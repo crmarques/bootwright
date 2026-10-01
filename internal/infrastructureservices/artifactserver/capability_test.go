@@ -129,8 +129,8 @@ func TestAServerBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
 }
 
 // An SSH placement publishes no controller reservation, but its claims are
-// qualified by its host's Machine so its own context compares their sockets
-// there.
+// qualified by its host's Machine and the SSH address and port it is reached
+// at, so its own context compares their sockets there.
 func TestSSHPlacementClaimsOnItsHostAlone(t *testing.T) {
 	ssh := api.MapValue(
 		text("addressRef", "ip"),
@@ -148,9 +148,10 @@ func TestSSHPlacementClaimsOnItsHostAlone(t *testing.T) {
 		t.Fatalf("an SSH placement reserved host resources: %+v", plan.Reservations)
 	}
 	if len(plan.SSHReservations) != 1 || plan.SSHReservations[0].Machine != "services" ||
+		plan.SSHReservations[0].Address != "192.0.2.1" || plan.SSHReservations[0].Port != 22 ||
 		plan.SSHReservations[0].Reservation.Kind != "artifact-server" ||
 		!slices.Contains(plan.SSHReservations[0].Reservation.Keys, "socket:192.0.2.1:8443") {
-		t.Fatalf("SSH claims = %+v, want the server's sockets qualified by the Machine services", plan.SSHReservations)
+		t.Fatalf("SSH claims = %+v, want the server's sockets qualified by the Machine services at 192.0.2.1:22", plan.SSHReservations)
 	}
 }
 

@@ -104,10 +104,11 @@ type contractRow struct {
 	// would report.
 	removalObservesNothing string
 	// readiness names the presence field carrying what the listeners answered,
-	// or a provider host's driver daemons, for a binding whose removal's
-	// resolution reads only what the removal takes back and never the apply's
-	// readiness or postcondition: specs/infrastructure-services.md, Unknown
-	// resolution, and specs/substrates.md, Evidence. Such a binding
+	// a provider host's driver daemons or the power state a machine's emulated
+	// BMC reports, for a binding whose removal's resolution reads only what the
+	// removal takes back and never the apply's readiness or postcondition:
+	// specs/infrastructure-services.md, Unknown resolution, and
+	// specs/substrates.md, Evidence and Machine realization. Such a binding
 	// reads its presence with that field emptied, and the partial fixture,
 	// which still reports everything the removal takes back, as positive no
 	// effect.
@@ -129,6 +130,11 @@ var contractStoppedService = map[string]any{"unit": "inactive", "container": "",
 // removal stops the pool before it undefines it.
 var contractStoppedPool = map[string]any{"pool": "inactive", "postcondition": false}
 
+// contractStoppedController leaves a libvirt machine's controller unit stopped,
+// its container gone and its emulated BMC silent beside its domain and disks,
+// as a removal killed after its first step, stopping that unit, does.
+var contractStoppedController = map[string]any{"unit": "inactive", "controller": "", "power": "", "postcondition": false}
+
 func (r contractRow) binding() lifecycle.CapabilityBinding {
 	return lifecycle.CapabilityBinding{Kind: r.kind, Implementation: r.implementation}
 }
@@ -137,7 +143,8 @@ func contractRows() []contractRow {
 	return []contractRow{
 		{kind: clients.Kind, implementation: clients.Implementation, example: "lab-rhel"},
 		{kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation, example: "lab-rhel", probes: true,
-			absence: map[string]any{"answered": true, "listener": false}, presence: contractMachinePresence},
+			absence: map[string]any{"answered": true, "listener": false}, presence: contractMachinePresence,
+			readiness: "power", removalPartial: contractStoppedController},
 		{kind: baremetal.Kind, implementation: baremetal.Implementation, example: "lab-baremetal", presence: contractBareMetalPresence,
 			retains: true, indivisible: true,
 			noEffectUnreported:     "specs/substrates.md proves no effect only from a claim never published, which the controller's reservations hold, not the adapter's evidence",
@@ -869,10 +876,15 @@ func contractPartial(t *testing.T, row contractRow, execution lifecycle.Executio
 // contractUnready is the row's presence evidence with its readiness unproved,
 // naming one request digest: everything the removal takes back reported
 // present while no listener answered, as a service whose one probe went
-// unanswered reports it.
+// unanswered reports it, or while an emulated BMC reported no power state.
+// The field is emptied in its own type, a list or a string.
 func contractUnready(t *testing.T, row contractRow, execution lifecycle.Execution, digest string) json.RawMessage {
 	t.Helper()
-	return contractPresenceOver(t, row, execution, digest, map[string]any{row.readiness: []any{}})
+	var unready any = []any{}
+	if _, text := row.presence(t, execution)[row.readiness].(string); text {
+		unready = ""
+	}
+	return contractPresenceOver(t, row, execution, digest, map[string]any{row.readiness: unready})
 }
 
 // contractRemovalPartial is the row's partial removal, naming one request
@@ -1035,11 +1047,12 @@ func contractClusterPresence(t *testing.T, execution lifecycle.Execution) map[st
 }
 
 // contractServicePresence proves a managed network service realized: its unit
-// active, the frozen image running, its content root present and every probe
-// target answering on the frozen port.
+// active, the frozen image running since after every file it runs from was
+// published, its content root present and every probe target answering on the
+// frozen port.
 func contractServicePresence(t *testing.T, execution lifecycle.Execution) map[string]any {
 	t.Helper()
-	request, err := managedservice.DecodeRequest(execution.Block.Request, execution.Block.Implementation)
+	request, err := managedservice.DecodeRequest(execution.Block.Request, contractServiceVersion(execution.Block.Implementation))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1049,7 +1062,19 @@ func contractServicePresence(t *testing.T, execution lifecycle.Execution) map[st
 	}
 	return map[string]any{
 		"postcondition": true, "unit": "active", "container": request.Image, "contentRoot": true, "answers": answers,
+		"startedAfterFiles": true,
 	}
+}
+
+// contractServiceVersion is the request version the managed service bound to
+// implementation writes, which is not its implementation's own name.
+func contractServiceVersion(implementation string) string {
+	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
+		if definition.Implementation == implementation {
+			return definition.Version
+		}
+	}
+	return ""
 }
 
 // contractArtifactServerPresence proves an artifact server realized: its unit

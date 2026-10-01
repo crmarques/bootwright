@@ -10,4 +10,4 @@
     - name: Execute the managed operating system destroy capability
       ansible.builtin.import_role:
         name: bootwright.core.managedos_install_anaconda
-        tasks_from: destroy.yml
+        tasks_from: destroy

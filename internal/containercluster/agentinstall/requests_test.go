@@ -91,7 +91,6 @@ func TestAFrozenPlacementOffTheControllerRefusesEveryVerb(t *testing.T) {
 		"a local placement with an address": {Address: "192.0.2.2", Connection: machine.ConnectionLocal, Machine: "controller"},
 		"a local placement with a port":     {Connection: machine.ConnectionLocal, Machine: "controller", Port: 22},
 		"a local placement with a user":     {Connection: machine.ConnectionLocal, Machine: "controller", User: "root"},
-		"a local placement that escalates":  {Connection: machine.ConnectionLocal, Machine: "controller", SudoPasswordRef: "controller-sudo"},
 		"a local placement naming no host":  {Connection: machine.ConnectionLocal},
 		"no connection":                     {Machine: "controller"},
 	} {

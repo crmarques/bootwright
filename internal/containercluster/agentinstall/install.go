@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // InstallCapability boots one cluster's nodes from the image its media block
@@ -365,12 +366,14 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 		}
 		values[strings.ReplaceAll(executable, "-", "")] = path
 	}
+	var refusals map[string]error
 	if operation == "apply" {
 		pins, err := c.pinValues(execution, request)
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
 		maps.Copy(values, pins)
+		refusals = preBootRefusals(request)
 	}
 	// The attempt adds the placement's identity and host key, so only the
 	// nodes' own credentials are listed here.
@@ -391,9 +394,25 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: InstallImplementation, Operation: operation, Variable: installVariablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
-		Outputs: outputs, Deadline: request.Deadline(),
+		Outputs: outputs, Refusals: refusals, Deadline: request.Deadline(),
 	}))
 }
+
+// preBootRefusals names what each node's pre-boot proof may refuse under that
+// node's position, the one its boot names it by, so a refusal reports the
+// Machine it refused.
+func preBootRefusals(request InstallRequest) map[string]error {
+	refusals := map[string]error{}
+	for index, node := range request.Nodes {
+		for reason, refused := range substrate.PreBootRefusals(node.Substrate, node.Machine, node.Controller.Endpoint) {
+			refusals[nodeRefusal(reason, index)] = refused
+		}
+	}
+	return refusals
+}
+
+// nodeRefusal is the reason a node's boot names one pre-boot refusal by.
+func nodeRefusal(reason string, index int) string { return reason + "-node-" + strconv.Itoa(index) }
 
 // pinValues carries the identity each physical node's own Machine block proved
 // earlier in this operation, under that node's position, so its pre-boot proof

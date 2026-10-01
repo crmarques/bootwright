@@ -23,32 +23,42 @@
 
 # A removal's resolution reads only the published content, which is all the
 # removal takes back, so none of the machine reads below runs for it.
-- name: Create the work directory an identity read may need
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_work }}'
-    state: directory
-    owner: root
-    group: root
-    mode: '0700'
-  changed_when: false
+- name: Read the machine through a work area this observation leaves as it found it
   when: not (managedos_install_anaconda_observes_removal | bool)
+  block:
+    - name: Create the work directory an identity read may need
+      ansible.builtin.file:
+        path: '{{ managedos_install_anaconda_work }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      changed_when: false
 
-- name: Read the machine through its own identity channel
-  ansible.builtin.include_tasks: identity.yml
-  when: not (managedos_install_anaconda_observes_removal | bool)
+    - name: Read the machine through its own identity channel
+      ansible.builtin.include_tasks: identity.yml
 
-# An observation resolves a completed apply, so it has to prove what the apply
-# proves. Reading the marker and the host key says the disk was written; only
-# this says the machine the plan promised is actually usable. It takes the
-# answer that is already true rather than waiting for one.
-- name: Try the fleet account the same way an apply proves it
-  ansible.builtin.include_tasks: reachable.yml
-  vars:
-    managedos_install_anaconda_reachable_retries: 1
-    managedos_install_anaconda_reachable_pause: 1
-  when:
-    - not (managedos_install_anaconda_observes_removal | bool)
-    - managedos_install_anaconda_host_key | default('') | trim | length > 0
+    # An observation resolves a completed apply, so it has to prove what the
+    # apply proves. Reading the marker and the host key says the disk was
+    # written; only this says the machine the plan promised is actually usable.
+    # It takes the answer that is already true rather than waiting for one.
+    - name: Try the fleet account the same way an apply proves it
+      ansible.builtin.include_tasks: reachable.yml
+      vars:
+        managedos_install_anaconda_reachable_retries: 1
+        managedos_install_anaconda_reachable_pause: 1
+      when: managedos_install_anaconda_host_key | default('') | trim | length > 0
+
+  # A work area this observation created is its own and goes whatever the reads
+  # answered. One it found is what an interrupted attempt left, which the next
+  # apply clears and a removal takes back, so it stays as it was.
+  always:
+    - name: Remove the work directory this observation created
+      ansible.builtin.file:
+        path: '{{ managedos_install_anaconda_work }}'
+        state: absent
+      changed_when: false
+      when: not (managedos_install_anaconda_observed.observation.work | bool)
 
 - name: Read the power state and media its controller reports
   bootwright.core.redfish_system_read:

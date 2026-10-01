@@ -30,8 +30,9 @@ func installPlan(t *testing.T, catalog api.Catalog, verb reconciliation.Verb) li
 }
 
 // retainedClients is a host whose controller stage published both the
-// installer and the clients of one release.
-func retainedClients() prerequisites.StorageView {
+// installer and the clients of one release, with the closure that stage
+// selects.
+func retainedClients() (prerequisites.StorageView, []prerequisites.ToolDefinition) {
 	tools := []prerequisites.ToolDefinition{
 		{
 			Kind: "openshift-install", Compatibility: "openshift", Version: "4.21.15",
@@ -55,14 +56,13 @@ func retainedClients() prerequisites.StorageView {
 		}
 	}
 	return prerequisites.StorageView{
-		State: prerequisites.HostState{RetainedDefinitions: []prerequisites.Definition{{Tools: tools}}},
 		OpenBundle: func(_ context.Context, id string) (prerequisites.BundleArea, error) {
 			if id != prerequisites.ToolsDigest(tools) {
 				return nil, nil
 			}
 			return fakeArea{path: "/var/lib/bootwright/controller/clients/" + id, entries: entries}, nil
 		},
-	}
+	}, tools
 }
 
 func installExecution(t *testing.T, catalog api.Catalog, digest string) (lifecycle.Execution, InstallRequest) {
@@ -239,10 +239,11 @@ func TestAnInstallationCrossesTheAdapterWithItsClientsAndCredentials(t *testing.
 // a node is booted, and names the command that publishes them.
 func TestAbsentClientsRefuseBeforeBooting(t *testing.T) {
 	execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+	_, selected := retainedClients()
 	execution.LocateTool = locatorOver(prerequisites.StorageView{
 		State:      prerequisites.HostState{},
 		OpenBundle: func(context.Context, string) (prerequisites.BundleArea, error) { return nil, nil },
-	})
+	}, selected)
 	runner := &fakeRunner{}
 	if _, err := NewInstall(runner).Apply(context.Background(), execution); err == nil {
 		t.Fatal("an installation ran without the clients its release names")

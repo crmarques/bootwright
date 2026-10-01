@@ -16,7 +16,7 @@ and neither command performs the other's work.
 | Scope | Prerequisites | Owner |
 | --- | --- | --- |
 | Host | Provided OS, architecture and verified installed-host identity; the fixed root and its controller record; the private Python and `ansible-core` execution bundle with the embedded automation; the baseline native closure of container runtime, SSH and NMState clients. | `setup` |
-| Context | The target client closure the selected graph needs; the libvirt client closure a declared `libvirt` capability selects; the hypervisor closure a libvirt provider hosted on this Machine selects; the installer-media tooling an Anaconda installation published through an artifact server on this Machine selects; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
+| Context | The target client closure the selected graph needs; the libvirt client closure a declared `libvirt` capability selects; the hypervisor closure and the libvirt client a libvirt provider hosted on this Machine selects; the installer-media tooling an Anaconda installation published through an artifact server on this Machine selects; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
 
 A host prepared once therefore serves every context later created on it, and a
 context that selects nothing beyond the baseline needs no controller stage.
@@ -96,7 +96,7 @@ releases are resolved by explicit setup. Dependency selection follows
 | Host foundation | Verify the provided OS, architecture, local identity, account/sudo boundary, filesystem containment/durability, free-space limits and trusted package sources. No OS installation, release upgrade, repository enrollment, entitlement registration or reboot. |
 | Baseline execution bundle | Publish the resolved exact Python and `ansible-core` closure in an isolated Bootwright-owned location. Do not use system/user Python imports or ambient Ansible configuration. |
 | Container runtime | Setup selects Podman for every prepared host, so a controller that declares `container-runtime` finds it ready. Install or update the approved dependency set and verify an existing exact runtime without taking ownership of its containers or configuration. Do not start a service, pull a managed-service image or create a container. |
-| Native target clients | Selected by the admitted desired-state graph, so [the controller stage](#the-controller-stage) owns them. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. A declared `libvirt` capability selects `virsh` and its native client dependencies; a libvirt provider hosted on the controller Machine selects the [hypervisor closure](substrates.md#provider-host-realization) instead, and an Anaconda installation published through an artifact server on the controller Machine selects the [installer-media tooling](managed-os.md#installation). Setup selects none of them; the SSH and NMState clients that support the baseline flows are host prerequisites. Install these with the fixed Ansible controller role. |
+| Native target clients | Selected by the admitted desired-state graph, so [the controller stage](#the-controller-stage) owns them. OpenShift/OKD clients (`oc`, `kubectl`) and installer match the selected release; Kubernetes consumers select Helm; referenced vSphere providers select `govc`; virtualization selects upstream `virtctl`. A declared `libvirt` capability selects `virsh` and its native client dependencies; a libvirt provider hosted on the controller Machine selects that client with the [hypervisor closure](substrates.md#provider-host-realization), because its host block proves both and the daemon packages need not install the client; and an Anaconda installation published through an artifact server on the controller Machine selects the [installer-media tooling](managed-os.md#installation). Setup selects none of them; the SSH and NMState clients that support the baseline flows are host prerequisites. Install these with the fixed Ansible controller role. |
 | Service execution | Service images, containers and lifecycle configuration remain with their service consumer. Installing a client grants no authority to contact or change a target. |
 
 Setup installs missing dependencies, updates selected dependencies to their
@@ -431,7 +431,7 @@ selects. It is one block in that context's lifecycle plan, planned by its
 capability from effective state alone and frozen before any effect: the target
 client requirements the graph names, the libvirt requirement a declared
 `libvirt` capability adds, the [hypervisor closure](substrates.md#provider-host-realization)
-a libvirt provider hosted on the controller Machine adds, the
+and the libvirt requirement a libvirt provider hosted on the controller Machine adds, the
 [installer-media tooling](managed-os.md#installation) an Anaconda installation
 published through an artifact server on the controller Machine adds, and the
 controller Machine's normalized proxy choice. Exact releases are not frozen with the
@@ -449,13 +449,33 @@ binds the host's exact before-inventory.
 
 Before acquiring a single byte it publishes the exact source identities it will
 fetch, and the native resolution a libvirt requirement needs, into the shared
-controller record. Target clients are published into a
+controller record. The stage reads only the latest retained resolution of its
+selection, the same platform, native closures and libvirt intent, so a new one
+supersedes every earlier one of that selection, and the publication that
+retains it [retires them](contexts/controller-record.md#bundles-and-client-areas).
+Solving again whenever a root is missing therefore never accumulates
+resolutions toward the host's bound of 16. Target clients are published into a
 [client area](contexts/controller-record.md#bundles-and-client-areas) named by
 the digest of that exact closure, under the reservation, attribution and
 sealing rules the setup bundle has; the native transaction publishes its
 before-state into the running attempt before it is authorized. The block
 completes only after every selected client is proved present by presence alone
 and the area is sealed.
+
+Every other block of the plan runs the clients this stage installed, and
+locates each executable through this block alone, from what the block proved
+in the apply whose effects the asking operation runs over: that apply, or the
+apply a removal takes back, because the stage's own removal retains and proves
+no closure. That proof names the client area and the exact bytes of each
+client. No retained resolution names a client closure, so the stage recovers
+the closure from the retained identities of exactly those clients and answers
+with the file the proved area holds. The host's retained sources are shared,
+so recovering the closure from all of them would select the newest release
+another context retained under the same `latest` intent, an area this context
+never published. An apply that proved no completed stage, a closure only partly
+retained or naming another area, an area that does not exist, or one without
+the file answers that the executable is not installed and names
+`apply --stage controller`, and no search path is ever consulted instead.
 
 Each client source has an acquisition deadline of 2 minutes plus its declared
 bytes at 512 KiB/s, rounded up to a whole second. A client installation's run
@@ -487,6 +507,16 @@ A selected libvirt requirement on RHEL, client or hypervisor, refuses before
 acquisition until an approved entitled source is defined; the qualified Fedora
 profile carries both closures and the installer-media tooling. Setup remains the owner of the host foundation, and this stage
 never installs it, publishes a binding, or claims another context's resources.
+
+A failure this stage meets in the dependency bundle adapter it shares with
+setup (tool catalog, projection, publisher metadata, transport, acquisition or
+trust) names this stage's own `bootwright apply --stage controller --context
+<name>` as what settles it, never `setup`, which installs nothing a context
+selects. That remedy offers the correction alone, even for a publisher the host
+could not reach or resolve: the block froze the controller Machine's proxy
+choice it acquires over, and the failed apply holding it can only be
+[continued over its exact input](state-reconciliation.md#state-machine), so
+another route is nothing that command can settle.
 
 ## Egress and local effects
 
@@ -543,11 +573,17 @@ recorded in the setup receipt exactly as a declared route is, so an interrupted
 setup resumed over a different route refuses rather than completing a plan that
 was approved for another one.
 
+A publisher setup could not reach or resolve is therefore offered a proxy
+through `HTTPS_PROXY`, kept out of `NO_PROXY`, and never an external Proxy on
+the controller Machine, which setup does not read; a failure setup meets names
+`bootwright setup` as what settles it. The same adapter failure met by a
+context's controller stage names [that stage](#the-controller-stage) instead.
+
 Local privilege is where this route is qualified. The unprivileged invocation
 reads and admits it before `sudo` can prompt, then forwards exactly the
 canonical variables to the elevated child, which `env_reset` would otherwise
 drop. A sudoers rule that permits neither `SETENV` nor `ALL` refuses that
-forwarding, and a human invocation's refusal names the `SETENV` tag as its
+forwarding, and the refusal, human or JSON, names the `SETENV` tag as its
 remedy ([local privilege](cli.md#local-privilege-and-user-identity)); running as
 root reads the environment directly. Child processes
 still receive no proxy variable of their own: the route reaches the download
@@ -651,6 +687,16 @@ mutation with recovery guidance. Never turn a lost child result into failure
 with a presumed no-effect outcome. Changed input, host identity or dependency
 closure cannot replace an incomplete setup; restore the exact compatible
 executable/dependencies and resolve that receipt first.
+
+Whether a pending receipt is this setup's own is decided without a context,
+because setup records none: a receipt that names one is never setup's, and a
+context's preflight compares neither its own context, nor its controller
+Machine's route with the ambient route the receipt recorded, nor a binding
+action setup never plans. Setup and a context-free preflight read that ambient
+route and still compare it, so setup resumed over another route refuses.
+Another pending attempt refuses, naming the executable that recorded it and the
+`HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` values it ran with, then
+`bootwright setup`.
 
 Cancellation stops authorization of new effects. Before native installation
 starts, the runner terminates and reaps its process group. Once an authorized

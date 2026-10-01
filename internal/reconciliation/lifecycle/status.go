@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
@@ -308,20 +309,19 @@ func clusterSummaries(catalog api.Catalog, kind api.Kind) []ClusterSummary {
 // everything else stays unsupported.
 func serviceSummaries(catalog api.Catalog, claimed []string) []ServiceSummary {
 	out := []ServiceSummary{}
-	for _, kind := range []api.Kind{api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer} {
-		for _, object := range catalog.OfKind(kind) {
-			if object.Spec().Get("management").Text() != "managed" {
-				continue
-			}
-			status := "unsupported"
-			if slices.Contains(claimed, string(kind)) && object.Spec().Get("retention").Text() != "install-only" {
-				status = "pending"
-			}
-			out = append(out, ServiceSummary{
-				Kind: string(kind), Name: object.Name(),
-				Machine: object.Spec().Get("machineRef").Text(), Status: status,
-			})
+	for _, object := range catalog.Objects() {
+		kind := object.Kind()
+		if !infrastructureservices.IsService(kind) || object.Spec().Get("management").Text() != "managed" {
+			continue
 		}
+		status := "unsupported"
+		if slices.Contains(claimed, string(kind)) && object.Spec().Get("retention").Text() != "install-only" {
+			status = "pending"
+		}
+		out = append(out, ServiceSummary{
+			Kind: string(kind), Name: object.Name(),
+			Machine: object.Spec().Get("machineRef").Text(), Status: status,
+		})
 	}
 	slices.SortFunc(out, func(x, y ServiceSummary) int {
 		if order := strings.Compare(x.Kind, y.Kind); order != 0 {

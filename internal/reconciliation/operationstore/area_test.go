@@ -182,6 +182,31 @@ func (a *memoryArea) RemoveDirectory(ctx context.Context, target string) error {
 	return nil
 }
 
+// RemoveRecord removes a record only while it holds exactly expected, and
+// keeps the directories above it, which the real area leaves in place.
+func (a *memoryArea) RemoveRecord(ctx context.Context, target string, expected []byte) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	if err := a.admit(ctx, target, true); err != nil {
+		return err
+	}
+	if err := a.check("unlink", target); err != nil {
+		return err
+	}
+	current, exists := a.files[target]
+	if !exists {
+		return nil
+	}
+	if !slices.Equal(current, expected) {
+		return errors.New("the record changed before its removal")
+	}
+	delete(a.files, target)
+	for parent := path.Dir(target); parent != "."; parent = path.Dir(parent) {
+		a.directories[parent] = true
+	}
+	return nil
+}
+
 // Sync refuses a record, as the contract requires, so a caller that names one
 // fails in a test rather than on a host.
 func (a *memoryArea) Sync(ctx context.Context, target string) error {

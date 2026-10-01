@@ -32,6 +32,7 @@ func Verify(t *testing.T, within Within) {
 		{"append creates then extends in order", appendCreatesThenExtendsInOrder},
 		{"entries list each name once in order", entriesListEachNameOnceInOrder},
 		{"a removal takes only an empty directory", removalTakesOnlyAnEmptyDirectory},
+		{"a record removal takes only the expected record", recordRemovalTakesOnlyTheExpectedRecord},
 		{"read refuses a record beyond its maximum", readRefusesARecordBeyondItsMaximum},
 		{"sync names a directory never a record", syncNamesADirectoryNeverARecord},
 		{"records and directories never share a path", recordsAndDirectoriesNeverShareAPath},
@@ -140,6 +141,46 @@ func removalTakesOnlyAnEmptyDirectory(t *testing.T, area operationstore.Area) {
 	succeeds(t, area.RemoveDirectory(ctx, "d"), "a removal of an emptied directory")
 	succeeds(t, area.RemoveDirectory(ctx, "absent/deeper"), "a removal beneath an absent directory")
 	lists(t, area, "", operationstore.Entry{Name: "p", Directory: true})
+}
+
+// recordRemovalTakesOnlyTheExpectedRecord holds a record removal to the bytes
+// its caller expects, so no caller removes a record it has not seen, and to the
+// record alone: the directory it was in stays until it is removed as one.
+func recordRemovalTakesOnlyTheExpectedRecord(t *testing.T, area operationstore.Area) {
+	ctx := context.Background()
+	succeeds(t, area.WriteExclusive(ctx, "p/f.json", []byte("nested\n")), "a nested record")
+	succeeds(t, area.WriteExclusive(ctx, "p/e.json", nil), "an empty record")
+	succeeds(t, area.WriteExclusive(ctx, "r.json", []byte("record\n")), "a record")
+	succeeds(t, area.EnsureDirectory(ctx, "d"), "a directory")
+	for _, wrong := range []string{"other\n", "nested", ""} {
+		if err := area.RemoveRecord(ctx, "p/f.json", []byte(wrong)); err == nil {
+			t.Fatalf("a removal expecting %q took %q", wrong, "nested\n")
+		}
+	}
+	if err := area.RemoveRecord(ctx, "p/e.json", []byte("x\n")); err == nil {
+		t.Fatal("a removal expecting bytes took an empty record")
+	}
+	for _, refused := range []string{"", "d", "p", "r.json/x.json"} {
+		if err := area.RemoveRecord(ctx, refused, nil); err == nil {
+			t.Fatalf("a record removal of %q succeeded", refused)
+		}
+	}
+	holds(t, area, "p/f.json", "nested\n")
+	holds(t, area, "p/e.json", "")
+	succeeds(t, area.RemoveRecord(ctx, "p/f.json", []byte("nested\n")), "a removal of the expected record")
+	absent(t, area, "p/f.json")
+	succeeds(t, area.RemoveRecord(ctx, "p/f.json", []byte("nested\n")), "a removal of an absent record")
+	succeeds(t, area.RemoveRecord(ctx, "p/e.json", nil), "a removal of an empty record")
+	succeeds(t, area.RemoveRecord(ctx, "absent/deeper.json", nil), "a removal beneath an absent directory")
+	holds(t, area, "r.json", "record\n")
+	lists(t, area, "p")
+	lists(t, area, "",
+		operationstore.Entry{Name: "d", Directory: true},
+		operationstore.Entry{Name: "p", Directory: true},
+		operationstore.Entry{Name: "r.json", Size: 7},
+	)
+	succeeds(t, area.RemoveDirectory(ctx, "p"), "a removal of the directory its records left")
+	lists(t, area, "", operationstore.Entry{Name: "d", Directory: true}, operationstore.Entry{Name: "r.json", Size: 7})
 }
 
 func readRefusesARecordBeyondItsMaximum(t *testing.T, area operationstore.Area) {
@@ -266,6 +307,7 @@ func recordCalls(ctx context.Context, area operationstore.Area, target string) [
 		{"WriteExclusive", area.WriteExclusive(ctx, target, []byte("x\n"))},
 		{"Replace", area.Replace(ctx, target, []byte("x\n"), nil)},
 		{"Append", area.Append(ctx, target, []byte("x\n"))},
+		{"RemoveRecord", area.RemoveRecord(ctx, target, []byte("x\n"))},
 	}
 }
 

@@ -60,6 +60,32 @@ type memoryArea struct {
 	// them but must not take the area again, and an error it returns fails
 	// that write, so a test can stop an invocation exactly at a durable write.
 	landing func(operation, target string, files map[string][]byte) error
+	// bound, when set, refuses a write that would take the bytes the area's
+	// records hold past it, counting a replaced record's current bytes as the
+	// real area does until its replacement lands.
+	bound int
+}
+
+// held is the bytes the area's records hold.
+func (a *memoryArea) held() int {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	return a.stored()
+}
+
+func (a *memoryArea) stored() int {
+	total := 0
+	for _, data := range a.files {
+		total += len(data)
+	}
+	return total
+}
+
+func (a *memoryArea) fits(data []byte) error {
+	if a.bound > 0 && a.stored()+len(data) > a.bound {
+		return errors.New("the operation area has reached its bytes")
+	}
+	return nil
 }
 
 func newArea() *memoryArea {
@@ -155,6 +181,9 @@ func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []b
 	if _, exists := a.files[target]; exists {
 		return errors.New("exists")
 	}
+	if err := a.fits(data); err != nil {
+		return err
+	}
 	a.files[target] = slices.Clone(data)
 	return a.landed("write " + target)
 }
@@ -181,6 +210,9 @@ func (a *memoryArea) Replace(ctx context.Context, target string, data, expected 
 	} else if !exists || !slices.Equal(current, expected) {
 		return errors.New("expectation")
 	}
+	if err := a.fits(data); err != nil {
+		return err
+	}
 	a.files[target] = slices.Clone(data)
 	return a.landed("replace " + target)
 }
@@ -197,6 +229,9 @@ func (a *memoryArea) Append(ctx context.Context, target string, data []byte) err
 		}
 	}
 	if err := a.fail["append "+target]; err != nil {
+		return err
+	}
+	if err := a.fits(data); err != nil {
 		return err
 	}
 	a.files[target] = append(a.files[target], data...)
@@ -234,6 +269,37 @@ func (a *memoryArea) RemoveDirectory(ctx context.Context, target string) error {
 		}
 	}
 	delete(a.directories, target)
+	return nil
+}
+
+// RemoveRecord removes a record only while it holds exactly expected, and
+// keeps the directories above it, which the real area leaves in place. It
+// lands like a write.
+func (a *memoryArea) RemoveRecord(ctx context.Context, target string, expected []byte) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	if err := a.admit(ctx, target, true); err != nil {
+		return err
+	}
+	if a.landing != nil {
+		if err := a.landing("unlink", target, a.files); err != nil {
+			return err
+		}
+	}
+	if err := a.fail["unlink "+target]; err != nil {
+		return err
+	}
+	current, exists := a.files[target]
+	if !exists {
+		return nil
+	}
+	if !slices.Equal(current, expected) {
+		return errors.New("the record changed before its removal")
+	}
+	delete(a.files, target)
+	for parent := path.Dir(target); parent != "."; parent = path.Dir(parent) {
+		a.directories[parent] = true
+	}
 	return nil
 }
 
@@ -436,6 +502,13 @@ func (a *heldArea) RemoveDirectory(ctx context.Context, target string) error {
 		return err
 	}
 	return a.memoryArea.RemoveDirectory(ctx, target)
+}
+
+func (a *heldArea) RemoveRecord(ctx context.Context, target string, expected []byte) error {
+	if err := a.usable(ctx, true); err != nil {
+		return err
+	}
+	return a.memoryArea.RemoveRecord(ctx, target, expected)
 }
 
 // testView is a view of the workspace. One a callback holds carries the areas
@@ -670,11 +743,22 @@ func (v *testView) Secrets(ctx context.Context, callback func(secretstore.Contex
 
 // RetainDependencies records what it was asked to retain and keeps it in the
 // controller record as the store does: a source or a resolution is never
-// replaced under its identity, and a resolution is kept only complete and
-// beside its exact sources.
-func (v *testView) RetainDependencies(_ context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource) error {
+// replaced under its identity, a resolution is kept only complete and beside
+// its exact sources, and the resolutions it supersedes are retired only beside
+// it, never the receipt's own.
+func (v *testView) RetainDependencies(_ context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource, superseded []string) error {
 	state := v.workspace.controller.State
 	retained, definitions := slices.Clone(state.RetainedSources), slices.Clone(state.RetainedDefinitions)
+	if definition == nil && len(superseded) != 0 {
+		return errors.New("a controller stage retires resolutions only beside the one that supersedes them")
+	}
+	for _, digest := range superseded {
+		if len(digest) != 64 || strings.Trim(digest, "0123456789abcdef") != "" || definition != nil && digest == definition.ResolutionDigest ||
+			state.Receipt.Definition != nil && digest == state.Receipt.Definition.ResolutionDigest {
+			return errors.New("a controller stage may not retire that resolution")
+		}
+	}
+	definitions = slices.DeleteFunc(definitions, func(item prerequisites.Definition) bool { return slices.Contains(superseded, item.ResolutionDigest) })
 	for _, source := range sources {
 		index := slices.IndexFunc(retained, func(item prerequisites.DependencySource) bool { return item.ID == source.ID })
 		if index >= 0 && retained[index] != source {
@@ -749,6 +833,19 @@ type testCapability struct {
 	// a race rather than by the test.
 	outcomeFor map[string]Result
 	errorFor   map[string]error
+	// verbose, when set, is how many more bytes an attempt prints on its
+	// adapter output, asked as it prints them.
+	verbose func() int
+}
+
+// print writes what a verbose adapter prints beside its fixed lines.
+func (c *testCapability) print(execution Execution) {
+	c.mutex.Lock()
+	verbose := c.verbose
+	c.mutex.Unlock()
+	if verbose != nil && execution.Output != nil {
+		_, _ = execution.Output.Write([]byte(strings.Repeat("x", verbose())))
+	}
 }
 
 // record appends what one call saw under the fixture's own lock, so blocks
@@ -845,6 +942,7 @@ func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result
 	if execution.Output != nil {
 		_, _ = execution.Output.Write([]byte("TASK [acquire the image]\nok: [controller]\n"))
 	}
+	c.print(execution)
 	if c.applyErr != nil {
 		return Result{Outcome: reconciliation.OutcomeFailed}, c.applyErr
 	}
@@ -864,6 +962,7 @@ func (c *testCapability) Destroy(_ context.Context, execution Execution) (Result
 	if hold != nil {
 		hold(execution.Block.ID)
 	}
+	c.print(execution)
 	return c.next(&c.outcomes), nil
 }
 
@@ -3889,7 +3988,7 @@ func TestControllerBlockReceivesItsPublicationBoundary(t *testing.T) {
 			t.Fatalf("the controller block received no %s capability", name)
 		}
 	}
-	if err := execution.Stage.RetainDependencies(context.Background(), nil, nil); err != nil {
+	if err := execution.Stage.RetainDependencies(context.Background(), nil, nil, nil); err != nil {
 		t.Fatalf("retention refused: %v", err)
 	}
 	if _, err := execution.Stage.ClientArea(context.Background(), strings.Repeat("d", 64)); err != nil {

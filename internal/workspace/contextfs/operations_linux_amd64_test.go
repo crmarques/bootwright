@@ -5,6 +5,7 @@ package contextfs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -230,5 +231,162 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Admission counts the operation area's bytes as its byte bound does, and an
+// attempt's retained output never takes the area into ReservedBytes. With
+// padding one byte past that line a claim refuses at the retained-operation
+// bound (lifecycle.state) and creates nothing. At the line, an apply claims,
+// registers and runs four attempts of its block whose adapter each time
+// prints as much as the area still holds or an attempt keeps, whichever is
+// less, and keeps none of it; its removal then registers, runs its block and
+// completes within the area's bound. Were output to take the reserve, the
+// fourth attempt would fill the area and its record would refuse.
+func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{{
+		ID: "alpha", Description: "serve alpha", Stage: reconciliation.StageInfraComponents,
+		Kind: "ArtifactServer", Object: "alpha", Implementation: "artifact-server-nginx-v1",
+		ContentDigest: strings.Repeat("a", 64), Request: json.RawMessage(`{"name":"alpha"}`),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := func() time.Time { return time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC) }
+	area := filepath.Join(store.options.Root, "contexts", record.Name, "state", "operations")
+	padding := filepath.Join(area, "padding", "output")
+	applied, removed := fmt.Sprintf("op-%032x", 1), fmt.Sprintf("op-%032x", 2)
+	held := func() int64 {
+		size := int64(0)
+		if err := filepath.WalkDir(area, func(_ string, entry fs.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			info, err := entry.Info()
+			size += info.Size()
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return size
+	}
+	register := func(operations *operationstore.Store, id, source string, plan reconciliation.Plan) (operationstore.Operation, error) {
+		digest, err := plan.Digest()
+		if err != nil {
+			return operationstore.Operation{}, err
+		}
+		operation := operationstore.Operation{
+			Version: operationstore.OperationVersion, ID: id, Verb: plan.Verb, Source: source, Context: record.Name, Revision: "rev-" + strings.Repeat("ef", 16),
+			InputDigest: strings.Repeat("1", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("2", 64),
+			Executable: operationstore.Executable{Version: "devel", Commit: "abcdef1"},
+			Closure:    &operationstore.Closure{Digest: strings.Repeat("3", 64), Python: "3.14.7", Ansible: "2.21.4"},
+			Bindings:   []string{}, State: reconciliation.OperationRunning,
+			Created: "2026-09-30T12:00:00Z", Updated: "2026-09-30T12:00:00Z",
+		}
+		if err := operations.Register(ctx, operation, plan); err != nil {
+			return operation, err
+		}
+		log, err := operations.OpenLog(ctx, operationstore.OperationLogPath(id))
+		if err != nil {
+			return operation, err
+		}
+		return operation, log.Close(ctx)
+	}
+	kept := []string{}
+	attempt := func(operations *operationstore.Store, id string, state reconciliation.BlockState) error {
+		number, err := operations.StartAttempt(ctx, id, "alpha")
+		if err != nil {
+			return err
+		}
+		target, err := operationstore.AttemptLogPath(id, "alpha", number, 0)
+		if err != nil {
+			return err
+		}
+		log, err := operations.OpenLog(ctx, target)
+		if err != nil {
+			return err
+		}
+		path, err := operationstore.AdapterOutputPath(target)
+		if err != nil {
+			return err
+		}
+		output := operations.OpenAdapterOutput(ctx, path)
+		if _, err := output.Write([]byte(strings.Repeat("x", int(min(operationstore.MaxAdapterOutputBytes, operationstore.MaxBytes-held()))))); err != nil {
+			return err
+		}
+		if err := output.Close(ctx); err != nil {
+			return err
+		}
+		if size, truncated := output.Retained(); size != 0 || !truncated {
+			kept = append(kept, fmt.Sprintf("attempt %d of %s: %d bytes, truncated %t", number, id, size, truncated))
+		}
+		if err := log.Close(ctx); err != nil {
+			return err
+		}
+		if state == reconciliation.BlockDone {
+			return operations.CompleteAttempt(ctx, id, "alpha", number, reconciliation.OutcomeChanged, reconciliation.EffectCompleted, state, json.RawMessage(`{"postcondition":true}`))
+		}
+		return operations.CompleteAttempt(ctx, id, "alpha", number, reconciliation.OutcomeFailed, reconciliation.EffectUnknown, state, nil)
+	}
+	err = store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		if err := tx.Operations().EnsureDirectory(ctx, "padding"); err != nil {
+			return err
+		}
+		file, err := os.OpenFile(padding, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			return err
+		}
+		if err := errors.Join(file.Truncate(operationstore.MaxBytes-operationstore.ReservedBytes+1), file.Close()); err != nil {
+			return err
+		}
+		operations := operationstore.New(tx.Operations(), clock)
+		if _, err := operations.Index(ctx); err != nil {
+			return err
+		}
+		refused := diagnostics.Of(operations.Claim(ctx, applied, plan))
+		if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: its operation area holds 50331649 of its 67108864 bytes") {
+			t.Fatalf("a claim one byte past the line reported %+v, want its lifecycle.state refusal", refused)
+		}
+		if _, err := os.Stat(filepath.Join(area, applied)); !os.IsNotExist(err) {
+			t.Fatalf("the refused claim left its directory (%v)", err)
+		}
+		if err := os.Truncate(padding, operationstore.MaxBytes-operationstore.ReservedBytes); err != nil {
+			return err
+		}
+		if err := operations.Claim(ctx, applied, plan); err != nil {
+			t.Fatalf("the claim at the line refused: %s", causeText(err))
+		}
+		if _, err := register(operations, applied, "", plan); err != nil {
+			t.Fatalf("the apply at the line did not register: %s", causeText(err))
+		}
+		for number, state := range []reconciliation.BlockState{reconciliation.BlockFailed, reconciliation.BlockFailed, reconciliation.BlockFailed, reconciliation.BlockDone} {
+			if err := attempt(operations, applied, state); err != nil {
+				t.Fatalf("attempt %d of the apply at the line failed: %s", number+1, causeText(err))
+			}
+		}
+		operation, err := register(operations, removed, applied, removal)
+		if err != nil {
+			t.Fatalf("the removal of the last apply admitted did not register: %s", causeText(err))
+		}
+		if err := attempt(operations, removed, reconciliation.BlockDone); err != nil {
+			t.Fatalf("the removal of the last apply admitted could not run its block: %s", causeText(err))
+		}
+		operation.State = reconciliation.OperationDone
+		if err := operations.UpdateOperation(ctx, operation); err != nil {
+			t.Fatalf("the removal of the last apply admitted could not complete: %s", causeText(err))
+		}
+		if len(kept) != 0 {
+			t.Fatalf("output past the line was kept: %v", kept)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(causeText(err))
 	}
 }

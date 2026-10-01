@@ -300,11 +300,11 @@ func TestAnUnstampedClientRefusalNamesTheReleaseStampCheck(t *testing.T) {
 	}{
 		{"record first", "unreleased", "release-stamp", "openshift-clients", true, ""},
 		{"exit first", "unreleased-after-exit", "release-stamp", "openshift-clients", true, ""},
-		{"another reason", "unreleased", "source integrity", "openshift-clients", false, ""},
-		{"another tool", "unreleased", "release-stamp", "helm", false, ""},
-		{"before the client's continue", "unreleased-before-continue", "release-stamp", "openshift-clients", false, ""},
+		{"another reason", "unreleased", "source integrity", "openshift-clients", false, "the Ansible capability protocol was invalid"},
+		{"another tool", "unreleased", "release-stamp", "helm", false, "the Ansible capability protocol was invalid"},
+		{"before the client's continue", "unreleased-before-continue", "release-stamp", "openshift-clients", false, "the Ansible capability protocol was invalid"},
 		{"after completed", "unreleased-after-completed", "release-stamp", "openshift-clients", false, "the Ansible capability protocol was invalid"},
-		{"after completed, exit first", "unreleased-after-completed-exit-first", "release-stamp", "openshift-clients", false, ""},
+		{"after completed, exit first", "unreleased-after-completed-exit-first", "release-stamp", "openshift-clients", false, "the Ansible capability protocol was invalid"},
 	} {
 		t.Run(check.name, func(t *testing.T) {
 			launch, request, boundary := runnerFixture(t, check.mode)
@@ -325,6 +325,116 @@ func TestAnUnstampedClientRefusalNamesTheReleaseStampCheck(t *testing.T) {
 			}
 			if check.message != "" && found[0].Message != check.message {
 				t.Fatalf("diagnostic %+v, want %q", found[0], check.message)
+			}
+		})
+	}
+}
+
+// A record the adapter wrote before its failed exit may be read after it. The
+// runner judges it as if it had read it first, so a record it refuses or cannot
+// read fails the run as a protocol breach whichever it reads first. One read
+// first holds the adapter until the refusal closes its acknowledgement channel;
+// one read after is written by a descendant once the adapter is reaped. Records
+// it accepts after the exit leave that failure and move the protocol on, so a
+// completed is judged after its loaded, prepared, native or continue, but
+// nothing is released, published, authorized or reported for them: release
+// and the inventory read follow only a loaded read before the exit, intent
+// only a prepared read before it, and no native or continue read after it
+// reports the installation that authorizes it.
+// The drain's close of a channel a descendant holds is the runner's own read
+// and no record, so it leaves the failed exit too.
+func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
+	const handoff = `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `
+	acknowledged := func(record string) string {
+		return `printf '` + record + `' >&3; read -r reply <&4; `
+	}
+	readFirst := func(records string) string {
+		return handoff + `printf '` + records + `' >&3; read -r reply <&4; exit 2`
+	}
+	afterTheExit := func(records string) string {
+		return `adapter=$$; (exec >/dev/null 2>&1 4<&-; while kill -0 "$adapter" 2>/dev/null; do sleep 0.01; done; sleep 0.05; printf '` + records + `' >&3) & exec 3>&- 4<&-; exit 2`
+	}
+	readAfter := func(records string) string { return handoff + afterTheExit(records) }
+	record := func(value any) string {
+		data, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data) + `\n`
+	}
+	sha := strings.Repeat("a", 64)
+	prepared := `{"phase":"prepared","preparation":{"addedSources":[],"inventorySHA256":"` + sha + `"}}\n`
+	completed := `{"evidence":{"added":[],"after":"` + sha + `","before":"` + sha + `","planDigest":"","postcondition":true,"request":"` + sha + `","tools":[]},"outcome":"unchanged","phase":"completed"}\n`
+	plan := &prerequisites.NativeResolvedPlan{Digest: strings.Repeat("c", 64), BeforeSHA256: sha, AfterSHA256: strings.Repeat("b", 64), Actions: []prerequisites.NativeAction{{SourceID: "native-one"}}}
+	transitions, err := prerequisites.NativeTransitionsDigest(plan.Actions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nativePrepared := record(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AfterInventorySHA256: plan.AfterSHA256, PlanDigest: plan.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}})
+	nativeCompleted := record(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "before": sha, "after": plan.AfterSHA256, "planDigest": plan.Digest, "added": []string{"native-one"}, "tools": []string{}, "postcondition": true}})
+	tool := prerequisites.ToolDefinition{Kind: "helm", Version: "3.17.3", Source: prerequisites.DependencySource{ID: "tool-helm", SHA256: strings.Repeat("d", 64), Bytes: 1}}
+	toolPrepared := record(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AddedSources: []string{tool.Source.ID}}})
+	toolCompleted := record(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "before": sha, "after": sha, "planDigest": "", "added": []string{}, "tools": []map[string]string{{"source": tool.Source.ID, "sha256": tool.Source.SHA256, "files": strings.Repeat("e", 64)}}, "postcondition": true}})
+	withNative := func(request *capabilityRequest) { request.Native = plan }
+	withTool := func(request *capabilityRequest) { request.Tools = []prerequisites.ToolDefinition{tool} }
+	const (
+		malformed  = `not a record\n`
+		misplaced  = `{"phase":"refused","reason":"release-stamp"}\n`
+		incomplete = "the Ansible structured result was incomplete"
+		invalid    = "the Ansible capability protocol was invalid"
+		failedExit = "Ansible did not complete the authorized dependency operation"
+	)
+	for _, check := range []struct {
+		name, script, code, message string
+		drain                       time.Duration
+		request                     func(*capabilityRequest)
+		released, published         bool
+	}{
+		{"a malformed record read first", readFirst(malformed), "controller.unknown", incomplete, 5 * time.Second, nil, true, false},
+		{"a malformed record read after the exit", readAfter(malformed), "controller.unknown", incomplete, 5 * time.Second, nil, true, false},
+		{"a record out of its place read first", readFirst(misplaced), "controller.unknown", invalid, 5 * time.Second, nil, true, false},
+		{"a record out of its place read after the exit", readAfter(misplaced), "controller.unknown", invalid, 5 * time.Second, nil, true, false},
+		{"valid records read after the exit", readAfter(prepared + completed), "controller.setup", failedExit, 5 * time.Second, nil, true, false},
+		{"a loaded record read after the exit", afterTheExit(`{"phase":"loaded"}\n` + prepared + completed), "controller.setup", failedExit, 5 * time.Second, nil, false, false},
+		{"a native record read after the exit", handoff + acknowledged(nativePrepared) + afterTheExit(`{"phase":"native"}\n`+nativeCompleted), "controller.setup", failedExit, 5 * time.Second, withNative, true, true},
+		{"a continue record read after the exit", handoff + acknowledged(toolPrepared) + afterTheExit(`{"phase":"continue"}\n`+toolCompleted), "controller.setup", failedExit, 5 * time.Second, withTool, true, true},
+		{"a channel the drain closes after the exit", handoff + `(exec >/dev/null 2>&1 4<&-; sleep 5) & exit 2`, "controller.setup", failedExit, 200 * time.Millisecond, nil, true, false},
+	} {
+		t.Run(check.name, func(t *testing.T) {
+			launch, request, boundary := runnerFixture(t, "unused")
+			if check.request != nil {
+				check.request(&request)
+			}
+			boundary.completedDrain, boundary.authorizedDrain = check.drain, check.drain
+			boundary.command = func(string, ...string) *exec.Cmd { return exec.Command("/bin/sh", "-c", check.script) }
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			released, published := 0, false
+			var details []string
+			result, err := runProcess(ctx, launch, request, func() error { released++; return nil }, func(context.Context, prerequisites.NativePreparation) error {
+				published = true
+				return nil
+			}, func(event prerequisites.ProgressEvent) { details = append(details, event.Detail) }, nil, boundary)
+			if ctx.Err() != nil {
+				t.Fatalf("the adapter ran until the deadline (%v)", err)
+			}
+			found := diagnostics.Of(err)
+			if len(found) != 1 || found[0].Code != check.code || found[0].Message != check.message {
+				t.Fatalf("the run reported %+v (%v), want %s %q", found, err, check.code, check.message)
+			}
+			outcome := "failed"
+			if check.published {
+				outcome = "unknown"
+			}
+			if result.Outcome != outcome || published != check.published {
+				t.Fatalf("the run left %s with intent published %v, want %s with %v", result.Outcome, published, outcome, check.published)
+			}
+			releases, progress := 0, []string{"starting the private Ansible runtime"}
+			if check.released {
+				releases, progress = 1, append(progress, "reading the native package inventory")
+			}
+			if released != releases || !slices.Equal(details, progress) {
+				t.Fatalf("the run released %d times and reported %q, want %d and %q", released, details, releases, progress)
 			}
 		})
 	}

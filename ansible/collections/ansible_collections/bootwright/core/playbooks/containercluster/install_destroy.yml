@@ -10,4 +10,4 @@
     - name: Execute the cluster installation destroy capability
       ansible.builtin.import_role:
         name: bootwright.core.containercluster_install_agent
-        tasks_from: destroy.yml
+        tasks_from: destroy

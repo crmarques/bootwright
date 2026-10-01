@@ -10,4 +10,4 @@
     - name: Execute the time service observe capability
       ansible.builtin.import_role:
         name: bootwright.core.infra_ntp_server_chrony
-        tasks_from: observe.yml
+        tasks_from: observe

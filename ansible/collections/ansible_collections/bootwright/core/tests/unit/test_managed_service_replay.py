@@ -21,6 +21,7 @@ import pathlib
 import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.plugins.module_utils.infra_service import UNIT_DIRECTORY
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 LOADER = DataLoader()
@@ -236,3 +237,32 @@ def test_a_service_that_is_not_running_is_started_rather_than_restarted(role):
 def test_a_server_without_serving_material_runs_from_its_configuration_and_unit():
     assert attempt(SERVER, tls=False) == (False, "unchanged")
     assert attempt(SERVER, newer=("unit",), tls=False) == (True, "changed")
+
+
+def published_inspections(role):
+    """The inspection whose observation each completion publishes, in the apply and in the observation."""
+    found = []
+    for tasks in ("apply.yml", "observe.yml"):
+        loaded = [task for task in LOADER.load_from_file(str(ROLES / role / "tasks" / tasks), trusted_as_template=True)
+                  if isinstance(task, dict)]
+        completion = only(loaded, lambda task: (action(task, "_protocol") or {}).get("phase") == "completed",
+                          "publishes the completion")
+        published = str(action(completion, "_protocol")["observation"])
+        found.append(only(loaded, lambda task, published=published: action(task, "_inspect") is not None
+                          and "%s.observation" % task.get("register") in published, "is the published inspection"))
+    return found
+
+
+# A managed network service's completion and its observation publish the start
+# compared with every file the apply restarts over, the unit definition the
+# inspection always compares included, so an unknown outcome is not resolved
+# complete while the service runs an earlier file.
+@pytest.mark.parametrize("role", [role for role in SERVICES if role != SERVER])
+def test_every_published_observation_compares_the_start_with_the_files_the_apply_restarts_over(role):
+    files = service_steps(load(role), role)[2]
+    templar = Templar(loader=LOADER, variables=scope(role, tls=True))
+    restarted_over = sorted(templar.template(files["loop"]))
+    unit = UNIT_DIRECTORY + SERVICES[role]["unit"] + ".container"
+    for inspection in published_inspections(role):
+        compared = templar.template(action(inspection, "_inspect").get("runs_from", []))
+        assert sorted(compared + [unit]) == restarted_over

@@ -2,7 +2,7 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_ntp_server_request.version == 'ntp-server-chrony-v1'
+      - bootwright_ntp_server_request.version == 'ntp-server-chrony-v2'
       - bootwright_ntp_server_request.unit is string
       - bootwright_ntp_server_request.contentRoot.startswith('/var/lib/bootwright-services/')
       - bootwright_ntp_server_request.image is search('@sha256:[0-9a-f]{64}$')
@@ -197,6 +197,8 @@
 - name: Prove the managed service answers on every declared address
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_ntp_server_request }}'
+    runs_from:
+      - '{{ infra_ntp_server_chrony_config_dir }}/chrony.conf'
     readiness: true
   register: infra_ntp_server_chrony_after
 

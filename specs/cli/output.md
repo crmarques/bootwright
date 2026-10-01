@@ -549,15 +549,21 @@ a complete result: the structured events say which groups settled, never what
 the adapter did inside them, so a run that succeeded is as worth reading as one
 that failed. Keeping material out of a retained run is the adapter's own
 obligation, discharged where the material is used: every task that reads bound
-material marks itself `no_log`, so the adapter's output never carries it. The
-file is appended to while the run produces it, within a bounded delay, so a run
-that wedges is readable before it ends rather than only once it stops. That
+material marks itself `no_log`, and the adapter's output callback prints
+nothing a `no_log` result raised
+([security](../security.md#logs-output-and-diagnostics)), so the adapter's
+output never carries it. The file is appended to while the run produces it,
+within a bounded delay, so a run that wedges is readable before it ends rather
+than only once it stops. That
 requires the adapter process to be launched so that it does not withhold its own
 output, because a tool that buffers until it exits defeats the retention
 whatever this side does. Publishing is coalesced rather than written a line at a
 time, and the file is bounded and truncated at its limit without an inline
-marker. It is troubleshooting material only: nothing reads it back, it is never
-product output, ownership evidence or a continuation cursor, and its attempt log
+marker, or sooner where it would take the operation area into the bytes
+[admission keeps free](../contexts.md#storage-locking-and-publication) for
+records and logs, which leaves no file once nothing fits beneath them. It is
+troubleshooting material only: nothing reads it back, it is never product
+output, ownership evidence or a continuation cursor, and its attempt log
 records the file by name with the bytes it holds and whether the bound cut it
 short. Neither retaining it nor failing to ever changes the outcome the
 operation records.
@@ -624,9 +630,11 @@ none, as its human output names no directory, and keeps none: the file is
 created only once the runtime is admitted, so a refused admission, such as a
 native package transaction holding its lock, or an interrupt, cancellation or
 deadline that lands first leaves no unnamed file behind. A run whose directory
-or file cannot be created, including one an interrupt stops between the two,
-fails before its adapter runs, names neither and removes the directory it
-made.
+or file cannot be created, including one an interrupt stops between the two
+and one whose file landed before an interrupt, or a failed read-back or sync of
+its publication, stopped it, fails before its adapter runs, names neither and
+removes what it made, even once interrupted: the file while it still holds
+nothing, then the directory.
 
 ### Setup run output
 

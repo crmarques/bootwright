@@ -6,6 +6,16 @@
 # controller answering at all is the identity proof. What remains to establish
 # is that the machine is not running: an installer booting beside a running
 # guest would write to disks that guest is using.
+#
+# The result channel is the consumer's, so the power check names the refusal
+# it makes before it runs, in substrate_libvirt_machine_refusal, which the
+# consumer names to its runner when this proof fails, and the proof clears it
+# once it holds. A controller that did not answer names none: its own message,
+# printed below, is the refusal.
+- name: Clear the refusal an earlier proof named
+  ansible.builtin.set_fact:
+    substrate_libvirt_machine_refusal: ''
+
 - name: Read the machine this installation is about to overwrite
   bootwright.core.redfish_system_read:
     endpoint: '{{ substrate_libvirt_machine_target_endpoint }}'
@@ -29,6 +39,10 @@
       {{ (substrate_libvirt_machine_target.msg | default('') | string | bootwright.core.printable)[:512] }}
     quiet: true
 
+- name: Name the power check as the refusal this proof makes
+  ansible.builtin.set_fact:
+    substrate_libvirt_machine_refusal: machine-running
+
 - name: Refuse a machine that is running
   ansible.builtin.assert:
     that:
@@ -37,3 +51,7 @@
       this machine is running, and an installation erases its disk; stop it
       explicitly before installing over it
     quiet: true
+
+- name: Clear the refusal now that the machine is proved
+  ansible.builtin.set_fact:
+    substrate_libvirt_machine_refusal: ''

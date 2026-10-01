@@ -7,6 +7,8 @@
 - name: Observe the managed service without changing it
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_dns_server_request }}'
+    runs_from:
+      - '{{ infra_dns_server_dnsmasq_config_dir }}/dnsmasq.conf'
     readiness: true
     attempts: 1
   register: infra_dns_server_dnsmasq_observation

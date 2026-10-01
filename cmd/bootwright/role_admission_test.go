@@ -16,6 +16,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -33,7 +34,10 @@ type roleOption struct {
 }
 
 // roleEntryPoint is the role and entry point the playbook bound to one
-// operation imports, with the options that entry point declares.
+// operation imports, with the options that entry point declares. It reads
+// tasks_from exactly as written, as ansible-core looks the specification up,
+// so an import by file name, which ansible-core runs unvalidated, declares no
+// entry point.
 func roleEntryPoint(playbook string) (string, map[string]roleOption, error) {
 	var plays []struct {
 		Tasks []map[string]any `yaml:"tasks"`
@@ -47,7 +51,7 @@ func roleEntryPoint(playbook string) (string, map[string]roleOption, error) {
 			continue
 		}
 		role := strings.TrimPrefix(fmt.Sprint(imported["name"]), "bootwright.core.")
-		entry := strings.TrimSuffix(fmt.Sprint(imported["tasks_from"]), ".yml")
+		entry := fmt.Sprint(imported["tasks_from"])
 		var document struct {
 			ArgumentSpecs map[string]struct {
 				Options map[string]roleOption `yaml:"options"`
@@ -148,8 +152,8 @@ func decodedRequest(canonical []byte) (any, error) {
 
 // roleRefusals lists why the entry point the playbook bound to one run would
 // refuse what the runner hands it: the frozen request under the run's own
-// variable, checked against that entry point's argument specification, and a
-// material mapping it declares.
+// variable, and the material mapping beside it, each checked against that
+// entry point's argument specification.
 func roleRefusals(request lifecycle.RunRequest) []string {
 	playbook, bound := operationPlaybook()[request.Implementation+"/"+request.Operation]
 	if !bound {
@@ -163,7 +167,8 @@ func roleRefusals(request lifecycle.RunRequest) []string {
 	if !ok || declared.Type != "dict" || !declared.Required {
 		return []string{entry + " does not require the dict " + request.Variable + "_request"}
 	}
-	if material, ok := options[request.Variable+"_material"]; !ok || material.Type != "dict" {
+	material, ok := options[request.Variable+"_material"]
+	if !ok || material.Type != "dict" {
 		return []string{entry + " does not declare the dict " + request.Variable + "_material"}
 	}
 	value, err := decodedRequest(request.Canonical)
@@ -174,7 +179,24 @@ func roleRefusals(request lifecycle.RunRequest) []string {
 	for _, problem := range declared.refusals(request.Variable+"_request", value) {
 		found = append(found, entry+" refuses it: "+problem)
 	}
+	for _, problem := range material.refusals(request.Variable+"_material", lentMaterial(request)) {
+		found = append(found, entry+" refuses it: "+problem)
+	}
 	return found
+}
+
+// lentMaterial is the material mapping the runner hands the adapter beside the
+// request, as ansiblerunner's variables builds it: each material file's path
+// and each material value, by the variable the run names it under.
+func lentMaterial(request lifecycle.RunRequest) map[string]any {
+	mapping := map[string]any{}
+	for _, file := range request.Materials {
+		mapping[file.Variable] = "/job/" + file.Name
+	}
+	for name, value := range request.MaterialValues {
+		mapping[name] = value
+	}
+	return mapping
 }
 
 // A role's argument specification and its version assertion are what refuse a
@@ -247,6 +269,40 @@ func TestThePowerRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
 				Variable: bound.variable, Canonical: compact.Bytes()}
 			for _, problem := range roleRefusals(request) {
 				t.Errorf("%s: %s", name, problem)
+			}
+		}
+	}
+}
+
+// A block placed on a host reached over SSH is lent that host's identity and
+// host key beside its own material, and ansible-core validates the mapping
+// carrying them before the entry point's first task. The contract suite places
+// every block on the controller, so a material mapping that declares its keys
+// and not these would refuse only the runs placed off the controller.
+func TestEveryEntryPointAdmitsTheMaterialAnSSHPlacementLends(t *testing.T) {
+	lent := lifecycle.Materials(machine.Placement{Connection: machine.ConnectionSSH, KnownHostsRef: "known-hosts", Machine: "host", PrivateKeyRef: "identity"})
+	if len(lent) != 2 {
+		t.Fatalf("an SSH placement lends %d material files, want its identity and its host key", len(lent))
+	}
+	bindings := operationPlaybook()
+	for _, key := range slices.Sorted(maps.Keys(bindings)) {
+		entry, options, err := roleEntryPoint(bindings[key])
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range slices.Sorted(maps.Keys(options)) {
+			if !strings.HasSuffix(name, "_material") || options[name].Options == nil {
+				continue
+			}
+			for _, file := range lent {
+				declared, ok := options[name].Options[file.Variable]
+				if !ok {
+					t.Errorf("%s refuses %s.%s, which an SSH placement lends", entry, name, file.Variable)
+					continue
+				}
+				for _, problem := range declared.refusals(name+"."+file.Variable, "/job/"+file.Name) {
+					t.Errorf("%s refuses it: %s", entry, problem)
+				}
 			}
 		}
 	}

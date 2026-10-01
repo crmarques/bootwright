@@ -7,6 +7,8 @@
 - name: Observe the managed service without changing it
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_proxy_request }}'
+    runs_from:
+      - '{{ infra_proxy_squid_config_dir }}/squid.conf'
     readiness: true
     attempts: 1
   register: infra_proxy_squid_observation

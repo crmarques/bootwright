@@ -155,22 +155,24 @@ func (t *lifecycleTransaction) openArea(id string) *controllerBundleArea {
 // installs anything. Sources are the immutable acquisition identities every
 // later inspection recovers a closure from; a resolution carrying the native
 // packages a context selects is retained beside them so presence-only
-// readiness can prove those roots without resolving again.
-func (t *lifecycleTransaction) RetainDependencies(ctx context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource) error {
+// readiness can prove those roots without resolving again. The resolutions
+// the stage names as superseded by that one are retired in the same
+// publication, so solving again never accumulates toward the bound.
+func (t *lifecycleTransaction) RetainDependencies(ctx context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource, superseded []string) error {
 	if err := t.base.available(ctx); err != nil {
 		return err
 	}
 	if t.stored.data == nil || t.stored.value.Receipt.Status != "complete" {
 		return controllerFailure("controller.identity", "this host has no completed controller setup; run bootwright setup")
 	}
-	value, err := retainDependencies(cloneControllerState(t.stored.value), definition, sources)
+	value, err := retainDependencies(cloneControllerState(t.stored.value), t.stored.bundles, definition, sources, superseded)
 	if err != nil {
 		return err
 	}
 	return t.publishControllerState(ctx, value, t.stored.bundles, checkpointBeforeRetainedDependencies)
 }
 
-func retainDependencies(value prerequisites.HostState, definition *prerequisites.Definition, sources []prerequisites.DependencySource) (prerequisites.HostState, error) {
+func retainDependencies(value prerequisites.HostState, held []controllerBundleReservation, definition *prerequisites.Definition, sources []prerequisites.DependencySource, superseded []string) (prerequisites.HostState, error) {
 	merged := make(map[string]prerequisites.DependencySource, len(value.RetainedSources)+len(sources))
 	for _, source := range slices.Concat(value.RetainedSources, sources) {
 		if prior, exists := merged[source.ID]; exists && prior != source {
@@ -185,8 +187,16 @@ func retainDependencies(value prerequisites.HostState, definition *prerequisites
 		return strings.Compare(x.ID, y.ID)
 	})
 	if definition == nil {
+		if len(superseded) != 0 {
+			return prerequisites.HostState{}, state("a controller stage retires resolutions only beside the one that supersedes them")
+		}
 		return value, nil
 	}
+	kept, err := retireStageResolutions(value, held, *definition, superseded)
+	if err != nil {
+		return prerequisites.HostState{}, err
+	}
+	value.RetainedDefinitions = kept
 	index := slices.IndexFunc(value.RetainedDefinitions, func(item prerequisites.Definition) bool {
 		return item.ResolutionDigest == definition.ResolutionDigest
 	})
@@ -201,4 +211,36 @@ func retainDependencies(value prerequisites.HostState, definition *prerequisites
 	}
 	value.RetainedDefinitions = append(value.RetainedDefinitions, prerequisites.CloneDefinition(*definition))
 	return value, nil
+}
+
+// retireStageResolutions drops the retained resolutions a controller stage
+// names as superseded by the one it retains. Which are superseded is the
+// stage's judgement; the store refuses the one the receipt carries, the one
+// being retained, and the last resolution naming an area it holds, because an
+// execution bundle is known by the resolutions naming it. A resolution it does
+// not hold is already gone.
+func retireStageResolutions(value prerequisites.HostState, held []controllerBundleReservation, retained prerequisites.Definition, superseded []string) ([]prerequisites.Definition, error) {
+	for _, digest := range superseded {
+		if !validControllerDigest(digest) {
+			return nil, state("retired controller resolution identity is invalid")
+		}
+		if digest == retained.ResolutionDigest {
+			return nil, state("a controller stage may not retire the resolution it retains")
+		}
+		if value.Receipt.Definition != nil && digest == value.Receipt.Definition.ResolutionDigest {
+			return nil, state("the resolution this receipt carries may not be retired")
+		}
+	}
+	retiring := func(definition prerequisites.Definition) bool {
+		return slices.Contains(superseded, definition.ResolutionDigest)
+	}
+	kept := slices.DeleteFunc(slices.Clone(value.RetainedDefinitions), retiring)
+	for _, definition := range value.RetainedDefinitions {
+		names := func(other prerequisites.Definition) bool { return other.CatalogDigest == definition.CatalogDigest }
+		holds := slices.ContainsFunc(held, func(item controllerBundleReservation) bool { return item.ID == definition.CatalogDigest })
+		if retiring(definition) && holds && !slices.ContainsFunc(kept, names) {
+			return nil, state("a retained controller resolution may not be retired while no other names its bundle")
+		}
+	}
+	return kept, nil
 }

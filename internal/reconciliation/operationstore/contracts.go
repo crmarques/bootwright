@@ -28,6 +28,11 @@ type Area interface {
 	// refuses a directory that holds anything, a record and the area itself,
 	// and a directory that is already absent is removed.
 	RemoveDirectory(ctx context.Context, path string) error
+	// RemoveRecord removes one record while it holds exactly expected, durably
+	// when it returns, and leaves the directories above it. It refuses a
+	// directory and a record holding other bytes, and a record that is already
+	// absent is removed.
+	RemoveRecord(ctx context.Context, path string, expected []byte) error
 	// Sync makes a directory durable and resolves every component of its path
 	// as one, so it names a directory and never a record. A record is already
 	// durable when WriteExclusive or Replace returns.

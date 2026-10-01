@@ -40,7 +40,10 @@ not the Machine the selected artifact server is placed on refuses because its
 emulated controller fetches the private [boot image](#boot-media) without
 verifying the server. The placement, install-profile and physical-node refusals
 and the two root-device refusals name the bound Machine in the remediation the
-refusal carries, because it is what the operator changes. Node `labels` and
+refusal carries, because it is what the operator changes. A node whose
+[realized target](substrates.md#selection-and-refusal) does not derive, other
+than on an unrealized substrate, refuses with the substrate's own reason and
+remedy, which name the object to change. Node `labels` and
 `taints` are accepted and reach no installer input, because they are
 post-installation placement intent rather than install configuration.
 
@@ -68,6 +71,8 @@ artifact server and its placement Machine.
 | More nodes than the run ceiling fits | more than 9 `spec.nodes`, whose installation [deadline](#installation) passes the 6-hour ceiling | `installing <nodes> nodes needs a run deadline of <deadline>, past the 6h0m0s every adapter run is held to` | `declare at most 9 nodes on <cluster>` |
 | A node with an install profile | `spec.os.installProfileRef` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `remove spec.os.installProfileRef from <machine> or drop it from <cluster>` |
 | A node on an unrealized substrate | a node's Machine whose provider declares a substrate this executable does not realize | `a declared node is on a substrate this executable does not realize` | `correct <cluster>` |
+| A node whose emulated controller port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulationDefaults.port` plus the node's position among that provider's Machines is past 65535 | `the Machine's emulated controller port does not allocate` | `correct spec.libvirt.bmcEmulationDefaults.port on <provider>` |
+| A node's provider with no emulated controller credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | `the provider declares no emulated controller credential` | `set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on <provider>` |
 | A physical node | a node's Machine on a `baremetal` provider | `physical cluster nodes are not supported until an emulated rehearsal qualifies them` | `<machine> is physical; declare <cluster> on virtual nodes` |
 | A root device the installer cannot name | a node's `spec.os.install.rootDeviceHints.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.os.install.rootDeviceHints.deviceName on <machine> to such a path` |
 | A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.os.install.rootDeviceHints` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.os.install.rootDeviceHints.minSizeGigabytes on <machine> as at most 9007199254740991` |

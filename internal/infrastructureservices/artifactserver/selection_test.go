@@ -160,14 +160,35 @@ func TestSSHPlacementRequiresKeyAndHostKey(t *testing.T) {
 	}
 }
 
-// A request frozen before placements stopped escalating still names its
-// escalation Secret; the operation binds the placement's own list, without it.
-func TestAPlacementNeverBindsAnEscalationSecret(t *testing.T) {
+// A request frozen while placements could still escalate is one this build no
+// longer reads: neither the version those builds wrote nor a placement naming
+// an escalation Secret decodes, so a removal names the executable that froze it.
+func TestARequestFrozenWhilePlacementsEscalatedRefuses(t *testing.T) {
+	requests, err := Requests(catalogOf(controller(), artifactServer()), "controller", testContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := requests[0].Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	earlier := strings.Replace(string(data), `"version":"`+requestVersion+`"`, `"version":"artifact-server-nginx-v1"`, 1)
+	local := `"placement":{"connection":"local","machine":"controller"}`
+	escalating := strings.Replace(string(data), local, `"placement":{"connection":"local","machine":"controller","sudoPasswordRef":"controller-sudo"}`, 1)
+	if earlier == string(data) || escalating == string(data) {
+		t.Fatalf("the frozen request does not carry this build's version and a local placement:\n%s", data)
+	}
+	if _, err := DecodeRequest([]byte(earlier)); err == nil {
+		t.Fatal("a request at the version builds that escalated froze decoded")
+	}
+	if _, err := DecodeRequest([]byte(escalating)); err == nil {
+		t.Fatal("a placement naming an escalation Secret decoded")
+	}
 	request := Request{
 		TLS: &TLS{Secret: "artifact-server-tls"},
 		Placement: Placement{
 			Address: "192.0.2.2", Connection: connectionSSH, KnownHostsRef: "services-host-key", Machine: "services",
-			Port: 22, PrivateKeyRef: "services-key", SudoPasswordRef: "services-sudo", User: "root",
+			Port: 22, PrivateKeyRef: "services-key", User: "root",
 		},
 	}
 	if got := request.secretReferences(); !slices.Equal(got, []string{"artifact-server-tls", "services-host-key", "services-key"}) {

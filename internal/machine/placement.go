@@ -21,10 +21,7 @@ type Placement struct {
 	Machine       string `json:"machine"`
 	Port          int    `json:"port,omitempty"`
 	PrivateKeyRef string `json:"privateKeyRef,omitempty"`
-	// SudoPasswordRef is never populated; it stays only so that requests frozen
-	// before placements stopped escalating remain canonical and removable.
-	SudoPasswordRef string `json:"sudoPasswordRef,omitempty"`
-	User            string `json:"user,omitempty"`
+	User          string `json:"user,omitempty"`
 }
 
 func (p Placement) Local() bool { return p.Connection == ConnectionLocal }

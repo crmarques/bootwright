@@ -192,9 +192,17 @@ A lifecycle operation may also extend the retained dependency evidence it
 acquires under. Before acquisition it publishes the exact source identities it
 will fetch, and the resolved native definition a selected client closure needs,
 into the same atomic record. Sources remain immutable: reusing an ID with
-different bytes or origin refuses, and retained resolutions stay append-only
-and identified by resolution digest, exactly as an explicit setup publishes
-them.
+different bytes or origin refuses, and a retained resolution is identified by
+resolution digest and never replaced under it, exactly as an explicit setup
+publishes them. That same publication retires the retained resolutions the
+[controller stage](../controller.md#the-controller-stage) names, by resolution
+digest, as superseded by the one it retains. Which are superseded is the
+stage's judgement; the store refuses to retire the receipt's own, the one it
+retains, or the last resolution naming an area it holds, retires none beside
+no resolution, and removes no area. A resolution it does not hold is already
+gone. The [bound](#bounds) on retained definitions is judged after that
+retirement, so a record already at the bound accepts a new resolution that
+retires one it holds.
 
 ## Setup runs
 

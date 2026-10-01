@@ -8,14 +8,22 @@ module: infra_service_inspect
 short_description: Observe one Bootwright managed network service
 version_added: "0.1.0"
 description:
-  - Reports the owned unit, container and content root and, when readiness is
-    requested, the answer the service gives on each declared address.
+  - Reports the owned unit, container and content root, whether the container
+    started after every file it runs from was last written and, when readiness
+    is requested, the answer the service gives on each declared address.
   - Performs no change and is safe to repeat.
 options:
   request:
     description: The frozen managed-service request.
     type: dict
     required: true
+  runs_from:
+    description:
+      - Absolute paths of the files the daemon reads at its start. Its unit
+        definition is always compared as well.
+    type: list
+    elements: str
+    default: []
   readiness:
     description: Whether to prove the service answers.
     type: bool
@@ -86,6 +94,7 @@ def main():
     module = AnsibleModule(
         argument_spec={
             "request": {"type": "dict", "required": True},
+            "runs_from": {"type": "list", "elements": "str", "default": []},
             "readiness": {"type": "bool", "default": False},
             "attempts": {"type": "int", "default": 30},
         },
@@ -94,7 +103,7 @@ def main():
     request = module.params["request"]
     attempts = max(1, min(int(module.params["attempts"]), MAX_ATTEMPTS))
     try:
-        observation = observe(module.run_command, request)
+        observation = observe(module.run_command, request, module.params["runs_from"])
     except (OSError, ValueError) as failure:
         module.fail_json(msg="the managed service could not be observed: %s" % type(failure).__name__)
         return

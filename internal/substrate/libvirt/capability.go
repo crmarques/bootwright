@@ -171,7 +171,9 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 			Context: input.Context.Name, Kind: "substrate-machine", Service: request.Identity.Object, Keys: request.ReservationKeys(),
 		}
 		if !request.Placement.Local() {
-			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{Machine: request.Placement.Machine, Reservation: claim})
+			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{
+				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port, Reservation: claim,
+			})
 			continue
 		}
 		plan.Reservations = append(plan.Reservations, claim)
@@ -445,19 +447,23 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 	})
 }
 
-// ObserveRemoval reads the same observation for what a removal proves: none of
-// the domain, its controller unit, its disks and a listener on its socket
-// present is its completion, the whole machine is positive no effect, and part
-// of it is a positive partial removal the next attempt converges. A listener
-// alone is not proved to be this Machine's, so it stays unknown.
+// ObserveRemoval reads the same observation for what a removal takes back, not
+// for readiness: none of the domain, its controller unit, its disks and a
+// listener on its socket present is its completion; the owned domain, its
+// unit active with its container and every disk present, through a hypervisor
+// that answered, is positive no effect, whatever image the controller runs,
+// whether its ComputerSystem answers or what size a disk is; and part of it,
+// or the unit not active, is a positive partial removal the next attempt
+// converges, whatever the apply's postcondition says. A listener alone is not
+// proved to be this Machine's, so it stays unknown.
 func (c MachineCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, func(evidence []byte, request MachineRequest, digest string) reconciliation.EffectState {
 		switch {
 		case ValidateMachineAbsence(evidence, digest) == nil:
 			return reconciliation.EffectCompleted
-		case ValidateMachinePresence(evidence, request, digest) == nil:
+		case ValidateMachineUnremoved(evidence, request, digest) == nil:
 			return reconciliation.EffectNoEffect
-		case ValidateMachinePartial(evidence, digest) == nil:
+		case ValidateMachineRemovalUnfinished(evidence, request, digest) == nil:
 			return reconciliation.EffectPartial
 		}
 		return reconciliation.EffectUnknown

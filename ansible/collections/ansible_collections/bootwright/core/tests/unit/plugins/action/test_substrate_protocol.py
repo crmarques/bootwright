@@ -156,8 +156,11 @@ def test_a_power_state_the_controller_never_reported_is_refused():
         substrate_machine_protocol.presence(machine_observation(), "Spinning", "uuid", DIGEST)
 
 
-# A refused postcondition publishes no evidence, and `no_log` censors the result,
-# so the field names are the only thing an operator can be told.
+# A refused postcondition publishes no evidence, and its message names fields,
+# never values. The completion runs under `no_log`, and the adapter's output
+# callback prints nothing a hidden task raised (plugins/callback/censored.py),
+# so the message reaches no output, and its names keep it safe should it be
+# printed.
 def test_an_unmet_machine_removal_names_what_is_still_there():
     assert substrate_machine_protocol.remaining({"domain": "", "unit": "", "controller": "", "disks": []}) == []
     assert substrate_machine_protocol.remaining(machine_observation()) == ["domain", "unit", "controller", "listener", "disks"]

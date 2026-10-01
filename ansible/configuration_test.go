@@ -37,6 +37,24 @@ func TestRequiresAnsibleMismatchIsAnError(t *testing.T) {
 	}
 }
 
+// ansible.builtin.default prints the error, warnings and deprecations a no_log
+// task raised, whatever value they name, so the adapter prints through the
+// collection's censoring callback and no other. The collection's
+// test_censored_output.py runs each shape under both callbacks.
+func TestTheAdapterOutputPrintsNothingANoLogTaskRaised(t *testing.T) {
+	if value, ok := configured(t, "defaults", "stdout_callback"); !ok || value != "bootwright.core.censored" {
+		t.Fatalf("ansible.cfg names the stdout callback %q, which prints what a no_log task raised", value)
+	}
+	if _, ok := Automation()["collections/ansible_collections/bootwright/core/plugins/callback/censored.py"]; !ok {
+		t.Fatal("the embedded automation carries no bootwright.core.censored callback")
+	}
+	for _, key := range []string{"callbacks_enabled", "callback_whitelist"} {
+		if value, ok := configured(t, "defaults", key); ok {
+			t.Fatalf("ansible.cfg enables the callbacks %q beside the censoring one", value)
+		}
+	}
+}
+
 // configured reads one key from one section of the embedded ansible.cfg.
 func configured(t *testing.T, section, key string) (string, bool) {
 	t.Helper()

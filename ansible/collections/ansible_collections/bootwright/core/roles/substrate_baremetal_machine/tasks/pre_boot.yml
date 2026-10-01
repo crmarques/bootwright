@@ -3,6 +3,16 @@
 # controller-side proof this repeats closed when the block that claimed the
 # machine completed, and a machine can be re-cabled or re-addressed since, so
 # the identity and the complete hardware inventory are read again here.
+#
+# The result channel is the consumer's, so each check names the refusal it
+# makes before it runs, in substrate_baremetal_machine_refusal, which the
+# consumer names to its runner when this proof fails, and the proof clears it
+# once it holds. A read the controller did not answer names none: its own
+# message, printed below, is the refusal.
+- name: Clear the refusal an earlier proof named
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: ''
+
 - name: Read the machine this installation is about to overwrite
   bootwright.core.redfish_system_inspect:
     endpoint: '{{ substrate_baremetal_machine_target_endpoint }}'
@@ -28,6 +38,10 @@
       {{ (substrate_baremetal_machine_target.msg | default('') | string | bootwright.core.printable)[:512] }}
     quiet: true
 
+- name: Name the hardware check as the refusal this proof makes
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: hardware-mismatch
+
 - name: Refuse a machine that is not the one this Machine declares
   ansible.builtin.assert:
     that:
@@ -48,6 +62,10 @@
 # comparison, where a decoded value is data and never a template. A value the
 # proof recorded empty is not compared, and no pin compares nothing. Neither
 # identity is printed: the endpoint and the remedy say what to correct.
+- name: Name the identity check as the refusal this proof makes
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: identity-mismatch
+
 - name: Refuse a machine that answers as another system than this operation proved
   ansible.builtin.assert:
     that:
@@ -66,6 +84,10 @@
       apply this context so the machine is proved again
     quiet: true
 
+- name: Name the power check as the refusal this proof makes
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: machine-running
+
 - name: Refuse a machine that is running
   ansible.builtin.assert:
     that:
@@ -74,3 +96,7 @@
       this machine is running, and an installation erases its disk; stop it
       explicitly before installing over it
     quiet: true
+
+- name: Clear the refusal now that the machine is proved
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: ''

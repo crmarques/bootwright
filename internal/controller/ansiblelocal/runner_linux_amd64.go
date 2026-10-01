@@ -5,6 +5,7 @@ package ansiblelocal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -200,9 +201,14 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 		close(messages)
 	}()
 	loaded, prepared, completed, canceled := false, request.Operation == "recover", false, false
+	// prepared and native are the protocol's position; published and
+	// nativeAuthorized are the effects a record read before the failed exit
+	// has. One read after it still moves the position, so a later record is
+	// judged as if read first, but records and authorizes nothing.
+	published := prepared
 	preparation := request.Preparation
 	continuations := 0
-	nativeAuthorized := false
+	native, nativeAuthorized := false, false
 	var drain <-chan time.Time
 	var drainTimer *time.Timer
 	defer func() {
@@ -223,8 +229,10 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	}
 	cancelled := ctx.Done()
 	var operationErr error
-	// exited records that operationErr is only the adapter's failed exit, which
-	// a refusal the adapter named just before it failed may still replace.
+	// exited marks an operationErr that is only the adapter's failed exit. A
+	// record the adapter wrote before it exited can be read after that exit,
+	// and is judged as if it had been read first: the refusal it names, or a
+	// record the runner refuses, then replaces the failure.
 	exited := false
 	for messages != nil || waited != nil {
 		select {
@@ -253,7 +261,7 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 			waited = nil
 			// A prepared run may still have an authorized native transaction
 			// holding the channel, so it drains on the longer grace period.
-			if prepared {
+			if published {
 				armDrain(boundary.authorizedDrain)
 			} else {
 				armDrain(boundary.completedDrain)
@@ -266,8 +274,10 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 			if !open {
 				messages = nil
 				if err := <-readResult; err != nil {
-					if operationErr == nil {
-						operationErr = failure("controller.unknown", "the Ansible structured result was incomplete")
+					// A read the drain's close ends is the runner's own and no
+					// record the adapter wrote, so it leaves the failed exit.
+					if operationErr == nil || exited && !errors.Is(err, os.ErrClosed) {
+						operationErr, exited = failure("controller.unknown", "the Ansible structured result was incomplete"), false
 					}
 					// A refused or unreadable record ends the protocol at once:
 					// the closed authorization channel fails a waiting adapter.
@@ -277,33 +287,42 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 				}
 				continue
 			}
-			valid := !completed && operationErr == nil && !canceled
+			// A record read after the failed exit is judged as if it had been
+			// read first, but its adapter is gone, so nothing is released,
+			// published, authorized, reported or acknowledged for it. A valid
+			// one leaves that failure, except the named refusal, which
+			// replaces it.
+			valid := !completed && (operationErr == nil || exited) && !canceled
 			switch message.Phase {
 			case "loaded":
 				valid = valid && !loaded && message.Preparation == nil && message.Outcome == "" && len(message.Evidence) == 0
-				if valid {
+				if valid && exited {
+					loaded = true
+				} else if valid {
 					operationErr = release()
 					loaded = operationErr == nil
 				}
-				if loaded && request.Operation == "recover" {
+				if loaded && !exited && request.Operation == "recover" {
 					report("verifying the recorded native transaction")
-				} else if loaded {
+				} else if loaded && !exited {
 					report("reading the native package inventory")
 				}
 			case "prepared":
 				valid = valid && loaded && !prepared && message.Preparation != nil && publish != nil && validPreparation(*message.Preparation, request)
-				if valid {
+				if valid && !exited {
 					operationErr = publish(ctx, *message.Preparation)
-					prepared = operationErr == nil
-					if prepared {
-						copy := *message.Preparation
-						copy.AddedSources = slices.Clone(copy.AddedSources)
-						preparation = &copy
-					}
+					published = operationErr == nil
+				}
+				if valid && (exited || published) {
+					prepared = true
+					copy := *message.Preparation
+					copy.AddedSources = slices.Clone(copy.AddedSources)
+					preparation = &copy
 				}
 			case "native":
-				valid = valid && loaded && prepared && !nativeAuthorized && preparation != nil && nativeChanges(request) > 0
-				if valid {
+				valid = valid && loaded && prepared && !native && preparation != nil && nativeChanges(request) > 0
+				native = native || valid
+				if valid && !exited {
 					nativeAuthorized = true
 					report("installing " + countNoun(nativeChanges(request), "native package"))
 				}
@@ -311,20 +330,21 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 				valid = valid && loaded && prepared && continuations < len(request.Tools)
 				if valid {
 					continuations++
+				}
+				if valid && !exited {
 					tool := request.Tools[continuations-1]
 					report("installing " + tool.Kind + " " + tool.Version + ", tool " + strconv.Itoa(continuations) + " of " + strconv.Itoa(len(request.Tools)))
 				}
 			case "completed":
-				valid = valid && loaded && prepared && (message.Outcome == "changed" || message.Outcome == "unchanged" && !nativeAuthorized) && continuations == len(request.Tools) && (request.Operation == "recover" || nativeAuthorized == (preparation != nil && nativeChanges(request) > 0)) && validEvidence(message.Evidence, request, preparation, nativeAuthorized)
-				if valid {
-					completed = true
+				valid = valid && loaded && prepared && (message.Outcome == "changed" || message.Outcome == "unchanged" && !native) && continuations == len(request.Tools) && (request.Operation == "recover" || native == (preparation != nil && nativeChanges(request) > 0)) && validEvidence(message.Evidence, request, preparation, native)
+				completed = completed || valid
+				if valid && !exited {
 					result = prerequisites.ActionResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
 				}
 			case "refused":
 				// The adapter names the one refusal with a remedy of its own
-				// before it fails, for the tool it is installing. Its exit can
-				// be read first, so the named refusal replaces that failure.
-				valid = !completed && !canceled && (operationErr == nil || exited) && loaded && prepared && continuations > 0 &&
+				// before it fails, for the tool it is installing.
+				valid = valid && loaded && prepared && continuations > 0 &&
 					message.Reason == "release-stamp" && request.Tools[continuations-1].Kind == "openshift-clients"
 				if valid {
 					operationErr, exited = prerequisites.UnreleasedClient(request.Tools[continuations-1]), false
@@ -333,12 +353,13 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 				valid = false
 			}
 			if !valid {
-				// The named refusal is the adapter's last record, so any other
-				// record read after the failed exit keeps that failure.
-				exited = false
-				if operationErr == nil {
+				// A record the runner refuses breaks the protocol whichever of
+				// it and the failed exit is read first, so it replaces that
+				// failure, and the failure is unknown in either order.
+				if operationErr == nil || exited {
 					operationErr = failure("controller.unknown", "the Ansible capability protocol was invalid")
 				}
+				exited = false
 			}
 			if ctx.Err() != nil {
 				canceled = true
@@ -354,13 +375,13 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 		}
 	}
 	if canceled {
-		return actionResult("unknown", prepared), ctx.Err()
+		return actionResult("unknown", published), ctx.Err()
 	}
 	if operationErr != nil || !completed {
 		if operationErr == nil {
 			operationErr = failure("controller.unknown", "the Ansible operation has no complete result")
 		}
-		if prepared {
+		if published {
 			return actionResult("unknown", true), operationErr
 		}
 		return result, operationErr

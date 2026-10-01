@@ -432,7 +432,6 @@ func effectGrants() map[string][]string {
 		"internal/workspace/contexts":           {"io"},
 		"internal/secrets/material":             {"crypto/rand", "io", "net.IP", "os", "syscall"},
 		"internal/secrets/localkeyring":         {"crypto/rand", "io"},
-		"internal/reconciliation/contextguard":  {"io"},
 		"internal/reconciliation/ansiblerunner": {"io", "os", "os/exec", "syscall"},
 		"internal/controller/privilege":         {"io", "os", "os/exec", "os/signal", "syscall"},
 		"internal/controller/hostlinux":         {"golang.org/x/sys/unix", "io", "os"},

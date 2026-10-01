@@ -280,9 +280,36 @@
     quiet: true
   no_log: true
 
+# The substrate's pre-boot proof leaves the refusal it made in its own fact,
+# because this role, not the substrate's, holds the result channel. Naming it
+# to the runner makes the operator's diagnostic the installation's own for that
+# refusal, naming the Machine and the remedy; any other failure of the boot
+# stays the adapter's, with what refused in this run's output. The rescue ends
+# in a fail with no condition, so every failure it catches stays terminal.
 - name: Boot the machine from its own installer image
-  ansible.builtin.include_tasks: boot.yml
   when: not (managedos_install_anaconda_installed | bool)
+  block:
+    - name: Prove the machine, insert the image and boot it
+      ansible.builtin.include_tasks: boot.yml
+  rescue:
+    - name: Name the substrate's refusal of the machine to the runner
+      bootwright.core.managedos_install_protocol:
+        phase: refused
+        reason: '{{ managedos_install_anaconda_refusal }}'
+      vars:
+        managedos_install_anaconda_refusal: >-
+          {{ substrate_libvirt_machine_refusal | default('')
+             if bootwright_os_install_request.target.substrate == 'libvirt'
+             else substrate_baremetal_machine_refusal | default('') }}
+      when: managedos_install_anaconda_refusal | length > 0
+      no_log: true
+
+    - name: Keep any failure of the boot a failure
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} was not
+          booted from its installer image; the failed step above names what
+          refused.
 
 - name: Report installer boot completion
   bootwright.core.managedos_install_protocol:

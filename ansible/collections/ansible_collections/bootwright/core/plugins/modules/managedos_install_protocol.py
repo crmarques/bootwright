@@ -24,6 +24,14 @@ options:
     description: The status a progress phase reports for its group.
     type: str
     required: false
+  reason:
+    description:
+      - The refusal of the target's pre-boot proof a refused phase names to the
+        runner before the run fails, which the runner reports as the
+        installation's own diagnostic for its Machine. One of
+        C(hardware-mismatch), C(identity-mismatch) or C(machine-running).
+    type: str
+    required: false
   outcome:
     description: The terminal outcome a completion phase publishes.
     type: str

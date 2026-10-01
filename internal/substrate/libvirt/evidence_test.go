@@ -272,6 +272,83 @@ func TestMachineAbsenceRequiresPositiveRemoval(t *testing.T) {
 	}
 }
 
+// A machine removal took nothing back only while an observation from a
+// hypervisor that answered shows everything it takes back, for this request
+// and in the form an observation publishes; nothing else it lacks is read as
+// untouched.
+func TestMachineUnremovedRequiresAnAnswerForEverythingTheRemovalTakesBack(t *testing.T) {
+	request := machineRequest(t)
+	for name, damage := range map[string]func(*MachineEvidence){
+		"reported as gone":  func(e *MachineEvidence) { e.Absent = true },
+		"hypervisor silent": func(e *MachineEvidence) { e.Answered = false },
+		"another domain":    func(e *MachineEvidence) { e.Domain = "bootwright-other" },
+		"foreign domain":    func(e *MachineEvidence) { e.Owned = false },
+		"unit stopping":     func(e *MachineEvidence) { e.Unit = "deactivating" },
+		"container gone":    func(e *MachineEvidence) { e.Controller = "" },
+		"disk missing":      func(e *MachineEvidence) { e.Disks[0].Present = false },
+		"disk renamed":      func(e *MachineEvidence) { e.Disks[0].Name = "other" },
+		"disk dropped":      func(e *MachineEvidence) { e.Disks = nil },
+		"another request":   func(e *MachineEvidence) { e.Request = "other" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			var evidence MachineEvidence
+			if err := json.Unmarshal(machineEvidence(request, "digest"), &evidence); err != nil {
+				t.Fatal(err)
+			}
+			if err := ValidateMachineUnremoved(encode(t, evidence), request, "digest"); err != nil {
+				t.Fatalf("a machine holding everything its removal takes back was refused: %v", err)
+			}
+			damage(&evidence)
+			if err := ValidateMachineUnremoved(encode(t, evidence), request, "digest"); err == nil {
+				t.Fatal("evidence that does not prove everything still held was accepted")
+			}
+		})
+	}
+}
+
+// A machine removal is unfinished while an observation reports part of what
+// it takes back and not the whole, whatever postcondition the adapter's
+// presence form carries, because that is the apply's. Nothing this context
+// owns, a foreign domain, the whole still held however drifted, the removal's
+// own form and another request's evidence are never read as unfinished.
+func TestMachineRemovalUnfinishedReadsWhatRemainsNotThePostcondition(t *testing.T) {
+	request := machineRequest(t)
+	for name, test := range map[string]struct {
+		damage     func(*MachineEvidence)
+		unfinished bool
+	}{
+		"unit stopped, all else held": {func(e *MachineEvidence) { e.Unit = "inactive" }, true},
+		"domain undefined":            {func(e *MachineEvidence) { e.Domain, e.Owned, e.System, e.Postcondition = "", false, "", false }, true},
+		"disk alone": {func(e *MachineEvidence) {
+			*e = MachineEvidence{Answered: true, Disks: []DiskEvidence{{Name: "root", Present: true}}, Request: "digest"}
+		}, true},
+		"everything held":        {func(*MachineEvidence) {}, false},
+		"everything held, drift": {func(e *MachineEvidence) { e.Controller, e.Disks[0].SizeGiB = "docker.io/other@sha256:0", 1 }, false},
+		"bmc silent":             {func(e *MachineEvidence) { e.Power, e.Postcondition = "", false }, false},
+		"nothing owned": {func(e *MachineEvidence) {
+			*e = MachineEvidence{Answered: true, Listener: observed(true), Request: "digest"}
+		}, false},
+		"foreign domain":  {func(e *MachineEvidence) { e.Unit, e.Owned = "inactive", false }, false},
+		"removal form":    {func(e *MachineEvidence) { e.Unit, e.Absent = "inactive", true }, false},
+		"another request": {func(e *MachineEvidence) { e.Unit, e.Request = "inactive", "other" }, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var evidence MachineEvidence
+			if err := json.Unmarshal(machineEvidence(request, "digest"), &evidence); err != nil {
+				t.Fatal(err)
+			}
+			test.damage(&evidence)
+			err := ValidateMachineRemovalUnfinished(encode(t, evidence), request, "digest")
+			if test.unfinished && err != nil {
+				t.Fatalf("a machine holding part of what its removal takes back was refused: %v", err)
+			}
+			if !test.unfinished && err == nil {
+				t.Fatal("evidence that proves no unfinished removal was accepted")
+			}
+		})
+	}
+}
+
 // A partial realization is what an interrupted effect usually leaves. It is
 // accepted only for what this context owns, because a foreign object is never
 // converged and the hypervisor closure is shared software this block never

@@ -41,7 +41,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [artifact-server-nginx-v1]
+            choices: [artifact-server-nginx-v2]
       bootwright_artifact_server_material:
         type: dict
         required: true
@@ -53,6 +53,12 @@ argument_specs:
             type: str
             required: false
           fingerprint:
+            type: str
+            required: false
+          identity:
+            type: str
+            required: false
+          knownHosts:
             type: str
             required: false
 

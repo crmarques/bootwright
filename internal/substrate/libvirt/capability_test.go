@@ -78,7 +78,8 @@ func TestMachinePlanRequiresItsProviderByObject(t *testing.T) {
 
 // A Machine on a provider reached over SSH publishes no controller
 // reservation, but its emulated BMC's socket is claimed on that provider's
-// host Machine, so its own context compares it with the host's other sockets.
+// host Machine and the SSH address and port it is reached at, so its own
+// context compares it with that host's other sockets.
 func TestAMachineOnAnSSHHostClaimsItsBMCSocketThere(t *testing.T) {
 	arm := provider().Spec().Get("libvirt")
 	remote := provider(field("libvirt", arm.With("machineRef", api.StringValue("hypervisor")).
@@ -95,9 +96,10 @@ func TestAMachineOnAnSSHHostClaimsItsBMCSocketThere(t *testing.T) {
 		t.Fatalf("a Machine on an SSH host published controller reservations: %+v", plan.Reservations)
 	}
 	if len(plan.SSHReservations) != 1 || plan.SSHReservations[0].Machine != "hypervisor" ||
+		plan.SSHReservations[0].Address != "192.0.2.5" || plan.SSHReservations[0].Port != 22 ||
 		plan.SSHReservations[0].Reservation.Service != "rhel-01" ||
 		!slices.Contains(plan.SSHReservations[0].Reservation.Keys, "socket:192.0.2.5:8000") {
-		t.Fatalf("SSH claims = %+v, want rhel-01's BMC socket qualified by the Machine hypervisor", plan.SSHReservations)
+		t.Fatalf("SSH claims = %+v, want rhel-01's BMC socket qualified by the Machine hypervisor at 192.0.2.5:22", plan.SSHReservations)
 	}
 }
 
@@ -490,6 +492,73 @@ func publishedPostcondition(evidence HostEvidence) bool {
 	for _, network := range evidence.Networks {
 		realized := network.Answered && network.Owned && network.State == "active" && network.Definition
 		complete = complete && network.Bridge && (!network.Managed || realized)
+	}
+	return complete
+}
+
+// A machine removal takes back the controller unit and its container, the
+// domain and its disks, so a machine that still holds all of them, its unit
+// active, is a removal that had no effect however far it has drifted from what
+// its apply proves: a controller on another image, an emulated BMC whose
+// ComputerSystem reports no power state, a domain with another UUID, a disk at
+// another size or nothing listening on the socket. The removal stops the unit
+// first, so a unit that is not active may be its first effect and reads
+// partial, as any part gone does; a hypervisor that did not answer never reads
+// no effect, and a same-named domain without this context's ownership stays
+// unknown. Each row carries the postcondition the adapter publishes for its
+// damage.
+func TestAMachineRemovalReadsWhatItTakesBackNotWhatTheApplyProves(t *testing.T) {
+	machines, _ := MachineRequests(labCatalog(), "controller", testContext)
+	canonical, _ := machines[0].Canonical()
+	execution := lifecycle.Execution{Block: reconciliation.Block{
+		BlockDefinition: reconciliation.BlockDefinition{ID: "machine-rhel-01", Request: canonical},
+		RequestDigest:   "digest",
+	}}
+	for name, test := range map[string]struct {
+		damage func(*MachineEvidence)
+		want   reconciliation.EffectState
+	}{
+		"image drifted":     {func(e *MachineEvidence) { e.Controller = "docker.io/other@sha256:0" }, reconciliation.EffectNoEffect},
+		"bmc silent":        {func(e *MachineEvidence) { e.Power = "" }, reconciliation.EffectNoEffect},
+		"another system":    {func(e *MachineEvidence) { e.System = "00000000-0000-0000-0000-000000000000" }, reconciliation.EffectNoEffect},
+		"disk resized":      {func(e *MachineEvidence) { e.Disks[0].SizeGiB += 10 }, reconciliation.EffectNoEffect},
+		"socket free":       {func(e *MachineEvidence) { e.Listener = observed(false) }, reconciliation.EffectNoEffect},
+		"unit stopped":      {func(e *MachineEvidence) { e.Unit = "inactive" }, reconciliation.EffectPartial},
+		"container gone":    {func(e *MachineEvidence) { e.Controller = "" }, reconciliation.EffectPartial},
+		"unit gone":         {func(e *MachineEvidence) { e.Unit, e.Controller, e.Power = "", "", "" }, reconciliation.EffectPartial},
+		"domain undefined":  {func(e *MachineEvidence) { e.Domain, e.Owned, e.System = "", false, "" }, reconciliation.EffectPartial},
+		"disk deleted":      {func(e *MachineEvidence) { e.Disks[0].Present, e.Disks[0].SizeGiB = false, 0 }, reconciliation.EffectPartial},
+		"hypervisor silent": {func(e *MachineEvidence) { e.Answered, e.Domain, e.Owned, e.System = false, "", false, "" }, reconciliation.EffectPartial},
+		"domain foreign":    {func(e *MachineEvidence) { e.Owned = false }, reconciliation.EffectUnknown},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var evidence MachineEvidence
+			if err := json.Unmarshal(machineEvidence(machines[0], "digest"), &evidence); err != nil {
+				t.Fatal(err)
+			}
+			test.damage(&evidence)
+			evidence.Postcondition = publishedMachinePostcondition(evidence)
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, evidence)}}
+			observation, err := NewMachine(runner).ObserveRemoval(context.Background(), execution)
+			if err != nil || observation.Effect != test.want {
+				t.Fatalf("the removal's resolution read %s (%v), want %s", observation.Effect, err, test.want)
+			}
+		})
+	}
+}
+
+// publishedMachinePostcondition is the postcondition the adapter's presence
+// form carries, as presence() in
+// ansible/collections/ansible_collections/bootwright/core/plugins/action/substrate_machine_protocol.py
+// computes it from an observation: the domain owned, its controller unit
+// active, a controller image, a system and a power state reported, and at
+// least one disk with every disk present. The image, the system and each
+// disk's size are never compared with the frozen request there.
+func publishedMachinePostcondition(evidence MachineEvidence) bool {
+	complete := evidence.Domain != "" && evidence.Owned && evidence.Unit == "active" && evidence.Controller != "" &&
+		evidence.System != "" && evidence.Power != "" && len(evidence.Disks) > 0
+	for _, disk := range evidence.Disks {
+		complete = complete && disk.Present
 	}
 	return complete
 }

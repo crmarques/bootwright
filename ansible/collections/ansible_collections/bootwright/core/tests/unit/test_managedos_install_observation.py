@@ -34,8 +34,20 @@ NOTHING = {"image": False, "private": False, "tree": False, "treeContent": False
 
 
 def tasks():
-    return [task for task in LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
-            if isinstance(task, dict)]
+    """observe.yml's tasks in the order a play reaches them, each block opened
+    and its condition carried onto every task inside it, as a play applies it."""
+    def opened(listed, inherited):
+        for task in listed:
+            if not isinstance(task, dict):
+                continue
+            conditions = task.get("when", [])
+            conditions = inherited + (conditions if isinstance(conditions, list) else [conditions])
+            if "block" in task:
+                for section in ("block", "rescue", "always"):
+                    yield from opened(task.get(section) or [], conditions)
+                continue
+            yield dict(task, when=conditions)
+    return list(opened(LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True), []))
 
 
 def defaults():

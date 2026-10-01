@@ -67,12 +67,31 @@ Alias cell.
 | [B233](#b233) | new, 2026-09-30 (X31) | enabling | Each capability spec's owner | Refusal tables X31 left | Parked under the 2026-09-30 triage rule |
 | [B234](#b234) | new, 2026-09-30 (X31) | enabling | Architecture, with each role's owner | Collection rules X31 left | Parked under the 2026-09-30 triage rule |
 | [B235](#b235) | new, 2026-09-30 (X31) | enabling | CLI and Desired state | Refusals for objects that are not API objects | Parked under the 2026-09-30 triage rule |
+| [B236](#b236) | new, 2026-09-30 (X32) | safety | State reconciliation and Workspace | Exits over unreadable or differently spelled evidence | Found after the M1 freeze (D48); one part needs an owner decision |
+| [B237](#b237) | new, 2026-09-30 (X32) | defect | Controller | The controller stage completes only over a sealed client area | Found after the M1 freeze (D48) |
+| [B238](#b238) | new, 2026-09-30 (X32) | defect | Controller setup | Setup counts controller-stage resolutions | Found after the M1 freeze (D48) |
+| [B239](#b239) | new, 2026-09-30 (X32) | defect | Controller | A context keeps the `latest` client it proved | Found after the M1 freeze (D48) |
+| [B240](#b240) | new, 2026-09-30 (X32) | enabling | Controller | The libvirt client rule in the specs | Found after the M1 freeze (D48) |
+| [B241](#b241) | new, 2026-09-30 (X32) | defect | Controller | Stage and preflight failures name their own remedies | Found after the M1 freeze (D48) |
+| [B242](#b242) | new, 2026-09-30 (X32) | defect | Controller and State reconciliation | An acknowledgement after a failed exit keeps that exit | Found after the M1 freeze (D48) |
+| [B243](#b243) | new, 2026-09-30 (X32) | safety | State reconciliation and Workspace | Room for a replacing removal and its records | Found after the M1 freeze (D48) |
+| [B244](#b244) | new, 2026-09-30 (X32) | safety | Architecture and State reconciliation | Request strings are never rendered as templates | Found after the M1 freeze (D48) |
+| [B245](#b245) | new, 2026-09-30 (X32) | enabling | Architecture, with each role's owner | Censored completions that name only fields | Found after the M1 freeze (D48) |
+| [B246](#b246) | new, 2026-09-30 (X32) | defect | Substrate | A drifted machine's apply resolution names its reason | Found after the M1 freeze (D48) |
+| [B247](#b247) | new, 2026-09-30 (X32) | safety | Infrastructure services and Substrate | Socket claims of an SSH placement that is the controller | Found after the M1 freeze (D48); publishing SSH claims needs an owner decision |
+| [B248](#b248) | new, 2026-09-30 (X32) | defect | Infrastructure services | The artifact server compares its start with its files | Found after the M1 freeze (D48) |
+| [B249](#b249) | new, 2026-09-30 (X32) | defect | Managed OS and Infrastructure services | A Machine and a profile of one name share no served directory | Found after the M1 freeze (D48); the consumer directories need an owner decision |
+| [B250](#b250) | new, 2026-09-30 (X32) | enabling | Container cluster and Substrate | Substrate refusals in the cluster's own words | Found after the M1 freeze (D48) |
+| [B251](#b251) | new, 2026-09-30 (X32) | enabling | State reconciliation, with each role's owner | Every lifecycle refusal reaches the operator | Found after the M1 freeze (D48) |
+| [B252](#b252) | new, 2026-09-30 (X32) | defect | State reconciliation, with each capability's owner | An old request refuses by naming its version | Found after the M1 freeze (D48) |
 
 ### B94
 
 Delete the dead setup-binding and legacy prerequisites layer, and share one
 retained-native matcher between preflight and the controller stage. **Exit
 evidence:** preflight and stage tests over one closure.
+
+Since X32 setup still plans a controller-binding action and appends a binding when a context is named, although its scope is always empty (found in X32).
 
 ### B95
 
@@ -320,6 +339,8 @@ Setup runs are not driven by the contextfs checkpoint harness; a failure their o
 
 A knowledge page keyed on `SyntaxWarning: invalid decimal literal` for the ansible-check area name (B203), and the carry-forward page citing the test that carries a settled receipt forward (found in X31). **Exit evidence:** the pages.
 
+X32 found the mechanism: ansible-core renders its home defaults through Jinja's native environment, whose concatenation parses the text, so any home path in which a number runs into a keyword warns in every process; CPython also warns for other number forms, such as `1_1if`, `1e1if` and `0x1fif`.
+
 ### B230
 
 No test pins the pre-plan refusal of a pending receipt whose bundle is incompatible; the lifecycle test double's held area lets a removal skip its closed and read-only checks; and no runner test pins a partial record waiting at the drain after a failed exit, whose outcome X31 made unknown (found in X31). **Exit evidence:** each test.
@@ -343,6 +364,74 @@ No structural rule checks that a rescue ends in an unconditional fail, so one co
 ### B235
 
 The lost-binding refusal names its operation and binding only in its message, because a diagnostic's object is an API object; and a refusal inherited from an Environment default gets the generic inherited-field remedy in place of its own, so a file source from a default names `secret set` only in its message (found in X31). **Exit evidence:** a diagnostic shape for such objects and inherited remedies kept.
+
+### B236
+
+A context whose evidence is corrupt or unsupported still has no runnable exit: deletion refuses it even with `--allow-orphans`, and the only remedy named is a whole-store restore no procedure provides; whether `--allow-orphans` may abandon such a context is an owner decision. The lost-binding refusal and its status step still name the orphan-acknowledged delete whatever the evidence reads; the context guard's evidence refusal names no remedy; and the lifecycle compares evidence by exact bytes where the guard accepts any spelling (found in X32). **Exit evidence:** the chosen exit, and each refusal naming a delete the guard admits.
+
+### B237
+
+An attempt interrupted after it publishes the clients but before it seals their area is later proved present and complete without sealing it, so the area stays writable although the specs say the stage completes only once it is sealed; and locating an installed tool reports any store error as not installed, pointing at the controller stage when store state is the cause (found in X32). **Exit evidence:** a resolution and replay that seal the area, and a lookup that names a store failure.
+
+### B238
+
+Setup's bound decision never counts controller-stage resolutions as retirable, so a host holding ones an earlier build accumulated keeps them until the same selection solves again and setup at the bound blames client areas; after a completed setup, the purge reports stage resolutions as retired execution bundles although it removed nothing; and resolutions of a selection no context makes any more are never retired (found in X32). **Exit evidence:** bound, purge-report and retirement tests over stage resolutions.
+
+### B239
+
+The controller stage's recovery and `preflight controller --context` select the newest retained release under a `latest` prefix from the host-wide sources, so once another context retains a newer client, a context's next fresh apply republishes under it undeclared, and its preflight reports its clients missing (found in X32, older than it). **Exit evidence:** stage and preflight tests in which another context's newer release is retained.
+
+### B240
+
+The controller selects the libvirt client for any Machine hosted on a libvirt provider, which the controller and state-reconciliation specs do not state; and no stage test runs a plan that selects the hypervisor closure end to end (found in X32). **Exit evidence:** the rule stated or dropped, and the test.
+
+### B241
+
+Native resolution and Ansible runner failures reached from the controller stage still name setup in their remedies; `preflight controller --context` compares a pending setup receipt's route with the context's Machine proxy, which setup never reads; and it reports a tool selection failure over retained sources with setup's remedy (found in X32). **Exit evidence:** remedy tests for each path.
+
+### B242
+
+In both runners, a record that needs an acknowledgement, read before the adapter's failed exit while the adapter is gone, fails its write with `EPIPE` and reports authorization delivery as uncertain, where reading the exit first keeps the failed exit; for a lifecycle attempt that is unknown against failed (found in X32). **Exit evidence:** runner tests that force each order.
+
+### B243
+
+An apply keeps room for one removal directory, so at the directory bound a failed removal's replacement refuses at registration; a removal's byte admission covers only its registration, so its records and logs can still stop it part way at the byte bound; and when the reserve cuts an attempt's output to nothing, the attempt log records nothing (found in X32). **Exit evidence:** bound tests for a replacing removal and for a removal's records, and a log entry for dropped output.
+
+### B244
+
+ansible-core 2.21.4 loads a runner's `--extra-vars @request.json` as trusted templates, so a request string holding Jinja delimiters is rendered on the controller, and since X32 argument validation renders every declared request string before the first task; no Go check refuses such delimiters, and whether an authored value can reach one is unverified. The install request would also carry `endpoints: null` if no endpoint address resolved, which validation now refuses (found in X32). **Exit evidence:** requests passed as unsafe data or delimiters refused, with a test per path.
+
+### B245
+
+Since X32 the adapter output prints nothing a failed `no_log` task raised, so completion refusals that name only fields, never values, now print nowhere; role comments still say ansible-core keeps nothing of such a failure; and the censor overrides a private ansible-core method that a move past 2.21 must re-qualify (found in X32). **Exit evidence:** a decision per refusal, the comments, and the re-qualification note.
+
+### B246
+
+The libvirt machine's apply resolution reads a controller on another image, a domain with another UUID or a resized disk as unknown with no reason, because the adapter proves its postcondition and Go refuses it on the comparison (found in X32). B213's text was also imprecise: before X32 only a silent BMC read partial on removal. **Exit evidence:** observation rows with named reasons.
+
+### B247
+
+An SSH placement recognized as the controller has its socket, unit and path claims compared only within its context and never published, so another context on the controller is not refused over them; a controller whose sshd listens on a port other than 22 is not recognized; one host reached by a name and an address is not recognized; and bridge readiness pairs providers and services by Machine name (found in X32). **Exit evidence:** the decision, and planning tests for each.
+
+### B248
+
+The artifact server's observation never compares the container's start with its configuration, unit or serving material, so an unknown resolution of an apply stopped before its restart can record it done while nginx serves an earlier configuration; and since X32 a managed-service apply whose host clock stepped back restarts on every attempt until the clock passes the file's time (found in X32). **Exit evidence:** observation and apply tests for both.
+
+### B249
+
+A Machine and a MachineInstallProfile with the same name publish into the same `os/<name>/` directory, and the Machine's removal deletes it recursively, taking the profile's tree; nothing refuses the collision (found in X32 by reading the code). The consumer-level `os/`, `private/` and `private/os/` directories stay until the artifact server's own removal, and no block owns them. **Exit evidence:** a refusal or distinct paths, with a test, and the owner's rule for consumer directories.
+
+### B250
+
+A node's port and credential refusals show the substrate's Machine-worded reason on a ContainerCluster diagnostic that does not name the node's Machine; and whether a provider's substrate is realized is decided by hand in three places (found in X32). **Exit evidence:** the wording, and one owner for the rule.
+
+### B251
+
+Lifecycle refusals other than the pre-boot proof, such as the managed-OS check that a machine holds another installation and the cluster boot's missing image, still reach the operator only through the adapter output; and the physical pre-boot refusals should be exercised end to end once B73 and B67 lift the physical refusals (found in X32). **Exit evidence:** a diagnostic per refusal, and an end-to-end run.
+
+### B252
+
+Every frozen-request decoder decodes strictly before it checks the version, so a request an earlier version froze with a since-removed field refuses as malformed instead of naming its version, as the state-reconciliation spec requires; and four decoders' unsupported-version messages name no version (found in X32). **Exit evidence:** decoder tests over an old request with a removed field.
 
 ## Retired
 

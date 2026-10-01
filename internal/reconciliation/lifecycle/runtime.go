@@ -123,12 +123,12 @@ func (s Service) retain(ctx context.Context, view RunView) (*operationstore.Adap
 	}
 	target := path.Join(identity, runOutputName)
 	if err := area.EnsureDirectory(ctx, identity); err != nil {
-		return nil, nil, "", abandonRun(ctx, area, identity, err)
+		return nil, nil, "", abandonRun(ctx, area, identity, "", err)
 	}
 	// Exclusive creation is what proves the name is this run's own, and it
 	// leaves the file an operator was told about already there to open.
 	if err := area.WriteExclusive(ctx, target, nil); err != nil {
-		return nil, nil, "", abandonRun(ctx, area, identity, err)
+		return nil, nil, "", abandonRun(ctx, area, identity, target, err)
 	}
 	directory := area.Location()
 	if directory != "" {
@@ -141,12 +141,19 @@ func (s Service) retain(ctx context.Context, view RunView) (*operationstore.Adap
 	return s.options.Operations(area).OpenAdapterOutput(ctx, target), logs, directory, nil
 }
 
-// abandonRun removes the directory a run made for a file it could not keep,
-// since no result names either, and reports the failure that stopped the run.
-// The removal outlives an interrupt, which can land between the directory and
-// its file; a removal that fails leaves that failure as it was.
-func abandonRun(ctx context.Context, area operationstore.Area, identity string, err error) error {
-	_ = area.RemoveDirectory(context.WithoutCancel(ctx), identity)
+// abandonRun removes what a run made for a file it could not keep, since no
+// result names either, and reports the failure that stopped the run. A file
+// whose bytes landed before its publication failed goes first, and only while
+// it is still as empty as this run wrote it, so the directory can go after it.
+// The removals outlive an interrupt, which can land between the directory and
+// its file or once the file landed; a removal that fails leaves that failure as
+// it was.
+func abandonRun(ctx context.Context, area operationstore.Area, identity, file string, err error) error {
+	unstoppable := context.WithoutCancel(ctx)
+	if file != "" {
+		_ = area.RemoveRecord(unstoppable, file, nil)
+	}
+	_ = area.RemoveDirectory(unstoppable, identity)
 	return err
 }
 

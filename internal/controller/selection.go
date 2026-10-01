@@ -148,8 +148,11 @@ func requiresInstallerMedia(catalog api.Catalog, controllerMachine api.Object) b
 	return false
 }
 
+// requiresLibvirtClient reports whether this Machine needs virsh. A provider
+// hosted here selects it too: its host block proves the client with the
+// hypervisor closure, and the daemon packages need not pull the client in.
 func requiresLibvirtClient(catalog api.Catalog, controllerMachine api.Object) bool {
-	if slices.Contains(controllerMachine.Spec().Get("capabilities").Strings(), "libvirt") {
+	if slices.Contains(controllerMachine.Spec().Get("capabilities").Strings(), "libvirt") || requiresHypervisor(catalog, controllerMachine) {
 		return true
 	}
 	for _, machine := range catalog.OfKind(api.Machine) {

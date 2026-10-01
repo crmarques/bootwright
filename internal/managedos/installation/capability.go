@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // Capability installs the operating system of a Bootwright-installed Machine.
@@ -357,7 +358,10 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if observes != "" {
 		values["observes"] = observes
 	}
+	var refusals map[string]error
 	if operation == "apply" {
+		// Only an apply proves its target before it boots it.
+		refusals = substrate.PreBootRefusals(request.Target.Substrate, request.Identity.Object, request.Target.Controller.Endpoint)
 		key, err := authorizedKey(execution, request)
 		if err != nil {
 			return lifecycle.RunResult{}, err
@@ -404,7 +408,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
-		Deadline: request.Deadline(),
+		Refusals: refusals, Deadline: request.Deadline(),
 	}))
 }
 

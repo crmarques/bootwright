@@ -55,8 +55,8 @@ func ServiceUnits() []string { return append([]string(nil), serviceUnits...) }
 const domainOff = "shut off"
 
 const (
-	hostRequestVersion    = "substrate-host-libvirt-v2"
-	machineRequestVersion = "machine-libvirt-v1"
+	hostRequestVersion    = "substrate-host-libvirt-v3"
+	machineRequestVersion = "machine-libvirt-v2"
 )
 
 // HostBlockID and MachineBlockID name the blocks each capability contributes.

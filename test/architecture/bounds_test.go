@@ -64,6 +64,8 @@ func documentedBounds() []documentedBound {
 		{contexts, "| Lifecycle operations one context retains | %s |", operations, "MaxOperations", nil, false},
 		{contexts, "| Entries in one context's lifecycle operation area | %s |", operations, "MaxEntries", nil, false},
 		{contexts, "and must still keep %s entries free", operations, "ReservedEntries", nil, false},
+		{contexts, "| Bytes in one context's lifecycle operation area | %s |", operations, "MaxBytes", nil, true},
+		{contexts, "fresh apply needs %s of them free", operations, "ReservedBytes", nil, true},
 		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}, false},
 		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}, false},
 		{contexts, "| One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}, false},

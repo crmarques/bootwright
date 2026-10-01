@@ -50,7 +50,7 @@ def service(kind, slug, name, port, **fields):
         "placement": LOCAL,
         "port": port,
         "unit": "bootwright-%s-%s-%s" % (CONTEXT, slug, name),
-        "version": "%s-v1" % slug,
+        "version": "%s-v2" % slug,
     }
     request.update(fields)
     return request
@@ -67,7 +67,7 @@ ARTIFACT_SERVER = {
     "placement": LOCAL,
     "tls": {"fingerprint": DIGEST, "minVersion": "TLSv1.2", "secret": "media-serving"},
     "unit": "bootwright-%s-artifact-server-media" % CONTEXT,
-    "version": "artifact-server-nginx-v1",
+    "version": "artifact-server-nginx-v2",
 }
 
 NETWORK = {"address": "192.0.2.1/24", "bridge": "virbr-lab", "forward": "nat", "managed": True,
@@ -82,7 +82,7 @@ HOST = {
     "provisioned": True,
     "services": ["virtnetworkd.socket", "virtqemud.socket", "virtstoraged.socket"],
     "uri": "qemu:///system",
-    "version": "substrate-host-libvirt-v2",
+    "version": "substrate-host-libvirt-v3",
 }
 
 MACHINE = {
@@ -108,7 +108,7 @@ MACHINE = {
     "uri": "qemu:///system",
     "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
     "vcpu": 4,
-    "version": "machine-libvirt-v1",
+    "version": "machine-libvirt-v2",
 }
 
 # Each rendered template with the variables its task sees beside the role's

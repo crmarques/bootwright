@@ -12,7 +12,11 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
     emit,
 )
 
-PHASES = ("loaded", "group", "completed")
+PHASES = ("loaded", "group", "refused", "completed")
+# The refusals of the target's pre-boot proof this installation names to its
+# runner before the run fails, each one the runner reports as the
+# installation's own diagnostic for its Machine (internal/substrate, preboot.go).
+REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
 GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 OUTCOMES = ("changed", "unchanged")
 POWER_STATES = ("", "On", "Off")
@@ -147,6 +151,12 @@ class ActionModule(ActionBase):
                 if status not in GROUP_STATUSES:
                     raise ValueError("group status")
                 emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
+                return {"changed": False}
+            if phase == "refused":
+                reason = arguments.get("reason")
+                if reason not in REFUSALS:
+                    raise ValueError("refusal reason")
+                emit({"phase": "refused", "reason": reason})
                 return {"changed": False}
             outcome = arguments.get("outcome")
             if outcome not in OUTCOMES:

@@ -382,23 +382,34 @@ func ValidateMachinePresence(data []byte, request MachineRequest, digest string)
 }
 
 func matchDisks(observed []DiskEvidence, frozen []Disk) error {
+	sorted, expected, err := pairDisks(observed, frozen)
+	if err != nil {
+		return err
+	}
+	for index, disk := range expected {
+		if sorted[index].SizeGiB != disk.SizeGiB {
+			return refusal("lifecycle.state", "a machine disk is not the size the profile froze", "")
+		}
+	}
+	return nil
+}
+
+// pairDisks orders the observed disks and the frozen ones by name, and
+// requires exactly one present entry of the same name for each frozen disk.
+func pairDisks(observed []DiskEvidence, frozen []Disk) ([]DiskEvidence, []Disk, error) {
 	if len(observed) != len(frozen) {
-		return refusal("lifecycle.state", "the machine evidence does not cover every frozen disk", "")
+		return nil, nil, refusal("lifecycle.state", "the machine evidence does not cover every frozen disk", "")
 	}
 	sorted := slices.Clone(observed)
 	slices.SortFunc(sorted, func(x, y DiskEvidence) int { return strings.Compare(x.Name, y.Name) })
 	expected := slices.Clone(frozen)
 	slices.SortFunc(expected, func(x, y Disk) int { return strings.Compare(x.Name, y.Name) })
 	for index, disk := range expected {
-		entry := sorted[index]
-		if entry.Name != disk.Name || !entry.Present {
-			return refusal("lifecycle.state", "a frozen machine disk is missing", "")
-		}
-		if entry.SizeGiB != disk.SizeGiB {
-			return refusal("lifecycle.state", "a machine disk is not the size the profile froze", "")
+		if sorted[index].Name != disk.Name || !sorted[index].Present {
+			return nil, nil, refusal("lifecycle.state", "a frozen machine disk is missing", "")
 		}
 	}
-	return nil
+	return sorted, expected, nil
 }
 
 // ValidateMachineAbsence accepts evidence only when it positively proves the
@@ -430,6 +441,73 @@ func ValidateMachineAbsence(data []byte, digest string) error {
 	return nil
 }
 
+// ValidateMachineUnremoved accepts observed evidence only when it proves a
+// removal of the frozen machine took nothing back: the presence form, from a
+// hypervisor that answered, reporting the frozen domain with this context's
+// ownership, its controller unit active with its container, and every frozen
+// disk present. The removal stops the unit before anything else, so a unit
+// that is not active may be its first effect and is never read as none. The
+// image the controller runs, the power state its ComputerSystem reports, the
+// domain's UUID and run state and each disk's size are what the apply proves,
+// and a listener on the socket is alone not proved to be this Machine's; none
+// of them is anything a removal takes back, so none plays any part.
+func ValidateMachineUnremoved(data []byte, request MachineRequest, digest string) error {
+	evidence, err := decodeMachineRemains(data, digest)
+	if err != nil {
+		return err
+	}
+	return machineUnremoved(evidence, request)
+}
+
+// ValidateMachineRemovalUnfinished accepts observed evidence only when it
+// proves a removal of the frozen machine took back part of what it owns and
+// not the rest: the presence form reporting the domain, its controller unit or
+// container, or one of its disks, without the whole that
+// ValidateMachineUnremoved reads. The adapter's postcondition is the apply's,
+// so it plays no part here. A same-name domain without this context's
+// ownership is foreign and leaves the effect unknown.
+func ValidateMachineRemovalUnfinished(data []byte, request MachineRequest, digest string) error {
+	evidence, err := decodeMachineRemains(data, digest)
+	if err != nil {
+		return err
+	}
+	if err := holdsMachine(evidence); err != nil {
+		return err
+	}
+	if machineUnremoved(evidence, request) == nil {
+		return refusal("lifecycle.state", "the machine still holds everything its removal takes back", "")
+	}
+	return nil
+}
+
+// decodeMachineRemains decodes observed evidence for this request in its
+// presence form, the only form that reports what a removal has still to take
+// back.
+func decodeMachineRemains(data []byte, digest string) (MachineEvidence, error) {
+	evidence, err := decodeMachineEvidence(data, digest)
+	if err != nil {
+		return MachineEvidence{}, err
+	}
+	if evidence.Absent {
+		return MachineEvidence{}, refusal("lifecycle.state", "the machine evidence reports a removal, not what remains", "")
+	}
+	return evidence, nil
+}
+
+func machineUnremoved(evidence MachineEvidence, request MachineRequest) error {
+	if !evidence.Answered {
+		return refusal("lifecycle.state", "the hypervisor did not answer for the machine's domain", "")
+	}
+	if evidence.Domain != request.Domain || !evidence.Owned {
+		return refusal("lifecycle.state", "the machine no longer holds its owned domain", "")
+	}
+	if evidence.Unit != "active" || evidence.Controller == "" {
+		return refusal("lifecycle.state", "the machine no longer holds its controller unit active", "")
+	}
+	_, _, err := pairDisks(evidence.Disks, request.Disks)
+	return err
+}
+
 // ValidateMachinePartial accepts evidence only when it positively proves this
 // context's own machine is part way realized: its domain, controller unit or
 // one of its disks is present while the whole is not. A same-name domain
@@ -443,14 +521,17 @@ func ValidateMachinePartial(data []byte, digest string) error {
 	if evidence.Postcondition || evidence.Absent {
 		return refusal("lifecycle.state", "the machine evidence proves a settled state, not a partial one", "")
 	}
+	return holdsMachine(evidence)
+}
+
+// holdsMachine requires the evidence to report the domain, the controller unit
+// or container, or one of the disks, and no same-name domain defined without
+// this context's ownership.
+func holdsMachine(evidence MachineEvidence) error {
 	if evidence.Domain != "" && !evidence.Owned {
 		return refusal("lifecycle.state", "a domain of the same name exists without this context's ownership", "")
 	}
-	present := evidence.Domain != "" || evidence.Unit != "" || evidence.Controller != ""
-	for _, disk := range evidence.Disks {
-		present = present || disk.Present
-	}
-	if !present {
+	if !machineRemains(evidence) {
 		return refusal("lifecycle.state", "the machine evidence reports nothing this context owns", "")
 	}
 	return nil

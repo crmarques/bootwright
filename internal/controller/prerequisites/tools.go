@@ -132,42 +132,38 @@ func WithTools(base Definition, tools []ToolDefinition) (Definition, error) {
 	return base, nil
 }
 
-// LocateInstalledTool answers the absolute path of one executable a retained
-// controller closure published on this host. A search path is never authority:
-// a consumer runs the exact file the controller stage installed for the
-// release its own graph selected.
-func LocateInstalledTool(ctx context.Context, view StorageView, tool controller.InstalledTool) (string, error) {
+// LocateInstalledTool answers the absolute path of one executable the exact
+// closure tools names published on this host. A search path is never
+// authority: the caller recovers the closure its own context's controller
+// stage selects, so a consumer runs the exact file that stage installed for
+// the release its own graph selected, and never one another closure holds.
+func LocateInstalledTool(ctx context.Context, view StorageView, tools []ToolDefinition, tool controller.InstalledTool) (string, error) {
 	if view.OpenBundle == nil {
 		return "", failure("controller.state", "the retained controller areas are unavailable",
 			"run bootwright setup, then apply --stage controller")
 	}
-	for _, definition := range view.State.RetainedDefinitions {
-		member, found := publishedMember(definition.Tools, tool)
-		if !found {
-			continue
-		}
-		area, err := view.OpenBundle(ctx, ToolsDigest(definition.Tools))
-		if err != nil || area == nil {
-			continue
-		}
-		entries, err := area.Entries(ctx)
-		if err != nil {
-			continue
-		}
-		if !slices.ContainsFunc(entries, func(entry BundleEntry) bool {
-			return entry.Path == member && !entry.Directory
-		}) {
-			continue
-		}
-		location, err := area.Location(ctx)
-		if err != nil {
-			continue
-		}
-		return location.Path + "/" + member, nil
-	}
-	return "", failure("controller.state",
+	absent := failure("controller.state",
 		"the "+tool.Executable+" of release "+tool.Version+" is not installed on this controller",
 		"run bootwright apply --stage controller")
+	member, found := publishedMember(tools, tool)
+	if !found {
+		return "", absent
+	}
+	area, err := view.OpenBundle(ctx, ToolsDigest(tools))
+	if err != nil || area == nil {
+		return "", absent
+	}
+	entries, err := area.Entries(ctx)
+	if err != nil || !slices.ContainsFunc(entries, func(entry BundleEntry) bool {
+		return entry.Path == member && !entry.Directory
+	}) {
+		return "", absent
+	}
+	location, err := area.Location(ctx)
+	if err != nil {
+		return "", absent
+	}
+	return location.Path + "/" + member, nil
 }
 
 // publishedMember is the file one retained closure publishes for exactly this

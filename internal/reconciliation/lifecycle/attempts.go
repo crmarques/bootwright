@@ -67,7 +67,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	}
 	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
-	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, block, material, proved, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, proved, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			return capability.Destroy(inner, execution)
 		}
@@ -106,7 +106,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 // observes for the verb the operation froze: a destroy's block through
 // ObserveRemoval, so a target its removal has not yet taken back is no
 // removal, and every other block through Observe.
-func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
+func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
@@ -133,7 +133,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	var observation Observation
-	_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, block, material, nil, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, nil, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		observe := capability.Observe
 		if operation.Verb == reconciliation.Destroy {
 			observe = capability.ObserveRemoval
@@ -190,7 +190,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 // invoke runs the capability inside the private Python execution boundary,
 // exactly as controller setup does. The approved bundle is the operation's
 // own, opened once before its first effect.
-func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, block reconciliation.Block, material map[string]secrets.Material, proved []BlockEvidence, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
+func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, proved []BlockEvidence, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
 	result := Result{Outcome: reconciliation.OutcomeUnknown}
 	// Completion is counted in proved groups, not in elapsed time: the adapter
@@ -241,7 +241,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 			Operation: operation.ID, Attempt: attempt, Resolution: resolution, Block: block, Launch: launch, Bundle: approved.location, Area: approved.area,
 			Material: material, Proved: proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
-				return prerequisites.LocateInstalledTool(inner, view, tool)
+				return s.locateTool(inner, store, view, operation, plan, tool)
 			},
 			Stage: stage,
 			// A failed record latches the boundary, which cancels this run.
@@ -265,6 +265,40 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		return callErr
 	})
 	return result, err
+}
+
+// locateTool asks the controller stage block this plan froze where the closure
+// it proved published one executable. The stage is the one block whose clients
+// every other block's adapter runs, so its capability alone answers; a plan
+// without one has installed nothing to run. The proof is the one that block
+// recorded in the apply whose effects this operation runs over, this apply or
+// the one a removal takes back, because the stage's removal retains and
+// proves no closure, and recovering the closure again from the host's shared
+// sources would move a latest client to a release another context retained.
+func (s Service) locateTool(ctx context.Context, store OperationStore, view prerequisites.StorageView, operation operationstore.Operation, plan reconciliation.Plan, tool controller.InstalledTool) (string, error) {
+	index := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.Stage == reconciliation.StageController })
+	if index < 0 {
+		return "", failure("controller.state",
+			"the "+tool.Executable+" of release "+tool.Version+" is not installed on this controller",
+			"run bootwright apply --stage controller")
+	}
+	stage := plan.Blocks[index]
+	capability, ok := s.capabilities.Resolve(stage.Kind, stage.Implementation)
+	locator, locates := capability.(ToolLocator)
+	if !ok || !locates {
+		return "", failure("lifecycle.state",
+			"this executable cannot locate the clients the controller stage of this operation installed",
+			"install the executable that registered this operation")
+	}
+	applied := operation.ID
+	if operation.Verb == reconciliation.Destroy {
+		applied = operation.Source
+	}
+	proved, err := blockEvidence(ctx, store, applied, stage, reconciliation.Apply)
+	if err != nil {
+		return "", err
+	}
+	return locator.LocateTool(ctx, view, stage, proved, tool)
 }
 
 func (s Service) report(ctx context.Context, event ProgressEvent) {

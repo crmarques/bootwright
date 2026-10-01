@@ -2,6 +2,7 @@ package clients
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/controller"
@@ -186,6 +187,11 @@ func retainedEvidence(request Request, digest string) ([]byte, error) {
 // whose retry is the same idempotent publication; an observation that cannot
 // be made at all stays unknown.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	observation, err := c.observe(ctx, execution)
+	return observation, inStage(execution, err)
+}
+
+func (c Capability) observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := DecodeRequest(execution.Block.Request)
 	if err != nil {
@@ -224,6 +230,21 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 // selected closure is proved from retained identities alone, so a repeated
 // apply contacts no publisher and reads no repository metadata.
 func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
+	result, err := c.apply(ctx, execution)
+	return result, inStage(execution, err)
+}
+
+// inStage names this stage, not setup, as what settles a failure the adapters
+// it shares with setup raise, because setup installs nothing a context
+// selects.
+func inStage(execution lifecycle.Execution, err error) error {
+	if err == nil || execution.Stage == nil {
+		return err
+	}
+	return prerequisites.InStage(err, execution.Stage.Setup.Context.Name)
+}
+
+func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	failed := lifecycle.Result{Outcome: reconciliation.OutcomeFailed}
 	if err := ctx.Err(); err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
@@ -270,12 +291,14 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	// solved from, so a missing root is solved again rather than replayed, and
 	// roots already installed need no transaction at all.
 	var transaction *prerequisites.Definition
+	var superseded []string
 	if request.installsNative() && !installed {
 		value, err := c.resolveNative(ctx, setup, request)
 		if err != nil {
 			return failed, err
 		}
 		transaction, native = &value, &value
+		superseded = supersededNative(execution, setup.Platform, request, value)
 	}
 	report(ctx, execution, "resolve-clients", "ok")
 	install, err := installDefinition(setup, transaction, tools)
@@ -285,7 +308,7 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	// Intent precedes acquisition: the exact identities this attempt will
 	// acquire are durable before a single byte is downloaded, so a later
 	// inspection can always name the closure an interrupted attempt chose.
-	if err := execution.Stage.RetainDependencies(ctx, transaction, install.Sources); err != nil {
+	if err := execution.Stage.RetainDependencies(ctx, transaction, install.Sources, superseded); err != nil {
 		return failed, err
 	}
 	return c.publish(ctx, execution, request, install, tools, native)
@@ -377,6 +400,62 @@ func (c Capability) retained(execution lifecycle.Execution, request Request) ([]
 	return c.tools.Select(request.ToolRequests(), execution.Stage.Setup.State.RetainedSources)
 }
 
+// LocateTool answers, for every other block of the plan this frozen stage
+// block belongs to, where the closure that block proved published one
+// executable. proved is what it recorded in the apply the asking operation
+// runs over, so a consumer runs the file its own context's stage installed.
+// No retained resolution names a client closure, so the closure is recovered
+// from retained identities, but only from those the proof names: the host's
+// sources are shared, and the newest release under a latest intent may be one
+// another context retained and this one never published.
+func (c Capability) LocateTool(ctx context.Context, view prerequisites.StorageView, block reconciliation.Block, proved lifecycle.BlockEvidence, tool controller.InstalledTool) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if c.tools == nil {
+		return "", refuse("controller.unsupported", "controller prerequisite installation is not configured", "use a compatible executable")
+	}
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		return "", err
+	}
+	tools, err := c.provedClosure(request, block, proved, view.State.RetainedSources)
+	if err != nil {
+		return "", err
+	}
+	return prerequisites.LocateInstalledTool(ctx, view, tools, tool)
+}
+
+// provedClosure is the exact closure a completed apply of this block proved,
+// or none. Only the retained sources whose bytes that proof names are read, so
+// each client is recovered at the release the proof names; a recovery that is
+// not whole, or that names an area other than the proved one, is no closure.
+func (c Capability) provedClosure(request Request, block reconciliation.Block, proved lifecycle.BlockEvidence, retained []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, error) {
+	var evidence Evidence
+	if proved.State != reconciliation.BlockDone || json.Unmarshal(proved.Evidence, &evidence) != nil ||
+		evidence.Retained || evidence.Area == "" || evidence.Request != block.RequestDigest {
+		return nil, nil
+	}
+	named := map[string]bool{}
+	for _, record := range evidence.Tools {
+		named[record.SHA256] = true
+	}
+	sources := []prerequisites.DependencySource{}
+	for _, source := range retained {
+		if named[source.SHA256] {
+			sources = append(sources, source)
+		}
+	}
+	tools, complete, err := c.tools.Select(request.ToolRequests(), sources)
+	if err != nil {
+		return nil, err
+	}
+	if !complete || prerequisites.ToolsDigest(tools) != evidence.Area {
+		return nil, nil
+	}
+	return tools, nil
+}
+
 // nativeRoots reports each selected native client root that is installed, by
 // name. Without a resolution nothing installed them, so their absence is
 // definite rather than unverifiable.
@@ -431,18 +510,35 @@ func retainedNative(execution lifecycle.Execution, platform prerequisites.Platfo
 	}
 	retained := execution.Stage.Setup.State.RetainedDefinitions
 	for index := len(retained) - 1; index >= 0; index-- {
-		value := retained[index]
-		if value.Native == nil || !value.NativeRequirements.LibvirtClient || value.Platform != platform ||
-			value.NativeRequirements.Hypervisor != request.Hypervisor || value.NativeRequirements.InstallerMedia != request.InstallerMedia {
+		if !sameNativeSelection(retained[index], platform, request) {
 			continue
 		}
-		if value.Versions.Libvirt != request.Versions().Libvirt {
-			continue
-		}
-		definition := prerequisites.CloneDefinition(value)
+		definition := prerequisites.CloneDefinition(retained[index])
 		return &definition
 	}
 	return nil
+}
+
+// sameNativeSelection reports a retained native client resolution this
+// request would read. Only the latest of them is ever read.
+func sameNativeSelection(value prerequisites.Definition, platform prerequisites.Platform, request Request) bool {
+	return value.Native != nil && value.NativeRequirements.LibvirtClient && value.Platform == platform &&
+		value.NativeRequirements.Hypervisor == request.Hypervisor && value.NativeRequirements.InstallerMedia == request.InstallerMedia &&
+		value.Versions.Libvirt == request.Versions().Libvirt
+}
+
+// supersededNative names every retained resolution of this request's selection
+// but the one it now retains. Once that one is retained it is the latest, so no
+// stage reads the others again, and a stage that solves again whenever a root
+// is missing would otherwise fill the host's bound of retained resolutions.
+func supersededNative(execution lifecycle.Execution, platform prerequisites.Platform, request Request, retained prerequisites.Definition) []string {
+	var superseded []string
+	for _, value := range execution.Stage.Setup.State.RetainedDefinitions {
+		if sameNativeSelection(value, platform, request) && value.ResolutionDigest != retained.ResolutionDigest {
+			superseded = append(superseded, value.ResolutionDigest)
+		}
+	}
+	return superseded
 }
 
 // foundation is the host resolution setup froze. This stage extends it; it

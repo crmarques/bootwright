@@ -136,6 +136,25 @@ func TestHypervisorClosureFollowsTheProvidersHostMachine(t *testing.T) {
 	}
 }
 
+// A provider hosted on the controller proves the client with its hypervisor
+// closure, so it selects the client with no guest and no declared capability;
+// one hosted elsewhere installs its own closure and selects nothing here.
+func TestAHostedProviderSelectsTheClientItsHostBlockProves(t *testing.T) {
+	for host, selected := range map[string]bool{"controller": true, "hypervisor-host": false} {
+		t.Run(host, func(t *testing.T) {
+			objects := append(selectionObjects(),
+				api.NewObject(api.InfraProvider, "lab", api.Value{}, api.MapValue().WithPath(api.StringValue(host), "libvirt", "machineRef")))
+			selection, err := controller.Select(api.NewCatalog(objects))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if selection.Hypervisor() != selected || selection.LibvirtClient() != selected {
+				t.Fatalf("a provider hosted on %q selected hypervisor %v and client %v", host, selection.Hypervisor(), selection.LibvirtClient())
+			}
+		})
+	}
+}
+
 // The image-building tooling runs where the installation publishes what it
 // builds, so the Machine the selected artifact server is placed on selects it.
 func TestInstallerMediaToolingFollowsTheArtifactServersMachine(t *testing.T) {

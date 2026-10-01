@@ -10,4 +10,4 @@
     - name: Execute the artifact-server observe capability
       ansible.builtin.import_role:
         name: bootwright.core.infra_artifact_server_nginx
-        tasks_from: observe.yml
+        tasks_from: observe

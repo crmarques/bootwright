@@ -165,9 +165,12 @@
 
       # A step the timeout stopped fails with ansible-core's own message, so the
       # budget is named here; any other failure stays a failure, and its own
-      # step above, not this one, says what refused. The rescue therefore ends
-      # in a fail with no condition, which is what keeps each refusal above
-      # terminal.
+      # step above, not this one, says what refused. A refusal of the node's
+      # pre-boot proof is left in its substrate's own fact, because this role
+      # holds the result channel, and is named to the runner under the node's
+      # position, so the operator's diagnostic is the installation's own for
+      # that Machine. The rescue therefore ends in a fail with no condition,
+      # which is what keeps each refusal above terminal.
       rescue:
         - name: Report the boot the boot phase's budget stopped
           ansible.builtin.fail:
@@ -175,6 +178,19 @@
               {{ containercluster_install_agent_boot_spent_hint }} Machine
               {{ containercluster_install_agent_node.machine }} was being booted when it was spent.
           when: ansible_failed_result.timedout is defined
+
+        - name: Name the substrate's refusal of the node to the runner
+          bootwright.core.containercluster_install_protocol:
+            phase: refused
+            reason: '{{ containercluster_install_agent_refusal }}'
+            node: '{{ containercluster_install_agent_index }}'
+          vars:
+            containercluster_install_agent_refusal: >-
+              {{ substrate_libvirt_machine_refusal | default('')
+                 if containercluster_install_agent_node.substrate == 'libvirt'
+                 else substrate_baremetal_machine_refusal | default('') }}
+          when: containercluster_install_agent_refusal | length > 0
+          no_log: true
 
         - name: Keep any other boot failure a failure
           ansible.builtin.fail:

@@ -1153,6 +1153,100 @@ func TestADestroyTheAreaCannotHoldRefusesAtItsRegistration(t *testing.T) {
 	}
 }
 
+// A fresh apply is admitted only while the context can retain its own
+// operation directory and the one of the removal that takes it back. One
+// directory short of the retained-operation bound it refuses at its claim,
+// before it raises evidence, binds a Secret or runs a block, and adds no
+// directory. Two short, it registers and completes, and its removal then
+// registers and completes at the bound.
+func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheDirectoryBound(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	for index := range operationstore.MaxOperations - 1 {
+		h.workspace.area.directories[fmt.Sprintf("retained-%d", index)] = true
+	}
+	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+		!strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: it retains 1023 of its 1024, and this apply needs room for 2") {
+		t.Fatalf("an apply one directory short of the bound reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
+	}
+	if current, directories := operations(t, h.workspace); current != "" || len(directories) != operationstore.MaxOperations-1 {
+		t.Fatalf("the refused apply left operation %q and %d directories", current, len(directories))
+	}
+	if !bytes.Equal(h.workspace.evidence, killPristine(t)) || len(h.binder.bound) != 0 || len(h.capability.applies) != 0 {
+		t.Fatalf("the refused apply left evidence %q, bound %v and applied %v", h.workspace.evidence, h.binder.bound, h.capability.applies)
+	}
+	delete(h.workspace.area.directories, "retained-0")
+	if result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the apply two directories short of the bound = %+v (%v)", result, err)
+	}
+	result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the removal of the last apply admitted = %+v (%v: %+v)", result, err, diagnostics.Of(err))
+	}
+	if record, _ := durableOperation(t, h); record.Verb != reconciliation.Destroy || record.State != reconciliation.OperationDone || !slices.Equal(h.capability.destroys, []string{"alpha"}) {
+		t.Fatalf("the removal at the bound is %s %s after removing %v", record.Verb, record.State, h.capability.destroys)
+	}
+	if _, directories := operations(t, h.workspace); len(directories) != operationstore.MaxOperations {
+		t.Fatalf("the context retains %d operation directories, want the bound %d", len(directories), operationstore.MaxOperations)
+	}
+}
+
+// A fresh apply is admitted only while the operation area keeps ReservedBytes
+// free beneath its byte bound, and an attempt's retained output never takes
+// the area into them, so however much its adapter prints, the removal of the
+// last apply admitted registers and completes within the bound. One byte past
+// that line the apply refuses at its claim, before it raises evidence, binds a
+// Secret or runs a block, and adds no directory. At the line, a chain of five
+// blocks whose adapter prints, each time, as much as the area still holds or
+// an attempt keeps, whichever is less, keeps none of it, and the apply and its
+// removal complete. Were output to take the reserve, the fourth block's output
+// would fill the area and its records would refuse.
+func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheByteBound(t *testing.T) {
+	ctx := context.Background()
+	blocks := []string{"alpha", "bravo", "charlie", "delta", "echo"}
+	definitions := make([]reconciliation.BlockDefinition, len(blocks))
+	for index, id := range blocks {
+		definitions[index] = definition(id)
+		if index > 0 {
+			definitions[index].Dependencies = []string{blocks[index-1]}
+		}
+	}
+	h := newPlannedHarness(t, definitions)
+	area := h.workspace.area
+	area.bound = operationstore.MaxBytes
+	h.capability.verbose = func() int { return min(operationstore.MaxAdapterOutputBytes, operationstore.MaxBytes-area.held()) }
+	area.files["filled/output"] = make([]byte, operationstore.MaxBytes-operationstore.ReservedBytes+1)
+	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+		!strings.Contains(refused[0].Message, "its operation area holds 50331649 of its 67108864 bytes, and this apply needs the 16777216 it keeps") {
+		t.Fatalf("an apply one byte past the line reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
+	}
+	if current, directories := operations(t, h.workspace); current != "" || !slices.Equal(directories, []string{"filled"}) {
+		t.Fatalf("the refused apply left operation %q and directories %v", current, directories)
+	}
+	if !bytes.Equal(h.workspace.evidence, killPristine(t)) || len(h.binder.bound) != 0 || len(h.capability.applies) != 0 {
+		t.Fatalf("the refused apply left evidence %q, bound %v and applied %v", h.workspace.evidence, h.binder.bound, h.capability.applies)
+	}
+	area.files["filled/output"] = area.files["filled/output"][1:]
+	if result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the apply at the line = %+v (%v: %+v)", result, err, diagnostics.Of(err))
+	}
+	result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the removal of the last apply admitted = %+v (%v: %+v)", result, err, diagnostics.Of(err))
+	}
+	if record, _ := durableOperation(t, h); record.Verb != reconciliation.Destroy || record.State != reconciliation.OperationDone ||
+		len(h.capability.applies) != len(blocks) || len(h.capability.destroys) != len(blocks) {
+		t.Fatalf("the removal at the line is %s %s after applying %v and removing %v", record.Verb, record.State, h.capability.applies, h.capability.destroys)
+	}
+	for name := range area.files {
+		if strings.HasSuffix(name, ".output") {
+			t.Fatalf("an attempt kept %s (%d bytes) past the line", name, len(area.files[name]))
+		}
+	}
+}
+
 // areaEntries counts the entries beneath target as the operation area's entry
 // bound counts them.
 func areaEntries(area *memoryArea, target string) int {
@@ -1170,8 +1264,10 @@ func areaEntries(area *memoryArea, target string) int {
 // running evidence that protects the context, and with it the claim it left,
 // so refused retries there add a claim each. The next registration moves the
 // index past every apply planned before it, so it reclaims them once it lands:
-// with the context four operations short of the bound before three refused
-// retries, the removal of the apply that registers after them still registers.
+// with the context five operations short of the bound before three refused
+// retries, the apply after them claims beside their claims with room for its
+// removal, only its own directory is left beside those retained once it
+// registers, and that removal registers.
 func TestARegistrationReclaimsWhatRefusedAppliesKeptBesideAnUnownedReservation(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
@@ -1179,7 +1275,7 @@ func TestARegistrationReclaimsWhatRefusedAppliesKeptBesideAnUnownedReservation(t
 	h.workspace.evidence = slices.Clone(running)
 	h.workspace.reservations = reservationOf("alpha")
 	const refused = 3
-	retained := operationstore.MaxOperations - refused - 1
+	retained := operationstore.MaxOperations - refused - 2
 	for index := range retained {
 		h.workspace.area.directories[fmt.Sprintf("retained-%d", index)] = true
 	}

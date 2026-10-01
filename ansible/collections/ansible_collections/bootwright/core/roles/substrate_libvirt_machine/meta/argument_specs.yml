@@ -53,7 +53,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-libvirt-v1]
+            choices: [machine-libvirt-v2]
       bootwright_substrate_machine_material:
         type: dict
         required: true

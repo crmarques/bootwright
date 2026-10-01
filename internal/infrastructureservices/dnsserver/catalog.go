@@ -7,6 +7,9 @@ import (
 
 const Implementation = "dns-server-dnsmasq-v1"
 
+// requestVersion is the frozen request shape this build writes and reads.
+const requestVersion = "dns-server-dnsmasq-v2"
+
 const Kind = string(api.DNSServer)
 
 const defaultImage = "docker.io/4km3/dnsmasq@sha256:52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641"
@@ -20,7 +23,7 @@ func Definition() managedservice.Definition {
 	return managedservice.Definition{
 		Kind:           api.DNSServer,
 		Implementation: Implementation,
-		Version:        Implementation,
+		Version:        requestVersion,
 		Slug:           "dns",
 		Variable:       "bootwright_dns_server",
 		Purpose:        "resolve names",

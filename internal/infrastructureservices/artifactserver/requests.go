@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 )
 
-const requestVersion = "artifact-server-nginx-v1"
+const requestVersion = "artifact-server-nginx-v2"
 
 // Request is the complete frozen intent for one managed artifact server. Its
 // fields are declared in the canonical key order the plan digest requires, and

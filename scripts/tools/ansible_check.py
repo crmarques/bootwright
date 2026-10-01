@@ -24,6 +24,22 @@ def cache_root(root: Path) -> Path:
 
 SUITES = ("syntax", "lint", "sanity", "units", "integration")
 
+# The area is every check process's HOME, and ansible-core renders its
+# ANSIBLE_HOME defaults in Jinja's native environment, which parses the
+# rendered path as Python. After a hyphen, a random part such as "3if" starts a
+# number that runs into a keyword, and every process then prints a
+# SyntaxWarning. After an underscore the random part, drawn from letters,
+# digits and underscores, only continues a name.
+AREA_PREFIX = "bootwright-ansible-check_"
+
+# The variable through which the gate tells its own tests which area it runs in.
+AREA_VARIABLE = "BOOTWRIGHT_ANSIBLE_CHECK_AREA"
+
+
+def check_area() -> tempfile.TemporaryDirectory:
+    """Return the temporary area one check run works in."""
+    return tempfile.TemporaryDirectory(prefix=AREA_PREFIX)
+
 
 def selected_suites(arguments: list[str]) -> set[str]:
     """Return the suites to run: all of them, or the one --suite names.
@@ -163,7 +179,7 @@ def main() -> int:
             str(cache_root(root) / "ansible-test-artifacts"),
         )
     )
-    with tempfile.TemporaryDirectory(prefix="bootwright-ansible-check-") as temporary:
+    with check_area() as temporary:
         area = Path(temporary)
         inventory = area / "inventory.json"
         inventory.write_text(
@@ -232,6 +248,21 @@ def main() -> int:
                 ],
                 cwd=root,
                 env=environment,
+                check=True,
+            )
+        if "units" in selected:
+            # The harness's own tests; -B keeps bytecode out of the checkout.
+            # AREA_VARIABLE names this run's area, so they parse the area that
+            # every process here takes as its HOME.
+            subprocess.run(
+                [
+                    str(executable),
+                    "-I",
+                    "-B",
+                    str(root / "scripts/tools/ansible_check_test.py"),
+                ],
+                cwd=root,
+                env={**environment, AREA_VARIABLE: str(area)},
                 check=True,
             )
         if not selected & {"sanity", "units", "integration"}:

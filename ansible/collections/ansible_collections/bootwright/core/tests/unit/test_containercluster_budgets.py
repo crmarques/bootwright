@@ -512,7 +512,10 @@ def test_every_boot_step_runs_under_what_the_boot_phase_has_left():
     for left, want in ((297, 297), (1, 1), (0, 1), (-40, 1)):
         rendering = scope(INSTALL, containercluster_install_agent_boot_deadline=now() + left)
         assert max(1, want - 2) <= int(rendering.template(bounded()["timeout"])) <= want
-    stopped, other = bounded()["rescue"]
+    # A refusal of the node's pre-boot proof is named between the two
+    # (test_containercluster_pre_boot.py), after the budget, which it never is.
+    stopped, named, other = bounded()["rescue"]
+    assert named["bootwright.core.containercluster_install_protocol"]["phase"] == "refused"
     rendering = scope(INSTALL, containercluster_install_agent_node={"machine": "sno-01"},
                       ansible_failed_result={"failed": True, "timedout": {"period": 12}})
     assert rendering.evaluate_conditional(stopped["when"])

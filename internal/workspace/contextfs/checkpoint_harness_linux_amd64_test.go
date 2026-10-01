@@ -1911,7 +1911,7 @@ func checkpointRetainedDependenciesScenario() checkpointScenario {
 	// retry.
 	retain := func(_ *testing.T, ctx context.Context, store *Store) error {
 		return checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
-			return tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{checkpointDependency})
+			return tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{checkpointDependency}, nil)
 		})
 	}
 	scenario := checkpointLifecycleScenario(checkpointScenario{

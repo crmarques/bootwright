@@ -19,13 +19,14 @@ type Answer struct {
 // Evidence is the bounded result an adapter returns for one managed service.
 // It never carries secret material, a material digest, or adapter prose.
 type Evidence struct {
-	Absent        bool     `json:"absent"`
-	Answers       []Answer `json:"answers"`
-	Container     string   `json:"container"`
-	ContentRoot   bool     `json:"contentRoot"`
-	Postcondition bool     `json:"postcondition"`
-	Request       string   `json:"request"`
-	Unit          string   `json:"unit"`
+	Absent            bool     `json:"absent"`
+	Answers           []Answer `json:"answers"`
+	Container         string   `json:"container"`
+	ContentRoot       bool     `json:"contentRoot"`
+	Postcondition     bool     `json:"postcondition"`
+	Request           string   `json:"request"`
+	StartedAfterFiles bool     `json:"startedAfterFiles"`
+	Unit              string   `json:"unit"`
 }
 
 func DecodeEvidence(data []byte) (Evidence, error) {
@@ -42,8 +43,11 @@ func DecodeEvidence(data []byte) (Evidence, error) {
 }
 
 // ValidatePresence accepts an apply only with positive evidence for the exact
-// frozen request: the unit active, the container built from the pinned image,
-// the owned root present, and every probe target answering.
+// frozen request: the unit active, the container built from the pinned image
+// and started no earlier than every file it runs from was last written, the
+// owned root present, and every probe target answering. A daemon keeps what it
+// read at its start, so one started before a file was published runs a
+// configuration the frozen request no longer describes.
 func ValidatePresence(data []byte, request Request, digest string) error {
 	evidence, err := DecodeEvidence(data)
 	if err != nil {
@@ -64,6 +68,9 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 	if !evidence.ContentRoot {
 		return Refusal("lifecycle.state", "the managed service owns no content root", "")
 	}
+	if !evidence.StartedAfterFiles {
+		return Refusal("lifecycle.state", "the managed service started before a file it runs from was last published", "")
+	}
 	answered := make([]string, 0, len(evidence.Answers))
 	for _, answer := range evidence.Answers {
 		if answer.Port != request.Port || answer.Answer == "" {
@@ -80,13 +87,16 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 
 // ValidatePartial accepts evidence only when it positively proves this
 // context's own service is part way realized: something the frozen request
-// names is present while the whole of it, its listeners' answers included, is
-// not. The unit, container and content root all carry the context in their
-// names and are claimed by its host reservation, so their presence is never
-// another context's work, and a service all present whose listener stays
-// silent is this context's own service not yet ready. A partial realization is
-// converged by repeating the operation, so it leaves the block failed rather
-// than unproved.
+// names is present while the whole of it, its listeners' answers and its start
+// after its files included, is not. The unit, container and content root all
+// carry the context in their names and are claimed by its host reservation, so
+// their presence is never another context's work, a service all present whose
+// listener stays silent is this context's own service not yet ready, and one
+// that started before a file it runs from is its own service not yet
+// restarted. Evidence reporting the postcondition without that start, as a
+// role that never compared it reports, is read the same way rather than as a
+// contradiction. A partial realization is converged by repeating the
+// operation, so it leaves the block failed rather than unproved.
 func ValidatePartial(data []byte, request Request, digest string) error {
 	evidence, err := DecodeEvidence(data)
 	if err != nil {
@@ -113,8 +123,9 @@ func ValidatePartial(data []byte, request Request, digest string) error {
 // ValidateUnremoved accepts observed evidence only when it proves a removal of
 // the frozen request took nothing back: this request's presence form reporting
 // the unit active, the container of the frozen image and the content root.
-// The listeners' answers and the postcondition flag are the apply's proof of
-// readiness, not anything a removal takes back, so neither plays any part.
+// The listeners' answers, the start after its files and the postcondition flag
+// are the apply's proof, not anything a removal takes back, so none plays any
+// part.
 func ValidateUnremoved(data []byte, request Request, digest string) error {
 	evidence, err := removalEvidence(data, digest)
 	if err != nil {
@@ -180,7 +191,7 @@ func ValidateAbsence(data []byte, digest string) error {
 	if !evidence.Postcondition || !evidence.Absent {
 		return Refusal("lifecycle.state", "the managed service removal proved no absence", "")
 	}
-	if evidence.Unit != "" || evidence.Container != "" || evidence.ContentRoot || len(evidence.Answers) != 0 {
+	if evidence.Unit != "" || evidence.Container != "" || evidence.ContentRoot || evidence.StartedAfterFiles || len(evidence.Answers) != 0 {
 		return Refusal("lifecycle.state", "the managed service removal left an owned resource behind", "")
 	}
 	return nil

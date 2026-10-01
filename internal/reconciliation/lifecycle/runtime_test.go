@@ -261,8 +261,9 @@ func TestARunThatRetainsNoOutputLeavesNoRunFile(t *testing.T) {
 }
 
 // A run that cannot keep its file names none and never reaches its adapter,
-// so the directory it made for that file goes too, whether its creation, the
-// file's or an interrupt between them stopped it.
+// so what it made for that file goes too, whether its directory's creation,
+// the file's, the file's publication once its bytes landed or an interrupt
+// before or after the file landed stopped it.
 func TestARunWhoseOutputCannotBeKeptLeavesNoDirectory(t *testing.T) {
 	identity := "run-" + strings.Repeat("2a", 16)
 	injected := errors.New("the retained output could not be created")
@@ -276,6 +277,9 @@ func TestARunWhoseOutputCannotBeKeptLeavesNoDirectory(t *testing.T) {
 		{"its file cannot be created", func(area *memoryArea, _ context.CancelFunc) {
 			area.fail["write "+identity+"/"+runOutputName] = injected
 		}},
+		{"its file lands but its publication fails", func(area *memoryArea, _ context.CancelFunc) {
+			area.failAfter["write "+identity+"/"+runOutputName] = injected
+		}},
 		{"an interrupt lands before its file", func(area *memoryArea, cancel context.CancelFunc) {
 			area.landing = func(operation, _ string, _ map[string][]byte) error {
 				if operation != "write" {
@@ -283,6 +287,15 @@ func TestARunWhoseOutputCannotBeKeptLeavesNoDirectory(t *testing.T) {
 				}
 				cancel()
 				return injected
+			}
+		}},
+		{"an interrupt lands after its file", func(area *memoryArea, cancel context.CancelFunc) {
+			area.failAfter["write "+identity+"/"+runOutputName] = injected
+			area.landing = func(operation, _ string, _ map[string][]byte) error {
+				if operation == "write" {
+					cancel()
+				}
+				return nil
 			}
 		}},
 	} {

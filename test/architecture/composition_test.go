@@ -27,8 +27,10 @@ func applicationValues() packageSymbols {
 		"internal/desiredstate/compilation": {"State": true},
 		"internal/workspace/contexts":       {"Configuration": true},
 		// PythonLaunch is the pinned launch descriptor an adapter reads and
-		// projects; it binds no replaceable service.
-		"internal/controller/prerequisites": {"SetupReceipt": true, "PythonLaunch": true},
+		// projects; ScopedFailure is the failure value a dependency adapter
+		// raises for its caller's scope to render. Neither binds a replaceable
+		// service.
+		"internal/controller/prerequisites": {"SetupReceipt": true, "PythonLaunch": true, "ScopedFailure": true},
 		// The immutable request and service definition other capabilities
 		// construct and read; they bind no replaceable service.
 		"internal/infrastructureservices/managedservice": {"Request": true, "Definition": true},

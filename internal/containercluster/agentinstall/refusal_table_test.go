@@ -59,6 +59,7 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 			node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test"))))
 	onSNOCluster := map[string]string{"<cluster>": "ContainerCluster/sno"}
 	onNode := map[string]string{"<cluster>": "ContainerCluster/sno", "<machine>": "Machine/sno-01"}
+	onProvider := map[string]string{"<cluster>": "ContainerCluster/sno", "<provider>": "InfraProvider/lab-libvirt"}
 	cases := map[string]refusalCase{
 		"An OKD cluster": {sno(func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringValue("okd"), "distribution", "type")
@@ -91,6 +92,12 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 			map[string]string{"<cluster>": "ContainerCluster/ocp", "<nodes>": "10", "<deadline>": "6h10m0s"}},
 		"A node with an install profile":    {onSNO(installed), "ContainerCluster/sno", onNode},
 		"A node on an unrealized substrate": {onSNO(unrealized, vsphere), "ContainerCluster/sno", onSNOCluster},
+		"A node whose emulated controller port does not allocate": {
+			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "ContainerCluster/sno", onProvider,
+		},
+		"A node's provider with no emulated controller credential": {
+			singleNodeOnProvider(noControllerCredential), "ContainerCluster/sno", onProvider,
+		},
 		"A physical node": {physicalCatalog(), "ContainerCluster/metal",
 			map[string]string{"<cluster>": "ContainerCluster/metal", "<machine>": "Machine/metal-01"}},
 		"A root device the installer cannot name": {singleNodeWith(text("deviceName", "/dev/mapper/root")), "ContainerCluster/sno", onNode},

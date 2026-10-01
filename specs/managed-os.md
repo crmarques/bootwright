@@ -243,6 +243,10 @@ needs it, the published package tree with the staging tree beside it, then
 proves each absent. It withdraws the tree's `.treeinfo` before the rest of the
 tree, so a removal stopped part way never leaves the marker over a partial
 tree, which the inspection and the next apply would take as published whole.
+The `os/<profile>/` directory the apply created for the tree goes with it, but
+only while it is empty, so anything else found there stays. It counts as a
+change only when it was there and the removal took it, so a removal that finds
+nothing of its own beside another entry there reports `unchanged`.
 The installed system leaves
 the host with the Machine's disks, so this block consumes no authorization of
 its own on removal. Destroy touches no management controller: a virtual-media
@@ -274,7 +278,9 @@ stopped while it deleted the tree leaves the directory without it. Anything at
 the staging tree's path counts too, since it is served part way extracted. The
 work area is never served, so an
 apply that left only it still had no effect, but a removal takes it back and
-counts it as left.
+counts it as left. The observation reports the work area before it creates one
+for its identity and reachability reads, and removes one it created however
+those reads end, so it leaves behind only a work area it found.
 
 **Quiescence and cancellation.** This block owns published installer content,
 which an installed Machine no longer reads, so its quiescence follows the

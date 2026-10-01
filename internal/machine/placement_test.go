@@ -1,7 +1,9 @@
 package machine
 
 import (
+	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -73,7 +75,7 @@ func TestALifecyclePlacementHostConnectsAsRoot(t *testing.T) {
 	}
 	root := m("addressRef", "ip", "auth", key, "knownHostsRef", "services-host-key")
 	for _, ssh := range []api.Value{root, root.With("user", api.StringValue("root"))} {
-		if placement, err := PlacementFor(host(ssh), "controller"); err != nil || placement.User != "root" || placement.SudoPasswordRef != "" {
+		if placement, err := PlacementFor(host(ssh), "controller"); err != nil || placement.User != "root" {
 			t.Fatalf("placement = %+v (%v)", placement, err)
 		}
 	}
@@ -91,10 +93,21 @@ func TestALifecyclePlacementHostConnectsAsRoot(t *testing.T) {
 	}
 }
 
+// A placement binds its SSH identity and host key and names no escalation
+// Secret, so one frozen by a build that still recorded it does not read as a
+// placement, and the request carrying it refuses rather than decoding a field
+// nothing uses.
 func TestAPlacementNeverBindsAnEscalationSecret(t *testing.T) {
+	decoder := json.NewDecoder(strings.NewReader(`{"address":"192.0.2.2","connection":"ssh","knownHostsRef":"services-host-key",` +
+		`"machine":"services","port":22,"privateKeyRef":"services-key","sudoPasswordRef":"services-sudo","user":"root"}`))
+	decoder.DisallowUnknownFields()
+	var escalating Placement
+	if err := decoder.Decode(&escalating); err == nil {
+		t.Fatalf("a placement naming an escalation Secret was read: %+v", escalating)
+	}
 	frozen := Placement{
 		Address: "192.0.2.2", Connection: ConnectionSSH, KnownHostsRef: "services-host-key", Machine: "services",
-		Port: 22, PrivateKeyRef: "services-key", SudoPasswordRef: "services-sudo", User: "root",
+		Port: 22, PrivateKeyRef: "services-key", User: "root",
 	}
 	if got := frozen.SecretReferences(); !slices.Equal(got, []string{"services-key", "services-host-key"}) {
 		t.Fatalf("secret references = %v", got)

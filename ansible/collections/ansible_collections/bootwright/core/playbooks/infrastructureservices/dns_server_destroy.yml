@@ -10,4 +10,4 @@
     - name: Execute the name resolver destroy capability
       ansible.builtin.import_role:
         name: bootwright.core.infra_dns_server_dnsmasq
-        tasks_from: destroy.yml
+        tasks_from: destroy

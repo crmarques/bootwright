@@ -29,8 +29,13 @@ interpreter, collection unit tests, the module and module utility unit tests
 again under that floor, and the synthetic controller tool and supervisor
 integration targets.
 
-The `units` suite runs the unit tests twice: under `ansible-test units`, then
-as the plain loop the
+The `units` suite first runs the harness's own tests,
+`scripts/tools/ansible_check_test.py`, and names its temporary area to them in
+`BOOTWRIGHT_ANSIBLE_CHECK_AREA`. They parse that area's path, and other area
+paths, as every ansible-core process does, since that area is each process's
+`HOME`; run by hand, without the variable, they skip the gate's area. The suite
+then runs the unit tests twice: under `ansible-test units`, then as the plain
+loop the
 [collection structure](../../specs/architecture.md#ansible-collection-structure)
 supports, pytest alone from the copy's collections directory with that
 directory on `PYTHONPATH`; a failure of either fails the suite. By hand, the

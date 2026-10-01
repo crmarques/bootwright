@@ -8,6 +8,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -127,6 +129,60 @@ func TestAPlainDeleteClearsTheRefusedRecordStatesBesidePristineEvidence(t *testi
 				}
 			}
 			contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")
+			registry, err := repository.View(context.Background())
+			if err != nil || len(registry.Contexts) != 0 {
+				t.Fatalf("the registry still holds %+v (%v)", registry.Contexts, err)
+			}
+			if _, err := os.Stat(filepath.Join(root, "contexts", "alpha")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("the deleted context remains (%v)", err)
+			}
+		})
+	}
+}
+
+var namedDeletion = regexp.MustCompile(`bootwright (context delete[^,\n]*)`)
+
+// Evidence spelled otherwise than this build publishes it, beside no
+// operation, admits neither verb. Where the context guard still reads it, both
+// refusals name the deletion the guard admits, and that command, run exactly as
+// named, removes the context. Evidence the guard cannot read admits no
+// deletion, acknowledged or not, so both refusals name none, and the
+// acknowledged deletion refuses and leaves the context in place.
+func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
+	for name, test := range map[string]struct {
+		evidence string
+		named    []string
+	}{
+		"respelled protected evidence": {`{"ownership":"retained","operation":"applied","version":1}`, []string{"context", "delete", "--name", "alpha", "--purge", "--allow-orphans"}},
+		"respelled pristine evidence":  {`{"version":1,"operation":"none","ownership":"none"}`, []string{"context", "delete", "--name", "alpha", "--purge"}},
+		"corrupt evidence":             {`{`, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			services, repository, input, root := contextFixture(t)
+			contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+			if err := os.WriteFile(filepath.Join(root, "contexts", "alpha", "state", "mutation.json"), []byte(test.evidence), 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, verb := range []string{"apply", "destroy"} {
+				_, stderr := contextRun(t, services, 1, verb, "--context", "alpha", "--yes")
+				var named []string
+				if found := namedDeletion.FindStringSubmatch(stderr); found != nil {
+					named = strings.Fields(found[1])
+				}
+				if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, "the mutation evidence reads an unrecognized record") ||
+					!slices.Equal(named, test.named) || (named == nil) != strings.Contains(stderr, "restore the whole store from a matching backup") {
+					t.Fatalf("the %s refused with %s", verb, stderr)
+				}
+			}
+			if test.named == nil {
+				contextRun(t, services, 1, "context", "delete", "--name", "alpha", "--purge", "--allow-orphans", "--yes")
+				registry, err := repository.View(context.Background())
+				if err != nil || len(registry.Contexts) != 1 {
+					t.Fatalf("the refused deletion left %+v (%v)", registry.Contexts, err)
+				}
+				return
+			}
+			contextRun(t, services, 0, append(slices.Clone(test.named), "--yes")...)
 			registry, err := repository.View(context.Background())
 			if err != nil || len(registry.Contexts) != 0 {
 				t.Fatalf("the registry still holds %+v (%v)", registry.Contexts, err)

@@ -60,6 +60,36 @@
   when: bootwright_os_install_request.tree is defined
   register: managedos_install_anaconda_staging_removed
 
+# The apply created the profile's directory for the tree and its staging copy,
+# so it goes once they have. rmdir removes a directory only while it is empty,
+# so anything else found there stays where it is. It reports success either
+# way, so the removal counts the directory only when it was there before and
+# is gone after.
+- name: Read the profile directory the tree was published in
+  ansible.builtin.stat:
+    path: '{{ bootwright_os_install_request.tree.path | dirname }}'
+  when: bootwright_os_install_request.tree is defined
+  register: managedos_install_anaconda_profile_found
+
+- name: Remove the profile directory the tree was published in once it is empty
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - --ignore-fail-on-non-empty
+      - '{{ bootwright_os_install_request.tree.path | dirname }}'
+  changed_when: false
+  when:
+    - managedos_install_anaconda_profile_found is not skipped
+    - managedos_install_anaconda_profile_found.stat.exists
+
+- name: Read whether the profile directory is gone
+  ansible.builtin.stat:
+    path: '{{ bootwright_os_install_request.tree.path | dirname }}'
+  when:
+    - managedos_install_anaconda_profile_found is not skipped
+    - managedos_install_anaconda_profile_found.stat.exists
+  register: managedos_install_anaconda_profile_left
+
 - name: Remove the private subtree this block owns
   ansible.builtin.file:
     path: '{{ managedos_install_anaconda_private_root }}'
@@ -112,6 +142,8 @@
              or managedos_install_anaconda_tree_marker_removed is changed
              or managedos_install_anaconda_tree_removed is changed
              or managedos_install_anaconda_staging_removed is changed
+             or (managedos_install_anaconda_profile_left is not skipped
+                 and not managedos_install_anaconda_profile_left.stat.exists)
              or managedos_install_anaconda_private_removed is changed
              or managedos_install_anaconda_work_removed is changed)
          else 'unchanged' }}

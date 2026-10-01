@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 // effectKinds are the API kinds whose selected objects need a lifecycle
@@ -78,11 +79,11 @@ func Unrealizable(catalog api.Catalog, claimed []string) []Refusal {
 			continue
 		}
 		for _, object := range catalog.OfKind(kind) {
-			if isService(kind) && object.Spec().Get("management").Text() != "managed" {
+			if infrastructureservices.IsService(kind) && object.Spec().Get("management").Text() != "managed" {
 				continue
 			}
 			reason := "no capability of this executable realizes the " + string(kind) + " kind"
-			if isService(kind) {
+			if infrastructureservices.IsService(kind) {
 				reason = "no capability of this executable manages the " + string(kind) + " kind"
 			}
 			refuse(object, reason)
@@ -103,8 +104,4 @@ func Unrealizable(catalog api.Catalog, claimed []string) []Refusal {
 		}
 	}
 	return SortRefusals(found)
-}
-
-func isService(kind api.Kind) bool {
-	return slices.Contains([]api.Kind{api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer}, kind)
 }

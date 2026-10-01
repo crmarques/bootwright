@@ -2,7 +2,7 @@
 - name: Validate the frozen provider host request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v2'
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v3'
       - bootwright_substrate_host_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true

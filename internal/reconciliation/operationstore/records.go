@@ -60,6 +60,41 @@ func AdmissionEntries(plan reconciliation.Plan) int {
 	return 2*FirstPassEntries(plan) + ReservedEntries
 }
 
+// AdmissionOperations is how many operation directories the context must
+// still have room for, beside those it retains, to admit an operation of
+// plan: an apply its own and that of the removal that takes it back, and a
+// removal its own, so the removal of the last apply admitted still registers.
+func AdmissionOperations(plan reconciliation.Plan) int {
+	if plan.Verb == reconciliation.Destroy {
+		return 1
+	}
+	return 2
+}
+
+// MaxBytes bounds the bytes one context's operation area holds in its records,
+// logs and retained adapter output. The Workspace area refuses a write that
+// would take it past them, and admission keeps what a new operation needs
+// within them.
+const MaxBytes = 64 << 20
+
+// ReservedBytes is what an apply is admitted with free for its records and
+// logs and those of the removal that takes it back. An attempt's retained
+// adapter output never takes the area into it, so however verbose a run is,
+// only records and logs ever use what that removal needs.
+const ReservedBytes = 16 << 20
+
+// AdmissionBytes is what the area must hold free, beside the bytes it holds,
+// to admit an operation of plan whose registration writes registration bytes
+// of records. An apply needs ReservedBytes. A removal needs what its
+// registration writes, its plan, its operation record and the index, and its
+// attempts share what the apply it takes back left of that reserve.
+func AdmissionBytes(plan reconciliation.Plan, registration int) int64 {
+	if plan.Verb == reconciliation.Destroy {
+		return int64(registration)
+	}
+	return ReservedBytes
+}
+
 type Index struct {
 	Version int    `json:"version"`
 	Current string `json:"current"`

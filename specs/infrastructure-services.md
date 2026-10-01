@@ -111,11 +111,21 @@ removal they sit beside or replaces them.
 
 One context's own exclusive `socket:` keys are compared by the same rule while
 it plans a fresh apply, each qualified by the host its block is placed on: the
-controller, or the SSH host its placement Machine names. Two of its claims on
-one host whose sockets conflict refuse `api.invariant` before registration,
-naming each claim's kind, service and socket and that host, because the second
-could never listen; claims on two hosts never conflict. The socket claims of a
-managed service, an artifact server or an
+controller, or the SSH host its placement Machine reaches. An SSH host is the
+effective SSH address and port the placement connects to, as the
+[host-key token](api/machines.md#addresses-and-access) names it, so two
+Machines whose access reaches one address and port are one host whatever their
+names, and one address at two ports, as a forwarded port gives, is two. A
+placement that reaches port `22` at a loopback address, at `localhost` or at an
+address the controller Machine declares is the controller, and its claims are
+compared with the controller's. Addresses compare as declared, an IP in its
+canonical form and a DNS name without case or a final dot, because planning
+resolves no name. Two of its claims on one host whose sockets conflict refuse
+`api.invariant` before registration, naming each claim's kind, service and
+socket, that host, and each Machine through which either claim reaches it over
+SSH when that is not the host's own name, because the second could never
+listen; claims on two hosts never conflict. The socket claims of a managed
+service, an artifact server or an
 [emulated BMC](substrates.md#machine-realization) placed on an SSH host are
 compared only within their context and never published, because two contexts
 targeting one SSH host are not coordinated. One claim's keys never conflict with each other, and
@@ -349,7 +359,15 @@ within the bounded readiness window is unknown, not failure, and is reported
 with its cause as [an unproved listener](#managed-artifact-serving) is.
 
 **Replay, inverse and unknown resolution.** Each follows the
-[artifact server's](#managed-artifact-serving) rules above.
+[artifact server's](#managed-artifact-serving) rules above, and live state
+matches the frozen request in full only while the running container started no
+earlier than the last modification of every file it runs from: its daemon
+configuration and its unit definition. A service that started before one of
+them was last published, or whose start or files cannot be read, runs what the
+frozen request no longer describes, so its presence proves no postcondition: an
+apply does not complete on it, and an observation reads it as a positive partial
+realization, which the next attempt converges by restarting it. A removal's
+resolution does not read the start.
 
 ## Adapter boundary
 

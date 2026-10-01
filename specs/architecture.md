@@ -512,6 +512,15 @@ publication boundary is such a value. Which blocks receive it follows the stage
 the plan froze, which is declared domain vocabulary; no application policy reads
 an implementation identity to decide.
 
+`LocateTool` is the one question every attempt may ask another stage: where
+the [controller stage](controller.md#the-controller-stage) installed one
+executable. The engine hands it, with the controller stage block the plan
+froze and that block's evidence from the apply the operation runs over, its own
+or the one a removal takes back, to that block's capability through the
+`ToolLocator` port, unread, because only that capability knows what its frozen
+request selects and what its evidence names. A plan without that block has
+installed nothing to run.
+
 The one widening is an apply attempt's `Proved`: what each block it depends on
 proved earlier in this operation, as the engine's block evidence, handed over
 unread. A proof one capability relies on is another capability's to have made,
@@ -593,7 +602,7 @@ needed paths:
 | `ansible/controller/` and `ansible/collections/` | Selected dependency inputs and exact locks for the complete runtime closure. |
 | Collection `playbooks/<domain>/<operation>.yml` | One fixed application-port entrypoint; private fragments under its `tasks/`. |
 | Collection `roles/<domain>_<capability>[_<implementation>]/` | One local or remote capability adapter with only applicable standard role directories. |
-| Collection `plugins/` | Capability adapters or effect-free product translation/evidence normalization. |
+| Collection `plugins/` | Capability adapters, effect-free product translation/evidence normalization, or the adapter's output callback, which [prints nothing a `no_log` result raised](security.md#logs-output-and-diagnostics). |
 | Collection `tests/unit/` | Collection-owned tests following `ansible-test` discovery. Their `conftest.py` installs the collection loader `ansible-test` would when no runner has, so plain pytest runs the same tests; the `units` suite of `scripts/ansible-check` runs them both ways. |
 
 The first consumer selects package-native or standard lock formats; Bootwright
@@ -613,6 +622,16 @@ normalizes one result/evidence set. The domain directory identifies its owner;
 the operation matches the Go capability. Playbooks do not choose workflows or
 providers from authored data or ambient facts, dynamically select another
 playbook, or coordinate independent domain operations.
+
+A playbook imports its role's entry point by the key the role's argument
+specification declares, never by its task file's name, which ansible-core runs
+unvalidated. ansible-core then validates what that entry point's specification
+declares, the request and any material mapping beside it, before the entry
+point's first task, and a request the role does not admit refuses there:
+`test_the_first_task_of_every_playbook_validates_its_entry_points_arguments`
+and
+`test_a_request_the_role_does_not_admit_refuses_before_the_entry_points_first_task`
+hold every playbook to this.
 
 ### Roles
 
@@ -681,7 +700,7 @@ phases:
 | `group` | lifecycle | adapter → runner | `phase`, `group`, `status` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, non-empty `evidence` | none | last, once | Absent when the channel closes, the run has no result. |
 | `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp` | none | last, once, in place of `completed`, while an `openshift-clients` tool is being installed | The run fails with the [release-stamp refusal](controller.md#selection-and-command-journeys) instead of the generic adapter failure, even when the adapter's failed exit is read first. |
-| `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason instead of the generic adapter failure, even when the adapter's failed exit is read first; the adapter is left to end on its own. |
+| `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason instead of the generic adapter failure, even when the adapter's failed exit is read first; the adapter is left to end on its own. |
 
 `outcome` is `changed` or `unchanged`, and the controller runner refuses
 `unchanged` after an authorized `native`. `status` is `running`, `ok`, `failed`
@@ -697,13 +716,20 @@ bound: 64 for the lifecycle runner, 132 for the controller runner (`loaded`,
 `prepared`, `native`, `completed` or `refused`, and a `continue` per tool). The
 controller runner also refuses a `refused` record with another reason or for
 another tool kind, and the lifecycle runner a `refused` record whose reason the
-run's request does not name. The lifecycle runner judges a record it reads
-after the adapter's failed exit as if it had read that record first, so a
-record it refuses fails the run as a protocol breach, with an unknown outcome,
-whichever of the two it reads first. A record the runner refuses, or a channel
-that cannot be read, ends the protocol at once: the runner closes the
-acknowledgement channel, so an adapter waiting for one fails instead of waiting
-out the deadline, and the lifecycle runner kills the adapter's process group.
+run's request does not name. Both runners judge a record they read after the
+adapter's failed exit as if they had read that record first, so a record they
+refuse, or one they cannot read, fails the run as a protocol breach rather than
+as the failed exit, whichever of the two they read first: a lifecycle attempt
+is then `unknown`, and a controller run fails `controller.unknown`, its outcome
+still set by `prepared` as below. A record they accept after the exit leaves
+that failure and moves the protocol on, so a later record is judged in its
+place, but nothing is released, published, authorized, acknowledged or
+reported for it, since its adapter is gone. A read that the drain's close ends
+is the runner's own and no record, so it leaves the failed exit. A record the
+runner refuses, or a channel that cannot be read, ends the protocol at once:
+the runner closes the acknowledgement channel, so an adapter waiting for one
+fails instead of waiting out the deadline, and the lifecycle runner kills the
+adapter's process group.
 The controller runner kills nothing on a refusal: the adapter fails at its next
 acknowledgement, and an authorized native transaction first runs to its end. A
 deadline or a cancellation kills the adapter's process group, sparing only an
@@ -847,9 +873,12 @@ reviewers retain semantic judgments that source checks cannot prove.
   `run()` is driven with what surrounds it stubbed. Go holds every request
   this build sends, request version included, to the argument specification of
   the role entry point that receives it: the capability contract suite for
-  each lifecycle operation, and the power and controller tests for theirs;
-  `TestRoleVersionAssertionsMatchTheirArgumentSpecs` holds each role's version
-  assertion to that specification.
+  each lifecycle operation, with the material mapping lent beside it, and the
+  power and controller tests for theirs;
+  `TestEveryEntryPointAdmitsTheMaterialAnSSHPlacementLends` holds each entry
+  point's material mapping to the identity and host key an SSH placement
+  lends, and `TestRoleVersionAssertionsMatchTheirArgumentSpecs` each role's
+  version assertion to that specification.
 - Cover public serialization, artifacts, commands, streams, help, exit codes,
   and graph composition with applicable golden and end-to-end tests.
 - Keep every allowlist and registry a fitness check reads exact: an entry that

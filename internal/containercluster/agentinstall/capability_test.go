@@ -93,17 +93,18 @@ func mediaExecution(t *testing.T, digest string) (lifecycle.Execution, MediaRequ
 }
 
 // locatorOver is the tool locator composition binds over one host's retained
-// controller evidence, so a capability test exercises the production lookup
-// rather than a substitute for it.
-func locatorOver(view prerequisites.StorageView) func(context.Context, controllerscope.InstalledTool) (string, error) {
+// controller evidence and the closure its controller stage selects, so a
+// capability test exercises the production lookup rather than a substitute for
+// it.
+func locatorOver(view prerequisites.StorageView, tools []prerequisites.ToolDefinition) func(context.Context, controllerscope.InstalledTool) (string, error) {
 	return func(ctx context.Context, tool controllerscope.InstalledTool) (string, error) {
-		return prerequisites.LocateInstalledTool(ctx, view, tool)
+		return prerequisites.LocateInstalledTool(ctx, view, tools, tool)
 	}
 }
 
 // retainedController is a host the controller stage has already prepared: it
-// retains the exact closure it published and can reopen that sealed area.
-func retainedController() prerequisites.StorageView {
+// can reopen the sealed area of the exact closure that stage selects.
+func retainedController() (prerequisites.StorageView, []prerequisites.ToolDefinition) {
 	tools := []prerequisites.ToolDefinition{{
 		Kind: "openshift-install", Compatibility: "openshift", Version: "4.21.15",
 		Files: []prerequisites.ToolFile{{
@@ -112,7 +113,6 @@ func retainedController() prerequisites.StorageView {
 		}},
 	}}
 	return prerequisites.StorageView{
-		State: prerequisites.HostState{RetainedDefinitions: []prerequisites.Definition{{Tools: tools}}},
 		OpenBundle: func(_ context.Context, id string) (prerequisites.BundleArea, error) {
 			if id != prerequisites.ToolsDigest(tools) {
 				return nil, nil
@@ -124,7 +124,7 @@ func retainedController() prerequisites.StorageView {
 				}},
 			}, nil
 		},
-	}
+	}, tools
 }
 
 func mediaEvidence(t *testing.T, digest string, mutate func(*MediaEvidence)) json.RawMessage {
@@ -360,10 +360,11 @@ func TestEachTrustBundleReachesTheAdapterInTheOrderTheClusterSelects(t *testing.
 // built, and names the command that publishes it.
 func TestAnAbsentInstallerRefusesBeforeBuilding(t *testing.T) {
 	execution, _ := mediaExecution(t, testDigest)
+	_, selected := retainedController()
 	execution.LocateTool = locatorOver(prerequisites.StorageView{
 		State:      prerequisites.HostState{},
 		OpenBundle: func(context.Context, string) (prerequisites.BundleArea, error) { return nil, nil },
-	})
+	}, selected)
 	runner := &fakeRunner{}
 	if _, err := NewMedia(runner).Apply(context.Background(), execution); err == nil {
 		t.Fatal("an apply ran without the installer its release names")

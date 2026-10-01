@@ -38,8 +38,12 @@ func newReceipt(i inspection) (SetupReceipt, error) {
 	return receipt, nil
 }
 
+// matchesActions compares a pending receipt's actions with the ones setup
+// plans, whichever context inspects it, because setup selects none.
 func (i inspection) matchesActions(actions []SetupAction) bool {
-	expected, err := newReceipt(i)
+	setup := i
+	setup.view.Context = SetupContext{}
+	expected, err := newReceipt(setup)
 	if err != nil || len(actions) != len(expected.Actions) {
 		return false
 	}

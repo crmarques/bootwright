@@ -64,8 +64,12 @@ type Transaction interface {
 	// verified and durable.
 	SealClientArea(context.Context, string) error
 	// RetainDependencies records the acquisition identities and native
-	// resolution a controller stage froze, before it installs them.
-	RetainDependencies(context.Context, *prerequisites.Definition, []prerequisites.DependencySource) error
+	// resolution a controller stage froze, before it installs them, and in
+	// that same publication retires the retained resolutions, named by
+	// resolution digest, that the stage says the new one supersedes. It
+	// refuses to retire the receipt's own, the one it retains, or the last
+	// naming a held bundle, and retires nothing without a resolution to keep.
+	RetainDependencies(context.Context, *prerequisites.Definition, []prerequisites.DependencySource, []string) error
 	// Secrets lends this context's secret area to one caller at a time, under
 	// the lock and lease the transaction already holds, so produced material
 	// is published and withdrawn inside the transaction that records it. The
@@ -241,6 +245,17 @@ type UnresolvedReporter interface {
 	Unresolved(reconciliation.Block, json.RawMessage) (Unresolved, bool)
 }
 
+// ToolLocator is the controller stage capability's answer to every other block
+// of its plan: where the closure its frozen block proved published one
+// executable on this host. The engine hands it what that block proved in the
+// apply whose effects the asking operation runs over, unread, because only
+// that capability knows what its evidence names, so a block reaches its own
+// context's closure through the stage block the plan froze and through
+// nothing else.
+type ToolLocator interface {
+	LocateTool(context.Context, prerequisites.StorageView, reconciliation.Block, BlockEvidence, controller.InstalledTool) (string, error)
+}
+
 // Unresolved is why one effect's outcome stayed unknown, in the operator's
 // terms: the foreign object, named, the target that could not be read, with
 // its host or endpoint, or the listener with nothing of the target behind it.
@@ -336,10 +351,13 @@ type CapabilityPlan struct {
 }
 
 // SSHReservation is one block's claim on the SSH host its placement names,
-// qualified by that host's Machine. It is never published, because two
+// qualified by that host's Machine and the SSH address and port the placement
+// connects to, which name the host itself. It is never published, because two
 // contexts targeting one SSH host are not coordinated.
 type SSHReservation struct {
 	Machine     string
+	Address     string
+	Port        int
 	Reservation prerequisites.HostReservation
 }
 
@@ -362,7 +380,9 @@ type Execution struct {
 	Proved []BlockEvidence
 	// LocateTool answers where the controller stage installed one executable,
 	// so a block runs the exact file that stage published for the release its
-	// own graph selected.
+	// own graph selected. The engine asks the plan's controller stage block,
+	// through its ToolLocator, with what that block proved in the apply this
+	// operation runs over, and nothing else.
 	LocateTool func(context.Context, controller.InstalledTool) (string, error)
 	// Stage is the controller stage's own publication boundary and is present
 	// only on the block that extends this host's prerequisites. Every other
@@ -386,7 +406,7 @@ type ControllerStage struct {
 	Setup              prerequisites.StorageView
 	ClientArea         func(context.Context, string) (prerequisites.BundleArea, error)
 	SealClientArea     func(context.Context, string) error
-	RetainDependencies func(context.Context, *prerequisites.Definition, []prerequisites.DependencySource) error
+	RetainDependencies func(context.Context, *prerequisites.Definition, []prerequisites.DependencySource, []string) error
 	Prepare            func(context.Context, prerequisites.NativePreparation) error
 	ReleaseFoundation  func() error
 }

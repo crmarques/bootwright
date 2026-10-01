@@ -28,6 +28,13 @@ type Store struct {
 	clock    func() time.Time
 	mutex    sync.Mutex
 	expected map[string][]byte
+	// outputs guards what the attempts' retained output may still take of the
+	// area beneath the line ReservedBytes keeps free, which is measured once,
+	// at the first flush: a record or log written since only adds to what
+	// that reserve holds, never to what output may take.
+	outputs  sync.Mutex
+	measured bool
+	room     int64
 }
 
 func New(area Area, clock func() time.Time) *Store {
@@ -106,34 +113,34 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if err != nil {
 		return err
 	}
-	if len(slices.DeleteFunc(claimed, func(directory string) bool { return directory == operation.ID })) >= MaxOperations {
-		return retainedMaximum()
-	}
-	if err := s.admit(ctx, operation.ID, plan); err != nil {
-		return err
-	}
-	if err := s.ensureOperation(ctx, operation.ID); err != nil {
+	if err := admitOperations(len(slices.DeleteFunc(claimed, func(directory string) bool { return directory == operation.ID })), plan); err != nil {
 		return err
 	}
 	encodedPlan, err := encode(plan, MaxPlanBytes)
 	if err != nil {
 		return err
 	}
-	if err := s.area.WriteExclusive(ctx, path.Join(operation.ID, "plan.json"), encodedPlan); err != nil {
-		return err
-	}
 	encoded, err := encode(operation, MaxOperationBytes)
 	if err != nil {
+		return err
+	}
+	index, err := encode(Index{Version: 1, Current: operation.ID}, MaxIndexBytes)
+	if err != nil {
+		return err
+	}
+	if err := s.admit(ctx, operation.ID, plan, len(encodedPlan)+len(encoded)+len(index)); err != nil {
+		return err
+	}
+	if err := s.ensureOperation(ctx, operation.ID); err != nil {
+		return err
+	}
+	if err := s.area.WriteExclusive(ctx, path.Join(operation.ID, "plan.json"), encodedPlan); err != nil {
 		return err
 	}
 	if err := s.area.WriteExclusive(ctx, s.operationPath(operation.ID), encoded); err != nil {
 		return err
 	}
 	s.remember(s.operationPath(operation.ID), slices.Clone(encoded))
-	index, err := encode(Index{Version: 1, Current: operation.ID}, MaxIndexBytes)
-	if err != nil {
-		return err
-	}
 	current, _ := s.expectation(indexPath)
 	if err := s.area.Replace(ctx, indexPath, index, current); err != nil {
 		return err
@@ -156,55 +163,76 @@ func (s *Store) Claim(ctx context.Context, id string, plan reconciliation.Plan) 
 	if err != nil {
 		return err
 	}
-	if len(claimed) >= MaxOperations {
-		return retainedMaximum()
+	if err := admitOperations(len(claimed), plan); err != nil {
+		return err
 	}
 	if slices.Contains(claimed, id) {
 		return recordError("the lifecycle operation identity already has a directory")
 	}
-	if err := s.admit(ctx, id, plan); err != nil {
+	if err := s.admit(ctx, id, plan, 0); err != nil {
 		return err
 	}
 	return s.ensureOperation(ctx, id)
 }
 
-func retainedMaximum() error {
-	return recordError("the context has retained the maximum number of lifecycle operations")
+const retainedMaximum = "the context has retained the maximum number of lifecycle operations"
+
+// admitOperations refuses a new operation at the retained-operation bound once
+// the context, retaining retained operation directories beside the one a
+// claim made for it, could not retain what AdmissionOperations says it needs.
+func admitOperations(retained int, plan reconciliation.Plan) error {
+	needed := AdmissionOperations(plan)
+	if retained+needed <= MaxOperations {
+		return nil
+	}
+	holds := fmt.Sprintf("%s: it retains %d of its %d", retainedMaximum, retained, MaxOperations)
+	if plan.Verb == reconciliation.Destroy {
+		return recordError(holds + ", and this removal needs room for its own")
+	}
+	return recordError(fmt.Sprintf("%s, and this apply needs room for %d: its own and that of the removal that takes it back", holds, needed))
 }
 
 // admit refuses a new operation at the retained-operation bound once the area
-// could not hold what AdmissionEntries says it needs, so an area filled by
-// operations that ran their blocks refuses the next apply here, before
-// anything is raised for it, rather than at one of its block writes, and the
-// removal of the last apply it admitted still registers. The directory a
-// claim created for id is what its registration fills, so it is left out of
-// what the area holds.
-func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan) error {
-	held, err := s.held(ctx, "", id)
+// could not hold what AdmissionEntries and AdmissionBytes say it needs, so an
+// area filled by operations that ran their blocks refuses the next apply
+// here, before anything is raised for it, rather than at one of its block
+// writes, and the removal of the last apply it admitted still registers. The
+// directory a claim created for id is what its registration fills, so it is
+// left out of what the area holds. registration is what the registration
+// writes, which a claim does not know and an apply does not need.
+func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan, registration int) error {
+	held, size, err := s.held(ctx, "", id)
 	if err != nil {
 		return err
 	}
-	needed := AdmissionEntries(plan)
-	if held+needed <= MaxEntries {
+	if needed := AdmissionEntries(plan); held+needed > MaxEntries {
+		holds := fmt.Sprintf("%s: its operation area holds %d of its %d entries", retainedMaximum, held, MaxEntries)
+		if plan.Verb == reconciliation.Destroy {
+			return recordError(fmt.Sprintf("%s, and this removal needs %d more for its first attempts and the writes that complete them", holds, needed))
+		}
+		return recordError(fmt.Sprintf("%s, and this apply needs %d more: %d for its first attempts and those of the removal that takes it back, and the %d it keeps for later attempts",
+			holds, needed, needed-ReservedEntries, ReservedEntries))
+	}
+	needed := AdmissionBytes(plan, registration)
+	if size+needed <= MaxBytes {
 		return nil
 	}
-	holds := fmt.Sprintf("the context has retained the maximum number of lifecycle operations: its operation area holds %d of its %d entries", held, MaxEntries)
+	holds := fmt.Sprintf("%s: its operation area holds %d of its %d bytes", retainedMaximum, size, MaxBytes)
 	if plan.Verb == reconciliation.Destroy {
-		return recordError(fmt.Sprintf("%s, and this removal needs %d more for its first attempts and the writes that complete them", holds, needed))
+		return recordError(fmt.Sprintf("%s, and this removal needs %d more for the records its registration writes", holds, needed))
 	}
-	return recordError(fmt.Sprintf("%s, and this apply needs %d more: %d for its first attempts and those of the removal that takes it back, and the %d it keeps for later attempts",
-		holds, needed, needed-ReservedEntries, ReservedEntries))
+	return recordError(fmt.Sprintf("%s, and this apply needs the %d it keeps for its records and logs and those of the removal that takes it back", holds, needed))
 }
 
 // held counts the entries beneath target as the area's entry bound counts
-// them, leaving out skip and everything beneath it, and stops once the count
-// passes MaxEntries.
-func (s *Store) held(ctx context.Context, target, skip string) (int, error) {
+// them, and the bytes their records hold as its byte bound does, leaving out
+// skip and everything beneath it, and stops once the count passes MaxEntries.
+func (s *Store) held(ctx context.Context, target, skip string) (int, int64, error) {
 	entries, err := s.area.Entries(ctx, target)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	count := 0
+	count, size := 0, int64(0)
 	for _, entry := range entries {
 		name := path.Join(target, entry.Name)
 		if name == skip {
@@ -212,17 +240,44 @@ func (s *Store) held(ctx context.Context, target, skip string) (int, error) {
 		}
 		count++
 		if entry.Directory {
-			nested, err := s.held(ctx, name, skip)
+			nested, nestedSize, err := s.held(ctx, name, skip)
 			if err != nil {
-				return 0, err
+				return 0, 0, err
 			}
-			count += nested
+			count, size = count+nested, size+nestedSize
+		} else {
+			size += entry.Size
 		}
 		if count > MaxEntries {
 			break
 		}
 	}
-	return count, nil
+	return count, size, nil
+}
+
+// outputRoom takes up to wanted bytes of what an attempt's retained output
+// may still add to the area beneath the line ReservedBytes keeps free, and
+// reports how many it took. Output that the area then refuses gives them
+// back with returnRoom.
+func (s *Store) outputRoom(ctx context.Context, wanted int) (int, error) {
+	s.outputs.Lock()
+	defer s.outputs.Unlock()
+	if !s.measured {
+		_, size, err := s.held(ctx, "", "")
+		if err != nil {
+			return 0, err
+		}
+		s.measured, s.room = true, max(MaxBytes-ReservedBytes-size, 0)
+	}
+	taken := min(int64(wanted), s.room)
+	s.room -= taken
+	return int(taken), nil
+}
+
+func (s *Store) returnRoom(size int) {
+	s.outputs.Lock()
+	defer s.outputs.Unlock()
+	s.room += int64(size)
 }
 
 // Claimed names every operation directory, in name order: each registered

@@ -1,6 +1,12 @@
 package reconciliation
 
-import "fmt"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
+
+const maxEvidenceBytes = 65536
 
 type MutationOperation string
 
@@ -45,6 +51,63 @@ func (e Evidence) Bytes() ([]byte, error) {
 		return nil, stateError("context mutation evidence is not a recognized state")
 	}
 	return fmt.Appendf(nil, "{\"version\":1,\"operation\":%q,\"ownership\":%q}\n", e.Operation, e.Ownership), nil
+}
+
+// ReadEvidence is the one reading of a mutation record the context guard
+// grants a disposition from: a single version-1 object holding the version,
+// operation and ownership members once each, in any order and spacing, with a
+// recognized state. Anything else is missing, corrupt or unsupported evidence,
+// which reads as nothing.
+func ReadEvidence(data []byte) (Evidence, bool) {
+	if len(data) == 0 || len(data) > maxEvidenceBytes {
+		return Evidence{}, false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
+		return Evidence{}, false
+	}
+	seen := map[string]bool{}
+	var evidence Evidence
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, ok := token.(string)
+		if err != nil || !ok || seen[key] {
+			return Evidence{}, false
+		}
+		seen[key] = true
+		if token, err = decoder.Token(); err != nil {
+			return Evidence{}, false
+		}
+		switch key {
+		case "version":
+			number, ok := token.(json.Number)
+			if !ok || string(number) != "1" {
+				return Evidence{}, false
+			}
+		case "operation":
+			operation, ok := token.(string)
+			if !ok {
+				return Evidence{}, false
+			}
+			evidence.Operation = MutationOperation(operation)
+		case "ownership":
+			ownership, ok := token.(string)
+			if !ok {
+				return Evidence{}, false
+			}
+			evidence.Ownership = MutationOwnership(ownership)
+		default:
+			return Evidence{}, false
+		}
+	}
+	if token, err := decoder.Token(); err != nil || token != json.Delim('}') || len(seen) != 3 {
+		return Evidence{}, false
+	}
+	if len(bytes.TrimLeft(data[decoder.InputOffset():], " \t\r\n")) != 0 {
+		return Evidence{}, false
+	}
+	return evidence, evidence.Valid()
 }
 
 // EvidenceFor maps an operation to the evidence its context must carry before

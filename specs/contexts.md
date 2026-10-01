@@ -325,7 +325,10 @@ beside its target, proves right before one rename that the destination still
 holds what it replaces or renames without replacing anything, and removes its
 stage on any failure before that rename, even when the command was cancelled.
 Removal happens only while the containing directory still verifies; otherwise
-the file stays and the original failure is reported.
+the file stays and the original failure is reported. An operation or run area
+removes a directory only once it is empty, and a record only while it is the
+file that held exactly the bytes its caller expects, and each removal is
+durable when it returns; an entry already absent counts as removed.
 
 Every writer of a stage in the root, the controller directory or a context's
 `state/` subtree holds the root lock for its whole command, so under the
@@ -391,6 +394,7 @@ Secrets limits additionally bound their trees.
 | Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_records.go` |
 | Lifecycle operations one context retains | 1024 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
 | Entries in one context's lifecycle operation area | 8192 | `MaxEntries` in `internal/reconciliation/operationstore/records.go` |
+| Bytes in one context's lifecycle operation area | 64 MiB | `MaxBytes` in `internal/reconciliation/operationstore/records.go` |
 | One lifecycle adapter invocation whose request states no deadline | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
 | The longest deadline a lifecycle adapter request may state | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
 | One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
@@ -411,9 +415,14 @@ clamped to the client-installation ceiling; a closure past that ceiling is
 refused before Ansible starts, so the clamp never shortens a run it admits.
 
 A claim or registration refuses `lifecycle.state` at the retained-operation
-bound once the context holds as many operation directories as the table
-states, or once the operation area could not hold what the new operation
-needs. A first pass is what an
+bound once the context could not retain the operation directories the new
+operation needs, or once the operation area could not hold what it needs. A
+fresh apply needs room for its own directory and for that of the removal that
+takes it back, and a removal for its own, so a fresh apply refuses one
+directory short of the bound the table states, while the removal of the last
+apply admitted still registers and completes at that bound
+(`TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheDirectoryBound`). A first
+pass is what an
 [operation directory](state-reconciliation.md#operation-records) holds once
 each block of its frozen plan ran one attempt: seven entries of its own and six
 for each block. A fresh apply needs its own first pass and the first pass of
@@ -430,9 +439,24 @@ hold the index and the later attempts and resolutions of the current apply and
 of its removal, the only operations that write again. That removal therefore
 refuses at its registration only once the apply's own later attempts used them
 up, and it then leaves the apply's evidence, binding and effects as they were
-(`TestADestroyTheAreaCannotHoldRefusesAtItsRegistration`). A record or log
-write that would take the area past its entries or its 64 MiB refuses
-`context.state`.
+(`TestADestroyTheAreaCannotHoldRefusesAtItsRegistration`).
+
+The area's bytes are admitted the same way, as its byte bound counts them. A
+fresh apply needs 16 MiB of them free, which hold its records and logs and
+those of the removal that takes it back, and a removal needs the bytes its
+registration writes: its plan, its operation record and the index. An
+attempt's retained adapter output never takes the area into those 16 MiB: it
+keeps what fits beneath them and is then cut short, as its own bound cuts it,
+and the outputs of one invocation share what is left. However much an adapter
+prints, only records and logs use them, so the removal of the last apply
+admitted registers and completes within the bound
+(`TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheByteBound`,
+`TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval`). That removal
+refuses at its registration, or stops part way through, only once the records
+and logs written since that apply was admitted used them up. A bounded run's
+output lies in an area of its own, which holds no records, and only its own
+bound cuts it. A record or log write that would take the area past its entries
+or its 64 MiB refuses `context.state`.
 
 Missing registry in a nonempty root is
 corruption, except that explicit init may finish publication when the root's

@@ -735,6 +735,82 @@ func TestPendingReceiptRejectsChangedCatalogWithoutEffects(t *testing.T) {
 	}
 }
 
+// Setup consumes and records no context, so the refusal of another pending
+// attempt names none, and names the proxy variables setup reads its route
+// from.
+func TestAnotherPendingReceiptNamesSetupAndNoContext(t *testing.T) {
+	f := newFixture(t)
+	f.bundle.err = errors.New("failed")
+	_, _ = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	f.catalog.definition.CatalogDigest = strings.Repeat("c", 64)
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	reported := diagnostics.Of(err)
+	want := "restore the executable that recorded it and the HTTPS_PROXY, HTTP_PROXY and NO_PROXY values it ran with, then run bootwright setup"
+	if len(reported) != 1 || reported[0].Code != "controller.unknown" || reported[0].Remediation != want {
+		t.Fatalf("pending receipt refusal: %+v", reported)
+	}
+}
+
+// The receipt check compares no context: a context's preflight reads setup's
+// pending receipt as setup's own and leaves it to setup, whichever route its
+// controller Machine selects, and a pending receipt that names a context is
+// never setup's.
+func TestAPendingReceiptIsJudgedWithoutAContext(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		ambient []string
+	}{
+		{name: "direct setup"},
+		{name: "setup behind HTTPS_PROXY", ambient: []string{"HTTPS_PROXY", "http://proxy.example:3128", "NO_PROXY", ".internal.example"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := ambientFixture(t, test.ambient...)
+			f.store.scope = SetupContext{Name: "example", Revision: "rev-" + strings.Repeat("2", 32)}
+			f.bundle.err = errors.New("failed")
+			if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err == nil {
+				t.Fatal("the interrupted setup reported success")
+			}
+			if !f.store.state.Receipt.Incomplete() || f.store.state.Receipt.Context != (SetupContext{}) {
+				t.Fatalf("setup left no context-free pending receipt: %+v", f.store.state.Receipt)
+			}
+			f.bundle.err = nil
+			report, err := f.service.Check(context.Background(), CheckRequest{ContextName: "example"})
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "preflight.failed" || reported[0].Remediation != setupCommand() {
+				t.Fatalf("a context's preflight judged setup's receipt by its context: %+v", reported)
+			}
+			if report == nil || report.Route != "direct" || !slices.ContainsFunc(report.Checks, func(check Check) bool { return check.ID == "setup-recovery" && check.Status == "not-ready" }) {
+				t.Fatalf("the pending receipt was not reported for setup to resolve: %+v", report)
+			}
+			f.store.state.Receipt.Context = f.store.scope
+			writes := f.store.writes
+			if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); code(err) != "controller.unknown" || f.store.writes != writes {
+				t.Fatalf("setup adopted a receipt that names a context: %v", err)
+			}
+		})
+	}
+}
+
+// Setup still judges its own pending receipt by the route it recorded, so a
+// resumed setup over another route refuses, and so does a context-free
+// preflight, which reads the same variables.
+func TestSetupsOwnReceiptKeepsItsRoute(t *testing.T) {
+	f := ambientFixture(t, "HTTPS_PROXY", "http://proxy.example:3128")
+	f.bundle.err = errors.New("failed")
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err == nil || !f.store.state.Receipt.Incomplete() {
+		t.Fatalf("setup left no pending receipt: %v", err)
+	}
+	f.bundle.err = nil
+	moved := New(&f.store, &f.compiler, &f.host, &f.catalog, &f.bundle, nil, Options{Confirmer: f, Presenter: f})
+	writes := f.store.writes
+	if _, err := moved.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); code(err) != "controller.unknown" || f.store.writes != writes {
+		t.Fatalf("setup resumed its receipt over another route: %v", err)
+	}
+	if _, err := moved.Check(context.Background(), CheckRequest{}); code(err) != "controller.unknown" {
+		t.Fatalf("a context-free preflight read the receipt over another route: %v", err)
+	}
+}
+
 func code(err error) string {
 	values := diagnostics.Of(err)
 	if len(values) == 0 {

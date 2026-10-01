@@ -140,8 +140,18 @@ func TestElevationOutcomes(t *testing.T) {
 		{name: "an interactive failure stands", terminal: true, child: scriptedChild{stderr: []string{startAnnouncement, stateFailure}, code: 1}, exit: 1, stderr: stateFailure},
 		{name: "a JSON child that started and was killed", json: true, child: scriptedChild{stderr: []string{startAnnouncement}, code: 137}, exit: 1, code: "runtime.internal", message: "the elevated command exited with status 137 without a result"},
 		{name: "a JSON child that started and panicked", json: true, child: scriptedChild{stderr: []string{startAnnouncement, "panic: boom\n"}, code: 2}, exit: 1, code: "runtime.internal", message: "the elevated command exited with status 2 without a result", stderr: "panic: boom\n"},
-		{name: "a JSON refusal", json: true, child: scriptedChild{stderr: []string{passwordNeeded}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization, remediation: authenticate},
-		{name: "a JSON policy denial leaves standard error empty", json: true, child: scriptedChild{stderr: []string{hostWarning, denial}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization, remediation: authenticate},
+		{name: "a JSON refusal carries the line it withheld", json: true, child: scriptedChild{stderr: []string{passwordNeeded}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization + ": a password is required", remediation: authenticate},
+		{
+			name: "a JSON policy denial is its reason and leaves standard error empty", json: true, child: scriptedChild{stderr: []string{hostWarning, denial}, code: 1}, exit: 1, code: "runtime.privilege",
+			message: authorization + ": unable to resolve host lab-01: Name or service not known; Sorry, user operator is not allowed to execute '/proc/4242/exe status' as root on lab-01.", remediation: authenticate,
+		},
+		{
+			name: "a JSON refusal of the forwarded route names the tag its rule lacks", json: true, child: scriptedChild{stderr: []string{setenvRefusal}, code: 1}, exit: 1, code: "runtime.privilege",
+			message:     authorization + ": sorry, you are not allowed to set the following environment variables: HTTPS_PROXY",
+			remediation: "add the SETENV tag to the sudoers rule that runs Bootwright, or run Bootwright as root",
+		},
+		{name: "a JSON child that started discards the lines withheld before it", json: true, child: scriptedChild{stdout: "{}\n", stderr: []string{hostWarning, startAnnouncement}}, stderr: ""},
+		{name: "a JSON result without a start discards the lines withheld", json: true, child: scriptedChild{stdout: "{}\n", stderr: []string{hostWarning}, code: 1}, exit: 1, stderr: ""},
 		{name: "a warning before a child's own failure", child: scriptedChild{stderr: []string{hostWarning, startAnnouncement, stateFailure}, code: 1}, exit: 1, stderr: hostWarning + stateFailure},
 		{name: "a warning before an unannounced child's own failure", child: scriptedChild{stderr: []string{hostWarning, stateFailure}, code: 1}, exit: 1, stderr: hostWarning + stateFailure},
 		{name: "a relayed remote refusal", child: scriptedChild{stderr: []string{startAnnouncement, passwordNeeded}, code: 1}, exit: 1, stderr: passwordNeeded},
@@ -494,13 +504,13 @@ func TestStartFilterStripsOneAnnouncementAndPassesTheRestUnchanged(t *testing.T)
 		{name: "a long sudo line before the start", mode: "human", writes: []string{"sudo: " + long}, want: "sudo: " + long},
 		{name: "a long JSON sudo line", mode: "json", writes: []string{"sudo: " + long}},
 		{name: "a long line after the start", mode: "json", writes: []string{startAnnouncement, long}, want: long, started: true},
-		{name: "JSON drops a refusal before a line", mode: "json", writes: []string{passwordNeeded + stateFailure}},
-		{name: "JSON drops a refusal after a line", mode: "json", writes: []string{stateFailure + passwordNeeded}},
-		{name: "JSON drops every line before the start", mode: "json", writes: []string{denial[:20], denial[20:] + hostWarning, long, startAnnouncement, stateFailure}, want: stateFailure, started: true},
-		{name: "JSON drops a line that only began like the announcement", mode: "json", writes: []string{"bootwright: elevated", " command failed\n", startAnnouncement}, started: true},
-		{name: "an unterminated JSON refusal", mode: "json", writes: []string{"sudo: a password is required"}},
+		{name: "JSON withholds a refusal before a line", mode: "json", writes: []string{passwordNeeded + stateFailure}, held: passwordNeeded + stateFailure},
+		{name: "JSON withholds a refusal after a line", mode: "json", writes: []string{stateFailure + passwordNeeded}, held: stateFailure + passwordNeeded},
+		{name: "JSON forwards no line before the start and discards what it held", mode: "json", writes: []string{denial[:20], denial[20:] + hostWarning, long, startAnnouncement, stateFailure}, want: stateFailure, started: true},
+		{name: "JSON withholds a line that only began like the announcement", mode: "json", writes: []string{"bootwright: elevated", " command failed\n"}, held: "bootwright: elevated command failed\n"},
+		{name: "an unterminated JSON refusal", mode: "json", writes: []string{"sudo: a password is required"}, held: "sudo: a password is required"},
 		{name: "an unterminated human refusal", mode: "human", writes: []string{"sudo: a password is required"}, held: "sudo: a password is required"},
-		{name: "an unterminated fragment", mode: "json", writes: []string{"sudo"}},
+		{name: "an unterminated fragment", mode: "json", writes: []string{"sudo"}, held: "sudo"},
 		{name: "an unterminated human fragment", mode: "human", writes: []string{"sudo"}, want: "sudo"},
 		{name: "an unterminated announcement", mode: "human", writes: []string{hostWarning, strings.TrimSuffix(startAnnouncement, "\n")}, want: hostWarning, started: true},
 		{name: "an unterminated diagnostic", mode: "human", writes: []string{"[FAIL] cli.usage: bad"}, want: "[FAIL] cli.usage: bad"},
@@ -508,15 +518,18 @@ func TestStartFilterStripsOneAnnouncementAndPassesTheRestUnchanged(t *testing.T)
 		t.Run(c.name, c.check)
 	}
 	const prompt = "[sudo] password for operator: "
-	for mode, want := range map[string]string{"interactive": prompt, "human": prompt, "json": ""} {
+	for _, mode := range []string{"interactive", "human"} {
 		t.Run("a prompt is decided at once in "+mode, func(t *testing.T) {
 			var out bytes.Buffer
 			filter := filterFor(mode, &out)
-			if _, err := filter.Write([]byte(prompt)); err != nil || out.String() != want || len(filter.line) != 0 {
-				t.Fatalf("forwarded %q, %v with %d bytes undecided before any further write, want %q", out.String(), err, len(filter.line), want)
+			if _, err := filter.Write([]byte(prompt)); err != nil || out.String() != prompt || len(filter.line) != 0 {
+				t.Fatalf("forwarded %q, %v with %d bytes undecided before any further write, want %q", out.String(), err, len(filter.line), prompt)
 			}
 		})
 	}
+	// JSON forwards nothing before the start, so a prompt waits for its line
+	// to end, bounded like any line it holds.
+	(filterCase{name: "a JSON prompt", mode: "json", writes: []string{prompt}, held: prompt}).check(t)
 }
 
 func TestStartFilterBoundsWhatItHolds(t *testing.T) {
@@ -528,7 +541,9 @@ func TestStartFilterBoundsWhatItHolds(t *testing.T) {
 		{name: "a seventeenth forwards them all", mode: "human", writes: []string{refusals, hostWarning, passwordNeeded}, want: refusals + hostWarning + passwordNeeded},
 		{name: "a line of the bound is held", mode: "human", writes: []string{longest}, held: longest},
 		{name: "a longer line passes whole after the held ones", mode: "human", writes: []string{passwordNeeded, tooLong, passwordNeeded}, want: passwordNeeded + tooLong + passwordNeeded},
-		{name: "JSON drops without holding", mode: "json", writes: []string{refusals, passwordNeeded}},
+		{name: "JSON holds sixteen lines and forwards none", mode: "json", writes: []string{refusals, hostWarning, passwordNeeded}, held: refusals},
+		{name: "JSON holds a line of the bound", mode: "json", writes: []string{longest}, held: longest},
+		{name: "JSON drops a longer line and holds the next", mode: "json", writes: []string{tooLong, passwordNeeded}, held: passwordNeeded},
 	} {
 		t.Run(c.name, c.check)
 	}

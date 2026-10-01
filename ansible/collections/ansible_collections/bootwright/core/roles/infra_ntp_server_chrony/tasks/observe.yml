@@ -7,6 +7,8 @@
 - name: Observe the managed service without changing it
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_ntp_server_request }}'
+    runs_from:
+      - '{{ infra_ntp_server_chrony_config_dir }}/chrony.conf'
     readiness: true
     attempts: 1
   register: infra_ntp_server_chrony_observation

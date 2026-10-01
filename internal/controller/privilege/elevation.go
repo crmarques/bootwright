@@ -118,7 +118,7 @@ func conclude(run elevationRun, stderr *startFilter) Outcome {
 	case run.json && stderr.started:
 		return Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.internal", Message: "the elevated command exited with status " + strconv.Itoa(run.code) + " without a result"}}
 	case run.json:
-		return authorizationRefusal(nil)
+		return authorizationRefusal(stderr.held)
 	case stderr.started || stderr.other:
 		return Outcome{ExitCode: run.code}
 	case run.interrupted:
@@ -140,7 +140,7 @@ func interruption() Outcome {
 const environmentRefusal = "sorry, you are not allowed to set the following environment variables"
 
 // authorizationRefusal reports that sudo refused before the child started. The
-// report replaces the lines a human invocation held, so it carries them as its
+// report replaces the lines the invocation held, so it carries them as its
 // reason, and a rule that refused the forwarded route names the tag it lacks.
 func authorizationRefusal(held []byte) Outcome {
 	message := "sudo authorization could not be obtained"
@@ -253,16 +253,19 @@ type sudoLines int
 const (
 	passSudoLines sudoLines = iota
 	holdSudoLines
-	// dropBeforeStart discards every byte before the start, whatever line it
-	// belongs to: only sudo writes there, and JSON leaves standard error empty.
-	dropBeforeStart
+	// withholdBeforeStart forwards no byte before the start, whatever line it
+	// belongs to, because JSON leaves standard error empty. Only sudo writes
+	// there, so it holds every line within the same bounds as the refusal's
+	// reason and discards them once the child starts.
+	withholdBeforeStart
 )
 
 // startFilter carries the elevated child's standard error, on which sudo
 // writes too. It removes the child's start announcement and, until then, holds
-// complete lines beginning with sudo's prefix or, for JSON, drops everything.
-// It holds bytes at a line start only while they remain a prefix of a line it
-// could hold, so a prompt without a line feed passes at once.
+// complete lines beginning with sudo's prefix or, for JSON, every line, which
+// it never forwards. A human invocation's filter holds bytes at a line start
+// only while they remain a prefix of a line it could hold, so a prompt without
+// a line feed passes at once.
 type startFilter struct {
 	writer io.Writer
 	sudo   sudoLines
@@ -280,7 +283,7 @@ type startFilter struct {
 func newStartFilter(writer io.Writer, json, noninteractive bool) *startFilter {
 	switch {
 	case json:
-		return &startFilter{writer: writer, sudo: dropBeforeStart}
+		return &startFilter{writer: writer, sudo: withholdBeforeStart}
 	case noninteractive:
 		return &startFilter{writer: writer, sudo: holdSudoLines}
 	}
@@ -306,7 +309,7 @@ func (f *startFilter) step(data []byte) (int, error) {
 		if end := bytes.IndexByte(data, '\n'); end >= 0 {
 			f.midLine, data = false, data[:end+1]
 		}
-		if f.sudo == dropBeforeStart {
+		if f.sudo == withholdBeforeStart {
 			return len(data), nil
 		}
 		return f.forward(data)
@@ -334,7 +337,12 @@ func (f *startFilter) judge(final bool) error {
 		return f.release()
 	case !complete && strings.HasPrefix(startAnnouncement, string(line)):
 		return nil
-	case f.sudo == dropBeforeStart:
+	case f.sudo == withholdBeforeStart && !complete && len(line) < heldLineBytes:
+		return nil
+	case f.sudo == withholdBeforeStart:
+		if complete && f.count < heldLineCount {
+			f.held, f.count = append(f.held, line...), f.count+1
+		}
 		f.line, f.midLine = nil, !complete
 		return nil
 	case sudoLine && complete && bytes.HasPrefix(line, []byte(sudoLinePrefix)):
@@ -354,11 +362,12 @@ func (f *startFilter) judge(final bool) error {
 	return err
 }
 
-// release forwards the held lines in the order they arrived.
+// release forwards the held lines in the order they arrived, except a JSON
+// invocation's, which it discards.
 func (f *startFilter) release() error {
 	held := f.held
 	f.held = nil
-	if len(held) == 0 {
+	if len(held) == 0 || f.sudo == withholdBeforeStart {
 		return nil
 	}
 	_, err := f.forward(held)

@@ -11,7 +11,13 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
     emit,
 )
 
-PHASES = ("loaded", "group", "completed")
+PHASES = ("loaded", "group", "refused", "completed")
+# The refusals of a node's pre-boot proof this installation names to its runner
+# before the run fails, under the node's position in the frozen request, each
+# one the runner reports as the installation's own diagnostic for that node's
+# Machine (internal/substrate, preboot.go).
+REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
+MAX_NODE = 999
 GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 OUTCOMES = ("changed", "unchanged")
 HEX = set("0123456789abcdef")
@@ -97,6 +103,18 @@ def unproved(found):
     return unmet
 
 
+def refused(arguments):
+    """The reason a node's refusal is named by: the refusal and the node's position."""
+    reason, node = arguments.get("reason"), arguments.get("node")
+    if reason not in REFUSALS:
+        raise ValueError("refusal reason")
+    if isinstance(node, str) and node.isdigit() and node == str(int(node)):
+        node = int(node)
+    if isinstance(node, bool) or not isinstance(node, int) or not 0 <= node <= MAX_NODE:
+        raise ValueError("refused node")
+    return "%s-node-%d" % (reason, node)
+
+
 def publishes(found, observed):
     """Whether this phase may publish evidence proving no postcondition."""
     return bool(found["postcondition"]) or bool(observed)
@@ -121,6 +139,9 @@ class ActionModule(ActionBase):
                 if status not in GROUP_STATUSES:
                     raise ValueError("group status")
                 emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
+                return {"changed": False}
+            if phase == "refused":
+                emit({"phase": "refused", "reason": refused(arguments)})
                 return {"changed": False}
             outcome = arguments.get("outcome")
             if outcome not in OUTCOMES:

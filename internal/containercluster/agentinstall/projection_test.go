@@ -3,6 +3,7 @@ package agentinstall
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -299,7 +300,9 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 // what it holds and that boot is not yet qualified on emulated hardware. A
 // node Bootwright also installs an operating system on refuses too, because
 // two installations would write its one disk. Either refusal names the bound
-// Machine, because that is what an operator changes.
+// Machine, because that is what an operator changes. A node whose realized
+// target does not derive refuses with its substrate's own reason and the remedy
+// naming the provider to correct.
 func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.T) {
 	installed := guest("sno-01", "198.51.100.21/24")
 	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel-9-8"), "os", "installProfileRef"))
@@ -322,6 +325,16 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 			"a declared node selects an install profile, so two installations would write its disk",
 			"remove spec.os.installProfileRef from Machine/sno-01 or drop it from ContainerCluster/sno",
 		},
+		"controller port past the port space": {
+			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "ContainerCluster/sno",
+			"the Machine's emulated controller port does not allocate",
+			"correct spec.libvirt.bmcEmulationDefaults.port on InfraProvider/lab-libvirt",
+		},
+		"no controller credential": {
+			singleNodeOnProvider(noControllerCredential), "ContainerCluster/sno",
+			"the provider declares no emulated controller credential",
+			"set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on InfraProvider/lab-libvirt",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if unsupported := Unsupported(test.catalog); len(unsupported) != 1 || unsupported[0] != test.cluster {
@@ -337,6 +350,23 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 			}
 			if reported[0].Remediation != test.remediation {
 				t.Fatalf("remediation = %q", reported[0].Remediation)
+			}
+		})
+	}
+}
+
+// A node's target error that carries no reason still refuses the cluster,
+// because an empty reason would admit it.
+func TestANodeTargetErrorWithoutAReasonStillRefuses(t *testing.T) {
+	catalog := singleNodeCatalog()
+	bound, _ := catalog.Find(api.Machine, "sno-01")
+	for name, err := range map[string]error{
+		"no diagnostic":   errors.New("no diagnostic"),
+		"an empty reason": diagnostics.NewFailure("api.value", "", ""),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if reason, _ := nodeTargetRefusal(catalog, bound, err); reason != "a declared node's realized target does not derive" {
+				t.Fatalf("reason = %q", reason)
 			}
 		})
 	}

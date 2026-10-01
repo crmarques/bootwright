@@ -2,7 +2,7 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_proxy_request.version == 'proxy-squid-v1'
+      - bootwright_proxy_request.version == 'proxy-squid-v2'
       - bootwright_proxy_request.contentRoot.startswith('/var/lib/bootwright-services/')
       - bootwright_proxy_digest is match('[0-9a-f]{64}')
     quiet: true

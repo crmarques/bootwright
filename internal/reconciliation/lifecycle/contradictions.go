@@ -1,7 +1,6 @@
 package lifecycle
 
 import (
-	"bytes"
 	"context"
 	"slices"
 	"strings"
@@ -12,15 +11,23 @@ import (
 
 const failedWithoutFailure = "the apply records failed, yet no block records the failure"
 
+const unreadableEvidenceExit = "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
+
 // deletionExit is the remedy of the record states neither verb acts on: a lost
 // index beside what no index accounts for, and a completed removal holding a
-// block that is not done. Deleting the context is their only exit. Pristine
-// evidence admits a plain deletion; any other evidence protects the context,
-// so the deletion must acknowledge the objects it abandons.
+// block that is not done. Deleting the context is their only exit while the
+// context guard reads its evidence, so the remedy names the deletion the guard
+// admits, from the guard's own reading: evidence read as pristine admits a
+// plain deletion, and any other it reads protects the context, so the
+// deletion must acknowledge the objects it abandons. Evidence the guard cannot
+// read admits no deletion at all, so over it the remedy names none.
 func deletionExit(view View) string {
+	evidence, readable := reconciliation.ReadEvidence(view.Evidence())
+	if !readable {
+		return unreadableEvidenceExit
+	}
 	command := "bootwright context delete --name " + view.Identity().Name + " --purge"
-	pristine, err := projection(reconciliation.Destroy, reconciliation.OperationDone)
-	if err == nil && bytes.Equal(view.Evidence(), pristine) {
+	if evidence == reconciliation.PristineEvidence() {
 		return "delete the context with " + command
 	}
 	return "delete the context with " + command + " --allow-orphans, which abandons what it may still own"

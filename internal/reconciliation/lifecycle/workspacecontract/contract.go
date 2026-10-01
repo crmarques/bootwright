@@ -54,6 +54,7 @@ func Verify(t *testing.T, within Within) {
 		{"each view names the context it holds", eachViewNamesTheContextItHolds},
 		{"a client area opens under a reservation and reopens sealed read-only", aClientAreaOpensUnderAReservation},
 		{"retained dependencies are kept whole and never replaced", retainedDependenciesAreKeptWhole},
+		{"a stage retires the resolutions it supersedes beside the one it retains", aStageRetiresTheResolutionsItSupersedes},
 		{"a secret area is lent for the held context only inside its transaction", aSecretAreaIsLentOnlyInsideItsTransaction},
 	} {
 		t.Run(clause.name, func(t *testing.T) {
@@ -306,19 +307,43 @@ func retainedDependenciesAreKeptWhole(t *testing.T, s Subject) {
 	incomplete.Native = nil
 	altered.PythonVersion = "3.14.8"
 	mutate(t, s, func(tx lifecycle.Transaction) {
-		succeeds(t, tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{source}), "retaining a source")
-		succeeds(t, tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{source}), "retaining it again")
-		refuses(t, tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{replaced}), "a source replaced under its identity")
-		refuses(t, tx.RetainDependencies(ctx, &incomplete, incomplete.Sources), "an incomplete resolution")
-		refuses(t, tx.RetainDependencies(ctx, &resolution, nil), "a resolution without its sources")
+		succeeds(t, tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{source}, nil), "retaining a source")
+		succeeds(t, tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{source}, nil), "retaining it again")
+		refuses(t, tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{replaced}, nil), "a source replaced under its identity")
+		refuses(t, tx.RetainDependencies(ctx, &incomplete, incomplete.Sources, nil), "an incomplete resolution")
+		refuses(t, tx.RetainDependencies(ctx, &resolution, nil, nil), "a resolution without its sources")
 		retains(t, tx, []prerequisites.DependencySource{source})
-		succeeds(t, tx.RetainDependencies(ctx, &resolution, resolution.Sources), "retaining a resolution with its sources")
-		succeeds(t, tx.RetainDependencies(ctx, &resolution, resolution.Sources), "retaining it again")
-		refuses(t, tx.RetainDependencies(ctx, &altered, altered.Sources), "a resolution replaced under its identity")
+		succeeds(t, tx.RetainDependencies(ctx, &resolution, resolution.Sources, nil), "retaining a resolution with its sources")
+		succeeds(t, tx.RetainDependencies(ctx, &resolution, resolution.Sources, nil), "retaining it again")
+		refuses(t, tx.RetainDependencies(ctx, &altered, altered.Sources, nil), "a resolution replaced under its identity")
 		retains(t, tx, append([]prerequisites.DependencySource{source}, resolution.Sources...), resolution)
 	})
 	read(t, s, func(view lifecycle.View) {
 		retains(t, view, append([]prerequisites.DependencySource{source}, resolution.Sources...), resolution)
+	})
+}
+
+// A stage that solves again retires, in the publication that retains its new
+// resolution, the ones it names as superseded, and only beside one it keeps.
+// A named resolution the store does not hold is already gone.
+func aStageRetiresTheResolutionsItSupersedes(t *testing.T, s Subject) {
+	ctx := context.Background()
+	first := syntheticResolution(t)
+	second := resolutionSolvedFrom(t, strings.Repeat("1", 64))
+	third := resolutionSolvedFrom(t, strings.Repeat("2", 64))
+	absent := strings.Repeat("3", 64)
+	mutate(t, s, func(tx lifecycle.Transaction) {
+		succeeds(t, tx.RetainDependencies(ctx, &first, first.Sources, nil), "retaining a first resolution")
+		refuses(t, tx.RetainDependencies(ctx, nil, nil, []string{first.ResolutionDigest}), "a retirement beside no resolution")
+		refuses(t, tx.RetainDependencies(ctx, &second, second.Sources, []string{second.ResolutionDigest}), "a retirement of the resolution being retained")
+		refuses(t, tx.RetainDependencies(ctx, &second, second.Sources, []string{"not-a-digest"}), "a retirement named by no digest")
+		retains(t, tx, first.Sources, first)
+		succeeds(t, tx.RetainDependencies(ctx, &second, second.Sources, []string{first.ResolutionDigest, absent}), "retaining a resolution that supersedes the first")
+		retains(t, tx, first.Sources, second)
+		succeeds(t, tx.RetainDependencies(ctx, &third, third.Sources, []string{second.ResolutionDigest}), "retaining one that supersedes the second")
+	})
+	read(t, s, func(view lifecycle.View) {
+		retains(t, view, first.Sources, third)
 	})
 }
 
@@ -390,6 +415,7 @@ func refusesEveryWrite(t *testing.T, area operationstore.Area, what string) {
 		"WriteExclusive":  area.WriteExclusive(ctx, "r.json", []byte("x\n")),
 		"Replace":         area.Replace(ctx, "r.json", []byte("x\n"), nil),
 		"Append":          area.Append(ctx, "log.jsonl", []byte("x\n")),
+		"RemoveRecord":    area.RemoveRecord(ctx, "r.json", nil),
 		"Sync":            area.Sync(ctx, ""),
 	} {
 		if err == nil {
@@ -467,6 +493,13 @@ func retains(t *testing.T, view lifecycle.View, sources []prerequisites.Dependen
 // freezes before it installs anything.
 func syntheticResolution(t *testing.T) prerequisites.Definition {
 	t.Helper()
+	return resolutionSolvedFrom(t, strings.Repeat("e", 64))
+}
+
+// resolutionSolvedFrom is that resolution solved against another package
+// inventory: the same releases and sources under a new resolution digest.
+func resolutionSolvedFrom(t *testing.T, inventory string) prerequisites.Definition {
+	t.Helper()
 	platform := prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
 	source := func(id, url string) prerequisites.DependencySource {
 		return prerequisites.DependencySource{ID: id, URL: url, SHA256: strings.Repeat("a", 64), Bytes: 64}
@@ -496,7 +529,7 @@ func syntheticResolution(t *testing.T) prerequisites.Definition {
 		Requirements: prerequisites.NativeRequirements{ContainerRuntime: true},
 		Repositories: []prerequisites.NativeRepository{{ID: "base", BaseURL: "https://packages.example.test/fedora", MetadataSHA256: strings.Repeat("d", 64)}},
 		Roots:        []prerequisites.NativeRoot{}, Packages: []prerequisites.NativePackage{}, Actions: []prerequisites.NativeAction{},
-		BeforeSHA256: strings.Repeat("e", 64), AfterSHA256: strings.Repeat("e", 64),
+		BeforeSHA256: inventory, AfterSHA256: inventory,
 	}
 	for _, root := range []struct{ key, name string }{{"podman", "podman"}, {"openssh", "openssh-clients"}, {"nmstate", "nmstate"}} {
 		identity := prerequisites.NativeIdentity{Name: root.name, Version: "1.2.3", Release: "1.fc43", Architecture: "x86_64"}

@@ -1457,3 +1457,49 @@ copy and resolves unknown under this build; an Environment declaring
 stall hint, lifecycle-role refusals and the JSON sudo reason. New items B203 to
 B221 entered M1 (B206, B208 and B220 need owner decisions), B222 to B235 were
 parked, and B17, B19, B73 and B180 gained clauses.
+
+### X32 — defects X29 to X31 found
+
+**Owner:** Controller, State reconciliation, Workspace, Substrate,
+Infrastructure services, Managed OS, Container cluster and Architecture.
+Integrated on local `main` on 2026-09-30 as one commit. **Items:** B210, B209,
+B215, B207, B221, B205, B219, B204, B212, B211, B213, B214, B216, B217, B218,
+B120, B203.
+
+**Outcome:** the slice also advanced B32, which stays open for the stall hint.
+The OpenShift install locates its clients from the closure the controller
+stage proved, on a real store (B210); a new stage solve retires the resolutions
+it supersedes (B209); a controller-hosted libvirt provider gets the libvirt
+client (B215); controller remedies name the command that settles them (B207);
+the controller runner judges records in any read order (B221); the operation
+area keeps room for the last apply's removal at its directory and byte bounds
+(B205) and removes a run file whose publication failed (B219); a refusal names
+only a context deletion the guard admits (B204); every playbook validates its
+request before its first task (B212) and the adapter output prints nothing a
+`no_log` task raised (B211); a machine removal reads no effect from what it
+takes back (B213); socket claims know when two Machines are one host (B214); a
+managed service's observation compares its start with its files (B216); an
+installation leaves no empty directory (B217); a node's target refusal names
+its own reason (B218); pre-boot and JSON sudo refusals reach the operator
+(B32); the unread sudo password fields are retired, moving the artifact
+server, managed service, libvirt host and libvirt machine requests (B120); and
+the ansible-check area name can no longer form a Python token (B203).
+
+**Review:** two findings, both confirmed and fixed: the tool lookup worked the
+closure out again from every source the host retains, so another context's
+newer `latest` release hid the proved one; and the stage's proxy remedy named a
+command that then refused. The check found no gap.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
+`lint` pass on the integrated slice and on the squashed commit. No real-host
+run.
+
+**Constraints left behind:** a context holding an artifact server, managed
+proxy, DNS or NTP service, libvirt provider host or libvirt machine block an
+earlier build froze refuses continuation and removal under this build; a
+request its role does not admit fails at argument validation before the role
+acts; a failed `no_log` completion shows only its name; a context whose
+operation area holds more than 48 MiB refuses fresh applies ([B206](m1.md#b206));
+the automation digest moves. Under D48 every follow-up was parked: B236 to
+B252, with clauses on B94, B206 and B229.

@@ -2,7 +2,7 @@
 - name: Validate the frozen artifact-server request
   ansible.builtin.assert:
     that:
-      - bootwright_artifact_server_request.version == 'artifact-server-nginx-v1'
+      - bootwright_artifact_server_request.version == 'artifact-server-nginx-v2'
       - bootwright_artifact_server_request.contentRoot.startswith('/var/lib/bootwright-services/')
       - bootwright_artifact_server_digest is match('[0-9a-f]{64}')
     quiet: true

@@ -433,7 +433,7 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 	settle(readiness("installed-host", "verified local identity", true, HostScope))
 	if view.State.Receipt.ID != "" && view.State.Receipt.Incomplete() {
 		if !current.compatibleReceipt(view.State.Receipt) || !current.matchesActions(view.State.Receipt.Actions) {
-			return current, failure("controller.unknown", "another exact setup attempt remains unresolved", "restore its original context, executable and acquisition route, then repeat controller setup")
+			return current, failure("controller.unknown", "another exact setup attempt remains unresolved", "restore the executable that recorded it and the HTTPS_PROXY, HTTP_PROXY and NO_PROXY values it ran with, then "+setupCommand())
 		}
 	}
 	// Only a resolved definition identifies a bundle. An unresolved setup has
@@ -646,8 +646,17 @@ func (i inspection) route() SetupEgress {
 	return SetupEgress{HTTPProxy: route.HTTPProxy(), HTTPSProxy: route.HTTPSProxy(), NoProxy: bypass}
 }
 
+// compatibleReceipt compares a pending receipt with what setup, which selects
+// no context, would record, so one naming a context is never setup's own. Its
+// route is setup's ambient one, which a context's inspection never reads, so
+// only an inspection without a context compares it; setup enforces it again
+// when it resumes.
 func (i inspection) compatibleReceipt(receipt SetupReceipt) bool {
-	return receipt.Context == i.view.Context && receipt.CatalogDigest == i.definition.CatalogDigest && slices.Equal(receipt.Sources, i.definition.Sources) && receipt.Egress.HTTPProxy == i.route().HTTPProxy && receipt.Egress.HTTPSProxy == i.route().HTTPSProxy && slices.Equal(receipt.Egress.NoProxy, i.route().NoProxy)
+	if receipt.Context != (SetupContext{}) || receipt.CatalogDigest != i.definition.CatalogDigest || !slices.Equal(receipt.Sources, i.definition.Sources) {
+		return false
+	}
+	route := i.route()
+	return i.view.Context.Name != "" || receipt.Egress.HTTPProxy == route.HTTPProxy && receipt.Egress.HTTPSProxy == route.HTTPSProxy && slices.Equal(receipt.Egress.NoProxy, route.NoProxy)
 }
 
 func (i inspection) samePlan(other inspection) bool {

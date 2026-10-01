@@ -39,6 +39,7 @@ def answer_evidence(entry):
 
 
 def presence(observation, answers, request_digest):
+    """Presence evidence; a service that started before a file it runs from runs an earlier one."""
     if len(answers) > MAX_ANSWERS:
         raise ValueError("answer count")
     return {
@@ -46,8 +47,13 @@ def presence(observation, answers, request_digest):
         "answers": [answer_evidence(entry) for entry in answers],
         "container": str(observation.get("container", "")),
         "contentRoot": bool(observation.get("contentRoot", False)),
-        "postcondition": observation.get("unit") == "active" and bool(observation.get("contentRoot")),
+        "postcondition": (
+            observation.get("unit") == "active"
+            and bool(observation.get("contentRoot"))
+            and bool(observation.get("startedAfterFiles"))
+        ),
         "request": digest(request_digest),
+        "startedAfterFiles": bool(observation.get("startedAfterFiles", False)),
         "unit": str(observation.get("unit", "")),
     }
 
@@ -67,6 +73,8 @@ def unproved(observation):
     names = [] if observation.get("unit") == "active" else ["unit"]
     if not observation.get("contentRoot"):
         names.append("contentRoot")
+    if not observation.get("startedAfterFiles"):
+        names.append("startedAfterFiles")
     return names
 
 
@@ -84,6 +92,7 @@ def absence(observation, request_digest):
         "contentRoot": False,
         "postcondition": bool(gone),
         "request": digest(request_digest),
+        "startedAfterFiles": False,
         "unit": "",
     }
 

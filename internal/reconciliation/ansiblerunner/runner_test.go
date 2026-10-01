@@ -114,13 +114,9 @@ func TestMaterialBytesRefuseMissingOrUnusableParts(t *testing.T) {
 	}
 }
 
-// A placement frozen before placements stopped escalating still names its
-// escalation Secret, and its material may still be bound: neither reaches the
-// adapter, so nothing it runs can escalate.
 func TestVariablesCarryPathsNotMaterial(t *testing.T) {
 	paths := map[string]string{"tls.crt": "/job/tls.crt", "tls.key": "/job/tls.key", "id": "/job/id", "known_hosts": "/job/known_hosts"}
 	request := sshRequest()
-	request.Placement.SudoPasswordRef = "services-sudo"
 	request.MaterialValues = map[string]string{"fingerprint": strings.Repeat("f", 64)}
 	values, err := variables(request, paths)
 	if err != nil {

@@ -236,7 +236,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 			// it reports a refusal, so the operation state matches the record.
 			// One that never started recorded nothing, and the block keeps the
 			// state it had.
-			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, block, c.material, position+1, len(c.plan.Blocks))
+			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks))
 			if state == "" {
 				state = prior
 			}

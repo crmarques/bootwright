@@ -71,10 +71,33 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 			prepare: func(h *harness) { h.capability.sshClaims = sshSockets("services", "storage") },
 		},
 		{
+			name: "its own sockets in conflict through two Machines on one SSH host", definitions: nestedDefinitions(), refusal: "api.invariant",
+			prepare: func(h *harness) { h.capability.sshClaims = sshSockets("services", "alias") },
+		},
+		{
+			name: "one socket at one SSH address and two ports", definitions: nestedDefinitions(),
+			prepare: func(h *harness) { h.capability.sshClaims = sshSockets("services", "forwarded") },
+		},
+		{
 			name: "an SSH host's socket that the controller also claims", definitions: nestedDefinitions(),
 			prepare: func(h *harness) {
 				h.capability.reservations = reservationOf("alpha")
-				h.capability.sshClaims = []SSHReservation{{Machine: "services", Reservation: reservationOf("beta")[0]}}
+				h.capability.sshClaims = []SSHReservation{sshClaim("services", reservationOf("beta")[0])}
+			},
+		},
+		{
+			name: "a controller socket claimed again through loopback SSH", definitions: nestedDefinitions(), refusal: "api.invariant",
+			prepare: func(h *harness) {
+				h.capability.reservations = reservationOf("alpha")
+				h.capability.sshClaims = []SSHReservation{sshClaim("loopback", reservationOf("beta")[0])}
+			},
+		},
+		{
+			name: "a controller socket claimed again through the controller's own address", definitions: nestedDefinitions(), refusal: "api.invariant",
+			prepare: func(h *harness) {
+				h.service.compiler = testCompiler{state: withControllerAddress()}
+				h.capability.reservations = reservationOf("alpha")
+				h.capability.sshClaims = []SSHReservation{sshClaim("declared", reservationOf("beta")[0])}
 			},
 		},
 	}
@@ -124,12 +147,101 @@ func TestAPlanWhoseOwnSocketsConflictNamesBoth(t *testing.T) {
 	}
 }
 
+// sshEndpoints is the SSH address and port each test Machine's placement
+// reaches: services and storage are two hosts, alias reaches the host services
+// does, forwarded reaches services' address at another port, loopback reaches
+// the controller, and declared reaches the address withControllerAddress
+// gives the controller.
+var sshEndpoints = map[string]struct {
+	address string
+	port    int
+}{
+	"services": {"192.0.2.10", 22}, "storage": {"192.0.2.20", 22}, "alias": {"192.0.2.10", 22},
+	"forwarded": {"192.0.2.10", 2222}, "loopback": {"127.0.0.1", 22}, "declared": {"192.0.2.1", 22},
+}
+
+// sshClaim is one claim placed through a test Machine's SSH access.
+func sshClaim(machine string, reservation prerequisites.HostReservation) SSHReservation {
+	endpoint := sshEndpoints[machine]
+	return SSHReservation{Machine: machine, Address: endpoint.address, Port: endpoint.port, Reservation: reservation}
+}
+
 // sshSockets is two of one context's own services at one port, the first bound
-// to a wildcard, each placed on the SSH host its Machine names.
+// to a wildcard, each placed on the SSH host its Machine reaches.
 func sshSockets(first, second string) []SSHReservation {
 	return []SSHReservation{
-		{Machine: first, Reservation: prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"socket:0.0.0.0:3128"}}},
-		{Machine: second, Reservation: prerequisites.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{"socket:192.0.2.9:3128"}}},
+		sshClaim(first, prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"socket:0.0.0.0:3128"}}),
+		sshClaim(second, prerequisites.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{"socket:192.0.2.9:3128"}}),
+	}
+}
+
+// withControllerAddress is the harness's Environment with its controller
+// Machine, which declares 192.0.2.1 among its addresses.
+func withControllerAddress() *compilation.State {
+	catalog := api.NewCatalog([]api.Object{
+		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
+			api.FieldValue{Name: "controller", Value: api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("controller")})},
+		)),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
+			api.FieldValue{Name: "network", Value: api.MapValue(api.FieldValue{Name: "addresses", Value: api.ListValue(
+				api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("fqdn")}, api.FieldValue{Name: "address", Value: api.StringValue("controller.lab.example.test")}),
+				api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("lab")}, api.FieldValue{Name: "address", Value: api.StringValue("192.0.2.1/24")}),
+			)})},
+		)),
+	})
+	return compilation.NewState(catalog, catalog, nil)
+}
+
+// Two Machines whose SSH access reaches one address and port are one host, so
+// their blocks' conflicting sockets refuse while the context plans, naming
+// that host and both Machines, as they would under one Machine's name.
+func TestTwoMachinesReachingOneSSHHostConflictThere(t *testing.T) {
+	h := newPlannedHarness(t, nestedDefinitions())
+	h.capability.sshClaims = sshSockets("services", "alias")
+	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "api.invariant" ||
+		reported[0].Message != "this context's proxy gamma at 0.0.0.0:3128 and dns delta at 192.0.2.9:3128 cannot both listen on the SSH host at 192.0.2.10:22, which Machine/alias and Machine/services both reach" ||
+		reported[0].Remediation != "give one of them another bind address or port" {
+		t.Fatalf("refusal = %+v (%v)", reported, err)
+	}
+}
+
+// A Machine whose SSH access reaches the controller, over loopback or at an
+// address the controller Machine declares, places its blocks on the
+// controller, so a socket it claims that the controller's own blocks or
+// another such Machine's also claim refuses while the context plans, naming
+// the controller and each Machine that reaches it.
+func TestAMachineReachingTheControllerConflictsThere(t *testing.T) {
+	for name, tc := range map[string]struct {
+		reservations []prerequisites.HostReservation
+		claims       []SSHReservation
+		host         string
+	}{
+		"over loopback beside the controller's own": {
+			reservations: reservationOf("alpha"), claims: []SSHReservation{sshClaim("loopback", reservationOf("beta")[0])},
+			host: "the controller, which Machine/loopback reaches over SSH",
+		},
+		"at a declared address beside the controller's own": {
+			reservations: reservationOf("alpha"), claims: []SSHReservation{sshClaim("declared", reservationOf("beta")[0])},
+			host: "the controller, which Machine/declared reaches over SSH",
+		},
+		"through two Machines": {
+			claims: []SSHReservation{sshClaim("loopback", reservationOf("alpha")[0]), sshClaim("declared", reservationOf("beta")[0])},
+			host:   "the controller, which Machine/declared and Machine/loopback both reach over SSH",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newPlannedHarness(t, nestedDefinitions())
+			h.service.compiler = testCompiler{state: withControllerAddress()}
+			h.capability.reservations, h.capability.sshClaims = tc.reservations, tc.claims
+			_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+			reported := diagnostics.Of(err)
+			want := "this context's artifact-server alpha at 192.0.2.1:8443 and artifact-server beta at 192.0.2.1:8443 cannot both listen on " + tc.host
+			if len(reported) != 1 || reported[0].Code != "api.invariant" || reported[0].Message != want {
+				t.Fatalf("refusal = %+v (%v), want %q", reported, err, want)
+			}
+		})
 	}
 }
 

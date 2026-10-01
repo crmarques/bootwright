@@ -272,6 +272,29 @@ func singleNodeWith(hints ...api.FieldValue) api.Catalog {
 	return api.NewCatalog(objects)
 }
 
+// singleNodeOnProvider is the lab-sno shape with its node's libvirt provider
+// changed, beside any further objects.
+func singleNodeOnProvider(mutate func(api.Value) api.Value, extra ...api.Object) api.Catalog {
+	objects := singleNodeCatalog().Objects()
+	for index, object := range objects {
+		if object.Kind() == api.InfraProvider && object.Name() == "lab-libvirt" {
+			objects[index] = object.WithSpec(mutate(object.Spec()))
+		}
+	}
+	return api.NewCatalog(append(objects, extra...))
+}
+
+// portPastTheSpace starts the provider's emulated controller range at the last
+// port, so every Machine after the first it hosts allocates none.
+func portPastTheSpace(spec api.Value) api.Value {
+	return spec.WithPath(api.IntegerValue("65535"), "libvirt", "bmcEmulationDefaults", "port")
+}
+
+// noControllerCredential drops the provider's emulated controller credential.
+func noControllerCredential(spec api.Value) api.Value {
+	return spec.WithPath(api.MapValue(), "libvirt", "bmcEmulationDefaults", "auth")
+}
+
 // externalCatalog is the compact topology with endpoints something outside the
 // cluster answers, so its load balancer is user-managed. It also trusts two
 // additional CA bundles, declared out of name order so the order the media

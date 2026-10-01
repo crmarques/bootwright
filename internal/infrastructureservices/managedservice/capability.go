@@ -106,7 +106,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			Service: request.Identity.Service, Keys: request.ReservationKeys(),
 		}
 		if !request.Placement.Local() {
-			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{Machine: request.Placement.Machine, Reservation: claim})
+			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{
+				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port, Reservation: claim,
+			})
 			continue
 		}
 		plan.Reservations = append(plan.Reservations, claim)
@@ -302,10 +304,11 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 
 // Observe is read-only. Live state matching the frozen request in full is
 // positive completion; nothing present is positive no effect; this context's
-// own service part way realized, a present one whose listener stays silent
-// included, is positive partial; anything else, including an observation that
-// could not be made, stays unknown. A fresh destroy over an incomplete apply
-// resolves the apply's block through this reading too.
+// own service part way realized, a present one whose listener stays silent or
+// that started before a file it runs from included, is positive partial;
+// anything else, including an observation that could not be made, stays
+// unknown. A fresh destroy over an incomplete apply resolves the apply's block
+// through this reading too.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, func(evidence []byte, request Request, digest string) reconciliation.EffectState {
 		switch {

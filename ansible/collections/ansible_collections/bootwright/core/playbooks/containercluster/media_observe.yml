@@ -10,4 +10,4 @@
     - name: Execute the boot-media observe capability
       ansible.builtin.import_role:
         name: bootwright.core.containercluster_media_agent
-        tasks_from: observe.yml
+        tasks_from: observe

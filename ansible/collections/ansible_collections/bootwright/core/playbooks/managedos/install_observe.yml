@@ -10,4 +10,4 @@
     - name: Execute the managed operating system observe capability
       ansible.builtin.import_role:
         name: bootwright.core.managedos_install_anaconda
-        tasks_from: observe.yml
+        tasks_from: observe

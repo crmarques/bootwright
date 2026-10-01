@@ -763,6 +763,53 @@ func TestABoundedRunOpensTheApprovedBundleAndRetainsItsOutput(t *testing.T) {
 	}
 }
 
+// A run file whose bytes landed before its publication's read-back failed
+// holds its directory, which then refuses removal, so the run area removes the
+// file itself while it still holds what the run wrote, and nothing stays.
+func TestARunFileWhosePublicationFailedIsRemoved(t *testing.T) {
+	ctx := context.Background()
+	store, _ := lifecycleFixture(t)
+	identity := "run-" + strings.Repeat("b", 32)
+	target := identity + "/run.output"
+	if err := store.RunLifecycle(ctx, "example", func(view lifecycle.RunView) error {
+		runs := view.Runs()
+		if err := runs.EnsureDirectory(ctx, identity); err != nil {
+			t.Fatalf("the run directory could not be created: %v", err)
+		}
+		fired := false
+		store.fail = func(point string) error {
+			if point == string(checkpointAfterSecretImmutableRename) && !fired {
+				fired = true
+				return errors.New("the published run file could not be read back")
+			}
+			return nil
+		}
+		err := runs.WriteExclusive(ctx, target, nil)
+		store.fail = nil
+		if err == nil || !fired {
+			t.Fatalf("the run file's publication = %v, fired %t", err, fired)
+		}
+		if _, found, err := runs.Read(ctx, target, 16); err != nil || !found {
+			t.Fatalf("the run file did not land: %t (%v)", found, err)
+		}
+		if err := runs.RemoveDirectory(ctx, identity); err == nil {
+			t.Fatal("the directory of a landed run file was removed")
+		}
+		if err := runs.RemoveRecord(ctx, target, nil); err != nil {
+			t.Fatalf("the landed run file was not removed: %#v", diagnostics.Of(err))
+		}
+		if err := runs.RemoveDirectory(ctx, identity); err != nil {
+			t.Fatalf("the emptied run directory was not removed: %#v", diagnostics.Of(err))
+		}
+		if entries, err := runs.Entries(ctx, ""); err != nil || len(entries) != 0 {
+			t.Fatalf("the run area holds %+v (%v)", entries, err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("bounded run failed: %#v", diagnostics.Of(err))
+	}
+}
+
 // An inspection runs no adapter, so it is offered neither the bundle nor a
 // writable area: a read that creates nothing is what plan and status rely on.
 func TestALifecycleInspectionRunsNothing(t *testing.T) {

@@ -174,8 +174,9 @@ def retained(tmp_path_factory):
 
     The role's own publication tasks run through ansible-playbook with what the
     shipped ansible.cfg and the runner set for the adapter's streams: the
-    default callback, no verbosity, no task arguments displayed, no color, and
-    standard output and error in one stream (ansible/ansible.cfg,
+    bootwright.core.censored callback, no verbosity, no task arguments
+    displayed, no color, and standard output and error in one stream
+    (ansible/ansible.cfg,
     internal/reconciliation/ansiblerunner/process_linux_amd64.go). The request
     and the observations arrive as extra variables, as a run's request does,
     so no value is in the playbook text an error's origin quotes. Each
@@ -205,7 +206,7 @@ def retained(tmp_path_factory):
         ANSIBLE_HOME=str(work / "home"),
         ANSIBLE_LOCAL_TEMP=str(work / "local"),
         ANSIBLE_COLLECTIONS_PATH=str(COLLECTIONS),
-        ANSIBLE_STDOUT_CALLBACK="ansible.builtin.default",
+        ANSIBLE_STDOUT_CALLBACK="bootwright.core.censored",
         ANSIBLE_DISPLAY_ARGS_TO_STDOUT="False",
         ANSIBLE_LOAD_CALLBACK_PLUGINS="0",
         ANSIBLE_NOCOLOR="1",

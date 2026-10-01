@@ -10,4 +10,4 @@
     - name: Execute the virtual machine apply capability
       ansible.builtin.import_role:
         name: bootwright.core.substrate_libvirt_machine
-        tasks_from: apply.yml
+        tasks_from: apply

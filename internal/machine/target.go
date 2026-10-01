@@ -17,7 +17,6 @@ type SSHTarget struct {
 	PrivateKeyRef    string
 	PasswordRef      string
 	KnownHostsRef    string
-	SudoPasswordRef  string
 	OperatorIdentity bool
 }
 
@@ -84,9 +83,9 @@ func SSH(o api.Object) (SSHTarget, bool) {
 	}
 	return SSHTarget{
 		Address: address, Port: port, User: ssh.Get("user").Text(),
-		PrivateKeyRef: ssh.Get("auth", "privateKeyRef").Text(),
-		PasswordRef:   ssh.Get("auth", "passwordRef").Text(),
-		KnownHostsRef: ssh.Get("knownHostsRef").Text(), SudoPasswordRef: ssh.Get("sudoPasswordRef").Text(),
+		PrivateKeyRef:    ssh.Get("auth", "privateKeyRef").Text(),
+		PasswordRef:      ssh.Get("auth", "passwordRef").Text(),
+		KnownHostsRef:    ssh.Get("knownHostsRef").Text(),
 		OperatorIdentity: ssh.Has("auth", "operatorIdentity"),
 	}, true
 }

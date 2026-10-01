@@ -115,7 +115,7 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		}
 		target, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine)
 		if err != nil {
-			return "a declared node is on a substrate this executable does not realize", ""
+			return nodeTargetRefusal(catalog, bound, err)
 		}
 		// Booting a physical node erases what it holds, and that boot is
 		// proved only by tests until an emulated rehearsal qualifies it.
@@ -141,6 +141,22 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		}
 	}
 	return "", ""
+}
+
+// nodeTargetRefusal says why a node's realized target does not derive. A node
+// on a provider whose substrate this executable does not realize is refused as
+// the cluster's own; every other reason is the substrate's own, with the
+// remedy naming the object to change. A reason the error does not carry still
+// refuses, because an empty reason would admit the cluster.
+func nodeTargetRefusal(catalog api.Catalog, bound api.Object, err error) (reason, remediation string) {
+	provider, found := catalog.Find(api.InfraProvider, bound.Spec().Get("substrate", "providerRef").Text())
+	if found && !slices.Contains(substrate.Realized(), substrate.Variant(provider)) {
+		return "a declared node is on a substrate this executable does not realize", ""
+	}
+	if refused := diagnostics.Of(err); len(refused) != 0 && refused[0].Message != "" {
+		return refused[0].Message, refused[0].Remediation
+	}
+	return "a declared node's realized target does not derive", ""
 }
 
 // pastTheCeiling says why a cluster's installation could not finish within the

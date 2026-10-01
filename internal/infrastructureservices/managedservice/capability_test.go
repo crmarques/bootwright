@@ -122,7 +122,8 @@ func TestRequestCanonicalFormIsStableAndOrdered(t *testing.T) {
 
 // An SSH placement publishes no controller reservation, since two contexts
 // targeting one SSH host are not coordinated, but its claims are qualified by
-// its host's Machine so its own context compares their sockets there.
+// its host's Machine and the SSH address and port it is reached at, so its
+// own context compares their sockets there.
 func TestSSHPlacementRequiresKeyAndHostKeyAndClaimsOnItsHostAlone(t *testing.T) {
 	remote := api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
 		field("capabilities", api.ListValue(api.StringValue("container-runtime"))),
@@ -154,9 +155,10 @@ func TestSSHPlacementRequiresKeyAndHostKeyAndClaimsOnItsHostAlone(t *testing.T) 
 		t.Fatal("an SSH placement claimed host reservations this context cannot coordinate")
 	}
 	if len(plan.SSHReservations) != 1 || plan.SSHReservations[0].Machine != "services" ||
+		plan.SSHReservations[0].Address != "192.0.2.9" || plan.SSHReservations[0].Port != 22 ||
 		plan.SSHReservations[0].Reservation.Service != "lab-proxy" ||
 		!slices.Contains(plan.SSHReservations[0].Reservation.Keys, "socket:192.0.2.9:3128") {
-		t.Fatalf("SSH claims = %+v, want lab-proxy's socket qualified by the Machine services", plan.SSHReservations)
+		t.Fatalf("SSH claims = %+v, want lab-proxy's socket qualified by the Machine services at 192.0.2.9:22", plan.SSHReservations)
 	}
 	if !slices.Equal(plan.Secrets, []string{"host-key", "services-key"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
@@ -324,26 +326,28 @@ func TestPresenceRequiresEveryDeclaredAnswer(t *testing.T) {
 	request := requests[0]
 	digest := strings.Repeat("d", 64)
 	complete := Evidence{
-		Answers:       []Answer{{Address: "192.0.2.1", Answer: "HTTP/1.1 400 Bad Request", Port: 3128}},
-		Container:     request.Image,
-		ContentRoot:   true,
-		Postcondition: true,
-		Request:       digest,
-		Unit:          "active",
+		Answers:           []Answer{{Address: "192.0.2.1", Answer: "HTTP/1.1 400 Bad Request", Port: 3128}},
+		Container:         request.Image,
+		ContentRoot:       true,
+		Postcondition:     true,
+		Request:           digest,
+		StartedAfterFiles: true,
+		Unit:              "active",
 	}
 	if err := ValidatePresence(encode(t, complete), request, digest); err != nil {
 		t.Fatal(err)
 	}
 	for name, mutate := range map[string]func(*Evidence){
-		"another request":   func(e *Evidence) { e.Request = strings.Repeat("e", 64) },
-		"no postcondition":  func(e *Evidence) { e.Postcondition = false },
-		"inactive unit":     func(e *Evidence) { e.Unit = "failed" },
-		"unplanned image":   func(e *Evidence) { e.Container = "docker.io/library/squid:6" },
-		"no content root":   func(e *Evidence) { e.ContentRoot = false },
-		"silent listener":   func(e *Evidence) { e.Answers = nil },
-		"unanswered socket": func(e *Evidence) { e.Answers[0].Answer = "" },
-		"other address":     func(e *Evidence) { e.Answers[0].Address = "192.0.2.9" },
-		"other port":        func(e *Evidence) { e.Answers[0].Port = 3129 },
+		"another request":          func(e *Evidence) { e.Request = strings.Repeat("e", 64) },
+		"no postcondition":         func(e *Evidence) { e.Postcondition = false },
+		"inactive unit":            func(e *Evidence) { e.Unit = "failed" },
+		"unplanned image":          func(e *Evidence) { e.Container = "docker.io/library/squid:6" },
+		"no content root":          func(e *Evidence) { e.ContentRoot = false },
+		"started before its files": func(e *Evidence) { e.StartedAfterFiles = false },
+		"silent listener":          func(e *Evidence) { e.Answers = nil },
+		"unanswered socket":        func(e *Evidence) { e.Answers[0].Answer = "" },
+		"other address":            func(e *Evidence) { e.Answers[0].Address = "192.0.2.9" },
+		"other port":               func(e *Evidence) { e.Answers[0].Port = 3129 },
 	} {
 		t.Run(name, func(t *testing.T) {
 			broken := complete
@@ -366,6 +370,7 @@ func TestAbsenceRequiresEveryOwnedResourceGone(t *testing.T) {
 		"unit remains":      func(e *Evidence) { e.Unit = "inactive" },
 		"container remains": func(e *Evidence) { e.Container = "image" },
 		"root remains":      func(e *Evidence) { e.ContentRoot = true },
+		"container started": func(e *Evidence) { e.StartedAfterFiles = true },
 		"still answering":   func(e *Evidence) { e.Answers = []Answer{{Address: "192.0.2.1", Answer: "x", Port: 3128}} },
 		"not absent":        func(e *Evidence) { e.Absent = false },
 	} {
@@ -402,19 +407,25 @@ func TestPartialRequiresSomethingThisContextOwns(t *testing.T) {
 	digest := strings.Repeat("d", 64)
 	complete := Evidence{
 		Answers:   []Answer{{Address: "192.0.2.1", Answer: "HTTP/1.1 400 Bad Request", Port: request.Port}},
-		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active",
+		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, StartedAfterFiles: true, Unit: "active",
 	}
 	silent := complete
 	silent.Answers = []Answer{}
 	otherImage := complete
 	otherImage.Container = "docker.io/library/squid:6"
+	stale := complete
+	stale.Postcondition, stale.StartedAfterFiles = false, false
+	startUnreported := complete
+	startUnreported.StartedAfterFiles = false
 	for name, evidence := range map[string]Evidence{
-		"unit without its root":          {Answers: []Answer{}, Request: digest, Unit: "active"},
-		"root without its unit":          {Answers: []Answer{}, ContentRoot: true, Request: digest},
-		"container left behind":          {Answers: []Answer{}, Container: "image", Request: digest},
-		"present with a silent listener": silent,
-		"present, another image":         otherImage,
-		"unit and root, no container":    {Answers: []Answer{}, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active"},
+		"present, started before its files": stale,
+		"present, start unreported":         startUnreported,
+		"unit without its root":             {Answers: []Answer{}, Request: digest, Unit: "active"},
+		"root without its unit":             {Answers: []Answer{}, ContentRoot: true, Request: digest},
+		"container left behind":             {Answers: []Answer{}, Container: "image", Request: digest},
+		"present with a silent listener":    silent,
+		"present, another image":            otherImage,
+		"unit and root, no container":       {Answers: []Answer{}, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidatePartial(encode(t, evidence), request, digest); err != nil {
@@ -463,20 +474,23 @@ func TestAnApplyObservationReadsAPresentServiceWithASilentListenerAsPartial(t *t
 	digest := call.Block.RequestDigest
 	present := Evidence{
 		Answers:   []Answer{{Address: "192.0.2.1", Answer: "HTTP/1.1 400 Bad Request", Port: request.Port}},
-		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active",
+		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, StartedAfterFiles: true, Unit: "active",
 	}
 	silent := present
 	silent.Answers = []Answer{}
 	foreignSilent := silent
 	foreignSilent.Request = strings.Repeat("e", 64)
+	stale := present
+	stale.Postcondition, stale.StartedAfterFiles = false, false
 	for name, tc := range map[string]struct {
 		evidence []byte
 		want     reconciliation.EffectState
 	}{
-		"present":                 {encode(t, present), reconciliation.EffectCompleted},
-		"present and silent":      {encode(t, silent), reconciliation.EffectPartial},
-		"nothing present":         {encode(t, Evidence{Absent: true, Answers: []Answer{}, Postcondition: true, Request: digest}), reconciliation.EffectNoEffect},
-		"silent, another request": {encode(t, foreignSilent), reconciliation.EffectUnknown},
+		"present":                  {encode(t, present), reconciliation.EffectCompleted},
+		"present and silent":       {encode(t, silent), reconciliation.EffectPartial},
+		"started before its files": {encode(t, stale), reconciliation.EffectPartial},
+		"nothing present":          {encode(t, Evidence{Absent: true, Answers: []Answer{}, Postcondition: true, Request: digest}), reconciliation.EffectNoEffect},
+		"silent, another request":  {encode(t, foreignSilent), reconciliation.EffectUnknown},
 	} {
 		t.Run(name, func(t *testing.T) {
 			runner := &scriptedRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: tc.evidence}}
@@ -529,7 +543,7 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 	digest := call.Block.RequestDigest
 	present := Evidence{
 		Answers:   []Answer{{Address: "192.0.2.1", Answer: "HTTP/1.1 400 Bad Request", Port: request.Port}},
-		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active",
+		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, StartedAfterFiles: true, Unit: "active",
 	}
 	if err := ValidatePresence(encode(t, present), request, digest); err != nil {
 		t.Fatalf("the presence fixture no longer proves presence: %v", err)
@@ -538,6 +552,8 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 	silent.Answers = []Answer{}
 	unproved := present
 	unproved.Postcondition = false
+	stale := present
+	stale.Postcondition, stale.StartedAfterFiles = false, false
 	otherImage := present
 	otherImage.Container = "docker.io/library/squid:6"
 	stopped := silent
@@ -555,6 +571,7 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		"present":                      {encode(t, present), nil, reconciliation.EffectNoEffect},
 		"present and silent":           {encode(t, silent), nil, reconciliation.EffectNoEffect},
 		"present and unproved":         {encode(t, unproved), nil, reconciliation.EffectNoEffect},
+		"started before its files":     {encode(t, stale), nil, reconciliation.EffectNoEffect},
 		"unit stopped, root left":      {encode(t, Evidence{Answers: []Answer{}, ContentRoot: true, Request: digest, Unit: "inactive"}), nil, reconciliation.EffectPartial},
 		"unit without a container":     {encode(t, Evidence{Answers: []Answer{}, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active"}), nil, reconciliation.EffectPartial},
 		"another image running":        {encode(t, otherImage), nil, reconciliation.EffectPartial},

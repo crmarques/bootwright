@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/contextguard"
 )
 
 const reviewWithStatus = "review its durable state with bootwright status"
@@ -139,6 +140,56 @@ func TestACompletedDestroyHoldingABlockNotDoneRefusesEitherVerb(t *testing.T) {
 	requirePreviewRefused(t, h, message, plainDeletion)
 	requireRefused(t, h, reconciliation.Apply, message, plainDeletion)
 	requireRefused(t, h, reconciliation.Destroy, message, plainDeletion)
+}
+
+// The deletion a refusal names is the one the context guard admits, decided
+// from the guard's own reading of the evidence, however the record is
+// spelled: a plain deletion over evidence it reads as pristine, an
+// acknowledged one over any other evidence it reads, and none over evidence
+// it cannot read, which no deletion admits.
+func TestTheDeletionARefusalNamesIsTheOneTheGuardAdmits(t *testing.T) {
+	ctx := context.Background()
+	for name, test := range map[string]struct{ evidence, remedy string }{
+		"respelled pristine evidence":  {`{"version":1,"operation":"none","ownership":"none"}`, plainDeletion},
+		"respelled protected evidence": {`{"ownership":"retained","operation":"applied","version":1}`, orphanedDeletion},
+		"corrupt evidence":             {`{`, unreadableEvidenceExit},
+		"unsupported evidence":         {`{"version":2,"operation":"none","ownership":"none"}` + "\n", unreadableEvidenceExit},
+	} {
+		disposition, err := (contextguard.Guard{}).Check(ctx, []byte(test.evidence))
+		admitted := orphanedDeletion
+		switch {
+		case err != nil:
+			admitted = unreadableEvidenceExit
+		case disposition.Dispose:
+			admitted = plainDeletion
+		}
+		if admitted != test.remedy {
+			t.Fatalf("%s: the guard grants %+v (%v), so the remedy is %q, not %q", name, disposition, err, admitted, test.remedy)
+		}
+		t.Run(name+" beside no operation", func(t *testing.T) {
+			h := newHarness(t, "alpha")
+			h.workspace.evidence = []byte(test.evidence)
+			entry := "the mutation evidence reads an unrecognized record"
+			requireStatusNames(t, h, entry)
+			message := "the context holds operation records or evidence that no index names: " + entry
+			requirePreviewRefused(t, h, message, test.remedy)
+			requireRefused(t, h, reconciliation.Apply, message, test.remedy)
+			requireRefused(t, h, reconciliation.Destroy, message, test.remedy)
+		})
+		t.Run(name+" beside a completed destroy holding a block that is not done", func(t *testing.T) {
+			h := newHarness(t, "alpha", "bravo")
+			completeApply(t, h)
+			if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
+				t.Fatal(err)
+			}
+			removal := currentOperation(t, h)
+			lose(h, path.Join(removal, "blocks", "bravo")+"/")
+			h.workspace.evidence = []byte(test.evidence)
+			message := "the completed destroy " + removal + " records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)"
+			requireRefused(t, h, reconciliation.Apply, message, test.remedy)
+			requireRefused(t, h, reconciliation.Destroy, message, test.remedy)
+		})
+	}
 }
 
 // failedRemovalWithEveryBlockDone leaves a failed removal whose resolution

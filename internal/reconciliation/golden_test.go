@@ -2,7 +2,6 @@ package reconciliation
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,8 +11,6 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/reconciliation/contextguard"
-	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 // update rewrites each golden this package compares instead of comparing it:
@@ -134,28 +131,25 @@ func lineDiff(want, got string) string {
 
 // The context guard reads mutation evidence, which Bytes formats by hand, so
 // each of the five values an operation can leave is compared with its golden
-// and read back through contextguard.Guard for the disposition it grants.
+// and read back through ReadEvidence, the reading the guard grants its
+// disposition from.
 func TestMutationEvidenceMatchesItsGoldens(t *testing.T) {
-	values := map[string]struct {
-		evidence        Evidence
-		update, dispose bool
-	}{
-		"evidence-pristine": {PristineEvidence(), true, true},
-		"evidence-applied":  {Evidence{Operation: MutationApplied, Ownership: OwnershipRetained}, true, false},
-		"evidence-failed":   {Evidence{Operation: MutationFailed, Ownership: OwnershipRetained}, false, false},
-		"evidence-unknown":  {Evidence{Operation: MutationUnknown, Ownership: OwnershipRetained}, false, false},
-		"evidence-pending":  {Evidence{Operation: MutationPending, Ownership: OwnershipRetained}, false, false},
+	values := map[string]Evidence{
+		"evidence-pristine": PristineEvidence(),
+		"evidence-applied":  {Operation: MutationApplied, Ownership: OwnershipRetained},
+		"evidence-failed":   {Operation: MutationFailed, Ownership: OwnershipRetained},
+		"evidence-unknown":  {Operation: MutationUnknown, Ownership: OwnershipRetained},
+		"evidence-pending":  {Operation: MutationPending, Ownership: OwnershipRetained},
 	}
 	golden := map[string]string{}
 	for name, value := range values {
-		data, err := value.evidence.Bytes()
+		data, err := value.Bytes()
 		if err != nil {
 			t.Fatalf("%s: %v", name, diagnostics.Of(err))
 		}
 		matchesGolden(t, name, data, true)
-		disposition, err := (contextguard.Guard{}).Check(context.Background(), data)
-		if err != nil || disposition != (contexts.Disposition{Update: value.update, Dispose: value.dispose}) {
-			t.Fatalf("%s read back as %+v (%v)", name, disposition, err)
+		if read, ok := ReadEvidence(data); !ok || read != value {
+			t.Fatalf("%s read back as %+v (%t)", name, read, ok)
 		}
 		golden[string(data)] = name
 	}

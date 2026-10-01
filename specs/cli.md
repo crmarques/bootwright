@@ -252,8 +252,10 @@ invocation, lines beginning with `sudo:` and a space that arrive before the
 start line are held, at most 16 of at most 4096 bytes each, and reach standard
 error once the child starts; any other line releases the held lines in order
 and ends the holding. An interactive invocation passes them at once. JSON mode
-discards everything that arrives before the start line, whatever it begins
-with, such as a sudoers denial, so its standard error stays empty. When sudo
+forwards nothing that arrives before the start line, whatever it begins with,
+such as a sudoers denial, so its standard error stays empty: it holds every
+such line within the same bounds, drops any beyond them, and discards what it
+held unless the `runtime.privilege` report below carries it. When sudo
 cannot be run or waited for and no
 result was written, the supervisor reports `runtime.interrupted` after an
 interrupt and `runtime.privilege` otherwise. An interactive invocation whose
@@ -265,20 +267,20 @@ its document reports `runtime.interrupted` after an interrupt,
 otherwise. In a human noninteractive invocation, when the child never started
 and nothing but held lines reached standard error, the supervisor reports
 `runtime.interrupted` after an interrupt, and `runtime.privilege` only when sudo
-exited 1 having held a line. That `runtime.privilege` report carries the held
-lines, each without sudo's prefix, as the reason sudo refused, which a JSON
-invocation, holding nothing, cannot give. Its remedy is to authenticate to sudo
-or run as root, except when a held line is the sudoers policy refusing to set
-the forwarded [acquisition route](controller.md#the-context-free-acquisition-route)'s
+exited 1 having held a line. That `runtime.privilege` report, and a JSON
+invocation's, carries the held lines, each without sudo's prefix, as the reason
+sudo refused. Its remedy is to authenticate to sudo or run as root, except
+when a held line is the sudoers policy refusing to set the forwarded
+[acquisition route](controller.md#the-context-free-acquisition-route)'s
 variables, whose remedy is the `SETENV` tag on the sudoers rule that runs
 Bootwright, or running as root. A report the supervisor writes replaces the held
 lines and exits `130` after an interrupt and `1` otherwise, as
 [streams and exit status](cli/output.md#streams-and-exit-status) requires;
-every other ending forwards the held lines and exits with the child's status,
-never `0` when sudo could not be waited for. A child that ends after the
-supervisor relayed an interrupt to it chose that status, so it stands, `0`
-included, unless its output is still open when the relay's grace ends, which
-counts as sudo not being waited for.
+every other ending forwards a human invocation's held lines and exits with the
+child's status, never `0` when sudo could not be waited for. A child that
+ends after the supervisor relayed an interrupt to it chose that status, so it
+stands, `0` included, unless its output is still open when the relay's grace
+ends, which counts as sudo not being waited for.
 
 The supervisor owns bounded `sudo -n -v` refresh subprocesses during that child.
 Keep the same parent and terminal identity. An unambiguous positive effective

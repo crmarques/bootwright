@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"time"
 
@@ -116,6 +117,9 @@ type Invocation struct {
 	Materials      []MaterialFile
 	Values         map[string]string
 	Outputs        []OutputFile
+	// Refusals are the adapter refusals the capability remedies by name, each
+	// with the diagnostic it reports in place of the adapter's failure.
+	Refusals map[string]error
 	// Deadline is the run's own deadline, derived from the budgets the frozen
 	// request carries; zero keeps the runner's default.
 	Deadline time.Duration
@@ -143,8 +147,9 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		Log:               execution.Log,
 		Progress:          execution.Progress,
 		Output:            execution.Output,
-		Deadline:          invocation.Deadline,
 		OutputRemediation: attemptOutputRemediation,
+		Refusals:          maps.Clone(invocation.Refusals),
+		Deadline:          invocation.Deadline,
 	}
 }
 

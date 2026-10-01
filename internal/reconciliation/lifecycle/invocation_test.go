@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -25,6 +26,22 @@ func TestRunForCarriesTheInvocationsDeadline(t *testing.T) {
 func TestRunForPointsAnAdapterFailureBesideTheAttemptLog(t *testing.T) {
 	if got := RunFor(Execution{}, Invocation{}).OutputRemediation; got != "read the adapter output retained beside this attempt's log" {
 		t.Fatalf("an attempt's request points an adapter failure at %q", got)
+	}
+}
+
+// The refusals a capability remedies by name reach the runner as its own,
+// each with the diagnostic it gave, and a later change to the capability's map
+// changes nothing the run already holds.
+func TestRunForCarriesTheRefusalsTheCapabilityRemedies(t *testing.T) {
+	running := errors.New("Machine/rhel-01 is running")
+	refusals := map[string]error{"machine-running": running}
+	request := RunFor(Execution{}, Invocation{Refusals: refusals})
+	refusals["identity-mismatch"] = errors.New("added later")
+	if len(request.Refusals) != 1 || request.Refusals["machine-running"] != running {
+		t.Fatalf("the run names the refusals %v", request.Refusals)
+	}
+	if got := RunFor(Execution{}, Invocation{}).Refusals; got != nil {
+		t.Fatalf("an invocation naming no refusal produced %v", got)
 	}
 }
 

@@ -2,7 +2,7 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_dns_server_request.version == 'dns-server-dnsmasq-v1'
+      - bootwright_dns_server_request.version == 'dns-server-dnsmasq-v2'
       - bootwright_dns_server_request.contentRoot.startswith('/var/lib/bootwright-services/')
       - bootwright_dns_server_digest is match('[0-9a-f]{64}')
     quiet: true

@@ -20,7 +20,7 @@ import (
 const (
 	maxOperationSegments = 6
 	maxOperationEntries  = operationstore.MaxEntries
-	maxOperationBytes    = 64 << 20
+	maxOperationBytes    = operationstore.MaxBytes
 	maxOperationRecord   = 1 << 20
 	maxOperationLog      = 8 << 20
 )
@@ -399,6 +399,42 @@ func (a *operationArea) RemoveDirectory(ctx context.Context, target string) erro
 	child.file.Close()
 	if err := unlinkVerified(parent, name, identity, true); err != nil {
 		return state("lifecycle operation directory could not be removed: " + filepath.Join(parent.path, name))
+	}
+	return a.store.syncDirectory(ctx, parent)
+}
+
+// RemoveRecord unlinks one record of this subtree only while it is the same
+// file that held exactly expected when read, and syncs its parent. A directory
+// or any other entry refuses as a read does, and a record already absent is
+// left so.
+func (a *operationArea) RemoveRecord(ctx context.Context, target string, expected []byte) error {
+	if err := a.available(ctx, true); err != nil {
+		return err
+	}
+	parts, err := operationPath(target, 1)
+	if err != nil {
+		return err
+	}
+	parent, name, release, err := a.descend(ctx, parts, false)
+	if errors.Is(err, syscall.ENOENT) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer release()
+	current, identity, err := readBoundedIdentity(ctx, parent, name, maxOperationLog, false)
+	if errors.Is(err, syscall.ENOENT) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(current, expected) {
+		return state("lifecycle operation record changed before its removal: " + filepath.Join(parent.path, name))
+	}
+	if err := unlinkVerified(parent, name, identity, false); err != nil {
+		return state("lifecycle operation record could not be removed: " + filepath.Join(parent.path, name))
 	}
 	return a.store.syncDirectory(ctx, parent)
 }

@@ -12,6 +12,7 @@ import struct
 
 SYSTEMCTL = "/usr/bin/systemctl"
 PODMAN = "/usr/bin/podman"
+UNIT_DIRECTORY = "/etc/containers/systemd/"
 
 MAX_OUTPUT = 4096
 MAX_STATUS = 128
@@ -69,15 +70,54 @@ def container_present(runner, name):
     return code == 0
 
 
-def observe(runner, request):
-    """Bounded read-only observation of everything this capability owns."""
-    unit_path = "/etc/containers/systemd/" + request["unit"] + ".container"
+def container_started(runner, name):
+    """Report when the container last started, in nanoseconds, or None when that cannot be read."""
+    code, output = invoke(runner, [PODMAN, "inspect", "--type", "container", "--format", "{{.State.StartedAt.UnixNano}}", name])
+    if code != 0 or not output:
+        return None
+    try:
+        return int(output.splitlines()[0].strip())
+    except ValueError:
+        return None
+
+
+def started_after(runner, name, paths):
+    """Whether the container started no earlier than every file it runs from was last written.
+
+    A daemon keeps what it read at its start, so a file published after that
+    start is one the service does not run. A start or a file that cannot be
+    read proves nothing, and the file is read as the apply's stat reads it,
+    without following a link.
+    """
+    if not all(os.path.isabs(path) for path in paths):
+        raise ValueError("path")
+    started = container_started(runner, name)
+    if started is None:
+        return False
+    for path in paths:
+        try:
+            modified = os.lstat(path).st_mtime_ns
+        except OSError:
+            return False
+        if modified > started:
+            return False
+    return True
+
+
+def observe(runner, request, runs_from=()):
+    """Bounded read-only observation of everything this capability owns.
+
+    `runs_from` names the files the daemon reads at its start besides its unit
+    definition, which is always compared.
+    """
+    unit_path = UNIT_DIRECTORY + request["unit"] + ".container"
     service = request["unit"] + ".service"
     return {
         "unit": unit_state(runner, unit_path, service),
         "container": container_image(runner, request["unit"]),
         "containerPresent": container_present(runner, request["unit"]),
         "contentRoot": os.path.isdir(request["contentRoot"]),
+        "startedAfterFiles": started_after(runner, request["unit"], [unit_path] + list(runs_from)),
     }
 
 

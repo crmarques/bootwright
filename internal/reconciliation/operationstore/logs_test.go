@@ -268,6 +268,57 @@ func TestAdapterOutputTruncatesAndNeverFailsItsRun(t *testing.T) {
 	}
 }
 
+// An attempt's retained output shares its area with the operation records, so
+// it never takes the area past the line ReservedBytes keeps free beneath the
+// byte bound: it keeps what fits beneath the line and reports itself cut
+// short, and the outputs of one store share what is left, so a later attempt
+// keeps nothing. A bounded run's output lies in an area that holds no records
+// and keeps its own bound.
+func TestAnAttemptsOutputNeverTakesTheReservedBytes(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	const room = 10
+	area.files["filled/output"] = make([]byte, MaxBytes-ReservedBytes-room)
+	id := "op-" + strings.Repeat("ab", 16)
+	first, second := id+"/logs/blocks/one/attempt-000001.output", id+"/logs/blocks/two/attempt-000001.output"
+	output := store.OpenAdapterOutput(ctx, first)
+	for _, line := range []string{"TASK [serve one]\n", "ok: [controller]\n"} {
+		if n, err := output.Write([]byte(line)); n != len(line) || err != nil {
+			t.Fatalf("an output at the line reported a short write: %d (%v)", n, err)
+		}
+	}
+	if err := output.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if kept, truncated := output.Retained(); kept != room || !truncated || string(area.files[first]) != "TASK [serv" {
+		t.Fatalf("the output kept %d bytes %q, truncated %t, want the %d beneath the line", kept, area.files[first], truncated, room)
+	}
+	later := store.OpenAdapterOutput(ctx, second)
+	if _, err := later.Write([]byte("TASK [serve two]\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := later.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if kept, truncated := later.Retained(); kept != 0 || !truncated {
+		t.Fatalf("a later attempt kept %d bytes, truncated %t, want nothing past the line", kept, truncated)
+	}
+	if _, found := area.files[second]; found {
+		t.Fatalf("a later attempt published %q past the line", area.files[second])
+	}
+	run := "run-" + strings.Repeat("ab", 16) + "/run.output"
+	bounded := store.OpenAdapterOutput(ctx, run)
+	if _, err := bounded.Write([]byte("TASK [read the power state]\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := bounded.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if kept, truncated := bounded.Retained(); kept != 28 || truncated || string(area.files[run]) != "TASK [read the power state]\n" {
+		t.Fatalf("a bounded run kept %d bytes %q, truncated %t, want all it printed", kept, area.files[run], truncated)
+	}
+}
+
 // manualClock advances only when a test says so, so the flush cadence is
 // asserted rather than waited for.
 type manualClock struct{ moment time.Time }

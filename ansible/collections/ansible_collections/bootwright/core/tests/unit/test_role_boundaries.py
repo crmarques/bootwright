@@ -85,6 +85,7 @@ EXECUTABLES = frozenset({
     "/usr/bin/openssl",
     "/usr/bin/podman",
     "/usr/bin/qemu-img",
+    "/usr/bin/rmdir",
     "/usr/bin/ssh",
     "/usr/bin/systemctl",
     "/usr/bin/timeout",
@@ -597,10 +598,11 @@ def refusal_problems(where, tasks):
     or only after the play acted on it.
 
     A task that reaches a controller under no_log never fails itself, because
-    ansible-core then keeps nothing of its result but that it failed. It
-    registers the result and tolerates its failure, and the next task either
-    refuses outside no_log with the controller's own message, stopping the play
-    whenever the controller refused, or publishes the result as an observation.
+    the adapter's output then shows nothing of its result but that it failed
+    (plugins/callback/censored.py). It registers the result and tolerates its
+    failure, and the next task either refuses outside no_log with the
+    controller's own message, stopping the play whenever the controller
+    refused, or publishes the result as an observation.
     Only the protocol's group records may come between them.
     """
     problems = []

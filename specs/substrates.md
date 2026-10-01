@@ -277,10 +277,20 @@ or one of its disks present without the whole is a positive partial realization
 the next attempt converges. A listener on the controller socket with none of
 those present is not proved to be this Machine's and stays unknown. A same-name
 domain without this context's ownership is foreign and stays unknown. A
-removal's resolution reads the same observation for what the removal proves.
-None of the domain, its controller unit, its disks and a listener on its socket
-present is its completion. The whole machine is positive no effect, and any of
-the domain, unit or disks present is a positive partial realization.
+removal's resolution reads the same observation for what the removal takes
+back, not for what the apply proves. None of the domain, its controller unit,
+its disks and a listener on its socket present is its completion. The whole
+machine is positive no effect: through a hypervisor that answered, the domain
+with this context's ownership, its controller unit active with its container,
+and every frozen disk present. The rest of what the apply proves, the image the
+controller runs, a power state its ComputerSystem reports, the domain's UUID
+and each disk's size, is nothing the removal takes back, so it plays no part: a
+controller on another image, a silent emulated BMC or a resized disk still
+reads no effect, and so does a socket nothing listens on. The removal stops the
+controller unit first, so a unit that is not active may be its first effect:
+that, like any of the domain, unit, container or disks present without the
+whole, is a positive partial realization. The adapter's postcondition is the
+apply's, so it plays no part here either.
 
 **Unresolved.** An observation that proves nothing
 [names why](state-reconciliation.md#attempts-and-unknown-outcomes), first
@@ -599,6 +609,23 @@ input is a value or the path of a material file, never secret bytes, because
 the validation is not hidden from output and echoes a value it refuses. The
 bare-metal entry points that reach the controller also take the path of its
 trust-bundle material, empty when it declares none.
+
+The result channel belongs to the consumer, so `pre_boot` leaves the refusal
+its failed check makes in a fact of its own role, cleared before the proof and
+once it holds, and the consumer names that refusal to its runner under the
+[adapter result protocol](architecture.md#the-adapter-result-protocol) before
+its run fails, a cluster under the node's position in its frozen request. The
+operator then receives the installation's `lifecycle.state` diagnostic, whose
+object is the Machine, instead of the adapter's failure: `hardware-mismatch`,
+a physical machine whose declaration names no MAC, whose complete inventory
+lacks a declared MAC or reports no system identity, or whose inventory was not
+read in full, remedied by correcting its `spec.hardware.management.bmc.address`
+or `spec.hardware.nics`; `identity-mismatch`, a physical machine answering as
+another system than its pin, remedied by correcting that address or destroying
+and applying the context so the machine is proved again; and `machine-running`,
+on either arm, remedied by `bootwright machine stop --name <machine>` before
+the apply is repeated. A read the controller did not answer names none,
+because the controller's own message in the retained output is the reason.
 
 A Redfish client speaks to one endpoint and follows no redirect, uses no
 ambient proxy or credential, bounds every request and response, and treats a

@@ -2,7 +2,7 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_machine_request.version == 'machine-libvirt-v1'
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v2'
       - bootwright_substrate_machine_request.directory.startswith('/var/lib/libvirt/images/bootwright/')
       - bootwright_substrate_machine_request.controller.image is search('@sha256:[0-9a-f]{64}$')
       - bootwright_substrate_machine_request.controller.port | int > 0

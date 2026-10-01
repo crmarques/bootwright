@@ -2,7 +2,7 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_proxy_request.version == 'proxy-squid-v1'
+      - bootwright_proxy_request.version == 'proxy-squid-v2'
       - bootwright_proxy_request.unit is string
       - bootwright_proxy_request.contentRoot.startswith('/var/lib/bootwright-services/')
       - bootwright_proxy_request.image is search('@sha256:[0-9a-f]{64}$')
@@ -197,6 +197,8 @@
 - name: Prove the managed service answers on every declared address
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_proxy_request }}'
+    runs_from:
+      - '{{ infra_proxy_squid_config_dir }}/squid.conf'
     readiness: true
   register: infra_proxy_squid_after
 

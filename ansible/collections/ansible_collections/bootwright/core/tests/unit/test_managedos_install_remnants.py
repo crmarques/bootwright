@@ -5,9 +5,11 @@ An apply extracts the package tree beside its published location, at
 a work area outside the served root. An apply killed between those steps leaves
 the staging copy beneath the served root and the work area behind, and a
 removal stopped while it deleted the tree leaves the tree's directory without
-its .treeinfo (found in X29). These tests run the role's own task files over a
-directory standing in for the artifact server's host, performing each file task
-and each native command the way the tool does:
+its .treeinfo (found in X29). Nor does an installation leave an empty directory
+behind: the profile's directory the apply created for the tree, or the work
+area an observation created for its reads (found in X31). These tests run the
+role's own task files over a directory standing in for the artifact server's
+host, performing each file task and each native command the way the tool does:
 
 - xorriso -osirrox on -extract / <dir> merges the image into a directory that
   already exists rather than replacing it (xorriso(1), -extract, xorriso 1.5.8);
@@ -18,16 +20,28 @@ and each native command the way the tool does:
 - the file module's state=absent deletes a directory through shutil.rmtree in
   the order the directory lists its entries (ansible/modules/file.py,
   ensure_absent, ansible-core 2.21), so a removal killed part way leaves the
-  entries listed after the kill.
+  entries listed after the kill;
+- rmdir --ignore-fail-on-non-empty removes a directory only while it is empty
+  and ignores the failure to remove one that is not (the rmdir invocation in
+  the GNU coreutils manual,
+  https://www.gnu.org/software/coreutils/manual/html_node/rmdir-invocation.html,
+  coreutils 9.7), and fails on one that does not exist;
+- the stat module reads a path without following a symbolic link and answers
+  only exists false for one that is not there (ansible/modules/stat.py, main,
+  ansible-core 2.21);
+- a block runs its always tasks after its own whether or not one failed, and
+  its condition holds for every task inside it.
 
-Every other task is a proof or a read this does not depend on, and is passed
-over. Rendering the task files needs Ansible's controller (DataLoader and
-Templar), which ansible-test does not offer to unit tests under
-tests/unit/plugins.
+An included task file is a read these tests stand in for. Every other task,
+the looped proofs of the tooling and the media an apply uses among them, is a
+proof or a read this does not depend on, and is passed over. Rendering the
+task files needs Ansible's controller (DataLoader and Templar), which
+ansible-test does not offer to unit tests under tests/unit/plugins.
 """
 
 from __future__ import annotations
 
+import errno
 import os
 import pathlib
 import shutil
@@ -47,7 +61,9 @@ INSPECT = "bootwright.core.managedos_install_inspect"
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 FILE = "ansible.builtin.file"
 COMMAND = "ansible.builtin.command"
-MODELLED = (INSPECT, PROTOCOL, FILE, COMMAND)
+INCLUDE = "ansible.builtin.include_tasks"
+STAT = "ansible.builtin.stat"
+MODELLED = (INSPECT, PROTOCOL, FILE, COMMAND, INCLUDE, STAT)
 BUILD = "Build this machine's own installer image"
 # What the extraction writes: the DVD's marker and one repository.
 EXTRACTED = {".treeinfo", "BaseOS"}
@@ -55,6 +71,10 @@ EXTRACTED = {".treeinfo", "BaseOS"}
 
 class Killed(Exception):
     """The attempt was killed while a task deleted a directory."""
+
+
+class ReadFailed(Exception):
+    """A read of the machine failed."""
 
 
 def tasks(name):
@@ -94,26 +114,45 @@ class Host:
         # A directory whose next deletion is killed part way, and the entries
         # it lists after the kill, which that deletion never reaches.
         self.kills = {}
+        # What each included task file does in place of its reads.
+        self.reads = {}
         monkeypatch.setattr(protocol, "emit", lambda message, **kwargs: self.emitted.append(message))
 
     def run(self, name, through=None):
         """Run one task file in order, stopping after the task named through."""
-        for task in tasks(name):
+        reached = self.perform(tasks(name), [], through)
+        assert reached or through is None, "%s holds no task named %s" % (name, through)
+
+    def perform(self, listed, inherited, through):
+        """Run a list of tasks in order, and report whether the task named
+        through ran."""
+        for task in listed:
+            if not isinstance(task, dict):
+                continue
+            conditions = task.get("when", [])
+            conditions = inherited + (conditions if isinstance(conditions, list) else [conditions])
+            if "block" in task:
+                assert "rescue" not in task, task.get("name")
+                try:
+                    reached = self.perform(task["block"], conditions, through)
+                finally:
+                    self.perform(task.get("always") or [], conditions, None)
+                if reached:
+                    return True
+                continue
             module = next((candidate for candidate in MODELLED if candidate in task), None)
-            if module is None:
+            if module is None or "loop" in task:
                 continue
             templar = Templar(loader=LOADER, variables=self.variables)
-            conditions = task.get("when", [])
-            if not all(templar.evaluate_conditional(condition)
-                       for condition in (conditions if isinstance(conditions, list) else [conditions])):
+            if not all(templar.evaluate_conditional(condition) for condition in conditions):
                 result = {"changed": False, "skipped": True}
             else:
                 result = getattr(self, module.rsplit(".", 1)[-1])(templar.template(task[module]))
             if "register" in task:
                 self.variables[task["register"]] = result
             if task.get("name") == through:
-                return
-        assert through is None, "%s holds no task named %s" % (name, through)
+                return True
+        return False
 
     def inside(self, path):
         path = pathlib.Path(path)
@@ -155,9 +194,28 @@ class Host:
             return {"changed": False}
         return {"changed": True}
 
+    def include_tasks(self, name):
+        self.reads.get(name, lambda: None)()
+        return {"changed": False}
+
+    def stat(self, arguments):
+        assert not arguments.get("follow"), arguments
+        path = self.inside(arguments["path"])
+        if not os.path.lexists(path):
+            return {"changed": False, "stat": {"exists": False}}
+        return {"changed": False, "stat": {"exists": True, "isdir": path.is_dir() and not path.is_symlink()}}
+
     def command(self, arguments):
         argv = [str(argument) for argument in arguments["argv"]]
-        if argv[0] == "/usr/bin/xorriso":
+        assert "removes" not in arguments and "creates" not in arguments, arguments
+        if argv[0] == "/usr/bin/rmdir":
+            assert argv[1:-1] == ["--ignore-fail-on-non-empty"], argv
+            try:
+                os.rmdir(self.inside(argv[-1]))
+            except OSError as error:
+                if error.errno != errno.ENOTEMPTY:
+                    raise
+        elif argv[0] == "/usr/bin/xorriso":
             target = self.inside(argv[-1])
             (target / "BaseOS").mkdir(parents=True, exist_ok=True)
             (target / ".treeinfo").write_text("[general]\n")
@@ -190,6 +248,12 @@ def killed_extraction(host):
 def killed_build(host):
     host.work.mkdir(parents=True)
     (host.work / "install.iso").write_bytes(b"stale")
+
+
+# An apply killed after it created the profile's directory and before it
+# extracted, or a removal killed after the tree went and before the directory.
+def empty_profile_directory(host):
+    host.tree.parent.mkdir(parents=True)
 
 
 @pytest.mark.parametrize("left", [stopped_removal, killed_extraction, killed_build],
@@ -227,8 +291,9 @@ def test_an_apply_completion_reads_after_its_work_area_is_gone():
 
 
 # Each remnant alone is what the removal changes, so each counts in its outcome.
-@pytest.mark.parametrize("left", [(killed_extraction,), (killed_build,), (killed_extraction, killed_build)],
-                         ids=["staging tree", "work area", "both"])
+@pytest.mark.parametrize("left", [(killed_extraction,), (killed_build,), (empty_profile_directory,),
+                                  (killed_extraction, killed_build)],
+                         ids=["staging tree", "work area", "empty profile directory", "both"])
 def test_a_removal_takes_back_and_reports_what_a_killed_apply_left(tmp_path, monkeypatch, left):
     host = Host(tmp_path, monkeypatch)
     for remnant in left:
@@ -238,6 +303,7 @@ def test_a_removal_takes_back_and_reports_what_a_killed_apply_left(tmp_path, mon
     assert before["treeStaging"] is (killed_extraction in left)
     assert before["work"] is (killed_build in left)
     assert not os.path.lexists(host.staging)
+    assert not os.path.lexists(host.tree.parent)
     assert not os.path.lexists(host.work)
     completed = host.completion()
     assert completed["outcome"] == "changed"
@@ -276,3 +342,64 @@ def test_a_removal_with_nothing_left_changes_nothing(tmp_path, monkeypatch):
     completed = host.completion()
     assert completed["outcome"] == "unchanged"
     assert completed["evidence"]["postcondition"] is True
+
+
+# The apply created the profile's directory for the tree and the image's for
+# the image, so a removal leaves neither behind.
+def test_a_removal_leaves_no_directory_the_apply_created(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch)
+    host.run("apply.yml", through=BUILD)
+    assert names(host.tree.parent) == {"tree"}
+    host.run("destroy.yml")
+    assert not os.path.lexists(host.tree.parent)
+    assert not os.path.lexists(host.image.parent)
+    assert not os.path.lexists(host.work)
+    assert host.completion()["outcome"] == "changed"
+
+
+# Only the tree and its staging copy are published in the profile's directory,
+# so anything else found there is not this removal's to take. It stays, and the
+# directory kept for it counts as no change.
+@pytest.mark.parametrize("left, outcome", [(published_tree, "changed"), (empty_profile_directory, "unchanged")],
+                         ids=["beside the tree", "with nothing of its own"])
+def test_a_removal_leaves_what_else_it_finds_in_the_profile_directory(tmp_path, monkeypatch, left, outcome):
+    host = Host(tmp_path, monkeypatch)
+    left(host)
+    (host.tree.parent / "install.iso").write_bytes(b"another")
+    host.run("destroy.yml")
+    assert names(host.tree.parent) == {"install.iso"}
+    completed = host.completion()
+    assert completed["outcome"] == outcome
+    assert completed["evidence"]["postcondition"] is True
+
+
+# The observation creates the work area its reads may need, so one that found
+# none leaves none, whether its reads answered or failed.
+def test_an_observation_leaves_no_work_area_it_did_not_find(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch)
+    host.run("observe.yml")
+    assert not os.path.lexists(host.work)
+    assert host.completion()["evidence"]["work"] is False
+
+
+def test_an_observation_whose_read_fails_leaves_no_work_area_it_did_not_find(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch)
+
+    def pinned_then_failed():
+        (host.work / "known_hosts").write_text("198.51.100.11 ssh-ed25519 AAAAHOST\n")
+        raise ReadFailed()
+
+    host.reads["identity.yml"] = pinned_then_failed
+    with pytest.raises(ReadFailed):
+        host.run("observe.yml")
+    assert not os.path.lexists(host.work)
+
+
+# A work area it found is what an interrupted attempt left, which the evidence
+# reports and a removal takes back, so the observation leaves it as it was.
+def test_an_observation_leaves_the_work_area_it_found_as_it_was(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch)
+    killed_build(host)
+    host.run("observe.yml")
+    assert names(host.work) == {"install.iso"}
+    assert host.completion()["evidence"]["work"] is True

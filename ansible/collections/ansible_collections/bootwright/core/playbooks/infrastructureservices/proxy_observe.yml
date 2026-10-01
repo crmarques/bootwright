@@ -10,4 +10,4 @@
     - name: Execute the proxy observe capability
       ansible.builtin.import_role:
         name: bootwright.core.infra_proxy_squid
-        tasks_from: observe.yml
+        tasks_from: observe

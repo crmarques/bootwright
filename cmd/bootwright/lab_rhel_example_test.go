@@ -21,7 +21,10 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -361,12 +364,12 @@ func TestLabRHELRequestsCarryTheirDerivedIntent(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
 	requests := map[string]managedservice.Request{}
-	for kind, implementation := range map[string]string{
-		"Proxy": "proxy-squid-v1", "DNSServer": "dns-server-dnsmasq-v1", "NTPServer": "ntp-server-chrony-v1",
+	for kind, definition := range map[string]managedservice.Definition{
+		"Proxy": proxy.Definition(), "DNSServer": dnsserver.Definition(), "NTPServer": ntpserver.Definition(),
 	} {
-		capability, ok := resolver.Resolve(kind, implementation)
+		capability, ok := resolver.Resolve(kind, definition.Implementation)
 		if !ok {
-			t.Fatalf("%s/%s does not resolve", kind, implementation)
+			t.Fatalf("%s/%s does not resolve", kind, definition.Implementation)
 		}
 		contribution, err := capability.Plan(context.Background(), lifecycle.PlanInput{
 			Verb: reconciliation.Apply, State: state, Controller: "controller",
@@ -375,7 +378,7 @@ func TestLabRHELRequestsCarryTheirDerivedIntent(t *testing.T) {
 		if err != nil || len(contribution.Definitions) != 1 {
 			t.Fatalf("%s contributed %d blocks (%v)", kind, len(contribution.Definitions), err)
 		}
-		request, err := managedservice.DecodeRequest(contribution.Definitions[0].Request, implementation)
+		request, err := managedservice.DecodeRequest(contribution.Definitions[0].Request, definition.Version)
 		if err != nil {
 			t.Fatalf("%s request: %v", kind, err)
 		}

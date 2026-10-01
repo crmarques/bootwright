@@ -24,6 +24,18 @@ options:
     description: The status a progress phase reports for its group.
     type: str
     required: false
+  reason:
+    description:
+      - The refusal of a node's pre-boot proof a refused phase names to the
+        runner before the run fails, which the runner reports as the
+        installation's own diagnostic for that node's Machine. One of
+        C(hardware-mismatch), C(identity-mismatch) or C(machine-running).
+    type: str
+    required: false
+  node:
+    description: The position in the frozen request of the node a refused phase names.
+    type: int
+    required: false
   outcome:
     description: The terminal outcome a completion phase publishes.
     type: str

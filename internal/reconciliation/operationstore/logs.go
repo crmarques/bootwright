@@ -98,13 +98,19 @@ func AttemptLogPath(id, block string, attempt, resolution int) (string, error) {
 type AdapterOutput struct {
 	// ctx is held because io.Writer has none and the writes arrive on the
 	// adapter process's own goroutine. Close takes the live one instead.
-	ctx       context.Context
-	area      Area
-	clock     func() time.Time
-	path      string
-	mutex     sync.Mutex
-	pending   []byte
-	written   int
+	ctx   context.Context
+	area  Area
+	clock func() time.Time
+	path  string
+	// store is set for an attempt's output, which shares its area with the
+	// operation records and so takes only the room outputRoom gives it.
+	store   *Store
+	mutex   sync.Mutex
+	pending []byte
+	written int
+	// limit is what this output keeps in all: MaxAdapterOutputBytes, lowered
+	// to what it holds once its area reached the line ReservedBytes keeps.
+	limit     int
 	flushed   time.Time
 	truncated bool
 	closed    bool
@@ -112,9 +118,15 @@ type AdapterOutput struct {
 
 // OpenAdapterOutput prepares the retained output beside an already open attempt
 // log, whose own directory it shares. It cannot fail, because retention is not
-// a precondition of the effect it records.
+// a precondition of the effect it records. An output inside an operation's
+// directory is an attempt's, and never takes the area into ReservedBytes; a
+// bounded run's lies in an area of its own, which holds no records.
 func (s *Store) OpenAdapterOutput(ctx context.Context, target string) *AdapterOutput {
-	return &AdapterOutput{ctx: ctx, area: s.area, clock: s.clock, path: target}
+	output := &AdapterOutput{ctx: ctx, area: s.area, clock: s.clock, path: target, limit: MaxAdapterOutputBytes}
+	if operation, _, _ := strings.Cut(target, "/"); reconciliation.ValidOperationID(operation) {
+		output.store = s
+	}
+	return output
 }
 
 func (o *AdapterOutput) Write(value []byte) (int, error) {
@@ -127,7 +139,7 @@ func (o *AdapterOutput) Write(value []byte) (int, error) {
 	if o.closed {
 		return size, nil
 	}
-	if room := MaxAdapterOutputBytes - o.written - len(o.pending); room < size {
+	if room := o.limit - o.written - len(o.pending); room < size {
 		o.truncated = true
 		value = value[:max(room, 0)]
 	}
@@ -183,7 +195,22 @@ func (o *AdapterOutput) flush(ctx context.Context) error {
 		// the interval instead of on every line.
 		o.flushed = o.clock()
 	}
+	if o.store != nil {
+		taken, err := o.store.outputRoom(ctx, len(o.pending))
+		if err != nil {
+			return err
+		}
+		if taken < len(o.pending) {
+			o.pending, o.limit, o.truncated = o.pending[:taken], o.written+taken, true
+		}
+		if taken == 0 {
+			return nil
+		}
+	}
 	if err := o.area.Append(ctx, o.path, o.pending); err != nil {
+		if o.store != nil {
+			o.store.returnRoom(len(o.pending))
+		}
 		return err
 	}
 	o.written += len(o.pending)

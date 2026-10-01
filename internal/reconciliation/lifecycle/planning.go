@@ -4,11 +4,13 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -96,7 +98,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 	}
 	slices.Sort(binding.secrets)
-	if err := refuseOwnSocketConflicts(binding.reservations, placed); err != nil {
+	if err := refuseOwnSocketConflicts(state.Effective(), controller, binding.reservations, placed); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
 	definitions = dependOnController(definitions)
@@ -116,22 +118,75 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 // on one host as another context's are compared on the controller, so two of
 // them that could never both listen refuse before the plan exists rather than
 // when the second one starts. A claim is qualified by the host its block is
-// placed on: the controller, or the Machine of an SSH host, and claims on two
-// hosts never conflict.
-func refuseOwnSocketConflicts(reservations []prerequisites.HostReservation, placed []SSHReservation) error {
-	if conflict, found := prerequisites.ConflictingSockets(reservations); found {
-		return socketConflict(conflict, "the controller")
-	}
-	hosts := map[string][]prerequisites.HostReservation{}
+// placed on: the controller, or the host its SSH placement reaches, named by
+// address and port rather than by Machine, so two Machines reaching one host
+// share it and one reaching the controller shares the controller's. Claims on
+// two hosts never conflict. The controller is compared first, then each SSH
+// host in the name order of the first Machine reaching it.
+func refuseOwnSocketConflicts(catalog api.Catalog, controller string, reservations []prerequisites.HostReservation, placed []SSHReservation) error {
+	own, _ := catalog.Find(api.Machine, controller)
+	local := &hostClaims{claims: slices.Clone(reservations), through: make([]string, len(reservations))}
+	remote := map[string]*hostClaims{}
 	for _, claim := range placed {
-		hosts[claim.Machine] = append(hosts[claim.Machine], claim.Reservation)
+		host := local
+		if !machine.ReachesController(own, claim.Address, claim.Port) {
+			endpoint := machine.SSHHost(claim.Address, claim.Port)
+			if host = remote[endpoint]; host == nil {
+				host = &hostClaims{endpoint: endpoint}
+				remote[endpoint] = host
+			}
+		}
+		host.claims = append(host.claims, claim.Reservation)
+		host.through = append(host.through, claim.Machine)
 	}
-	for _, machine := range slices.Sorted(maps.Keys(hosts)) {
-		if conflict, found := prerequisites.ConflictingSockets(hosts[machine]); found {
-			return socketConflict(conflict, "the SSH host "+string(api.Machine)+"/"+machine)
+	ordered := slices.SortedFunc(maps.Values(remote), func(first, second *hostClaims) int {
+		return strings.Compare(slices.Min(first.through), slices.Min(second.through))
+	})
+	for _, host := range append([]*hostClaims{local}, ordered...) {
+		if conflict, found := prerequisites.ConflictingSockets(host.claims); found {
+			return socketConflict(conflict, host.name(conflict))
 		}
 	}
 	return nil
+}
+
+// hostClaims is every socket claim this context places on one host: through
+// names the Machine each claim reaches it by over SSH, empty for a claim placed
+// on the controller, and endpoint is where an SSH host is reached.
+type hostClaims struct {
+	endpoint string
+	claims   []prerequisites.HostReservation
+	through  []string
+}
+
+// name is how a refusal names the host two conflicting claims share: the
+// controller, or an SSH host by its Machine, and each Machine through which
+// either claim reaches that host over SSH when it is not the host's own name,
+// so an operator sees why two Machines' services meet. A claim is found by the
+// kind and service the refusal names it by.
+func (h *hostClaims) name(conflict prerequisites.SocketConflict) string {
+	var machines []string
+	for _, claim := range []prerequisites.HostReservation{conflict.First, conflict.Second} {
+		index := slices.IndexFunc(h.claims, func(held prerequisites.HostReservation) bool {
+			return held.Kind == claim.Kind && held.Service == claim.Service
+		})
+		name := string(api.Machine) + "/" + h.through[index]
+		if h.through[index] != "" && !slices.Contains(machines, name) {
+			machines = append(machines, name)
+		}
+	}
+	slices.Sort(machines)
+	switch {
+	case h.endpoint == "" && len(machines) == 0:
+		return "the controller"
+	case h.endpoint == "" && len(machines) == 1:
+		return "the controller, which " + machines[0] + " reaches over SSH"
+	case h.endpoint == "":
+		return "the controller, which " + strings.Join(machines, " and ") + " both reach over SSH"
+	case len(machines) == 1:
+		return "the SSH host " + machines[0]
+	}
+	return "the SSH host at " + h.endpoint + ", which " + strings.Join(machines, " and ") + " both reach"
 }
 
 func socketConflict(conflict prerequisites.SocketConflict, host string) error {

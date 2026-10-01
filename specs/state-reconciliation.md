@@ -48,10 +48,15 @@ completed destroy whose records hold one proves nothing removed that block's
 effect, so both verbs refuse `lifecycle.state` over it, naming each such block
 with the state its record reads, rather than settle or start a fresh apply
 beside that effect. Neither verb has a way on from there, so deleting the
-context is its only exit, and the refusal names
+context is its only exit, and the refusal names the deletion the
+[guard](#context-mutation-evidence) admits, decided from the guard's own
+reading of the evidence however its record is spelled:
 `bootwright context delete --name <name> --purge`, adding `--allow-orphans`
-unless the context's evidence is pristine: only pristine evidence admits a
-[deletion](contexts.md#permanent-deletion) that acknowledges no orphan.
+unless the guard reads the context's evidence as pristine, because only
+pristine evidence admits a [deletion](contexts.md#permanent-deletion) that
+acknowledges no orphan. Evidence the guard cannot read admits no deletion,
+with the acknowledgement or without, so over it the refusal names none and
+names restoring the whole store from a matching backup instead.
 
 Before any verb, an operation whose blocks are all `done` but whose record,
 [evidence](#context-mutation-evidence), reservations, Secret bindings or
@@ -101,10 +106,12 @@ other than pristine evidence and the running evidence an interrupted
 registration leaves, and an operation directory whose `blocks/` lists anything
 while no index names it, is state no index accounts for: a `destroy` and a
 fresh `apply` over it each refuse `lifecycle.state`, naming each such evidence
-and directory, and write nothing, whatever else the context holds. Deleting the
-context is its only exit, so the refusal names it as the refusal over a
-completed destroy holding a block that is not `done` does, with
-`--allow-orphans` unless the evidence is pristine.
+and directory, and write nothing, whatever else the context holds. Evidence
+spelled otherwise than the record this build publishes, even with the same
+members, is such evidence. Deleting the context is its only exit, so the
+refusal names it as the refusal over a completed destroy holding a block that
+is not `done` does: with `--allow-orphans` unless the guard reads the evidence
+as pristine, and over evidence the guard cannot read no deletion at all.
 
 Otherwise nothing claims a context holding no operation only while its
 evidence is pristine and it holds no reservation. Running evidence, or a
@@ -397,8 +404,8 @@ complete, synchronized bytes.
 | Durable state | Allowed lifecycle transition |
 | --- | --- |
 | no operation, or completed destroy | start a fresh apply; a `destroy` settles without effect, over no operation first releasing what an interrupted registration left |
-| no operation beside evidence or records no index accounts for | none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine |
-| completed destroy holding a block that is not `done` | none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine |
+| no operation beside evidence or records no index accounts for | none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, and no deletion over evidence the guard cannot read |
+| completed destroy holding a block that is not `done` | none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, and no deletion over evidence the guard cannot read |
 | apply running | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply failed | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply failed, every block `done` | an `apply` finalizes it, recording it `done` and publishing its projection, or start a fresh destroy of its whole frozen plan |
@@ -827,8 +834,9 @@ removal. The one exception is a version 1 record once the controller directory
 keeps [setup runs](contexts/controller-record.md#setup-runs): every build that
 wrote such a record predates them and refuses that directory, so the refusal
 says so and names no build. It offers the superseding removal where one may
-take the operation's place, and otherwise the deletion of the context with
-`--allow-orphans`. Only a fresh verb runs under the build and bundle in hand.
+take the operation's place, and otherwise the
+[deletion exit](#lifecycle-unit) of the records neither verb acts on. Only a
+fresh verb runs under the build and bundle in hand.
 
 ### Attempts and unknown outcomes
 

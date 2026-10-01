@@ -10,4 +10,4 @@
     - name: Execute the physical machine destroy capability
       ansible.builtin.import_role:
         name: bootwright.core.substrate_baremetal_machine
-        tasks_from: destroy.yml
+        tasks_from: destroy

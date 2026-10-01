@@ -60,7 +60,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [proxy-squid-v1]
+            choices: [proxy-squid-v2]
       bootwright_proxy_material:
         type: dict
         required: true

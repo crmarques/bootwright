@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore/areadouble"
 	"maps"
 	"os"
@@ -878,7 +879,8 @@ func TestRegisterRefusesBeyondTheRetentionBound(t *testing.T) {
 // A claim creates an operation's directory, empty, before anything fills it,
 // and the registration of the same identity fills that directory without
 // counting it against the retention bound a second time. A claim refuses an
-// identity that already has a directory, and refuses at the bound.
+// identity that already has a directory, and refuses at the bound, which an
+// apply reaches with room for one directory left, since its removal needs it.
 func TestAClaimedOperationRegistersIntoItsDirectory(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)
@@ -904,7 +906,7 @@ func TestAClaimedOperationRegistersIntoItsDirectory(t *testing.T) {
 	if err := store.Claim(ctx, operation.ID, plan); err == nil {
 		t.Fatal("a claim took an identity that already has a directory")
 	}
-	for index := range MaxOperations - 1 {
+	for index := range MaxOperations - 2 {
 		area.directories["slot-"+FormatIndex(index)] = true
 	}
 	other := "op-" + strings.Repeat("cd", 16)
@@ -1072,6 +1074,116 @@ func TestAdmissionKeepsTheFirstPassWithinTheAreaEntries(t *testing.T) {
 	delete(area.files, "filled/record-0")
 	if err := store.Register(ctx, removal, removalPlan); err != nil {
 		t.Fatalf("the removal of the registered apply did not register with its first pass free: %v", err)
+	}
+}
+
+// An apply is admitted only while the context can still retain its own
+// operation directory and the one of the removal that takes it back. One
+// directory short of the bound, a claim refuses, naming what the context
+// retains and what the apply needs, and creates nothing, while a removal still
+// registers there; at the bound the removal refuses too.
+func TestAdmissionKeepsADirectoryForTheRemoval(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha")
+	removalPlan, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if AdmissionOperations(plan) != 2 || AdmissionOperations(removalPlan) != 1 {
+		t.Fatalf("an apply and its removal need room for %d and %d directories, want 2 and 1", AdmissionOperations(plan), AdmissionOperations(removalPlan))
+	}
+	for index := range MaxOperations - 1 {
+		area.directories["slot-"+FormatIndex(index)] = true
+	}
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	apply := "op-" + strings.Repeat("cd", 16)
+	err = store.Claim(ctx, apply, plan)
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+		!strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: it retains 1023 of its 1024, and this apply needs room for 2: its own and that of the removal that takes it back") {
+		t.Fatalf("an apply one directory short of the bound reported %+v (%v)", refused, err)
+	}
+	if areadouble.IsDirectory(area.files, area.directories, apply) {
+		t.Fatal("the refused claim created its directory")
+	}
+	removal := testOperation(t, removalPlan)
+	removal.Source = apply
+	if err := store.Register(ctx, removal, removalPlan); err != nil {
+		t.Fatalf("a removal one directory short of the bound did not register: %v", err)
+	}
+	other := testOperation(t, removalPlan)
+	other.ID, other.Source = "op-"+strings.Repeat("ef", 16), apply
+	err = store.Register(ctx, other, removalPlan)
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+		!strings.Contains(refused[0].Message, "it retains 1024 of its 1024, and this removal needs room for its own") {
+		t.Fatalf("a removal at the bound reported %+v (%v)", refused, err)
+	}
+}
+
+// Admission holds the area's bytes as it holds its entries. An apply needs
+// ReservedBytes free, so a claim refuses one byte past that line, naming what
+// the area holds and what the apply keeps, and creates nothing, and is
+// admitted at it. A removal needs only the bytes its registration writes: it
+// refuses, naming them, once one byte fewer is free, and registers with them.
+func TestAdmissionKeepsTheReservedBytesFree(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	area.files["filled/output"] = make([]byte, MaxBytes-ReservedBytes+1)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	err := store.Claim(ctx, operation.ID, plan)
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+		!strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: its operation area holds 50331649 of its 67108864 bytes, and this apply needs the 16777216 it keeps for its records and logs and those of the removal that takes it back") {
+		t.Fatalf("an apply one byte past the line reported %+v (%v)", refused, err)
+	}
+	if areadouble.IsDirectory(area.files, area.directories, operation.ID) {
+		t.Fatal("the refused claim created its directory")
+	}
+	area.files["filled/output"] = area.files["filled/output"][:MaxBytes-ReservedBytes]
+	if err := store.Claim(ctx, operation.ID, plan); err != nil {
+		t.Fatalf("the claim at the line refused: %v", err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatalf("the apply at the line did not register: %v", err)
+	}
+	removalPlan, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal := testOperation(t, removalPlan)
+	removal.ID, removal.Source = "op-"+strings.Repeat("cd", 16), operation.ID
+	registration := 0
+	for _, value := range []any{removalPlan, removal, Index{Version: 1, Current: removal.ID}} {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		registration += len(encoded) + 1
+	}
+	if AdmissionBytes(removalPlan, registration) != int64(registration) || AdmissionBytes(plan, registration) != ReservedBytes {
+		t.Fatalf("a removal and an apply need %d and %d bytes, want %d and %d", AdmissionBytes(removalPlan, registration), AdmissionBytes(plan, registration), registration, ReservedBytes)
+	}
+	held := int64(0)
+	for _, data := range area.files {
+		held += int64(len(data))
+	}
+	area.files["filled/records"] = make([]byte, MaxBytes-held-int64(registration)+1)
+	err = store.Register(ctx, removal, removalPlan)
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+		!strings.Contains(refused[0].Message, fmt.Sprintf("holds %d of its 67108864 bytes, and this removal needs %d more for the records its registration writes", MaxBytes-int64(registration)+1, registration)) {
+		t.Fatalf("a removal one byte short of its registration reported %+v (%v)", refused, err)
+	}
+	if areadouble.IsDirectory(area.files, area.directories, removal.ID) {
+		t.Fatal("the refused removal created its directory")
+	}
+	area.files["filled/records"] = area.files["filled/records"][1:]
+	if err := store.Register(ctx, removal, removalPlan); err != nil {
+		t.Fatalf("the removal with its registration free did not register: %v", err)
 	}
 }
 

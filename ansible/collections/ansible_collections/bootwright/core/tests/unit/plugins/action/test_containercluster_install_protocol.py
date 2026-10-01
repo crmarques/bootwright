@@ -102,6 +102,40 @@ def action(args):
     return module
 
 
+# A node's boot names a refusal of its pre-boot proof under the node's
+# position, which is the reason Go gave that node's Machine a diagnostic for
+# (internal/containercluster/agentinstall, preBootRefusals).
+@pytest.mark.parametrize("node", [0, 2, "2", 999], ids=repr)
+def test_a_nodes_pre_boot_refusal_is_named_under_its_position(node, monkeypatch):
+    published = []
+    monkeypatch.setattr(protocol, "emit", lambda message, **kwargs: published.append(message))
+    result = action({"phase": "refused", "reason": "machine-running", "node": node}).run(task_vars={})
+    assert result == {"changed": False}
+    assert published == [{"phase": "refused", "reason": "machine-running-node-%s" % node}]
+
+
+# A reason or node Go gave no diagnostic for would break the runner's protocol,
+# so the task fails before it publishes anything.
+@pytest.mark.parametrize("args", [
+    {"reason": "machine-running"},
+    {"reason": "release-stamp", "node": 0},
+    {"reason": "machine-running ", "node": 0},
+    {"node": 0},
+    {"reason": "identity-mismatch", "node": -1},
+    {"reason": "identity-mismatch", "node": 1000},
+    {"reason": "identity-mismatch", "node": True},
+    {"reason": "identity-mismatch", "node": "01"},
+    {"reason": "identity-mismatch", "node": "1 "},
+    {"reason": "identity-mismatch", "node": 1.0},
+], ids=repr)
+def test_a_refusal_no_node_diagnostic_names_is_never_published(args, monkeypatch):
+    published = []
+    monkeypatch.setattr(protocol, "emit", lambda message, **kwargs: published.append(message))
+    result = action(dict(args, phase="refused")).run(task_vars={})
+    assert result == {"failed": True, "msg": "the installation capability result could not be published"}
+    assert not published
+
+
 def test_an_apply_whose_cluster_is_still_installing_publishes_nothing(monkeypatch):
     published = []
     monkeypatch.setattr(protocol, "emit", lambda *args, **kwargs: published.append(args))

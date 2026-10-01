@@ -7,6 +7,9 @@ import (
 
 const Implementation = "ntp-server-chrony-v1"
 
+// requestVersion is the frozen request shape this build writes and reads.
+const requestVersion = "ntp-server-chrony-v2"
+
 const Kind = string(api.NTPServer)
 
 const defaultImage = "docker.io/dockurr/chrony@sha256:f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025"
@@ -18,7 +21,7 @@ func Definition() managedservice.Definition {
 	return managedservice.Definition{
 		Kind:           api.NTPServer,
 		Implementation: Implementation,
-		Version:        Implementation,
+		Version:        requestVersion,
 		Slug:           "ntp",
 		Variable:       "bootwright_ntp_server",
 		Purpose:        "serve time",

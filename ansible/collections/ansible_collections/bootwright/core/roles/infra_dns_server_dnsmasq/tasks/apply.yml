@@ -2,7 +2,7 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_dns_server_request.version == 'dns-server-dnsmasq-v1'
+      - bootwright_dns_server_request.version == 'dns-server-dnsmasq-v2'
       - bootwright_dns_server_request.unit is string
       - bootwright_dns_server_request.contentRoot.startswith('/var/lib/bootwright-services/')
       - bootwright_dns_server_request.image is search('@sha256:[0-9a-f]{64}$')
@@ -197,6 +197,8 @@
 - name: Prove the managed service answers on every declared address
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_dns_server_request }}'
+    runs_from:
+      - '{{ infra_dns_server_dnsmasq_config_dir }}/dnsmasq.conf'
     readiness: true
   register: infra_dns_server_dnsmasq_after
 

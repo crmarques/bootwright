@@ -158,7 +158,7 @@ func TestRetainDependenciesIsAppendOnly(t *testing.T) {
 	source := prerequisites.DependencySource{ID: "tool-helm-v3.17.0", URL: "https://mirror.example.test/helm.tar.gz", SHA256: strings.Repeat("b", 64), Bytes: 1024}
 	retain := func(value prerequisites.DependencySource) error {
 		return store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
-			return tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{value})
+			return tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{value}, nil)
 		})
 	}
 	if err := retain(source); err != nil {
