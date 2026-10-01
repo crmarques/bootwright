@@ -87,6 +87,7 @@ Alias cell.
 | [B255](#b255) | new, 2026-10-01 (X33) | enabling | Each test's owner | Mutants the X33 splits found surviving | Found after the M1 freeze (D48) |
 | [B256](#b256) | new, 2026-10-01 (X33) | enabling | Architecture | Line-limit texts for empty lists | Found after the M1 freeze (D48) |
 | [B257](#b257) | new, 2026-10-01 (X33) | defect | Controller | Controller-client refusals carry their remedy | Found after the M1 freeze (D48) |
+| [B258](#b258) | split from B206 on 2026-10-01 (D52) | enabling | State reconciliation | Pruning retained operations | D52 names the existing exits; pruning needs a retention rule for evidence and audit |
 
 ### B94
 
@@ -448,6 +449,10 @@ Since X33 both awaiting-split lists are empty, but the collection's line-limit t
 
 The controller clients' refusal helper passes its remedy where the diagnostic takes a source path, so every such refusal that gives a remedy, the frozen-request version refusal, "run bootwright setup" and "repeat the operation" among them, carries it as a path and shows no remediation (found in X33, older than it). **Exit evidence:** diagnostic tests whose remediation holds the remedy and whose path is empty.
 
+### B258
+
+No command prunes retained operations, so a context at the 1024-operation bound leaves only through destroy and deletion (D52). Pruning needs a rule for which completed operations no block's ownership and no audit depends on. **Exit evidence:** the retention rule, and a pruning journey that keeps every operation the index names.
+
 ## Retired
 
 IDs no longer issued. Where an item took one over, its line here names that
@@ -557,3 +562,9 @@ Requires cell as `owner decision: <question>`.
 - **D46** (2026-09-30, accepted by the owner from the session's recommendations): B131: media publication proves nothing wrote the stage after it was measured, and the spec says so; the pre-X20 long-name leftover is removed by hand.
 - **D47** (2026-09-30, accepted by the owner from the session's recommendations): B158: a newer Index API minor version makes setup warn and continue; a newer major version refuses.
 - **D48** (2026-09-30, the owner): M1 is frozen after X33. Follow-ups X32, X33 and later slices find are parked here for a future milestone, whatever their kind, instead of entering M1; D30 no longer admits items to M1. M1 keeps its open items: X32, X33, the owner decisions and the chain behind B49.
+- **D49** (2026-10-01, the owner accepted the session's recommendation A): B32: after a stall the install role reads the registered hosts from the rendezvous host's assisted-service API with the watcher token, bounded and under `no_log`, and the give-up names the node.
+- **D50** (2026-10-01, the owner accepted the session's recommendation A): B175: `setup --purge-old-bundles` retires superseded areas under a pending receipt whose bundle holds no area, then resumes it.
+- **D51** (2026-10-01, the owner accepted the session's recommendation A): B188: a drifted running network restarts when its Machines are stopped and otherwise refuses before any effect, naming them.
+- **D52** (2026-10-01, the owner accepted the session's recommendation A): B206: the retained-operation refusal names destroy, then context deletion and a fresh init; pruning is parked (B258).
+- **D53** (2026-10-01, the owner accepted the session's recommendation A): B208: a retained bundle that lost a bootstrap source falls back to a fresh resolution.
+- **D54** (2026-10-01, the owner accepted the session's recommendation A): B220: before a wait, the install role restores a truncated installer kubeconfig from the kept copy when it names the same cluster.
