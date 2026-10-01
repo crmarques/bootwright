@@ -55,6 +55,10 @@ def evidence(arguments, request_digest, removed):
     `ownMedia` names the nodes among `media` whose controller presents the
     image this cluster published, as the state read compared it. It carries
     names only, never the address, whose last segment is the unguessable one.
+
+    `restored` records that a wait of this apply put the kept copy back in
+    place of the installer's own kubeconfig. Like `completed`, only a real
+    boolean true counts, and a removal waits for nothing, so it never restores.
     """
     state = arguments.get("state") or {}
     found = {
@@ -69,6 +73,7 @@ def evidence(arguments, request_digest, removed):
         "powered": names(state.get("powered")),
         "release": bounded(state.get("release")),
         "request": digest(request_digest),
+        "restored": not removed and arguments.get("restored") is True,
     }
     if removed:
         found["postcondition"] = not found["media"]

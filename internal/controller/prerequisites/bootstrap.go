@@ -29,6 +29,13 @@ var ErrBootstrapIncompatible = errors.New("retained bootstrap is incompatible wi
 // again. It always accompanies ErrBootstrapIncompatible, never replaces it.
 var ErrAutomationSuperseded = errors.New("retained bootstrap automation is superseded by the current executable")
 
+// ErrRetainedSourceUnavailable means the retained bundle a resolution would be
+// carried from cannot serve one of that resolution's approved sources: the
+// bundle is gone, or a source cannot be read or is not its approved bytes.
+// Nothing is carried then. Setup resolves afresh, and that resolution's
+// publishers supply and verify every source it names.
+var ErrRetainedSourceUnavailable = errors.New("retained bundle cannot serve an approved dependency source")
+
 // MinimumRecordedAnsibleVersion is the oldest ansible-core a retained
 // resolution may name: the collection's templating trust and strict Boolean
 // semantics begin there. It judges records only. What setup selects is the

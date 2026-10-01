@@ -458,6 +458,28 @@ output lies in an area of its own, which holds no records, and only its own
 bound cuts it. A record or log write that would take the area past its entries
 or its 64 MiB refuses `context.state`.
 
+No command prunes the operations a context retains, so a refusal at the
+retained-operation bound names the exits that exist, from what a `destroy`
+would still free and from the
+[guard's](state-reconciliation.md#context-mutation-evidence) own reading of the
+evidence. A fresh apply refused beside evidence the guard does not read as
+pristine names `bootwright destroy --context <name>` and then the apply again:
+that destroy removes or releases what the evidence protects, which a deletion
+would have to abandon. One refused beside pristine evidence and a claim that
+holds nothing names the same destroy, which
+[reclaims](state-reconciliation.md#context-mutation-evidence) that claim. The
+repeated apply fits in what the destroy freed or refuses again. A fresh apply
+refused beside pristine evidence and no such claim names
+`bootwright context delete --name <name> --purge` and then
+`bootwright context init --name <name>` from the context's original
+configuration and input. A removal refused at its registration has no destroy
+left to name, so it names the deletion the guard admits, with
+`--allow-orphans`, which abandons what the context may still own, and then the
+same init. Over evidence the guard cannot read, the refusal names restoring the
+whole store from a matching backup
+(`TestTheRetainedOperationRefusalsMatchTheirGolden`,
+`TestEachRetainedOperationExitLeadsOutOfTheBound`).
+
 Missing registry in a nonempty root is
 corruption, except that explicit init may finish publication when the root's
 only entry is one private `pending-<32 lowercase hexadecimal digits>.json` file

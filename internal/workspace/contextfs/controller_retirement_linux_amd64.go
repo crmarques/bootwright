@@ -91,6 +91,17 @@ func (t *controllerTransaction) RetireResolutions(ctx context.Context, digests [
 	return err
 }
 
+// stranded reports a pending receipt an earlier build published although the
+// bundle it names could never be reserved: the record holds every area it
+// may, and none for that bundle. Its setup can resume only once room is made,
+// and the one area it reads is the one no retirement may name, so it admits a
+// retirement of areas as a settled receipt does. Its resolutions stay.
+func (t *controllerTransaction) stranded() bool {
+	receipt := t.stored.value.Receipt
+	return receipt.Incomplete() && len(t.stored.bundles) >= maxControllerBundles &&
+		!slices.ContainsFunc(t.stored.bundles, func(item controllerBundleReservation) bool { return item.ID == receipt.CatalogDigest })
+}
+
 func retired(retiring []controllerBundleReservation, id string) bool {
 	return id != "" && slices.ContainsFunc(retiring,
 		func(item controllerBundleReservation) bool { return item.ID == id })
@@ -104,8 +115,8 @@ func retired(retiring []controllerBundleReservation, id string) bool {
 // retirement marked retiring when it dropped that resolution, and a client
 // area is named by a closure no resolution names. A receipt whose setup
 // completed, failed or was canceled admits a retirement; a pending one does
-// not, because its setup resumes it exactly. An area it does not hold is
-// already gone.
+// not, because its setup resumes it exactly, unless it is stranded. An area it
+// does not hold is already gone.
 //
 // A retiring entry keeps the identity its removal is verified against and a
 // reserved one records none, so a reserved area is attributed first, as a
@@ -113,7 +124,7 @@ func retired(retiring []controllerBundleReservation, id string) bool {
 // its reservation is dropped with the intent, and returned so that its
 // resolution is retired with it.
 func (t *controllerTransaction) plannedRetirement(ids []string) ([]controllerBundleReservation, []controllerBundleReservation, error) {
-	if receipt := t.stored.value.Receipt; receipt.ID == "" || receipt.Incomplete() {
+	if receipt := t.stored.value.Receipt; receipt.ID == "" || receipt.Incomplete() && !t.stranded() {
 		return nil, nil, state("controller retirement requires a settled setup receipt")
 	}
 	current := t.stored.value.Receipt.CatalogDigest

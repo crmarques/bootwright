@@ -1187,6 +1187,50 @@ func TestAdmissionKeepsTheReservedBytesFree(t *testing.T) {
 	}
 }
 
+// Every refusal at the retained-operation bound, at its directories, entries
+// or bytes and for an apply's claim or a removal's registration, is known to
+// be one, so the lifecycle can name the exits beside it; a claim refused for
+// another reason is not.
+func TestTheRefusalsAtTheRetainedOperationBoundAreKnownAsSuch(t *testing.T) {
+	ctx := context.Background()
+	plan := testPlan(t, "alpha")
+	removalPlan, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	apply := "op-" + strings.Repeat("cd", 16)
+	for bound, fill := range map[string]func(*memoryArea){
+		"directories": func(area *memoryArea) {
+			for index := range MaxOperations {
+				area.directories["slot-"+FormatIndex(index)] = true
+			}
+		},
+		"entries": func(area *memoryArea) {
+			for index := range MaxEntries - 1 {
+				area.files["filled/record-"+FormatIndex(index)] = []byte("{}\n")
+			}
+		},
+		"bytes": func(area *memoryArea) { area.files["filled/output"] = make([]byte, MaxBytes) },
+	} {
+		store, area := newStore(t)
+		fill(area)
+		removal := testOperation(t, removalPlan)
+		removal.ID, removal.Source = "op-"+strings.Repeat("ef", 16), apply
+		for verb, err := range map[string]error{"apply": store.Claim(ctx, apply, plan), "removal": store.Register(ctx, removal, removalPlan)} {
+			if refused := diagnostics.Of(err); !AtTheBound(err) || len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.HasPrefix(refused[0].Message, retainedMaximum+": ") {
+				t.Fatalf("the %s refused at the %s bound with %+v (%v), want a refusal known to be at the bound", verb, bound, refused, err)
+			}
+		}
+	}
+	store, area := newStore(t)
+	area.directories[apply] = true
+	for reason, err := range map[string]error{"an invalid identity": store.Claim(ctx, "op-invalid", plan), "a claimed identity": store.Claim(ctx, apply, plan)} {
+		if len(diagnostics.Of(err)) != 1 || AtTheBound(err) {
+			t.Fatalf("a claim refused for %s reported %v, known to be at the bound: %t", reason, err, AtTheBound(err))
+		}
+	}
+}
+
 func FormatIndex(value int) string {
 	if value == 0 {
 		return "0"

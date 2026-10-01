@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"slices"
@@ -177,6 +178,24 @@ func (s *Store) Claim(ctx context.Context, id string, plan reconciliation.Plan) 
 
 const retainedMaximum = "the context has retained the maximum number of lifecycle operations"
 
+// boundRefusal is a refusal at the retained-operation bound. Its exits depend
+// on the context it is raised for, which the store does not know, so it names
+// none, and AtTheBound lets the caller that knows that context name them.
+type boundRefusal struct{ error }
+
+func (r boundRefusal) Unwrap() error { return r.error }
+
+func refuseAtTheBound(message string) error {
+	return boundRefusal{recordError(message)}
+}
+
+// AtTheBound reports whether err is a claim's or a registration's refusal at
+// the retained-operation bound.
+func AtTheBound(err error) bool {
+	var refusal boundRefusal
+	return errors.As(err, &refusal)
+}
+
 // admitOperations refuses a new operation at the retained-operation bound once
 // the context, retaining retained operation directories beside the one a
 // claim made for it, could not retain what AdmissionOperations says it needs.
@@ -187,9 +206,9 @@ func admitOperations(retained int, plan reconciliation.Plan) error {
 	}
 	holds := fmt.Sprintf("%s: it retains %d of its %d", retainedMaximum, retained, MaxOperations)
 	if plan.Verb == reconciliation.Destroy {
-		return recordError(holds + ", and this removal needs room for its own")
+		return refuseAtTheBound(holds + ", and this removal needs room for its own")
 	}
-	return recordError(fmt.Sprintf("%s, and this apply needs room for %d: its own and that of the removal that takes it back", holds, needed))
+	return refuseAtTheBound(fmt.Sprintf("%s, and this apply needs room for %d: its own and that of the removal that takes it back", holds, needed))
 }
 
 // admit refuses a new operation at the retained-operation bound once the area
@@ -208,9 +227,9 @@ func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan, 
 	if needed := AdmissionEntries(plan); held+needed > MaxEntries {
 		holds := fmt.Sprintf("%s: its operation area holds %d of its %d entries", retainedMaximum, held, MaxEntries)
 		if plan.Verb == reconciliation.Destroy {
-			return recordError(fmt.Sprintf("%s, and this removal needs %d more for its first attempts and the writes that complete them", holds, needed))
+			return refuseAtTheBound(fmt.Sprintf("%s, and this removal needs %d more for its first attempts and the writes that complete them", holds, needed))
 		}
-		return recordError(fmt.Sprintf("%s, and this apply needs %d more: %d for its first attempts and those of the removal that takes it back, and the %d it keeps for later attempts",
+		return refuseAtTheBound(fmt.Sprintf("%s, and this apply needs %d more: %d for its first attempts and those of the removal that takes it back, and the %d it keeps for later attempts",
 			holds, needed, needed-ReservedEntries, ReservedEntries))
 	}
 	needed := AdmissionBytes(plan, registration)
@@ -219,9 +238,9 @@ func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan, 
 	}
 	holds := fmt.Sprintf("%s: its operation area holds %d of its %d bytes", retainedMaximum, size, MaxBytes)
 	if plan.Verb == reconciliation.Destroy {
-		return recordError(fmt.Sprintf("%s, and this removal needs %d more for the records its registration writes", holds, needed))
+		return refuseAtTheBound(fmt.Sprintf("%s, and this removal needs %d more for the records its registration writes", holds, needed))
 	}
-	return recordError(fmt.Sprintf("%s, and this apply needs the %d it keeps for its records and logs and those of the removal that takes it back", holds, needed))
+	return refuseAtTheBound(fmt.Sprintf("%s, and this apply needs the %d it keeps for its records and logs and those of the removal that takes it back", holds, needed))
 }
 
 // held counts the entries beneath target as the area's entry bound counts

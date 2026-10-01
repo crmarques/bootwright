@@ -268,4 +268,7 @@
     digest: '{{ bootwright_cluster_install_digest }}'
     identity: '{{ containercluster_install_agent_before.observation.identity }}'
     state: '{{ containercluster_install_agent_state }}'
+    # Whether a wait of this apply put the kept copy back in place of the
+    # installer's own kubeconfig (wait_attempt.yml).
+    restored: '{{ containercluster_install_agent_restored | default(false) }}'
   no_log: true

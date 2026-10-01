@@ -3,6 +3,8 @@
 The provider host defines only a managed network the host does not already
 carry as frozen, so a replay defines none and publishes no change, while a
 network whose definition drifted is defined again and makes the apply changed.
+One that runs another definition is also restarted, but only while nothing
+runs on it: otherwise the apply refuses and names what does.
 
 A machine's controller authenticates against a bcrypt hash of its bound
 password. bcrypt salts every hash afresh, so hashing the password on every
@@ -107,14 +109,20 @@ UPLINK = {"answered": False, "bridge": True, "definition": False, "managed": Fal
           "owned": False, "state": "", "uuid": ""}
 
 
-def host_scope(observed):
+def drifted(*guests, answered=True):
+    """What libvirt_host_inspect reports for the managed network when it runs another definition than the frozen one."""
+    return {"name": MANAGED["name"], "guests": list(guests), "guestsAnswered": answered}
+
+
+def host_scope(observed, restarts=()):
     """The role's defaults, the frozen request and the tasks a replay leaves unchanged."""
     variables = defaults("substrate_libvirt_host")
     variables.update(
         bootwright_substrate_host_request={"identity": {"context": "lab"}, "networks": [MANAGED, EXTERNAL],
                                            "uri": "qemu:///system"},
         bootwright_substrate_host_digest=DIGEST,
-        substrate_libvirt_host_running={"observation": {"networks": [observed, UPLINK], "pool": "active"}},
+        substrate_libvirt_host_running={"observation": {"drifted": list(restarts), "networks": [observed, UPLINK],
+                                                        "pool": "active"}},
         substrate_libvirt_host_packages={"changed": False, "skipped": True},
         substrate_libvirt_host_daemon={"changed": False, "skipped": True},
         substrate_libvirt_host_pool_directory={"changed": False},
@@ -122,31 +130,77 @@ def host_scope(observed):
     return variables
 
 
-def host_attempt(observed):
-    """The networks an apply defines over this observation, and the outcome it publishes."""
+def refusals(tasks, variables):
+    """The message of every assertion over the networks to restart that fails, each item in turn."""
+    refused = []
+    for task in tasks:
+        check = task.get("ansible.builtin.assert")
+        if not check or "substrate_libvirt_host_restarted" not in str(task.get("loop")):
+            continue
+        for item in Templar(loader=LOADER, variables=variables).template(task["loop"]):
+            templar = Templar(loader=LOADER, variables=dict(variables, item=item))
+            if not all(templar.evaluate_conditional(condition) for condition in check["that"]):
+                refused.append(" ".join(str(templar.template(check["fail_msg"])).split()))
+    return refused
+
+
+def host_attempt(observed, restarts=()):
+    """What an apply does over this observation: the refusals it makes, else the
+    networks it defines, stops and starts, and the outcome it publishes."""
     tasks = load("substrate_libvirt_host", "apply.yml")
     define = only(tasks, lambda task: "net-define" in argv_of(task), "defines a network")
+    stop = only(tasks, lambda task: "net-destroy" in argv_of(task), "stops a network")
+    start = only(tasks, lambda task: "net-start" in argv_of(task), "starts a network")
     completion = only(
         tasks,
         lambda task: (task.get("bootwright.core.substrate_host_protocol") or {}).get("phase") == "completed",
         "publishes the completion",
     )
-    templar = Templar(loader=LOADER, variables=host_scope(observed))
-    defined = [entry["name"] for entry in templar.template(define["loop"])]
-    return defined, templar.template(completion["bootwright.core.substrate_host_protocol"]["outcome"])
+    variables = host_scope(observed, restarts)
+    refused = refusals(tasks, variables)
+    if refused:
+        return refused
+    templar = Templar(loader=LOADER, variables=variables)
+    defined, stopped, started = ([entry["name"] for entry in templar.template(task["loop"])] for task in (define, stop, start))
+    assert started == [MANAGED["name"]]
+    return defined, stopped, templar.template(completion["bootwright.core.substrate_host_protocol"]["outcome"])
 
 
 def test_a_replay_over_networks_the_host_carries_defines_nothing_and_publishes_no_change():
-    assert host_attempt(network()) == ([], "unchanged")
+    assert host_attempt(network()) == ([], [], "unchanged")
 
 
 @pytest.mark.parametrize("observed", [
     network(definition=False),
     network(definition=False, state="inactive"),
     network(answered=True, definition=False, owned=False, state="", uuid=""),
-], ids=["drifted while active", "drifted while stopped", "not defined"])
+], ids=["keeping another definition while active", "drifted while stopped", "not defined"])
 def test_a_network_the_host_does_not_carry_as_frozen_is_defined_and_the_apply_is_changed(observed):
-    assert host_attempt(observed) == ([MANAGED["name"]], "changed")
+    assert host_attempt(observed) == ([MANAGED["name"]], [], "changed")
+
+
+# A network that runs another definition than the frozen one runs it until it
+# stops. With no domain running on it, the apply defines it again and restarts
+# it, and the start runs the definition just given.
+def test_a_drifted_network_whose_machines_are_stopped_is_redefined_and_restarted():
+    assert host_attempt(network(definition=False), [drifted()]) == ([MANAGED["name"]], [MANAGED["name"]], "changed")
+
+
+# Restarting it would cut off what still runs on it, so the apply refuses
+# before any effect, naming the network, what runs on it and the command that
+# stops a Machine.
+def test_a_drifted_network_a_machine_still_runs_on_refuses_naming_them():
+    refused = host_attempt(network(definition=False), [drifted("Machine rhel-01", "domain workstation")])
+    assert len(refused) == 1
+    assert refused[0].startswith("network %s runs a definition other than the one the request froze" % MANAGED["name"])
+    assert "disconnect Machine rhel-01, domain workstation, which still run on it" in refused[0]
+    assert "bootwright machine stop --name <machine>" in refused[0]
+
+
+def test_a_drifted_network_its_hypervisor_did_not_answer_for_refuses():
+    refused = host_attempt(network(definition=False), [drifted(answered=False)])
+    assert len(refused) == 1
+    assert "the hypervisor at qemu:///system did not answer which domains run on it" in refused[0]
 
 
 # The machine's controller credential.

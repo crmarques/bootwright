@@ -110,7 +110,8 @@ the controller's managed services, and carrying ownership metadata naming the
 context and attachment. An `external` attachment is proved present as a link and never
 defined, changed or removed. A network that exists without this context's
 ownership metadata is foreign and refuses; an owned network whose definition
-differs from the frozen request is redefined.
+differs from the frozen request is redefined, and restarted while it runs
+another one.
 
 The apply reads, for each managed network, both the definition it runs and the
 one libvirt keeps for its next start, and compares each value this contract
@@ -118,10 +119,19 @@ sets, ignoring what libvirt adds of its own such as the UUID and the bridge MAC
 address. A network carrying the frozen request in both is left as it is, so a
 replay defines nothing; any other, a missing one included, is defined from the
 frozen request. Defining an active network changes only the definition it next
-starts from, and the apply never stops a network to apply it, because stopping
-a network disconnects every guest on it: an active network that runs another
-definition stays unproved, so its apply does not complete, until the network
-next starts.
+starts from, so an owned active network that runs another definition is then
+stopped and started again, and runs the frozen one, which its completion
+proves. Stopping a network disconnects every domain plugged into it, through
+the network or the bridge it runs, so the apply restarts it only when the
+hypervisor answers for every domain that is not shut off and none is plugged
+into it. When one is, the apply refuses before it defines, stops or starts
+anything, naming the network and each such domain, a Machine of this context by
+its name and any other domain by its own, with
+`bootwright machine stop --name <machine>` as the remedy before the apply is
+repeated; when the hypervisor does not answer which domains run on it, the
+apply refuses the same way and names the connection. Either refusal is the
+adapter's own: the operator receives `lifecycle.state` and finds the names in
+the adapter output retained beside the attempt's log.
 
 **Virtual-media pool.** One directory pool `bootwright-<context>-<provider>-vmedia`
 beneath `/var/lib/libvirt/images/bootwright/<context>/<provider>/vmedia`,
@@ -143,8 +153,9 @@ every managed network active with its ownership metadata, running and keeping
 the frozen definition, every external bridge present, and the pool active.
 Replay reports `completed` with no change when live state matches. The
 differences it converges, each reported as a change, are an owned network whose
-definition differs, which is redefined under the identity it already holds, and
-a missing network or pool, which is defined again.
+definition differs, which is redefined under the identity it already holds and
+restarted while it runs another definition and nothing runs on it, and a
+missing network or pool, which is defined again.
 The inverse refuses before its first effect when the `uri` does not answer,
 or when the network driver did not answer for a managed network or the storage
 driver for the pool, then destroys and undefines the networks and pool this

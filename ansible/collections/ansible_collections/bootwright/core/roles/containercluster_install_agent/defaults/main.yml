@@ -62,6 +62,18 @@ containercluster_install_agent_stalled_hint: >-
   It starts only once every declared node reports known, so a node that never
   booted the image, whose declared hardware address is not the one it registers
   with, or whose install disk was rejected holds the cluster there.
+# A stall's own give-ups name no host, so after one the wait reads once which
+# declared nodes registered with the assisted service on the rendezvous host
+# (wait.yml) and leads with each that did not. A read that fails, or that finds
+# every declared node, leaves the hint above.
+containercluster_install_agent_unregistered_hint: >-
+  {{ 'node' if containercluster_install_agent_unregistered | length == 1 else 'nodes' }}
+  {{ containercluster_install_agent_unregistered | join(', ') }} never registered
+  with the assisted service on the rendezvous host, so the cluster reached ready
+  but the rendezvous node never started installing: it starts only once every
+  declared node reports known. A node that never booted the image, or whose
+  declared hardware address is not the one it registers with, holds the cluster
+  there.
 containercluster_install_agent_stopped_after_stall_note: >-
   The installer was re-invoked after that give-up, and this wait's budget of
   {{ containercluster_install_agent_budget }} seconds stopped that attempt.

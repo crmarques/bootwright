@@ -30,6 +30,11 @@ type DependencyCatalog interface {
 
 type BundleManager interface {
 	Inspect(context.Context, BundleArea, Definition, bool) (BundleInspection, error)
+	// Validate refuses, without reading any area, a definition this executable
+	// could never inspect or prepare, exactly as Inspect and Prepare refuse it:
+	// a retained resolution whose automation or provided execution foundation
+	// moved returns ErrBootstrapIncompatible.
+	Validate(Definition) error
 	// Prepare publishes the approved closure into the first area. The second is
 	// a retained area this host already holds, or nil: every approved source is
 	// read there before its publisher is contacted, so a resolution carried
@@ -42,6 +47,8 @@ type BundleManager interface {
 	// executable embeds, reading its sources from the retained area that holds
 	// them. It contacts no publisher and changes no release, byte count or
 	// signer; only the projection identity that carries the automation moves.
+	// A source that area cannot serve as its approved bytes returns
+	// ErrRetainedSourceUnavailable.
 	Rebase(context.Context, BundleArea, BootstrapDefinition) (BootstrapDefinition, error)
 }
 

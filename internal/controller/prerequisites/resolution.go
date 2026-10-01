@@ -2,6 +2,7 @@ package prerequisites
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"slices"
 	"strconv"
@@ -217,7 +218,8 @@ func (s Service) resolveDependencies(ctx context.Context, before inspection) (in
 // retained bundle holds rather than solved again: no publisher or repository is
 // consulted, and the native transaction is reused whenever its roots remain
 // installed. Only the projection identity, and with it the bundle this setup
-// publishes, is new.
+// publishes, is new. A retained bundle that can no longer serve one of those
+// sources returns ErrRetainedSourceUnavailable, and setup resolves afresh.
 func (s Service) carryForward(ctx context.Context, before inspection) (inspection, error) {
 	retained := before.definition
 	if retained.Bootstrap == nil || retained.Native == nil || retained.CatalogDigest == "" {
@@ -234,7 +236,7 @@ func (s Service) carryForward(ctx context.Context, before inspection) (inspectio
 				return err
 			}
 			if area == nil {
-				return failure("controller.state", "the retained bundle this resolution is carried from is missing", setupCommand())
+				return errors.Join(ErrRetainedSourceUnavailable, failure("controller.state", "the retained bundle this resolution is carried from is missing", setupCommand()))
 			}
 			rebased, err = s.bundle.Rebase(ctx, area, *retained.Bootstrap)
 			return err

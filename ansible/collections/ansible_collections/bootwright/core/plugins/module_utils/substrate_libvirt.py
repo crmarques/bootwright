@@ -212,6 +212,8 @@ def network_state(runner, uri, name, frozen=None, context=""):
     `definition` is whether the network runs, and keeps for its next start,
     everything the `frozen` request entry sets for this `context`, so a replay
     defines nothing a network already carries and a redefinition is proved.
+    `drifted` is whether an owned active network runs another definition than
+    the frozen one, which only a restart replaces.
 
     A network is read through the network driver, a daemon of its own that may
     be silent while the hypervisor the uri names answers, and virsh reports a
@@ -219,7 +221,7 @@ def network_state(runner, uri, name, frozen=None, context=""):
     true only when the driver returned the definition, or completed a listing
     that does not name the network, because only that proves it absent.
     """
-    unanswered = {"answered": False, "definition": False, "state": "", "owned": False, "bridge": "", "uuid": ""}
+    unanswered = {"answered": False, "definition": False, "drifted": False, "state": "", "owned": False, "bridge": "", "uuid": ""}
     code, output = virsh(runner, uri, "net-dumpxml", name)
     if code != 0:
         return dict(unanswered, answered=listed(runner, uri, "net-list", name) is False)
@@ -238,12 +240,66 @@ def network_state(runner, uri, name, frozen=None, context=""):
         uuid = (element.text or "").strip()
     code, active = virsh(runner, uri, "net-info", name)
     state = "active" if code == 0 and "Active:         yes" in active else "inactive"
-    definition = (
-        frozen is not None
-        and carries_definition(root, frozen, context)
-        and keeps_definition(runner, uri, name, frozen, context)
-    )
-    return {"answered": True, "definition": definition, "state": state, "owned": owned, "bridge": bridge, "uuid": uuid}
+    runs = frozen is not None and carries_definition(root, frozen, context)
+    definition = runs and keeps_definition(runner, uri, name, frozen, context)
+    drifted = frozen is not None and owned and state == "active" and not runs
+    return {
+        "answered": True, "definition": definition, "drifted": drifted, "state": state,
+        "owned": owned, "bridge": bridge, "uuid": uuid,
+    }
+
+
+def attaches(root, network, bridge):
+    """Whether one domain definition plugs an interface into the network or the bridge it runs.
+
+    An interface on a libvirt network names it, and a running domain's also
+    names the bridge the network gave it; an interface bridged to the LAN
+    names the bridge alone (https://libvirt.org/formatdomain.html#virtual-network
+    and #bridge-to-lan). Stopping the network removes that bridge from under
+    either.
+    """
+    for source in root.findall("./devices/interface/source"):
+        if source.get("network") == network or (bridge and source.get("bridge") == bridge):
+            return True
+    return False
+
+
+def guest_name(root, name, context):
+    """How a refusal names one domain: as this context's Machine, or as a domain it does not own."""
+    owner = root.find("./metadata/{%s}owner" % OWNERSHIP)
+    if owner is not None and (owner.findtext("{%s}context" % OWNERSHIP) or "").strip() == context:
+        machine = (owner.findtext("{%s}machine" % OWNERSHIP) or "").strip()
+        if machine:
+            return "Machine " + machine
+    return "domain " + name
+
+
+def network_guests(runner, uri, network, bridge, context):
+    """Every domain that is not shut off and is plugged into the network, or None when unanswered.
+
+    `bridge` is the one the network runs, which a restart removes whatever
+    the frozen entry names. `virsh list` without `--all` lists only the active
+    domains, one name per line with `--name` (cmdList in
+    tools/virsh-domain-monitor.c, https://gitlab.com/libvirt/libvirt), so a
+    paused or suspended domain is listed too: it still holds its interface. A
+    listing or a definition that did not answer, or that the bound truncated,
+    proves nothing idle.
+    """
+    code, output = virsh(runner, uri, "list", "--name")
+    if code != 0 or len(output) >= MAX_OUTPUT:
+        return None
+    guests = []
+    for name in [line.strip() for line in output.splitlines() if line.strip()]:
+        code, described = virsh(runner, uri, "dumpxml", name)
+        if code != 0 or len(described) >= MAX_OUTPUT:
+            return None
+        try:
+            root = ElementTree.fromstring(described)
+        except ElementTree.ParseError:
+            return None
+        if attaches(root, network, bridge):
+            guests.append(guest_name(root, name, context))
+    return sorted(guests)
 
 
 def bridge_present(name):
@@ -434,9 +490,12 @@ def observe_host(runner, request):
     that the hypervisor did. An external network is never read, so it is never
     answered for. The pool directory is observed by its path either way. Each
     managed network's `definition` is whether it carries its frozen entry, and
-    an external network, never read, carries none.
+    an external network, never read, carries none. `drifted` names each owned
+    managed network that runs another definition than its frozen entry, which
+    only a restart converges, with the `guests` a restart would cut off and
+    whether the hypervisor answered for them all; evidence never carries it.
     """
-    networks = []
+    networks, drifted = [], []
     answers = uri_answers(runner, request["uri"])
     context = str((request.get("identity") or {}).get("context") or "")
     for network in request.get("networks") or []:
@@ -446,6 +505,9 @@ def observe_host(runner, request):
             state = network_state(runner, request["uri"], network["name"], network, context)
             entry["answered"], entry["definition"], entry["state"] = state["answered"], state["definition"], state["state"]
             entry["owned"], entry["uuid"] = state["owned"], state["uuid"]
+            if state["drifted"]:
+                guests = network_guests(runner, request["uri"], network["name"], state["bridge"], context)
+                drifted.append({"name": network["name"], "guests": guests or [], "guestsAnswered": guests is not None})
         networks.append(entry)
     pool = pool_state(runner, request["uri"], request["poolName"]) if answers else {"answered": False, "state": ""}
     services = []
@@ -457,6 +519,7 @@ def observe_host(runner, request):
         })
     return {
         "directory": os.path.lexists(request["poolPath"]),
+        "drifted": drifted,
         "hypervisor": packages_present(runner, request.get("packages") or []),
         "networks": networks,
         "pool": pool["state"],

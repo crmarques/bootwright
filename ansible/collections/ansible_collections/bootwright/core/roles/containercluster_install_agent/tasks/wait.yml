@@ -32,6 +32,28 @@
     loop_var: containercluster_install_agent_attempt
     label: attempt {{ containercluster_install_agent_attempt + 1 }}
 
+# The installer's two give-ups that mark a stall name no host, and the hosts
+# that registered are readable only from the assisted service on the rendezvous
+# host, with the watcher token the installer keeps in its asset state. So a
+# wait diagnosed as a stall, and no other, reads them once, in one request
+# bounded in time and size; the token never leaves the inspection, and the
+# result carries only the declared nodes no registered host names. A read that
+# fails names no node and leaves the stall's own hint.
+- name: Read which declared nodes never registered after a stall
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+    registered: true
+  register: containercluster_install_agent_registration
+  failed_when: false
+  no_log: true
+  when:
+    - containercluster_install_agent_wait.rc != 0
+    - not (containercluster_install_agent_wait.stderr | default('')
+           is search(containercluster_install_agent_host_error_pattern))
+    - containercluster_install_agent_stalled | bool
+      or (containercluster_install_agent_wait.stderr | default('')
+          is search(containercluster_install_agent_stalled_pattern))
+
 # The classification leads the failure rather than trailing it, because a run
 # tree keeps only the beginning of a message. The host-error class is checked
 # first: the same output carries both it and the installer's own timeout, and
@@ -51,12 +73,20 @@
       {{ containercluster_install_agent_stalled | bool
          or (containercluster_install_agent_wait.stderr | default('')
              is search(containercluster_install_agent_stalled_pattern)) }}
+    containercluster_install_agent_registered: >-
+      {{ (containercluster_install_agent_registration | default({})).registration | default({}) }}
+    containercluster_install_agent_unregistered: >-
+      {{ containercluster_install_agent_registered.unregistered | default([])
+         if containercluster_install_agent_registered.read | default(false) is sameas true
+         else [] }}
   ansible.builtin.fail:
     msg: >-
       {{ containercluster_install_agent_host_error_hint
          if (containercluster_install_agent_wait.stderr | default('')
              is search(containercluster_install_agent_host_error_pattern))
-         else ((containercluster_install_agent_stalled_hint
+         else (((containercluster_install_agent_unregistered_hint
+                 if containercluster_install_agent_unregistered | length > 0
+                 else containercluster_install_agent_stalled_hint)
                 ~ (' ' ~ containercluster_install_agent_stopped_after_stall_note
                    if containercluster_install_agent_stopped | bool else ''))
                if containercluster_install_agent_stall_seen | bool

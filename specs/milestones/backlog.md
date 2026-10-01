@@ -88,6 +88,15 @@ Alias cell.
 | [B256](#b256) | new, 2026-10-01 (X33) | enabling | Architecture | Line-limit texts for empty lists | Found after the M1 freeze (D48) |
 | [B257](#b257) | new, 2026-10-01 (X33) | defect | Controller | Controller-client refusals carry their remedy | Found after the M1 freeze (D48) |
 | [B258](#b258) | split from B206 on 2026-10-01 (D52) | enabling | State reconciliation | Pruning retained operations | D52 names the existing exits; pruning needs a retention rule for evidence and audit |
+| [B259](#b259) | new, 2026-10-01 (X34) | safety | Container cluster | A grown installer kubeconfig is restored too | Found after the M1 freeze (D48) |
+| [B260](#b260) | new, 2026-10-01 (X34) | enabling | Container cluster | Qualify the registered-hosts read on a real install | Found after the M1 freeze (D48) |
+| [B261](#b261) | new, 2026-10-01 (X34) | defect | Controller setup | A resumed carried-forward receipt reads its approved bytes | Found after the M1 freeze (D48) |
+| [B262](#b262) | new, 2026-10-01 (X34) | safety | Controller setup | A pending receipt this executable cannot prepare refuses first | Found after the M1 freeze (D48) |
+| [B263](#b263) | new, 2026-10-01 (X34) | enabling | Controller setup | The fresh-resolution fallback says why and reuses what it can | Found after the M1 freeze (D48); the display needs an owner decision |
+| [B264](#b264) | new, 2026-10-01 (X34) | safety | Substrate | A network is this context's only when its metadata names this context | Found after the M1 freeze (D48) |
+| [B265](#b265) | new, 2026-10-01 (X34) | safety | Substrate and Machine | No Machine starts while its network restarts | Found after the M1 freeze (D48) |
+| [B266](#b266) | new, 2026-10-01 (X34) | enabling | Substrate | The drifted-network refusal names an exit that works | Found after the M1 freeze (D48) |
+| [B267](#b267) | new, 2026-10-01 (X34) | enabling | State reconciliation | Exits at the retained-operation bound | Found after the M1 freeze (D48); one part needs an owner confirmation |
 
 ### B94
 
@@ -452,6 +461,42 @@ The controller clients' refusal helper passes its remedy where the diagnostic ta
 ### B258
 
 No command prunes retained operations, so a context at the 1024-operation bound leaves only through destroy and deletion (D52). Pruning needs a rule for which completed operations no block's ownership and no audit depends on. **Exit evidence:** the retention rule, and a pruning journey that keeps every operation the index names.
+
+### B259
+
+Since X34 a wait restores a truncated installer kubeconfig from the kept copy, but one the install-complete rewrites grew past the 64 KiB read bound and a kill cut to a prefix still over that bound is never read, so it is not restored and the wait fails as before; and a restore is recorded only in the completion evidence, so a wait that restored and then failed leaves no durable note (found in X34). **Exit evidence:** a cut proven without a full read, and the note.
+
+### B260
+
+X34's read of the registered hosts after a stall is proved against fakes taken from `openshift-install` 4.21.10's own `agent create config-image` output; a stalled multi-node install on a real host should name the missing node, and the watcher token should list the hosts. A knowledge page could record what that command writes (state members, `rendezvous-host.env`, `common.sh`, `set-hostname.sh`, `agent.service`) for later fakes (found in X34). **Exit evidence:** an acceptance-ledger row, and the page.
+
+### B261
+
+A carried-forward pending receipt does not record the bundle it was carried from, so its resume acquires every source from the publisher again, and the controller spec's rule that a carried resolution consults no publisher does not survive an interruption (found in X34). **Exit evidence:** a resume test that reads the retained bytes.
+
+### B262
+
+Below the bound, a pending receipt whose bundle holds no area and that another executable recorded still refuses only at preparation, after setup presented its plan, published its intent and reserved an empty area; and the purge's help and the bound refusal do not name the stranded case (found in X34). **Exit evidence:** a refusal before any effect, and the texts.
+
+### B263
+
+Since X34 a retained bundle that lost a bootstrap source falls back to a fresh resolution, but its retained row ends as a failure with no warning naming the lost source, and the fresh resolution downloads every source again, including those the retained bundle still holds (found in X34). **Exit evidence:** the display, and a seeded resolution.
+
+### B264
+
+The libvirt host's ownership check counts any Bootwright ownership element as owned, not only this context's, so a network carrying another context's metadata passes the foreign guard, is redefined and, since X34, restarted when idle, although the substrates spec says a network without this context's ownership is foreign and refuses (found in X34, older than it). **Exit evidence:** a host test in which another context's network refuses before any effect.
+
+### B265
+
+Nothing stops a Machine starting, for example through `machine start` in another invocation, between the host apply's guest read and its network restart; whether machine power commands are excluded while an apply runs was not checked (found in X34). **Exit evidence:** the exclusion shown, with a test.
+
+### B266
+
+The host block runs before any Machine of its apply is realized, so the running Machines X34's drifted-network refusal names can only be domains a deleted context left behind, and `machine stop` refuses each of them as not realized; the refusal could name the domain and stopping it on the host. The network and the Machines also reach only the retained output, because an adapter refusal cannot carry names it read (found in X34). **Exit evidence:** a refusal whose exit runs.
+
+### B267
+
+Since X34 the retained-operation refusal names destroy, but a removal refused at its own registration names an orphan-acknowledged delete and a fresh init, since destroy would refuse again; a fresh apply's claim does not reclaim idle claims under pristine evidence before counting them; and status still offers `apply` over a context at the bound (found in X34). **Exit evidence:** the owner's exit, a reclaim before counting, and the status step.
 
 ## Retired
 

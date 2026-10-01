@@ -27,6 +27,10 @@ substrate_libvirt_host_redefined: >-
   {{ substrate_libvirt_host_managed
      | rejectattr('name', 'in', substrate_libvirt_host_carried)
      | list }}
+# The owned managed networks that run another definition than the frozen one,
+# each with the domains plugged into it, read once the network driver runs.
+# Each is also redefined, and only a restart makes it run what was defined.
+substrate_libvirt_host_restarted: '{{ substrate_libvirt_host_running.observation.drifted }}'
 # The managed networks this context actually owns on the host right now. A
 # removal touches exactly these, never a foreign network of the same name.
 substrate_libvirt_host_owned_networks: >-

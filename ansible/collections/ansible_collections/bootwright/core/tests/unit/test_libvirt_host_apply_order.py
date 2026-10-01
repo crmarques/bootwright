@@ -75,6 +75,7 @@ def test_every_network_and_pool_decision_reads_an_observation_taken_once_the_dri
     publish = index_of(tasks, lambda task: (task.get("ansible.builtin.template") or {}).get("src") == "network.xml.j2", "renders a network")
     pool = index_of(tasks, lambda task: "pool-define-as" in argv_of(task), "defines the pool")
     define = index_of(tasks, lambda task: "net-define" in argv_of(task), "defines a network")
+    stop = index_of(tasks, lambda task: "net-destroy" in argv_of(task), "stops a network")
     defaults = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
 
     decisions = {
@@ -82,6 +83,7 @@ def test_every_network_and_pool_decision_reads_an_observation_taken_once_the_dri
         "the external bridge proof": (bridge, observations(tasks[bridge].get("loop"))),
         "each managed network's identity": (publish, observations(defaults["substrate_libvirt_host_network_uuids"])),
         "which managed networks to define": (define, observations(defaults["substrate_libvirt_host_carried"])),
+        "which managed networks to restart": (stop, observations(defaults["substrate_libvirt_host_restarted"])),
         "whether to define the pool": (pool, observations(tasks[pool].get("when"))),
     }
     for decision, (index, read) in decisions.items():
@@ -110,3 +112,36 @@ def test_the_apply_refuses_what_a_running_driver_did_not_answer_for_before_defin
     pool_observed = observed_at(tasks, observations(conditions_of(tasks[pool])), "the pool refusal")
     assert running < network_observed == pool_observed < min(network, pool)
     assert max(network, pool) < effect
+
+
+# A network that runs another definition than the frozen one is stopped and
+# started again to run the one defined for it, which cuts off every domain on
+# it. Both refusals over it read the observation taken once the drivers run and
+# come before the first task that defines, stops, starts or writes anything;
+# the stop follows the definition it makes the network run and precedes the
+# start, and the proof is observed after that start.
+def test_a_drifted_network_is_refused_before_any_effect_or_restarted_between_its_definition_and_its_proof():
+    tasks = apply_tasks()
+    running = drivers_run(tasks)
+    refusals = [
+        index for index, task in enumerate(tasks)
+        if "ansible.builtin.assert" in task and "substrate_libvirt_host_restarted" in str(task.get("loop"))
+    ]
+    assert len(refusals) == 2
+    observed = index_of(
+        tasks, lambda task: task.get("register") == "substrate_libvirt_host_running", "observes once the drivers run",
+    )
+    effect = next(
+        index for index, task in enumerate(tasks)
+        if index > observed and (
+            "ansible.builtin.file" in task or "ansible.builtin.template" in task
+            or (argv_of(task)[:1] == ["/usr/bin/virsh"] and argv_of(task)[-1:] != ["version"]))
+    )
+    assert running < observed < min(refusals) and max(refusals) < effect
+    define = index_of(tasks, lambda task: "net-define" in argv_of(task), "defines a network")
+    stop = index_of(tasks, lambda task: "net-destroy" in argv_of(task), "stops a network")
+    start = index_of(tasks, lambda task: "net-start" in argv_of(task), "starts a network")
+    proof = index_of(
+        tasks, lambda task: task.get("register") == "substrate_libvirt_host_after", "observes what the apply proves",
+    )
+    assert define < stop < start < proof

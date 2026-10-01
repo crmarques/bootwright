@@ -142,6 +142,11 @@ type InstallEvidence struct {
 	Powered []string `json:"powered"`
 	Release string   `json:"release"`
 	Request string   `json:"request"`
+	// Restored records that a wait of this apply found the installer's own
+	// kubeconfig no longer parsing and put back in its place the copy this
+	// installation keeps, which still named this build's identity. The
+	// installer's waits load that file themselves, never the kept copy.
+	Restored bool `json:"restored"`
 }
 
 // ValidateInstallPresence accepts evidence only when it proves the cluster

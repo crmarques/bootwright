@@ -1,0 +1,27 @@
+{
+  "a removal the operation area cannot hold": {
+    "code": "lifecycle.state",
+    "message": "the context has retained the maximum number of lifecycle operations: its operation area holds 8179 of its 8192 entries, and this removal needs 14 more for its first attempts and the writes that complete them",
+    "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own, then create it again with bootwright context init --name lab from its original configuration and input"
+  },
+  "an apply beside a claim an interrupted apply left": {
+    "code": "lifecycle.state",
+    "message": "the context has retained the maximum number of lifecycle operations: it retains 1023 of its 1024, and this apply needs room for 2: its own and that of the removal that takes it back",
+    "remediation": "reclaim the operation directories interrupted applies left with bootwright destroy --context lab, then repeat the apply"
+  },
+  "an apply beside pristine evidence": {
+    "code": "lifecycle.state",
+    "message": "the context has retained the maximum number of lifecycle operations: it retains 1023 of its 1024, and this apply needs room for 2: its own and that of the removal that takes it back",
+    "remediation": "delete the context with bootwright context delete --name lab --purge, then create it again with bootwright context init --name lab from its original configuration and input"
+  },
+  "an apply beside the running evidence an interrupted registration left": {
+    "code": "lifecycle.state",
+    "message": "the context has retained the maximum number of lifecycle operations: it retains 1023 of its 1024, and this apply needs room for 2: its own and that of the removal that takes it back",
+    "remediation": "remove what the context owns with bootwright destroy --context lab, then repeat the apply"
+  },
+  "an apply whose operation area holds more than 48 MiB": {
+    "code": "lifecycle.state",
+    "message": "the context has retained the maximum number of lifecycle operations: its operation area holds 50331649 of its 67108864 bytes, and this apply needs the 16777216 it keeps for its records and logs and those of the removal that takes it back",
+    "remediation": "delete the context with bootwright context delete --name lab --purge, then create it again with bootwright context init --name lab from its original configuration and input"
+  }
+}

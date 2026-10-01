@@ -19,7 +19,15 @@ description:
   - A kept copy that is missing, larger than that bound, not whole, in any
     other shape, or that disables verification or authenticates another way,
     names no identity.
-  - Without O(keep) it performs no change and is safe to repeat.
+  - The installer's own waits load its file, not the kept copy, so O(restore)
+    puts the kept copy back in its place, in one rename, when that file is
+    within the bound and names no identity, as a write the installer was
+    killed in leaves it, and the kept copy names this installation's identity.
+  - Without O(keep) or O(restore) it performs no change and is safe to repeat.
+  - O(registered) reads which declared nodes the assisted service on the
+    rendezvous host has registered, in one request over plain HTTP bounded in
+    time and size, with the watcher token the installer keeps in its asset
+    state. The token never leaves the module.
 options:
   request:
     description: The frozen installation request.
@@ -31,6 +39,33 @@ options:
         that file is whole, within the bound and names an identity, and the
         kept copy is missing or names that same identity.
       - A kept copy that names no identity or another one is never replaced.
+    type: bool
+    default: false
+  restore:
+    description:
+      - Replace the installer's own kubeconfig with the kept copy, in one
+        rename, when that file is a regular file within the bound that names
+        no identity, and the kept copy names O(identity).
+      - A kept copy that names no identity or another one is never written
+        there; the result then reports the restore refused.
+      - Exclusive with O(keep).
+    type: bool
+    default: false
+  identity:
+    description:
+      - The identity the apply took from the kept copy before its first
+        effect, which the kept copy must still name for O(restore).
+    type: str
+    default: ""
+  registered:
+    description:
+      - Read the hosts registered with the assisted service on the rendezvous
+        host and report each declared node no registered host carries the
+        name of.
+      - The address is the rendezvous address the installer's asset state
+        names, read only when it is one of the addresses the request declares
+        a node at.
+      - Exclusive with O(keep) and O(restore).
     type: bool
     default: false
 author:
@@ -46,6 +81,17 @@ EXAMPLES = r"""
   bootwright.core.containercluster_install_inspect:
     request: '{{ bootwright_cluster_install_request }}'
     keep: true
+
+- name: Restore the installer's kubeconfig from the kept copy when it is cut short
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+    restore: true
+    identity: '{{ containercluster_install_agent_before.observation.identity }}'
+
+- name: Read which declared nodes never registered after a stall
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+    registered: true
 """
 
 RETURN = r"""
@@ -53,15 +99,36 @@ observation:
   description: This build's identity, whether the kept copy exists, and the published image address.
   returned: always
   type: dict
+restore:
+  description:
+    - With O(restore), C(restored) when the kept copy replaced the installer's
+      file, C(refused) when that file needed it and the kept copy does not name
+      O(identity), and C(untouched) when the file was left as it is.
+  returned: when O(restore) is true
+  type: str
+registration:
+  description:
+    - With O(registered), C(read) is true when the assisted service answered
+      with this cluster's hosts and named each of them, and C(unregistered)
+      lists the declared nodes, in request order, that no registered host
+      carries the name of. A read that failed lists none.
+  returned: when O(registered) is true
+  type: dict
 """
 
 import base64
 import binascii
+import contextlib
 import hashlib
+import http.client
+import ipaddress
+import json
 import os
 import re
+import signal
 import stat
 import tempfile
+import time
 
 from ansible.module_utils.basic import AnsibleModule
 
@@ -136,6 +203,34 @@ PRIVATE_KEY = re.compile(rb"(?:[A-Z0-9]+ )?PRIVATE KEY\Z")
 # the authority and client certificate the inspection named before S26, nor a
 # bare SHA-256 of the certificate.
 DOMAIN = b"bootwright/containercluster/identity/v2\x00"
+# What a restore did to the installer's own kubeconfig before a wait.
+RESTORED = "restored"
+REFUSED = "refused"
+UNTOUCHED = "untouched"
+# The installer's asset state in its asset directory: one JSON object keyed by
+# asset type. It holds the watcher token as *gencrypto.AuthConfig's
+# WatcherAuthToken and the rendezvous address as *agentconfig.AgentConfig's
+# Config.rendezvousIP, as openshift-install 4.21.10 writes them, and the
+# installer's own pkg/agent finds both there (FindAuthTokenFromAssetStore and
+# FindRendezvouIPAndSSHKeyFromAssetStore). A larger file is never read.
+STATE = ".openshift_install_state.json"
+AUTH_CONFIG = "*gencrypto.AuthConfig"
+AGENT_CONFIG = "*agentconfig.AgentConfig"
+MAX_STATE = 16 * 1024 * 1024
+# The assisted service on the rendezvous host answers plain HTTP on this port,
+# under this base path: SERVICE_BASE_URL in the rendezvous-host.env the
+# installer writes into the image, which the image's own common.sh extends
+# with api/assisted-install/v2. The watcher token is the credential the
+# installer's own client of that service sends (NewNodeZeroRestClient with
+# gencrypto's WatcherAuthHeaderWriter), in the header the service reads it
+# from. One request lists the cluster with its hosts; it ends within
+# READ_SECONDS of its start, connecting included, and is dropped once its
+# body passes MAX_CLUSTERS.
+SERVICE_PORT = 8090
+CLUSTERS = "/api/assisted-install/v2/clusters?with_hosts=true"
+WATCHER = "Watcher-Authorization"
+MAX_CLUSTERS = 16 * 1024 * 1024
+READ_SECONDS = 10
 
 
 def placed(indent, item, key, value):
@@ -214,7 +309,7 @@ def named(data):
     return hashlib.sha256(DOMAIN + client).hexdigest()
 
 
-def bounded(path):
+def bounded(path, limit=MAX_KUBECONFIG):
     """The bytes of one regular file within the read bound, or nothing."""
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -224,10 +319,10 @@ def bounded(path):
         try:
             if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
                 return None
-            data = handle.read(MAX_KUBECONFIG + 1)
+            data = handle.read(limit + 1)
         except OSError:
             return None
-    return data if len(data) <= MAX_KUBECONFIG else None
+    return data if len(data) <= limit else None
 
 
 def identity(path):
@@ -280,6 +375,32 @@ def keep(request, check_mode=False):
     return True
 
 
+def restore(request, anchor, check_mode=False):
+    """What the installer's own kubeconfig needed before a wait: RESTORED, REFUSED or UNTOUCHED.
+
+    `agent wait-for` loads auth/kubeconfig from its asset directory itself and
+    exits when that fails (cmd/openshift-install/agent/waitfor.go builds the
+    path with filepath.Join(assetDir, "auth", "kubeconfig"), and
+    pkg/agent/cluster.go NewCluster ends in logrus.Fatal when
+    NewClusterKubeAPIClient cannot load it, release-4.21), so a file a kill cut
+    short stops every later wait. Only a regular file within the bound that
+    names no identity is replaced, and only by a kept copy that names the
+    identity the apply took from it before its first effect. A file naming an
+    identity, past the bound, missing or not a regular file is left as it is.
+    """
+    work = request["workRoot"]
+    target = os.path.join(work, KUBECONFIG)
+    current = bounded(target)
+    if current is None or named(current):
+        return UNTOUCHED
+    kept = bounded(os.path.join(work, KEPT))
+    if not anchor or kept is None or named(kept) != anchor:
+        return REFUSED
+    if not check_mode:
+        publish(os.path.dirname(target), target, kept)
+    return RESTORED
+
+
 def published(root, base):
     """The address the image is published at, or nothing.
 
@@ -312,21 +433,192 @@ def observe(request):
     }
 
 
+def installer_state(work):
+    """The rendezvous address and watcher token the installer's asset state holds, or nothing."""
+    data = bounded(os.path.join(work, STATE), MAX_STATE)
+    try:
+        state = None if data is None else json.loads(data)
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(state, dict):
+        return None
+    auth, agent = state.get(AUTH_CONFIG), state.get(AGENT_CONFIG)
+    config = agent.get("Config") if isinstance(agent, dict) else None
+    token = auth.get("WatcherAuthToken") if isinstance(auth, dict) else None
+    address = config.get("rendezvousIP") if isinstance(config, dict) else None
+    if not isinstance(token, str) or not token or not isinstance(address, str):
+        return None
+    return address, token
+
+
+def admitted(address, request):
+    """The rendezvous address when the request declares a node at it, or nothing.
+
+    The address comes from a file, so it is reached only when it is one of the
+    addresses the frozen request names: the token is never sent anywhere else.
+    """
+    try:
+        rendezvous = ipaddress.ip_address(address)
+    except ValueError:
+        return ""
+    for node in request.get("nodes") or []:
+        try:
+            declared = ipaddress.ip_address(str(node.get("address", ""))) if isinstance(node, dict) else None
+        except ValueError:
+            continue
+        if declared == rendezvous:
+            return str(rendezvous)
+    return ""
+
+
+class Expired(Exception):
+    """The read of the registered hosts ran past its deadline."""
+
+
+@contextlib.contextmanager
+def deadline(seconds):
+    """Bound connecting, the headers and the body together, however slowly they arrive.
+
+    A socket timeout bounds each wait alone, so a body arriving a byte at a
+    time would outlast it. This is the alarm controller_files.alarm sets: an
+    earlier one is kept, the sooner of the two fires, and the earlier one is
+    re-armed with what remains of it.
+    """
+    started = time.monotonic()
+    prior_handler = signal.getsignal(signal.SIGALRM)
+    prior_timer = signal.getitimer(signal.ITIMER_REAL)
+
+    def expired(_number, _frame):
+        raise Expired()
+
+    try:
+        signal.signal(signal.SIGALRM, expired)
+        signal.setitimer(signal.ITIMER_REAL, min(seconds, prior_timer[0]) if prior_timer[0] else seconds)
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, prior_handler)
+        if prior_timer[0]:
+            signal.setitimer(signal.ITIMER_REAL, max(0.001, prior_timer[0] - (time.monotonic() - started)),
+                             prior_timer[1])
+
+
+def answered(connection, token, limit):
+    """The body the service answered the one request with, or nothing unless it is a 200 within the limit."""
+    connection.request("GET", CLUSTERS, headers={WATCHER: token, "Accept": "application/json"})
+    answer = connection.getresponse()
+    if answer.status != 200:
+        return None
+    body = answer.read(limit + 1)
+    return body if len(body) <= limit else None
+
+
+def fetch(address, token, port, seconds=READ_SECONDS, limit=MAX_CLUSTERS):
+    """The body of one request for the service's clusters with their hosts, or nothing.
+
+    http.client follows no redirect and reads no proxy setting, so the request
+    reaches the admitted address alone. Any status but 200, a body past the
+    limit, or a read still unfinished at the deadline is nothing.
+    """
+    connection = http.client.HTTPConnection(address, port, timeout=seconds)
+    try:
+        with deadline(seconds):
+            return answered(connection, token, limit)
+    except (Expired, OSError, http.client.HTTPException, ValueError):
+        return None
+    finally:
+        connection.close()
+
+
+def host_names(host):
+    """The names a registered host carries: the one requested for it and the one its inventory reports."""
+    if not isinstance(host, dict):
+        return set()
+    names = set()
+    requested = host.get("requested_hostname")
+    if isinstance(requested, str) and requested:
+        names.add(requested)
+    try:
+        inventory = json.loads(host.get("inventory") or "null")
+    except (TypeError, ValueError, RecursionError):
+        inventory = None
+    reported = inventory.get("hostname") if isinstance(inventory, dict) else None
+    if isinstance(reported, str) and reported:
+        names.add(reported)
+    return names
+
+
+def registered_names(body):
+    """Every name the one cluster's registered hosts carry, or nothing when the answer cannot prove it.
+
+    The rendezvous host registers itself, so an answer with no host, with any
+    cluster but exactly one, or with a host that carries no name proves
+    nothing about which declared node is missing.
+    """
+    try:
+        clusters = json.loads(body)
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(clusters, list) or len(clusters) != 1 or not isinstance(clusters[0], dict):
+        return None
+    hosts = clusters[0].get("hosts")
+    if not isinstance(hosts, list) or not hosts:
+        return None
+    found = set()
+    for host in hosts:
+        names = host_names(host)
+        if not names:
+            return None
+        found |= names
+    return found
+
+
+def registration(request):
+    """Which declared nodes no host registered with the assisted service carries the name of.
+
+    The installer's two give-ups that mark a stall name no host, so this is
+    read once after one. A read that fails reports read false and no node.
+    """
+    held = installer_state(request["workRoot"])
+    address = "" if held is None else admitted(held[0], request)
+    body = fetch(address, held[1], SERVICE_PORT) if address else None
+    found = None if body is None else registered_names(body)
+    if found is None:
+        return {"read": False, "unregistered": []}
+    declared = [node.get("name") for node in request.get("nodes") or [] if isinstance(node, dict)]
+    return {"read": True, "unregistered": [name for name in declared if isinstance(name, str) and name not in found]}
+
+
 def main():
     module = AnsibleModule(
         argument_spec={
             "request": {"type": "dict", "required": True},
             "keep": {"type": "bool", "default": False},
+            "restore": {"type": "bool", "default": False},
+            "identity": {"type": "str", "default": ""},
+            "registered": {"type": "bool", "default": False},
         },
         supports_check_mode=True,
     )
-    request, changed = module.params["request"], False
+    request, changed, result = module.params["request"], False, {}
+    if module.params["keep"] and module.params["restore"]:
+        module.fail_json(msg="keep and restore are exclusive")
+    if module.params["registered"] and (module.params["keep"] or module.params["restore"]):
+        module.fail_json(msg="registered only reads, so it is exclusive with keep and restore")
+    if module.params["registered"]:
+        result["registration"] = registration(request)
     if module.params["keep"]:
         try:
             changed = keep(request, module.check_mode)
         except OSError as error:
             module.fail_json(msg="the installation's copy of its kubeconfig could not be kept: %s" % error.strerror)
-    module.exit_json(changed=changed, observation=observe(request))
+    if module.params["restore"]:
+        try:
+            result["restore"] = restore(request, module.params["identity"], module.check_mode)
+        except OSError as error:
+            module.fail_json(msg="the installer's kubeconfig could not be restored: %s" % error.strerror)
+        changed = result["restore"] == RESTORED
+    module.exit_json(changed=changed, observation=observe(request), **result)
 
 
 if __name__ == "__main__":

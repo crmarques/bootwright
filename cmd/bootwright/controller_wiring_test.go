@@ -61,6 +61,10 @@ func (p *controllerPorts) Inspect(context.Context, prerequisites.BundleArea, pre
 	p.effects++
 	return prerequisites.BundleInspection{}, errors.New("unexpected bundle inspection")
 }
+func (p *controllerPorts) Validate(prerequisites.Definition) error {
+	p.effects++
+	return errors.New("unexpected bundle validation")
+}
 func (p *controllerPorts) Rebase(context.Context, prerequisites.BundleArea, prerequisites.BootstrapDefinition) (prerequisites.BootstrapDefinition, error) {
 	p.effects++
 	return prerequisites.BootstrapDefinition{}, errors.New("unexpected bundle rebase")

@@ -1356,7 +1356,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		}
 	}
 	if err := s.publish(ctx, store, operation, decided.plan, record); err != nil {
-		return fail(err)
+		return fail(atTheBound(ctx, tx, store, decided.verb, err))
 	}
 	return operation, decided.plan, nil, nil
 }

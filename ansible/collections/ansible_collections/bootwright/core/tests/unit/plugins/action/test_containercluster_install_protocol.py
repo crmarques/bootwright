@@ -96,6 +96,19 @@ def test_a_removal_records_the_completion_without_requiring_it():
         assert found["completed"] is completed
 
 
+# A restore of the installer's kubeconfig is recorded only from a real boolean
+# true, and never in a removal's evidence, because a removal waits for nothing.
+# It proves nothing about the cluster, so the postcondition ignores it.
+@pytest.mark.parametrize("restored, expected", [
+    (True, True), (False, False), ("True", False), (1, False), (None, False),
+], ids=repr)
+def test_only_a_boolean_restore_is_recorded_and_only_by_an_apply(restored, expected):
+    found = protocol.evidence(arguments(restored=restored), DIGEST, False)
+    assert found["restored"] is expected and found["postcondition"] is True
+    assert protocol.evidence(arguments(restored=restored), DIGEST, True)["restored"] is False
+    assert protocol.evidence(arguments(), DIGEST, False)["restored"] is False
+
+
 def action(args):
     module = protocol.ActionModule.__new__(protocol.ActionModule)
     module._task = SimpleNamespace(args=args)
@@ -495,5 +508,5 @@ def test_a_removal_observation_of_a_foreign_image_publishes_the_media_alone():
     assert found == {
         "absent": False, "cluster": "", "completed": False, "identity": IDENTITY, "media": ["sno-01"],
         "missing": ["master-0"], "ownMedia": [], "postcondition": False, "powered": ["sno-01"],
-        "release": "", "request": DIGEST,
+        "release": "", "request": DIGEST, "restored": False,
     }

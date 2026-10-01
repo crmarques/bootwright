@@ -21,15 +21,17 @@ type retirement struct {
 // itself and every client area are never among it.
 //
 // A receipt whose setup failed or was canceled is replaced by the next one, so
-// at the bound it counts like a completed one. Only a pending receipt admits
-// no retirement: setup resumes it exactly and publishes no new receipt.
+// at the bound it counts like a completed one. A pending receipt is resumed
+// exactly and never replaced, so it admits a retirement only when an earlier
+// build left it stranded, its bundle holding no area at the bound: then the
+// bundle it names is the new one, and its resolution, already retained, stays.
 func (i inspection) room(view StorageView, purge bool) (retirement, error) {
 	receipt, target := view.State.Receipt, i.definition.CatalogDigest
-	if target == "" || receipt.ID == "" || receipt.Incomplete() {
-		return retirement{}, nil
-	}
 	holds := func(id string) bool {
 		return slices.ContainsFunc(view.Areas, func(held HeldArea) bool { return held.ID == id })
+	}
+	if target == "" || receipt.ID == "" || receipt.Incomplete() && holds(receipt.CatalogDigest) {
+		return retirement{}, nil
 	}
 	area := !holds(target)
 	resolution := i.definition.Bootstrap != nil && !slices.ContainsFunc(view.State.RetainedDefinitions,
@@ -51,7 +53,9 @@ func (i inspection) room(view StorageView, purge bool) (retirement, error) {
 		}
 	}
 	slices.Sort(retiring.bundles)
-	retiring.resolutions = i.supersededResolutions(view.State, kept)
+	if !receipt.Incomplete() {
+		retiring.resolutions = i.supersededResolutions(view.State, kept)
+	}
 	if full(view, area, resolution, retiring) {
 		return retirement{}, failure("controller.conflict", "only client areas and the current execution bundle hold this host's "+strconv.Itoa(MaxRetainedBundles)+" bundle areas or resolutions, and neither is ever retired, so the new execution bundle has no room", "")
 	}
@@ -59,6 +63,15 @@ func (i inspection) room(view StorageView, purge bool) (retirement, error) {
 		return retirement{}, failure("controller.conflict", "this host already retains the "+strconv.Itoa(MaxRetainedBundles)+" bundle areas or resolutions it may hold, so the new execution bundle has no room", "run bootwright setup --purge-old-bundles to retire the superseded execution bundles first")
 	}
 	return retiring, nil
+}
+
+// stranded reports a pending receipt an earlier build published at the bound:
+// the bundle it names holds no area while the host holds every area it may,
+// so resuming it needs a retirement first.
+func stranded(view StorageView) bool {
+	receipt := view.State.Receipt
+	return receipt.ID != "" && receipt.Incomplete() && len(view.Areas) >= MaxRetainedBundles &&
+		!slices.ContainsFunc(view.Areas, func(held HeldArea) bool { return held.ID == receipt.CatalogDigest })
 }
 
 // supersededResolutions are the retained resolutions of a kept bundle that

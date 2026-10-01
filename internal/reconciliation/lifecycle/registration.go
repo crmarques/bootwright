@@ -136,7 +136,7 @@ func (s Service) protect(ctx context.Context, name string, decided transition, r
 		if err := store.Claim(ctx, identity, decided.plan); err != nil {
 			claimed, listed := store.Claimed(recordingContext(ctx))
 			record.raised = listed != nil || slices.Contains(claimed, identity)
-			return err
+			return atTheBound(ctx, tx, store, reconciliation.Apply, err)
 		}
 		record.raised = true
 		if err := s.raise(ctx, tx, reconciliation.Apply, record); err != nil {
@@ -195,6 +195,46 @@ func (s Service) publish(ctx context.Context, store OperationStore, operation op
 		record.outcome = possiblyRegistered
 	}
 	return err
+}
+
+// atTheBound gives a refusal at the retained-operation bound the exits that
+// exist, which only the context it was raised for decides, and returns any
+// other error as it is.
+func atTheBound(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, err error) error {
+	reported := diagnostics.Of(err)
+	if !operationstore.AtTheBound(err) || len(reported) != 1 {
+		return err
+	}
+	return failure(reported[0].Code, reported[0].Message, retainedExit(ctx, view, store, verb))
+}
+
+// retainedExit is the remedy of a refusal at the retained-operation bound. No
+// command prunes the operations a context retains, so it names the exits that
+// exist, from what a destroy would still free and from the guard's own reading
+// of the evidence. A fresh apply refused beside evidence the guard does not
+// read as pristine names the destroy that removes or releases what that
+// evidence protects, which a deletion would have to abandon, and one refused
+// beside a claim that holds nothing names the destroy that reclaims it; the
+// apply repeated after either fits or refuses again. A removal refused there
+// is that destroy, so it names, as a fresh apply with nothing left to free
+// does, the deletion the guard admits and the init that creates the context
+// again. A listing of the claims that fails names the destroy, which deletes
+// nothing, and evidence the guard cannot read admits no deletion at all.
+func retainedExit(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb) string {
+	evidence, readable := reconciliation.ReadEvidence(view.Evidence())
+	if !readable {
+		return unreadableEvidenceExit
+	}
+	name := view.Identity().Name
+	if verb == reconciliation.Apply {
+		if evidence != reconciliation.PristineEvidence() {
+			return "remove what the context owns with bootwright destroy --context " + name + ", then repeat the apply"
+		}
+		if idle, err := store.Idle(ctx); err != nil || len(idle) != 0 {
+			return "reclaim the operation directories interrupted applies left with bootwright destroy --context " + name + ", then repeat the apply"
+		}
+	}
+	return deletionExit(view) + ", then create it again with bootwright context init --name " + name + " from its original configuration and input"
 }
 
 // unregistered gives back what a registration that provably did not happen

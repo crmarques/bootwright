@@ -56,6 +56,13 @@ options:
     description: Whether the completion proves removal rather than presence.
     type: bool
     required: false
+  restored:
+    description:
+      - Whether a wait of this apply replaced the installer's own kubeconfig,
+        which no longer parsed, with the copy the installation keeps. Only a
+        real boolean true is recorded as a restore.
+    type: bool
+    required: false
   observed:
     description:
       - Whether this publication is a read-only observation, which may report

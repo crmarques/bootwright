@@ -288,6 +288,25 @@ def test_after_the_install_complete_rewrite_a_completed_cluster_still_proves_thi
     assert protocol.unproved(found) == []
 
 
+# The completion evidence records whether a wait of this apply put the kept
+# copy back in place of the installer's own kubeconfig (wait_attempt.yml); an
+# apply whose waits restored nothing records no restore.
+@pytest.mark.parametrize("facts, expected", [({}, False), ({"containercluster_install_agent_restored": True}, True)],
+                         ids=["nothing restored", "restored"])
+def test_the_completion_evidence_records_a_restore_of_the_installers_kubeconfig(tmp_path, facts, expected):
+    observation = inspected(tmp_path / "work", REWRITTEN)
+    scope = dict({
+        "bootwright_cluster_install_digest": DIGEST,
+        "containercluster_install_agent_before": {"observation": observation},
+        "containercluster_install_agent_state": resolved(observation),
+        "containercluster_install_agent_settled": False,
+    }, **facts)
+    arguments = Templar(loader=LOADER, variables=scope).template(publication("apply.yml"))
+    assert arguments["restored"] is expected
+    found = protocol.evidence(arguments, DIGEST, False)
+    assert found["restored"] is expected and found["postcondition"] is True
+
+
 INSPECT = "bootwright.core.containercluster_install_inspect"
 
 

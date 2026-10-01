@@ -38,13 +38,14 @@ const mediaMargin = 30 * time.Minute
 // installMargin is what an installation run's deadline allows beyond its
 // budgets whatever its size: proving name resolution, the inspection, the
 // cluster reads before and after the waits, each request of which oc gives up
-// on after the role's request timeout, each wait's kill-after grace, and
-// Ansible's own time between tasks. nodeMargin is what each node adds beyond
-// the boot budget: the bound of every call the installation makes to its
-// controller outside that budget, which is its media read in each of the two
-// state reads, and the eject and the disk selection that release its media. A
-// cluster whose deadline would pass the runner's ceiling refuses before
-// registration.
+// on after the role's request timeout, each wait's kill-after grace, the one
+// read of the registered hosts after a stall, which the inspection ends within
+// 10 seconds, and Ansible's own time between tasks. nodeMargin is what each
+// node adds beyond the boot budget: the bound of every call the installation
+// makes to its controller outside that budget, which is its media read in each
+// of the two state reads, and the eject and the disk selection that release
+// its media. A cluster whose deadline would pass the runner's ceiling refuses
+// before registration.
 const (
 	installMargin = 30 * time.Minute
 	nodeMargin    = 2*substrate.ControllerMediaReadBound + substrate.ControllerEjectBound + substrate.ControllerBootSelectionBound

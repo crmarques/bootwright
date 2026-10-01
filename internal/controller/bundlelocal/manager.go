@@ -66,6 +66,13 @@ func (m *Manager) Inspect(ctx context.Context, area prerequisites.BundleArea, de
 	return inspection, nil
 }
 
+// Validate refuses what Inspect and Prepare refuse before they read an area,
+// so a definition whose bundle holds no area yet is judged all the same.
+func (m *Manager) Validate(definition prerequisites.Definition) error {
+	_, err := validateDefinition(definition)
+	return err
+}
+
 // presentFiles is the presence check for a sealed bundle: the retained sources
 // by size, the published projection by file count and total bytes, the
 // collection documentation that count leaves out, the private interpreter,
@@ -400,7 +407,9 @@ func qualifiedFoundation(bootstrap *prerequisites.BootstrapDefinition) error {
 // embeds. It reads that resolution's own approved sources from the sealed area
 // holding them and projects them again, so every release, byte count, signer
 // and publisher origin survives unchanged and nothing is acquired. Only the
-// automation digest and the projection identity it produces may differ.
+// automation digest and the projection identity it produces may differ. A
+// source the area cannot serve as its approved bytes returns
+// ErrRetainedSourceUnavailable; a canceled read returns the cancellation.
 func (m *Manager) Rebase(ctx context.Context, area prerequisites.BundleArea, retained prerequisites.BootstrapDefinition) (prerequisites.BootstrapDefinition, error) {
 	if area == nil {
 		return prerequisites.BootstrapDefinition{}, bundleFailure("retained bundle inspection capability is unavailable")
@@ -422,10 +431,13 @@ func (m *Manager) Rebase(ctx context.Context, area prerequisites.BundleArea, ret
 		}
 		data, err := area.Read(ctx, sourcePath(source), int(source.Bytes))
 		if err != nil {
-			return prerequisites.BootstrapDefinition{}, err
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return prerequisites.BootstrapDefinition{}, ctxErr
+			}
+			return prerequisites.BootstrapDefinition{}, errors.Join(prerequisites.ErrRetainedSourceUnavailable, bundleFailure("retained dependency source cannot be read"))
 		}
 		if !approvedBytes(source, data) {
-			return prerequisites.BootstrapDefinition{}, bundleFailure("retained dependency source differs from its approved identity")
+			return prerequisites.BootstrapDefinition{}, errors.Join(prerequisites.ErrRetainedSourceUnavailable, bundleFailure("retained dependency source differs from its approved identity"))
 		}
 		if err := projectSource(ctx, projected, index, data); err != nil {
 			return prerequisites.BootstrapDefinition{}, err

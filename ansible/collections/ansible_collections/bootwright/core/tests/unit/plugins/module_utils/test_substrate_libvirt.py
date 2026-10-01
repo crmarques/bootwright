@@ -13,6 +13,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
     domain_state,
     invoke,
     listening,
+    network_guests,
     network_state,
     observe_host,
     observe_machine,
@@ -111,7 +112,7 @@ def test_a_network_without_this_contexts_metadata_is_foreign():
         "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
     })
     assert network_state(owned, "qemu:///system", "bootwright-lab-guests") == {
-        "answered": True, "definition": False, "state": "active", "owned": True, "bridge": "virbr-lab",
+        "answered": True, "definition": False, "drifted": False, "state": "active", "owned": True, "bridge": "virbr-lab",
         "uuid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
     }
     foreign = runner_for({
@@ -125,7 +126,7 @@ def test_an_absent_or_malformed_network_reports_no_state():
     assert network_state(runner_for({}), "qemu:///system", "gone")["state"] == ""
     malformed = runner_for({"net-dumpxml gone": (0, "not xml", "")})
     assert network_state(malformed, "qemu:///system", "gone") == {
-        "answered": False, "definition": False, "state": "", "owned": False, "bridge": "", "uuid": "",
+        "answered": False, "definition": False, "drifted": False, "state": "", "owned": False, "bridge": "", "uuid": "",
     }
 
 
@@ -144,7 +145,7 @@ POOL_UNDEFINED = (1, "", "error: failed to get pool 'p'\nerror: Storage pool not
 def test_a_network_or_pool_is_absent_only_when_its_driver_answered_for_it():
     undefined = runner_for({"net-dumpxml bootwright-lab-guests": NETWORK_UNDEFINED, "net-list --all --name": (0, "default\n\n", "")})
     assert network_state(undefined, "qemu:///system", "bootwright-lab-guests") == {
-        "answered": True, "definition": False, "state": "", "owned": False, "bridge": "", "uuid": "",
+        "answered": True, "definition": False, "drifted": False, "state": "", "owned": False, "bridge": "", "uuid": "",
     }
     for name, answers in {
         "driver silent": {"net-dumpxml bootwright-lab-guests": NETWORK_DRIVER_SILENT,
@@ -154,7 +155,7 @@ def test_a_network_or_pool_is_absent_only_when_its_driver_answered_for_it():
         "listing truncated": {"net-dumpxml bootwright-lab-guests": NETWORK_UNDEFINED, "net-list --all --name": (0, "x" * MAX_OUTPUT, "")},
     }.items():
         state = network_state(runner_for(answers), "qemu:///system", "bootwright-lab-guests")
-        assert state == {"answered": False, "definition": False, "state": "", "owned": False, "bridge": "", "uuid": ""}, name
+        assert state == {"answered": False, "definition": False, "drifted": False, "state": "", "owned": False, "bridge": "", "uuid": ""}, name
     assert pool_state(runner_for({"pool-info p": POOL_UNDEFINED, "pool-list --all --name": (0, "default\n\n", "")}), "qemu:///system", "p") == {
         "answered": True, "state": "",
     }
@@ -323,6 +324,172 @@ def test_an_observed_managed_network_reports_whether_it_carries_its_frozen_entry
     assert [entry["definition"] for entry in observation["networks"]] == [True, False]
     other = observe_host(runner_for(answers), dict(request, identity={"context": "other"}))
     assert other["networks"][0]["definition"] is False
+
+
+def drifted_of(live, kept, active="yes"):
+    """Whether a network running `live`, keeping `kept`, reads as one only a restart converges."""
+    answers = {
+        "net-dumpxml bootwright-lab-guests": (0, live, ""),
+        "net-dumpxml --inactive bootwright-lab-guests": (0, kept, ""),
+        "net-info bootwright-lab-guests": (0, "Active:         %s\n" % active, ""),
+    }
+    return network_state(runner_for(answers), "qemu:///system", "bootwright-lab-guests", FROZEN_NETWORK, "lab")["drifted"]
+
+
+# Defining a network again replaces what it keeps for its next start, so only
+# one that runs another definition while active needs a restart. One that is
+# stopped, or keeps another definition while it runs the frozen one, does not.
+def test_only_an_owned_active_network_running_another_definition_has_drifted():
+    assert drifted_of(READDRESSED_NETWORK, CARRIED_NETWORK) is True
+    assert drifted_of(READDRESSED_NETWORK, READDRESSED_NETWORK) is True
+    assert drifted_of(CARRIED_NETWORK, READDRESSED_NETWORK) is False
+    assert drifted_of(CARRIED_NETWORK, CARRIED_NETWORK) is False
+    assert drifted_of(READDRESSED_NETWORK, CARRIED_NETWORK, active="no") is False
+    unowned = READDRESSED_NETWORK.replace(CARRIED_NETWORK[CARRIED_NETWORK.index("  <metadata>"):CARRIED_NETWORK.index("  <forward")], "")
+    assert "bw:owner" not in unowned
+    assert drifted_of(unowned, CARRIED_NETWORK) is False
+
+
+# A running domain as `virsh dumpxml` prints it: an interface on a libvirt
+# network names it and, while the domain runs, the port and the bridge the
+# network gave it (https://libvirt.org/formatdomain.html#virtual-network); one
+# bridged to the LAN names the bridge alone (#bridge-to-lan there). The
+# ownership metadata is what the machine role's domain template writes.
+RUNNING_MACHINE = """<domain type='kvm' id='3'>
+  <name>bootwright-lab-rhel-01</name>
+  <uuid>1ab52b3c-0000-8000-8000-000000000000</uuid>
+  <metadata>
+    <bw:owner xmlns:bw="https://bootwright.io/substrate/v1">
+      <bw:context>lab</bw:context>
+      <bw:machine>rhel-01</bw:machine>
+    </bw:owner>
+  </metadata>
+  <devices>
+    <interface type='network'>
+      <mac address='52:54:00:6b:3c:58'/>
+      <source network='bootwright-lab-guests' portid='0b2a3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d' bridge='virbr-lab'/>
+      <target dev='vnet0'/>
+      <model type='virtio'/>
+      <alias name='net0'/>
+    </interface>
+  </devices>
+</domain>"""
+BRIDGED_DOMAIN = """<domain type='kvm' id='4'>
+  <name>workstation</name>
+  <devices>
+    <interface type='bridge'>
+      <mac address='52:54:00:11:22:33'/>
+      <source bridge='virbr-lab'/>
+      <target dev='vnet1'/>
+    </interface>
+  </devices>
+</domain>"""
+ELSEWHERE_DOMAIN = """<domain type='kvm' id='5'>
+  <name>bootwright-lab-rhel-02</name>
+  <metadata>
+    <bw:owner xmlns:bw="https://bootwright.io/substrate/v1">
+      <bw:context>lab</bw:context>
+      <bw:machine>rhel-02</bw:machine>
+    </bw:owner>
+  </metadata>
+  <devices>
+    <interface type='network'>
+      <source network='bootwright-lab-uplink' portid='1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f' bridge='virbr-up'/>
+    </interface>
+  </devices>
+</domain>"""
+ACTIVE_DOMAINS = (0, "bootwright-lab-rhel-01\nworkstation\nbootwright-lab-rhel-02\n\n", "")
+
+
+def guests_answers(**replaced):
+    answers = {
+        "list --name": ACTIVE_DOMAINS,
+        "dumpxml bootwright-lab-rhel-01": (0, RUNNING_MACHINE, ""),
+        "dumpxml workstation": (0, BRIDGED_DOMAIN, ""),
+        "dumpxml bootwright-lab-rhel-02": (0, ELSEWHERE_DOMAIN, ""),
+    }
+    answers.update(replaced)
+    return answers
+
+
+def guests_of(answers, bridge="virbr-lab", context="lab"):
+    return network_guests(runner_for(answers), "qemu:///system", "bootwright-lab-guests", bridge, context)
+
+
+def test_every_running_domain_plugged_into_the_network_is_named():
+    assert guests_of(guests_answers()) == ["Machine rhel-01", "domain workstation"]
+    # Another context's Machine is not this context's to stop, so it is named by its domain.
+    assert guests_of(guests_answers(), context="other") == ["domain bootwright-lab-rhel-01", "domain workstation"]
+    assert guests_of(guests_answers(**{"list --name": (0, "\n", "")})) == []
+    # The bridge a restart removes is the one the network runs, whatever the
+    # frozen entry names, so a domain bridged to another one is not cut off.
+    assert guests_of(guests_answers(), bridge="virbr-new") == ["Machine rhel-01"]
+
+
+def test_a_listing_or_definition_the_hypervisor_did_not_answer_proves_nothing_idle():
+    for name, replaced in {
+        "listing refused": {"list --name": (1, "", "error: failed to connect to the hypervisor\n")},
+        "definition refused": {"dumpxml workstation": (1, "", "error: failed to get domain 'workstation'\n")},
+        "definition not XML": {"dumpxml workstation": (0, "not xml", "")},
+        # Cut in its trailing blanks, a definition still parses: only its length tells.
+        "definition truncated": {"dumpxml workstation": (0, BRIDGED_DOMAIN.ljust(MAX_OUTPUT), "")},
+    }.items():
+        assert guests_of(guests_answers(**replaced)) is None, name
+
+
+# The bound cuts a longer listing wherever it falls, here on a line boundary,
+# so every name it kept is complete and resolves to a domain elsewhere: only
+# the listing's length tells that the active domains past the cut were never
+# read. One name fewer fits under the bound and is answered.
+def test_a_listing_the_bound_cut_proves_nothing_idle():
+    line = "a" * 15 + "\n"
+    assert MAX_OUTPUT % len(line) == 0
+    fitting = MAX_OUTPUT // len(line)
+    elsewhere = {"dumpxml " + line.strip(): (0, ELSEWHERE_DOMAIN, "")}
+    assert guests_of({"list --name": (0, line * (fitting - 1), ""), **elsewhere}) == []
+    assert guests_of({"list --name": (0, line * (fitting + 1), ""), **elsewhere}) is None
+
+
+def drift_request(tmp_path):
+    return {
+        "identity": {"context": "lab"},
+        "networks": [FROZEN_NETWORK],
+        "packages": [],
+        "poolName": "bootwright-lab-p-vmedia",
+        "poolPath": str(tmp_path / "pool"),
+        "services": [],
+        "uri": "qemu:///system",
+    }
+
+
+def test_the_observation_names_what_runs_on_each_drifted_network_alone(tmp_path):
+    answers = guests_answers(**{
+        "version": (0, "", ""),
+        "net-dumpxml bootwright-lab-guests": (0, READDRESSED_NETWORK, ""),
+        "net-dumpxml --inactive bootwright-lab-guests": (0, CARRIED_NETWORK, ""),
+        "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
+    })
+    observation = observe_host(runner_for(answers), drift_request(tmp_path))
+    assert observation["drifted"] == [
+        {"name": "bootwright-lab-guests", "guests": ["Machine rhel-01", "domain workstation"], "guestsAnswered": True},
+    ]
+    assert observation["networks"][0]["definition"] is False
+    # A network still running the bridge an earlier entry named is read by that bridge.
+    renamed = dict(answers, **{
+        "net-dumpxml bootwright-lab-guests": (0, READDRESSED_NETWORK.replace("name='virbr-lab'", "name='virbr-old'"), ""),
+        "dumpxml workstation": (0, BRIDGED_DOMAIN.replace("virbr-lab", "virbr-old"), ""),
+    })
+    assert observe_host(runner_for(renamed), drift_request(tmp_path))["drifted"][0]["guests"] == [
+        "Machine rhel-01", "domain workstation",
+    ]
+    silent = dict(answers, **{"list --name": (1, "", "error: failed to connect to the hypervisor\n")})
+    assert observe_host(runner_for(silent), drift_request(tmp_path))["drifted"] == [
+        {"name": "bootwright-lab-guests", "guests": [], "guestsAnswered": False},
+    ]
+    # A network that runs the frozen definition is never restarted, so what
+    # runs on it is not read at all.
+    carried = dict(answers, **{"net-dumpxml bootwright-lab-guests": (0, CARRIED_NETWORK, ""), "list --name": (1, "", "")})
+    assert observe_host(runner_for(carried), drift_request(tmp_path))["drifted"] == []
 
 
 def test_a_domain_reports_its_identity_and_ownership():

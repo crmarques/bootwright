@@ -21,6 +21,42 @@
           {{ (containercluster_install_agent_deadline | int) - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)) }}
       changed_when: false
 
+    # The installer loads its own file, never the kept copy every read of
+    # this installation goes through, so a file a kill during its in-place
+    # rewrite cut short stops each later wait before it watches anything. The
+    # kept copy is put back in its place only while it still names the
+    # identity this apply took from it before its first effect; a copy of
+    # another cluster is never handed to the installer.
+    - name: Restore the installer's kubeconfig from the kept copy when it no longer parses
+      bootwright.core.containercluster_install_inspect:
+        request: '{{ bootwright_cluster_install_request }}'
+        restore: true
+        identity: '{{ containercluster_install_agent_before.observation.identity }}'
+      register: containercluster_install_agent_restoring
+      when: containercluster_install_agent_remaining | int > 0
+      no_log: true
+
+    - name: Refuse to restore the installer's kubeconfig from a copy that names another cluster
+      ansible.builtin.fail:
+        msg: >-
+          the installer's administrator kubeconfig in the work area of cluster
+          {{ bootwright_cluster_install_request.identity.cluster }} no longer
+          parses, and the copy this installation kept names no identity or
+          another one than this apply recorded before its first effect, so it
+          was not restored and the installer did not wait for
+          {{ containercluster_install_agent_milestone }}. Destroy the
+          cluster's installation first: bootwright destroy --context
+          {{ bootwright_cluster_install_request.identity.context }} ejects its
+          media and discards the work area, and the apply after it builds the
+          image afresh
+      when: containercluster_install_agent_restoring.restore | default('') == 'refused'
+
+    - name: Record that this apply restored the installer's kubeconfig
+      ansible.builtin.set_fact:
+        containercluster_install_agent_restored: true
+      changed_when: false
+      when: containercluster_install_agent_restoring.restore | default('') == 'restored'
+
     - name: Wait for the installer to report this milestone within what is left
       ansible.builtin.command:
         argv:

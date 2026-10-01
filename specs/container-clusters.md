@@ -303,11 +303,29 @@ stall, the block fails as that stall and adds that the budget stopped the
 attempt after it. A wait is thus diagnosed as a host in error first, then as a
 stall, then as the budget spent, and only then as the installer's own timeout.
 
-Not yet met: a stall fails the block naming no node, because the two installer
-give-ups it is recognized by, a cluster that stayed ready without starting to
-install and one that failed to prepare its installation, name no host, and
-nothing else the wait reads names a node that never registered; tracked as
-[B32](milestones/m1.md#b32).
+The two installer give-ups a stall is recognized by, a cluster that stayed
+ready without starting to install and one that failed to prepare its
+installation, name no host, and the installer reports the hosts' events only
+at debug level. So a wait diagnosed as a stall, and no other, then reads once
+which hosts registered with the assisted service on the rendezvous host, the
+only place they can be read from: one request for the service's cluster with
+its hosts, under `http://<rendezvous>:8090/api/assisted-install/v2`, carrying
+the watcher token the installer keeps in its asset state in the work area,
+which travels in cleartext
+([security](security.md#network-remote-systems-and-privilege)). The
+rendezvous address is the one that asset state names, and the read reaches it
+only when the frozen request declares a node at that address. It follows no
+redirect, reads no proxy setting, ends within 10 seconds of its start and
+drops an answer past 16 MiB; it runs under `no_log`, and the token never
+leaves the inspection that reads and sends it. The block then fails leading
+with each declared node that no registered host carries the name of, as its
+requested hostname or as the hostname its inventory reports; the image sets a
+node's hostname to its declared name when the node carries the MAC address of
+its first declared interface. A read that fails, an answer that is not exactly
+one cluster whose hosts each carry a name, or one in which every declared node
+registered names no node, and the block fails with the stall's own message.
+The read comes after the wait, so it is no part of the wait's budget, and the
+installation's deadline covers it.
 
 **Budgets.** Each long phase of a cluster's two blocks is bounded in wall-clock
 time by a budget its frozen request carries, never by a value the adapter
@@ -365,7 +383,19 @@ never kept, so the kept copy stays at the last whole rewrite within the bound,
 and a kept copy that names no identity is never replaced. An observation keeps
 nothing. An apply that then holds no kept copy naming an identity refuses
 before any effect, naming the destroy that discards the work area as the
-remedy, rather than booting nodes no read could prove. Once an apply's attempt
+remedy, rather than booting nodes no read could prove. The installer's own
+waits never read the kept copy: each `agent wait-for` loads the installer's
+file itself and exits when it cannot. So before each wait attempt runs the
+installer, the apply restores that file from the kept copy, in one rename and
+private to root, when the file is a regular file within the 64 KiB bound that
+names no identity, as every file a kill during the installer's write cuts short
+does, and the kept copy still names the identity the apply took from it before
+its first effect; the completion evidence then records the restore. When the
+kept copy names no identity or another one, the attempt refuses before it runs
+the installer, naming the same destroy, and writes nothing. A file that names
+an identity, whichever it names, is the installer's to read, and one past the
+bound, missing or not a regular file is never read; each is left as it is.
+Once an apply's attempt
 proves the installation complete, or a resolution of an apply's block reads it
 complete, including a destroy's resolution of an incomplete apply, the role
 copies the kept kubeconfig into a private output file of its run and the
@@ -422,8 +452,9 @@ client the controller stage published, so completion is what the cluster says
 about itself rather than what the installer said before it exited. The evidence
 records the identity, what answered, the release, whether the cluster reported
 its installation completed, the declared nodes still missing, the nodes still
-presenting media and which of them present this cluster's own image; it records
-no credential and no path. A node presents its own image when the scheme, host
+presenting media, which of them present this cluster's own image, and whether
+a wait of the apply restored the installer's kubeconfig; it records no
+credential and no path. A node presents its own image when the scheme, host
 and path of the image its controller reports equal those of the address the
 media block published, each compared exactly and never as a prefix, because a
 controller may echo an image back without its default port; any other image,

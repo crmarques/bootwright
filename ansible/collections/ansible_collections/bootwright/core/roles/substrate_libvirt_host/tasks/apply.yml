@@ -154,6 +154,40 @@
     label: '{{ item.name }}'
   when: not item.managed
 
+# A network that runs another definition than the frozen one is converged only
+# by restarting it, and stopping a network cuts off every domain plugged into
+# it. It is restarted only once its hypervisor answered that no domain that is
+# not shut off is plugged into it; otherwise the apply refuses before it
+# defines, stops or starts anything, naming the network and what still runs.
+- name: Refuse to restart a network nothing proves idle
+  ansible.builtin.assert:
+    that:
+      - item.guestsAnswered
+    fail_msg: >-
+      network {{ item.name }} runs a definition other than the one the request
+      froze, and the hypervisor at {{ bootwright_substrate_host_request.uri }}
+      did not answer which domains run on it, so nothing proves restarting it
+      disconnects none; restore that connection and repeat the apply
+    quiet: true
+  loop: '{{ substrate_libvirt_host_restarted }}'
+  loop_control:
+    label: '{{ item.name }}'
+
+- name: Refuse to restart a network a Machine still runs on
+  ansible.builtin.assert:
+    that:
+      - item.guests | length == 0
+    fail_msg: >-
+      network {{ item.name }} runs a definition other than the one the request
+      froze, and restarting it to apply that one would disconnect
+      {{ item.guests | join(', ') }}, which still run on it; stop each Machine
+      with bootwright machine stop --name <machine>, and any other domain
+      named, then repeat the apply
+    quiet: true
+  loop: '{{ substrate_libvirt_host_restarted }}'
+  loop_control:
+    label: '{{ item.name }}'
+
 - name: Create the private definition directory
   ansible.builtin.file:
     path: '{{ substrate_libvirt_host_definitions }}'
@@ -176,9 +210,7 @@
   changed_when: false
 
 # A network already defined but active keeps running the definition it started
-# with: defining it again changes only the one it next starts from, and it is
-# never stopped here, because stopping it disconnects every guest on it. Its
-# completion stays unproved until it runs the frozen definition.
+# with: defining it again changes only the one it next starts from.
 - name: Define each managed network the host does not carry as frozen
   ansible.builtin.command:
     argv:
@@ -188,6 +220,25 @@
       - net-define
       - '{{ substrate_libvirt_host_definitions }}/{{ item.name }}.xml'
   loop: '{{ substrate_libvirt_host_redefined }}'
+  loop_control:
+    label: '{{ item.name }}'
+  changed_when: true
+
+# Defining an active persistent network saves that definition to be restored
+# when the network shuts down, leaving the one it runs alone
+# (virNetworkObjUpdateAssignDef in src/conf/virnetworkobj.c,
+# https://gitlab.com/libvirt/libvirt), so once stopped here it stays defined
+# and the start below runs the frozen one. Nothing runs on these networks, as
+# the refusals above proved.
+- name: Stop each managed network that runs another definition than the frozen one
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - net-destroy
+      - '{{ item.name }}'
+  loop: '{{ substrate_libvirt_host_restarted }}'
   loop_control:
     label: '{{ item.name }}'
   changed_when: true

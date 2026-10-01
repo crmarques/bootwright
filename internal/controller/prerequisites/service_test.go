@@ -174,7 +174,7 @@ func (m *memoryStorage) view() StorageView {
 		if slices.ContainsFunc(m.areas, func(held HeldArea) bool { return held.ID == id && held.Retiring }) {
 			return nil, errors.New("this controller bundle is being retired")
 		}
-		if m.bundleExists {
+		if m.bundleExists && slices.ContainsFunc(m.areas, func(held HeldArea) bool { return held.ID == id }) {
 			return dummyArea{}, nil
 		}
 		return nil, nil
@@ -326,8 +326,8 @@ func (m *memoryStorage) Bundle(ctx context.Context, id string) (BundleArea, erro
 
 // RetireBundles records what a retirement asked for and drops the retained
 // resolutions it names, exactly as the store does, and refuses what the store
-// refuses: any retirement without a receipt or while it is pending, an
-// identity that is no digest and the bundle the receipt names.
+// refuses: any retirement without a receipt or while it is pending, unless it
+// is stranded, an identity that is no digest and the bundle the receipt names.
 func (m *memoryStorage) RetireBundles(_ context.Context, ids []string) error {
 	if m.retireErr != nil {
 		return m.retireErr
@@ -335,7 +335,7 @@ func (m *memoryStorage) RetireBundles(_ context.Context, ids []string) error {
 	if m.uncertain {
 		return errors.New("controller storage capability is no longer available")
 	}
-	if m.state.Receipt.ID == "" || m.state.Receipt.Incomplete() {
+	if m.state.Receipt.ID == "" || m.state.Receipt.Incomplete() && !m.stranded() {
 		return errors.New("controller retirement requires a settled setup receipt")
 	}
 	for _, id := range ids {
@@ -358,6 +358,13 @@ func (m *memoryStorage) RetireBundles(_ context.Context, ids []string) error {
 	m.retired = append(m.retired, ids...)
 	m.areas = slices.DeleteFunc(m.areas, func(held HeldArea) bool { return slices.Contains(ids, held.ID) })
 	return nil
+}
+
+// stranded is a pending receipt an earlier build published although the bundle
+// it names could never be reserved: every area is held, none for that bundle.
+func (m *memoryStorage) stranded() bool {
+	return m.state.Receipt.Incomplete() && len(m.areas) >= MaxRetainedBundles &&
+		!slices.ContainsFunc(m.areas, func(held HeldArea) bool { return held.ID == m.state.Receipt.CatalogDigest })
 }
 
 // RetireResolutions drops the retained resolutions it names, exactly as the
@@ -495,6 +502,8 @@ func (b *testBundle) Inspect(context.Context, BundleArea, Definition, bool) (Bun
 	b.inspections++
 	return BundleInspection{Ready: b.ready, ToolsReady: b.toolsReady, Sealed: b.sealed, Recoverable: b.recoverable}, nil
 }
+
+func (b *testBundle) Validate(Definition) error { return nil }
 
 // Rebase reprojects the retained resolution under a different automation, which
 // is the whole observable effect: the returned bootstrap names the same

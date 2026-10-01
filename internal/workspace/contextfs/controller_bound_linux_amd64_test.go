@@ -38,7 +38,7 @@ func automationRevision(t *testing.T, revision int) p.Definition {
 
 // retirable is what a setup at the bound gives up: every area a retained
 // resolution names and every area already being retired, except the bundle
-// the completed receipt names, the one the carry-forward reads and the new one.
+// the receipt names, the one the carry-forward reads and the new one.
 func retirable(view p.StorageView, carried, target string) []string {
 	var ids []string
 	for _, held := range view.Areas {
@@ -74,27 +74,38 @@ func supersededResolutions(view p.StorageView, carried string, definition p.Defi
 	return digests
 }
 
+// strandedReceipt reports a pending receipt whose bundle holds no area while
+// the host holds every area it may, which setup resumes only once room is made.
+func strandedReceipt(view p.StorageView) bool {
+	receipt := view.State.Receipt
+	return receipt.Incomplete() && len(view.Areas) >= maxControllerBundles &&
+		!slices.ContainsFunc(view.Areas, func(held p.HeldArea) bool { return held.ID == receipt.CatalogDigest })
+}
+
 // publishRevision drives one setup of a resolution through the store in the
 // order setup takes: with purge, room first, then the new receipt under its
 // durable intent, the bundle it names, and completion. Each step skips what an
 // earlier attempt already made durable, so repeating it is the retry. A
 // receipt is this resolution's own only when it carries it, since a new
-// resolution can name the bundle an earlier receipt already names.
+// resolution can name the bundle an earlier receipt already names. Its own
+// pending receipt is resumed, after room is made only when it is stranded.
 func publishRevision(t *testing.T, store *Store, definition p.Definition, carried string, purge bool) error {
 	t.Helper()
 	ctx := context.Background()
 	return store.MutateController(ctx, p.SetupContext{}, true, func(tx p.StorageTransaction) error {
-		if view := tx.Snapshot(); view.State.Receipt.Definition == nil || view.State.Receipt.Definition.ResolutionDigest != definition.ResolutionDigest {
-			if ids := retirable(view, carried, definition.CatalogDigest); purge && len(ids) != 0 {
-				if err := tx.RetireBundles(ctx, ids); err != nil {
-					return err
-				}
-				// Setup decides from the snapshot what it may publish next, so
-				// the snapshot must already present the areas as gone.
-				if held := len(tx.Snapshot().Areas); held != len(view.Areas)-len(ids) {
-					return errors.New("the snapshot still presents " + strconv.Itoa(held) + " areas after a retirement")
-				}
+		view := tx.Snapshot()
+		own := view.State.Receipt.Definition != nil && view.State.Receipt.Definition.ResolutionDigest == definition.ResolutionDigest
+		if ids := retirable(view, carried, definition.CatalogDigest); purge && len(ids) != 0 && (!own || strandedReceipt(view)) {
+			if err := tx.RetireBundles(ctx, ids); err != nil {
+				return err
 			}
+			// Setup decides from the snapshot what it may publish next, so
+			// the snapshot must already present the areas as gone.
+			if held := len(tx.Snapshot().Areas); held != len(view.Areas)-len(ids) {
+				return errors.New("the snapshot still presents " + strconv.Itoa(held) + " areas after a retirement")
+			}
+		}
+		if !own {
 			if digests := supersededResolutions(tx.Snapshot(), carried, definition); purge && len(digests) != 0 {
 				if err := tx.RetireResolutions(ctx, digests); err != nil {
 					return err

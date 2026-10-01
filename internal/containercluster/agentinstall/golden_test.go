@@ -209,6 +209,16 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 			},
 			func(data []byte) error { return ValidateInstallPresence(data, install, testDigest) },
 		},
+		// The same completion by an apply whose wait found the installer's own
+		// kubeconfig cut short and put the kept copy back in its place first.
+		"completed-restored": {
+			InstallEvidence{
+				Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
+				OwnMedia: []string{}, Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15",
+				Request: testDigest, Restored: true,
+			},
+			func(data []byte) error { return ValidateInstallPresence(data, install, testDigest) },
+		},
 		// A removal ejects the media and retains the cluster, which still answers.
 		"removed": {
 			InstallEvidence{

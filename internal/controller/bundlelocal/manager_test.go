@@ -99,6 +99,33 @@ func TestBootstrapIncompatibilityNeverMasksCorruptResolution(t *testing.T) {
 	}
 }
 
+// Validate needs no area and refuses what Prepare refuses before it reads one,
+// so a pending receipt whose bundle holds no area is judged before any effect.
+func TestValidateRefusesWithoutAnAreaWhatPrepareRefuses(t *testing.T) {
+	manager := New(nil)
+	current := resolvedDefinitionFixture(t)
+	if err := manager.Validate(current); err != nil {
+		t.Fatalf("the current resolution was refused: %v", err)
+	}
+	moved := *current.Bootstrap
+	moved.AutomationDigest = strings.Repeat("f", 64)
+	bootstrap, err := prerequisites.CanonicalBootstrap(moved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := prerequisites.NewResolvedDefinition(bootstrap, *current.Native)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refused := manager.Validate(definition)
+	_, prepared := manager.Prepare(context.Background(), nil, nil, definition, prerequisites.SetupEgress{}, nil)
+	for _, err := range []error{refused, prepared} {
+		if !errors.Is(err, prerequisites.ErrBootstrapIncompatible) || !errors.Is(err, prerequisites.ErrAutomationSuperseded) {
+			t.Fatalf("a resolution under moved automation: validate %v, prepare %v", refused, prepared)
+		}
+	}
+}
+
 func TestDefinitionRequiresCompleteSelectedNativeAndToolClosure(t *testing.T) {
 	platform := prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
 	requirements := prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true}

@@ -191,10 +191,12 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	}
 	// An executable whose embedded automation moved needs a new bundle, not new
 	// dependencies. The retained closure is reprojected from the sources this
-	// host already holds, so the releases, bytes and signers stay frozen.
+	// host already holds, so the releases, bytes and signers stay frozen. A
+	// retained bundle that lost one of those sources is resolved afresh below,
+	// exactly as an incompatible settled resolution is.
 	if err != nil && errors.Is(err, ErrAutomationSuperseded) {
 		current, err = s.carryForward(ctx, current)
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrRetainedSourceUnavailable) {
 			return &current.report, err
 		}
 	}
@@ -462,7 +464,19 @@ func (s Service) settleHostChecks(ctx context.Context, view StorageView, current
 	}
 	settle(readiness("installed-host", "verified local identity", true, HostScope))
 	if view.State.Receipt.ID != "" && view.State.Receipt.Incomplete() {
-		if !current.compatibleReceipt(view.State.Receipt) || !current.matchesActions(view.State.Receipt.Actions) {
+		foreign := !current.compatibleReceipt(view.State.Receipt) || !current.matchesActions(view.State.Receipt.Actions)
+		// A stranded receipt resumes only after a retirement, which is never
+		// undone, makes room for it, so this executable first proves that it
+		// can prepare that receipt's bundle at all.
+		if !foreign && stranded(view) {
+			if err := s.bundle.Validate(current.definition); err != nil {
+				if !errors.Is(err, ErrBootstrapIncompatible) {
+					return err
+				}
+				foreign = true
+			}
+		}
+		if foreign {
 			return failure("controller.unknown", "another exact setup attempt remains unresolved", "restore the executable that recorded it and the HTTPS_PROXY, HTTP_PROXY and NO_PROXY values it ran with, then "+setupCommand())
 		}
 	}

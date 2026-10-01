@@ -476,33 +476,206 @@ func TestTheBoundOfOneBundlesResolutionsNamesPurgeOldBundles(t *testing.T) {
 	}
 }
 
-// A pending receipt is resumed exactly, never replaced, so a setup at the bound
-// plans no retirement around it, even with --purge-old-bundles. Here a setup
-// lost the publication of its first intent, so the bundle its pending receipt
-// names holds no area, and the host is then filled to its bound.
-func TestAPendingSetupAtTheBoundPlansNoRetirement(t *testing.T) {
-	f, _, _, _ := oneShortOfTheBound(t)
+// strandedClient is the client area that fills a stranded host's sixteenth
+// slot. No resolution names it, so no retirement may remove it.
+var strandedClient = strings.Repeat("f", 64)
+
+// strandedAtTheBound leaves a host as a build that published a receipt at the
+// bound left it: the setup oneShortOfTheBound prepares published its pending
+// receipt, whose resolution the store retains, and a client area holds the
+// sixteenth area, so the bundle that receipt names was never reserved. With
+// intent, that setup's first intent was durable before its reservation
+// refused; without, its publication was lost. The native transaction now
+// succeeds. It returns the pending receipt and the superseded bundles, sorted.
+func strandedAtTheBound(t *testing.T, intent bool) (*fixture, SetupReceipt, []string) {
+	t.Helper()
+	f, _, superseded, installer := oneShortOfTheBound(t)
 	f.store.failPublication = f.store.writes + 2
 	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err == nil {
 		t.Fatal("the lost intent publication was not reported")
+	}
+	f.store.failPublication = 0
+	if intent {
+		f.store.state.Receipt.Actions[0].Phase = "intent"
 	}
 	pending := f.store.state.Receipt
 	if !pending.Incomplete() || slices.ContainsFunc(f.store.areas, func(held HeldArea) bool { return held.ID == pending.CatalogDigest }) {
 		t.Fatalf("the interrupted setup left receipt %q over %#v", pending.Status, f.store.areas)
 	}
-	f.store.failPublication = 0
-	f.store.areas = append(f.store.areas, HeldArea{ID: strings.Repeat("f", 64)})
+	f.store.areas = append(f.store.areas, HeldArea{ID: strandedClient})
 	atTheBound(t, f)
+	installer.result, installer.err = ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}, nil
 	f.events, f.plan = nil, Report{}
-	_, _ = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
-	if !slices.Contains(f.events, "present") {
-		t.Fatalf("the pending setup was not resumed: %v", f.events)
+	return f, pending, superseded
+}
+
+// resumedStranded fails the test unless the stranded receipt completed exactly
+// as it was published, over its own bundle and its own resolution alone, and
+// the client area survived.
+func resumedStranded(t *testing.T, f *fixture, pending SetupReceipt) {
+	t.Helper()
+	receipt := f.store.state.Receipt
+	if receipt.ID != pending.ID || receipt.PlanDigest != pending.PlanDigest || receipt.Status != "complete" {
+		t.Fatalf("the stranded receipt was not resumed exactly: %#v", receipt)
 	}
-	if slices.ContainsFunc(f.plan.Actions, func(action string) bool { return strings.HasPrefix(action, "Retire ") }) || len(f.store.retired) != 0 {
-		t.Fatalf("a retirement around a pending receipt: plan=%q retired=%v", f.plan.Actions, f.store.retired)
+	want := []HeldArea{{ID: pending.CatalogDigest}, {ID: strandedClient}}
+	slices.SortFunc(want, func(a, b HeldArea) int { return strings.Compare(a.ID, b.ID) })
+	if !slices.Equal(f.store.areas, want) {
+		t.Fatalf("areas after the resumed setup = %#v", f.store.areas)
 	}
-	if f.store.state.Receipt.ID != pending.ID {
-		t.Fatalf("the pending receipt was replaced: %#v", f.store.state.Receipt)
+	if retained := f.store.state.RetainedDefinitions; len(retained) != 1 || retained[0].ResolutionDigest != pending.Definition.ResolutionDigest {
+		t.Fatalf("retained resolutions after the resumed setup = %#v", retained)
+	}
+}
+
+// A pending receipt whose bundle holds no area at the bound is resumed under
+// --purge-old-bundles: every superseded execution bundle is retired first, the
+// one the completed receipt before it named included, the client area and the
+// pending receipt's resolution are kept, and the receipt then completes.
+func TestPurgeAtTheBoundResumesAStrandedPendingSetup(t *testing.T) {
+	for name, intent := range map[string]bool{"its intent lost": false, "its reservation refused": true} {
+		t.Run(name, func(t *testing.T) {
+			f, pending, superseded := strandedAtTheBound(t, intent)
+			report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
+			if err != nil || report.Outcome != "changed" {
+				t.Fatalf("the stranded setup under the flag: %#v %#v", report, diagnostics.Of(err))
+			}
+			if !slices.Contains(f.plan.Actions, "Retire 15 superseded execution bundles to make room for the new one") {
+				t.Fatalf("the plan did not present the retirement: %q", f.plan.Actions)
+			}
+			if !slices.Equal(f.store.retired, superseded) || !slices.Equal(report.RetiredBundles, superseded) || len(f.store.retiredResolutions) != 0 {
+				t.Fatalf("retired bundles %v, reported %v, resolutions %v", f.store.retired, report.RetiredBundles, f.store.retiredResolutions)
+			}
+			resumedStranded(t, f, pending)
+		})
+	}
+}
+
+// Without the flag that host refuses before it presents a plan, names the
+// command that makes room and leaves the receipt pending.
+func TestTheBoundRefusalOverAStrandedPendingSetupNamesPurgeOldBundles(t *testing.T) {
+	f, pending, _ := strandedAtTheBound(t, true)
+	writes := f.store.writes
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	refusal(t, err, boundRefusal, boundRemediation)
+	if slices.Contains(f.events, "present") || f.store.writes != writes || len(f.store.retired) != 0 {
+		t.Fatalf("a refused setup acted: events=%v writes=%d retired=%v", f.events, f.store.writes-writes, f.store.retired)
+	}
+	if receipt := f.store.state.Receipt; receipt.ID != pending.ID || !receipt.Incomplete() {
+		t.Fatalf("the refusal moved the pending receipt: %#v", receipt)
+	}
+}
+
+// Only an earlier build strands a receipt, and its automation is not this
+// executable's, which then cannot prepare the bundle that receipt names.
+// Retiring is never undone, so with or without the flag setup refuses before it
+// presents a plan, retires or writes anything, as it refuses another
+// executable's pending attempt.
+func TestAStrandedPendingSetupThisExecutableCannotPrepareRefusesBeforeAnyEffect(t *testing.T) {
+	f, pending, _ := strandedAtTheBound(t, true)
+	moved := errors.Join(ErrBootstrapIncompatible, ErrAutomationSuperseded, failure("controller.setup", "superseded automation", ""))
+	f.service.bundle = obsoleteBundle{BundleManager: &f.bundle, digest: pending.CatalogDigest, err: moved}
+	areas, writes, prepares := slices.Clone(f.store.areas), f.store.writes, f.bundle.prepares
+	for _, purge := range []bool{true, false} {
+		_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: purge})
+		found := diagnostics.Of(err)
+		if len(found) != 1 || found[0].Code != "controller.unknown" || found[0].Message != "another exact setup attempt remains unresolved" ||
+			!strings.HasPrefix(found[0].Remediation, "restore the executable that recorded it") {
+			t.Fatalf("purge=%t: refusal = %#v (%v)", purge, found, err)
+		}
+	}
+	if slices.Contains(f.events, "present") || f.store.writes != writes || len(f.store.retired) != 0 || f.bundle.prepares != prepares || !slices.Equal(f.store.areas, areas) {
+		t.Fatalf("a refused setup acted: events=%v writes=%d retired=%v prepares=%d areas=%#v", f.events, f.store.writes-writes, f.store.retired, f.bundle.prepares-prepares, f.store.areas)
+	}
+	if receipt := f.store.state.Receipt; receipt.ID != pending.ID || receipt.PlanDigest != pending.PlanDigest || !receipt.Incomplete() {
+		t.Fatalf("the refusal moved the pending receipt: %#v", receipt)
+	}
+}
+
+// However the resumed setup is interrupted, the receipt stays pending with its
+// resolution retained, and repeating the command completes it. An interrupted
+// retirement still holds the bound, so the flag is needed again. Each
+// interruption disarms itself and reports whether it fired.
+func TestAnInterruptedStrandedSetupAtTheBoundStaysResumable(t *testing.T) {
+	for name, interrupt := range map[string]func(*fixture) func(error) bool{
+		"retirement refused": func(f *fixture) func(error) bool {
+			busy := errors.New("busy")
+			f.store.retireErr = busy
+			return func(err error) bool { f.store.retireErr = nil; return errors.Is(err, busy) }
+		},
+		"retirement intent recorded": func(f *fixture) func(error) bool {
+			f.store.interrupted = true
+			return func(error) bool { return !f.store.interrupted }
+		},
+		"intent publication": func(f *fixture) func(error) bool {
+			f.store.failPublication = f.store.writes + 1
+			return func(error) bool {
+				fired := f.store.writes >= f.store.failPublication
+				f.store.failPublication = 0
+				return fired
+			}
+		},
+		"bundle preparation": func(f *fixture) func(error) bool {
+			failed := errors.New("acquisition failed")
+			f.bundle.err = failed
+			return func(err error) bool { f.bundle.err = nil; return errors.Is(err, failed) }
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, pending, _ := strandedAtTheBound(t, false)
+			fired := interrupt(f)
+			_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
+			if !fired(err) || err == nil {
+				t.Fatalf("the interruption did not fire or was not reported: %v", err)
+			}
+			receipt := f.store.state.Receipt
+			retained := slices.ContainsFunc(f.store.state.RetainedDefinitions, func(definition Definition) bool {
+				return definition.ResolutionDigest == pending.Definition.ResolutionDigest
+			})
+			if receipt.ID != pending.ID || !receipt.Incomplete() || !retained {
+				t.Fatalf("the interruption left receipt %#v", receipt)
+			}
+			if name == "retirement intent recorded" {
+				_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+				refusal(t, err, boundRefusal, boundRemediation)
+			}
+			report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
+			if err != nil || report.Outcome != "changed" {
+				t.Fatalf("repeating the setup: %#v %#v", report, diagnostics.Of(err))
+			}
+			resumedStranded(t, f, pending)
+		})
+	}
+}
+
+// A pending receipt whose bundle holds an area is resumed exactly and needs no
+// room, so none is planned around it even at the bound. One left stranded
+// gives up only areas: its own resolution is already retained, so no
+// resolution of the bundle it names is retired, and a client area stays.
+func TestRoomUnderAPendingReceiptRetiresOnlyTheAreasAStrandedOneLacks(t *testing.T) {
+	digest := func(digit string) string { return strings.Repeat(digit, 64) }
+	pending, superseded, marked := digest("1"), digest("2"), digest("3")
+	own := Definition{CatalogDigest: pending, ResolutionDigest: digest("b"), Bootstrap: &BootstrapDefinition{}}
+	areas := []HeldArea{{ID: superseded}, {ID: marked, Retiring: true}}
+	for index := range MaxRetainedBundles - len(areas) {
+		areas = append(areas, HeldArea{ID: fmt.Sprintf("%064x", index+256)})
+	}
+	view := StorageView{Areas: areas, State: HostState{
+		Receipt:             SetupReceipt{ID: "setup-" + digest("1")[:32], Status: "pending", CatalogDigest: pending, Definition: &own},
+		RetainedDefinitions: []Definition{{CatalogDigest: pending, ResolutionDigest: digest("a")}, {CatalogDigest: superseded, ResolutionDigest: digest("c")}, own},
+	}}
+	current := inspection{definition: own}
+	_, err := current.room(view, false)
+	refusal(t, err, boundRefusal, boundRemediation)
+	planned, err := current.room(view, true)
+	if err != nil || !slices.Equal(planned.bundles, []string{superseded, marked}) || len(planned.resolutions) != 0 {
+		t.Fatalf("room under a stranded receipt = %#v (%v)", planned, err)
+	}
+	view.Areas[len(view.Areas)-1] = HeldArea{ID: pending}
+	for _, purge := range []bool{false, true} {
+		if planned, err := current.room(view, purge); err != nil || len(planned.bundles) != 0 || len(planned.resolutions) != 0 {
+			t.Fatalf("room under a pending receipt whose bundle is held, purge=%t: %#v (%v)", purge, planned, err)
+		}
 	}
 }
 

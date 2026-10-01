@@ -192,22 +192,42 @@ func automationDigestV1(files map[string][]byte) string {
 }
 
 // The retained bundle is evidence, not authority: bytes that are no longer the
-// approved ones cannot be carried onto a new automation revision.
+// approved ones cannot be carried onto a new automation revision. A source the
+// bundle lost or changed is reported as one it cannot serve, which setup
+// settles by resolving afresh; a canceled read stays a cancellation.
 func TestRebaseRefusesRetainedSourcesThatAreNotTheirApprovedBytes(t *testing.T) {
-	retained, area := retainedBootstrap(t)
+	retained, _ := retainedBootstrap(t)
 	for _, source := range retained.Sources {
 		t.Run(source.ID, func(t *testing.T) {
 			_, corrupted := retainedBootstrap(t)
 			corrupted.files[sourcePath(source)] = projectedFile{data: []byte("replacement payload")}
-			if _, err := New(nil).Rebase(t.Context(), corrupted, retained); err == nil {
-				t.Fatal("accepted a retained source that changed")
+			if _, err := New(nil).Rebase(t.Context(), corrupted, retained); !errors.Is(err, prerequisites.ErrRetainedSourceUnavailable) {
+				t.Fatalf("a retained source that changed was not reported as unservable: %v", err)
+			}
+			_, missing := retainedBootstrap(t)
+			delete(missing.files, sourcePath(source))
+			if _, err := New(nil).Rebase(t.Context(), missing, retained); !errors.Is(err, prerequisites.ErrRetainedSourceUnavailable) {
+				t.Fatalf("a retained bundle that lost a source was not reported as unservable: %v", err)
 			}
 		})
 	}
-	delete(area.files, sourcePath(retained.Sources[0]))
-	if _, err := New(nil).Rebase(t.Context(), area, retained); err == nil {
-		t.Fatal("accepted a retained bundle that no longer holds its sources")
+	_, held := retainedBootstrap(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	_, err := New(nil).Rebase(ctx, cancelingArea{memoryArea: held, cancel: cancel}, retained)
+	if !errors.Is(err, context.Canceled) || errors.Is(err, prerequisites.ErrRetainedSourceUnavailable) {
+		t.Fatalf("a canceled read was reported as a source the bundle cannot serve: %v", err)
 	}
+}
+
+// cancelingArea is a retained bundle whose reader is canceled mid-read.
+type cancelingArea struct {
+	*memoryArea
+	cancel context.CancelFunc
+}
+
+func (a cancelingArea) Read(ctx context.Context, _ string, _ int) ([]byte, error) {
+	a.cancel()
+	return nil, ctx.Err()
 }
 
 // A provided execution foundation is host evidence. No reprojection can repair

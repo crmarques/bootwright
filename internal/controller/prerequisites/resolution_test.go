@@ -327,6 +327,22 @@ func (b obsoleteBundle) Inspect(ctx context.Context, area BundleArea, definition
 	return b.BundleManager.Inspect(ctx, area, definition, probe)
 }
 
+// Validate and Prepare refuse that definition as Inspect does, because the
+// executable judges it before it reads any area.
+func (b obsoleteBundle) Validate(definition Definition) error {
+	if definition.CatalogDigest == b.digest {
+		return b.err
+	}
+	return b.BundleManager.Validate(definition)
+}
+
+func (b obsoleteBundle) Prepare(ctx context.Context, area, retained BundleArea, definition Definition, egress SetupEgress, progress func(ProgressEvent)) (BundleInspection, error) {
+	if definition.CatalogDigest == b.digest {
+		return BundleInspection{}, b.err
+	}
+	return b.BundleManager.Prepare(ctx, area, retained, definition, egress, progress)
+}
+
 // An executable whose embedded automation moved needs a new bundle, not new
 // dependencies. Setup reprojects the closure the host already holds, so no
 // publisher or repository is consulted, every release it froze survives, and
@@ -409,34 +425,136 @@ func TestSupersededAutomationCarriesASettledReceiptForward(t *testing.T) {
 	}
 }
 
-// A retained resolution whose bundle cannot be read is not carried forward on
-// assumption: the closure it names has to come from somewhere.
-func TestCarryForwardRefusesWithoutTheRetainedBundleItReadsFrom(t *testing.T) {
-	for _, cause := range []string{"missing", "refused"} {
+// supersededRetainedBundle completes a first setup and then moves the embedded
+// automation, so the next setup carries that resolution forward from the
+// bundle it sealed. A fresh resolution names the moved automation, as a
+// publisher resolution under the running executable does.
+func supersededRetainedBundle(t *testing.T) (*fixture, *resolvingFixture, obsoleteBundle) {
+	t.Helper()
+	f, r := dynamicFixture(t)
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	superseded := errors.Join(ErrBootstrapIncompatible, ErrAutomationSuperseded, failure("controller.setup", "superseded automation", ""))
+	refused := obsoleteBundle{BundleManager: &f.bundle, digest: f.store.state.Receipt.CatalogDigest, err: superseded}
+	f.service.bundle = refused
+	f.bundle.ready, f.bundle.sealed = false, false
+	f.bundle.automation = strings.Repeat("9", 64)
+	r.bootstrap.AutomationDigest = f.bundle.automation
+	var err error
+	if r.bootstrap, err = CanonicalBootstrap(r.bootstrap); err != nil {
+		t.Fatal(err)
+	}
+	return f, r, refused
+}
+
+// loseRetainedSource makes the retained bundle unable to serve what the
+// carry-forward reads: one of its sources, or the whole bundle once inspection
+// has found it superseded.
+func loseRetainedSource(f *fixture, refused obsoleteBundle, cause string) {
+	switch cause {
+	case "source":
+		f.bundle.rebaseErr = errors.Join(ErrRetainedSourceUnavailable, failure("controller.state", "retained dependency source cannot be read", ""))
+	case "bundle":
+		refused.onRefusal = func() { f.store.hidden = refused.digest }
+		f.service.bundle = refused
+	}
+}
+
+// A retained bundle that lost a source has nothing to carry. Setup resolves
+// afresh instead of refusing every run: its publishers are consulted again,
+// the new plan is presented and confirmed, and preparation is offered no
+// retained bundle, so it acquires and verifies every source from its publisher.
+func TestCarryForwardResolvesAfreshFromARetainedBundleThatLostASource(t *testing.T) {
+	for _, cause := range []string{"source", "bundle"} {
 		t.Run(cause, func(t *testing.T) {
-			f, r := dynamicFixture(t)
-			if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
-				t.Fatal(err)
+			f, r, refused := supersededRetainedBundle(t)
+			loseRetainedSource(f, refused, cause)
+			before, events := f.store.state.Receipt, len(f.events)
+			report, err := f.service.Setup(context.Background(), SetupRequest{})
+			if err != nil || report.Outcome != "changed" {
+				t.Fatalf("a retained bundle that lost a source refused setup: %#v %v", report, err)
 			}
-			previous := f.store.state.Receipt.CatalogDigest
-			superseded := errors.Join(ErrBootstrapIncompatible, ErrAutomationSuperseded, failure("controller.setup", "superseded automation", ""))
-			refused := obsoleteBundle{BundleManager: &f.bundle, digest: previous, err: superseded}
-			if cause == "missing" {
-				// The area is gone by the time the resolution would be read
-				// out of it, which is the one way carrying forward has nothing
-				// to carry.
-				refused.onRefusal = func() { f.store.hidden = previous }
-			} else {
-				f.bundle.rebaseErr = errors.New("retained source differs from its approved identity")
+			rebases := map[string]int{"source": 1, "bundle": 0}[cause]
+			if r.bootstrapCalls != 2 || r.nativeCalls != 2 || f.bundle.rebases != rebases {
+				t.Fatalf("setup did not resolve afresh: bootstrap=%d native=%d rebases=%d", r.bootstrapCalls, r.nativeCalls, f.bundle.rebases)
 			}
-			f.service.bundle = refused
-			f.bundle.ready, f.bundle.sealed = false, false
-			writes, prepares := f.store.writes, f.bundle.prepares
-			report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
-			if err == nil || r.bootstrapCalls != 1 || f.store.writes != writes || f.bundle.prepares != prepares {
-				t.Fatalf("an unreadable retained bundle was carried forward: %#v %v", report, err)
+			if seeds := f.bundle.retainedSeeds; len(seeds) != 2 || seeds[1] {
+				t.Fatalf("the fresh resolution was offered the retained bundle: %v", seeds)
+			}
+			next := f.store.state.Receipt
+			if next.ID == before.ID || next.Status != "complete" || next.CatalogDigest == before.CatalogDigest || next.Definition == nil || next.Definition.Bootstrap.AutomationDigest != f.bundle.automation {
+				t.Fatalf("the fresh resolution was not recorded: %#v", next)
+			}
+			for _, check := range report.Checks {
+				if check.Status != "ready" {
+					t.Fatalf("setup completed over an unverified check: %#v", report.Checks)
+				}
+			}
+			order := f.events[events:]
+			resolve, present, confirm, prepare := slices.Index(order, "resolve-bootstrap"), slices.Index(order, "present"), slices.Index(order, "confirm"), slices.Index(order, "prepare")
+			if resolve == -1 || present < resolve || confirm < present || prepare < confirm || slices.Index(order, "rebase") > resolve {
+				t.Fatalf("the fresh resolution did not run before its plan and preparation: %q", order)
 			}
 		})
+	}
+}
+
+// The fresh resolution a lost source falls back to is any fresh resolution: a
+// publisher that fails, or that now serves other bytes under a retained
+// source's identity, refuses exactly as it does for a host whose retained
+// bundle was already gone when setup inspected it, before any plan or effect.
+func TestCarryForwardFallbackRefusesAsAFreshResolutionWould(t *testing.T) {
+	unavailable := failure("controller.setup", "the dependency publisher could not be reached", "")
+	for _, publisher := range []string{"unavailable", "moved"} {
+		t.Run(publisher, func(t *testing.T) {
+			outcomes := map[string]error{}
+			for _, host := range []string{"lost", "gone"} {
+				f, r, refused := supersededRetainedBundle(t)
+				if host == "lost" {
+					loseRetainedSource(f, refused, "source")
+				} else {
+					f.store.hidden = refused.digest
+				}
+				switch publisher {
+				case "unavailable":
+					r.bootstrapError = unavailable
+				case "moved":
+					r.bootstrap.Sources[0].SHA256 = strings.Repeat("e", 64)
+					var err error
+					if r.bootstrap, err = CanonicalBootstrap(r.bootstrap); err != nil {
+						t.Fatal(err)
+					}
+				}
+				before, writes, prepares, events := f.store.state.Receipt, f.store.writes, f.bundle.prepares, len(f.events)
+				_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+				if err == nil || r.bootstrapCalls != 2 || f.store.writes != writes || f.bundle.prepares != prepares || !reflect.DeepEqual(f.store.state.Receipt, before) {
+					t.Fatalf("%s: a failed fresh resolution crossed an effect boundary: %v", host, err)
+				}
+				if slices.Contains(f.events[events:], "present") || slices.Contains(f.events[events:], "confirm") {
+					t.Fatalf("%s: a failed fresh resolution presented a plan: %q", host, f.events[events:])
+				}
+				outcomes[host] = err
+			}
+			if lost, gone := diagnostics.Of(outcomes["lost"]), diagnostics.Of(outcomes["gone"]); len(lost) == 0 || !reflect.DeepEqual(lost, gone) {
+				t.Fatalf("the fallback refused unlike a fresh resolution: %v, want %v", outcomes["lost"], outcomes["gone"])
+			}
+			if publisher == "unavailable" && !errors.Is(outcomes["lost"], unavailable) || publisher == "moved" && code(outcomes["lost"]) != "controller.identity" {
+				t.Fatalf("the fallback did not report the publisher's refusal: %v", outcomes["lost"])
+			}
+		})
+	}
+}
+
+// A reprojection that fails for any other cause than a source the bundle lost
+// still refuses: a fresh resolution would not settle it.
+func TestCarryForwardRefusesAReprojectionThatFailsForAnotherCause(t *testing.T) {
+	f, r, _ := supersededRetainedBundle(t)
+	f.bundle.rebaseErr = failure("controller.state", "retained Python projection lacks its declared executable", "")
+	writes, prepares := f.store.writes, f.bundle.prepares
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if !errors.Is(err, f.bundle.rebaseErr) || r.bootstrapCalls != 1 || f.store.writes != writes || f.bundle.prepares != prepares {
+		t.Fatalf("a failed reprojection was replaced by a fresh resolution: %#v %v", report, err)
 	}
 }
 

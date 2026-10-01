@@ -169,9 +169,15 @@ that resolution's own approved sources from the retained bundle holding them,
 projects them again under the embedded automation, and publishes the result as
 the new bundle that identity names. Every release, byte count, signer and
 publisher origin is preserved, no publisher or repository is consulted, and the
-native transaction is reused unless a selected root is missing. A source the
-retained bundle cannot serve as its approved bytes is acquired from its
-publisher as usual, and a resolution needing a different provided execution
+native transaction is reused unless a selected root is missing. A retained
+bundle that cannot serve one of those sources as its approved bytes, because it
+lost or changed one or is gone, has nothing to carry: setup resolves afresh, as
+it does for a resolution it cannot use, and that resolution's publishers supply
+every source it names, each verified as any fresh resolution's is. A publisher
+that fails, or that now serves other bytes under a retained source's identity,
+refuses that setup exactly as it would any fresh resolution. A source the
+bundle loses after the reprojection is acquired from its publisher when the new
+bundle is published. A resolution needing a different provided execution
 foundation is refused rather than carried, because no local projection can
 establish one. Preflight reports the incompatibility and carries nothing.
 
@@ -197,7 +203,8 @@ only when it is positively identified as a superseded execution bundle, which
 is one a retained resolution names and that the receipt does not, or when an
 interrupted retirement already marked its area as retiring. That receipt
 is a settled one, whose setup completed, failed or was canceled; a pending
-receipt admits no retirement. Everything else is left untouched, including
+receipt admits no retirement, except one stranded at the bound, below.
+Everything else is left untouched, including
 every [client area](#the-controller-stage), which is shared host state no
 context uninstalls, and any area this record does not account for; the
 [store refuses](contexts/controller-record.md#bundles-and-client-areas) to
@@ -248,10 +255,30 @@ again under the mutation that publishes:
 
 The receipt may be one whose setup completed, or one whose setup failed or was
 canceled: the next setup replaces either with a new receipt, so both are
-treated alike at the bound. Only a pending receipt admits no retirement, because
-setup resumes it exactly rather than publishing a new one. The store refuses a
-new receipt that names a bundle it cannot reserve, so no receipt is left
-pending that no setup could complete.
+treated alike at the bound. A pending receipt is resumed exactly rather than
+replaced, so it admits no retirement unless it is stranded: an earlier build
+published it at the bound, and the bundle it names holds no area while the
+host holds 16, so resuming it could never reserve one. The store refuses a new
+receipt that names a bundle it cannot reserve, so no new receipt is stranded.
+Retirement is never undone, so for one an earlier build left, setup first
+proves that this executable can prepare the bundle that receipt names. One
+whose automation or provided execution foundation this executable does not
+embed refuses with `controller.unknown` before any effect, with or without the
+flag, as [another pending attempt](#publication-and-interrupted-setup) does.
+Otherwise setup decides as above with the bundle that receipt names as the new
+one. With `--purge-old-bundles` it retires every superseded execution bundle
+and every area left marked as retiring, keeping
+that receipt's bundle, its resolution, which the store retained when it
+published the receipt, and every client area, then resumes the receipt
+exactly. A resumption carries nothing forward, so no other bundle is kept, and
+it retires no resolution, because only an area is missing. Without the flag it
+refuses with `controller.conflict` before any effect and names
+`bootwright setup --purge-old-bundles`. This is safe too: nothing the
+resumption reads is in an area it retires, and no lifecycle operation runs
+while a receipt is pending. A pending receipt whose bundle holds an area needs
+no room and admits no retirement.
+
+Not yet met: only an earlier build could strand a receipt, and no build that resumes one embeds that build's automation, so every stranded receipt refuses as another executable's attempt and stays pending; tracked as [B175](milestones/m1.md#b175).
 
 Retirement records its intent before it removes anything, so an interruption
 leaves an area marked as retiring rather than an area the record still presents
@@ -259,8 +286,10 @@ as usable. Recording that intent already retires the resolutions those areas
 carry, so no resolution names them afterwards: `setup --purge-old-bundles`
 also retires every area marked as retiring, except the bundle the receipt
 names, and repeating the command once completes an interrupted retirement. A
-partially removed area is never readable, published into, or counted as
-retained.
+stranded receipt stays pending with its resolution retained however its
+retirement or resumption is interrupted, and repeating the command goes on
+from what the interruption left. A partially removed area is never readable,
+published into, or counted as retained.
 
 ## Selection and command journeys
 

@@ -1500,7 +1500,7 @@ proxy, DNS or NTP service, libvirt provider host or libvirt machine block an
 earlier build froze refuses continuation and removal under this build; a
 request its role does not admit fails at argument validation before the role
 acts; a failed `no_log` completion shows only its name; a context whose
-operation area holds more than 48 MiB refuses fresh applies ([B206](m1.md#b206));
+operation area holds more than 48 MiB refuses fresh applies (B206, delivered by [X34](#x34--the-decisions-of-2026-10-01));
 the automation digest moves. Under D48 every follow-up was parked: B236 to
 B252, with clauses on B94, B206 and B229.
 
@@ -1532,3 +1532,43 @@ pass on the squashed commit. No real-host run.
 
 **Constraints left behind:** none for operators beyond the reworded messages.
 Under D48 every follow-up was parked: B255 to B257.
+
+### X34 — the decisions of 2026-10-01
+
+**Owner:** Container cluster, Controller setup, Substrate and State
+reconciliation. Integrated on local `main` on 2026-10-01 as one commit.
+**Items:** B220, B32, B208, B188, B206. **Decisions:** D49, D51 to D54.
+
+**Outcome:** the slice also landed D50's guarded path for B175, which stays
+open. Before each wait the install role restores a truncated installer
+kubeconfig from the kept copy when that copy names the install's own cluster,
+refuses a copy of another cluster before the installer runs, and records the
+restore in the evidence (B220, D54). After a stall it reads the registered
+hosts once from the rendezvous host's assisted-service API with the watcher
+token, bounded and under `no_log`, reaching only an address the frozen request
+names, and the give-up names each declared node that never registered; a
+failed read keeps the earlier hint (B32, D49). A retained bundle that lost a
+bootstrap source falls back to a fresh resolution with every verification
+(B208, D53). A drifted owned network restarts when its Machines are stopped and
+otherwise refuses before any effect (B188, D51). The retained-operation refusal
+names destroy, then context deletion and a fresh init (B206, D52).
+
+**Review:** three findings. One confirmed: D50's resume cannot run on a real
+host, because every stranded receipt names another executable's automation;
+it needs a new owner decision, so B175 stays open. Two were rejected: the
+drifted-network refusal reaches the operator only through the retained output,
+and its named remedy refuses for the orphaned domains it can name, which D51
+required; both are parked ([B266](backlog.md#b266)).
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration` and
+`lint` pass on the integrated slice and on the squashed commit. No real-host
+run.
+
+**Constraints left behind:** the registered-hosts read sends the watcher token
+in cleartext on the machine network and is proved only against the installer's
+own generated files ([B260](backlog.md#b260)); completion evidence gains a
+`restored` member, which a build before X34 refuses; the automation digest
+moves. Under D48 every follow-up was parked: B259 to B267. B264 is a
+cross-context safety gap: another context's network passes the host's
+ownership check.

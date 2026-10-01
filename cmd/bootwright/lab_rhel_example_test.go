@@ -451,6 +451,8 @@ func (p *labControllerPorts) Inspect(context.Context, prerequisites.BundleArea, 
 	return prerequisites.BundleInspection{Recoverable: true}, nil
 }
 
+func (p *labControllerPorts) Validate(prerequisites.Definition) error { return nil }
+
 func (p *labControllerPorts) Rebase(context.Context, prerequisites.BundleArea, prerequisites.BootstrapDefinition) (prerequisites.BootstrapDefinition, error) {
 	p.effects++
 	return prerequisites.BootstrapDefinition{}, errors.New("unexpected bundle rebase")

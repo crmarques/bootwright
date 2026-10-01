@@ -172,7 +172,12 @@ names, or one already `retiring` because an earlier retirement dropped that
 resolution. A client area is named by its closure, which no resolution names.
 Naming any other area it holds, a client area included, refuses the whole
 retirement before anything changes, as naming the bundle the receipt names
-does; naming an area it does not hold removes nothing. A `retiring` entry
+does; naming an area it does not hold removes nothing. A retirement needs a
+settled receipt, except that a pending one whose bundle holds no area while
+all 16 are held, which an earlier build could publish, admits a retirement of
+areas, so [setup](../controller.md#supported-host-and-dependency-selection)
+can make room and resume it; no pending receipt admits a retirement of
+resolutions alone. A `retiring` entry
 keeps the directory identity its removal is verified against, and a
 `reserved` one records none, so retiring a reserved area first attributes the
 empty directory its interrupted publication left, as a resumed publication

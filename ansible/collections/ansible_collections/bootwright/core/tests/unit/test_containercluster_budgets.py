@@ -24,7 +24,13 @@ and subprocess.Popen.returncode in the Python documentation).
 How a wait goes on from one attempt to the next is checked by running wait.yml
 against a scripted installer and a simulated clock (Wait below), so the gate,
 the pause, the remaining time and the record step are proved together rather
-than one expression at a time.
+than one expression at a time. The same run restores the installer's own
+kubeconfig through the inspection's restore before each attempt (B220, D54),
+over a real work area when a test gives it one. A wait diagnosed as a stall
+then reads once which declared nodes registered with the assisted service on
+the rendezvous host (B32, D49), through the inspection's own read against a
+service the test serves on 127.0.0.1, and its failure leads with each node that
+did not; any other wait reads nothing.
 
 Rendering the task files needs Ansible's controller (DataLoader and Templar),
 which ansible-test does not offer to unit tests under tests/unit/plugins.
@@ -32,13 +38,22 @@ which ansible-test does not offer to unit tests under tests/unit/plugins.
 
 from __future__ import annotations
 
+import base64
 import datetime
+import hashlib
+import http.server
+import json
 import pathlib
+import threading
 import time
 
 import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+
+from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect as inspection
+from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import (
+    AGENT_CONFIG, AUTH_CONFIG, KEPT, RESTORED, STATE, UNTOUCHED, registration, restore)
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 INSTALL = ROLES / "containercluster_install_agent"
@@ -48,11 +63,56 @@ LOADER = DataLoader()
 # Distinct values, so each phase is proved to read its own budget.
 INSTALL_BUDGETS = {"bootSeconds": 311, "bootstrapSeconds": 4703, "installSeconds": 5903}
 MEDIA_BUDGETS = {"buildSeconds": 1709}
+INSTALL_REQUEST = {"budgets": INSTALL_BUDGETS, "identity": {"cluster": "sno", "context": "lab"},
+                   "workRoot": "/var/lib/bootwright-clusters/lab/sno"}
 SPENT = (124, 137, -9)
 CLIENT = "{{ containercluster_install_agent_client }}"
 TIMED_OUT = "level=fatal msg=\"bootstrap process timed out\""
 STALLED = "level=fatal msg=\"failed to progress after all hosts available\""
 HOST_ERROR = "level=info msg=\"cluster has hosts in error\"\n" + TIMED_OUT
+INSPECT = "bootwright.core.containercluster_install_inspect"
+
+
+def pem(kind, body):
+    return ("-----BEGIN %s-----\n%s\n-----END %s-----\n" % (kind, body, kind)).encode()
+
+
+def encoded(data):
+    return base64.b64encode(data).decode()
+
+
+ADMIN = pem("CERTIFICATE", "YWRtaW4=")
+OTHER = pem("CERTIFICATE", "b3RoZXI=")
+
+
+def kubeconfig(client=ADMIN):
+    """auth/kubeconfig as AgentAdminClient writes it with the image, in the
+    layout kubeconfig() in the inspection's own tests builds from the installer
+    (pkg/asset/kubeconfig/agent.go and kubeconfig.go, release-4.21), with
+    placeholder certificate bodies the inspection hashes and never parses."""
+    return ((
+        "clusters:\n"
+        "- cluster:\n"
+        "    certificate-authority-data: %s\n"
+        "    server: https://api.sno.lab.example:6443\n"
+        "  name: sno\n"
+        "contexts:\n"
+        "- context:\n"
+        "    cluster: sno\n"
+        "    user: admin\n"
+        "  name: admin\n"
+        "current-context: admin\n"
+        "users:\n"
+        "- name: admin\n"
+        "  user:\n"
+        "    client-certificate-data: %s\n"
+        "    client-key-data: %s\n"
+    ) % (encoded(pem("CERTIFICATE", "bG9jYWxob3N0")), encoded(client),
+         encoded(pem("RSA PRIVATE KEY", "a2V5")))).encode()
+
+
+def anchor(client=ADMIN):
+    return hashlib.sha256(b"bootwright/containercluster/identity/v2\0" + client).hexdigest()
 
 
 def trusted(path):
@@ -81,8 +141,7 @@ def argv(task):
 def scope(role, **variables):
     """The role's defaults, a request freezing the test budgets, and variables."""
     values = dict(LOADER.load_from_file(str(role / "defaults" / "main.yml"), trusted_as_template=True))
-    values["bootwright_cluster_install_request"] = {
-        "budgets": INSTALL_BUDGETS, "identity": {"cluster": "sno"}, "workRoot": "/var/lib/bootwright-clusters/lab/sno"}
+    values["bootwright_cluster_install_request"] = dict(INSTALL_REQUEST)
     values["bootwright_cluster_install_material"] = {"openshiftinstall": "/installer", "oc": "/oc"}
     values["bootwright_cluster_media_request"] = {
         "budgets": MEDIA_BUDGETS, "identity": {"cluster": "sno"}, "workRoot": "/var/lib/bootwright-clusters/lab/sno"}
@@ -259,16 +318,30 @@ class Wait:
     of them is set. Each scripted installer run is (rc, stderr, seconds); one
     that would run past the time it was given is stopped there, exiting with
     `stopped`, 124 at the deadline or, for a kill, one grace later.
+
+    The restore before each attempt runs the inspection's own restore over
+    `work` with the identity the apply recorded, and `seen` keeps the
+    installer's kubeconfig as each run found it. Without a work area it answers
+    as the inspection does over an installer file that parses. The read after
+    a stall runs the inspection's own read over `work`, for a request declaring
+    `nodes`, and `reads` keeps what each read reported; without a work area it
+    answers as a read that failed.
     """
 
-    def __init__(self, script, budget=4703, stopped=124):
+    def __init__(self, script, budget=4703, stopped=124, work=None, identity="", nodes=None):
         self.clock = Clock()
         self.script = list(script)
         self.budget = budget
         self.stopped = stopped
-        self.facts = {}
+        self.work = work
+        self.facts = {"containercluster_install_agent_before": {"observation": {"identity": identity}}}
+        if nodes is not None:
+            self.facts["bootwright_cluster_install_request"] = dict(INSTALL_REQUEST, nodes=nodes)
         self.runs = []
         self.pauses = []
+        self.restores = []
+        self.reads = []
+        self.seen = []
         self.started = None
 
     def run(self, milestone="bootstrap-complete"):
@@ -309,6 +382,8 @@ class Wait:
             self.clock.seconds += seconds
         elif "ansible.builtin.command" in task:
             self.facts[task["register"]] = self.installer(task, rendering)
+        elif INSPECT in task:
+            self.facts[task["register"]] = self.inspect(rendering.template(task[INSPECT]))
         elif "ansible.builtin.fail" in task:
             raise Failed(rendering.template(task["ansible.builtin.fail"]["msg"]))
         else:
@@ -325,6 +400,26 @@ class Wait:
             for child in included:
                 self.task(child, [], dict(local, **{loop_var: item}))
 
+    def inspect(self, arguments):
+        if "registered" in arguments:
+            return self.read(arguments)
+        assert set(arguments) == {"request", "restore", "identity"} and arguments["restore"] is True, arguments
+        if self.work is None:
+            outcome = UNTOUCHED
+        else:
+            outcome = restore(dict(arguments["request"], workRoot=str(self.work)), arguments["identity"])
+        self.restores.append(outcome)
+        return {"changed": outcome == RESTORED, "restore": outcome}
+
+    def read(self, arguments):
+        assert set(arguments) == {"request", "registered"} and arguments["registered"] is True, arguments
+        if self.work is None:
+            reported = {"read": False, "unregistered": []}
+        else:
+            reported = registration(dict(arguments["request"], workRoot=str(self.work)))
+        self.reads.append(reported)
+        return {"changed": False, "registration": reported}
+
     def installer(self, task, rendering):
         command = [rendering.template(value) for value in argv(task)]
         assert command[0] == "/usr/bin/timeout" and command[4:6] == ["agent", "wait-for"], command
@@ -333,6 +428,8 @@ class Wait:
         assert self.script, "the installer was run more often than the %d times scripted" % len(self.runs)
         rc, stderr, seconds = self.script.pop(0)
         self.runs.append((self.clock.seconds - self.started, given))
+        if self.work is not None:
+            self.seen.append((self.work / "auth" / "kubeconfig").read_bytes())
         if seconds >= given:
             rc = self.stopped
             seconds = given if rc == 124 else given + grace
@@ -427,6 +524,227 @@ def test_the_next_wait_starts_afresh():
     wait = Wait([(1, STALLED, 60), (0, "", 600), (0, "", 10**6)])
     assert wait.run("bootstrap-complete") is None
     assert wait.run("install-complete").startswith("this wait's budget of 4703 seconds was spent")
+
+
+def work_area(root, installer, kept):
+    """A work area holding the installer's kubeconfig and the copy the installation kept."""
+    (root / "auth").mkdir(parents=True)
+    (root / "auth" / "kubeconfig").write_bytes(installer)
+    (root / KEPT).write_bytes(kept)
+    return root
+
+
+# clientcmd.WriteToFile writes through os.WriteFile, which truncates before it
+# writes, so a budget kill during the installer's rewrite leaves any prefix of
+# the file, the empty one included (the client-go loader.go the installer
+# vendors at release-4.21). The next wait puts the kept copy back first, and the
+# installer then runs over the whole file and reaches its milestone.
+@pytest.mark.parametrize("cut", [0, 1, 200, -1], ids=["empty", "one byte", "inside the authority", "no final newline"])
+def test_a_wait_over_a_truncated_installer_kubeconfig_restores_it_and_continues(tmp_path, cut):
+    whole = kubeconfig()
+    work = work_area(tmp_path / "work", whole[:cut], whole)
+    wait = Wait([(0, "", 600)], work=work, identity=anchor())
+    assert wait.run() is None
+    assert wait.restores == [RESTORED] and wait.seen == [whole]
+    assert wait.facts["containercluster_install_agent_restored"] is True
+    assert (work / KEPT).read_bytes() == whole
+
+
+# A kept copy that no longer names the identity the apply took from it before
+# its first effect, whether it names another cluster's or none, is never handed
+# to the installer: the wait refuses before the installer runs, naming the
+# destroy that discards the work area, and changes nothing.
+@pytest.mark.parametrize("kept", [kubeconfig(OTHER), b"", kubeconfig()[:-40]],
+                         ids=["another cluster", "empty", "cut short"])
+def test_a_wait_whose_kept_copy_names_another_cluster_refuses_before_the_installer_runs(tmp_path, kept):
+    cut = kubeconfig()[:200]
+    work = work_area(tmp_path / "work", cut, kept)
+    wait = Wait([(0, "", 600)], work=work, identity=anchor())
+    message = wait.run()
+    assert message.startswith("the installer's administrator kubeconfig in the work area of cluster sno no longer "
+                              "parses, and the copy this installation kept names no identity or another one")
+    assert "did not wait for bootstrap-complete" in message and "bootwright destroy --context lab" in message
+    assert wait.restores == ["refused"] and wait.runs == []
+    assert (work / "auth" / "kubeconfig").read_bytes() == cut and (work / KEPT).read_bytes() == kept
+    assert "containercluster_install_agent_restored" not in wait.facts
+
+
+# A file that parses is the installer's to read, even one naming another
+# identity, so the wait leaves it as it is and records no restore.
+@pytest.mark.parametrize("installer", [kubeconfig(), kubeconfig(OTHER)], ids=["this build's", "another identity"])
+def test_a_wait_over_an_installer_kubeconfig_that_parses_leaves_it_as_it_is(tmp_path, installer):
+    work = work_area(tmp_path / "work", installer, kubeconfig())
+    wait = Wait([(1, TIMED_OUT, 60), (0, "", 600)], work=work, identity=anchor())
+    assert wait.run() is None
+    assert wait.restores == [UNTOUCHED, UNTOUCHED] and wait.seen == [installer, installer]
+    assert "containercluster_install_agent_restored" not in wait.facts
+
+
+# B32, D49. The asset state holds the two members the read takes, in the shape
+# openshift-install 4.21.10 wrote them (the inspection's own tests show the
+# whole entries), and the service on 127.0.0.1 answers the cluster list with
+# the members the assisted-service models the installer vendors name: hosts,
+# and each host's inventory, the JSON document its agent reports. The token
+# is a placeholder. The request and its header are spelled here, as the
+# inspection's own tests spell them, rather than taken from the module.
+TOKEN = "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.cGxhY2Vob2xkZXI.c2lnbmF0dXJl"
+READ = ("/api/assisted-install/v2/clusters?with_hosts=true", TOKEN)
+NODES = [{"name": "master-0", "address": "127.0.0.1"}, {"name": "master-1", "address": "192.0.2.11"},
+         {"name": "master-2", "address": "192.0.2.12"}]
+
+
+def asset_state(root, state=True):
+    """A work area whose installer kubeconfig parses, holding the installer's
+    asset state, which names 127.0.0.1 as the rendezvous address."""
+    work_area(root, kubeconfig(), kubeconfig())
+    if not state:
+        return root
+    (root / STATE).write_text(json.dumps({
+        AUTH_CONFIG: {"WatcherAuthToken": TOKEN, "AuthType": "agent-installer-local"},
+        AGENT_CONFIG: {"Config": {"kind": "AgentConfig", "rendezvousIP": "127.0.0.1"}}}))
+    return root
+
+
+def listed(*names):
+    """The service's one cluster, with one known host reporting each name."""
+    return json.dumps([{"id": "6a4ba3e8-0000-4000-8000-000000000000", "status": "ready", "hosts": [
+        {"status": "known", "inventory": json.dumps({"hostname": name})} for name in names]}]).encode()
+
+
+class Service(http.server.BaseHTTPRequestHandler):
+    """The assisted service on the rendezvous host: it records each request and answers as told."""
+
+    def do_GET(self):
+        self.server.seen.append((self.path, self.headers.get("Watcher-Authorization")))
+        status, body = self.server.answer
+        self.send_response(status)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        return
+
+
+@pytest.fixture(name="service")
+def service_fixture(request, monkeypatch):
+    server = http.server.HTTPServer(("127.0.0.1", 0), Service)
+    server.seen, server.answer = [], (200, listed("master-0"))
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+    thread.start()
+    monkeypatch.setattr(inspection, "SERVICE_PORT", server.server_address[1])
+
+    def stop():
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    request.addfinalizer(stop)
+    return server
+
+
+def registered_read():
+    return found(INSTALL, "wait.yml", lambda task: (task.get(INSPECT) or {}).get("registered") is True)
+
+
+# The read carries the watcher token, so it runs under no_log, and it never
+# fails the wait itself: a read that fails leaves the stall's own diagnosis.
+def test_the_read_after_a_stall_runs_under_no_log_and_never_fails_the_wait_itself():
+    task = registered_read()
+    assert task[INSPECT] == {"request": "{{ bootwright_cluster_install_request }}", "registered": True}
+    assert task["no_log"] is True and task["failed_when"] is False
+    tasks = trusted(INSTALL / "tasks" / "wait.yml")
+    assert tasks.index(task) < tasks.index(found(INSTALL, "wait.yml", lambda task: "ansible.builtin.fail" in task))
+
+
+# The installer's two give-ups that mark a stall name no host. The read names
+# each declared node no registered host carries the name of, and the failure
+# leads with it, also when the budget stopped the attempt after the stall.
+@pytest.mark.parametrize("registered, named", [
+    (("master-0", "master-2"), "node master-1 never registered"),
+    (("master-0",), "nodes master-1, master-2 never registered"),
+], ids=["one node", "two nodes"])
+def test_a_stall_names_each_declared_node_that_never_registered(tmp_path, service, registered, named):
+    service.answer = (200, listed(*registered))
+    wait = Wait([(1, STALLED, 60), (0, "", 10**6)], work=asset_state(tmp_path / "work"), nodes=NODES)
+    message = wait.run()
+    assert message.startswith(named + " with the assisted service on the rendezvous host, so the cluster "
+                              "reached ready but the rendezvous node never started installing")
+    assert "this wait's budget of 4703 seconds stopped that attempt" in message
+    assert message.endswith("The installer did not reach bootstrap-complete for sno.")
+    assert service.seen == [READ] and TOKEN not in message
+
+
+def test_a_wait_that_stalls_again_and_again_reads_once(tmp_path, service):
+    service.answer = (200, listed("master-0", "master-1"))
+    wait = Wait([(1, STALLED, 1)] * 41, work=asset_state(tmp_path / "work"), nodes=NODES)
+    message = wait.run()
+    assert message.startswith("node master-2 never registered with the assisted service")
+    assert "stopped that attempt" not in message
+    assert len(wait.runs) == 41 and len(wait.reads) == 1 and service.seen == [READ]
+
+
+# A read that fails, or that finds every declared node registered by the time
+# it runs, names no node and leaves the stall's own hint.
+@pytest.mark.parametrize("answer, state", [
+    ((200, listed("master-0", "master-1", "master-2")), True),
+    ((401, b'{"code":"401","reason":"unauthorized"}'), True),
+    ((200, b"not json"), True),
+    ((200, listed("master-0")), False),
+], ids=["every node registered", "unauthorized", "not json", "no asset state"])
+def test_a_read_that_names_no_node_keeps_the_stalls_own_hint(tmp_path, service, answer, state):
+    service.answer = answer
+    wait = Wait([(1, STALLED, 60), (1, STALLED, 60), (0, "", 10**6)], work=asset_state(tmp_path / "work", state),
+                nodes=NODES)
+    message = wait.run()
+    assert message.startswith("the cluster reached ready but the rendezvous node never started installing")
+    assert "this wait's budget of 4703 seconds stopped that attempt" in message
+    assert len(wait.reads) == 1 and wait.reads[0]["read"] is (answer[0] == 200 and answer[1] != b"not json" and state)
+    assert service.seen == ([READ] if state else [])
+
+
+def test_a_rendezvous_host_that_does_not_answer_keeps_the_stalls_own_hint(tmp_path, monkeypatch):
+    closed = http.server.HTTPServer(("127.0.0.1", 0), Service)
+    port = closed.server_address[1]
+    closed.server_close()
+    monkeypatch.setattr(inspection, "SERVICE_PORT", port)
+    wait = Wait([(1, STALLED, 60)] + [(1, STALLED, 4690)], work=asset_state(tmp_path / "work"), nodes=NODES)
+    assert wait.run().startswith("the cluster reached ready but the rendezvous node never started installing")
+    assert wait.reads == [{"read": False, "unregistered": []}]
+
+
+# Only a wait diagnosed as a stall reads: a reached milestone, a host in error
+# even after a stall, the budget spent, the installer's own timeout even after
+# a stall, and a give-up it cannot resume from read nothing.
+@pytest.mark.parametrize("script", [
+    [(0, "", 600)],
+    [(1, STALLED, 60), (0, "", 600)],
+    [(1, HOST_ERROR, 60)],
+    [(1, STALLED, 60), (1, HOST_ERROR, 60)],
+    [(0, "", 10**6)],
+    [(1, TIMED_OUT, 60), (1, TIMED_OUT, 4690)],
+    [(1, STALLED, 60), (1, TIMED_OUT, 60), (0, "", 10**6)],
+    [(1, "level=fatal msg=\"failed to fetch the cluster\"", 60)],
+], ids=["reached", "reached after a stall", "host error", "host error after a stall", "budget spent", "timed out",
+        "budget spent after a later timeout", "not resumable"])
+def test_only_a_wait_diagnosed_as_a_stall_reads_the_registered_hosts(tmp_path, service, script):
+    wait = Wait(script, work=asset_state(tmp_path / "work"), nodes=NODES)
+    message = wait.run()
+    assert message is None or not message.startswith(("node", "the cluster reached ready"))
+    assert wait.reads == [] and service.seen == []
+
+
+# The budget stopped the attempt after the stall, so the wait keeps that stall,
+# but the output of the stopped attempt shows a host in error: the wait is
+# diagnosed as the host in error, and only the host-error clause of the read's
+# condition keeps the token from being sent.
+def test_a_host_in_error_after_a_stall_reads_nothing_when_the_budget_stopped_its_attempt(tmp_path, service):
+    wait = Wait([(1, STALLED, 60), (1, HOST_ERROR, 10**6)], work=asset_state(tmp_path / "work"), nodes=NODES)
+    message = wait.run()
+    assert wait.facts["containercluster_install_agent_stalled"] is True
+    assert wait.facts["containercluster_install_agent_wait"]["rc"] == 124
+    assert message.startswith("the assisted service moved a declared host into error and stopped installing")
+    assert wait.reads == [] and service.seen == []
 
 
 def build():

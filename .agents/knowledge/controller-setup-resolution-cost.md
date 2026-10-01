@@ -90,8 +90,10 @@ why each removed step was expensive, which is the reason those rules matter.
   the sealed area, projects them under the embedded automation and returns the
   same resolution under its new projection identity, and `Prepare` reads each
   source from that area before contacting a publisher. Nothing is downloaded
-  and nothing is solved when the native roots are still installed. The
-  superseded area still remains. Code: `ansible/assets.go` (`Digest`,
+  and nothing is solved when the native roots are still installed. A retained
+  area that lost a source, or is gone, returns `ErrRetainedSourceUnavailable`,
+  and `Setup` resolves afresh instead (B208). The superseded area still
+  remains. Code: `ansible/assets.go` (`Digest`,
   `Automation`, `Documentation`),
   `internal/controller/prerequisites/definition.go` (`resolvedContentDigest`),
   `internal/controller/bundlelocal/projection.go` (`embed`, `describe`),
@@ -133,8 +135,9 @@ why each removed step was expensive, which is the reason those rules matter.
   `test_verified_files_covers_installed_files_and_no_host_owned_path` and
   `test_integrity_is_proved_over_exactly_what_the_transaction_installed`.
   For carrying a resolution forward:
-  `TestSupersededAutomationCarriesTheRetainedResolutionForward` and
-  `TestCarryForwardRefusesWithoutTheRetainedBundleItReadsFrom` in
+  `TestSupersededAutomationCarriesTheRetainedResolutionForward`,
+  `TestCarryForwardResolvesAfreshFromARetainedBundleThatLostASource` and
+  `TestCarryForwardFallbackRefusesAsAFreshResolutionWould` in
   `internal/controller/prerequisites`, and
   `TestRebaseKeepsEveryRetainedIdentityAndOnlyMovesTheAutomation`,
   `TestRebaseRefusesRetainedSourcesThatAreNotTheirApprovedBytes` and
