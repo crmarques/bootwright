@@ -213,88 +213,96 @@ func canonicalValueSize(value reflect.Value, maximum, depth int) (int, bool) {
 		if value.Type().Elem().Kind() == reflect.Uint8 {
 			return 0, false
 		}
-		fallthrough
+		return canonicalSequenceSize(value, maximum, depth)
 	case reflect.Array:
-		size, valid := boundedSize(0, 2, maximum)
-		for index := 0; valid && index < value.Len(); index++ {
-			if index != 0 {
-				size, valid = boundedSize(size, 1, maximum)
-				if !valid {
-					return 0, false
-				}
-			}
-			var item int
-			item, valid = canonicalValueSize(value.Index(index), maximum-size, depth+1)
-			if valid {
-				size, valid = boundedSize(size, item, maximum)
-			}
-		}
-		return size, valid
+		return canonicalSequenceSize(value, maximum, depth)
 	case reflect.Struct:
-		typeOf := value.Type()
-		size, valid := boundedSize(0, 2, maximum)
-		fields := 0
-		for index := 0; valid && index < value.NumField(); index++ {
-			field := typeOf.Field(index)
-			if field.PkgPath != "" || field.Anonymous {
-				return 0, false
-			}
-			tag := field.Tag.Get("json")
-			name, options, _ := strings.Cut(tag, ",")
-			if name == "-" {
-				continue
-			}
-			// Only omissions this size calculation can predict exactly are
-			// supported, because the predicted size must equal the encoding.
-			// An omitted zero also lets a record written before a counted
-			// field existed still round-trip byte for byte.
-			if options == "omitempty" {
-				fieldValue := value.Field(index)
-				switch fieldValue.Kind() {
-				case reflect.Bool:
-					if !fieldValue.Bool() {
-						continue
-					}
-				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-					if fieldValue.Int() == 0 {
-						continue
-					}
-				default:
-					return 0, false
-				}
-			} else if options != "" {
-				return 0, false
-			}
-			if name == "" {
-				name = field.Name
-			}
-			if fields != 0 {
-				size, valid = boundedSize(size, 1, maximum)
-				if !valid {
-					return 0, false
-				}
-			}
-			var nameSize int
-			nameSize, valid = canonicalStringSize(name, maximum-size)
-			if valid {
-				size, valid = boundedSize(size, nameSize, maximum)
-			}
-			if valid {
-				size, valid = boundedSize(size, 1, maximum)
-			}
-			var fieldSize int
-			if valid {
-				fieldSize, valid = canonicalValueSize(value.Field(index), maximum-size, depth+1)
-			}
-			if valid {
-				size, valid = boundedSize(size, fieldSize, maximum)
-			}
-			fields++
-		}
-		return size, valid
+		return canonicalStructSize(value, maximum, depth)
 	default:
 		return 0, false
 	}
+}
+
+func canonicalSequenceSize(value reflect.Value, maximum, depth int) (int, bool) {
+	size, valid := boundedSize(0, 2, maximum)
+	for index := 0; valid && index < value.Len(); index++ {
+		if index != 0 {
+			size, valid = boundedSize(size, 1, maximum)
+			if !valid {
+				return 0, false
+			}
+		}
+		var item int
+		item, valid = canonicalValueSize(value.Index(index), maximum-size, depth+1)
+		if valid {
+			size, valid = boundedSize(size, item, maximum)
+		}
+	}
+	return size, valid
+}
+
+func canonicalStructSize(value reflect.Value, maximum, depth int) (int, bool) {
+	typeOf := value.Type()
+	size, valid := boundedSize(0, 2, maximum)
+	fields := 0
+	for index := 0; valid && index < value.NumField(); index++ {
+		field := typeOf.Field(index)
+		if field.PkgPath != "" || field.Anonymous {
+			return 0, false
+		}
+		tag := field.Tag.Get("json")
+		name, options, _ := strings.Cut(tag, ",")
+		if name == "-" {
+			continue
+		}
+		// Only omissions this size calculation can predict exactly are
+		// supported, because the predicted size must equal the encoding.
+		// An omitted zero also lets a record written before a counted
+		// field existed still round-trip byte for byte.
+		if options == "omitempty" {
+			fieldValue := value.Field(index)
+			switch fieldValue.Kind() {
+			case reflect.Bool:
+				if !fieldValue.Bool() {
+					continue
+				}
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				if fieldValue.Int() == 0 {
+					continue
+				}
+			default:
+				return 0, false
+			}
+		} else if options != "" {
+			return 0, false
+		}
+		if name == "" {
+			name = field.Name
+		}
+		if fields != 0 {
+			size, valid = boundedSize(size, 1, maximum)
+			if !valid {
+				return 0, false
+			}
+		}
+		var nameSize int
+		nameSize, valid = canonicalStringSize(name, maximum-size)
+		if valid {
+			size, valid = boundedSize(size, nameSize, maximum)
+		}
+		if valid {
+			size, valid = boundedSize(size, 1, maximum)
+		}
+		var fieldSize int
+		if valid {
+			fieldSize, valid = canonicalValueSize(value.Field(index), maximum-size, depth+1)
+		}
+		if valid {
+			size, valid = boundedSize(size, fieldSize, maximum)
+		}
+		fields++
+	}
+	return size, valid
 }
 
 func canonicalStringSize(value string, maximum int) (int, bool) {

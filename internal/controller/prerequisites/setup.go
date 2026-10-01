@@ -143,127 +143,17 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 		outcome := "unchanged"
 		evidence := object(map[string]any{"postcondition": "verified"})
 		if action.ID == "container-runtime" && len(action.Preparation) != 0 {
-			if s.runtime == nil {
-				return failure("controller.unknown", "native recovery verification is not configured", "restore the exact compatible executable")
-			}
-			if (!current.runtime.Ready && current.definition.Native == nil) || !current.bundle.Ready || !current.bundle.Recoverable {
-				return failure("controller.unknown", "native effects or retained tool files cannot be attributed", "restore the exact native prerequisites and setup evidence")
-			}
-			area, err := tx.Bundle(ctx, current.definition.CatalogDigest)
+			recovered, err := s.recoverNative(ctx, tx, current, action.Preparation, progress)
 			if err != nil {
 				return err
-			}
-			if area == nil {
-				return failure("controller.unknown", "native recovery execution bundle is missing", "restore the exact retained bundle")
-			}
-			preparation, err := ReadNativePreparation(action.Preparation, current.definition)
-			if err != nil {
-				return err
-			}
-			progress(ProgressEvent{Status: "running", Detail: "recovering the recorded native transaction"})
-			output, release := s.retain(ctx, tx, &current.report)
-			result, err := s.runtime.Recover(ctx, area, current.platform, current.definition, current.route(), preparation, progress, output)
-			release()
-			if err != nil {
-				return err
-			}
-			if result.Outcome != "unchanged" && result.Outcome != "changed" || len(result.Evidence) <= 2 {
-				return failure("controller.unknown", "native recovery postcondition is unproved", "resolve the original native transaction before repeating setup")
-			}
-			current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
-			if err != nil {
-				return err
-			}
-			current.runtime, err = s.inspectRuntime(ctx, current.definition)
-			if err != nil {
-				return err
-			}
-			if !current.bundle.Ready || !current.dependenciesReady() {
-				return failure("controller.unknown", "recovered dependency postconditions are incomplete", "restore the exact setup dependencies before retrying")
 			}
 			ready = true
-			evidence = result.Evidence
+			evidence = recovered
 			outcome = "changed"
 		}
 		if !ready {
-			if action.Phase != "planned" && action.ID == "execution-bundle" && !current.bundle.Recoverable {
-				return failure("controller.unknown", "interrupted bundle publication cannot be attributed safely", "preserve the setup state and restore its exact dependency evidence")
-			}
-			if action.Phase == "planned" {
-				action.Phase = "intent"
-				if err := publish(ctx, tx, state); err != nil {
-					return err
-				}
-			}
-			progress(ProgressEvent{Status: "running"})
 			var err error
-			switch action.ID {
-			case "execution-bundle":
-				var area BundleArea
-				area, err = tx.Bundle(ctx, current.definition.CatalogDigest)
-				if err == nil {
-					// Preparation reads back and qualifies exactly what it
-					// published, so its verification is the postcondition
-					// rather than a second full pass over the same closure.
-					current.bundle, err = s.bundle.Prepare(ctx, area, retainedArea(ctx, tx, *current), current.definition, current.route(), progress)
-					if err == nil && !current.bundle.Ready {
-						err = failure("controller.unknown", "execution bundle postcondition could not be verified", "repeat the exact setup after inspecting the retained evidence")
-					}
-				}
-			case "container-runtime":
-				if s.runtime == nil {
-					err = failure("controller.unsupported", "native runtime installation is not configured", "prepare the qualified runtime before repeating setup")
-				} else {
-					var area BundleArea
-					area, err = tx.Bundle(ctx, current.definition.CatalogDigest)
-					if err == nil && area == nil {
-						err = failure("controller.unknown", "verified runtime execution bundle is missing", "restore the exact setup bundle")
-					}
-					if err == nil {
-						var result ActionResult
-						output, release := s.retain(ctx, tx, &current.report)
-						result, err = s.runtime.Prepare(ctx, area, current.platform, current.definition, current.route(), func(call context.Context, preparation NativePreparation) error {
-							encoded := EncodeNativePreparation(preparation)
-							if _, err := ReadNativePreparation(encoded, current.definition); err != nil {
-								return err
-							}
-							if len(action.Preparation) != 0 && !bytes.Equal(action.Preparation, encoded) {
-								return failure("controller.unknown", "native before-state differs from its retained preparation", "resolve the original native transaction")
-							}
-							action.Preparation = encoded
-							return publish(call, tx, state)
-						}, progress, output)
-						release()
-						if err == nil && len(result.Evidence) > 2 {
-							evidence = result.Evidence
-						}
-						if err != nil && result.Outcome == "failed" && len(result.Evidence) > 2 {
-							action.Phase, action.Outcome, action.Evidence = "observed", "failed", result.Evidence
-							state.Receipt.Status = "failed"
-							if publicationErr := publish(ctx, tx, state); publicationErr != nil {
-								return publicationErr
-							}
-						} else if err == nil && result.Outcome != "changed" && result.Outcome != "unchanged" {
-							err = failure("controller.unknown", "native runtime action has no definitive result", "resolve the exact native transaction before repeating setup")
-						}
-						if err == nil {
-							current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
-						}
-					}
-				}
-				if err == nil {
-					current.runtime, err = s.inspectRuntime(ctx, current.definition)
-					if err == nil && !current.dependenciesReady() {
-						err = failure("controller.unknown", "container runtime postcondition could not be verified", "resolve the native transaction before repeating setup")
-					}
-				}
-			case "controller-binding":
-				current.bound = true
-			default:
-				err = failure("controller.unknown", "setup contains an unsupported retained action", "restore the original compatible executable")
-			}
-			if err != nil {
-				progress(ProgressEvent{Status: "failed"})
+			if evidence, err = s.performAction(ctx, tx, current, &state, action, progress, evidence); err != nil {
 				return err
 			}
 			outcome = "changed"
@@ -284,6 +174,132 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 	}
 	state.Receipt.Status = "complete"
 	return publish(ctx, tx, state)
+}
+
+func (s Service) recoverNative(ctx context.Context, tx StorageTransaction, current *inspection, recorded json.RawMessage, progress func(ProgressEvent)) (json.RawMessage, error) {
+	if s.runtime == nil {
+		return nil, failure("controller.unknown", "native recovery verification is not configured", "restore the exact compatible executable")
+	}
+	if (!current.runtime.Ready && current.definition.Native == nil) || !current.bundle.Ready || !current.bundle.Recoverable {
+		return nil, failure("controller.unknown", "native effects or retained tool files cannot be attributed", "restore the exact native prerequisites and setup evidence")
+	}
+	area, err := tx.Bundle(ctx, current.definition.CatalogDigest)
+	if err != nil {
+		return nil, err
+	}
+	if area == nil {
+		return nil, failure("controller.unknown", "native recovery execution bundle is missing", "restore the exact retained bundle")
+	}
+	preparation, err := ReadNativePreparation(recorded, current.definition)
+	if err != nil {
+		return nil, err
+	}
+	progress(ProgressEvent{Status: "running", Detail: "recovering the recorded native transaction"})
+	output, release := s.retain(ctx, tx, &current.report)
+	result, err := s.runtime.Recover(ctx, area, current.platform, current.definition, current.route(), preparation, progress, output)
+	release()
+	if err != nil {
+		return nil, err
+	}
+	if result.Outcome != "unchanged" && result.Outcome != "changed" || len(result.Evidence) <= 2 {
+		return nil, failure("controller.unknown", "native recovery postcondition is unproved", "resolve the original native transaction before repeating setup")
+	}
+	current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
+	if err != nil {
+		return nil, err
+	}
+	current.runtime, err = s.inspectRuntime(ctx, current.definition)
+	if err != nil {
+		return nil, err
+	}
+	if !current.bundle.Ready || !current.dependenciesReady() {
+		return nil, failure("controller.unknown", "recovered dependency postconditions are incomplete", "restore the exact setup dependencies before retrying")
+	}
+	return result.Evidence, nil
+}
+
+func (s Service) performAction(ctx context.Context, tx StorageTransaction, current *inspection, state *HostState, action *SetupAction, progress func(ProgressEvent), evidence json.RawMessage) (json.RawMessage, error) {
+	if action.Phase != "planned" && action.ID == "execution-bundle" && !current.bundle.Recoverable {
+		return nil, failure("controller.unknown", "interrupted bundle publication cannot be attributed safely", "preserve the setup state and restore its exact dependency evidence")
+	}
+	if action.Phase == "planned" {
+		action.Phase = "intent"
+		if err := publish(ctx, tx, *state); err != nil {
+			return nil, err
+		}
+	}
+	progress(ProgressEvent{Status: "running"})
+	var err error
+	switch action.ID {
+	case "execution-bundle":
+		var area BundleArea
+		area, err = tx.Bundle(ctx, current.definition.CatalogDigest)
+		if err == nil {
+			// Preparation reads back and qualifies exactly what it
+			// published, so its verification is the postcondition
+			// rather than a second full pass over the same closure.
+			current.bundle, err = s.bundle.Prepare(ctx, area, retainedArea(ctx, tx, *current), current.definition, current.route(), progress)
+			if err == nil && !current.bundle.Ready {
+				err = failure("controller.unknown", "execution bundle postcondition could not be verified", "repeat the exact setup after inspecting the retained evidence")
+			}
+		}
+	case "container-runtime":
+		if s.runtime == nil {
+			err = failure("controller.unsupported", "native runtime installation is not configured", "prepare the qualified runtime before repeating setup")
+		} else {
+			var area BundleArea
+			area, err = tx.Bundle(ctx, current.definition.CatalogDigest)
+			if err == nil && area == nil {
+				err = failure("controller.unknown", "verified runtime execution bundle is missing", "restore the exact setup bundle")
+			}
+			if err == nil {
+				var result ActionResult
+				output, release := s.retain(ctx, tx, &current.report)
+				result, err = s.runtime.Prepare(ctx, area, current.platform, current.definition, current.route(), func(call context.Context, preparation NativePreparation) error {
+					encoded := EncodeNativePreparation(preparation)
+					if _, err := ReadNativePreparation(encoded, current.definition); err != nil {
+						return err
+					}
+					if len(action.Preparation) != 0 && !bytes.Equal(action.Preparation, encoded) {
+						return failure("controller.unknown", "native before-state differs from its retained preparation", "resolve the original native transaction")
+					}
+					action.Preparation = encoded
+					return publish(call, tx, *state)
+				}, progress, output)
+				release()
+				if err == nil && len(result.Evidence) > 2 {
+					evidence = result.Evidence
+				}
+				if err != nil && result.Outcome == "failed" && len(result.Evidence) > 2 {
+					action.Phase, action.Outcome, action.Evidence = "observed", "failed", result.Evidence
+					state.Receipt.Status = "failed"
+					if publicationErr := publish(ctx, tx, *state); publicationErr != nil {
+						return nil, publicationErr
+					}
+				} else if err == nil && result.Outcome != "changed" && result.Outcome != "unchanged" {
+					err = failure("controller.unknown", "native runtime action has no definitive result", "resolve the exact native transaction before repeating setup")
+				}
+				if err == nil {
+					current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
+				}
+			}
+		}
+		if err == nil {
+			current.runtime, err = s.inspectRuntime(ctx, current.definition)
+			if err == nil && !current.dependenciesReady() {
+				err = failure("controller.unknown", "container runtime postcondition could not be verified", "resolve the native transaction before repeating setup")
+			}
+		}
+	case "controller-binding":
+		current.bound = true
+	default:
+		err = failure("controller.unknown", "setup contains an unsupported retained action", "restore the original compatible executable")
+	}
+	if err != nil {
+		progress(ProgressEvent{Status: "failed"})
+		return nil, err
+	}
+	return evidence, nil
 }
 
 // report never fails an operation: progress is presentation, and a setup that

@@ -2,7 +2,6 @@ package clients
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/controller"
@@ -431,9 +430,11 @@ func (c Capability) LocateTool(ctx context.Context, view prerequisites.StorageVi
 // each client is recovered at the release the proof names; a recovery that is
 // not whole, or that names an area other than the proved one, is no closure.
 func (c Capability) provedClosure(request Request, block reconciliation.Block, proved lifecycle.BlockEvidence, retained []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, error) {
-	var evidence Evidence
-	if proved.State != reconciliation.BlockDone || json.Unmarshal(proved.Evidence, &evidence) != nil ||
-		evidence.Retained || evidence.Area == "" || evidence.Request != block.RequestDigest {
+	if proved.State != reconciliation.BlockDone {
+		return nil, nil
+	}
+	evidence, err := reconciliation.DecodeEvidence[Evidence](proved.Evidence, maxEvidenceBytes, "controller prerequisites")
+	if err != nil || evidence.Retained || evidence.Area == "" || evidence.Request != block.RequestDigest {
 		return nil, nil
 	}
 	named := map[string]bool{}

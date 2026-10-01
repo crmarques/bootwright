@@ -84,6 +84,9 @@ Alias cell.
 | [B250](#b250) | new, 2026-09-30 (X32) | enabling | Container cluster and Substrate | Substrate refusals in the cluster's own words | Found after the M1 freeze (D48) |
 | [B251](#b251) | new, 2026-09-30 (X32) | enabling | State reconciliation, with each role's owner | Every lifecycle refusal reaches the operator | Found after the M1 freeze (D48) |
 | [B252](#b252) | new, 2026-09-30 (X32) | defect | State reconciliation, with each capability's owner | An old request refuses by naming its version | Found after the M1 freeze (D48) |
+| [B255](#b255) | new, 2026-10-01 (X33) | enabling | Each test's owner | Mutants the X33 splits found surviving | Found after the M1 freeze (D48) |
+| [B256](#b256) | new, 2026-10-01 (X33) | enabling | Architecture | Line-limit texts for empty lists | Found after the M1 freeze (D48) |
+| [B257](#b257) | new, 2026-10-01 (X33) | defect | Controller | Controller-client refusals carry their remedy | Found after the M1 freeze (D48) |
 
 ### B94
 
@@ -432,6 +435,18 @@ Lifecycle refusals other than the pre-boot proof, such as the managed-OS check t
 ### B252
 
 Every frozen-request decoder decodes strictly before it checks the version, so a request an earlier version froze with a since-removed field refuses as malformed instead of naming its version, as the state-reconciliation spec requires; and four decoders' unsupported-version messages name no version (found in X32). **Exit evidence:** decoder tests over an old request with a removed field.
+
+### B255
+
+Disabling these left every suite passing, before the splits as after: the desired-state issue for a resource path that selects no acquired file; the Machine BMC issue for credentials required after provider inheritance; the schema enum issue; a bootstrap whose wheels lack ansible-core or urllib3; a native recovery whose evidence is not recorded in the receipt; the compiler returning no state and no error; podman's native request intent swapped for libvirt's; the ELF RPATH and RUNPATH search, reached only by a network-tagged test; and in the keyring, secret material and workspace, the initialization-root refusal, the selector and part rotation, the publication preflight, the duplicate-part refusal, the duplicate `NoProxy` refusal and the refusal to adopt an existing reservation directory (found in X33). **Exit evidence:** a test that fails for each mutant.
+
+### B256
+
+Since X33 both awaiting-split lists are empty, but the collection's line-limit test still says their split is B47, and the Go test's failure message still offers adding a function to the list although the list only shrinks (found in X33). **Exit evidence:** both texts corrected.
+
+### B257
+
+The controller clients' refusal helper passes its remedy where the diagnostic takes a source path, so every such refusal that gives a remedy, the frozen-request version refusal, "run bootwright setup" and "repeat the operation" among them, carries it as a path and shows no remediation (found in X33, older than it). **Exit evidence:** diagnostic tests whose remediation holds the remedy and whose path is empty.
 
 ## Retired
 

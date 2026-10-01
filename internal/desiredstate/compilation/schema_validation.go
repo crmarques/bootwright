@@ -13,9 +13,6 @@ func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path
 		return
 	}
 	shape = shapeForValue(shape, value)
-	issue := func(code, message string) {
-		sink.issue(record, api.Issue{Code: code, Field: path, Message: message})
-	}
 	if shape.Type != api.Absent && shape.Type != value.Type() && !(shape.Type == api.Number && value.Type() == api.Integer) {
 		return
 	}
@@ -25,117 +22,131 @@ func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path
 			length = len(value.Text())
 		}
 		if length < shape.MinLength {
-			issue("api.value", "value must not be empty")
+			sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: "value must not be empty"})
 		}
 	}
-	if value.Type() == api.String {
-		if len(shape.Enums) > 0 && !slices.Contains(shape.Enums, value.Text()) {
-			issue("api.value", "value is not one of the permitted choices")
-		}
-		if shape.Rule != "" && !api.ValidLexical(shape.Rule, value.Text()) {
-			issue("api.value", "value does not match the required "+shape.Rule+" grammar")
-		}
-		if len(shape.Reference) > 0 && value.Text() != "" {
-			if !api.ValidLexical("name", value.Text()) {
-				issue("api.value", "reference must be a DNS label")
-			} else if references {
-				matches := 0
-				var target api.Object
-				for _, kind := range shape.Reference {
-					for _, candidate := range catalog.OfKind(kind) {
-						if candidate.Name() == value.Text() {
-							matches++
-							target = candidate
-						}
+	switch value.Type() {
+	case api.String:
+		validateString(record, value, shape, path, references, catalog, sink)
+	case api.Integer, api.Number:
+		validateRange(record, value, shape, path, sink)
+	case api.Mapping:
+		validateMapping(record, value, shape, path, partial, references, catalog, sink)
+	case api.Sequence:
+		validateSequence(record, value, shape, path, partial, references, catalog, sink)
+	}
+}
+
+func validateString(record *objectRecord, value api.Value, shape *api.Shape, path string, references bool, catalog api.Catalog, sink *diagnosticSink) {
+	if len(shape.Enums) > 0 && !slices.Contains(shape.Enums, value.Text()) {
+		sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: "value is not one of the permitted choices"})
+	}
+	if shape.Rule != "" && !api.ValidLexical(shape.Rule, value.Text()) {
+		sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: "value does not match the required " + shape.Rule + " grammar"})
+	}
+	if len(shape.Reference) > 0 && value.Text() != "" {
+		if !api.ValidLexical("name", value.Text()) {
+			sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: "reference must be a DNS label"})
+		} else if references {
+			matches := 0
+			var target api.Object
+			for _, kind := range shape.Reference {
+				for _, candidate := range catalog.OfKind(kind) {
+					if candidate.Name() == value.Text() {
+						matches++
+						target = candidate
 					}
 				}
-				if matches != 1 {
-					issue("api.reference", "reference must resolve to exactly one object of the required kind")
-				} else if target.Kind() == api.Secret && len(shape.SecretTypes) > 0 && !slices.Contains(shape.SecretTypes, target.Spec().Get("type").Text()) {
-					issue("api.reference", "referenced Secret has an incompatible declared type")
+			}
+			if matches != 1 {
+				sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "reference must resolve to exactly one object of the required kind"})
+			} else if target.Kind() == api.Secret && len(shape.SecretTypes) > 0 && !slices.Contains(shape.SecretTypes, target.Spec().Get("type").Text()) {
+				sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "referenced Secret has an incompatible declared type"})
+			}
+		}
+	}
+}
+
+func validateRange(record *objectRecord, value api.Value, shape *api.Shape, path string, sink *diagnosticSink) {
+	n, ok := new(big.Rat).SetString(value.Text())
+	if ok {
+		for _, bound := range []struct {
+			text    string
+			minimum bool
+		}{{shape.Minimum, true}, {shape.Maximum, false}} {
+			if bound.text != "" {
+				b, valid := new(big.Rat).SetString(bound.text)
+				if valid && (bound.minimum && n.Cmp(b) < 0 || !bound.minimum && n.Cmp(b) > 0) {
+					sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: "number is outside the permitted range"})
 				}
 			}
 		}
 	}
-	if value.Type() == api.Integer || value.Type() == api.Number {
-		n, ok := new(big.Rat).SetString(value.Text())
-		if ok {
-			for _, bound := range []struct {
-				text    string
-				minimum bool
-			}{{shape.Minimum, true}, {shape.Maximum, false}} {
-				if bound.text != "" {
-					b, valid := new(big.Rat).SetString(bound.text)
-					if valid && (bound.minimum && n.Cmp(b) < 0 || !bound.minimum && n.Cmp(b) > 0) {
-						issue("api.value", "number is outside the permitted range")
-					}
-				}
-			}
+}
+
+func validateMapping(record *objectRecord, value api.Value, shape *api.Shape, path string, partial, references bool, catalog api.Catalog, sink *diagnosticSink) {
+	if shape.KindDefaults {
+		for _, f := range value.Fields() {
+			validateShape(record, f.Value, api.Schema(api.Kind(f.Name)), path+"."+f.Name, true, false, catalog, sink)
 		}
+		return
 	}
-	if value.Type() == api.Mapping {
-		if shape.KindDefaults {
+	if shape.Open || shape.Type == api.Absent {
+		if shape.Element != nil {
 			for _, f := range value.Fields() {
-				validateShape(record, f.Value, api.Schema(api.Kind(f.Name)), path+"."+f.Name, true, false, catalog, sink)
+				validateShape(record, f.Value, shape.Element, path, partial, references, catalog, sink)
 			}
-			return
 		}
-		if shape.Open || shape.Type == api.Absent {
-			if shape.Element != nil {
-				for _, f := range value.Fields() {
-					validateShape(record, f.Value, shape.Element, path, partial, references, catalog, sink)
+		return
+	}
+	if len(shape.Arms) > 0 {
+		count := 0
+		allowed, selected := shape.ArmValues[value.Get(shape.Discriminator).Text()]
+		for _, arm := range shape.Arms {
+			if value.Has(arm) && !(slices.Contains(shape.InertArms, arm) && unpopulated(value.Get(arm))) {
+				count++
+				if selected && !slices.Contains(allowed, arm) {
+					sink.issue(record, api.Issue{Code: "api.invariant", Field: path + "." + arm, Message: "configuration arm does not match the selected discriminator"})
 				}
 			}
-			return
 		}
-		if len(shape.Arms) > 0 {
-			count := 0
-			allowed, selected := shape.ArmValues[value.Get(shape.Discriminator).Text()]
-			for _, arm := range shape.Arms {
-				if value.Has(arm) && !(slices.Contains(shape.InertArms, arm) && unpopulated(value.Get(arm))) {
-					count++
-					if selected && !slices.Contains(allowed, arm) {
-						sink.issue(record, api.Issue{Code: "api.invariant", Field: path + "." + arm, Message: "configuration arm does not match the selected discriminator"})
-					}
-				}
-			}
-			if count > 1 || count == 0 && !partial && !shape.AllowEmpty && shape.Discriminator == "" {
-				issue("api.invariant", "exactly one implementation arm is required")
-			}
-		}
-		for _, field := range shape.Fields {
-			if sink.stopped() {
-				break
-			}
-			childPath := path + "." + field.Name
-			if field.Required && !partial && !value.Has(field.Name) {
-				sink.issue(record, api.Issue{Code: "api.required", Field: childPath, Message: "required field is absent"})
-				continue
-			}
-			validateShape(record, value.Get(field.Name), field.Shape, childPath, partial, references, catalog, sink)
+		if count > 1 || count == 0 && !partial && !shape.AllowEmpty && shape.Discriminator == "" {
+			sink.issue(record, api.Issue{Code: "api.invariant", Field: path, Message: "exactly one implementation arm is required"})
 		}
 	}
-	if value.Type() == api.Sequence {
-		seen := map[string]bool{}
-		for i, item := range value.Items() {
-			if sink.stopped() {
-				break
-			}
-			childPath := path + "[" + strconv.Itoa(i) + "]"
-			key := ""
-			if shape.NameKey != "" {
-				key = item.Get(shape.NameKey).Text()
-			} else if shape.Unique {
-				key = valueKey(item)
-			}
-			if key != "" {
-				if seen[key] {
-					sink.issue(record, api.Issue{Code: "api.duplicate", Field: childPath, Message: "collection entries must be unique"})
-				}
-				seen[key] = true
-			}
-			validateShape(record, item, shape.Element, childPath, partial, references, catalog, sink)
+	for _, field := range shape.Fields {
+		if sink.stopped() {
+			break
 		}
+		childPath := path + "." + field.Name
+		if field.Required && !partial && !value.Has(field.Name) {
+			sink.issue(record, api.Issue{Code: "api.required", Field: childPath, Message: "required field is absent"})
+			continue
+		}
+		validateShape(record, value.Get(field.Name), field.Shape, childPath, partial, references, catalog, sink)
+	}
+}
+
+func validateSequence(record *objectRecord, value api.Value, shape *api.Shape, path string, partial, references bool, catalog api.Catalog, sink *diagnosticSink) {
+	seen := map[string]bool{}
+	for i, item := range value.Items() {
+		if sink.stopped() {
+			break
+		}
+		childPath := path + "[" + strconv.Itoa(i) + "]"
+		key := ""
+		if shape.NameKey != "" {
+			key = item.Get(shape.NameKey).Text()
+		} else if shape.Unique {
+			key = valueKey(item)
+		}
+		if key != "" {
+			if seen[key] {
+				sink.issue(record, api.Issue{Code: "api.duplicate", Field: childPath, Message: "collection entries must be unique"})
+			}
+			seen[key] = true
+		}
+		validateShape(record, item, shape.Element, childPath, partial, references, catalog, sink)
 	}
 }
 

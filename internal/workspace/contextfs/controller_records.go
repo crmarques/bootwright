@@ -204,6 +204,44 @@ func validateControllerState(value prerequisites.HostState) error {
 		return state("controller host evidence is invalid")
 	}
 	r := value.Receipt
+	if err := validateControllerReceiptIdentity(r); err != nil {
+		return err
+	}
+	if err := validateControllerSources(r.Sources, maxControllerSources); err != nil {
+		return err
+	}
+	if err := validateControllerSources(value.RetainedSources, maxControllerRetainedSources); err != nil {
+		return err
+	}
+	if len(value.RetainedDefinitions) > maxControllerBundles {
+		return state("retained controller resolutions exceed their bound")
+	}
+	if err := validateControllerReservations(value.Reservations); err != nil {
+		return err
+	}
+	if err := validateRetainedDefinitions(value); err != nil {
+		return err
+	}
+	if err := validateControllerActions(r); err != nil {
+		return err
+	}
+	digest, err := prerequisites.SetupPlanDigest(value.Host, r)
+	if err != nil || digest != r.PlanDigest {
+		return state("controller receipt plan digest is inconsistent")
+	}
+	if err := validateControllerBindings(value); err != nil {
+		return err
+	}
+	for _, source := range r.Sources {
+		index := slices.IndexFunc(value.RetainedSources, func(item prerequisites.DependencySource) bool { return item.ID == source.ID })
+		if index < 0 || value.RetainedSources[index] != source {
+			return state("controller receipt source lacks retained dependency evidence")
+		}
+	}
+	return nil
+}
+
+func validateControllerReceiptIdentity(r prerequisites.SetupReceipt) error {
 	if !identifier(r.ID, "setup-") || !validControllerDigest(r.CatalogDigest) || !validControllerDigest(r.PlanDigest) {
 		return state("controller receipt identity is invalid")
 	}
@@ -232,18 +270,10 @@ func validateControllerState(value prerequisites.HostState) error {
 	if r.Egress.HTTPProxy == "" && r.Egress.HTTPSProxy == "" && len(r.Egress.NoProxy) != 0 {
 		return state("direct setup contains proxy bypass configuration")
 	}
-	if err := validateControllerSources(r.Sources, maxControllerSources); err != nil {
-		return err
-	}
-	if err := validateControllerSources(value.RetainedSources, maxControllerRetainedSources); err != nil {
-		return err
-	}
-	if len(value.RetainedDefinitions) > maxControllerBundles {
-		return state("retained controller resolutions exceed their bound")
-	}
-	if err := validateControllerReservations(value.Reservations); err != nil {
-		return err
-	}
+	return nil
+}
+
+func validateRetainedDefinitions(value prerequisites.HostState) error {
 	seenDefinitions := map[string]bool{}
 	for _, definition := range value.RetainedDefinitions {
 		if err := prerequisites.ValidateResolvedDefinition(definition); err != nil || seenDefinitions[definition.ResolutionDigest] {
@@ -256,9 +286,14 @@ func validateControllerState(value prerequisites.HostState) error {
 			}
 		}
 	}
+	r := value.Receipt
 	if r.Definition != nil && !slices.ContainsFunc(value.RetainedDefinitions, func(item prerequisites.Definition) bool { return prerequisites.SameDefinition(item, *r.Definition) }) {
 		return state("controller receipt lacks its retained resolution")
 	}
+	return nil
+}
+
+func validateControllerActions(r prerequisites.SetupReceipt) error {
 	if r.Actions == nil || len(r.Actions) == 0 || len(r.Actions) > maxControllerActions {
 		return state("controller action count is invalid")
 	}
@@ -317,10 +352,10 @@ func validateControllerState(value prerequisites.HostState) error {
 	default:
 		return state("controller receipt status is invalid")
 	}
-	digest, err := prerequisites.SetupPlanDigest(value.Host, r)
-	if err != nil || digest != r.PlanDigest {
-		return state("controller receipt plan digest is inconsistent")
-	}
+	return nil
+}
+
+func validateControllerBindings(value prerequisites.HostState) error {
 	hostDigest, _ := value.Host.PrivateDigest()
 	if value.Bindings == nil || len(value.Bindings) > maxContexts {
 		return state("controller binding count is invalid")
@@ -331,12 +366,6 @@ func validateControllerState(value prerequisites.HostState) error {
 			return state("controller binding identity is invalid")
 		}
 		previous = binding.Context
-	}
-	for _, source := range r.Sources {
-		index := slices.IndexFunc(value.RetainedSources, func(item prerequisites.DependencySource) bool { return item.ID == source.ID })
-		if index < 0 || value.RetainedSources[index] != source {
-			return state("controller receipt source lacks retained dependency evidence")
-		}
 	}
 	return nil
 }

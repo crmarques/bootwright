@@ -170,190 +170,210 @@ func fitsJSON(value reflect.Value, limit int, depths ...int) bool {
 	if len(depths) != 0 {
 		maxDepth = depths[0]
 	}
-	count := 0
-	add := func(n int) bool {
-		if n < 0 || n > limit-count {
-			return false
-		}
-		count += n
-		return true
-	}
-	stringSize := func(value string) int {
-		size := 2
-		for len(value) > 0 {
-			r, n := utf8.DecodeRuneInString(value)
-			value = value[n:]
-			switch {
-			case r == '"' || r == '\\' || r == '\b' || r == '\f' || r == '\n' || r == '\r' || r == '\t':
-				size += 2
-			case r < 0x20 || r == '<' || r == '>' || r == '&' || r == 0x2028 || r == 0x2029 || r == utf8.RuneError && n == 1:
-				size += 6
-			default:
-				size += n
-			}
-			if size > limit-count {
-				return size
-			}
-		}
-		return size
-	}
-	var visit func(reflect.Value, int) bool
-	visit = func(v reflect.Value, depth int) bool {
-		if depth > maxDepth || !v.IsValid() {
-			return false
-		}
-		if v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
-			if v.IsNil() {
-				return add(4)
-			}
-			return visit(v.Elem(), depth+1)
-		}
-		if v.Type() == reflect.TypeFor[json.RawMessage]() {
-			raw := v.Bytes()
-			if len(raw) > maxRecord || !json.Valid(raw) {
-				return false
-			}
-			quoted, escaped := false, false
-			for i := 0; i < len(raw); {
-				c := raw[i]
-				if !quoted && (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
-					i++
-					continue
-				}
-				if quoted && !escaped && (c == '<' || c == '>' || c == '&') {
-					if !add(6) {
-						return false
-					}
-					i++
-					continue
-				}
-				if quoted && !escaped && c >= utf8.RuneSelf {
-					r, n := utf8.DecodeRune(raw[i:])
-					size := n
-					if r == 0x2028 || r == 0x2029 {
-						size = 6
-					}
-					if !add(size) {
-						return false
-					}
-					i += n
-					continue
-				}
-				if !add(1) {
-					return false
-				}
-				i++
-				if escaped {
-					escaped = false
-					continue
-				}
-				if quoted && c == '\\' {
-					escaped = true
-				} else if c == '"' {
-					quoted = !quoted
-				}
-			}
-			return true
-		}
-		switch v.Kind() {
-		case reflect.String:
-			if v.Len() > limit-count {
-				return false
-			}
-			return add(stringSize(v.String()))
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			value := v.Uint()
-			digits := 1
-			for value >= 10 {
-				value /= 10
-				digits++
-			}
-			return add(digits)
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			n := v.Int()
-			digits := 1
-			u := uint64(n)
-			if n < 0 {
-				digits++
-				u = uint64(-(n + 1)) + 1
-			}
-			for u >= 10 {
-				digits++
-				u /= 10
-			}
-			return add(digits)
-		case reflect.Bool:
-			if v.Bool() {
-				return add(4)
-			}
-			return add(5)
-		case reflect.Slice:
-			if v.IsNil() {
-				return add(4)
-			}
-			if !add(2) {
-				return false
-			}
-			for i := 0; i < v.Len(); i++ {
-				if i > 0 && !add(1) {
-					return false
-				}
-				if !visit(v.Index(i), depth+1) {
-					return false
-				}
-			}
-			return true
-		case reflect.Struct:
-			if !add(2) {
-				return false
-			}
-			fields := 0
-			for i := 0; i < v.NumField(); i++ {
-				field := v.Type().Field(i)
-				if !field.IsExported() {
-					continue
-				}
-				name := field.Tag.Get("json")
-				if name == "-" {
-					continue
-				}
-				if name == "" {
-					name = field.Name
-				}
-				if base, option, found := strings.Cut(name, ","); found {
-					if option != "omitempty" {
-						return false
-					}
-					item := v.Field(i)
-					empty := false
-					switch item.Kind() {
-					case reflect.String, reflect.Slice:
-						empty = item.Len() == 0
-					case reflect.Pointer:
-						empty = item.IsNil()
-					case reflect.Bool:
-						empty = !item.Bool()
-					default:
-						return false
-					}
-					if empty {
-						continue
-					}
-					name = base
-				}
-				if fields > 0 && !add(1) {
-					return false
-				}
-				fields++
-				if !add(stringSize(name)+1) || !visit(v.Field(i), depth+1) {
-					return false
-				}
-			}
-			return true
-		}
+	budget := &jsonBudget{limit: limit, maxDepth: maxDepth}
+	return budget.visit(value, 0)
+}
+
+// jsonBudget counts an encoding against its limit while fitsJSON visits it.
+type jsonBudget struct {
+	limit    int
+	maxDepth int
+	count    int
+}
+
+func (b *jsonBudget) add(n int) bool {
+	if n < 0 || n > b.limit-b.count {
 		return false
 	}
-	return visit(value, 0)
+	b.count += n
+	return true
+}
+
+func (b *jsonBudget) stringSize(value string) int {
+	size := 2
+	for len(value) > 0 {
+		r, n := utf8.DecodeRuneInString(value)
+		value = value[n:]
+		switch {
+		case r == '"' || r == '\\' || r == '\b' || r == '\f' || r == '\n' || r == '\r' || r == '\t':
+			size += 2
+		case r < 0x20 || r == '<' || r == '>' || r == '&' || r == 0x2028 || r == 0x2029 || r == utf8.RuneError && n == 1:
+			size += 6
+		default:
+			size += n
+		}
+		if size > b.limit-b.count {
+			return size
+		}
+	}
+	return size
+}
+
+func (b *jsonBudget) visit(v reflect.Value, depth int) bool {
+	if depth > b.maxDepth || !v.IsValid() {
+		return false
+	}
+	if v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return b.add(4)
+		}
+		return b.visit(v.Elem(), depth+1)
+	}
+	if v.Type() == reflect.TypeFor[json.RawMessage]() {
+		return b.raw(v.Bytes())
+	}
+	switch v.Kind() {
+	case reflect.String:
+		if v.Len() > b.limit-b.count {
+			return false
+		}
+		return b.add(b.stringSize(v.String()))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		value := v.Uint()
+		digits := 1
+		for value >= 10 {
+			value /= 10
+			digits++
+		}
+		return b.add(digits)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n := v.Int()
+		digits := 1
+		u := uint64(n)
+		if n < 0 {
+			digits++
+			u = uint64(-(n + 1)) + 1
+		}
+		for u >= 10 {
+			digits++
+			u /= 10
+		}
+		return b.add(digits)
+	case reflect.Bool:
+		if v.Bool() {
+			return b.add(4)
+		}
+		return b.add(5)
+	case reflect.Slice:
+		return b.slice(v, depth)
+	case reflect.Struct:
+		return b.structure(v, depth)
+	}
+	return false
+}
+
+func (b *jsonBudget) raw(raw []byte) bool {
+	if len(raw) > maxRecord || !json.Valid(raw) {
+		return false
+	}
+	quoted, escaped := false, false
+	for i := 0; i < len(raw); {
+		c := raw[i]
+		if !quoted && (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+			i++
+			continue
+		}
+		if quoted && !escaped && (c == '<' || c == '>' || c == '&') {
+			if !b.add(6) {
+				return false
+			}
+			i++
+			continue
+		}
+		if quoted && !escaped && c >= utf8.RuneSelf {
+			r, n := utf8.DecodeRune(raw[i:])
+			size := n
+			if r == 0x2028 || r == 0x2029 {
+				size = 6
+			}
+			if !b.add(size) {
+				return false
+			}
+			i += n
+			continue
+		}
+		if !b.add(1) {
+			return false
+		}
+		i++
+		if escaped {
+			escaped = false
+			continue
+		}
+		if quoted && c == '\\' {
+			escaped = true
+		} else if c == '"' {
+			quoted = !quoted
+		}
+	}
+	return true
+}
+
+func (b *jsonBudget) slice(v reflect.Value, depth int) bool {
+	if v.IsNil() {
+		return b.add(4)
+	}
+	if !b.add(2) {
+		return false
+	}
+	for i := 0; i < v.Len(); i++ {
+		if i > 0 && !b.add(1) {
+			return false
+		}
+		if !b.visit(v.Index(i), depth+1) {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *jsonBudget) structure(v reflect.Value, depth int) bool {
+	if !b.add(2) {
+		return false
+	}
+	fields := 0
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Type().Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		name := field.Tag.Get("json")
+		if name == "-" {
+			continue
+		}
+		if name == "" {
+			name = field.Name
+		}
+		if base, option, found := strings.Cut(name, ","); found {
+			if option != "omitempty" {
+				return false
+			}
+			item := v.Field(i)
+			empty := false
+			switch item.Kind() {
+			case reflect.String, reflect.Slice:
+				empty = item.Len() == 0
+			case reflect.Pointer:
+				empty = item.IsNil()
+			case reflect.Bool:
+				empty = !item.Bool()
+			default:
+				return false
+			}
+			if empty {
+				continue
+			}
+			name = base
+		}
+		if fields > 0 && !b.add(1) {
+			return false
+		}
+		fields++
+		if !b.add(b.stringSize(name)+1) || !b.visit(v.Field(i), depth+1) {
+			return false
+		}
+	}
+	return true
 }
 
 func canonicalPath(path string) bool {

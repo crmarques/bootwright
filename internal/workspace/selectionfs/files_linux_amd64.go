@@ -85,6 +85,10 @@ func (s *Store) local(ctx context.Context, action string, value contexts.Selecti
 		}
 		return contexts.Selection{}, dir.Sync()
 	}
+	return s.publishRecord(ctx, dir, current, value)
+}
+
+func (s *Store) publishRecord(ctx context.Context, dir *os.File, current selectionRecord, value contexts.Selection) (contexts.Selection, error) {
 	data, _ := json.Marshal(value)
 	data = append(data, '\n')
 	var token [16]byte

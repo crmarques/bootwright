@@ -26,6 +26,16 @@ func validateInvocation(command *cobra.Command, path string) string {
 	} else if len(flags.Args()) != 0 {
 		return "this command accepts no positional operands"
 	}
+	if message := validateFlagValues(flags, path, spec); message != "" {
+		return message
+	}
+	if message := validateSharedFlags(command, path); message != "" {
+		return message
+	}
+	return validateCommandFlags(command, path)
+}
+
+func validateFlagValues(flags *pflag.FlagSet, path string, spec commandSpec) string {
 	for _, flag := range append(globalFlags(), spec.flags...) {
 		parsed := flags.Lookup(flag.name)
 		if parsed == nil {
@@ -60,6 +70,11 @@ func validateInvocation(command *cobra.Command, path string) string {
 			return "--" + flag.name + " has an unsupported value"
 		}
 	}
+	return ""
+}
+
+func validateSharedFlags(command *cobra.Command, path string) string {
+	flags := command.Flags()
 	if contextName := stringValue(flags, "context"); contextName != "" && !dnsLabel(contextName) {
 		return "--context must be a lowercase DNS label"
 	}
@@ -94,6 +109,11 @@ func validateInvocation(command *cobra.Command, path string) string {
 	if strings.HasPrefix(path, "context ") && flags.Lookup("name") != nil && !dnsLabel(stringValue(flags, "name")) {
 		return "--name must be a lowercase DNS label"
 	}
+	return ""
+}
+
+func validateCommandFlags(command *cobra.Command, path string) string {
+	flags := command.Flags()
 	switch path {
 	case "context init", "context update":
 		if len(arrayValue(flags, "file")) > 1 {
@@ -117,16 +137,7 @@ func validateInvocation(command *cobra.Command, path string) string {
 			}
 		}
 	case "add-ons add", "add-ons delete":
-		name, version, combined := strings.Cut(stringValue(flags, "name"), ":")
-		if name == "" || strings.ContainsAny(name, "/\\ \t\r\n") || strings.ContainsAny(version, "/\\ \t\r\n") || (combined && (version == "" || strings.Contains(version, ":"))) {
-			return "--name must identify an add-on and optional version"
-		}
-		if strings.ContainsAny(stringValue(flags, "version"), "/\\ \t\r\n:") {
-			return "--version must identify a catalog release"
-		}
-		if combined && stringValue(flags, "version") != "" {
-			return "an inline add-on version conflicts with --version"
-		}
+		return validateAddonSelection(flags)
 	case "secret set":
 		if message := validateSecretInput(flags); message != "" {
 			return message
@@ -141,20 +152,7 @@ func validateInvocation(command *cobra.Command, path string) string {
 			}
 		}
 	case "render":
-		input, output := stringValue(flags, "input-dir"), stringValue(flags, "output-dir")
-		if input != "" {
-			if output == "" {
-				return "--input-dir requires --output-dir"
-			}
-			if stringValue(flags, "context") != "" {
-				return "--input-dir conflicts with an explicit context"
-			}
-			if boolValue(flags, "sensitive") {
-				return "--input-dir conflicts with --sensitive"
-			}
-		} else if output != "" && !boolValue(flags, "sensitive") {
-			return "context-backed render requires --sensitive"
-		}
+		return validateRenderDirectories(flags)
 	case "machine list":
 		if boolValue(flags, "silent") && selectedJSON(command) {
 			return "--silent conflicts with JSON output"
@@ -184,6 +182,38 @@ func validateInvocation(command *cobra.Command, path string) string {
 		if boolValue(flags, "secrets") && stringValue(flags, "name") == "" {
 			return "--secrets requires an explicit --name"
 		}
+	}
+	return ""
+}
+
+func validateAddonSelection(flags *pflag.FlagSet) string {
+	name, version, combined := strings.Cut(stringValue(flags, "name"), ":")
+	if name == "" || strings.ContainsAny(name, "/\\ \t\r\n") || strings.ContainsAny(version, "/\\ \t\r\n") || (combined && (version == "" || strings.Contains(version, ":"))) {
+		return "--name must identify an add-on and optional version"
+	}
+	if strings.ContainsAny(stringValue(flags, "version"), "/\\ \t\r\n:") {
+		return "--version must identify a catalog release"
+	}
+	if combined && stringValue(flags, "version") != "" {
+		return "an inline add-on version conflicts with --version"
+	}
+	return ""
+}
+
+func validateRenderDirectories(flags *pflag.FlagSet) string {
+	input, output := stringValue(flags, "input-dir"), stringValue(flags, "output-dir")
+	if input != "" {
+		if output == "" {
+			return "--input-dir requires --output-dir"
+		}
+		if stringValue(flags, "context") != "" {
+			return "--input-dir conflicts with an explicit context"
+		}
+		if boolValue(flags, "sensitive") {
+			return "--input-dir conflicts with --sensitive"
+		}
+	} else if output != "" && !boolValue(flags, "sensitive") {
+		return "context-backed render requires --sensitive"
 	}
 	return ""
 }

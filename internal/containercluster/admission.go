@@ -17,7 +17,26 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 		return o, nil
 	}
 	s := o.Spec()
-	distribution := s.Get("distribution").Default("type", api.StringValue("openshift"))
+	distribution := normalizedDistribution(s.Get("distribution"))
+	s = s.With("distribution", distribution)
+	install := s.Get("install")
+	if !install.Present() {
+		return o.WithSpec(s), nil
+	}
+	s = s.With("install", normalizedInstall(o, c, install, distribution.Get("type").Text()))
+	nodes := nodesWithFQDN(o, c, s.Get("nodes").Items())
+	if s.Has("nodes") {
+		s = s.With("nodes", api.ListValue(nodes...))
+	}
+	if disk := s.Get("security", "diskEncryption"); disk.Present() && !disk.Has("roles") {
+		s = s.WithPath(api.StringList(declaredRoles(nodes)...), "security", "diskEncryption", "roles")
+	}
+	s = s.With("networking", normalizedNetworking(o, c, s.Get("networking")))
+	return o.WithSpec(s), nil
+}
+
+func normalizedDistribution(distribution api.Value) api.Value {
+	distribution = distribution.Default("type", api.StringValue("openshift"))
 	release := distribution.Get("release")
 	if distribution.Get("type").Text() == "openshift" && !release.Has("image") && !release.Has("channel") {
 		if channel, ok := releaseChannel(release.Get("version").Text()); ok {
@@ -27,12 +46,11 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if release.Present() {
 		distribution = distribution.With("release", release)
 	}
-	s = s.With("distribution", distribution)
-	install := s.Get("install")
-	if !install.Present() {
-		return o.WithSpec(s), nil
-	}
-	if distribution.Get("type").Text() == "openshift" {
+	return distribution
+}
+
+func normalizedInstall(o api.Object, c api.Catalog, install api.Value, distribution string) api.Value {
+	if distribution == "openshift" {
 		install = install.Default("pullSecretRef", api.StringValue("openshift-pull-secret"))
 	}
 	if !install.Has("nodeSSH") {
@@ -49,7 +67,20 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 			install = install.WithPath(maskCIDRs(values), "platform", "vsphere", "nodeNetworking", side, "networkSubnetCidr")
 		}
 	}
-	endpoints := install.Get("endpoints")
+	if endpoints := normalizedEndpoints(o, c, install.Get("endpoints")); endpoints.Present() {
+		install = install.With("endpoints", endpoints)
+	}
+	install = install.With("proxy", infrastructureservices.NormalizeProxy(install.Get("proxy"), c))
+	if install.Has("ntp") {
+		install = install.With("ntp", infrastructureservices.NormalizeServerSelections(install.Get("ntp"), c, api.NTPServer))
+	}
+	if install.Has("registries", "mirror") {
+		install = install.WithPath(infrastructureservices.NormalizeRegistrySelection(install.Get("registries", "mirror"), c), "registries", "mirror")
+	}
+	return install
+}
+
+func normalizedEndpoints(o api.Object, c api.Catalog, endpoints api.Value) api.Value {
 	if !endpoints.Has("api-int") && endpoints.Has("api") {
 		copy := api.MapValue()
 		for _, key := range []string{"address", "source"} {
@@ -81,18 +112,10 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 		}
 		endpoints = endpoints.With(slot, endpoint)
 	}
-	if endpoints.Present() {
-		install = install.With("endpoints", endpoints)
-	}
-	install = install.With("proxy", infrastructureservices.NormalizeProxy(install.Get("proxy"), c))
-	if install.Has("ntp") {
-		install = install.With("ntp", infrastructureservices.NormalizeServerSelections(install.Get("ntp"), c, api.NTPServer))
-	}
-	if install.Has("registries", "mirror") {
-		install = install.WithPath(infrastructureservices.NormalizeRegistrySelection(install.Get("registries", "mirror"), c), "registries", "mirror")
-	}
-	s = s.With("install", install)
-	nodes := s.Get("nodes").Items()
+	return endpoints
+}
+
+func nodesWithFQDN(o api.Object, c api.Catalog, nodes []api.Value) []api.Value {
 	domain := ""
 	if envs := c.OfKind(api.Environment); len(envs) == 1 {
 		domains := envs[0].Spec().Get("domains")
@@ -109,24 +132,25 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 			nodes[i] = node.With("fqdn", api.StringValue(node.Get("name").Text()+"."+o.Name()+"."+domain))
 		}
 	}
-	if s.Has("nodes") {
-		s = s.With("nodes", api.ListValue(nodes...))
-	}
-	if disk := s.Get("security", "diskEncryption"); disk.Present() && !disk.Has("roles") {
-		roles := []string{}
-		for _, role := range []string{"master", "worker", "infra"} {
-			for _, node := range nodes {
-				if node.Get("role").Text() == role {
-					roles = append(roles, role)
-					break
-				}
+	return nodes
+}
+
+func declaredRoles(nodes []api.Value) []string {
+	roles := []string{}
+	for _, role := range []string{"master", "worker", "infra"} {
+		for _, node := range nodes {
+			if node.Get("role").Text() == role {
+				roles = append(roles, role)
+				break
 			}
 		}
-		s = s.WithPath(api.StringList(roles...), "security", "diskEncryption", "roles")
 	}
+	return roles
+}
+
+func normalizedNetworking(o api.Object, c api.Catalog, networking api.Value) api.Value {
 	networks, complete := machineNetworks(o, c)
 	ipv6 := complete && networkFamily(networks) == 6
-	networking := s.Get("networking")
 	clusterDefault := api.ListValue(api.MapValue(api.FieldValue{Name: "cidr", Value: api.StringValue("10.128.0.0/14")}, api.FieldValue{Name: "hostPrefix", Value: api.IntegerValue("23")}))
 	serviceDefault := api.StringList("172.30.0.0/16")
 	if ipv6 {
@@ -148,9 +172,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if networking.Has("clusterNetwork") {
 		networking = networking.With("clusterNetwork", api.ListValue(clusters...))
 	}
-	networking = networking.With("serviceNetwork", maskCIDRs(networking.Get("serviceNetwork")))
-	s = s.With("networking", networking)
-	return o.WithSpec(s), nil
+	return networking.With("serviceNetwork", maskCIDRs(networking.Get("serviceNetwork")))
 }
 
 func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
@@ -258,12 +280,6 @@ var endpointSlots = []string{"api", "api-int", "ingress"}
 func validateLocal(o api.Object, partial bool) []api.Issue {
 	s := o.Spec()
 	install := s.Get("install")
-	distribution := s.Get("distribution")
-	kind := distribution.Get("type").Text()
-	if kind == "" && !partial {
-		kind = "openshift"
-	}
-	release := distribution.Get("release")
 	issues := []api.Issue{}
 	platform := install.Get("platform")
 	if platform.Has("type") {
@@ -273,6 +289,29 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 			}
 		}
 	}
+	issues = add(issues, validateRelease(s, partial)...)
+	issues = add(issues, validateInstallChoices(install, partial)...)
+	nodes := s.Get("nodes").Items()
+	issues = add(issues, validateNodes(s, nodes, partial)...)
+	issues = add(issues, validateEndpointSources(s, nodes, partial)...)
+	for i, entry := range s.Get("networking", "clusterNetwork").Items() {
+		prefix, err := netip.ParsePrefix(entry.Get("cidr").Text())
+		host, ok := entry.Get("hostPrefix").Int64()
+		if err == nil && ok && (host <= int64(prefix.Bits()) || host > int64(prefix.Addr().BitLen())) {
+			issues = add(issues, invariant(fmt.Sprintf("$.spec.networking.clusterNetwork[%d].hostPrefix", i), "hostPrefix must be larger than the CIDR prefix and fit its address family"))
+		}
+	}
+	return add(issues, validateInstallNames(o, install)...)
+}
+
+func validateRelease(s api.Value, partial bool) []api.Issue {
+	distribution := s.Get("distribution")
+	kind := distribution.Get("type").Text()
+	if kind == "" && !partial {
+		kind = "openshift"
+	}
+	release := distribution.Get("release")
+	var issues []api.Issue
 	if !partial && !release.Has("version") && !release.Has("image") {
 		issues = add(issues, invariant("$.spec.distribution.release", "release requires version or a pinned image"))
 	}
@@ -287,6 +326,11 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 	if kind == "okd" && s.Get("security", "fips", "enabled").Bool() {
 		issues = add(issues, invariant("$.spec.security.fips.enabled", "FIPS requires OpenShift"))
 	}
+	return issues
+}
+
+func validateInstallChoices(install api.Value, partial bool) []api.Issue {
+	var issues []api.Issue
 	mode := install.Get("mode").Text()
 	if mode == "" && !partial {
 		mode = "connected"
@@ -303,7 +347,11 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 			issues = add(issues, invariant("$.spec.install.nodeSSH.publicKeyRef", "split SSH material requires a public-key reference"))
 		}
 	}
-	nodes := s.Get("nodes").Items()
+	return issues
+}
+
+func validateNodes(s api.Value, nodes []api.Value, partial bool) []api.Issue {
+	var issues []api.Issue
 	roles := map[string]bool{}
 	for i, node := range nodes {
 		roles[node.Get("role").Text()] = true
@@ -330,8 +378,13 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 			}
 		}
 	}
+	return issues
+}
+
+func validateEndpointSources(s api.Value, nodes []api.Value, partial bool) []api.Issue {
+	var issues []api.Issue
 	for _, slot := range endpointSlots {
-		endpoint := install.Get("endpoints", slot)
+		endpoint := s.Get("install", "endpoints", slot)
 		if !endpoint.Present() {
 			continue
 		}
@@ -367,13 +420,11 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 			}
 		}
 	}
-	for i, entry := range s.Get("networking", "clusterNetwork").Items() {
-		prefix, err := netip.ParsePrefix(entry.Get("cidr").Text())
-		host, ok := entry.Get("hostPrefix").Int64()
-		if err == nil && ok && (host <= int64(prefix.Bits()) || host > int64(prefix.Addr().BitLen())) {
-			issues = add(issues, invariant(fmt.Sprintf("$.spec.networking.clusterNetwork[%d].hostPrefix", i), "hostPrefix must be larger than the CIDR prefix and fit its address family"))
-		}
-	}
+	return issues
+}
+
+func validateInstallNames(o api.Object, install api.Value) []api.Issue {
+	var issues []api.Issue
 	internalNames := map[string]bool{"api-int": true}
 	if name := install.Get("endpoints", "api-int", "dnsName").Text(); name != "" {
 		internalNames[name] = true

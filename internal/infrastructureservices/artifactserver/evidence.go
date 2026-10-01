@@ -1,10 +1,10 @@
 package artifactserver
 
 import (
-	"bytes"
-	"encoding/json"
 	"slices"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 // Evidence is the only result shape the adapter may return. Go validates it
@@ -76,19 +76,7 @@ func probedAddresses(r Request) []string {
 }
 
 func decodeEvidence(data []byte) (Evidence, error) {
-	if len(data) == 0 || len(data) > maxEvidenceBytes {
-		return Evidence{}, refusal("lifecycle.state", "the artifact-server adapter returned no bounded evidence", "")
-	}
-	var evidence Evidence
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil {
-		return Evidence{}, refusal("lifecycle.state", "the artifact-server adapter returned malformed evidence", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return Evidence{}, refusal("lifecycle.state", "the artifact-server adapter returned trailing evidence", "")
-	}
-	return evidence, nil
+	return reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "artifact-server")
 }
 
 // ValidatePresence accepts evidence only when it proves the exact frozen

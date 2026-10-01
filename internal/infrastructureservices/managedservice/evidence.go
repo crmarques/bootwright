@@ -1,9 +1,9 @@
 package managedservice
 
 import (
-	"bytes"
-	"encoding/json"
 	"slices"
+
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 const maxEvidenceBytes = 64 << 10
@@ -30,16 +30,7 @@ type Evidence struct {
 }
 
 func DecodeEvidence(data []byte) (Evidence, error) {
-	if len(data) == 0 || len(data) > maxEvidenceBytes {
-		return Evidence{}, Refusal("lifecycle.state", "the managed service adapter returned no bounded evidence", "")
-	}
-	var evidence Evidence
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil || len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return Evidence{}, Refusal("lifecycle.state", "the managed service adapter returned malformed evidence", "")
-	}
-	return evidence, nil
+	return reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "managed service")
 }
 
 // ValidatePresence accepts an apply only with positive evidence for the exact

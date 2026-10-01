@@ -30,122 +30,12 @@ func Select(catalog api.Catalog, attachments []Attachment) Selection {
 	if !env.Spec().Has("containerClusters") && !env.Spec().Has("storageClusters") {
 		return result
 	}
-	retained := map[string]bool{}
-	fullStorage := map[string]bool{}
-	keep := func(kind api.Kind, name string) {
-		if name != "" {
-			retained[string(kind)+"/"+name] = true
-		}
-	}
-	for _, kind := range []api.Kind{api.Environment, api.Entitlement, api.MachineImage, api.MachineInstallProfile, api.NetworkConfig, api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.CustomPlaybook, api.Secret} {
-		for _, object := range catalog.OfKind(kind) {
-			keep(kind, object.Name())
-		}
-	}
-	keep(api.Machine, env.Spec().Get("controller", "machineRef").Text())
-	for _, entry := range []struct {
-		field string
-		kind  api.Kind
-	}{{"containerClusters", api.ContainerCluster}, {"storageClusters", api.StorageCluster}} {
-		values := env.Spec().Get(entry.field)
-		if !values.Present() {
-			for _, o := range catalog.OfKind(entry.kind) {
-				keep(o.Kind(), o.Name())
-				if o.Kind() == api.StorageCluster {
-					fullStorage[o.Name()] = true
-				}
-			}
-			continue
-		}
-		if values.Len() == 0 {
-			result.Problems = append(result.Problems, SelectionIssue{env, api.Issue{Code: "api.value", Field: "$.spec." + entry.field, Message: "cluster root selection must not be empty"}})
-		}
-		for _, value := range values.Items() {
-			name := value.Text()
-			if _, ok := catalog.Find(entry.kind, name); !ok {
-				result.Problems = append(result.Problems, SelectionIssue{env, api.Issue{Code: "api.reference", Field: "$.spec." + entry.field, Message: "cluster selection must resolve to one root of its selected kind"}})
-				matches := 0
-				for _, object := range catalog.OfKind(entry.kind) {
-					if object.Name() == name {
-						matches++
-					}
-				}
-				if matches == 0 {
-					continue
-				}
-			}
-			keep(entry.kind, name)
-			if entry.kind == api.StorageCluster {
-				fullStorage[name] = true
-			}
-		}
-	}
-	// Each pass adds identities only; at most the finite catalog can be added.
-	for {
-		before := len(retained)
-		for _, object := range catalog.Objects() {
-			spec := object.Spec()
-			kind := object.Kind()
-			if kind == api.ClusterAddonBinding && retained[string(api.ContainerCluster)+"/"+spec.Get("clusterRef").Text()] {
-				keep(kind, object.Name())
-			}
-			if storageChild(kind) && fullStorage[spec.Get("clusterRef").Text()] {
-				keep(kind, object.Name())
-			}
-			if !retained[object.Identity()] {
-				continue
-			}
-			switch kind {
-			case api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer:
-				if spec.Get("management").Text() == "managed" {
-					keep(api.Machine, spec.Get("machineRef").Text())
-				}
-			case api.Machine:
-				keep(api.InfraProvider, spec.Get("substrate", "providerRef").Text())
-			case api.InfraProvider:
-				keep(api.Machine, spec.Get("libvirt", "machineRef").Text())
-			case api.ContainerCluster:
-				for _, node := range spec.Get("nodes").Items() {
-					keep(api.Machine, node.Get("machineRef").Text())
-				}
-			case api.StorageCluster:
-				for _, node := range spec.Get("ceph", "topology", "nodes").Items() {
-					keep(api.Machine, node.Get("machineRef").Text())
-				}
-			case api.ClusterAddonBinding, api.ClusterAddonProfile:
-				for _, name := range spec.Get("profileRefs").Strings() {
-					keep(api.ClusterAddonProfile, name)
-				}
-				for _, name := range spec.Get("addonRefs").Strings() {
-					keep(api.ClusterAddon, name)
-				}
-			case api.StorageExport, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StoragePlacementPolicy:
-				keep(api.StorageCluster, spec.Get("clusterRef").Text())
-				retainReferences(spec, api.Schema(kind), keep)
-				if kind == api.StorageExport {
-					for _, nfs := range catalog.OfKind(api.StorageNFSExport) {
-						if nfs.Spec().Get("clusterRef").Text() == spec.Get("clusterRef").Text() {
-							keep(api.StorageNFSExport, nfs.Name())
-						}
-					}
-				}
-			}
-		}
-		for _, attachment := range attachments {
-			if retained[string(api.ContainerCluster)+"/"+attachment.ClusterRef] {
-				keep(api.StorageExport, attachment.ExportRef)
-			}
-			if export, ok := catalog.Find(api.StorageExport, attachment.ExportRef); ok && fullStorage[export.Spec().Get("clusterRef").Text()] {
-				keep(api.ContainerCluster, attachment.ClusterRef)
-			}
-		}
-		if before == len(retained) {
-			break
-		}
-	}
+	closure := &retention{retained: map[string]bool{}, fullStorage: map[string]bool{}}
+	result.Problems = append(result.Problems, closure.selectRoots(catalog, env)...)
+	closure.expand(catalog, attachments)
 	objects := []api.Object{}
 	for _, object := range catalog.Objects() {
-		if retained[object.Identity()] {
+		if closure.retained[object.Identity()] {
 			objects = append(objects, object)
 			continue
 		}
@@ -163,6 +53,135 @@ func Select(catalog api.Catalog, attachments []Attachment) Selection {
 	slices.Sort(result.ExcludedContainerClusters)
 	slices.Sort(result.ExcludedStorageClusters)
 	return result
+}
+
+type retention struct {
+	retained    map[string]bool
+	fullStorage map[string]bool
+}
+
+func (r *retention) keep(kind api.Kind, name string) {
+	if name != "" {
+		r.retained[string(kind)+"/"+name] = true
+	}
+}
+
+func (r *retention) selectRoots(catalog api.Catalog, env api.Object) []SelectionIssue {
+	var problems []SelectionIssue
+	for _, kind := range []api.Kind{api.Environment, api.Entitlement, api.MachineImage, api.MachineInstallProfile, api.NetworkConfig, api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.CustomPlaybook, api.Secret} {
+		for _, object := range catalog.OfKind(kind) {
+			r.keep(kind, object.Name())
+		}
+	}
+	r.keep(api.Machine, env.Spec().Get("controller", "machineRef").Text())
+	for _, entry := range []struct {
+		field string
+		kind  api.Kind
+	}{{"containerClusters", api.ContainerCluster}, {"storageClusters", api.StorageCluster}} {
+		values := env.Spec().Get(entry.field)
+		if !values.Present() {
+			for _, o := range catalog.OfKind(entry.kind) {
+				r.keep(o.Kind(), o.Name())
+				if o.Kind() == api.StorageCluster {
+					r.fullStorage[o.Name()] = true
+				}
+			}
+			continue
+		}
+		if values.Len() == 0 {
+			problems = append(problems, SelectionIssue{env, api.Issue{Code: "api.value", Field: "$.spec." + entry.field, Message: "cluster root selection must not be empty"}})
+		}
+		for _, value := range values.Items() {
+			name := value.Text()
+			if _, ok := catalog.Find(entry.kind, name); !ok {
+				problems = append(problems, SelectionIssue{env, api.Issue{Code: "api.reference", Field: "$.spec." + entry.field, Message: "cluster selection must resolve to one root of its selected kind"}})
+				matches := 0
+				for _, object := range catalog.OfKind(entry.kind) {
+					if object.Name() == name {
+						matches++
+					}
+				}
+				if matches == 0 {
+					continue
+				}
+			}
+			r.keep(entry.kind, name)
+			if entry.kind == api.StorageCluster {
+				r.fullStorage[name] = true
+			}
+		}
+	}
+	return problems
+}
+
+func (r *retention) expand(catalog api.Catalog, attachments []Attachment) {
+	// Each pass adds identities only; at most the finite catalog can be added.
+	for {
+		before := len(r.retained)
+		for _, object := range catalog.Objects() {
+			r.retainDependencies(catalog, object)
+		}
+		for _, attachment := range attachments {
+			if r.retained[string(api.ContainerCluster)+"/"+attachment.ClusterRef] {
+				r.keep(api.StorageExport, attachment.ExportRef)
+			}
+			if export, ok := catalog.Find(api.StorageExport, attachment.ExportRef); ok && r.fullStorage[export.Spec().Get("clusterRef").Text()] {
+				r.keep(api.ContainerCluster, attachment.ClusterRef)
+			}
+		}
+		if before == len(r.retained) {
+			break
+		}
+	}
+}
+
+func (r *retention) retainDependencies(catalog api.Catalog, object api.Object) {
+	spec := object.Spec()
+	kind := object.Kind()
+	if kind == api.ClusterAddonBinding && r.retained[string(api.ContainerCluster)+"/"+spec.Get("clusterRef").Text()] {
+		r.keep(kind, object.Name())
+	}
+	if storageChild(kind) && r.fullStorage[spec.Get("clusterRef").Text()] {
+		r.keep(kind, object.Name())
+	}
+	if !r.retained[object.Identity()] {
+		return
+	}
+	switch kind {
+	case api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer:
+		if spec.Get("management").Text() == "managed" {
+			r.keep(api.Machine, spec.Get("machineRef").Text())
+		}
+	case api.Machine:
+		r.keep(api.InfraProvider, spec.Get("substrate", "providerRef").Text())
+	case api.InfraProvider:
+		r.keep(api.Machine, spec.Get("libvirt", "machineRef").Text())
+	case api.ContainerCluster:
+		for _, node := range spec.Get("nodes").Items() {
+			r.keep(api.Machine, node.Get("machineRef").Text())
+		}
+	case api.StorageCluster:
+		for _, node := range spec.Get("ceph", "topology", "nodes").Items() {
+			r.keep(api.Machine, node.Get("machineRef").Text())
+		}
+	case api.ClusterAddonBinding, api.ClusterAddonProfile:
+		for _, name := range spec.Get("profileRefs").Strings() {
+			r.keep(api.ClusterAddonProfile, name)
+		}
+		for _, name := range spec.Get("addonRefs").Strings() {
+			r.keep(api.ClusterAddon, name)
+		}
+	case api.StorageExport, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StoragePlacementPolicy:
+		r.keep(api.StorageCluster, spec.Get("clusterRef").Text())
+		retainReferences(spec, api.Schema(kind), r.keep)
+		if kind == api.StorageExport {
+			for _, nfs := range catalog.OfKind(api.StorageNFSExport) {
+				if nfs.Spec().Get("clusterRef").Text() == spec.Get("clusterRef").Text() {
+					r.keep(api.StorageNFSExport, nfs.Name())
+				}
+			}
+		}
+	}
 }
 
 func storageChild(kind api.Kind) bool {

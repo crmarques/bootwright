@@ -1,11 +1,10 @@
 package power
 
 import (
-	"bytes"
-	"encoding/json"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 const maxEvidenceBytes = 8 << 10
@@ -62,19 +61,7 @@ func expected(verb string) string {
 }
 
 func decode(data []byte) (Evidence, error) {
-	if len(data) == 0 || len(data) > maxEvidenceBytes {
-		return Evidence{}, failure("lifecycle.state", "the power adapter returned no bounded evidence", "")
-	}
-	var evidence Evidence
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil {
-		return Evidence{}, failure("lifecycle.state", "the power adapter returned malformed evidence", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return Evidence{}, failure("lifecycle.state", "the power adapter returned trailing evidence", "")
-	}
-	return evidence, nil
+	return reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "power")
 }
 
 // Reading is one Machine's power exactly as its controller answered. A
@@ -126,17 +113,5 @@ func validateReading(data []byte, survey ReadSurvey, digest string) (map[string]
 }
 
 func decodeReading(data []byte) (ReadEvidence, error) {
-	if len(data) == 0 || len(data) > maxReadingBytes {
-		return ReadEvidence{}, failure("lifecycle.state", "the power reading adapter returned no bounded evidence", "")
-	}
-	var evidence ReadEvidence
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil {
-		return ReadEvidence{}, failure("lifecycle.state", "the power reading adapter returned malformed evidence", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return ReadEvidence{}, failure("lifecycle.state", "the power reading adapter returned trailing evidence", "")
-	}
-	return evidence, nil
+	return reconciliation.DecodeEvidence[ReadEvidence](data, maxReadingBytes, "power reading")
 }

@@ -271,6 +271,17 @@ and the embedded `ansible` assets have roles of their own.
 why. A consumer of a realized Machine reads `substrate.TargetFor` and imports no
 substrate arm package.
 
+A lifecycle capability, like every application package that consumes the
+lifecycle port vocabulary, reads no JSON itself. It freezes its request through
+`reconciliation.Freeze`, reads it back through `reconciliation.Thaw` and, once
+the version it holds is its own, `reconciliation.ProveCanonical`, and reads an
+adapter's evidence, or a proof another block left, through
+`reconciliation.DecodeEvidence` at its own byte bound. These are functions over
+one shape each, not a framework: they refuse a member the shape does not
+declare and anything after the document, in the capability's own words, while
+what a request selects and what its evidence proves stay the capability's
+(`TestNoLifecycleConsumerReadsJSONItself`).
+
 A command service exposes a concrete `Service`, a lifecycle capability concrete
 capability types. Dependencies are private fields; add constructors when
 there are actual dependencies to inject. Consumer-owned ports are repeated on
@@ -919,8 +930,8 @@ reviewers retain semantic judgments that source checks cannot prove.
   fails until its removal is staged. Each clause of the effect boundary is
   proved by a fixture it refuses, and each kind of grant by the clauses it
   exempts and the ones it leaves. A production function, in Go or in the
-  collection's plugins, stays within 100 lines; the ones already longer are
-  listed awaiting their split ([B47](milestones/m1.md#b47)).
+  collection's plugins, stays within 100 lines; the lists of functions
+  awaiting their split are empty and only shrink.
 - `make quick` tests, besides the architecture suite, each package with a
   changed Go file and each package whose directory encloses, at any depth, a
   changed file that is not Go source, as a `go:embed` pattern or a read of

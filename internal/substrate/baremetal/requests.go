@@ -1,11 +1,10 @@
 package baremetal
 
 import (
-	"bytes"
-	"encoding/json"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -49,42 +48,19 @@ type Request struct {
 // Canonical encodes the request exactly as the plan digest and the adapter both
 // consume it, refusing anything a later reader could interpret differently.
 func (r Request) Canonical() ([]byte, error) {
-	data, err := json.Marshal(r)
-	if err != nil {
-		return nil, refusal("lifecycle.state", "the machine request cannot be encoded", "")
-	}
-	var probe map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(&probe); err != nil {
-		return nil, refusal("lifecycle.state", "the machine request cannot be decoded", "")
-	}
-	reencoded, err := json.Marshal(probe)
-	if err != nil || !bytes.Equal(data, reencoded) {
-		return nil, refusal("lifecycle.state", "the machine request is not canonically ordered", "")
-	}
-	return data, nil
+	return reconciliation.Freeze(r, "machine")
 }
 
 func DecodeRequest(data []byte) (Request, error) {
-	var request Request
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		return Request{}, refusal("lifecycle.state", "the frozen machine request is malformed", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return Request{}, refusal("lifecycle.state", "the frozen machine request contains trailing data", "")
+	request, err := reconciliation.Thaw[Request](data, "machine")
+	if err != nil {
+		return Request{}, err
 	}
 	if request.Version != requestVersion {
 		return Request{}, refusal("lifecycle.state", "the frozen machine request has an unsupported version", "")
 	}
-	canonical, err := request.Canonical()
-	if err != nil {
+	if err := reconciliation.ProveCanonical(data, request, "machine"); err != nil {
 		return Request{}, err
-	}
-	if !bytes.Equal(canonical, data) {
-		return Request{}, refusal("lifecycle.state", "the frozen machine request is not canonical", "")
 	}
 	return request, nil
 }

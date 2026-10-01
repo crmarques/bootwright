@@ -14,6 +14,22 @@ func validContextSummary(summary contexts.Summary) bool {
 	return summary.Name != "" && (summary.Mode == contexts.Ready || summary.Mode == contexts.Initializing || summary.Mode == contexts.Deleting)
 }
 
+func validAdmission(result *contexts.AdmissionResult) bool {
+	return result != nil && validContextSummary(result.Context) && result.FilesCopied >= 0 && result.Counts.FilesSeen >= 0 && result.Counts.ObjectsDecoded >= 0
+}
+
+func validContextList(result *contexts.ListResult) bool {
+	if result == nil {
+		return false
+	}
+	for _, summary := range result.Contexts {
+		if !validContextSummary(summary) {
+			return false
+		}
+	}
+	return true
+}
+
 func writeContextSummary(out io.Writer, summary contexts.Summary) error {
 	var text display
 	contextSummaryFields(&text, summary)

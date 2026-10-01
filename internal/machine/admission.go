@@ -28,7 +28,42 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if s.Has("hardware", "nics") {
 		s = s.WithPath(api.ListValue(nics...), "hardware", "nics")
 	}
-	network := s.Get("network")
+	network := normalizedContacts(o, c, s.Get("network"))
+	provider, found := Provider(o, c)
+	if found && network.Has("configRef") && !network.Has("attachmentRef") && !network.Has("interfaceAttachments") && provider.Spec().Get("networkAttachments").Len() == 1 {
+		if _, ok := namedValue(provider.Spec().Get("networkAttachments"), network.Get("configRef").Text()); ok {
+			network = network.With("attachmentRef", network.Get("configRef"))
+		}
+	}
+	if network.Present() {
+		s = s.With("network", network)
+	}
+	if bmc := s.Get("hardware", "management", "bmc"); bmc.Present() {
+		if found && substrate.RealizesPhysicalNICs(provider) {
+			bmc = inherit(bmc, providerBMCDefaults(bmc, provider))
+		}
+		bmc = substrate.NormalizeBMCDefaults(bmc).Default("protocol", api.StringValue("redfish"))
+		s = s.WithPath(bmc, "hardware", "management", "bmc")
+	}
+	o = o.WithSpec(s)
+	if native, issues := ComposeNetwork(o, c); native.Present() && len(issues) == 0 {
+		if binding, issues := resolveBindings(o, c, native); binding.Present() && len(issues) == 0 {
+			network = network.With("interfaceBinding", binding)
+		}
+		if selected, issues := selectInstallAddress(o, c, false); selected.Present() && len(issues) == 0 {
+			network = network.Default("installAddressRef", selected.Get("name"))
+		}
+	}
+	if network.Present() {
+		s = s.With("network", network)
+	}
+	if access := normalizedAccess(o, c, s, network); access.Present() {
+		s = s.With("access", access.Default("rootLogin", api.StringValue("keep")))
+	}
+	return o.WithSpec(normalizedInstallation(o, c, s)), nil
+}
+
+func normalizedContacts(o api.Object, c api.Catalog, network api.Value) api.Value {
 	if network.Has("inline") {
 		network = network.With("inline", normalizeConfiguration(network.Get("inline"), c))
 	}
@@ -61,34 +96,10 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if len(addresses) != 0 || network.Has("addresses") {
 		network = network.With("addresses", api.ListValue(addresses...))
 	}
-	provider, found := Provider(o, c)
-	if found && network.Has("configRef") && !network.Has("attachmentRef") && !network.Has("interfaceAttachments") && provider.Spec().Get("networkAttachments").Len() == 1 {
-		if _, ok := namedValue(provider.Spec().Get("networkAttachments"), network.Get("configRef").Text()); ok {
-			network = network.With("attachmentRef", network.Get("configRef"))
-		}
-	}
-	if network.Present() {
-		s = s.With("network", network)
-	}
-	if bmc := s.Get("hardware", "management", "bmc"); bmc.Present() {
-		if found && substrate.RealizesPhysicalNICs(provider) {
-			bmc = inherit(bmc, providerBMCDefaults(bmc, provider))
-		}
-		bmc = substrate.NormalizeBMCDefaults(bmc).Default("protocol", api.StringValue("redfish"))
-		s = s.WithPath(bmc, "hardware", "management", "bmc")
-	}
-	o = o.WithSpec(s)
-	if native, issues := ComposeNetwork(o, c); native.Present() && len(issues) == 0 {
-		if binding, issues := resolveBindings(o, c, native); binding.Present() && len(issues) == 0 {
-			network = network.With("interfaceBinding", binding)
-		}
-		if selected, issues := selectInstallAddress(o, c, false); selected.Present() && len(issues) == 0 {
-			network = network.Default("installAddressRef", selected.Get("name"))
-		}
-	}
-	if network.Present() {
-		s = s.With("network", network)
-	}
+	return network
+}
+
+func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Value {
 	access := s.Get("access")
 	if installed(o) {
 		if envs := c.OfKind(api.Environment); len(envs) == 1 && envs[0].Spec().Has("remoteMachinesAccessKey", "keyRef") {
@@ -111,9 +122,10 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 		}
 		access = access.With("ssh", ssh)
 	}
-	if access.Present() {
-		s = s.With("access", access.Default("rootLogin", api.StringValue("keep")))
-	}
+	return access
+}
+
+func normalizedInstallation(o api.Object, c api.Catalog, s api.Value) api.Value {
 	if installed(o) {
 		install := s.Get("os", "install")
 		if profile, ok := c.Find(api.MachineInstallProfile, s.Get("os", "installProfileRef").Text()); ok {
@@ -134,7 +146,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	if s.Get("os", "provided").Bool() || installed(o) {
 		s = s.With("proxy", infrastructureservices.NormalizeProxy(s.Get("proxy"), c))
 	}
-	return o.WithSpec(s), nil
+	return s
 }
 
 // NormalizationOrigins identifies profile choices inherited by an installed
@@ -200,6 +212,25 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			issues = appendIssues(issues, reference("$.spec.placement.site", "site must name an Environment site"))
 		}
 	}
+	issues = appendIssues(issues, validateProvision(s)...)
+	provider, found := Provider(o, c)
+	variant := substrate.Variant(provider)
+	if found && variant != "" {
+		issues = appendIssues(issues, validateSubstrate(o, provider, variant)...)
+	}
+	issues = appendIssues(issues, validateHardware(o, c, variant)...)
+	network := s.Get("network")
+	configured := network.Has("configRef") || network.Has("inline")
+	issues = appendIssues(issues, validateNetworkContacts(o, c, configured)...)
+	issues = appendIssues(issues, validateInstallNetwork(o, c, provider, found, variant, configured)...)
+	issues = appendIssues(issues, validateAccess(o, c)...)
+	issues = appendIssues(issues, validatePlacementHost(o, c)...)
+	issues = appendIssues(issues, validateHostKey(o, c)...)
+	return appendIssues(issues, validateBMC(s.Get("hardware", "management", "bmc"))...)
+}
+
+func validateProvision(s api.Value) []api.Issue {
+	var issues []api.Issue
 	provided := s.Get("os", "provided")
 	network := s.Get("network")
 	if provided.Bool() {
@@ -216,35 +247,43 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	} else if provided.Present() && !s.Has("substrate", "providerRef") {
 		issues = appendIssues(issues, invariant("$.spec.substrate.providerRef", "non-provided Machines require a substrate provider"))
 	}
-	provider, found := Provider(o, c)
-	variant := substrate.Variant(provider)
-	if found && variant != "" {
-		profileRef := s.Get("substrate", "profileRef")
-		if variant == substrate.ArmBaremetal && profileRef.Present() {
-			issues = appendIssues(issues, invariant("$.spec.substrate.profileRef", "bare-metal Machines forbid a virtual machine profile"))
+	return issues
+}
+
+func validateSubstrate(o, provider api.Object, variant string) []api.Issue {
+	var issues []api.Issue
+	s := o.Spec()
+	provided := s.Get("os", "provided")
+	profileRef := s.Get("substrate", "profileRef")
+	if variant == substrate.ArmBaremetal && profileRef.Present() {
+		issues = appendIssues(issues, invariant("$.spec.substrate.profileRef", "bare-metal Machines forbid a virtual machine profile"))
+	}
+	if variant != substrate.ArmBaremetal {
+		if provided.Present() && !provided.Bool() && !profileRef.Present() {
+			issues = appendIssues(issues, invariant("$.spec.substrate.profileRef", "virtual installation requires a provider-local machine profile"))
 		}
-		if variant != substrate.ArmBaremetal {
-			if provided.Present() && !provided.Bool() && !profileRef.Present() {
-				issues = appendIssues(issues, invariant("$.spec.substrate.profileRef", "virtual installation requires a provider-local machine profile"))
-			}
-			if profileRef.Present() {
-				if _, ok := namedValue(provider.Spec().Get(variant, "machineProfiles"), profileRef.Text()); !ok {
-					issues = appendIssues(issues, reference("$.spec.substrate.profileRef", "profile must name a machine profile on the selected provider"))
-				}
-			}
-		}
-		if variant == substrate.ArmBaremetal && provided.Present() && !provided.Bool() {
-			issues = appendIssues(issues, validateBaremetal(o)...)
-		}
-		for _, hint := range substrate.UnmatchableRootDeviceHints(provider) {
-			if s.Has("os", "install", "rootDeviceHints", hint) {
-				issues = appendIssues(issues, invariant("$.spec.os.install.rootDeviceHints."+hint,
-					"the disks this substrate creates carry no WWN, SCSI address or serial number, so this hint can match none of them"))
+		if profileRef.Present() {
+			if _, ok := namedValue(provider.Spec().Get(variant, "machineProfiles"), profileRef.Text()); !ok {
+				issues = appendIssues(issues, reference("$.spec.substrate.profileRef", "profile must name a machine profile on the selected provider"))
 			}
 		}
 	}
-	issues = appendIssues(issues, validateHardware(o, c, variant)...)
-	configured := network.Has("configRef") || network.Has("inline")
+	if variant == substrate.ArmBaremetal && provided.Present() && !provided.Bool() {
+		issues = appendIssues(issues, validateBaremetal(o)...)
+	}
+	for _, hint := range substrate.UnmatchableRootDeviceHints(provider) {
+		if s.Has("os", "install", "rootDeviceHints", hint) {
+			issues = appendIssues(issues, invariant("$.spec.os.install.rootDeviceHints."+hint,
+				"the disks this substrate creates carry no WWN, SCSI address or serial number, so this hint can match none of them"))
+		}
+	}
+	return issues
+}
+
+func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api.Issue {
+	var issues []api.Issue
+	provided := o.Spec().Get("os", "provided")
+	network := o.Spec().Get("network")
 	if network.Has("overrides") && !network.Has("configRef") {
 		issues = appendIssues(issues, invariant("$.spec.network.overrides", "network overrides require configRef"))
 	}
@@ -277,6 +316,13 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 	}
+	return issues
+}
+
+func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, found bool, variant string, configured bool) []api.Issue {
+	s := o.Spec()
+	network := s.Get("network")
+	var issues []api.Issue
 	native, compositionIssues := ComposeNetwork(o, c)
 	issues = appendIssues(issues, compositionIssues...)
 	if found && configured {
@@ -308,21 +354,31 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 	}
+	return issues
+}
+
+func validateAccess(o api.Object, c api.Catalog) []api.Issue {
+	var issues []api.Issue
+	s := o.Spec()
+	provided := s.Get("os", "provided")
 	if local := s.Get("access", "local"); local.Present() && (!local.Bool() || !provided.Bool()) {
 		issues = appendIssues(issues, invariant("$.spec.access.local", "local access must be true and requires an OS-ready Machine"))
 	}
 	if ssh := s.Get("access", "ssh"); ssh.Present() {
-		if _, ok := namedValue(network.Get("addresses"), ssh.Get("addressRef").Text()); ssh.Has("addressRef") && !ok {
+		if _, ok := namedValue(s.Get("network", "addresses"), ssh.Get("addressRef").Text()); ssh.Has("addressRef") && !ok {
 			issues = appendIssues(issues, reference("$.spec.access.ssh.addressRef", "SSH address must name a Machine contact or assignment"))
 		}
 	}
 	if s.Get("access", "rootLogin").Text() == "revoke" && (installed(o) || !successorLogin(o, c)) {
 		issues = appendIssues(issues, invariant("$.spec.access.rootLogin", "revoking root login requires a managed storage-cluster non-root successor login"))
 	}
-	issues = appendIssues(issues, validatePlacementHost(o, c)...)
-	issues = appendIssues(issues, validateHostKey(o, c)...)
-	issues = appendIssues(issues, substrate.ValidateBMCDefaults(s.Get("hardware", "management", "bmc"), "$.spec.hardware.management.bmc", false)...)
-	if bmc := s.Get("hardware", "management", "bmc"); bmc.Present() {
+	return issues
+}
+
+func validateBMC(bmc api.Value) []api.Issue {
+	var issues []api.Issue
+	issues = appendIssues(issues, substrate.ValidateBMCDefaults(bmc, "$.spec.hardware.management.bmc", false)...)
+	if bmc.Present() {
 		if !bmc.Has("credentialsRef") {
 			issues = appendIssues(issues, invariant("$.spec.hardware.management.bmc.credentialsRef", "BMC credentials are required after provider inheritance"))
 		}

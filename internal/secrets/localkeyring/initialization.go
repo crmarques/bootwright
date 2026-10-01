@@ -18,65 +18,11 @@ func (i *Implementation) initialize(ctx context.Context, selected secretstore.Co
 		return nil, areaFailure(ctx, "store.corrupt", "secret selector cannot be read safely", err)
 	}
 	if selectorExists {
-		record, err := secretstore.DecodeRecord(selectorData, selected.Name)
-		if err != nil || !validSelector(record.Selector, selected, i.Backend()) {
-			return nil, secretstore.Failure("store.corrupt", "secret metadata is invalid or incompatible")
-		}
-		s, err := i.open(ctx, selected, area, record.Selector, nil)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.collectArtifacts(ctx); err != nil {
-			s.Close()
-			return nil, err
-		}
-		return s, nil
+		return i.openInitialized(ctx, selected, area, selectorData)
 	}
-	markerData, markerExists, err := area.ReadMutable(ctx, initializationPath, selectorMaximum)
+	marker, err := i.initializationMarker(ctx, selected, area)
 	if err != nil {
-		return nil, areaFailure(ctx, "store.corrupt", "secret initialization record cannot be read safely", err)
-	}
-	root, err := area.Entries(ctx, "")
-	if err != nil {
-		return nil, areaFailure(ctx, "store.corrupt", "secret initialization state cannot be inspected safely", err)
-	}
-	if !validInitializationRoot(root, markerExists) {
-		return nil, secretstore.Failure("store.corrupt", "nonempty secret store has no attributable initialization state")
-	}
-	var marker initializationRecord
-	if markerExists {
-		if decodeCanonical(markerData, selectorMaximum, 512, &marker) != nil || !validInitialization(marker, selected, i.Backend()) {
-			return nil, secretstore.Failure("store.corrupt", "secret initialization record is invalid or incompatible")
-		}
-		if marker.MAC != "" {
-			signingKey, err := initializationSigningKey(ctx, area, marker)
-			if err != nil {
-				return nil, err
-			}
-			clear(signingKey)
-		}
-	} else {
-		pending, pendingExists, err := freshInitializationPending(ctx, area, selected, i.Backend(), root)
-		if err != nil {
-			return nil, err
-		}
-		if pendingExists {
-			marker = pending
-		} else {
-			marker, err = i.newInitialization(ctx, selected, area, nil)
-			if err != nil {
-				return nil, err
-			}
-		}
-		data, err := encodeCanonical(marker, selectorMaximum)
-		if err != nil {
-			return nil, err
-		}
-		outcome, replaceErr := area.Replace(ctx, initializationPath, data, markerData)
-		if replaceErr != nil || outcome != secretstore.Committed {
-			return nil, publicationFailure(ctx, outcome, replaceErr)
-		}
-		markerData = data
+		return nil, err
 	}
 	if err := verifyInitializationArtifacts(ctx, area, selected, marker, true); err != nil {
 		return nil, err
@@ -94,47 +40,118 @@ func (i *Implementation) initialize(ctx context.Context, selected secretstore.Co
 		if err != nil {
 			return nil, err
 		}
-		marker = currentMarker
 		if !retry {
 			return session, nil
 		}
-		if len(marker.Attempts) >= 16 {
-			return nil, secretstore.Failure("store.limit", "secret initialization recovery exhausted its attempt limit")
-		}
-		current, exists, readErr := area.ReadMutable(ctx, initializationPath, selectorMaximum)
-		if readErr != nil || !exists {
-			return nil, areaFailure(ctx, "store.corrupt", "secret initialization record changed during recovery", readErr)
-		}
-		var actual initializationRecord
-		if decodeCanonical(current, selectorMaximum, 256, &actual) != nil || !reflectInitializationEqual(actual, marker) {
-			return nil, secretstore.Failure("store.conflict", "secret initialization record changed during recovery")
-		}
-		next, err := i.newInitialization(ctx, selected, area, &marker)
+		marker, err = i.retryInitialization(ctx, selected, area, currentMarker)
 		if err != nil {
-			return nil, err
-		}
-		if marker.MAC != "" {
-			signingKey, err := initializationSigningKey(ctx, area, marker)
-			if err != nil {
-				return nil, err
-			}
-			next = signInitialization(next, marker.MACKeyID, signingKey)
-			clear(signingKey)
-		}
-		nextData, err := encodeCanonical(next, selectorMaximum)
-		if err != nil {
-			return nil, err
-		}
-		outcome, replaceErr := area.Replace(ctx, initializationPath, nextData, current)
-		if replaceErr != nil || outcome != secretstore.Committed {
-			return nil, publicationFailure(ctx, outcome, replaceErr)
-		}
-		marker, markerData = next, nextData
-		if err := verifyInitializationArtifacts(ctx, area, selected, marker, false); err != nil {
 			return nil, err
 		}
 	}
 	return nil, secretstore.Failure("store.limit", "secret initialization recovery exhausted its attempt limit")
+}
+
+func (i *Implementation) openInitialized(ctx context.Context, selected secretstore.Context, area secretstore.Area, selectorData []byte) (secretstore.StoreSession, error) {
+	record, err := secretstore.DecodeRecord(selectorData, selected.Name)
+	if err != nil || !validSelector(record.Selector, selected, i.Backend()) {
+		return nil, secretstore.Failure("store.corrupt", "secret metadata is invalid or incompatible")
+	}
+	s, err := i.open(ctx, selected, area, record.Selector, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.collectArtifacts(ctx); err != nil {
+		s.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+func (i *Implementation) initializationMarker(ctx context.Context, selected secretstore.Context, area secretstore.Area) (initializationRecord, error) {
+	markerData, markerExists, err := area.ReadMutable(ctx, initializationPath, selectorMaximum)
+	if err != nil {
+		return initializationRecord{}, areaFailure(ctx, "store.corrupt", "secret initialization record cannot be read safely", err)
+	}
+	root, err := area.Entries(ctx, "")
+	if err != nil {
+		return initializationRecord{}, areaFailure(ctx, "store.corrupt", "secret initialization state cannot be inspected safely", err)
+	}
+	if !validInitializationRoot(root, markerExists) {
+		return initializationRecord{}, secretstore.Failure("store.corrupt", "nonempty secret store has no attributable initialization state")
+	}
+	var marker initializationRecord
+	if markerExists {
+		if decodeCanonical(markerData, selectorMaximum, 512, &marker) != nil || !validInitialization(marker, selected, i.Backend()) {
+			return initializationRecord{}, secretstore.Failure("store.corrupt", "secret initialization record is invalid or incompatible")
+		}
+		if marker.MAC != "" {
+			signingKey, err := initializationSigningKey(ctx, area, marker)
+			if err != nil {
+				return initializationRecord{}, err
+			}
+			clear(signingKey)
+		}
+		return marker, nil
+	}
+	pending, pendingExists, err := freshInitializationPending(ctx, area, selected, i.Backend(), root)
+	if err != nil {
+		return initializationRecord{}, err
+	}
+	if pendingExists {
+		marker = pending
+	} else {
+		marker, err = i.newInitialization(ctx, selected, area, nil)
+		if err != nil {
+			return initializationRecord{}, err
+		}
+	}
+	data, err := encodeCanonical(marker, selectorMaximum)
+	if err != nil {
+		return initializationRecord{}, err
+	}
+	outcome, replaceErr := area.Replace(ctx, initializationPath, data, markerData)
+	if replaceErr != nil || outcome != secretstore.Committed {
+		return initializationRecord{}, publicationFailure(ctx, outcome, replaceErr)
+	}
+	return marker, nil
+}
+
+func (i *Implementation) retryInitialization(ctx context.Context, selected secretstore.Context, area secretstore.Area, marker initializationRecord) (initializationRecord, error) {
+	if len(marker.Attempts) >= 16 {
+		return initializationRecord{}, secretstore.Failure("store.limit", "secret initialization recovery exhausted its attempt limit")
+	}
+	current, exists, readErr := area.ReadMutable(ctx, initializationPath, selectorMaximum)
+	if readErr != nil || !exists {
+		return initializationRecord{}, areaFailure(ctx, "store.corrupt", "secret initialization record changed during recovery", readErr)
+	}
+	var actual initializationRecord
+	if decodeCanonical(current, selectorMaximum, 256, &actual) != nil || !reflectInitializationEqual(actual, marker) {
+		return initializationRecord{}, secretstore.Failure("store.conflict", "secret initialization record changed during recovery")
+	}
+	next, err := i.newInitialization(ctx, selected, area, &marker)
+	if err != nil {
+		return initializationRecord{}, err
+	}
+	if marker.MAC != "" {
+		signingKey, err := initializationSigningKey(ctx, area, marker)
+		if err != nil {
+			return initializationRecord{}, err
+		}
+		next = signInitialization(next, marker.MACKeyID, signingKey)
+		clear(signingKey)
+	}
+	nextData, err := encodeCanonical(next, selectorMaximum)
+	if err != nil {
+		return initializationRecord{}, err
+	}
+	outcome, replaceErr := area.Replace(ctx, initializationPath, nextData, current)
+	if replaceErr != nil || outcome != secretstore.Committed {
+		return initializationRecord{}, publicationFailure(ctx, outcome, replaceErr)
+	}
+	if err := verifyInitializationArtifacts(ctx, area, selected, next, false); err != nil {
+		return initializationRecord{}, err
+	}
+	return next, nil
 }
 
 func (i *Implementation) resumeInitialization(ctx context.Context, selected secretstore.Context, area secretstore.Area, selectorExpected []byte, marker initializationRecord) (secretstore.StoreSession, bool, initializationRecord, error) {
@@ -146,37 +163,9 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 		clear(signingKey)
 	}
 	attempt := marker.Attempts[len(marker.Attempts)-1]
-	keyEntry, err := namedEntry(ctx, area, "keys", attempt.KeyID+".key")
-	if err != nil {
-		return nil, false, marker, err
-	}
-	key := make([]byte, 32)
-	if keyEntry == nil {
-		if _, err := io.ReadFull(i.random, key); err != nil {
-			clear(key)
-			return nil, false, marker, secretstore.Failure("store.crypto", "secret encryption randomness is unavailable")
-		}
-		if err := area.WriteExclusive(ctx, keyPath(attempt.KeyID), key); err != nil {
-			clear(key)
-			return nil, false, marker, areaFailure(ctx, "store.conflict", "secret encryption key could not be stored", err)
-		}
-	} else {
-		if keyEntry.Size != 32 {
-			clear(key)
-			return nil, true, marker, nil
-		}
-		value, exists, err := area.ReadMutable(ctx, keyPath(attempt.KeyID), 32)
-		if err != nil || !exists || len(value) != 32 {
-			clear(key)
-			clear(value)
-			return nil, true, marker, nil
-		}
-		copy(key, value)
-		clear(value)
-		if err := area.SyncFile(ctx, keyPath(attempt.KeyID)); err != nil {
-			clear(key)
-			return nil, false, marker, areaFailure(ctx, "store.conflict", "recovered secret key durability could not be established", err)
-		}
+	key, retry, err := i.initializationKey(ctx, area, attempt.KeyID)
+	if err != nil || retry {
+		return nil, retry, marker, err
 	}
 	keepKey := false
 	defer func() {
@@ -185,22 +174,9 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 		}
 	}()
 	if marker.MAC == "" {
-		current, exists, err := area.ReadMutable(ctx, initializationPath, selectorMaximum)
-		if err != nil || !exists {
-			return nil, false, marker, areaFailure(ctx, "store.corrupt", "secret initialization record changed before authentication", err)
-		}
-		var actual initializationRecord
-		if decodeCanonical(current, selectorMaximum, 256, &actual) != nil || !reflectInitializationEqual(actual, marker) {
-			return nil, false, marker, secretstore.Failure("store.conflict", "secret initialization record changed before authentication")
-		}
-		signed := signInitialization(marker, attempt.KeyID, key)
-		data, err := encodeCanonical(signed, selectorMaximum)
+		signed, err := authenticateInitialization(ctx, area, marker, attempt.KeyID, key)
 		if err != nil {
 			return nil, false, marker, err
-		}
-		outcome, replaceErr := area.Replace(ctx, initializationPath, data, current)
-		if replaceErr != nil || outcome != secretstore.Committed {
-			return nil, false, marker, publicationFailure(ctx, outcome, replaceErr)
 		}
 		marker = signed
 	}
@@ -233,24 +209,11 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 	selector := secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: selected.Name, Backend: i.Backend(), Generation: attempt.Generation}
 	index := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: attempt.KeyID, Keys: []storedKey{{ID: attempt.KeyID, Seals: ledger.Seals}}, Versions: []storedVersion{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}, Produced: []secretstore.Produced{}}
 	if !freshLedger {
-		ledgerData, exists, err := area.ReadMutable(ctx, ledgerPath(attempt.KeyID), ledgerMaximum)
-		if err != nil || !exists {
-			return nil, false, marker, areaFailure(ctx, "store.corrupt", "secret initialization ledger cannot be reserved", err)
-		}
-		ledger, err = decodeLedger(ledgerData, selected.Name, i.Backend(), key, attempt.KeyID, 0)
-		if err != nil || ledger.Seals >= maxSeals {
-			return nil, false, marker, secretstore.Failure("store.limit", "secret initialization seal limit is exhausted")
-		}
-		ledger.Seals++
-		nextLedger, err := encodeLedger(selected.Name, i.Backend(), key, attempt.KeyID, ledger.Seals)
+		seals, err := i.reserveInitializationSeal(ctx, selected, area, attempt.KeyID, key)
 		if err != nil {
 			return nil, false, marker, err
 		}
-		outcome, replaceErr := area.Replace(ctx, ledgerPath(attempt.KeyID), nextLedger, ledgerData)
-		if replaceErr != nil || outcome != secretstore.Committed {
-			return nil, false, marker, publicationFailure(ctx, outcome, replaceErr)
-		}
-		index.Keys[0].Seals = ledger.Seals
+		index.Keys[0].Seals = seals
 	}
 	plaintext, err := encodeCanonical(index, indexMaximum)
 	if err != nil {
@@ -273,6 +236,87 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 		return nil, false, marker, cleanupFailure(ctx, err)
 	}
 	return session, false, marker, nil
+}
+
+// initializationKey stores a fresh key for the attempt or recovers the one an
+// interrupted attempt stored. A recorded key it cannot recover asks for a new
+// attempt.
+func (i *Implementation) initializationKey(ctx context.Context, area secretstore.Area, keyID string) ([]byte, bool, error) {
+	keyEntry, err := namedEntry(ctx, area, "keys", keyID+".key")
+	if err != nil {
+		return nil, false, err
+	}
+	key := make([]byte, 32)
+	if keyEntry == nil {
+		if _, err := io.ReadFull(i.random, key); err != nil {
+			clear(key)
+			return nil, false, secretstore.Failure("store.crypto", "secret encryption randomness is unavailable")
+		}
+		if err := area.WriteExclusive(ctx, keyPath(keyID), key); err != nil {
+			clear(key)
+			return nil, false, areaFailure(ctx, "store.conflict", "secret encryption key could not be stored", err)
+		}
+		return key, false, nil
+	}
+	if keyEntry.Size != 32 {
+		clear(key)
+		return nil, true, nil
+	}
+	value, exists, err := area.ReadMutable(ctx, keyPath(keyID), 32)
+	if err != nil || !exists || len(value) != 32 {
+		clear(key)
+		clear(value)
+		return nil, true, nil
+	}
+	copy(key, value)
+	clear(value)
+	if err := area.SyncFile(ctx, keyPath(keyID)); err != nil {
+		clear(key)
+		return nil, false, areaFailure(ctx, "store.conflict", "recovered secret key durability could not be established", err)
+	}
+	return key, false, nil
+}
+
+func authenticateInitialization(ctx context.Context, area secretstore.Area, marker initializationRecord, keyID string, key []byte) (initializationRecord, error) {
+	current, exists, err := area.ReadMutable(ctx, initializationPath, selectorMaximum)
+	if err != nil || !exists {
+		return marker, areaFailure(ctx, "store.corrupt", "secret initialization record changed before authentication", err)
+	}
+	var actual initializationRecord
+	if decodeCanonical(current, selectorMaximum, 256, &actual) != nil || !reflectInitializationEqual(actual, marker) {
+		return marker, secretstore.Failure("store.conflict", "secret initialization record changed before authentication")
+	}
+	signed := signInitialization(marker, keyID, key)
+	data, err := encodeCanonical(signed, selectorMaximum)
+	if err != nil {
+		return marker, err
+	}
+	outcome, replaceErr := area.Replace(ctx, initializationPath, data, current)
+	if replaceErr != nil || outcome != secretstore.Committed {
+		return marker, publicationFailure(ctx, outcome, replaceErr)
+	}
+	return signed, nil
+}
+
+func (i *Implementation) reserveInitializationSeal(ctx context.Context, selected secretstore.Context, area secretstore.Area, keyID string, key []byte) (uint64, error) {
+	ledgerData, exists, err := area.ReadMutable(ctx, ledgerPath(keyID), ledgerMaximum)
+	if err != nil || !exists {
+		return 0, areaFailure(ctx, "store.corrupt", "secret initialization ledger cannot be reserved", err)
+	}
+	ledger, err := decodeLedger(ledgerData, selected.Name, i.Backend(), key, keyID, 0)
+	if err != nil || ledger.Seals >= maxSeals {
+		return 0, secretstore.Failure("store.limit", "secret initialization seal limit is exhausted")
+	}
+	ledger.Seals++
+	nextLedger, err := encodeLedger(selected.Name, i.Backend(), key, keyID, ledger.Seals)
+	if err != nil {
+		return 0, err
+	}
+	outcome, replaceErr := area.Replace(ctx, ledgerPath(keyID), nextLedger, ledgerData)
+	if replaceErr != nil || outcome != secretstore.Committed {
+		return 0, publicationFailure(ctx, outcome, replaceErr)
+	}
+	return ledger.Seals, nil
 }
 
 func (i *Implementation) newInitialization(ctx context.Context, selected secretstore.Context, area secretstore.Area, prior *initializationRecord) (initializationRecord, error) {

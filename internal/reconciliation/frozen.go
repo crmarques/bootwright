@@ -31,16 +31,48 @@ func Freeze(value any, subject string) ([]byte, error) {
 // declare. The caller checks the version it read before proving the bytes, so
 // an unsupported version is named rather than reported as unreadable bytes.
 func Thaw[T any](data []byte, subject string) (T, error) {
-	var request, empty T
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
+	var empty T
+	request, trailing, err := decodeClosed[T](data)
+	if err != nil {
 		return empty, frozenFailure("the frozen " + subject + " request is malformed")
 	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
+	if trailing {
 		return empty, frozenFailure("the frozen " + subject + " request contains trailing data")
 	}
 	return request, nil
+}
+
+// DecodeEvidence reads the one result shape an adapter may return, at most
+// maximum bytes of it, refusing a member the shape does not declare and
+// anything after it. What the evidence proves stays its capability's to decide.
+func DecodeEvidence[T any](data []byte, maximum int, subject string) (T, error) {
+	var empty T
+	if len(data) == 0 || len(data) > maximum {
+		return empty, frozenFailure("the " + subject + " adapter returned no bounded evidence")
+	}
+	evidence, trailing, err := decodeClosed[T](data)
+	if err != nil {
+		return empty, frozenFailure("the " + subject + " adapter returned malformed evidence")
+	}
+	if trailing {
+		return empty, frozenFailure("the " + subject + " adapter returned trailing evidence")
+	}
+	return evidence, nil
+}
+
+// decodeClosed reads one value of T, refusing a member T does not declare, and
+// reports whether anything but JSON whitespace follows the value.
+func decodeClosed[T any](data []byte) (T, bool, error) {
+	var value, empty T
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return empty, false, err
+	}
+	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
+		return empty, true, nil
+	}
+	return value, false, nil
 }
 
 // ProveCanonical proves the bytes are the canonical encoding of the shape they

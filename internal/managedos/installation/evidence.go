@@ -1,9 +1,6 @@
 package installation
 
-import (
-	"bytes"
-	"encoding/json"
-)
+import "github.com/crmarques/bootwright/internal/reconciliation"
 
 const maxEvidenceBytes = 64 << 10
 
@@ -100,14 +97,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 // it to pin a session against a key this context already proved, so it decodes
 // without the request digest a running operation compares.
 func HostKeyEvidence(data []byte) (address, hostKey string, err error) {
-	if len(data) == 0 || len(data) > maxEvidenceBytes {
-		return "", "", refusal("lifecycle.state", "the installation evidence is not bounded", "")
-	}
-	var evidence Evidence
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil || len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return "", "", refusal("lifecycle.state", "the installation evidence could not be decoded", "")
+	evidence, err := reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "installation")
+	if err != nil {
+		return "", "", err
 	}
 	if evidence.Absent || evidence.HostKey == "" || evidence.Address == "" {
 		return "", "", refusal("lifecycle.state", "the installation evidence proves no host key", "")
@@ -208,17 +200,9 @@ func ValidatePartial(data []byte, digest, marker string) error {
 }
 
 func decodeEvidence(data []byte, digest string) (Evidence, error) {
-	if len(data) == 0 || len(data) > maxEvidenceBytes {
-		return Evidence{}, refusal("lifecycle.state", "the installation adapter returned no bounded evidence", "")
-	}
-	var evidence Evidence
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil {
-		return Evidence{}, refusal("lifecycle.state", "the installation adapter returned malformed evidence", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return Evidence{}, refusal("lifecycle.state", "the installation adapter returned trailing evidence", "")
+	evidence, err := reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "installation")
+	if err != nil {
+		return Evidence{}, err
 	}
 	if evidence.Request != digest {
 		return Evidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")

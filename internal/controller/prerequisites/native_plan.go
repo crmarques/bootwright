@@ -117,21 +117,7 @@ func validateNativeShape(value NativeResolvedPlan) error {
 			return nativePlanFailure()
 		}
 	}
-	requests := map[string]string{"openssh": value.Requests.OpenSSH, "nmstate": value.Requests.NMState}
-	if value.Requirements.ContainerRuntime {
-		requests["podman"] = value.Requests.Podman
-	}
-	if value.Requirements.LibvirtClient {
-		requests["libvirt"] = value.Requests.Libvirt
-	}
-	// The hypervisor runs the release its client speaks, so it shares that
-	// intent rather than carrying one that could drift from it.
-	if value.Requirements.Hypervisor {
-		requests["hypervisor"] = value.Requests.Libvirt
-	}
-	if value.Requirements.InstallerMedia {
-		requests["installer-media"] = value.Requests.InstallerMedia
-	}
+	requests := nativeRequests(value)
 	// A requirement may install more than one root package, so the plan is
 	// proved against exactly the packages its selected requirements name.
 	expected := 0
@@ -148,27 +134,9 @@ func validateNativeShape(value NativeResolvedPlan) error {
 		}
 		repositories[repo.ID] = true
 	}
-	packages := map[string]NativePackage{}
-	identities := map[NativeIdentity]string{}
-	var totalBytes int64
-	for _, pkg := range value.Packages {
-		totalBytes += pkg.Source.Bytes
-		if totalBytes > 4<<30 {
-			return nativePlanFailure()
-		}
-		identity := NativeIdentity{pkg.Name, pkg.Epoch, pkg.Version, pkg.Release, pkg.Architecture}
-		if !validNativeIdentity(identity) || !nativeText(pkg.Source.ID, 160) || packages[pkg.Source.ID].Name != "" || identities[identity] != "" || !nativeHTTPS(pkg.Source.URL) || !nativeSHA(pkg.Source.SHA256) || pkg.Source.Bytes <= 0 || pkg.Source.Bytes > 256<<20 || len(pkg.Signer) != 40 || strings.Trim(pkg.Signer, "0123456789abcdef") != "" {
-			return nativePlanFailure()
-		}
-		approved := false
-		for _, repo := range value.Repositories {
-			approved = approved || strings.HasPrefix(pkg.Source.URL, strings.TrimSuffix(repo.BaseURL, "/")+"/")
-		}
-		if !approved {
-			return nativePlanFailure()
-		}
-		packages[pkg.Source.ID] = pkg
-		identities[identity] = pkg.Source.ID
+	packages, identities, ok := nativePackages(value)
+	if !ok {
+		return nativePlanFailure()
 	}
 	used := map[string]bool{}
 	rootNames := map[string]string{}
@@ -210,6 +178,51 @@ func validateNativeShape(value NativeResolvedPlan) error {
 		return nativePlanFailure()
 	}
 	return nil
+}
+
+func nativeRequests(value NativeResolvedPlan) map[string]string {
+	requests := map[string]string{"openssh": value.Requests.OpenSSH, "nmstate": value.Requests.NMState}
+	if value.Requirements.ContainerRuntime {
+		requests["podman"] = value.Requests.Podman
+	}
+	if value.Requirements.LibvirtClient {
+		requests["libvirt"] = value.Requests.Libvirt
+	}
+	// The hypervisor runs the release its client speaks, so it shares that
+	// intent rather than carrying one that could drift from it.
+	if value.Requirements.Hypervisor {
+		requests["hypervisor"] = value.Requests.Libvirt
+	}
+	if value.Requirements.InstallerMedia {
+		requests["installer-media"] = value.Requests.InstallerMedia
+	}
+	return requests
+}
+
+func nativePackages(value NativeResolvedPlan) (map[string]NativePackage, map[NativeIdentity]string, bool) {
+	packages := map[string]NativePackage{}
+	identities := map[NativeIdentity]string{}
+	var totalBytes int64
+	for _, pkg := range value.Packages {
+		totalBytes += pkg.Source.Bytes
+		if totalBytes > 4<<30 {
+			return nil, nil, false
+		}
+		identity := NativeIdentity{pkg.Name, pkg.Epoch, pkg.Version, pkg.Release, pkg.Architecture}
+		if !validNativeIdentity(identity) || !nativeText(pkg.Source.ID, 160) || packages[pkg.Source.ID].Name != "" || identities[identity] != "" || !nativeHTTPS(pkg.Source.URL) || !nativeSHA(pkg.Source.SHA256) || pkg.Source.Bytes <= 0 || pkg.Source.Bytes > 256<<20 || len(pkg.Signer) != 40 || strings.Trim(pkg.Signer, "0123456789abcdef") != "" {
+			return nil, nil, false
+		}
+		approved := false
+		for _, repo := range value.Repositories {
+			approved = approved || strings.HasPrefix(pkg.Source.URL, strings.TrimSuffix(repo.BaseURL, "/")+"/")
+		}
+		if !approved {
+			return nil, nil, false
+		}
+		packages[pkg.Source.ID] = pkg
+		identities[identity] = pkg.Source.ID
+	}
+	return packages, identities, true
 }
 
 func validNativeIdentity(value NativeIdentity) bool {

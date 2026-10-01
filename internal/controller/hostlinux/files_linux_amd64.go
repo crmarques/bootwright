@@ -97,30 +97,10 @@ func (f *heldFilesystem) openPathPolicy(ctx context.Context, name string, readab
 				unix.Close(fd)
 				return nil, unix.Stat_t{}, errEvidence
 			}
-			var filesystem unix.Statfs_t
-			if unix.Fstatfs(fd, &filesystem) != nil || filesystem.Type == unix.PROC_SUPER_MAGIC {
-				unix.Close(fd)
-				return nil, unix.Stat_t{}, errEvidence
-			}
 			links++
-			buffer := make([]byte, 4097)
-			// AT_EMPTY_PATH reads this held symlink, so replacement cannot change
-			// its target between metadata verification and link acquisition.
-			n, linkErr := unix.Readlinkat(fd, "", buffer)
-			unix.Close(fd)
-			if linkErr != nil || n == 0 || n > 4096 || links > 16 {
-				return nil, unix.Stat_t{}, errEvidence
-			}
-			target := string(buffer[:n])
-			if f.qualifiedLinks != nil && f.qualifiedLinks[current] != target {
-				return nil, unix.Stat_t{}, errEvidence
-			}
-			if !strings.HasPrefix(target, "/") {
-				target = "/" + strings.Join(resolved, "/") + "/" + target
-			}
-			target = path.Clean(target)
-			if target == "/" {
-				return nil, unix.Stat_t{}, errEvidence
+			target, err := f.linkTarget(fd, current, resolved, links)
+			if err != nil {
+				return nil, unix.Stat_t{}, err
 			}
 			pending = append(strings.Split(strings.TrimPrefix(target, "/"), "/"), pending...)
 			resolved = nil
@@ -144,27 +124,59 @@ func (f *heldFilesystem) openPathPolicy(ctx context.Context, name string, readab
 		if !readable {
 			return os.NewFile(uintptr(fd), name), stat, nil
 		}
-		if !f.regular(stat) {
-			unix.Close(fd)
-			return nil, unix.Stat_t{}, errEvidence
-		}
-		readFD, readErr := unix.Openat(parent, part, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NOATIME, 0)
-		if readErr == unix.EPERM {
-			// An unprivileged platform read may lack CAP_FOWNER for O_NOATIME.
-			readFD, readErr = unix.Openat(parent, part, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-		}
-		unix.Close(fd)
-		if readErr != nil {
-			return nil, unix.Stat_t{}, readErr
-		}
-		var opened unix.Stat_t
-		if unix.Fstat(readFD, &opened) != nil || !stable(stat, opened) {
-			unix.Close(readFD)
-			return nil, unix.Stat_t{}, errEvidence
-		}
-		return os.NewFile(uintptr(readFD), name), opened, nil
+		return f.openReadable(parent, fd, part, name, stat)
 	}
 	return nil, unix.Stat_t{}, errEvidence
+}
+
+func (f *heldFilesystem) linkTarget(fd int, current string, resolved []string, links int) (string, error) {
+	var filesystem unix.Statfs_t
+	if unix.Fstatfs(fd, &filesystem) != nil || filesystem.Type == unix.PROC_SUPER_MAGIC {
+		unix.Close(fd)
+		return "", errEvidence
+	}
+	buffer := make([]byte, 4097)
+	// AT_EMPTY_PATH reads this held symlink, so replacement cannot change
+	// its target between metadata verification and link acquisition.
+	n, linkErr := unix.Readlinkat(fd, "", buffer)
+	unix.Close(fd)
+	if linkErr != nil || n == 0 || n > 4096 || links > 16 {
+		return "", errEvidence
+	}
+	target := string(buffer[:n])
+	if f.qualifiedLinks != nil && f.qualifiedLinks[current] != target {
+		return "", errEvidence
+	}
+	if !strings.HasPrefix(target, "/") {
+		target = "/" + strings.Join(resolved, "/") + "/" + target
+	}
+	target = path.Clean(target)
+	if target == "/" {
+		return "", errEvidence
+	}
+	return target, nil
+}
+
+func (f *heldFilesystem) openReadable(parent, fd int, part, name string, stat unix.Stat_t) (*os.File, unix.Stat_t, error) {
+	if !f.regular(stat) {
+		unix.Close(fd)
+		return nil, unix.Stat_t{}, errEvidence
+	}
+	readFD, readErr := unix.Openat(parent, part, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NOATIME, 0)
+	if readErr == unix.EPERM {
+		// An unprivileged platform read may lack CAP_FOWNER for O_NOATIME.
+		readFD, readErr = unix.Openat(parent, part, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	}
+	unix.Close(fd)
+	if readErr != nil {
+		return nil, unix.Stat_t{}, readErr
+	}
+	var opened unix.Stat_t
+	if unix.Fstat(readFD, &opened) != nil || !stable(stat, opened) {
+		unix.Close(readFD)
+		return nil, unix.Stat_t{}, errEvidence
+	}
+	return os.NewFile(uintptr(readFD), name), opened, nil
 }
 
 func (f *heldFilesystem) regular(stat unix.Stat_t) bool {

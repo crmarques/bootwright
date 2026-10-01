@@ -104,6 +104,15 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			issues = add(issues, issue("$.spec.os.version", "numeric RHEL major versions must be at least 9"))
 		}
 	}
+	issues = add(issues, validateCustomizationEntries(custom)...)
+	issues = add(issues, validateSubscription(s, c)...)
+	issues = add(issues, validateServiceChoices(custom)...)
+	issues = add(issues, validateInstallerSources(o, c)...)
+	return add(issues, validateConsumers(o, c)...)
+}
+
+func validateCustomizationEntries(custom api.Value) []api.Issue {
+	var issues []api.Issue
 	for _, field := range []string{"language", "formats", "keyboard", "timezone"} {
 		v := custom.Get("localization", field)
 		if v.Present() && hasSpace(v.Text()) {
@@ -133,6 +142,11 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			issues = add(issues, issue(path+".gpgKeyURL", "GPG key URL must use HTTP(S) or an absolute file URI"))
 		}
 	}
+	return issues
+}
+
+func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
+	var issues []api.Issue
 	anaconda := s.Get("installer", "anaconda")
 	subscription := s.Get("subscription")
 	fromSubscription := anaconda.Get("packageSource", "fromSubscription")
@@ -149,7 +163,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 	}
-	subRepos := custom.Get("repositories", "subscription")
+	subRepos := s.Get("customizations", "repositories", "subscription")
 	if subRepos.Present() {
 		enable, disable := subRepos.Get("enable").Strings(), subRepos.Get("disable").Strings()
 		if len(enable)+len(disable) == 0 {
@@ -172,6 +186,11 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 	}
+	return issues
+}
+
+func validateServiceChoices(custom api.Value) []api.Issue {
+	var issues []api.Issue
 	enabled, disabled := custom.Get("services", "enabled").Strings(), custom.Get("services", "disabled").Strings()
 	for _, service := range enabled {
 		if slices.Contains(disabled, service) {
@@ -184,6 +203,12 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if tpm := custom.Get("security", "diskEncryption", "unlock", "tpm2"); tpm.Has("pcrBank") && !tpm.Has("pcrIds") {
 		issues = add(issues, issue("$.spec.customizations.security.diskEncryption.unlock.tpm2.pcrBank", "PCR bank requires selected PCR IDs"))
 	}
+	return issues
+}
+
+func validateInstallerSources(o api.Object, c api.Catalog) []api.Issue {
+	var issues []api.Issue
+	anaconda := o.Spec().Get("installer", "anaconda")
 	for _, selection := range []struct {
 		value api.Value
 		path  string
@@ -207,6 +232,14 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			issues = add(issues, issue("$.spec.installer.anaconda.packageSource.hostedTree.fromMedia", "hosted content media must differ from the boot image"))
 		}
 	}
+	return issues
+}
+
+func validateConsumers(o api.Object, c api.Catalog) []api.Issue {
+	var issues []api.Issue
+	s := o.Spec()
+	anaconda := s.Get("installer", "anaconda")
+	custom := s.Get("customizations")
 	for _, machine := range consumers(o, c) {
 		provider, ok := c.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
 		if !ok {

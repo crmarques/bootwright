@@ -1,12 +1,11 @@
 package managedservice
 
 import (
-	"bytes"
-	"encoding/json"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -46,42 +45,19 @@ type Request struct {
 // Canonical encodes the request exactly as the plan digest and the adapter
 // both consume it. It refuses anything a reader could interpret differently.
 func (r Request) Canonical() ([]byte, error) {
-	data, err := json.Marshal(r)
-	if err != nil {
-		return nil, Refusal("lifecycle.state", "the managed service request cannot be encoded", "")
-	}
-	var probe map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(&probe); err != nil {
-		return nil, Refusal("lifecycle.state", "the managed service request cannot be decoded", "")
-	}
-	canonical, err := json.Marshal(probe)
-	if err != nil || !bytes.Equal(data, canonical) {
-		return nil, Refusal("lifecycle.state", "the managed service request is not canonically ordered", "")
-	}
-	return data, nil
+	return reconciliation.Freeze(r, "managed service")
 }
 
 func DecodeRequest(data []byte, version string) (Request, error) {
-	var request Request
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		return Request{}, Refusal("lifecycle.state", "the frozen managed service request is malformed", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return Request{}, Refusal("lifecycle.state", "the frozen managed service request contains trailing data", "")
+	request, err := reconciliation.Thaw[Request](data, "managed service")
+	if err != nil {
+		return Request{}, err
 	}
 	if request.Version != version {
 		return Request{}, Refusal("lifecycle.state", "the frozen managed service request has an unsupported version", "")
 	}
-	canonical, err := request.Canonical()
-	if err != nil {
+	if err := reconciliation.ProveCanonical(data, request, "managed service"); err != nil {
 		return Request{}, err
-	}
-	if !bytes.Equal(canonical, data) {
-		return Request{}, Refusal("lifecycle.state", "the frozen managed service request is not canonical", "")
 	}
 	return request, nil
 }

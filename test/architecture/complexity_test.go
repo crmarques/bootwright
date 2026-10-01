@@ -16,47 +16,10 @@ import (
 const functionLineLimit = 100
 
 // longFunctionsAwaitingSplit are the bodies that already exceed the limit. The
-// list only shrinks: a new entry means a function grew past it instead of being
-// split, and removing one is the whole point. Their split is item B47 in
-// specs/milestones/m1.md.
+// list is empty and only shrinks: a new entry means a function grew past it
+// instead of being split.
 func longFunctionsAwaitingSplit() []string {
-	return []string{
-		"internal/cli/results.go.writeResult",
-		"internal/cli/runner.go.run",
-		"internal/cli/validation.go.validateInvocation",
-		"internal/containercluster/admission.go.Normalize",
-		"internal/containercluster/admission.go.validateLocal",
-		"internal/controller/ansiblelocal/runner_linux_amd64.go.runProcess",
-		"internal/controller/bundlelocal/bootstrap_linux_amd64.go.qualifyBootstrapELF",
-		"internal/controller/bundlelocal/execution_linux_amd64.go.WithPython",
-		"internal/controller/bundlelocal/manager.go.Prepare",
-		"internal/controller/bundlelocal/manager.go.inspectFiles",
-		"internal/controller/bundlelocal/tools.go.resolve",
-		"internal/controller/hostlinux/files_linux_amd64.go.openPathPolicy",
-		"internal/controller/prerequisites/bootstrap.go.CanonicalBootstrap",
-		"internal/controller/prerequisites/native_plan.go.validateNativeShape",
-		"internal/controller/prerequisites/service.go.inspect",
-		"internal/controller/prerequisites/service.go.setup",
-		"internal/controller/prerequisites/setup.go.prepare",
-		"internal/desiredstate/compilation/decoding.go.value",
-		"internal/desiredstate/compilation/schema_validation.go.validateShape",
-		"internal/desiredstate/compilation/selection.go.selectResources",
-		"internal/environment/selection.go.Select",
-		"internal/machine/admission.go.Normalize",
-		"internal/machine/admission.go.Validate",
-		"internal/managedos/admission.go.Validate",
-		"internal/reconciliation/ansiblerunner/process_linux_amd64.go.consume",
-		"internal/secrets/localkeyring/artifacts.go.obsoleteArtifacts",
-		"internal/secrets/localkeyring/format.go.canonicalValueSize",
-		"internal/secrets/localkeyring/initialization.go.initialize",
-		"internal/secrets/localkeyring/initialization.go.resumeInitialization",
-		"internal/secrets/localkeyring/mutations.go.publish",
-		"internal/secrets/material/files_linux_amd64.go.readFileParts",
-		"internal/workspace/contextfs/controller_records.go.validateControllerState",
-		"internal/workspace/contextfs/initialization_linux_amd64.go.Reserve",
-		"internal/workspace/contextfs/records.go.fitsJSON",
-		"internal/workspace/selectionfs/files_linux_amd64.go.local",
-	}
+	return []string{}
 }
 
 func TestProductionFunctionsStayWithinTheLineLimit(t *testing.T) {

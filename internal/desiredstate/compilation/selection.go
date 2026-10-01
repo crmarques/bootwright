@@ -24,6 +24,12 @@ func selectResources(sources desiredstate.Sources, documents []desiredstate.Docu
 	if resources.Len() == 0 {
 		ds.issue(env, api.Issue{Code: "api.value", Field: "$.spec.resources", Message: "resource selection must not be empty"})
 	}
+	selectDeclaredResources(sources, resources, env, base, selected, ds)
+	selectStoredAddons(sources, documents, base, selected)
+	return selected, excludedResources(sources, documents, base, selected, ds)
+}
+
+func selectDeclaredResources(sources desiredstate.Sources, resources api.Value, env *objectRecord, base string, selected map[string]bool, ds *diagnosticSink) {
 	seen := map[string]bool{}
 	for _, resource := range resources.Items() {
 		value := resource.Text()
@@ -49,6 +55,9 @@ func selectResources(sources desiredstate.Sources, documents []desiredstate.Docu
 			ds.issue(env, api.Issue{Code: "api.reference", Field: "$.spec.resources", Message: "resource path does not select an acquired desired-state file"})
 		}
 	}
+}
+
+func selectStoredAddons(sources desiredstate.Sources, documents []desiredstate.Document, base string, selected map[string]bool) {
 	// A marker proves descriptor selection only. It never authenticates a package.
 	markers := map[string][]desiredstate.SourceFile{}
 	for _, marker := range sources.Markers {
@@ -81,6 +90,9 @@ func selectResources(sources desiredstate.Sources, documents []desiredstate.Docu
 			selected[file.Path()] = true
 		}
 	}
+}
+
+func excludedResources(sources desiredstate.Sources, documents []desiredstate.Document, base string, selected map[string]bool, ds *diagnosticSink) []string {
 	excluded := []string{}
 	for _, file := range sources.Files {
 		if selected[file.Path()] {
@@ -112,7 +124,7 @@ func selectResources(sources desiredstate.Sources, documents []desiredstate.Docu
 		ds.add(diagnostics.Diagnostic{Severity: "warning", Code: "api.selection", Message: "resource file is excluded: " + strings.Join(sortedNames(identities), ", "), Source: &location, Remediation: remediation})
 	}
 	slices.Sort(excluded)
-	return selected, excluded
+	return excluded
 }
 
 func pathWithin(path, base string) bool {

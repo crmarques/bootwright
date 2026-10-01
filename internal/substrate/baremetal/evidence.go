@@ -2,7 +2,6 @@ package baremetal
 
 import (
 	"bytes"
-	"encoding/json"
 	"slices"
 	"strconv"
 	"strings"
@@ -182,17 +181,5 @@ func decodeEvidence(data []byte, digest string) (Evidence, error) {
 }
 
 func decodeStrict(data []byte) (Evidence, error) {
-	if len(data) == 0 || len(data) > maxEvidenceBytes {
-		return Evidence{}, refusal("lifecycle.state", "the machine adapter returned no bounded evidence", "")
-	}
-	var evidence Evidence
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil {
-		return Evidence{}, refusal("lifecycle.state", "the machine adapter returned malformed evidence", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return Evidence{}, refusal("lifecycle.state", "the machine adapter returned trailing evidence", "")
-	}
-	return evidence, nil
+	return reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "machine")
 }

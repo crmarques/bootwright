@@ -1,10 +1,8 @@
 package clients
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"slices"
 	"strings"
 
@@ -12,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 // The block this capability plans is the controller stage: one block per
@@ -107,41 +106,21 @@ func (r Request) Versions() controller.DependencyVersions {
 }
 
 func (r Request) Canonical() ([]byte, error) {
-	data, err := json.Marshal(r)
-	if err != nil {
-		return nil, refuse("lifecycle.state", "the controller prerequisites request cannot be encoded", "")
-	}
-	var probe map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(&probe); err != nil {
-		return nil, refuse("lifecycle.state", "the controller prerequisites request cannot be decoded", "")
-	}
-	canonical, err := json.Marshal(probe)
-	if err != nil || !bytes.Equal(data, canonical) {
-		return nil, refuse("lifecycle.state", "the controller prerequisites request is not canonically ordered", "")
-	}
-	return data, nil
+	return reconciliation.Freeze(r, "controller prerequisites")
 }
 
 func DecodeRequest(data []byte) (Request, error) {
-	var request Request
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil || len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request is malformed", "")
+	request, err := reconciliation.Thaw[Request](data, "controller prerequisites")
+	if err != nil {
+		return Request{}, err
 	}
 	if request.Version != Version {
 		return Request{}, refuse("lifecycle.state",
 			"the frozen controller prerequisites request has an unsupported version: "+request.Version,
 			"install the executable that registered this operation")
 	}
-	canonical, err := request.Canonical()
-	if err != nil {
+	if err := reconciliation.ProveCanonical(data, request, "controller prerequisites"); err != nil {
 		return Request{}, err
-	}
-	if !bytes.Equal(canonical, data) {
-		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request is not canonical", "")
 	}
 	return request, nil
 }

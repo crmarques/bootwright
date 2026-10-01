@@ -53,17 +53,9 @@ func (guard ExecutionGuard) WithPython(ctx context.Context, area prerequisites.B
 	for _, link := range requirement.Links {
 		fs.links[link.Path] = link.Target
 	}
-	lock, _, err := fs.open(ctx, requirement.LockPath, true, false)
+	lock, err := fs.readLock(ctx, requirement.LockPath)
 	if err != nil {
-		return executionFailure("controller.unsupported", "the qualified native package lock is missing or unsafe")
-	}
-	readLock := unix.Flock_t{Type: unix.F_RDLCK, Whence: 0, Start: 0, Len: 0}
-	if err := unix.FcntlFlock(lock.Fd(), unix.F_OFD_SETLK, &readLock); err != nil {
-		lock.Close()
-		if errors.Is(err, unix.EACCES) || errors.Is(err, unix.EAGAIN) {
-			return executionFailure("controller.conflict", "a native package transaction prevents coherent dependency execution")
-		}
-		return executionFailure("controller.unsupported", "the native package lock cannot protect dependency execution")
+		return err
 	}
 	var mu sync.Mutex
 	active := true
@@ -99,24 +91,58 @@ func (guard ExecutionGuard) WithPython(ctx context.Context, area prerequisites.B
 		}
 		return executionFailure("controller.unsupported", "the provided execution libraries or loader configuration do not match the qualified foundation")
 	}
-	if err := area.Verify(ctx); err != nil {
+	launch, bundle, err := openBundleLaunch(ctx, area, requirement, view.owner)
+	if err != nil {
 		return err
+	}
+	defer bundle.Close()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := use(launch, release); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return area.Verify(ctx)
+}
+
+func (fs executionFilesystem) readLock(ctx context.Context, name string) (*os.File, error) {
+	lock, _, err := fs.open(ctx, name, true, false)
+	if err != nil {
+		return nil, executionFailure("controller.unsupported", "the qualified native package lock is missing or unsafe")
+	}
+	readLock := unix.Flock_t{Type: unix.F_RDLCK, Whence: 0, Start: 0, Len: 0}
+	if err := unix.FcntlFlock(lock.Fd(), unix.F_OFD_SETLK, &readLock); err != nil {
+		lock.Close()
+		if errors.Is(err, unix.EACCES) || errors.Is(err, unix.EAGAIN) {
+			return nil, executionFailure("controller.conflict", "a native package transaction prevents coherent dependency execution")
+		}
+		return nil, executionFailure("controller.unsupported", "the native package lock cannot protect dependency execution")
+	}
+	return lock, nil
+}
+
+func openBundleLaunch(ctx context.Context, area prerequisites.BundleArea, requirement prerequisites.ExecutionRequirement, owner uint32) (prerequisites.PythonLaunch, *os.File, error) {
+	if err := area.Verify(ctx); err != nil {
+		return prerequisites.PythonLaunch{}, nil, err
 	}
 	location, err := area.Location(ctx)
 	if err != nil {
-		return err
+		return prerequisites.PythonLaunch{}, nil, err
 	}
 	if !executionPath(location.Path) || location.Device == 0 || location.Inode == 0 {
-		return executionFailure("controller.identity", "the private dependency bundle location is unverified")
+		return prerequisites.PythonLaunch{}, nil, executionFailure("controller.identity", "the private dependency bundle location is unverified")
 	}
-	bundle, err := openExecutionRoot(executionView{root: location.Path, owner: view.owner})
+	bundle, err := openExecutionRoot(executionView{root: location.Path, owner: owner})
 	if err != nil {
-		return executionFailure("controller.identity", "the private dependency bundle execution directory is unsafe")
+		return prerequisites.PythonLaunch{}, nil, executionFailure("controller.identity", "the private dependency bundle execution directory is unsafe")
 	}
-	defer bundle.Close()
 	var stat unix.Stat_t
 	if unix.Fstat(int(bundle.Fd()), &stat) != nil || uint64(stat.Dev) != location.Device || stat.Ino != location.Inode {
-		return executionFailure("controller.identity", "the private dependency bundle execution directory was replaced")
+		bundle.Close()
+		return prerequisites.PythonLaunch{}, nil, executionFailure("controller.identity", "the private dependency bundle execution directory was replaced")
 	}
 	launch := prerequisites.PythonLaunch{
 		Loader: requirement.Loader,
@@ -131,16 +157,7 @@ func (guard ExecutionGuard) WithPython(ctx context.Context, area prerequisites.B
 			"LC_ALL=C.UTF-8", "LANG=C.UTF-8", "HOME=" + location.Path, "OPENSSL_CONF=/dev/null",
 		},
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := use(launch, release); err != nil {
-		return err
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return area.Verify(ctx)
+	return launch, bundle, nil
 }
 
 func validExecutionRequirement(value prerequisites.ExecutionRequirement) bool {

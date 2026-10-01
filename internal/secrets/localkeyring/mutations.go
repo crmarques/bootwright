@@ -332,6 +332,65 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		return err
 	}
 	setKeySeals(next, publication.id, reservation.seals)
+	if err := s.assignBlobs(ctx, next, plain, publication.id); err != nil {
+		return err
+	}
+	if err := publicationFits(*next, plain, publication.id); err != nil {
+		return err
+	}
+	plaintext, err := encodeCanonical(*next, indexMaximum)
+	if err != nil {
+		return err
+	}
+	defer clear(plaintext)
+
+	identityData, err := s.identityRecords(identities)
+	if err != nil {
+		return err
+	}
+	if err := s.collectArtifacts(ctx); err != nil {
+		return err
+	}
+	s.mutated = true
+	for index, id := range identities {
+		if err := s.area.PublishExclusive(ctx, "identities/"+id+".json", identityData[index]); err != nil {
+			return areaFailure(ctx, "store.conflict", "secret identity tombstone could not be stored", err)
+		}
+	}
+	if publication.fresh {
+		if err := s.area.WriteExclusive(ctx, keyPath(publication.id), publication.value); err != nil {
+			return areaFailure(ctx, "store.conflict", "fresh secret encryption key could not be stored", err)
+		}
+	}
+	if err := s.commitSeals(ctx, reservation); err != nil {
+		return err
+	}
+	if err := s.writeSealedParts(ctx, *next, plain, publication); err != nil {
+		return err
+	}
+	selectorData, err := sealMetadata(publication.value, plaintext, next.Selector, publication.id, s.implementation.random)
+	if err != nil {
+		return err
+	}
+	defer clear(selectorData)
+	outcome, err := s.area.Replace(ctx, selectorPath, selectorData, s.selectorData)
+	if err != nil || outcome != secretstore.Committed {
+		return publicationFailure(ctx, outcome, err)
+	}
+	s.selector = next.Selector
+	clear(s.selectorData)
+	s.selectorData = slices.Clone(selectorData)
+	s.index = cloneIndex(*next)
+	if publication.fresh {
+		s.keys[publication.id] = publication.value
+	}
+	if err := s.collectArtifacts(ctx); err != nil {
+		return cleanupFailure(ctx, err)
+	}
+	return nil
+}
+
+func (s *session) assignBlobs(ctx context.Context, next *indexRecord, plain []plainPart, keyID string) error {
 	usedGenerations := map[string]bool{s.selector.Generation: true}
 	for _, version := range next.Versions {
 		for _, part := range version.Parts {
@@ -356,62 +415,51 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		if !exists {
 			return secretstore.Failure("store.corrupt", "secret publication lost a pending part")
 		}
-		part.BlobID, part.KeyID, part.Generation = blobID, publication.id, generation
+		part.BlobID, part.KeyID, part.Generation = blobID, keyID, generation
 	}
 	next.Selector = secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: s.context.Name, Backend: s.selector.Backend, Generation: generation}
-	indexSize, err := canonicalEncodedSize(*next, indexMaximum)
+	return nil
+}
+
+func publicationFits(next indexRecord, plain []plainPart, keyID string) error {
+	indexSize, err := canonicalEncodedSize(next, indexMaximum)
 	if err != nil {
 		return err
 	}
-	if _, err := metadataEncodedSize(indexSize, next.Selector, publication.id); err != nil {
+	if _, err := metadataEncodedSize(indexSize, next.Selector, keyID); err != nil {
 		return err
 	}
 	for _, pending := range plain {
-		version, _ := findVersion(*next, pending.version)
+		version, _ := findVersion(next, pending.version)
 		part, _ := storedPartOf(version, pending.part)
-		if _, err := sealedEnvelopeSize(len(pending.data), "part", publication.id, part.BlobID, partMaximum); err != nil {
+		if _, err := sealedEnvelopeSize(len(pending.data), "part", keyID, part.BlobID, partMaximum); err != nil {
 			return err
 		}
 	}
-	if err := validateIndex(*next, next.Selector); err != nil {
+	if err := validateIndex(next, next.Selector); err != nil {
 		return secretstore.Failure("store.limit", "secret publication would exceed its logical bounds")
 	}
-	plaintext, err := encodeCanonical(*next, indexMaximum)
-	if err != nil {
-		return err
-	}
-	defer clear(plaintext)
+	return nil
+}
 
+func (s *session) identityRecords(identities []string) ([][]byte, error) {
 	identityData := make([][]byte, len(identities))
 	for index, id := range identities {
 		if !validID(id, "ver-") && !validID(id, "bind-") {
-			return secretstore.Failure("store.corrupt", "secret publication identity is invalid")
+			return nil, secretstore.Failure("store.corrupt", "secret publication identity is invalid")
 		}
 		data, err := encodeCanonical(identityRecord{FormatVersion: formatVersion, Context: s.context.Name, ID: id}, selectorMaximum)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		identityData[index] = data
 	}
-	if err := s.collectArtifacts(ctx); err != nil {
-		return err
-	}
-	s.mutated = true
-	for index, id := range identities {
-		if err := s.area.PublishExclusive(ctx, "identities/"+id+".json", identityData[index]); err != nil {
-			return areaFailure(ctx, "store.conflict", "secret identity tombstone could not be stored", err)
-		}
-	}
-	if publication.fresh {
-		if err := s.area.WriteExclusive(ctx, keyPath(publication.id), publication.value); err != nil {
-			return areaFailure(ctx, "store.conflict", "fresh secret encryption key could not be stored", err)
-		}
-	}
-	if err := s.commitSeals(ctx, reservation); err != nil {
-		return err
-	}
+	return identityData, nil
+}
+
+func (s *session) writeSealedParts(ctx context.Context, next indexRecord, plain []plainPart, publication publicationKey) error {
 	for _, pending := range plain {
-		version, _ := findVersion(*next, pending.version)
+		version, _ := findVersion(next, pending.version)
 		part, _ := storedPartOf(version, pending.part)
 		sealed, err := seal(publication.value, pending.data, partAAD(s.context.Name, next.Selector.Backend, version, part), "part", publication.id, part.BlobID, s.implementation.random, partMaximum)
 		if err != nil {
@@ -422,25 +470,6 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		if err != nil {
 			return areaFailure(ctx, "store.conflict", "encrypted secret part could not be stored", err)
 		}
-	}
-	selectorData, err := sealMetadata(publication.value, plaintext, next.Selector, publication.id, s.implementation.random)
-	if err != nil {
-		return err
-	}
-	defer clear(selectorData)
-	outcome, err := s.area.Replace(ctx, selectorPath, selectorData, s.selectorData)
-	if err != nil || outcome != secretstore.Committed {
-		return publicationFailure(ctx, outcome, err)
-	}
-	s.selector = next.Selector
-	clear(s.selectorData)
-	s.selectorData = slices.Clone(selectorData)
-	s.index = cloneIndex(*next)
-	if publication.fresh {
-		s.keys[publication.id] = publication.value
-	}
-	if err := s.collectArtifacts(ctx); err != nil {
-		return cleanupFailure(ctx, err)
 	}
 	return nil
 }

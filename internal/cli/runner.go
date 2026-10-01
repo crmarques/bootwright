@@ -185,6 +185,10 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 		}
 		return 0
 	}
+	return r.execute(ctx, command, path)
+}
+
+func (r *Runner) execute(ctx context.Context, command *cobra.Command, path string) int {
 	if r.config.BeginOperation != nil && implementedOperation(path) && ctx.Err() == nil {
 		operationContext, finish := r.config.BeginOperation(ctx)
 		if finish != nil {

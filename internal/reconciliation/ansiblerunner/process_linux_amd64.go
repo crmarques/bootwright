@@ -325,6 +325,31 @@ func start(command *exec.Cmd) (<-chan error, <-chan error) {
 	return started, waited
 }
 
+// adapterProtocol is one invocation's progress through the adapter protocol:
+// what the adapter reported and how far ending its process tree has gone.
+type adapterProtocol struct {
+	command      *exec.Cmd
+	input        *os.File
+	output       *os.File
+	grace        time.Duration
+	request      lifecycle.RunRequest
+	waited       <-chan error
+	drain        <-chan time.Time
+	timer        *time.Timer
+	result       lifecycle.RunResult
+	operationErr error
+	loaded       bool
+	completed    bool
+	canceled     bool
+	// exited marks an operationErr that is only the adapter's failed exit. A
+	// record the adapter wrote before it exited can be read after that exit,
+	// and is judged as if it had been read first: the refusal it names, or a
+	// record the runner refuses, then replaces the failure.
+	exited      bool
+	stopping    bool
+	groupKilled bool
+}
+
 // consume drives the protocol. No adapter effect is ever authorized to outlive
 // cancellation, so cancellation always terminates the owned process tree.
 func (r Runner) consume(ctx context.Context, command *exec.Cmd, waited <-chan error, output, input *os.File, grace time.Duration, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
@@ -334,166 +359,186 @@ func (r Runner) consume(ctx context.Context, command *exec.Cmd, waited <-chan er
 		readResult <- readProtocol(output, messages)
 		close(messages)
 	}()
-	var result lifecycle.RunResult
-	var operationErr error
-	loaded, completed, canceled := false, false, false
-	// exited marks an operationErr that is only the adapter's failed exit. A
-	// record the adapter wrote before it exited can be read after that exit,
-	// and is judged as if it had been read first: the refusal it names, or a
-	// record the runner refuses, then replaces the failure.
-	exited := false
-	var drain <-chan time.Time
-	var timer *time.Timer
-	defer func() {
-		if timer != nil {
-			timer.Stop()
-		}
-	}()
-	arm := func() {
-		if timer == nil {
-			timer = time.NewTimer(grace)
-			drain = timer.C
-		}
-	}
-	// Cancellation and a refused or unreadable record end the protocol at
-	// once. Closing the authorization channel releases whatever waits on it,
-	// and no lifecycle effect outlives the protocol, so the whole tree goes
-	// too. The adapter is signaled first: its supervisor ends every
-	// descendant on the parent-death signal, including an Ansible worker in a
-	// session of its own that a group kill never reaches, and a group kill
-	// first would end the supervisor before it could. The group is killed once
-	// the adapter is reaped or the drain passes, whichever comes first, which
-	// ends what the adapter left in it or an adapter that ignored the signal.
-	stopping, groupKilled := false, false
-	killGroup := func() {
-		if stopping && !groupKilled {
-			groupKilled = true
-			_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
-		}
-	}
-	stop := func() {
-		input.Close()
-		if stopping {
-			return
-		}
-		stopping = true
-		// A reaped adapter refuses the signal, so it never reaches a reused
-		// process ID.
-		_ = command.Process.Signal(parentDeath)
-		arm()
-		if waited == nil {
-			killGroup()
-		}
-	}
+	protocol := &adapterProtocol{command: command, input: input, output: output, grace: grace, request: request, waited: waited}
+	defer protocol.release()
 	cancelled := ctx.Done()
-	for messages != nil || waited != nil {
+	for messages != nil || protocol.waited != nil {
 		select {
 		case <-cancelled:
 			cancelled = nil
-			canceled = true
-			stop()
-		case <-drain:
-			drain = nil
-			killGroup()
-			output.Close()
-			if operationErr == nil {
-				operationErr = failure("lifecycle.unknown", "adapter descendants retained the result channel after completion", request.OutputRemediation)
-			}
-		case waitErr := <-waited:
-			waited = nil
-			killGroup()
-			arm()
-			if waitErr != nil && operationErr == nil {
-				operationErr = failure("lifecycle.state", "the adapter operation did not complete", request.OutputRemediation)
-				exited = true
-			}
+			protocol.canceled = true
+			protocol.stop()
+		case <-protocol.drain:
+			protocol.drained()
+		case waitErr := <-protocol.waited:
+			protocol.reaped(waitErr)
 		case message, open := <-messages:
-			if !open {
+			if open {
+				protocol.receive(ctx, message)
+			} else {
 				messages = nil
-				if err := <-readResult; err != nil {
-					// A read the drain's close ends is the runner's own and no
-					// record the adapter wrote, so it leaves the failed exit. A
-					// record the reader took before that close is still judged
-					// as if it had been read first.
-					if operationErr == nil || exited && !errors.Is(err, os.ErrClosed) {
-						operationErr, exited = failure("lifecycle.unknown", "the adapter structured result was incomplete", request.OutputRemediation), false
-					}
-					stop()
-				}
-				continue
-			}
-			// A record read after the failed exit is judged as if it had been
-			// read first. A valid one leaves that failure, except the named
-			// refusal, which replaces it.
-			valid := !completed && (operationErr == nil || exited) && !canceled
-			switch message.Phase {
-			case "loaded":
-				valid = valid && !loaded
-				loaded = valid
-			case "group":
-				valid = valid && loaded
-				if valid && !exited && request.Progress != nil {
-					request.Progress(ctx, message.Group, message.Status)
-				}
-				// A record the log could not keep is the engine's log fault: its
-				// callback latches it and cancels this run, which ends below.
-				if valid && !exited && request.Log != nil {
-					_ = request.Log(ctx, operationstore.LogRecord{Event: "group", Group: message.Group, Detail: message.Status})
-				}
-			case "completed":
-				valid = valid && loaded
-				if valid {
-					completed = true
-				}
-				if valid && !exited {
-					result = lifecycle.RunResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
-				}
-			case "refused":
-				// The adapter names a refusal its caller remedies by name, then
-				// fails. The caller's own failure for it replaces the adapter's.
-				named := request.Refusals[message.Reason]
-				valid = valid && loaded && named != nil
-				if valid {
-					operationErr, exited = named, false
-				}
-			default:
-				valid = false
-			}
-			if !valid {
-				// A record the runner refuses breaks the protocol whichever of
-				// it and the failed exit is read first, so it replaces that
-				// failure, and the outcome is unknown in either order.
-				if operationErr == nil || exited {
-					operationErr = failure("lifecycle.unknown", "the adapter capability protocol was invalid", request.OutputRemediation)
-				}
-				exited = false
-			}
-			if valid && message.Phase == "refused" {
-				// The adapter prints what it refused into its retained output
-				// as it fails, so it is left to end on its own.
-				continue
-			}
-			if operationErr != nil || canceled {
-				stop()
-				continue
-			}
-			if message.Phase == "loaded" {
-				if _, err := input.Write([]byte("proceed\n")); err != nil {
-					operationErr = failure("lifecycle.unknown", "adapter authorization delivery was uncertain", request.OutputRemediation)
-				}
+				protocol.readEnded(<-readResult)
 			}
 		}
 	}
-	if canceled {
+	return protocol.outcome(ctx)
+}
+
+func (p *adapterProtocol) release() {
+	if p.timer != nil {
+		p.timer.Stop()
+	}
+}
+
+func (p *adapterProtocol) arm() {
+	if p.timer == nil {
+		p.timer = time.NewTimer(p.grace)
+		p.drain = p.timer.C
+	}
+}
+
+// Cancellation and a refused or unreadable record end the protocol at once.
+// Closing the authorization channel releases whatever waits on it, and no
+// lifecycle effect outlives the protocol, so the whole tree goes too. The
+// adapter is signaled first: its supervisor ends every descendant on the
+// parent-death signal, including an Ansible worker in a session of its own
+// that a group kill never reaches, and a group kill first would end the
+// supervisor before it could. The group is killed once the adapter is reaped
+// or the drain passes, whichever comes first, which ends what the adapter left
+// in it or an adapter that ignored the signal.
+func (p *adapterProtocol) stop() {
+	p.input.Close()
+	if p.stopping {
+		return
+	}
+	p.stopping = true
+	// A reaped adapter refuses the signal, so it never reaches a reused
+	// process ID.
+	_ = p.command.Process.Signal(parentDeath)
+	p.arm()
+	if p.waited == nil {
+		p.killGroup()
+	}
+}
+
+func (p *adapterProtocol) killGroup() {
+	if p.stopping && !p.groupKilled {
+		p.groupKilled = true
+		_ = syscall.Kill(-p.command.Process.Pid, syscall.SIGKILL)
+	}
+}
+
+func (p *adapterProtocol) drained() {
+	p.drain = nil
+	p.killGroup()
+	p.output.Close()
+	if p.operationErr == nil {
+		p.operationErr = failure("lifecycle.unknown", "adapter descendants retained the result channel after completion", p.request.OutputRemediation)
+	}
+}
+
+func (p *adapterProtocol) reaped(waitErr error) {
+	p.waited = nil
+	p.killGroup()
+	p.arm()
+	if waitErr != nil && p.operationErr == nil {
+		p.operationErr = failure("lifecycle.state", "the adapter operation did not complete", p.request.OutputRemediation)
+		p.exited = true
+	}
+}
+
+func (p *adapterProtocol) readEnded(err error) {
+	if err == nil {
+		return
+	}
+	// A read the drain's close ends is the runner's own and no record the
+	// adapter wrote, so it leaves the failed exit. A record the reader took
+	// before that close is still judged as if it had been read first.
+	if p.operationErr == nil || p.exited && !errors.Is(err, os.ErrClosed) {
+		p.operationErr, p.exited = failure("lifecycle.unknown", "the adapter structured result was incomplete", p.request.OutputRemediation), false
+	}
+	p.stop()
+}
+
+func (p *adapterProtocol) receive(ctx context.Context, message protocolMessage) {
+	valid := p.accept(ctx, message)
+	if !valid {
+		// A record the runner refuses breaks the protocol whichever of it and
+		// the failed exit is read first, so it replaces that failure, and the
+		// outcome is unknown in either order.
+		if p.operationErr == nil || p.exited {
+			p.operationErr = failure("lifecycle.unknown", "the adapter capability protocol was invalid", p.request.OutputRemediation)
+		}
+		p.exited = false
+	}
+	if valid && message.Phase == "refused" {
+		// The adapter prints what it refused into its retained output as it
+		// fails, so it is left to end on its own.
+		return
+	}
+	if p.operationErr != nil || p.canceled {
+		p.stop()
+		return
+	}
+	if message.Phase == "loaded" {
+		if _, err := p.input.Write([]byte("proceed\n")); err != nil {
+			p.operationErr = failure("lifecycle.unknown", "adapter authorization delivery was uncertain", p.request.OutputRemediation)
+		}
+	}
+}
+
+// accept judges one record and applies what a valid one reports. A record read
+// after the failed exit is judged as if it had been read first. A valid one
+// leaves that failure, except the named refusal, which replaces it.
+func (p *adapterProtocol) accept(ctx context.Context, message protocolMessage) bool {
+	valid := !p.completed && (p.operationErr == nil || p.exited) && !p.canceled
+	switch message.Phase {
+	case "loaded":
+		valid = valid && !p.loaded
+		p.loaded = valid
+	case "group":
+		valid = valid && p.loaded
+		if valid && !p.exited && p.request.Progress != nil {
+			p.request.Progress(ctx, message.Group, message.Status)
+		}
+		// A record the log could not keep is the engine's log fault: its
+		// callback latches it and cancels this run, which ends below.
+		if valid && !p.exited && p.request.Log != nil {
+			_ = p.request.Log(ctx, operationstore.LogRecord{Event: "group", Group: message.Group, Detail: message.Status})
+		}
+	case "completed":
+		valid = valid && p.loaded
+		if valid {
+			p.completed = true
+		}
+		if valid && !p.exited {
+			p.result = lifecycle.RunResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
+		}
+	case "refused":
+		// The adapter names a refusal its caller remedies by name, then fails.
+		// The caller's own failure for it replaces the adapter's.
+		named := p.request.Refusals[message.Reason]
+		valid = valid && p.loaded && named != nil
+		if valid {
+			p.operationErr, p.exited = named, false
+		}
+	default:
+		valid = false
+	}
+	return valid
+}
+
+func (p *adapterProtocol) outcome(ctx context.Context) (lifecycle.RunResult, error) {
+	if p.canceled {
 		return lifecycle.RunResult{}, ctx.Err()
 	}
-	if operationErr != nil || !completed {
-		if operationErr == nil {
-			operationErr = failure("lifecycle.unknown", "the adapter operation has no complete result", request.OutputRemediation)
-		}
-		return lifecycle.RunResult{}, operationErr
+	if p.operationErr != nil {
+		return lifecycle.RunResult{}, p.operationErr
 	}
-	return result, nil
+	if !p.completed {
+		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter operation has no complete result", p.request.OutputRemediation)
+	}
+	return p.result, nil
 }
 
 // entrypoint pins the private interpreter's import roots before any Ansible

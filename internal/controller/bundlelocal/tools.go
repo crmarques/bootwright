@@ -341,51 +341,9 @@ func (c *ToolCatalog) release(ctx context.Context, repository, version string, e
 }
 
 func (c *ToolCatalog) resolve(ctx context.Context, request controller.ToolRequest, egress prerequisites.SetupEgress) (prerequisites.ToolDefinition, error) {
-	version := request.Version
-	var release githubToolRelease
-	var err error
-	repository := ""
-	switch request.Kind {
-	case "helm":
-		repository = "helm/helm"
-	case "govc":
-		repository = "vmware/govmomi"
-	case "virtctl":
-		repository = "kubevirt/kubevirt"
-	case "openshift-clients", "openshift-install":
-		if request.Compatibility == "okd" {
-			repository = okdPrimaryRepository
-		}
-	}
-	if repository != "" {
-		tag := version
-		if version != "latest" && request.Compatibility != "okd" {
-			tag = withV(version)
-		}
-		release, err = c.release(ctx, repository, tag, egress)
-		// Both repositories are owned by the OKD project. The older SCOS stream
-		// lives in its own repository; discover only an exact published tag,
-		// without guessing a repository from the numeric OpenShift version.
-		if request.Compatibility == "okd" && errors.Is(err, errToolMetadataNotFound) {
-			repository = okdSCOSRepository
-			release, err = c.release(ctx, repository, tag, egress)
-		}
-		if err != nil {
-			return prerequisites.ToolDefinition{}, err
-		}
-		if version == "latest" {
-			version = release.Tag
-		}
-	}
-	if request.Kind == "kubectl" && version == "latest" {
-		metadata, err := c.metadata(ctx, http.MethodGet, "https://dl.k8s.io/release/stable.txt", 128, egress)
-		if err != nil {
-			return prerequisites.ToolDefinition{}, err
-		}
-		version = strings.TrimSpace(string(metadata.data))
-	}
-	if request.Version == "latest" && !stableVersion(version) {
-		return prerequisites.ToolDefinition{}, bundleFailure("latest tool metadata does not identify a stable release")
+	version, release, repository, err := c.resolveVersion(ctx, request, egress)
+	if err != nil {
+		return prerequisites.ToolDefinition{}, err
 	}
 	publisherRequest := request
 	publisherRequest.Mirror = ""
@@ -416,25 +374,8 @@ func (c *ToolCatalog) resolve(ctx context.Context, request controller.ToolReques
 			source.SHA256 = strings.TrimPrefix(asset.Digest, "sha256:")
 		}
 	}
-	checksumURL := ""
 	if source.SHA256 == "" {
-		switch request.Kind {
-		case "helm":
-			checksumURL = publisher + ".sha256sum"
-		case "kubectl":
-			checksumURL = publisher + ".sha256"
-		case "openshift-clients", "openshift-install":
-			checksumURL = publisher[:strings.LastIndex(publisher, "/")+1] + "sha256sum.txt"
-		case "govc":
-			checksumURL = "https://github.com/vmware/govmomi/releases/download/" + withV(version) + "/checksums.txt"
-		default:
-			return prerequisites.ToolDefinition{}, bundleFailure("virtctl release lacks authenticated publisher SHA-256 metadata")
-		}
-		metadata, err := c.metadata(ctx, http.MethodGet, checksumURL, maxToolMetadataBytes, egress)
-		if err != nil {
-			return prerequisites.ToolDefinition{}, err
-		}
-		source.SHA256, err = toolChecksum(metadata.data, filename)
+		source.SHA256, err = c.publisherChecksum(ctx, request.Kind, version, publisher, filename, egress)
 		if err != nil {
 			return prerequisites.ToolDefinition{}, err
 		}
@@ -447,6 +388,77 @@ func (c *ToolCatalog) resolve(ctx context.Context, request controller.ToolReques
 		source.Bytes = metadata.size
 	}
 	return toolDefinition(request, version, source)
+}
+
+func (c *ToolCatalog) resolveVersion(ctx context.Context, request controller.ToolRequest, egress prerequisites.SetupEgress) (string, githubToolRelease, string, error) {
+	version := request.Version
+	var release githubToolRelease
+	var err error
+	repository := ""
+	switch request.Kind {
+	case "helm":
+		repository = "helm/helm"
+	case "govc":
+		repository = "vmware/govmomi"
+	case "virtctl":
+		repository = "kubevirt/kubevirt"
+	case "openshift-clients", "openshift-install":
+		if request.Compatibility == "okd" {
+			repository = okdPrimaryRepository
+		}
+	}
+	if repository != "" {
+		tag := version
+		if version != "latest" && request.Compatibility != "okd" {
+			tag = withV(version)
+		}
+		release, err = c.release(ctx, repository, tag, egress)
+		// Both repositories are owned by the OKD project. The older SCOS stream
+		// lives in its own repository; discover only an exact published tag,
+		// without guessing a repository from the numeric OpenShift version.
+		if request.Compatibility == "okd" && errors.Is(err, errToolMetadataNotFound) {
+			repository = okdSCOSRepository
+			release, err = c.release(ctx, repository, tag, egress)
+		}
+		if err != nil {
+			return "", githubToolRelease{}, "", err
+		}
+		if version == "latest" {
+			version = release.Tag
+		}
+	}
+	if request.Kind == "kubectl" && version == "latest" {
+		metadata, err := c.metadata(ctx, http.MethodGet, "https://dl.k8s.io/release/stable.txt", 128, egress)
+		if err != nil {
+			return "", githubToolRelease{}, "", err
+		}
+		version = strings.TrimSpace(string(metadata.data))
+	}
+	if request.Version == "latest" && !stableVersion(version) {
+		return "", githubToolRelease{}, "", bundleFailure("latest tool metadata does not identify a stable release")
+	}
+	return version, release, repository, nil
+}
+
+func (c *ToolCatalog) publisherChecksum(ctx context.Context, kind, version, publisher, filename string, egress prerequisites.SetupEgress) (string, error) {
+	checksumURL := ""
+	switch kind {
+	case "helm":
+		checksumURL = publisher + ".sha256sum"
+	case "kubectl":
+		checksumURL = publisher + ".sha256"
+	case "openshift-clients", "openshift-install":
+		checksumURL = publisher[:strings.LastIndex(publisher, "/")+1] + "sha256sum.txt"
+	case "govc":
+		checksumURL = "https://github.com/vmware/govmomi/releases/download/" + withV(version) + "/checksums.txt"
+	default:
+		return "", bundleFailure("virtctl release lacks authenticated publisher SHA-256 metadata")
+	}
+	metadata, err := c.metadata(ctx, http.MethodGet, checksumURL, maxToolMetadataBytes, egress)
+	if err != nil {
+		return "", err
+	}
+	return toolChecksum(metadata.data, filename)
 }
 
 func toolChecksum(data []byte, filename string) (string, error) {

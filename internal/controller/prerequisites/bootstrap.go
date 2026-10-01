@@ -123,67 +123,8 @@ func CanonicalBootstrap(value BootstrapDefinition) (BootstrapDefinition, error) 
 			return invalid()
 		}
 	}
-	ids := map[string]DependencySource{}
-	var sourceBytes int64
-	for index, source := range value.Sources {
-		endpoint, ok := bootstrapSource(source, 64<<20)
-		if !ok || ids[source.ID].ID != "" {
-			return invalid()
-		}
-		if sourceBytes > 256<<20-source.Bytes {
-			return invalid()
-		}
-		sourceBytes += source.Bytes
-		if index == 0 {
-			if endpoint.Hostname() != "github.com" || !strings.HasPrefix(endpoint.Path, "/astral-sh/python-build-standalone/releases/download/") || !strings.HasPrefix(path.Base(endpoint.Path), "cpython-"+value.PythonVersion+"+") || !strings.HasSuffix(endpoint.Path, "-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz") {
-				return invalid()
-			}
-		} else if endpoint.Hostname() != "files.pythonhosted.org" || !strings.HasPrefix(endpoint.Path, "/packages/") || !strings.HasSuffix(endpoint.Path, ".whl") {
-			return invalid()
-		}
-		ids[source.ID] = source
-	}
-	names := map[string]bool{}
-	for index, wheel := range value.Wheels {
-		if !bootstrapName.MatchString(wheel.Name) || len(wheel.Version) == 0 || len(wheel.Version) > 80 || strings.ContainsAny(wheel.Version, "\\/\x00\r\n\t ") || names[wheel.Name] || wheel.SourceID != value.Sources[index+1].ID {
-			return invalid()
-		}
-		names[wheel.Name] = true
-		if wheel.Name == "ansible-core" && wheel.Version != value.AnsibleVersion {
-			return invalid()
-		}
-		endpoint, _ := url.Parse(value.Sources[index+1].URL)
-		parts := strings.Split(strings.TrimSuffix(path.Base(endpoint.Path), ".whl"), "-")
-		if len(parts) < 5 || strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(parts[0], "_", "-"), ".", "-")) != wheel.Name || parts[1] != wheel.Version {
-			return invalid()
-		}
-	}
-	if !names["ansible-core"] || !names["urllib3"] {
+	if !validBootstrapSources(value) || !validBootstrapWheels(value) || !validBootstrapMetadata(value) {
 		return invalid()
-	}
-	for index, metadata := range value.Metadata {
-		endpoint, ok := bootstrapSource(metadata, 8<<20)
-		if !ok {
-			return invalid()
-		}
-		switch endpoint.Hostname() {
-		case "raw.githubusercontent.com":
-			if index != 0 || endpoint.Path != "/astral-sh/uv/main/crates/uv-python/download-metadata.json" {
-				return invalid()
-			}
-		case "pypi.org":
-			// Setup selects from the Index API; the project JSON an earlier
-			// build selected from stays readable in its records.
-			expected := []string{"/simple/ansible-core/", "/pypi/ansible-core/json"}
-			if value.AnsibleIntent != "latest" {
-				expected = []string{"/simple/ansible-core/", "/pypi/ansible-core/" + value.AnsibleVersion + "/json"}
-			}
-			if index != 1 || !slices.Contains(expected, endpoint.Path) {
-				return invalid()
-			}
-		default:
-			return invalid()
-		}
 	}
 	value.Digest = ""
 	data, err := json.Marshal(value)
@@ -197,6 +138,77 @@ func CanonicalBootstrap(value BootstrapDefinition) (BootstrapDefinition, error) 
 	digest := sha256.Sum256(append([]byte("bootwright.controller.bootstrap-v1\x00"), data...))
 	canonical.Digest = hex.EncodeToString(digest[:])
 	return canonical, nil
+}
+
+func validBootstrapSources(value BootstrapDefinition) bool {
+	ids := map[string]DependencySource{}
+	var sourceBytes int64
+	for index, source := range value.Sources {
+		endpoint, ok := bootstrapSource(source, 64<<20)
+		if !ok || ids[source.ID].ID != "" {
+			return false
+		}
+		if sourceBytes > 256<<20-source.Bytes {
+			return false
+		}
+		sourceBytes += source.Bytes
+		if index == 0 {
+			if endpoint.Hostname() != "github.com" || !strings.HasPrefix(endpoint.Path, "/astral-sh/python-build-standalone/releases/download/") || !strings.HasPrefix(path.Base(endpoint.Path), "cpython-"+value.PythonVersion+"+") || !strings.HasSuffix(endpoint.Path, "-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz") {
+				return false
+			}
+		} else if endpoint.Hostname() != "files.pythonhosted.org" || !strings.HasPrefix(endpoint.Path, "/packages/") || !strings.HasSuffix(endpoint.Path, ".whl") {
+			return false
+		}
+		ids[source.ID] = source
+	}
+	return true
+}
+
+func validBootstrapWheels(value BootstrapDefinition) bool {
+	names := map[string]bool{}
+	for index, wheel := range value.Wheels {
+		if !bootstrapName.MatchString(wheel.Name) || len(wheel.Version) == 0 || len(wheel.Version) > 80 || strings.ContainsAny(wheel.Version, "\\/\x00\r\n\t ") || names[wheel.Name] || wheel.SourceID != value.Sources[index+1].ID {
+			return false
+		}
+		names[wheel.Name] = true
+		if wheel.Name == "ansible-core" && wheel.Version != value.AnsibleVersion {
+			return false
+		}
+		endpoint, _ := url.Parse(value.Sources[index+1].URL)
+		parts := strings.Split(strings.TrimSuffix(path.Base(endpoint.Path), ".whl"), "-")
+		if len(parts) < 5 || strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(parts[0], "_", "-"), ".", "-")) != wheel.Name || parts[1] != wheel.Version {
+			return false
+		}
+	}
+	return names["ansible-core"] && names["urllib3"]
+}
+
+func validBootstrapMetadata(value BootstrapDefinition) bool {
+	for index, metadata := range value.Metadata {
+		endpoint, ok := bootstrapSource(metadata, 8<<20)
+		if !ok {
+			return false
+		}
+		switch endpoint.Hostname() {
+		case "raw.githubusercontent.com":
+			if index != 0 || endpoint.Path != "/astral-sh/uv/main/crates/uv-python/download-metadata.json" {
+				return false
+			}
+		case "pypi.org":
+			// Setup selects from the Index API; the project JSON an earlier
+			// build selected from stays readable in its records.
+			expected := []string{"/simple/ansible-core/", "/pypi/ansible-core/json"}
+			if value.AnsibleIntent != "latest" {
+				expected = []string{"/simple/ansible-core/", "/pypi/ansible-core/" + value.AnsibleVersion + "/json"}
+			}
+			if index != 1 || !slices.Contains(expected, endpoint.Path) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func ValidateBootstrap(value BootstrapDefinition) error {

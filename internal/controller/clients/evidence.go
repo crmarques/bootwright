@@ -8,6 +8,8 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
+const maxEvidenceBytes = 64 << 10
+
 // ToolRecord is one published client's durable identity: what it is and the
 // exact publisher bytes it came from. It names no path.
 type ToolRecord struct {

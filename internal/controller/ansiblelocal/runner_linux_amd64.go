@@ -130,17 +130,8 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	if err := requireScratchCapacity(scratch, request); err != nil {
 		return result, err
 	}
-	interpreter := filepath.Join(job, "interpreter")
-	if err := os.WriteFile(interpreter, []byte(launch.InterpreterScript()), 0700); err != nil {
-		return result, failure("controller.setup", "the pinned module interpreter could not be published")
-	}
-	inventory := map[string]any{"all": map[string]any{"children": map[string]any{"bootwright_controller": map[string]any{"hosts": map[string]any{"controller": map[string]any{"ansible_connection": "local", "ansible_python_interpreter": interpreter, "ansible_host": "localhost"}}}}}}
-	variables := map[string]any{"bootwright_controller_request": request}
-	for name, value := range map[string]any{"inventory.json": inventory, "request.json": variables} {
-		encoded, err := json.Marshal(value)
-		if err != nil || len(encoded) > 4<<20 || os.WriteFile(filepath.Join(job, name), encoded, 0600) != nil {
-			return result, failure("controller.setup", "the frozen Ansible invocation could not be materialized")
-		}
+	if err := writeInvocation(job, launch, request); err != nil {
+		return result, err
 	}
 	output, childOutput, err := os.Pipe()
 	if err != nil {
@@ -154,23 +145,7 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	}
 	defer childInput.Close()
 	defer input.Close()
-	automation := filepath.Join(request.Bundle.Path, "automation")
-	// -u is what makes the retained output readable while the run is still
-	// going. Ansible writes its callback output and lets the system flush it,
-	// so a child whose stdout is a pipe holds roughly eight kilobytes back
-	// until it exits. -E is implied by -I, so PYTHONUNBUFFERED cannot do this.
-	arguments := append(slices.Clone(launch.Arguments), "-u", "-I", "-B", "-S", "-c", entrypoint, filepath.Join(automation, "collections/ansible_collections/bootwright/core/plugins/module_utils/controller_supervisor.py"),
-		"-i", filepath.Join(job, "inventory.json"), "--extra-vars", "@"+filepath.Join(job, "request.json"),
-		filepath.Join(automation, "collections/ansible_collections/bootwright/core/playbooks/controller/setup.yml"))
-	command := boundary.command(launch.Loader, arguments...)
-	command.Dir = automation
-	command.Env = append(slices.Clone(launch.Environment),
-		"ANSIBLE_CONFIG="+filepath.Join(automation, "ansible.cfg"),
-		"ANSIBLE_COLLECTIONS_PATH="+filepath.Join(automation, "collections"),
-		"ANSIBLE_LOCAL_TEMP="+filepath.Join(job, "local"), "ANSIBLE_REMOTE_TEMP="+filepath.Join(job, "remote"),
-		"ANSIBLE_NOCOLOR=1", "ANSIBLE_FORCE_COLOR=0", "ANSIBLE_LOAD_CALLBACK_PLUGINS=0",
-		"TMPDIR="+scratch,
-		"PATH=/usr/bin:/usr/sbin")
+	command := ansibleCommand(boundary, launch, request, job, scratch)
 	command.ExtraFiles = []*os.File{childOutput, childInput}
 	// A run that retains its output is readable afterwards; one that does not
 	// discards it rather than letting it reach the operator's terminal.
@@ -192,6 +167,73 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	}
 	childOutput.Close()
 	childInput.Close()
+	run := &protocolRun{request: request, release: release, publish: publish, report: report, result: result, prepared: request.Operation == "recover", preparation: request.Preparation}
+	run.published = run.prepared
+	return run.supervise(ctx, command, output, input, boundary)
+}
+
+func writeInvocation(job string, launch prerequisites.PythonLaunch, request capabilityRequest) error {
+	interpreter := filepath.Join(job, "interpreter")
+	if err := os.WriteFile(interpreter, []byte(launch.InterpreterScript()), 0700); err != nil {
+		return failure("controller.setup", "the pinned module interpreter could not be published")
+	}
+	inventory := map[string]any{"all": map[string]any{"children": map[string]any{"bootwright_controller": map[string]any{"hosts": map[string]any{"controller": map[string]any{"ansible_connection": "local", "ansible_python_interpreter": interpreter, "ansible_host": "localhost"}}}}}}
+	variables := map[string]any{"bootwright_controller_request": request}
+	for name, value := range map[string]any{"inventory.json": inventory, "request.json": variables} {
+		encoded, err := json.Marshal(value)
+		if err != nil || len(encoded) > 4<<20 || os.WriteFile(filepath.Join(job, name), encoded, 0600) != nil {
+			return failure("controller.setup", "the frozen Ansible invocation could not be materialized")
+		}
+	}
+	return nil
+}
+
+func ansibleCommand(boundary processBoundary, launch prerequisites.PythonLaunch, request capabilityRequest, job, scratch string) *exec.Cmd {
+	automation := filepath.Join(request.Bundle.Path, "automation")
+	// -u is what makes the retained output readable while the run is still
+	// going. Ansible writes its callback output and lets the system flush it,
+	// so a child whose stdout is a pipe holds roughly eight kilobytes back
+	// until it exits. -E is implied by -I, so PYTHONUNBUFFERED cannot do this.
+	arguments := append(slices.Clone(launch.Arguments), "-u", "-I", "-B", "-S", "-c", entrypoint, filepath.Join(automation, "collections/ansible_collections/bootwright/core/plugins/module_utils/controller_supervisor.py"),
+		"-i", filepath.Join(job, "inventory.json"), "--extra-vars", "@"+filepath.Join(job, "request.json"),
+		filepath.Join(automation, "collections/ansible_collections/bootwright/core/playbooks/controller/setup.yml"))
+	command := boundary.command(launch.Loader, arguments...)
+	command.Dir = automation
+	command.Env = append(slices.Clone(launch.Environment),
+		"ANSIBLE_CONFIG="+filepath.Join(automation, "ansible.cfg"),
+		"ANSIBLE_COLLECTIONS_PATH="+filepath.Join(automation, "collections"),
+		"ANSIBLE_LOCAL_TEMP="+filepath.Join(job, "local"), "ANSIBLE_REMOTE_TEMP="+filepath.Join(job, "remote"),
+		"ANSIBLE_NOCOLOR=1", "ANSIBLE_FORCE_COLOR=0", "ANSIBLE_LOAD_CALLBACK_PLUGINS=0",
+		"TMPDIR="+scratch,
+		"PATH=/usr/bin:/usr/sbin")
+	return command
+}
+
+type protocolRun struct {
+	request capabilityRequest
+	release func() error
+	publish func(context.Context, prerequisites.NativePreparation) error
+	report  func(string)
+	result  prerequisites.ActionResult
+
+	loaded, prepared, completed, canceled bool
+	// prepared and native are the protocol's position; published and
+	// nativeAuthorized are the effects a record read before the failed exit
+	// has. One read after it still moves the position, so a later record is
+	// judged as if read first, but records and authorizes nothing.
+	published                bool
+	preparation              *prerequisites.NativePreparation
+	continuations            int
+	native, nativeAuthorized bool
+	operationErr             error
+	// exited marks an operationErr that is only the adapter's failed exit. A
+	// record the adapter wrote before it exited can be read after that exit,
+	// and is judged as if it had been read first: the refusal it names, or a
+	// record the runner refuses, then replaces the failure.
+	exited bool
+}
+
+func (run *protocolRun) supervise(ctx context.Context, command *exec.Cmd, output, input *os.File, boundary processBoundary) (prerequisites.ActionResult, error) {
 	waited := make(chan error, 1)
 	go func() { waited <- command.Wait() }()
 	messages := make(chan protocolMessage, 8)
@@ -200,15 +242,6 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 		readResult <- readProtocol(output, messages)
 		close(messages)
 	}()
-	loaded, prepared, completed, canceled := false, request.Operation == "recover", false, false
-	// prepared and native are the protocol's position; published and
-	// nativeAuthorized are the effects a record read before the failed exit
-	// has. One read after it still moves the position, so a later record is
-	// judged as if read first, but records and authorizes nothing.
-	published := prepared
-	preparation := request.Preparation
-	continuations := 0
-	native, nativeAuthorized := false, false
 	var drain <-chan time.Time
 	var drainTimer *time.Timer
 	defer func() {
@@ -228,165 +261,184 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 		drain = drainTimer.C
 	}
 	cancelled := ctx.Done()
-	var operationErr error
-	// exited marks an operationErr that is only the adapter's failed exit. A
-	// record the adapter wrote before it exited can be read after that exit,
-	// and is judged as if it had been read first: the refusal it names, or a
-	// record the runner refuses, then replaces the failure.
-	exited := false
 	for messages != nil || waited != nil {
 		select {
 		case <-cancelled:
 			cancelled = nil
-			if !canceled {
-				canceled = true
-				input.Close()
-				// Only an authorized native transaction may outlive
-				// cancellation. Durable intent alone is not installation, and a
-				// recovery run starts already prepared.
-				if !nativeAuthorized {
-					_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
-				}
-			}
+			run.cancel(input, command.Process)
 			// An authorized native transaction is left running, so its channel
 			// is drained on a grace period rather than closed immediately.
 			armDrain(boundary.authorizedDrain)
 		case <-drain:
 			drain = nil
 			output.Close()
-			if operationErr == nil {
-				operationErr = failure("controller.unknown", "Ansible descendants retained the result channel after completion")
+			if run.operationErr == nil {
+				run.operationErr = failure("controller.unknown", "Ansible descendants retained the result channel after completion")
 			}
 		case waitErr := <-waited:
 			waited = nil
 			// A prepared run may still have an authorized native transaction
 			// holding the channel, so it drains on the longer grace period.
-			if published {
+			if run.published {
 				armDrain(boundary.authorizedDrain)
 			} else {
 				armDrain(boundary.completedDrain)
 			}
-			if waitErr != nil && operationErr == nil {
-				operationErr = failure("controller.setup", "Ansible did not complete the authorized dependency operation")
-				exited = true
+			if waitErr != nil && run.operationErr == nil {
+				run.operationErr = failure("controller.setup", "Ansible did not complete the authorized dependency operation")
+				run.exited = true
 			}
 		case message, open := <-messages:
 			if !open {
 				messages = nil
-				if err := <-readResult; err != nil {
-					// A read the drain's close ends is the runner's own and no
-					// record the adapter wrote, so it leaves the failed exit.
-					if operationErr == nil || exited && !errors.Is(err, os.ErrClosed) {
-						operationErr, exited = failure("controller.unknown", "the Ansible structured result was incomplete"), false
-					}
-					// A refused or unreadable record ends the protocol at once:
-					// the closed authorization channel fails a waiting adapter.
-					// Nothing is killed, so an authorized native transaction
-					// runs to its end and its channel is drained as usual.
-					input.Close()
-				}
+				run.channelClosed(<-readResult, input)
 				continue
 			}
-			// A record read after the failed exit is judged as if it had been
-			// read first, but its adapter is gone, so nothing is released,
-			// published, authorized, reported or acknowledged for it. A valid
-			// one leaves that failure, except the named refusal, which
-			// replaces it.
-			valid := !completed && (operationErr == nil || exited) && !canceled
-			switch message.Phase {
-			case "loaded":
-				valid = valid && !loaded && message.Preparation == nil && message.Outcome == "" && len(message.Evidence) == 0
-				if valid && exited {
-					loaded = true
-				} else if valid {
-					operationErr = release()
-					loaded = operationErr == nil
-				}
-				if loaded && !exited && request.Operation == "recover" {
-					report("verifying the recorded native transaction")
-				} else if loaded && !exited {
-					report("reading the native package inventory")
-				}
-			case "prepared":
-				valid = valid && loaded && !prepared && message.Preparation != nil && publish != nil && validPreparation(*message.Preparation, request)
-				if valid && !exited {
-					operationErr = publish(ctx, *message.Preparation)
-					published = operationErr == nil
-				}
-				if valid && (exited || published) {
-					prepared = true
-					copy := *message.Preparation
-					copy.AddedSources = slices.Clone(copy.AddedSources)
-					preparation = &copy
-				}
-			case "native":
-				valid = valid && loaded && prepared && !native && preparation != nil && nativeChanges(request) > 0
-				native = native || valid
-				if valid && !exited {
-					nativeAuthorized = true
-					report("installing " + countNoun(nativeChanges(request), "native package"))
-				}
-			case "continue":
-				valid = valid && loaded && prepared && continuations < len(request.Tools)
-				if valid {
-					continuations++
-				}
-				if valid && !exited {
-					tool := request.Tools[continuations-1]
-					report("installing " + tool.Kind + " " + tool.Version + ", tool " + strconv.Itoa(continuations) + " of " + strconv.Itoa(len(request.Tools)))
-				}
-			case "completed":
-				valid = valid && loaded && prepared && (message.Outcome == "changed" || message.Outcome == "unchanged" && !native) && continuations == len(request.Tools) && (request.Operation == "recover" || native == (preparation != nil && nativeChanges(request) > 0)) && validEvidence(message.Evidence, request, preparation, native)
-				completed = completed || valid
-				if valid && !exited {
-					result = prerequisites.ActionResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
-				}
-			case "refused":
-				// The adapter names the one refusal with a remedy of its own
-				// before it fails, for the tool it is installing.
-				valid = valid && loaded && prepared && continuations > 0 &&
-					message.Reason == "release-stamp" && request.Tools[continuations-1].Kind == "openshift-clients"
-				if valid {
-					operationErr, exited = prerequisites.UnreleasedClient(request.Tools[continuations-1]), false
-				}
-			default:
-				valid = false
-			}
-			if !valid {
-				// A record the runner refuses breaks the protocol whichever of
-				// it and the failed exit is read first, so it replaces that
-				// failure, and the failure is unknown in either order.
-				if operationErr == nil || exited {
-					operationErr = failure("controller.unknown", "the Ansible capability protocol was invalid")
-				}
-				exited = false
-			}
-			if ctx.Err() != nil {
-				canceled = true
+			run.judge(ctx, message)
+			run.acknowledge(ctx, message, input)
+			if run.canceled {
 				cancelled = nil
 			}
-			if operationErr != nil || canceled {
-				input.Close()
-			} else if message.Phase != "completed" {
-				if _, err := input.Write([]byte("proceed\n")); err != nil {
-					operationErr = failure("controller.unknown", "Ansible authorization delivery was uncertain")
-				}
-			}
 		}
 	}
-	if canceled {
-		return actionResult("unknown", published), ctx.Err()
+	return run.outcome(ctx)
+}
+
+func (run *protocolRun) cancel(input *os.File, process *os.Process) {
+	if run.canceled {
+		return
 	}
-	if operationErr != nil || !completed {
-		if operationErr == nil {
-			operationErr = failure("controller.unknown", "the Ansible operation has no complete result")
-		}
-		if published {
-			return actionResult("unknown", true), operationErr
-		}
-		return result, operationErr
+	run.canceled = true
+	input.Close()
+	// Only an authorized native transaction may outlive
+	// cancellation. Durable intent alone is not installation, and a
+	// recovery run starts already prepared.
+	if !run.nativeAuthorized {
+		_ = syscall.Kill(-process.Pid, syscall.SIGKILL)
 	}
-	return result, nil
+}
+
+func (run *protocolRun) channelClosed(err error, input *os.File) {
+	if err == nil {
+		return
+	}
+	// A read the drain's close ends is the runner's own and no
+	// record the adapter wrote, so it leaves the failed exit.
+	if run.operationErr == nil || run.exited && !errors.Is(err, os.ErrClosed) {
+		run.operationErr, run.exited = failure("controller.unknown", "the Ansible structured result was incomplete"), false
+	}
+	// A refused or unreadable record ends the protocol at once:
+	// the closed authorization channel fails a waiting adapter.
+	// Nothing is killed, so an authorized native transaction
+	// runs to its end and its channel is drained as usual.
+	input.Close()
+}
+
+func (run *protocolRun) judge(ctx context.Context, message protocolMessage) {
+	request := run.request
+	// A record read after the failed exit is judged as if it had been
+	// read first, but its adapter is gone, so nothing is released,
+	// published, authorized, reported or acknowledged for it. A valid
+	// one leaves that failure, except the named refusal, which
+	// replaces it.
+	valid := !run.completed && (run.operationErr == nil || run.exited) && !run.canceled
+	switch message.Phase {
+	case "loaded":
+		valid = valid && !run.loaded && message.Preparation == nil && message.Outcome == "" && len(message.Evidence) == 0
+		if valid && run.exited {
+			run.loaded = true
+		} else if valid {
+			run.operationErr = run.release()
+			run.loaded = run.operationErr == nil
+		}
+		if run.loaded && !run.exited && request.Operation == "recover" {
+			run.report("verifying the recorded native transaction")
+		} else if run.loaded && !run.exited {
+			run.report("reading the native package inventory")
+		}
+	case "prepared":
+		valid = valid && run.loaded && !run.prepared && message.Preparation != nil && run.publish != nil && validPreparation(*message.Preparation, request)
+		if valid && !run.exited {
+			run.operationErr = run.publish(ctx, *message.Preparation)
+			run.published = run.operationErr == nil
+		}
+		if valid && (run.exited || run.published) {
+			run.prepared = true
+			copy := *message.Preparation
+			copy.AddedSources = slices.Clone(copy.AddedSources)
+			run.preparation = &copy
+		}
+	case "native":
+		valid = valid && run.loaded && run.prepared && !run.native && run.preparation != nil && nativeChanges(request) > 0
+		run.native = run.native || valid
+		if valid && !run.exited {
+			run.nativeAuthorized = true
+			run.report("installing " + countNoun(nativeChanges(request), "native package"))
+		}
+	case "continue":
+		valid = valid && run.loaded && run.prepared && run.continuations < len(request.Tools)
+		if valid {
+			run.continuations++
+		}
+		if valid && !run.exited {
+			tool := request.Tools[run.continuations-1]
+			run.report("installing " + tool.Kind + " " + tool.Version + ", tool " + strconv.Itoa(run.continuations) + " of " + strconv.Itoa(len(request.Tools)))
+		}
+	case "completed":
+		valid = valid && run.loaded && run.prepared && (message.Outcome == "changed" || message.Outcome == "unchanged" && !run.native) && run.continuations == len(request.Tools) && (request.Operation == "recover" || run.native == (run.preparation != nil && nativeChanges(request) > 0)) && validEvidence(message.Evidence, request, run.preparation, run.native)
+		run.completed = run.completed || valid
+		if valid && !run.exited {
+			run.result = prerequisites.ActionResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
+		}
+	case "refused":
+		// The adapter names the one refusal with a remedy of its own
+		// before it fails, for the tool it is installing.
+		valid = valid && run.loaded && run.prepared && run.continuations > 0 &&
+			message.Reason == "release-stamp" && request.Tools[run.continuations-1].Kind == "openshift-clients"
+		if valid {
+			run.operationErr, run.exited = prerequisites.UnreleasedClient(request.Tools[run.continuations-1]), false
+		}
+	default:
+		valid = false
+	}
+	if !valid {
+		// A record the runner refuses breaks the protocol whichever of
+		// it and the failed exit is read first, so it replaces that
+		// failure, and the failure is unknown in either order.
+		if run.operationErr == nil || run.exited {
+			run.operationErr = failure("controller.unknown", "the Ansible capability protocol was invalid")
+		}
+		run.exited = false
+	}
+}
+
+func (run *protocolRun) acknowledge(ctx context.Context, message protocolMessage, input *os.File) {
+	if ctx.Err() != nil {
+		run.canceled = true
+	}
+	if run.operationErr != nil || run.canceled {
+		input.Close()
+	} else if message.Phase != "completed" {
+		if _, err := input.Write([]byte("proceed\n")); err != nil {
+			run.operationErr = failure("controller.unknown", "Ansible authorization delivery was uncertain")
+		}
+	}
+}
+
+func (run *protocolRun) outcome(ctx context.Context) (prerequisites.ActionResult, error) {
+	if run.canceled {
+		return actionResult("unknown", run.published), ctx.Err()
+	}
+	if run.operationErr != nil || !run.completed {
+		if run.operationErr == nil {
+			run.operationErr = failure("controller.unknown", "the Ansible operation has no complete result")
+		}
+		if run.published {
+			return actionResult("unknown", true), run.operationErr
+		}
+		return run.result, run.operationErr
+	}
+	return run.result, nil
 }
 
 func countNoun(count int, noun string) string {

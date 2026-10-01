@@ -1,10 +1,10 @@
 package libvirt
 
 import (
-	"bytes"
-	"encoding/json"
 	"slices"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 const maxEvidenceBytes = 64 << 10
@@ -538,8 +538,8 @@ func holdsMachine(evidence MachineEvidence) error {
 }
 
 func decodeHostEvidence(data []byte, digest string) (HostEvidence, error) {
-	var evidence HostEvidence
-	if err := decodeEvidence(data, &evidence, "provider host"); err != nil {
+	evidence, err := reconciliation.DecodeEvidence[HostEvidence](data, maxEvidenceBytes, "provider host")
+	if err != nil {
 		return HostEvidence{}, err
 	}
 	if evidence.Request != digest {
@@ -549,27 +549,12 @@ func decodeHostEvidence(data []byte, digest string) (HostEvidence, error) {
 }
 
 func decodeMachineEvidence(data []byte, digest string) (MachineEvidence, error) {
-	var evidence MachineEvidence
-	if err := decodeEvidence(data, &evidence, "machine"); err != nil {
+	evidence, err := reconciliation.DecodeEvidence[MachineEvidence](data, maxEvidenceBytes, "machine")
+	if err != nil {
 		return MachineEvidence{}, err
 	}
 	if evidence.Request != digest {
 		return MachineEvidence{}, refusal("lifecycle.state", "the machine evidence names another request", "")
 	}
 	return evidence, nil
-}
-
-func decodeEvidence(data []byte, target any, subject string) error {
-	if len(data) == 0 || len(data) > maxEvidenceBytes {
-		return refusal("lifecycle.state", "the "+subject+" adapter returned no bounded evidence", "")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return refusal("lifecycle.state", "the "+subject+" adapter returned malformed evidence", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return refusal("lifecycle.state", "the "+subject+" adapter returned trailing evidence", "")
-	}
-	return nil
 }

@@ -1,13 +1,12 @@
 package artifactserver
 
 import (
-	"bytes"
-	"encoding/json"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 const requestVersion = "artifact-server-nginx-v2"
@@ -65,42 +64,19 @@ const (
 // Canonical encodes the request exactly as the plan digest and the adapter
 // both consume it. It refuses anything a reader could interpret differently.
 func (r Request) Canonical() ([]byte, error) {
-	data, err := json.Marshal(r)
-	if err != nil {
-		return nil, failure("lifecycle.state", "the artifact-server request cannot be encoded", "")
-	}
-	var probe map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(&probe); err != nil {
-		return nil, failure("lifecycle.state", "the artifact-server request cannot be decoded", "")
-	}
-	canonical, err := json.Marshal(probe)
-	if err != nil || !bytes.Equal(data, canonical) {
-		return nil, failure("lifecycle.state", "the artifact-server request is not canonically ordered", "")
-	}
-	return data, nil
+	return reconciliation.Freeze(r, "artifact-server")
 }
 
 func DecodeRequest(data []byte) (Request, error) {
-	var request Request
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		return Request{}, failure("lifecycle.state", "the frozen artifact-server request is malformed", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return Request{}, failure("lifecycle.state", "the frozen artifact-server request contains trailing data", "")
+	request, err := reconciliation.Thaw[Request](data, "artifact-server")
+	if err != nil {
+		return Request{}, err
 	}
 	if request.Version != requestVersion {
 		return Request{}, failure("lifecycle.state", "the frozen artifact-server request has an unsupported version", "")
 	}
-	canonical, err := request.Canonical()
-	if err != nil {
+	if err := reconciliation.ProveCanonical(data, request, "artifact-server"); err != nil {
 		return Request{}, err
-	}
-	if !bytes.Equal(canonical, data) {
-		return Request{}, failure("lifecycle.state", "the frozen artifact-server request is not canonical", "")
 	}
 	return request, nil
 }

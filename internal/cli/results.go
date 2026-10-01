@@ -55,7 +55,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 			return true, writeValidation(out, errOut, path, result.validation, selectedJSON(command))
 		}
 	case "context init", "context update":
-		if result.admission != nil && validContextSummary(result.admission.Context) && result.admission.FilesCopied >= 0 && result.admission.Counts.FilesSeen >= 0 && result.admission.Counts.ObjectsDecoded >= 0 {
+		if validAdmission(result.admission) {
 			return true, writeAdmission(out, errOut, path, result.admission)
 		}
 	case "context use":
@@ -63,12 +63,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 			return true, writeContextUse(out, result.use)
 		}
 	case "context list":
-		if result.list != nil {
-			for _, summary := range result.list.Contexts {
-				if !validContextSummary(summary) {
-					return false, nil
-				}
-			}
+		if validContextList(result.list) {
 			return true, writeContextList(out, result.list)
 		}
 	case "context current":

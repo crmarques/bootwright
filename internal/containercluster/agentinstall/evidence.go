@@ -1,9 +1,9 @@
 package agentinstall
 
 import (
-	"bytes"
-	"encoding/json"
 	"slices"
+
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 const maxEvidenceBytes = 64 << 10
@@ -96,17 +96,9 @@ func ValidateMediaPartial(data []byte, digest string) error {
 }
 
 func decodeMediaEvidence(data []byte, digest string) (MediaEvidence, error) {
-	if len(data) == 0 || len(data) > maxEvidenceBytes {
-		return MediaEvidence{}, refusal("lifecycle.state", "the boot-media adapter returned no bounded evidence", "")
-	}
-	var evidence MediaEvidence
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil {
-		return MediaEvidence{}, refusal("lifecycle.state", "the boot-media adapter returned malformed evidence", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return MediaEvidence{}, refusal("lifecycle.state", "the boot-media adapter returned trailing evidence", "")
+	evidence, err := reconciliation.DecodeEvidence[MediaEvidence](data, maxEvidenceBytes, "boot-media")
+	if err != nil {
+		return MediaEvidence{}, err
 	}
 	if evidence.Request != digest {
 		return MediaEvidence{}, refusal("lifecycle.state", "the boot-media evidence names another request", "")
@@ -293,17 +285,9 @@ func ValidateInstallPartial(data []byte, digest string) error {
 }
 
 func decodeInstallEvidence(data []byte, digest string) (InstallEvidence, error) {
-	if len(data) == 0 || len(data) > maxEvidenceBytes {
-		return InstallEvidence{}, refusal("lifecycle.state", "the installation adapter returned no bounded evidence", "")
-	}
-	var evidence InstallEvidence
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil {
-		return InstallEvidence{}, refusal("lifecycle.state", "the installation adapter returned malformed evidence", "")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
-		return InstallEvidence{}, refusal("lifecycle.state", "the installation adapter returned trailing evidence", "")
+	evidence, err := reconciliation.DecodeEvidence[InstallEvidence](data, maxEvidenceBytes, "installation")
+	if err != nil {
+		return InstallEvidence{}, err
 	}
 	if evidence.Request != digest {
 		return InstallEvidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")

@@ -201,70 +201,15 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 	if err := projected.automation(ctx); err != nil {
 		return prerequisites.BundleInspection{}, err
 	}
-	for index, source := range record.Baseline {
-		if err := ctx.Err(); err != nil {
-			return prerequisites.BundleInspection{}, err
-		}
-		name := sourcePath(source)
-		var data []byte
-		if _, found := entries[name]; found {
-			data, err = area.Read(ctx, name, int(source.Bytes))
-		} else if held := retainedSource(ctx, retained, source); held != nil {
-			acquiring("recovering "+path.Base(source.ID), index)
-			data, err = held, nil
-		} else {
-			acquiring("acquiring "+path.Base(source.ID), index)
-			data, err = m.fetch(ctx, source, egress)
-		}
-		if err != nil {
-			return prerequisites.BundleInspection{}, err
-		}
-		if !approvedBytes(source, data) {
-			return prerequisites.BundleInspection{}, bundleFailure("dependency source changed before bundle publication")
-		}
-		if err := projectSource(ctx, projected, index, data); err != nil {
-			return prerequisites.BundleInspection{}, err
-		}
-		if _, found := entries[name]; !found {
-			// Retain verified publisher bytes before any derived file. Exact
-			// retry can then reconstruct every attributable partial projection.
-			if err := area.Write(ctx, name, data, false); err != nil {
-				return prerequisites.BundleInspection{}, err
-			}
-		}
+	if err := m.acquireSources(ctx, area, retained, record, entries, projected, egress, acquiring); err != nil {
+		return prerequisites.BundleInspection{}, err
 	}
 	if !projected.matches(record.Bootstrap) {
 		return prerequisites.BundleInspection{}, bundleFailure("bootstrap projection differs from its frozen file closure")
 	}
 	report("publishing " + strconv.Itoa(len(projected.files)) + " bundle files")
-	for _, name := range projected.directories() {
-		if err := area.EnsureDirectory(ctx, name); err != nil {
-			return prerequisites.BundleInspection{}, err
-		}
-	}
-	names := make([]string, 0, len(projected.files))
-	for name := range projected.files {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		if err := ctx.Err(); err != nil {
-			return prerequisites.BundleInspection{}, err
-		}
-		file := projected.files[name]
-		if existing, found := entries[name]; found {
-			data, err := area.Read(ctx, name, len(file.data))
-			if err != nil {
-				return prerequisites.BundleInspection{}, err
-			}
-			if existing.Directory || existing.Executable != file.executable || !bytes.Equal(data, file.data) {
-				return prerequisites.BundleInspection{}, bundleFailure("existing bundle file changed during preparation")
-			}
-			continue
-		}
-		if err := area.Write(ctx, name, file.data, file.executable); err != nil {
-			return prerequisites.BundleInspection{}, err
-		}
+	if err := publishProjection(ctx, area, projected, entries); err != nil {
+		return prerequisites.BundleInspection{}, err
 	}
 	if err := publishDocumentation(ctx, area, projected, entries); err != nil {
 		return prerequisites.BundleInspection{}, err
@@ -282,6 +227,76 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 		return prerequisites.BundleInspection{}, err
 	}
 	return after, nil
+}
+
+func (m *Manager) acquireSources(ctx context.Context, area, retained prerequisites.BundleArea, record catalogRecord, entries map[string]prerequisites.BundleEntry, projected *projection, egress prerequisites.SetupEgress, acquiring func(string, int)) error {
+	for index, source := range record.Baseline {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		name := sourcePath(source)
+		var data []byte
+		var err error
+		if _, found := entries[name]; found {
+			data, err = area.Read(ctx, name, int(source.Bytes))
+		} else if held := retainedSource(ctx, retained, source); held != nil {
+			acquiring("recovering "+path.Base(source.ID), index)
+			data, err = held, nil
+		} else {
+			acquiring("acquiring "+path.Base(source.ID), index)
+			data, err = m.fetch(ctx, source, egress)
+		}
+		if err != nil {
+			return err
+		}
+		if !approvedBytes(source, data) {
+			return bundleFailure("dependency source changed before bundle publication")
+		}
+		if err := projectSource(ctx, projected, index, data); err != nil {
+			return err
+		}
+		if _, found := entries[name]; !found {
+			// Retain verified publisher bytes before any derived file. Exact
+			// retry can then reconstruct every attributable partial projection.
+			if err := area.Write(ctx, name, data, false); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func publishProjection(ctx context.Context, area prerequisites.BundleArea, projected *projection, entries map[string]prerequisites.BundleEntry) error {
+	for _, name := range projected.directories() {
+		if err := area.EnsureDirectory(ctx, name); err != nil {
+			return err
+		}
+	}
+	names := make([]string, 0, len(projected.files))
+	for name := range projected.files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		file := projected.files[name]
+		if existing, found := entries[name]; found {
+			data, err := area.Read(ctx, name, len(file.data))
+			if err != nil {
+				return err
+			}
+			if existing.Directory || existing.Executable != file.executable || !bytes.Equal(data, file.data) {
+				return bundleFailure("existing bundle file changed during preparation")
+			}
+			continue
+		}
+		if err := area.Write(ctx, name, file.data, file.executable); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // publishDocumentation writes the collection documentation the area lacks,
@@ -440,28 +455,9 @@ func equalRuntime(a, b prerequisites.RuntimeRequirement) bool {
 }
 
 func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record catalogRecord, selectedTools ...[]prerequisites.ToolDefinition) (prerequisites.BundleInspection, map[string]prerequisites.BundleEntry, error) {
-	if err := ctx.Err(); err != nil {
-		return prerequisites.BundleInspection{}, nil, err
-	}
-	if area == nil {
-		return prerequisites.BundleInspection{}, nil, bundleFailure("bundle storage capability is unavailable")
-	}
-	if err := area.Verify(ctx); err != nil {
-		return prerequisites.BundleInspection{}, nil, err
-	}
-	listed, err := area.Entries(ctx)
+	entries, err := bundleInventory(ctx, area)
 	if err != nil {
 		return prerequisites.BundleInspection{}, nil, err
-	}
-	if len(listed) > maxArchiveEntries {
-		return prerequisites.BundleInspection{}, nil, bundleFailure("bundle entry inventory exceeds the qualified limit")
-	}
-	entries := make(map[string]prerequisites.BundleEntry, len(listed))
-	for _, entry := range listed {
-		if _, duplicate := entries[entry.Path]; duplicate || !validPath(entry.Path) {
-			return prerequisites.BundleInspection{}, nil, bundleFailure("bundle inventory contains invalid or duplicate entries")
-		}
-		entries[entry.Path] = entry
 	}
 	projected := projectionFor(record)
 	if err := projected.automation(ctx); err != nil {
@@ -529,44 +525,9 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record cat
 	if err != nil || !tools.consistent {
 		return prerequisites.BundleInspection{}, entries, err
 	}
-	for name, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return prerequisites.BundleInspection{}, entries, err
-		}
-		if _, documented := projected.documentation[name]; documented {
-			if !attributableDocumentation(entry) {
-				return prerequisites.BundleInspection{}, entries, nil
-			}
-			continue
-		}
-		if entry.Directory {
-			if !directories[name] {
-				return prerequisites.BundleInspection{}, entries, nil
-			}
-			continue
-		}
-		if tool, streamed := tools.files[name]; streamed {
-			matches, err := tools.matches(ctx, name, entry, tool)
-			if err != nil || !matches {
-				return prerequisites.BundleInspection{}, entries, err
-			}
-			continue
-		}
-		file, found := expected[name]
-		if !found || entry.Executable != file.executable || entry.Size != int64(len(file.data)) {
-			return prerequisites.BundleInspection{}, entries, nil
-		}
-		// Retained source bytes were just read and checked above.
-		if strings.HasPrefix(name, "sources/") {
-			continue
-		}
-		data, err := area.Read(ctx, name, len(file.data))
-		if err != nil {
-			return prerequisites.BundleInspection{}, entries, err
-		}
-		if !bytes.Equal(data, file.data) {
-			return prerequisites.BundleInspection{}, entries, nil
-		}
+	attributable, err := entriesAttributable(ctx, area, entries, projected, expected, directories, tools)
+	if err != nil || !attributable {
+		return prerequisites.BundleInspection{}, entries, err
 	}
 	if allBaseline && !projected.matches(record.Bootstrap) {
 		return prerequisites.BundleInspection{}, entries, bundleFailure("retained bootstrap sources differ from the frozen projection")
@@ -580,6 +541,76 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record cat
 		return prerequisites.BundleInspection{}, entries, err
 	}
 	return prerequisites.BundleInspection{Ready: ready, ToolsReady: tools.ready, Recoverable: true}, entries, nil
+}
+
+func bundleInventory(ctx context.Context, area prerequisites.BundleArea) (map[string]prerequisites.BundleEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if area == nil {
+		return nil, bundleFailure("bundle storage capability is unavailable")
+	}
+	if err := area.Verify(ctx); err != nil {
+		return nil, err
+	}
+	listed, err := area.Entries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(listed) > maxArchiveEntries {
+		return nil, bundleFailure("bundle entry inventory exceeds the qualified limit")
+	}
+	entries := make(map[string]prerequisites.BundleEntry, len(listed))
+	for _, entry := range listed {
+		if _, duplicate := entries[entry.Path]; duplicate || !validPath(entry.Path) {
+			return nil, bundleFailure("bundle inventory contains invalid or duplicate entries")
+		}
+		entries[entry.Path] = entry
+	}
+	return entries, nil
+}
+
+func entriesAttributable(ctx context.Context, area prerequisites.BundleArea, entries map[string]prerequisites.BundleEntry, projected *projection, expected map[string]projectedFile, directories map[string]bool, tools toolInspection) (bool, error) {
+	for name, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		if _, documented := projected.documentation[name]; documented {
+			if !attributableDocumentation(entry) {
+				return false, nil
+			}
+			continue
+		}
+		if entry.Directory {
+			if !directories[name] {
+				return false, nil
+			}
+			continue
+		}
+		if tool, streamed := tools.files[name]; streamed {
+			matches, err := tools.matches(ctx, name, entry, tool)
+			if err != nil || !matches {
+				return false, err
+			}
+			continue
+		}
+		file, found := expected[name]
+		if !found || entry.Executable != file.executable || entry.Size != int64(len(file.data)) {
+			return false, nil
+		}
+		// Retained source bytes were already read and checked.
+		if strings.HasPrefix(name, "sources/") {
+			continue
+		}
+		data, err := area.Read(ctx, name, len(file.data))
+		if err != nil {
+			return false, err
+		}
+		if !bytes.Equal(data, file.data) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 type toolInspection struct {

@@ -140,118 +140,132 @@ func (d *decoder) value(node *desiredstate.Node, shape *api.Shape, path string) 
 	}
 	switch node.Kind {
 	case desiredstate.MappingKind:
-		if shape.Type != api.Absent && shape.Type != api.Mapping {
-			d.fail(node, "api.type", path, "field requires a different YAML type")
-			return api.Value{}
-		}
-		fields := []api.FieldValue{}
-		seen := map[string]bool{}
-		for i := 0; i+1 < len(node.Content) && !d.sink.stopped(); i += 2 {
-			key, n := node.Content[i], node.Content[i+1]
-			if key.Kind == desiredstate.ScalarKind && key.Value == "<<" && (key.Tag == "!!merge" || scalarType(key) == api.String) {
-				d.fail(key, "yaml.alias", path, "merge keys are not permitted")
-				continue
-			}
-			if d.refusedConstruct(key, path) {
-				continue
-			}
-			if key.Kind != desiredstate.ScalarKind || scalarType(key) != api.String {
-				d.fail(key, "yaml.shape", path, "mapping keys must be strings")
-				continue
-			}
-			if seen[key.Value] {
-				d.fail(key, "yaml.duplicate-key", path, "mapping keys must be unique")
-				continue
-			}
-			seen[key.Value] = true
-			childPath := path
-			// Native keys are unbounded authored data, not diagnostic field names.
-			// Repeating a long key in every descendant's provenance would amplify
-			// a byte-bounded source into an unbounded number of large path strings.
-			if !shape.Open && shape.Type != api.Absent {
-				childPath += "." + key.Value
-			}
-			var childShape *api.Shape
-			if shape.KindDefaults {
-				childShape = api.Schema(api.Kind(key.Value))
-				if childShape == nil {
-					d.fail(key, "api.field", path, "default kind is not registered")
-					continue
-				}
-				if api.Kind(key.Value) == api.Environment {
-					copy := *childShape
-					copy.Fields = nil
-					for _, f := range childShape.Fields {
-						if f.Name != "defaults" {
-							copy.Fields = append(copy.Fields, f)
-						}
-					}
-					childShape = &copy
-				}
-			} else if shape.Type == api.Absent || shape.Open {
-				childShape = shape.Element
-			} else if field, ok := shape.Field(key.Value); ok {
-				childShape = field.Shape
-			} else {
-				if message := d.retiredFieldMessage(path, key.Value); message != "" {
-					d.fail(key, "api.field", childPath, message)
-				} else {
-					d.fail(key, "api.field", path, "field is not permitted by this schema")
-				}
-				continue
-			}
-			fields = append(fields, api.FieldValue{Name: key.Value, Value: d.value(n, childShape, childPath)})
-		}
-		return api.MapValue(fields...)
+		return d.mapping(node, shape, path)
 	case desiredstate.SequenceKind:
-		if shape.Type != api.Absent && shape.Type != api.Sequence {
-			d.fail(node, "api.type", path, "field requires a different YAML type")
-			return api.Value{}
-		}
-		items := make([]api.Value, 0, len(node.Content))
-		for i, n := range node.Content {
-			if d.sink.stopped() {
-				break
-			}
-			childPath := path
-			if shape.Type != api.Absent {
-				childPath += "[" + strconv.Itoa(i) + "]"
-			}
-			items = append(items, d.value(n, shape.Element, childPath))
-		}
-		return api.ListValue(items...)
+		return d.sequence(node, shape, path)
 	case desiredstate.ScalarKind:
-		kind := scalarType(node)
-		if node.Tag == "!!null" && !(node.ExplicitTag && node.Tag == "!!str") {
-			d.fail(node, "api.type", path, "null values are not permitted")
-			return api.Value{}
+		return d.scalar(node, shape, path)
+	}
+	d.fail(node, "yaml.shape", path, "unsupported YAML representation")
+	return api.Value{}
+}
+
+func (d *decoder) mapping(node *desiredstate.Node, shape *api.Shape, path string) api.Value {
+	if shape.Type != api.Absent && shape.Type != api.Mapping {
+		d.fail(node, "api.type", path, "field requires a different YAML type")
+		return api.Value{}
+	}
+	fields := []api.FieldValue{}
+	seen := map[string]bool{}
+	for i := 0; i+1 < len(node.Content) && !d.sink.stopped(); i += 2 {
+		key, n := node.Content[i], node.Content[i+1]
+		if key.Kind == desiredstate.ScalarKind && key.Value == "<<" && (key.Tag == "!!merge" || scalarType(key) == api.String) {
+			d.fail(key, "yaml.alias", path, "merge keys are not permitted")
+			continue
 		}
-		if kind == api.Absent {
-			d.fail(node, "api.type", path, "scalar spelling or YAML type is not permitted")
-			return api.Value{}
+		if d.refusedConstruct(key, path) {
+			continue
 		}
-		if shape.Type != api.Absent && kind != shape.Type && !(shape.Type == api.Number && kind == api.Integer) {
-			d.fail(node, "api.type", path, "field requires a different YAML scalar type")
-			return api.Value{}
+		if key.Kind != desiredstate.ScalarKind || scalarType(key) != api.String {
+			d.fail(key, "yaml.shape", path, "mapping keys must be strings")
+			continue
 		}
-		switch kind {
-		case api.String:
-			return api.StringValue(node.Value)
-		case api.Boolean:
-			return api.BoolValue(node.Value == "true")
-		case api.Integer:
-			if shape.Type != api.Number {
-				return api.IntegerValue(node.Value)
+		if seen[key.Value] {
+			d.fail(key, "yaml.duplicate-key", path, "mapping keys must be unique")
+			continue
+		}
+		seen[key.Value] = true
+		childPath := path
+		// Native keys are unbounded authored data, not diagnostic field names.
+		// Repeating a long key in every descendant's provenance would amplify
+		// a byte-bounded source into an unbounded number of large path strings.
+		if !shape.Open && shape.Type != api.Absent {
+			childPath += "." + key.Value
+		}
+		var childShape *api.Shape
+		if shape.KindDefaults {
+			childShape = api.Schema(api.Kind(key.Value))
+			if childShape == nil {
+				d.fail(key, "api.field", path, "default kind is not registered")
+				continue
 			}
-			fallthrough
-		case api.Number:
-			n, err := strconv.ParseFloat(node.Value, 64)
-			if err != nil && !errors.Is(err, strconv.ErrRange) || math.IsInf(n, 0) || math.IsNaN(n) {
-				d.fail(node, "api.type", path, "number must be finite")
-				return api.Value{}
+			if api.Kind(key.Value) == api.Environment {
+				copy := *childShape
+				copy.Fields = nil
+				for _, f := range childShape.Fields {
+					if f.Name != "defaults" {
+						copy.Fields = append(copy.Fields, f)
+					}
+				}
+				childShape = &copy
 			}
-			return api.NumberValue(strconv.FormatFloat(n, 'g', -1, 64))
+		} else if shape.Type == api.Absent || shape.Open {
+			childShape = shape.Element
+		} else if field, ok := shape.Field(key.Value); ok {
+			childShape = field.Shape
+		} else {
+			if message := d.retiredFieldMessage(path, key.Value); message != "" {
+				d.fail(key, "api.field", childPath, message)
+			} else {
+				d.fail(key, "api.field", path, "field is not permitted by this schema")
+			}
+			continue
 		}
+		fields = append(fields, api.FieldValue{Name: key.Value, Value: d.value(n, childShape, childPath)})
+	}
+	return api.MapValue(fields...)
+}
+
+func (d *decoder) sequence(node *desiredstate.Node, shape *api.Shape, path string) api.Value {
+	if shape.Type != api.Absent && shape.Type != api.Sequence {
+		d.fail(node, "api.type", path, "field requires a different YAML type")
+		return api.Value{}
+	}
+	items := make([]api.Value, 0, len(node.Content))
+	for i, n := range node.Content {
+		if d.sink.stopped() {
+			break
+		}
+		childPath := path
+		if shape.Type != api.Absent {
+			childPath += "[" + strconv.Itoa(i) + "]"
+		}
+		items = append(items, d.value(n, shape.Element, childPath))
+	}
+	return api.ListValue(items...)
+}
+
+func (d *decoder) scalar(node *desiredstate.Node, shape *api.Shape, path string) api.Value {
+	kind := scalarType(node)
+	if node.Tag == "!!null" && !(node.ExplicitTag && node.Tag == "!!str") {
+		d.fail(node, "api.type", path, "null values are not permitted")
+		return api.Value{}
+	}
+	if kind == api.Absent {
+		d.fail(node, "api.type", path, "scalar spelling or YAML type is not permitted")
+		return api.Value{}
+	}
+	if shape.Type != api.Absent && kind != shape.Type && !(shape.Type == api.Number && kind == api.Integer) {
+		d.fail(node, "api.type", path, "field requires a different YAML scalar type")
+		return api.Value{}
+	}
+	switch kind {
+	case api.String:
+		return api.StringValue(node.Value)
+	case api.Boolean:
+		return api.BoolValue(node.Value == "true")
+	case api.Integer:
+		if shape.Type != api.Number {
+			return api.IntegerValue(node.Value)
+		}
+		fallthrough
+	case api.Number:
+		n, err := strconv.ParseFloat(node.Value, 64)
+		if err != nil && !errors.Is(err, strconv.ErrRange) || math.IsInf(n, 0) || math.IsNaN(n) {
+			d.fail(node, "api.type", path, "number must be finite")
+			return api.Value{}
+		}
+		return api.NumberValue(strconv.FormatFloat(n, 'g', -1, 64))
 	}
 	d.fail(node, "yaml.shape", path, "unsupported YAML representation")
 	return api.Value{}

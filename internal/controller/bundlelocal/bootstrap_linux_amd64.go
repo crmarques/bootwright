@@ -192,42 +192,9 @@ func stageBootstrap(ctx context.Context, projected *projection, value prerequisi
 // authenticated private bytes or the copied provided foundation. No system
 // library cache, module search directory or ambient preload enters this root.
 func qualifyBootstrapELF(projected *projection, requirement prerequisites.ExecutionRequirement, root string) error {
-	type object struct {
-		name                            string
-		needed, rpath, runpath, sonames []string
-	}
-	decode := func(name string, data []byte) (object, bool, error) {
-		result := object{name: name}
-		if !bytes.HasPrefix(data, []byte{0x7f, 'E', 'L', 'F'}) {
-			return result, false, nil
-		}
-		file, err := elf.NewFile(bytes.NewReader(data))
-		if err != nil {
-			return result, false, bundleFailure("bootstrap contains an invalid ELF object")
-		}
-		defer file.Close()
-		if file.Machine != elf.EM_X86_64 || file.Class != elf.ELFCLASS64 {
-			return result, false, bundleFailure("bootstrap ELF architecture is unsupported")
-		}
-		result.needed, err = file.ImportedLibraries()
-		if err != nil {
-			return result, false, err
-		}
-		result.sonames, err = file.DynString(elf.DT_SONAME)
-		if err != nil {
-			return result, false, err
-		}
-		result.rpath, err = file.DynString(elf.DT_RPATH)
-		if err != nil {
-			return result, false, err
-		}
-		result.runpath, err = file.DynString(elf.DT_RUNPATH)
-		return result, true, err
-	}
-	provided := map[string]bool{}
-	var objects, foundation []object
+	var objects []elfObject
 	for name, file := range projected.files {
-		parsed, yes, err := decode("/"+name, file.data)
+		parsed, yes, err := decodeBootstrapELF("/"+name, file.data)
 		if err != nil {
 			return err
 		}
@@ -235,6 +202,55 @@ func qualifyBootstrapELF(projected *projection, requirement prerequisites.Execut
 			objects = append(objects, parsed)
 		}
 	}
+	provided, err := providedBootstrapLibraries(requirement, root)
+	if err != nil {
+		return err
+	}
+	for _, file := range objects {
+		if err := qualifyPrivateDependencies(projected, file, provided); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type elfObject struct {
+	name                            string
+	needed, rpath, runpath, sonames []string
+}
+
+func decodeBootstrapELF(name string, data []byte) (elfObject, bool, error) {
+	result := elfObject{name: name}
+	if !bytes.HasPrefix(data, []byte{0x7f, 'E', 'L', 'F'}) {
+		return result, false, nil
+	}
+	file, err := elf.NewFile(bytes.NewReader(data))
+	if err != nil {
+		return result, false, bundleFailure("bootstrap contains an invalid ELF object")
+	}
+	defer file.Close()
+	if file.Machine != elf.EM_X86_64 || file.Class != elf.ELFCLASS64 {
+		return result, false, bundleFailure("bootstrap ELF architecture is unsupported")
+	}
+	result.needed, err = file.ImportedLibraries()
+	if err != nil {
+		return result, false, err
+	}
+	result.sonames, err = file.DynString(elf.DT_SONAME)
+	if err != nil {
+		return result, false, err
+	}
+	result.rpath, err = file.DynString(elf.DT_RPATH)
+	if err != nil {
+		return result, false, err
+	}
+	result.runpath, err = file.DynString(elf.DT_RUNPATH)
+	return result, true, err
+}
+
+func providedBootstrapLibraries(requirement prerequisites.ExecutionRequirement, root string) (map[string]bool, error) {
+	provided := map[string]bool{}
+	var foundation []elfObject
 	for _, file := range requirement.Files {
 		name := file.Path
 		if root != "" {
@@ -242,15 +258,15 @@ func qualifyBootstrapELF(projected *projection, requirement prerequisites.Execut
 		}
 		data, err := os.ReadFile(name)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		digest := sha256.Sum256(data)
 		if hex.EncodeToString(digest[:]) != file.SHA256 {
-			return bundleFailure("provided bootstrap library changed during qualification")
+			return nil, bundleFailure("provided bootstrap library changed during qualification")
 		}
-		parsed, yes, err := decode(file.Path, data)
+		parsed, yes, err := decodeBootstrapELF(file.Path, data)
 		if err != nil || !yes {
-			return bundleFailure("provided bootstrap object is invalid")
+			return nil, bundleFailure("provided bootstrap object is invalid")
 		}
 		provided[filepath.Base(file.Path)] = true
 		for _, name := range parsed.sonames {
@@ -261,78 +277,76 @@ func qualifyBootstrapELF(projected *projection, requirement prerequisites.Execut
 	for _, file := range foundation {
 		for _, needed := range file.needed {
 			if !provided[needed] {
-				return bundleFailure("provided bootstrap libraries have an incomplete dependency closure")
+				return nil, bundleFailure("provided bootstrap libraries have an incomplete dependency closure")
 			}
 		}
 	}
-	private := func(name string) bool {
-		if !strings.HasPrefix(name, "/python/") {
-			return false
+	return provided, nil
+}
+
+func qualifyPrivateDependencies(projected *projection, file elfObject, provided map[string]bool) error {
+	origin := filepath.Dir(file.name)
+	for _, needed := range file.needed {
+		if provided[needed] {
+			continue
 		}
-		_, ok := projected.files[strings.TrimPrefix(name, "/")]
-		return ok
-	}
-	expand := func(value, origin string) string {
-		return filepath.Clean(strings.ReplaceAll(strings.ReplaceAll(value, "${ORIGIN}", origin), "$ORIGIN", origin))
-	}
-	for _, file := range objects {
-		origin := filepath.Dir(file.name)
-		for _, needed := range file.needed {
-			if provided[needed] {
+		if strings.Contains(needed, "/") {
+			if projectedPrivately(projected, expandOrigin(needed, origin)) {
 				continue
 			}
-			if strings.Contains(needed, "/") {
-				if private(expand(needed, origin)) {
-					continue
-				}
-				return bundleFailure("bootstrap ELF dependency path escapes its authenticated private projection")
+			return bundleFailure("bootstrap ELF dependency path escapes its authenticated private projection")
+		}
+		found := false
+		var err error
+		// RPATH precedes the fixed library path. An external RPATH is harmless
+		// only for dependencies already explicitly preloaded above.
+		if len(file.runpath) == 0 {
+			found, err = privateSearch(projected, file.rpath, origin, needed, "bootstrap ELF search path could select an unqualified external dependency")
+			if err != nil {
+				return err
 			}
-			found := false
-			// RPATH precedes the fixed library path. An external RPATH is harmless
-			// only for dependencies already explicitly preloaded above.
-			if len(file.runpath) == 0 {
-				for _, entry := range file.rpath {
-					for _, directory := range strings.Split(entry, ":") {
-						directory = expand(directory, origin)
-						if !strings.HasPrefix(directory, "/python/") {
-							return bundleFailure("bootstrap ELF search path could select an unqualified external dependency")
-						}
-						if private(filepath.Join(directory, needed)) {
-							found = true
-							break
-						}
-					}
-					if found {
-						break
-					}
-				}
+		}
+		if !found && projectedPrivately(projected, "/python/lib/"+needed) {
+			found = true
+		}
+		if !found {
+			found, err = privateSearch(projected, file.runpath, origin, needed, "bootstrap ELF search path escapes its private projection")
+			if err != nil {
+				return err
 			}
-			if !found && private("/python/lib/"+needed) {
-				found = true
-			}
-			if !found {
-				for _, entry := range file.runpath {
-					for _, directory := range strings.Split(entry, ":") {
-						directory = expand(directory, origin)
-						if !strings.HasPrefix(directory, "/python/") {
-							return bundleFailure("bootstrap ELF search path escapes its private projection")
-						}
-						if private(filepath.Join(directory, needed)) {
-							found = true
-							break
-						}
-					}
-					if found {
-						break
-					}
-				}
-			}
-			if !found {
-				return bundleFailure("selected Python or wheel ELF dependency is outside the authenticated bootstrap foundation")
-			}
+		}
+		if !found {
+			return bundleFailure("selected Python or wheel ELF dependency is outside the authenticated bootstrap foundation")
 		}
 	}
 	return nil
+}
+
+func privateSearch(projected *projection, entries []string, origin, needed, escape string) (bool, error) {
+	for _, entry := range entries {
+		for _, directory := range strings.Split(entry, ":") {
+			directory = expandOrigin(directory, origin)
+			if !strings.HasPrefix(directory, "/python/") {
+				return false, bundleFailure(escape)
+			}
+			if projectedPrivately(projected, filepath.Join(directory, needed)) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func projectedPrivately(projected *projection, name string) bool {
+	if !strings.HasPrefix(name, "/python/") {
+		return false
+	}
+	_, ok := projected.files[strings.TrimPrefix(name, "/")]
+	return ok
+}
+
+func expandOrigin(value, origin string) string {
+	return filepath.Clean(strings.ReplaceAll(strings.ReplaceAll(value, "${ORIGIN}", origin), "$ORIGIN", origin))
 }
 
 func qualifyResolvedProjection(projected *projection, requirement prerequisites.ExecutionRequirement) error {

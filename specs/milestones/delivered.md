@@ -1503,3 +1503,32 @@ acts; a failed `no_log` completion shows only its name; a context whose
 operation area holds more than 48 MiB refuses fresh applies ([B206](m1.md#b206));
 the automation digest moves. Under D48 every follow-up was parked: B236 to
 B252, with clauses on B94, B206 and B229.
+
+### X33 — function splits and one reading of frozen JSON
+
+**Owner:** Architecture, with Controller, State reconciliation, Secrets and
+Workspace. Integrated on local `main` on 2026-10-01 as one commit, the last
+slice before the M1 freeze (D48). **Items:** B47, B253, B254, B48.
+
+**Outcome:** every production function over the 100-line limit is split into
+named helpers in its own file, with code moved in its original order, so both
+awaiting-split lists are empty and only shrink (B47, B253 and B254, split from
+B47 by owner area so they ran as parallel lanes). Every frozen request is
+frozen and read back through one `Freeze`, `Thaw` and `ProveCanonical`, every
+adapter's evidence is decoded through one bounded, closed `DecodeEvidence`,
+and a fitness test refuses a lifecycle consumer that reads JSON itself (B48).
+No frozen byte, request version or golden moved. B48 fails closed in one more
+place: a controller-stage proof over 64 KiB or with an undeclared member now
+reads as no closure, where a lax reading accepted it; and four refusal
+messages are reworded.
+
+**Review:** no finding survived; the finders and the critic traced each split
+and each decoder against the base.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` passes on the integrated slice and on the squashed commit, and
+`./scripts/ansible-check --suite units`, `sanity`, `integration` and `lint`
+pass on the squashed commit. No real-host run.
+
+**Constraints left behind:** none for operators beyond the reworded messages.
+Under D48 every follow-up was parked: B255 to B257.

@@ -71,24 +71,9 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest) (ma
 			return nil, failure("input", "secret file request has an invalid part", "")
 		}
 	}
-	base := ""
-	for _, request := range requests {
-		if !filepath.IsAbs(request.Path) && request.Path != "~" && !strings.HasPrefix(request.Path, "~/") && !strings.HasPrefix(request.Path, "~") {
-			var err error
-			base, err = fileBase(ctx)
-			if err != nil {
-				return nil, err
-			}
-			break
-		}
-	}
-	resolved := make([]string, len(requests))
-	var err error
-	for index, request := range requests {
-		resolved[index], err = resolveSecretPathFor(ctx, base, request.Path, code, identity.Home)
-		if err != nil {
-			return nil, err
-		}
+	resolved, err := resolveFileRequests(ctx, requests, code, identity.Home)
+	if err != nil {
+		return nil, err
 	}
 
 	reader, err := newSecureFiles(ctx, code)
@@ -119,6 +104,41 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest) (ma
 		}
 	}
 
+	parts, err := readHeldParts(ctx, held, code)
+	if err != nil {
+		return nil, err
+	}
+	if err := reader.verify(held); err != nil {
+		clearParts(parts)
+		return nil, err
+	}
+	return parts, nil
+}
+
+func resolveFileRequests(ctx context.Context, requests []fileRequest, code, home string) ([]string, error) {
+	base := ""
+	for _, request := range requests {
+		if !filepath.IsAbs(request.Path) && request.Path != "~" && !strings.HasPrefix(request.Path, "~/") && !strings.HasPrefix(request.Path, "~") {
+			var err error
+			base, err = fileBase(ctx)
+			if err != nil {
+				return nil, err
+			}
+			break
+		}
+	}
+	resolved := make([]string, len(requests))
+	var err error
+	for index, request := range requests {
+		resolved[index], err = resolveSecretPathFor(ctx, base, request.Path, code, home)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return resolved, nil
+}
+
+func readHeldParts(ctx context.Context, held []heldPart, code string) (map[secrets.Part][]byte, error) {
 	parts := make(map[secrets.Part][]byte, len(held))
 	fail := func(err error) (map[secrets.Part][]byte, error) {
 		clearParts(parts)
@@ -146,9 +166,6 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest) (ma
 			return fail(failure(code, "secret file request contains a duplicate part", part.request.Path))
 		}
 		parts[part.request.Part] = data
-	}
-	if err := reader.verify(held); err != nil {
-		return fail(err)
 	}
 	return parts, nil
 }

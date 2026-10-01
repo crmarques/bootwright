@@ -794,8 +794,9 @@ var _ lifecycle.ToolLocator = Capability{}
 // proved in its apply, recovered only from the retained identities that proof
 // names: a newer release under the same latest intent, retained by another
 // context, is never offered. Anything short of a completed apply's proof of
-// exactly this request and area, or a closure only partly retained, names no
-// area it may run from, even one that holds the file.
+// exactly this request and area, read as the one bounded shape it declares, or
+// a closure only partly retained, names no area it may run from, even one that
+// holds the file.
 func TestLocateToolAnswersOnlyFromTheClosureTheStageProved(t *testing.T) {
 	release := func(kind, version, digit string, members ...string) prerequisites.ToolDefinition {
 		definition := toolDefinition(kind, version)
@@ -838,6 +839,16 @@ func TestLocateToolAnswersOnlyFromTheClosureTheStageProved(t *testing.T) {
 		"a proof of another request": {proved: proof(func(e *Evidence) { e.Request = strings.Repeat("9", 64) }), selected: closure, complete: true},
 		"a proof of another area":    {proved: proof(func(e *Evidence) { e.Area = strings.Repeat("9", 64) }), selected: closure, complete: true},
 		"a removal's retained proof": {proved: proof(func(e *Evidence) { e.Retained = true }), selected: closure, complete: true},
+		"a proof widened by a member it never declared": {proved: func() lifecycle.BlockEvidence {
+			value := proof(nil)
+			value.Evidence = append(value.Evidence[:len(value.Evidence)-1], `,"widened":true}`...)
+			return value
+		}(), selected: closure, complete: true},
+		"a proof past the evidence bound": {proved: func() lifecycle.BlockEvidence {
+			value := proof(nil)
+			value.Evidence = append(value.Evidence, strings.Repeat(" ", 64<<10)...)
+			return value
+		}(), selected: closure, complete: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			area := &fakeArea{sealed: true}
