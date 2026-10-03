@@ -101,8 +101,10 @@ func TestBootstrapChildHasNoHostRootMapping(t *testing.T) {
 
 // syntheticResolver completes a resolution against fake publishers whose
 // ansible-core page is of the given Index API version, counting the sources
-// it fetches.
-func syntheticResolver(t *testing.T, apiVersion string, fetched *int) *BootstrapCatalog {
+// it fetches and the projections it qualifies. It qualifies without reading
+// the provided foundation, the glibc and libgcc only a qualified controller
+// holds.
+func syntheticResolver(t *testing.T, apiVersion string, fetched, qualified *int) *BootstrapCatalog {
 	t.Helper()
 	wheels := map[string][]byte{
 		"https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl": wheelArchive(t, "ansible_core/__init__.py"),
@@ -137,6 +139,13 @@ func syntheticResolver(t *testing.T, apiVersion string, fetched *int) *Bootstrap
 		}
 		return json.Marshal(map[string]any{"version": "1", "install": install, "environment": map[string]string{"python_full_version": "3.14.7", "implementation_name": "cpython", "platform_machine": "x86_64", "sys_platform": "linux"}})
 	}
+	resolver.qualify = func(projected *projection, requirement prerequisites.ExecutionRequirement) error {
+		if _, ok := projected.files[requirement.PythonExecutable]; !ok || len(requirement.Files) == 0 {
+			t.Fatalf("a resolution qualified a projection without its interpreter or provided foundation: %+v", requirement)
+		}
+		*qualified++
+		return nil
+	}
 	return resolver
 }
 
@@ -148,17 +157,17 @@ func TestAResolutionOverANewerIndexAPIMinorWarnsAndANewerMajorRefuses(t *testing
 	platform := prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
 	known := "1." + strconv.Itoa(indexAPIMinor)
 	for _, api := range []string{known, "1." + strconv.Itoa(indexAPIMinor+1)} {
-		fetched := 0
-		resolved, warnings, err := syntheticResolver(t, api, &fetched).Resolve(t.Context(), platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
-		if err != nil || prerequisites.ValidateBootstrap(resolved) != nil || resolved.AnsibleVersion != "2.21.4" || fetched != 3 {
-			t.Fatalf("a resolution over Index API %s did not complete: %d fetched %+v", api, fetched, diagnostics.Of(err))
+		fetched, qualified := 0, 0
+		resolved, warnings, err := syntheticResolver(t, api, &fetched, &qualified).Resolve(t.Context(), platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
+		if err != nil || prerequisites.ValidateBootstrap(resolved) != nil || resolved.AnsibleVersion != "2.21.4" || fetched != 3 || qualified != 1 {
+			t.Fatalf("a resolution over Index API %s did not complete: %d fetched, %d qualified %+v", api, fetched, qualified, diagnostics.Of(err))
 		}
 		if api == known && len(warnings) != 0 || api != known && (len(warnings) != 1 || warnings[0].Severity != "warning" || warnings[0].Code != "controller.unsupported" || !strings.Contains(warnings[0].Message, "version "+api+", newer than the "+known+" ")) {
 			t.Fatalf("a resolution over Index API %s reported %+v", api, warnings)
 		}
 	}
-	fetched := 0
-	resolved, warnings, err := syntheticResolver(t, "2.0", &fetched).Resolve(t.Context(), platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
+	fetched, qualified := 0, 0
+	resolved, warnings, err := syntheticResolver(t, "2.0", &fetched, &qualified).Resolve(t.Context(), platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
 	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.unsupported" || !strings.Contains(found[0].Message, "version 2.0, a major version this build does not read") || fetched != 0 || warnings != nil || resolved.Digest != "" {
 		t.Fatalf("a resolution over a newer Index API major was not refused: %d fetched %+v %+v", fetched, warnings, found)
 	}
@@ -179,7 +188,7 @@ func TestAResolutionOverANewerIndexAPIMinorWarnsAndANewerMajorRefuses(t *testing
 			}
 		},
 	} {
-		resolver := syntheticResolver(t, newer, &fetched)
+		resolver := syntheticResolver(t, newer, &fetched, &qualified)
 		stop(resolver)
 		resolved, warnings, err := resolver.Resolve(t.Context(), platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
 		if !errors.Is(err, stopped) || resolved.Digest != "" || len(warnings) != 1 || warnings[0].Severity != "warning" || !strings.Contains(warnings[0].Message, "version "+newer+", newer than the "+known+" ") {
@@ -189,7 +198,7 @@ func TestAResolutionOverANewerIndexAPIMinorWarnsAndANewerMajorRefuses(t *testing
 	exact := controller.DefaultDependencyVersions()
 	exact.Ansible = "2.21.5"
 	fetched = 0
-	resolved, warnings, err = syntheticResolver(t, newer, &fetched).Resolve(t.Context(), platform, exact, prerequisites.SetupEgress{})
+	resolved, warnings, err = syntheticResolver(t, newer, &fetched, &qualified).Resolve(t.Context(), platform, exact, prerequisites.SetupEgress{})
 	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "no live wheel of ansible-core 2.21.5") || fetched != 0 || resolved.Digest != "" || len(warnings) != 1 || !strings.Contains(warnings[0].Message, "version "+newer+", newer than the "+known+" ") {
 		t.Fatalf("a resolution over Index API %s that refused its releases lost its warning: %d fetched %+v %+v", newer, fetched, warnings, found)
 	}

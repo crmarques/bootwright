@@ -1617,3 +1617,23 @@ no context is stranded. A never-started pending receipt below the bound still
 refuses after the host's release moves, with a remedy an upgraded host cannot
 follow ([B271](backlog.md#b271)). Under D48 every follow-up was parked: B268
 to B271.
+
+### X36 — the resolution test off the host's foundation
+
+**Owner:** Controller setup. Delivered out of sequence on the owner's explicit
+request after CI failed, and integrated on local `main` on 2026-10-03 as one
+commit.
+
+**Outcome:** X29's test of a resolution over a newer Index API version ran
+the bootstrap resolution through its last step, which hashes the controller's
+own glibc and libgcc against the catalog's Fedora 43 profile, so it passed only
+on a host holding exactly those packages: CI's Ubuntu runner failed it on every
+push from 35de8f40 on, and a glibc or libgcc update would have failed it
+locally. That step is now a port of the resolver, like its publisher reads,
+wired to the same qualification in production; the test qualifies without
+reading the host and counts that the step ran. Production behavior is
+unchanged.
+
+**Gates:** `make quick` and `make check` pass. Built static and run in a private
+user and mount namespace with a foreign glibc loader bound over the host's, the
+test fails as CI did before the change and passes after it. No real-host run.

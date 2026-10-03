@@ -30,21 +30,23 @@ const simpleIndexJSON = "application/vnd.pypi.simple.v1+json"
 
 type bootstrapMetadataFetcher func(context.Context, string, string, prerequisites.SetupEgress) (toolMetadata, error)
 type bootstrapWheelResolver func(context.Context, *projection, prerequisites.BootstrapDefinition, prerequisites.SetupEgress) ([]byte, error)
+type bootstrapProjectionQualifier func(*projection, prerequisites.ExecutionRequirement) error
 
 // BootstrapCatalog resolves one publisher snapshot. Its private function ports
-// allow parser/isolation tests without network access or installed-host effects.
+// allow parser/isolation tests without network access or the installed host.
 type BootstrapCatalog struct {
 	metadata bootstrapMetadataFetcher
 	fetch    sourceFetcher
 	resolve  bootstrapWheelResolver
+	qualify  bootstrapProjectionQualifier
 }
 
 func NewBootstrapResolver() *BootstrapCatalog {
-	return &BootstrapCatalog{metadata: fetchBootstrapMetadata, fetch: fetchSource, resolve: resolveBootstrapWheels}
+	return &BootstrapCatalog{metadata: fetchBootstrapMetadata, fetch: fetchSource, resolve: resolveBootstrapWheels, qualify: qualifyResolvedProjection}
 }
 
 func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.Platform, versions controller.DependencyVersions, egress prerequisites.SetupEgress) (prerequisites.BootstrapDefinition, []diagnostics.Diagnostic, error) {
-	if c == nil || c.metadata == nil || c.fetch == nil || c.resolve == nil {
+	if c == nil || c.metadata == nil || c.fetch == nil || c.resolve == nil || c.qualify == nil {
 		return prerequisites.BootstrapDefinition{}, nil, bundleFailure("bootstrap resolver adapters are unavailable")
 	}
 	if err := qualifiedIntent(versions); err != nil {
@@ -119,7 +121,7 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 	if err := projected.automation(ctx); err != nil {
 		return prerequisites.BootstrapDefinition{}, warnings, err
 	}
-	if err := qualifyResolvedProjection(projected, value.Execution); err != nil {
+	if err := c.qualify(projected, value.Execution); err != nil {
 		return prerequisites.BootstrapDefinition{}, warnings, err
 	}
 	value.ProjectionSHA256, value.FileCount, value.ExpandedBytes = projected.identity(), len(projected.files), projected.bytes
