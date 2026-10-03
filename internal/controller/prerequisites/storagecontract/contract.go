@@ -48,6 +48,8 @@ func Verify(t *testing.T, within Within) {
 		{"an unknown publication ends the transaction's publications", anUnknownPublicationEndsThePublications},
 		{"a retirement removes only superseded bundles", aRetirementRemovesOnlySupersededBundles},
 		{"a retirement after a failed setup keeps the bundle its receipt names", aRetirementAfterAFailedSetupKeepsItsBundle},
+		{"a retirement of a bundle the store never held keeps the resolution naming it", aRetirementOfABundleNeverHeldKeepsItsResolution},
+		{"a resolution retirement drops the last one naming a bundle the store never held", aResolutionRetirementDropsOneNamingABundleNeverHeld},
 		{"a setup run opens only under a durable intent and is numbered upward", aSetupRunOpensOnlyUnderADurableIntent},
 		{"a resolution retirement keeps the receipt's resolution and every bundle named", aResolutionRetirementKeepsEveryBundleNamed},
 	} {
@@ -301,6 +303,60 @@ func aRetirementAfterAFailedSetupKeepsItsBundle(t *testing.T, s Subject) {
 	})
 }
 
+// A setup canceled before its bundle held an area leaves the resolution its
+// receipt carries naming a bundle the store never held, and that resolution
+// stays retained once a later receipt replaces the canceled one. Naming that
+// bundle in a retirement removes nothing, the resolution naming it included.
+func aRetirementOfABundleNeverHeldKeepsItsResolution(t *testing.T, s Subject) {
+	ctx := context.Background()
+	first, second := resolved(t, s.Scope, "1"), resolved(t, s.Scope, "2")
+	never, current := first.Receipt.CatalogDigest, second.Receipt.CatalogDigest
+	both := []string{first.Receipt.Definition.ResolutionDigest, second.Receipt.Definition.ResolutionDigest}
+	mutate(t, s, func(tx prerequisites.StorageTransaction) {
+		publishes(t, tx, first)
+		publishes(t, tx, canceled(first))
+	})
+	mutate(t, s, func(tx prerequisites.StorageTransaction) {
+		publishes(t, tx, second)
+		opens(t, tx, current)
+		publishes(t, tx, complete(second))
+		succeeds(t, tx.RetireBundles(ctx, []string{never}), "a retirement of a bundle the store never held")
+		retains(t, tx.Snapshot(), both...)
+		holdsAreas(t, tx.Snapshot(), current)
+	})
+	read(t, s, "", func(view prerequisites.StorageView) {
+		retains(t, view, both...)
+		holdsAreas(t, view, current)
+	})
+}
+
+// While a canceled receipt is the receipt, the resolution it carries stays.
+// Once a later receipt replaces it, that resolution names a bundle the store
+// never held, so it identifies no area and a resolution retirement drops it
+// alone, although no other resolution names its bundle.
+func aResolutionRetirementDropsOneNamingABundleNeverHeld(t *testing.T, s Subject) {
+	ctx := context.Background()
+	first, second := resolved(t, s.Scope, "1"), resolved(t, s.Scope, "2")
+	abandoned, current := first.Receipt.Definition.ResolutionDigest, second.Receipt.Definition.ResolutionDigest
+	mutate(t, s, func(tx prerequisites.StorageTransaction) {
+		publishes(t, tx, first)
+		publishes(t, tx, canceled(first))
+		refuses(t, tx.RetireResolutions(ctx, []string{abandoned}), "a retirement of the resolution the canceled receipt carries")
+	})
+	mutate(t, s, func(tx prerequisites.StorageTransaction) {
+		publishes(t, tx, second)
+		opens(t, tx, second.Receipt.CatalogDigest)
+		publishes(t, tx, complete(second))
+		succeeds(t, tx.RetireResolutions(ctx, []string{abandoned}), "a retirement of the last resolution naming a bundle the store never held")
+		retains(t, tx.Snapshot(), current)
+		holdsAreas(t, tx.Snapshot(), second.Receipt.CatalogDigest)
+	})
+	read(t, s, "", func(view prerequisites.StorageView) {
+		retains(t, view, current)
+		holdsAreas(t, view, second.Receipt.CatalogDigest)
+	})
+}
+
 // aSetupRunOpensOnlyUnderADurableIntent holds a setup run to the receipt that
 // intends the Ansible it keeps: none opens before an action's intent is
 // durable or after the receipt completes, and runs keep being numbered upward
@@ -454,6 +510,17 @@ func failed(value prerequisites.HostState) prerequisites.HostState {
 		value.Receipt.Actions[index].Phase, value.Receipt.Actions[index].Outcome = "observed", "failed"
 		value.Receipt.Actions[index].Evidence = []byte(`{"ready":false}`)
 	}
+	return value
+}
+
+// canceled is value once setup abandoned it before its intended action took
+// effect: that action observed as never started, because no area holds the
+// bundle the receipt names, which ends the receipt canceled.
+func canceled(value prerequisites.HostState) prerequisites.HostState {
+	value.Receipt.Status = "canceled"
+	value.Receipt.Actions = slices.Clone(value.Receipt.Actions)
+	value.Receipt.Actions[0].Phase, value.Receipt.Actions[0].Outcome = "observed", "canceled"
+	value.Receipt.Actions[0].Evidence = []byte(`{"bundleArea":"absent"}`)
 	return value
 }
 

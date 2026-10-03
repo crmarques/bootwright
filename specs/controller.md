@@ -224,7 +224,14 @@ The resolution a retired bundle carries is retired with it, because a retained
 resolution whose sources are gone can be carried forward from nothing. That is
 what returns capacity: a host holds at most 16 bundle areas, execution bundles
 and client areas alike, and at most 16 retained resolutions
-([bounds](contexts/controller-record.md#bounds)).
+([bounds](contexts/controller-record.md#bounds)). A superseded execution
+bundle that holds no area has only its resolution to give back: once a later
+receipt replaces a canceled one whose bundle never held an area, the
+retirement after completion retires that receipt's resolution alone. The
+resolution a [controller stage](#the-controller-stage) retains for the native
+clients a context selects names no area either, but only that stage judges
+which of those are superseded, so setup never retires one. The result names
+the bundles whose areas the command removed, and nothing else.
 
 **A setup at the bound.** A setup never gets stuck at that bound. When it must
 publish a new execution bundle and the host already holds 16 areas or 16
@@ -243,7 +250,7 @@ again under the mutation that publishes:
   and the latest naming each kept bundle stay, so every kept bundle stays
   named by a resolution, and no area is removed for them; the
   [store refuses](contexts/controller-record.md#bundles-and-client-areas) to
-  drop the receipt's own or the last resolution naming a bundle.
+  drop the receipt's own or the last resolution naming a bundle it holds.
   The plan names that retirement. It then publishes and completes, and the
   retirement after completion follows as usual. Retirement is never undone,
   so a setup that fails after it still leaves that room.
@@ -261,11 +268,8 @@ published it at the bound, and the bundle it names holds no area while the
 host holds 16, so resuming it could never reserve one. The store refuses a new
 receipt that names a bundle it cannot reserve, so no new receipt is stranded.
 Retirement is never undone, so for one an earlier build left, setup first
-proves that this executable can prepare the bundle that receipt names. One
-whose automation or provided execution foundation this executable does not
-embed refuses with `controller.unknown` before any effect, with or without the
-flag, as [another pending attempt](#publication-and-interrupted-setup) does.
-Otherwise setup decides as above with the bundle that receipt names as the new
+proves that this executable can prepare the bundle that receipt names. When it
+can, setup decides as above with the bundle that receipt names as the new
 one. With `--purge-old-bundles` it retires every superseded execution bundle
 and every area left marked as retiring, keeping
 that receipt's bundle, its resolution, which the store retained when it
@@ -278,7 +282,34 @@ resumption reads is in an area it retires, and no lifecycle operation runs
 while a receipt is pending. A pending receipt whose bundle holds an area needs
 no room and admits no retirement.
 
-Not yet met: only an earlier build could strand a receipt, and no build that resumes one embeds that build's automation, so every stranded receipt refuses as another executable's attempt and stays pending; tracked as [B175](milestones/m1.md#b175).
+A stranded receipt that is [setup's own](#publication-and-interrupted-setup),
+over whatever ambient route it recorded, cannot be resumed when its automation
+or provided execution foundation is not one this executable embeds, or when it
+froze dependencies other than the ones this host now selects, such as another
+platform's, and one whose setup never took effect is abandoned instead: a
+route binds only what a setup acquires, and that one acquired nothing. That
+is the receipt an earlier build left by recording the
+intent of its first action, `execution-bundle`, and then meeting the bound
+reserving that bundle's area: that action holds at most its intent and every
+later action is still planned. With `--purge-old-bundles` setup
+records that receipt `canceled`, observing its intended action as never
+started because the store holds no area for the bundle the receipt names,
+then retires every superseded execution bundle and every area left marked as
+retiring, and sets this host up afresh under this executable from its
+observed state, as the next setup after any canceled receipt does. Once that
+setup completes, the retirement after completion retires the resolution the
+canceled receipt carried, whose bundle never held an area. The one
+plan it presents names the cancellation, the retirement and the fresh setup,
+and the cancellation is durable before anything is retired. Without the flag
+setup refuses with `controller.conflict` before any effect and names
+`bootwright setup --purge-old-bundles`, and preflight refuses the same way.
+Any other stranded receipt this executable cannot resume, such as one with
+another action holding its intent or any action observed, `unknown` included,
+may have taken effect, so it is never abandoned: it refuses with
+`controller.unknown` before any effect, with or without the flag. When it froze
+dependencies other than the ones this host now selects, the refusal says so and
+names the original input to restore; otherwise it refuses as
+[another pending attempt](#publication-and-interrupted-setup) does.
 
 Retirement records its intent before it removes anything, so an interruption
 leaves an area marked as retiring rather than an area the record still presents
@@ -288,8 +319,12 @@ also retires every area marked as retiring, except the bundle the receipt
 names, and repeating the command once completes an interrupted retirement. A
 stranded receipt stays pending with its resolution retained however its
 retirement or resumption is interrupted, and repeating the command goes on
-from what the interruption left. A partially removed area is never readable,
-published into, or counted as retained.
+from what the interruption left. One being abandoned stays pending and
+stranded until its cancellation is durable; an interruption after that, during
+the retirement or the fresh setup, leaves it canceled, still at the bound
+until the retirement completes, or already replaced by the fresh setup's own
+receipt, and repeating the command completes it from there. A partially
+removed area is never readable, published into, or counted as retained.
 
 ## Selection and command journeys
 
@@ -715,14 +750,20 @@ Contradictory or incomplete proof leaves the action unknown and blocks further
 mutation with recovery guidance. Never turn a lost child result into failure
 with a presumed no-effect outcome. Changed input, host identity or dependency
 closure cannot replace an incomplete setup; restore the exact compatible
-executable/dependencies and resolve that receipt first.
+executable/dependencies and resolve that receipt first. The one exception is a
+receipt stranded at the bound that this executable cannot resume, whose setup
+never took effect, which `setup --purge-old-bundles`
+[abandons](#supported-host-and-dependency-selection) on the observation that
+its bundle holds no area.
 
 Whether a pending receipt is this setup's own is decided without a context,
 because setup records none: a receipt that names one is never setup's, and a
 context's preflight compares neither its own context, nor its controller
 Machine's route with the ambient route the receipt recorded, nor a binding
 action setup never plans. Setup and a context-free preflight read that ambient
-route and still compare it, so setup resumed over another route refuses.
+route and still compare it, so setup resumed over another route refuses. A
+stranded receipt setup [abandons](#supported-host-and-dependency-selection) is
+never resumed, so its route is not compared.
 Another pending attempt refuses, naming the executable that recorded it and the
 `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` values it ran with, then
 `bootwright setup`.
@@ -747,7 +788,8 @@ Completed setup retains enough bounded host and bundle evidence for later
 inspection; no-op repetition revalidates without republishing. A later input
 or Bootwright automation revision may select a new bundle through a fresh setup.
 Preflight reports an incompatible retained bundle without resolving a replacement;
-an incomplete receipt still requires its original compatible executable. An
+an incomplete receipt still requires its original compatible executable, unless
+it is one setup abandons at the bound. An
 input update may change a context's controller prerequisite intent, which its
 next controller stage installs, but cannot silently change an established
 controller Machine/host binding. A host prerequisite that loses readiness is

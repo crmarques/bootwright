@@ -2,6 +2,7 @@ package prerequisites
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strconv"
 )
@@ -74,6 +75,95 @@ func stranded(view StorageView) bool {
 		!slices.ContainsFunc(view.Areas, func(held HeldArea) bool { return held.ID == receipt.CatalogDigest })
 }
 
+// errUnresumable marks the refusal of a stranded receipt that this executable
+// cannot resume and whose setup never took effect, which is the one receipt
+// setup --purge-old-bundles abandons.
+var errUnresumable = errors.New("a setup receipt stranded at the bound cannot be resumed by this executable")
+
+// unresumable refuses that receipt. Only abandoning it settles it, so the
+// refusal names the command that does.
+func unresumable() error {
+	return errors.Join(errUnresumable, failure("controller.conflict", "an earlier build left a setup pending at this host's bound that this executable cannot resume", "run bootwright setup --purge-old-bundles to cancel it, retire the superseded execution bundles and set this host up afresh"))
+}
+
+// neverStarted reports a stranded receipt whose setup cannot have taken
+// effect. The build that published it recorded the intent of its first
+// action, the execution bundle, and then met the bound reserving that
+// bundle's area, so that action holds at most its intent and every later
+// action is still planned. A receipt in any other shape may have taken effect.
+func neverStarted(receipt SetupReceipt) bool {
+	if len(receipt.Actions) == 0 || receipt.Actions[0].ID != "execution-bundle" {
+		return false
+	}
+	for index, action := range receipt.Actions {
+		if action.Phase != "planned" && (index != 0 || action.Phase != "intent") {
+			return false
+		}
+	}
+	return true
+}
+
+// abandonable reports a receipt setup abandons once this executable cannot
+// resume it: one setup recorded, naming no context, stranded at the bound and
+// never started. Whatever route it recorded, nothing was acquired over it.
+func abandonable(view StorageView) bool {
+	receipt := view.State.Receipt
+	return receipt.Context == (SetupContext{}) && stranded(view) && neverStarted(receipt)
+}
+
+// canceled is a receipt neverStarted admits once it is abandoned: the intent
+// of its execution bundle is observed as never started, because the store
+// holds no area for the bundle the receipt names, and every later action
+// stays planned.
+func canceled(receipt SetupReceipt) SetupReceipt {
+	receipt.Actions = slices.Clone(receipt.Actions)
+	if receipt.Actions[0].Phase == "intent" {
+		receipt.Actions[0].Phase, receipt.Actions[0].Outcome = "observed", "canceled"
+		receipt.Actions[0].Evidence = object(map[string]any{"bundleArea": "absent"})
+	}
+	receipt.Status = "canceled"
+	return receipt
+}
+
+// abandoned names the receipt a setup --purge-old-bundles cancels: one
+// stranded at the bound that this executable cannot resume. The inspection
+// that refuses it to preflight and to a setup without the flag decides,
+// first and without streaming, so all three judge it alike.
+func (s Service) abandoned(ctx context.Context, view StorageView) SetupReceipt {
+	if !s.abandon || view.Context.Name != "" || !stranded(view) {
+		return SetupReceipt{}
+	}
+	judge := s
+	judge.abandon = false
+	if _, err := judge.inspect(ctx, view, false, ""); !errors.Is(err, errUnresumable) {
+		return SetupReceipt{}
+	}
+	return view.State.Receipt
+}
+
+// abandon decides again, from the store's own snapshot under the mutation
+// that publishes, that the receipt this plan cancels is still the stranded one
+// it was approved over, and returns that snapshot with the receipt canceled.
+func (i inspection) abandon(view StorageView) (StorageView, error) {
+	if i.abandoned.ID == "" {
+		return view, nil
+	}
+	receipt := view.State.Receipt
+	if receipt.ID != i.abandoned.ID || receipt.PlanDigest != i.abandoned.PlanDigest || !stranded(view) || !neverStarted(receipt) {
+		return view, failure("controller.conflict", "controller state changed after plan confirmation", setupCommand())
+	}
+	view.State.Receipt = canceled(receipt)
+	return view, nil
+}
+
+// abandonment is the plan line that names the cancellation, if any.
+func (i inspection) abandonment() []string {
+	if i.abandoned.ID == "" {
+		return nil
+	}
+	return []string{"Cancel the setup an earlier build left pending at this host's bound, which never published its bundle"}
+}
+
 // supersededResolutions are the retained resolutions of a kept bundle that
 // nothing reads any more. A retry after a failed setup, or a solve against a
 // changed package inventory, names the same bundle under a new resolution, so
@@ -122,11 +212,22 @@ func full(view StorageView, area, resolution bool, retiring retirement) bool {
 // host at its bound gives up first, and returns the areas it removed. It
 // decides again from the store's own snapshot, so an area reserved after the
 // plan was presented is counted, and it refuses rather than publishing a
-// receipt whose bundle could never be reserved.
+// receipt whose bundle could never be reserved. A receipt the plan abandons is
+// recorded canceled first, once both decisions hold, and nothing is retired
+// before that cancellation is durable.
 func (s Service) makeRoom(ctx context.Context, tx StorageTransaction, approved inspection, purge bool) ([]string, error) {
-	retiring, err := approved.room(tx.Snapshot(), purge)
+	view, err := approved.abandon(tx.Snapshot())
 	if err != nil {
 		return nil, err
+	}
+	retiring, err := approved.room(view, purge)
+	if err != nil {
+		return nil, err
+	}
+	if approved.abandoned.ID != "" {
+		if err := publish(ctx, tx, view.State); err != nil {
+			return nil, err
+		}
 	}
 	if len(retiring.bundles) != 0 {
 		if err := tx.RetireBundles(ctx, retiring.bundles); err != nil {

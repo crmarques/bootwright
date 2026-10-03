@@ -82,7 +82,12 @@ keys. Each action records `planned`, `intent` or `observed`; an observed action
 requires bounded evidence and an explicit outcome. Successful observations
 cannot regress. `pending` and `unknown` retain recovery protection. `complete`
 requires every action's verified `changed` or `unchanged` postcondition;
-`failed`/`canceled` require no unresolved intent or unknown effect. The plan
+`failed`/`canceled` require no unresolved intent or unknown effect. A receipt
+setup [abandons at the bound](../controller.md#supported-host-and-dependency-selection)
+is recorded `canceled` under its own ID and plan: its first action,
+`execution-bundle`, when it held its intent, is observed `canceled` with the
+evidence `{"bundleArea":"absent"}`, because the record holds no area for the
+bundle the receipt names, and every later action stays `planned`. The plan
 digest is SHA-256 of the domain-separated host digest, catalog, resolution, egress,
 sources and immutable action requests; progress and receipt ID are excluded.
 Receipt IDs are `setup-` plus 128 bits of a domain-separated SHA-256 over the
@@ -172,7 +177,8 @@ names, or one already `retiring` because an earlier retirement dropped that
 resolution. A client area is named by its closure, which no resolution names.
 Naming any other area it holds, a client area included, refuses the whole
 retirement before anything changes, as naming the bundle the receipt names
-does; naming an area it does not hold removes nothing. A retirement needs a
+does; naming an area it does not hold removes nothing, not even a resolution
+naming it. A retirement needs a
 settled receipt, except that a pending one whose bundle holds no area while
 all 16 are held, which an earlier build could publish, admits a retirement of
 areas, so [setup](../controller.md#supported-host-and-dependency-selection)
@@ -187,11 +193,14 @@ anything changes.
 
 A retirement may instead name retained resolutions alone, by resolution
 digest, which [setup at its bound](../controller.md#supported-host-and-dependency-selection)
-does for the superseded resolutions of a bundle it keeps. It removes no area.
-Because an execution bundle is known by the resolutions naming it, the store
-refuses to drop the last resolution naming a bundle, as it refuses the one the
-receipt carries, and either refusal changes nothing; a resolution it does not
-hold is already gone.
+does for the superseded resolutions of a bundle it keeps, and its retirement
+after completion does for a superseded resolution whose bundle holds no area,
+as a canceled receipt's does once a later receipt replaced it. It removes no
+area. Because an execution bundle is known by the resolutions naming it, the
+store refuses to drop the last resolution naming a bundle it holds, as it
+refuses the one the receipt carries, and either refusal changes nothing; one
+naming a bundle it does not hold identifies no area, and a resolution it does
+not hold is already gone.
 
 A lifecycle operation may also extend the retained dependency evidence it
 acquires under. Before acquisition it publishes the exact source identities it
@@ -251,5 +260,7 @@ Read-only bundle capabilities expire with their shared-lock callback, and all
 mutation capabilities expire with their transaction.
 
 Inspection never converts a pending receipt to completion. Only explicit setup retry
-resolves it through Controller postconditions. Setup effects retain their
+resolves it through Controller postconditions, or, for one stranded at the
+bound that the running executable cannot resume, the explicit setup that
+abandons it. Setup effects retain their
 receipt; a new context cannot bypass that pending host work. Reads never bootstrap, upgrade, repair or write these records.

@@ -17,11 +17,12 @@ import (
 // strandedFixture leaves a store as a build that published a receipt at the
 // bound left it. Fifteen setups each sealed their own bundle beside the
 // resolution they carry, a controller stage sealed a client area in the
-// sixteenth slot, and the next setup's receipt, whose first intent is durable,
-// names a bundle the store could never reserve. The store now refuses that
-// receipt, so it is written as that build wrote it. It returns the stranded
-// resolution and the superseded bundles, oldest first.
-func strandedFixture(t *testing.T) (*Store, p.Definition, []string) {
+// sixteenth slot, and the next setup's receipt, whose first intent is durable
+// before the further actions given, names a bundle the store could never
+// reserve. The store now refuses that receipt, so it is written as that build
+// wrote it. It returns the stranded resolution and the superseded bundles,
+// oldest first.
+func strandedFixture(t *testing.T, further ...p.SetupAction) (*Store, p.Definition, []string) {
 	t.Helper()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
@@ -39,7 +40,7 @@ func strandedFixture(t *testing.T) (*Store, p.Definition, []string) {
 	stranded := automationRevision(t, maxControllerBundles-1)
 	err := store.MutateController(ctx, p.SetupContext{}, false, func(tx p.StorageTransaction) error {
 		controller := tx.(*controllerTransaction)
-		value, err := retainControllerSources(controller.stored.value, revisionReceipt(t, stranded))
+		value, err := retainControllerSources(controller.stored.value, revisionReceipt(t, stranded, further...))
 		if err != nil {
 			return err
 		}

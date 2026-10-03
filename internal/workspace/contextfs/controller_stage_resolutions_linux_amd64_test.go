@@ -68,16 +68,21 @@ func (n *solvingAgain) Clients(context.Context, prerequisites.ClientInstallation
 	return prerequisites.ActionResult{Outcome: "changed"}, nil
 }
 
-func retainedResolutions(t *testing.T, store *Store) prerequisites.HostState {
+func controllerView(t *testing.T, store *Store) prerequisites.StorageView {
 	t.Helper()
-	var held prerequisites.HostState
+	var held prerequisites.StorageView
 	if err := store.ReadController(context.Background(), "", func(view prerequisites.StorageView) error {
-		held = view.State
+		held = view
 		return nil
 	}); err != nil {
 		t.Fatalf("controller read failed: %#v", diagnostics.Of(err))
 	}
 	return held
+}
+
+func retainedResolutions(t *testing.T, store *Store) prerequisites.HostState {
+	t.Helper()
+	return controllerView(t, store).State
 }
 
 // solveLibvirtClient runs the real controller stage once over the real store,
@@ -225,6 +230,72 @@ func TestAStageRetiresNoResolutionAHeldBundleNeeds(t *testing.T) {
 		}
 		if after := retainedResolutions(t, store); !slices.EqualFunc(after.RetainedDefinitions, before.RetainedDefinitions, prerequisites.SameDefinition) {
 			t.Fatalf("refusing to retire %s changed the retained resolutions", what)
+		}
+	}
+}
+
+// readyHost answers setup as the host a completed setup left ready: the
+// identity the store recorded, the resolution that setup's receipt carries,
+// its sealed bundle ready and its native roots installed. It answers nothing
+// else a setup could ask.
+type readyHost struct {
+	prerequisites.Compiler
+	prerequisites.HostInspector
+	prerequisites.BundleManager
+	identity   controller.InstalledHostIdentity
+	definition prerequisites.Definition
+}
+
+func (h readyHost) Platform(context.Context) (prerequisites.Platform, error) {
+	return h.definition.Platform, nil
+}
+
+func (h readyHost) Identity(context.Context) (controller.InstalledHostIdentity, error) {
+	return h.identity, nil
+}
+
+func (h readyHost) Select(prerequisites.Platform, prerequisites.NativeRequirements) (prerequisites.Definition, error) {
+	return prerequisites.CloneDefinition(h.definition), nil
+}
+
+func (readyHost) ValidateEgress(prerequisites.SetupEgress) error { return nil }
+
+func (readyHost) Inspect(context.Context, prerequisites.BundleArea, prerequisites.Definition, bool) (prerequisites.BundleInspection, error) {
+	return prerequisites.BundleInspection{Ready: true, Sealed: true, Recoverable: true}, nil
+}
+
+func (readyHost) Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
+	return prerequisites.NativePresence{Ready: true}, nil
+}
+
+// A controller stage's resolution names no bundle area, as the one a canceled
+// setup carried does once a later receipt replaced it, and the store, which
+// keeps no kind per resolution, drops either alike. Only the canceled setup's
+// is setup's own to retire, so setup --purge-old-bundles over the real store
+// leaves the stage's resolution, retiring and reporting nothing, however often
+// it runs.
+func TestSetupsPurgeLeavesAControllerStageResolution(t *testing.T) {
+	store, record := lifecycleFixture(t)
+	resolvedSetupFixture(t, store, record)
+	if err := solveLibvirtClient(t, store, record, &solvingAgain{}, true); err != nil {
+		t.Fatalf("the controller stage failed: %#v", diagnostics.Of(err))
+	}
+	before := controllerView(t, store)
+	held := before.State.RetainedDefinitions
+	if len(held) != 2 || !held[1].NativeRequirements.LibvirtClient ||
+		slices.ContainsFunc(before.Areas, func(area prerequisites.HeldArea) bool { return area.ID == held[1].CatalogDigest }) {
+		t.Fatalf("the stage retained no resolution without an area beside the setup's: %d resolutions over %#v", len(held), before.Areas)
+	}
+	host := readyHost{identity: before.State.Host, definition: *before.State.Receipt.Definition}
+	service := prerequisites.New(store, host, host, host, host, nil, prerequisites.Options{NativeInspector: host})
+	for purge := 1; purge <= 2; purge++ {
+		report, err := service.Setup(context.Background(), prerequisites.SetupRequest{PurgeOldBundles: true})
+		if err != nil || report.Outcome != "unchanged" || len(report.RetiredBundles) != 0 {
+			t.Fatalf("purge %d: %#v %#v", purge, report, diagnostics.Of(err))
+		}
+		after := controllerView(t, store)
+		if !slices.EqualFunc(after.State.RetainedDefinitions, held, prerequisites.SameDefinition) || !slices.Equal(after.Areas, before.Areas) {
+			t.Fatalf("purge %d retired what the stage retained: %d resolutions over %#v", purge, len(after.State.RetainedDefinitions), after.Areas)
 		}
 	}
 }

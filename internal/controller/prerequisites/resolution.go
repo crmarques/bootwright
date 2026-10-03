@@ -23,10 +23,11 @@ func (s Service) selectedResolution(current inspection, requirements NativeRequi
 		return value.Platform == current.platform && value.Versions.Baseline() == current.selection.Versions().Baseline() && value.NativeRequirements == requirements && len(value.Tools) == 0
 	}
 	var selected *Definition
+	pending := false
 	if len(frozen) != 0 && frozen[0].Definition != nil {
 		selected = frozen[0].Definition
 	} else if receipt := current.view.State.Receipt; receipt.ID != "" && receipt.Incomplete() {
-		selected = receipt.Definition
+		selected, pending = receipt.Definition, true
 		if selected == nil {
 			return Definition{}, false, failure("controller.unknown", "pending setup lacks its exact dependency resolution", "restore the original setup evidence")
 		}
@@ -50,6 +51,11 @@ func (s Service) selectedResolution(current inspection, requirements NativeRequi
 			return Definition{}, false, failure("controller.state", "frozen setup contains target tools it does not own", "restore the exact setup evidence")
 		}
 		if !matches(*selected) {
+			// No executable resumes, on this host, a receipt frozen for other
+			// dependencies than it now selects, such as another platform.
+			if pending && abandonable(current.view) {
+				return Definition{}, false, unresumable()
+			}
 			return Definition{}, false, failure("controller.unknown", "frozen setup dependencies differ from current intent", "restore the original input before retrying")
 		}
 		return CloneDefinition(*selected), true, nil

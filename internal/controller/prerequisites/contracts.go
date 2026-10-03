@@ -122,12 +122,13 @@ type StorageTransaction interface {
 	// RetireBundles removes superseded execution bundle areas and the retained
 	// resolutions they carry. It records its intent before removing anything,
 	// so an interruption leaves an area that is never read rather than one the
-	// record still presents as usable.
+	// record still presents as usable. Naming an area it does not hold removes
+	// nothing, not even a resolution naming it.
 	RetireBundles(context.Context, []string) error
 	// RetireResolutions drops retained resolutions, named by resolution
-	// digest, of a bundle that stays. It refuses the receipt's own and any
-	// whose bundle no other retained resolution would still name, so every
-	// execution bundle stays identifiable as one.
+	// digest, of a bundle that stays or of one that holds no area. It refuses
+	// the receipt's own and any whose held bundle no other retained resolution
+	// would still name, so every execution bundle stays identifiable as one.
 	RetireResolutions(context.Context, []string) error
 	// OpenRun creates the next setup run while an action of the receipt holds
 	// its durable intent, removing the oldest runs first so no more than the

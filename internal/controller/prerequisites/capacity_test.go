@@ -486,7 +486,10 @@ var strandedClient = strings.Repeat("f", 64)
 // sixteenth area, so the bundle that receipt names was never reserved. With
 // intent, that setup's first intent was durable before its reservation
 // refused; without, its publication was lost. The native transaction now
-// succeeds. It returns the pending receipt and the superseded bundles, sorted.
+// succeeds, and the executable that runs next embeds that receipt's
+// automation, so its bundle manager, which refuses any other as the
+// production one does, can prepare that receipt's bundle. It returns the
+// pending receipt and the superseded bundles, sorted.
 func strandedAtTheBound(t *testing.T, intent bool) (*fixture, SetupReceipt, []string) {
 	t.Helper()
 	f, _, superseded, installer := oneShortOfTheBound(t)
@@ -505,6 +508,7 @@ func strandedAtTheBound(t *testing.T, intent bool) (*fixture, SetupReceipt, []st
 	f.store.areas = append(f.store.areas, HeldArea{ID: strandedClient})
 	atTheBound(t, f)
 	installer.result, installer.err = ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}, nil
+	f.service.bundle = executableBundle{BundleManager: &f.bundle, automation: pending.Definition.Bootstrap.AutomationDigest}
 	f.events, f.plan = nil, Report{}
 	return f, pending, superseded
 }
@@ -562,32 +566,6 @@ func TestTheBoundRefusalOverAStrandedPendingSetupNamesPurgeOldBundles(t *testing
 		t.Fatalf("a refused setup acted: events=%v writes=%d retired=%v", f.events, f.store.writes-writes, f.store.retired)
 	}
 	if receipt := f.store.state.Receipt; receipt.ID != pending.ID || !receipt.Incomplete() {
-		t.Fatalf("the refusal moved the pending receipt: %#v", receipt)
-	}
-}
-
-// Only an earlier build strands a receipt, and its automation is not this
-// executable's, which then cannot prepare the bundle that receipt names.
-// Retiring is never undone, so with or without the flag setup refuses before it
-// presents a plan, retires or writes anything, as it refuses another
-// executable's pending attempt.
-func TestAStrandedPendingSetupThisExecutableCannotPrepareRefusesBeforeAnyEffect(t *testing.T) {
-	f, pending, _ := strandedAtTheBound(t, true)
-	moved := errors.Join(ErrBootstrapIncompatible, ErrAutomationSuperseded, failure("controller.setup", "superseded automation", ""))
-	f.service.bundle = obsoleteBundle{BundleManager: &f.bundle, digest: pending.CatalogDigest, err: moved}
-	areas, writes, prepares := slices.Clone(f.store.areas), f.store.writes, f.bundle.prepares
-	for _, purge := range []bool{true, false} {
-		_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: purge})
-		found := diagnostics.Of(err)
-		if len(found) != 1 || found[0].Code != "controller.unknown" || found[0].Message != "another exact setup attempt remains unresolved" ||
-			!strings.HasPrefix(found[0].Remediation, "restore the executable that recorded it") {
-			t.Fatalf("purge=%t: refusal = %#v (%v)", purge, found, err)
-		}
-	}
-	if slices.Contains(f.events, "present") || f.store.writes != writes || len(f.store.retired) != 0 || f.bundle.prepares != prepares || !slices.Equal(f.store.areas, areas) {
-		t.Fatalf("a refused setup acted: events=%v writes=%d retired=%v prepares=%d areas=%#v", f.events, f.store.writes-writes, f.store.retired, f.bundle.prepares-prepares, f.store.areas)
-	}
-	if receipt := f.store.state.Receipt; receipt.ID != pending.ID || receipt.PlanDigest != pending.PlanDigest || !receipt.Incomplete() {
 		t.Fatalf("the refusal moved the pending receipt: %#v", receipt)
 	}
 }

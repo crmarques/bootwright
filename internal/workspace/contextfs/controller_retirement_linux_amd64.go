@@ -49,10 +49,12 @@ func (t *controllerTransaction) RetireBundles(ctx context.Context, ids []string)
 }
 
 // RetireResolutions drops superseded retained resolutions of a bundle that
-// stays, in one publication that leaves every area as it is. The record keeps
-// no kind per area, so an execution bundle is known by the resolutions naming
-// it: the store refuses to drop the last of them, as it refuses the one the
-// receipt carries, and a resolution it does not hold is already gone.
+// stays, or of one it holds no area for, in one publication that leaves every
+// area as it is. The record keeps no kind per area, so an execution bundle is
+// known by the resolutions naming it: the store refuses to drop the last of
+// those naming an area it holds, as it refuses the one the receipt carries.
+// One naming no area identifies nothing, and a resolution it does not hold is
+// already gone.
 func (t *controllerTransaction) RetireResolutions(ctx context.Context, digests []string) error {
 	if err := t.available(ctx); err != nil {
 		return err
@@ -82,7 +84,8 @@ func (t *controllerTransaction) RetireResolutions(ctx context.Context, digests [
 		return nil
 	}
 	for _, definition := range held {
-		if slices.Contains(digests, definition.ResolutionDigest) && !slices.ContainsFunc(value.RetainedDefinitions,
+		holds := slices.ContainsFunc(t.stored.bundles, func(item controllerBundleReservation) bool { return item.ID == definition.CatalogDigest })
+		if holds && slices.Contains(digests, definition.ResolutionDigest) && !slices.ContainsFunc(value.RetainedDefinitions,
 			func(other prerequisites.Definition) bool { return other.CatalogDigest == definition.CatalogDigest }) {
 			return state("a retained controller resolution may not be retired while no other names its bundle")
 		}

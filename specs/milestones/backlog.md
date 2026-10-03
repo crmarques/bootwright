@@ -97,6 +97,10 @@ Alias cell.
 | [B265](#b265) | new, 2026-10-01 (X34) | safety | Substrate and Machine | No Machine starts while its network restarts | Found after the M1 freeze (D48) |
 | [B266](#b266) | new, 2026-10-01 (X34) | enabling | Substrate | The drifted-network refusal names an exit that works | Found after the M1 freeze (D48) |
 | [B267](#b267) | new, 2026-10-01 (X34) | enabling | State reconciliation | Exits at the retained-operation bound | Found after the M1 freeze (D48); one part needs an owner confirmation |
+| [B268](#b268) | new, 2026-10-03 (X35) | enabling | Controller setup | The storage contract holds doubles to the terminal-receipt rule | Found after the M1 freeze (D48) |
+| [B269](#b269) | new, 2026-10-03 (X35) | defect | Controller setup | A setup at the bound that fails after an effect reports it | Found after the M1 freeze (D48) |
+| [B270](#b270) | new, 2026-10-03 | defect | Infrastructure services, with Substrate | The proxy and emulated BMC units stop within their timeout | Found after the M1 freeze (D48) |
+| [B271](#b271) | new, 2026-10-03 (X35) | defect | Controller setup | A never-started setup survives a host release change | Found after the M1 freeze (D48) |
 
 ### B94
 
@@ -390,6 +394,8 @@ An attempt interrupted after it publishes the clients but before it seals their 
 
 Setup's bound decision never counts controller-stage resolutions as retirable, so a host holding ones an earlier build accumulated keeps them until the same selection solves again and setup at the bound blames client areas; after a completed setup, the purge reports stage resolutions as retired execution bundles although it removed nothing; and resolutions of a selection no context makes any more are never retired (found in X32). **Exit evidence:** bound, purge-report and retirement tests over stage resolutions.
 
+**Partly settled in [X35](delivered.md#x35--the-decision-of-2026-10-03).** The purge after a completed setup names and reports only the areas the store holds, and retires a resolution whose bundle holds no area only when it belongs to setup's own closure, so it neither reports a controller stage's resolution as a retired execution bundle nor retires it; `TestSetupsPurgeLeavesAControllerStageResolution` pins this over the real store. The bound clause and the stale-selection clause stay parked.
+
 ### B239
 
 The controller stage's recovery and `preflight controller --context` select the newest retained release under a `latest` prefix from the host-wide sources, so once another context retains a newer client, a context's next fresh apply republishes under it undeclared, and its preflight reports its clients missing (found in X32, older than it). **Exit evidence:** stage and preflight tests in which another context's newer release is retained.
@@ -497,6 +503,22 @@ The host block runs before any Machine of its apply is realized, so the running 
 ### B267
 
 Since X34 the retained-operation refusal names destroy, but a removal refused at its own registration names an orphan-acknowledged delete and a fresh init, since destroy would refuse again; a fresh apply's claim does not reclaim idle claims under pristine evidence before counting them; and status still offers `apply` over a context at the bound (found in X34). **Exit evidence:** the owner's exit, a reclaim before counting, and the status step.
+
+### B268
+
+The storage contract suite has no clause for the store's rule on settled receipts: a failed or canceled receipt keeps no intent or unknown effect, and every observed action carries evidence. Since X35 the prerequisites memory double enforces it, but no contract clause holds a future double to it (found in X35). **Exit evidence:** a contract clause both stores pass and a double without the rule fails.
+
+### B269
+
+When a setup at the bound fails after its first durable effect, the cancellation of a stranded receipt or a retirement, its result reports the outcome `planned`, which implies nothing changed, and does not name the cancellation (found in X35). **Exit evidence:** a failure after the cancellation and one after a retirement, each reported with what changed.
+
+### B270
+
+The managed proxy (Squid) and the emulated BMC (sushy-tools) containers do not exit on SIGTERM within podman's 10-second stop timeout, and their unit templates set no stop timeout or success status, so every stop or removal waits ten seconds per unit, ends with SIGKILL (status 137) and leaves the unit `failed` in systemd. Seen on 2026-10-03 removing lab-rhel's `bootwright-lab-rhel-proxy-lab-proxy` and `bootwright-lab-rhel-bmc-rhel-01` units while preparing B49's run; the destroy itself completed. **Exit evidence:** unit templates whose stop ends cleanly, with their template goldens.
+
+### B271
+
+A pending setup receipt that never took effect, below the bound, refuses on a host whose release moved since it was recorded, for example after a distribution upgrade, with `controller.unknown` and the remedy to restore the original input, which an upgraded host cannot do; D55's abandonment applies only at the bound (found in X35, older than it). **Exit evidence:** an exit for a never-started pending receipt after a release change, with a test.
 
 ## Retired
 

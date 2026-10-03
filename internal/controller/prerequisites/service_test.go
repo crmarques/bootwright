@@ -222,6 +222,9 @@ func (m *memoryStorage) Publish(ctx context.Context, state HostState) (Publicati
 	if m.uncertain {
 		return NotCommitted, errors.New("controller storage capability is no longer available")
 	}
+	if err := unresolvedEffects(state.Receipt); err != nil {
+		return NotCommitted, err
+	}
 	if err := m.transition(state); err != nil {
 		return NotCommitted, err
 	}
@@ -262,6 +265,22 @@ func (m *memoryStorage) retain(next HostState) ([]Definition, error) {
 		return nil, errors.New("retained controller bundle limit exceeded")
 	}
 	return retained, nil
+}
+
+// unresolvedEffects refuses what the store refuses of a receipt's own
+// actions: an observed action without evidence, and a failed or canceled
+// receipt that keeps an intent or an unknown effect, which only a pending one
+// may hold.
+func unresolvedEffects(receipt SetupReceipt) error {
+	for _, action := range receipt.Actions {
+		if action.Phase == "observed" && (len(action.Evidence) == 0 || bytes.Equal(action.Evidence, []byte("{}"))) {
+			return errors.New("observed controller action lacks attributable evidence")
+		}
+		if (receipt.Status == "failed" || receipt.Status == "canceled") && (action.Phase == "intent" || action.Outcome == "unknown") {
+			return errors.New("terminal controller receipt retains unresolved effects")
+		}
+	}
+	return nil
 }
 
 // transition refuses what the store's receipt rules refuse: a receipt of
@@ -324,10 +343,12 @@ func (m *memoryStorage) Bundle(ctx context.Context, id string) (BundleArea, erro
 	return dummyArea{}, nil
 }
 
-// RetireBundles records what a retirement asked for and drops the retained
-// resolutions it names, exactly as the store does, and refuses what the store
-// refuses: any retirement without a receipt or while it is pending, unless it
-// is stranded, an identity that is no digest and the bundle the receipt names.
+// RetireBundles records the areas a retirement removed and drops the retained
+// resolutions they carry, exactly as the store does, and refuses what the
+// store refuses: any retirement without a receipt or while it is pending,
+// unless it is stranded, an identity that is no digest and the bundle the
+// receipt names. An area it does not hold is already gone, so naming one
+// removes nothing, not even a resolution that names it.
 func (m *memoryStorage) RetireBundles(_ context.Context, ids []string) error {
 	if m.retireErr != nil {
 		return m.retireErr
@@ -346,17 +367,26 @@ func (m *memoryStorage) RetireBundles(_ context.Context, ids []string) error {
 	if slices.Contains(ids, m.state.Receipt.CatalogDigest) {
 		return errors.New("the execution bundle this receipt names may not be retired")
 	}
+	var held []string
+	for _, id := range ids {
+		if !slices.Contains(held, id) && slices.ContainsFunc(m.areas, func(area HeldArea) bool { return area.ID == id }) {
+			held = append(held, id)
+		}
+	}
+	if len(held) == 0 {
+		return nil
+	}
 	m.state.RetainedDefinitions = slices.DeleteFunc(slices.Clone(m.state.RetainedDefinitions),
-		func(definition Definition) bool { return slices.Contains(ids, definition.CatalogDigest) })
+		func(definition Definition) bool { return slices.Contains(held, definition.CatalogDigest) })
 	if m.interrupted {
 		m.interrupted = false
 		for index := range m.areas {
-			m.areas[index].Retiring = m.areas[index].Retiring || slices.Contains(ids, m.areas[index].ID)
+			m.areas[index].Retiring = m.areas[index].Retiring || slices.Contains(held, m.areas[index].ID)
 		}
 		return errors.New("synthetic process death after the retirement intent")
 	}
-	m.retired = append(m.retired, ids...)
-	m.areas = slices.DeleteFunc(m.areas, func(held HeldArea) bool { return slices.Contains(ids, held.ID) })
+	m.retired = append(m.retired, held...)
+	m.areas = slices.DeleteFunc(m.areas, func(area HeldArea) bool { return slices.Contains(held, area.ID) })
 	return nil
 }
 
@@ -370,7 +400,7 @@ func (m *memoryStorage) stranded() bool {
 // RetireResolutions drops the retained resolutions it names, exactly as the
 // store does, and refuses what the store refuses: any retirement without a
 // receipt or while it is pending, an identity that is no digest, the
-// resolution the receipt carries and one whose bundle no other retained
+// resolution the receipt carries and one whose held bundle no other retained
 // resolution would still name.
 func (m *memoryStorage) RetireResolutions(_ context.Context, digests []string) error {
 	if m.retireErr != nil {
@@ -399,7 +429,8 @@ func (m *memoryStorage) RetireResolutions(_ context.Context, digests []string) e
 			continue
 		}
 		bundle := m.state.RetainedDefinitions[index].CatalogDigest
-		if !slices.ContainsFunc(kept, func(other Definition) bool { return other.CatalogDigest == bundle }) {
+		if slices.ContainsFunc(m.areas, func(held HeldArea) bool { return held.ID == bundle }) &&
+			!slices.ContainsFunc(kept, func(other Definition) bool { return other.CatalogDigest == bundle }) {
 			return errors.New("a retained resolution may not be retired while no other names its bundle")
 		}
 		retired = append(retired, digest)
@@ -1095,6 +1126,7 @@ func TestPurgeRetiresOnlySupersededBundlesOfACompletedSetup(t *testing.T) {
 	f.store.state.RetainedDefinitions = []Definition{
 		{CatalogDigest: superseded}, {CatalogDigest: current},
 	}
+	f.store.areas = append(f.store.areas, HeldArea{ID: superseded})
 	result, err = f.service.Setup(context.Background(), SetupRequest{PurgeOldBundles: true})
 	if err != nil || result.Outcome != "unchanged" {
 		t.Fatalf("purge=%#v err=%v", result, err)
@@ -1115,6 +1147,33 @@ func TestPurgeRetiresOnlySupersededBundlesOfACompletedSetup(t *testing.T) {
 	result, err = f.service.Setup(context.Background(), SetupRequest{PurgeOldBundles: true})
 	if err != nil || len(result.RetiredBundles) != 0 || len(f.store.retired) != 0 {
 		t.Fatalf("a second purge retired %v (%v)", f.store.retired, err)
+	}
+}
+
+// A retained resolution whose bundle holds no area leaves no area to remove.
+// The purge retires one of setup's own closure, as a canceled receipt leaves
+// once a later receipt replaced it, and names no retired bundle for it. A
+// controller stage's native client resolution names no area either, and only
+// that stage judges it superseded, so the purge leaves it.
+func TestPurgeRetiresAResolutionWithoutAnAreaOnlyOfSetupsOwnClosure(t *testing.T) {
+	f := newFixture(t)
+	if result, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil || result.Outcome != "changed" {
+		t.Fatalf("setup=%#v err=%v", result, err)
+	}
+	canceled := Definition{CatalogDigest: strings.Repeat("b", 64), ResolutionDigest: strings.Repeat("c", 64), NativeRequirements: NativeRequirements{ContainerRuntime: true}}
+	client := Definition{CatalogDigest: strings.Repeat("d", 64), ResolutionDigest: strings.Repeat("e", 64), NativeRequirements: NativeRequirements{ContainerRuntime: true, LibvirtClient: true}}
+	f.store.state.RetainedDefinitions = []Definition{canceled, client}
+	for range 2 {
+		result, err := f.service.Setup(context.Background(), SetupRequest{PurgeOldBundles: true})
+		if err != nil || result.Outcome != "unchanged" || len(result.RetiredBundles) != 0 {
+			t.Fatalf("purge=%#v err=%v", result, err)
+		}
+	}
+	if len(f.store.retired) != 0 || !slices.Equal(f.store.retiredResolutions, []string{canceled.ResolutionDigest}) {
+		t.Fatalf("retired bundles %v and resolutions %v", f.store.retired, f.store.retiredResolutions)
+	}
+	if retained := f.store.state.RetainedDefinitions; len(retained) != 1 || retained[0].ResolutionDigest != client.ResolutionDigest {
+		t.Fatalf("retained resolutions = %#v", retained)
 	}
 }
 
@@ -1186,7 +1245,7 @@ func TestAFailedRetirementIsReported(t *testing.T) {
 	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	f.store.state.RetainedDefinitions = []Definition{{CatalogDigest: strings.Repeat("b", 64)}}
+	supersede(f, 1)
 	f.store.retireErr = errors.New("busy")
 	result, err := f.service.Setup(context.Background(), SetupRequest{PurgeOldBundles: true})
 	if err == nil {

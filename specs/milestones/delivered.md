@@ -1332,7 +1332,7 @@ race` passes on the integrated slice and on the squashed commit, and
 pass on the squashed commit. No real-host run.
 
 **Constraints left behind:** a host a build before X30 left with a pending
-receipt at the bound stays stuck until [B175](m1.md#b175) decides its recovery;
+receipt at the bound stays stuck until B175 ([X35](#x35--the-decision-of-2026-10-03)) decides its recovery;
 repeating an interrupted retirement (B172 ([X31](#x31--recovery-setup-custody-refusals-and-adapter-defects))), a failed receipt
 after a moved automation digest (B176 ([X31](#x31--recovery-setup-custody-refusals-and-adapter-defects))) and resolutions of a kept
 bundle (B177 ([X31](#x31--recovery-setup-custody-refusals-and-adapter-defects))) can still stop setup. New items B172 to B178
@@ -1572,3 +1572,48 @@ own generated files ([B260](backlog.md#b260)); completion evidence gains a
 moves. Under D48 every follow-up was parked: B259 to B267. B264 is a
 cross-context safety gap: another context's network passes the host's
 ownership check.
+
+### X35 — the decision of 2026-10-03
+
+**Owner:** Controller setup. Integrated on local `main` on 2026-10-03 as one
+commit. **Items:** B175. **Decisions:** D50, D55.
+
+**Outcome:** at the bound, `setup --purge-old-bundles` cancels a pending setup
+receipt stranded there that this executable cannot resume, whether by its
+automation, its execution foundation, its route or the dependencies it froze,
+when its setup never took effect: its first action, `execution-bundle`, holds
+at most its intent and every later action is still planned, the shape every
+build before X30 left. The cancellation observes that action as never started,
+because the store holds no area for the bundle the receipt names, and is
+durable before anything is retired; setup then retires the superseded areas,
+sets the host up afresh under this executable and, once that completes,
+retires the resolution the canceled receipt carried. One plan names the
+cancellation, the retirement and the fresh setup. Without the flag setup and
+preflight refuse with `controller.conflict` naming
+`bootwright setup --purge-old-bundles`; a stranded receipt that may have taken
+effect keeps its `controller.unknown` refusal, and D50's resume stays for one
+this executable can prepare (B175, D55). The purge after a completed setup now
+names and reports only the areas the store holds, so it neither reports nor
+retires a controller stage's resolution, which settles
+[B238](backlog.md#b238)'s purge-report clause. The setup help text and its
+command row say what the flag cancels.
+
+**Review:** seven findings, five confirmed and fixed: the purge reported the
+canceled receipt's bundle, which never held an area, as retired and never
+retired its resolution (three findings); the storage double removed a bundle
+it held no area for; and a stranded receipt recorded over another ambient
+route was never abandoned, which the fix extended to one frozen for another
+platform. The first check found two untested conditions of the abandonment, an
+imprecise refusal sentence and a guard pinned only against the double, all
+fixed; the second check found no gap.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` passes on the integrated slice, after each fix round and on the squashed
+commit. `./scripts/ansible-check` was not required, since nothing under
+`ansible/` changed. No real-host run.
+
+**Constraints left behind:** no record, request or automation digest moves, so
+no context is stranded. A never-started pending receipt below the bound still
+refuses after the host's release moves, with a remedy an upgraded host cannot
+follow ([B271](backlog.md#b271)). Under D48 every follow-up was parked: B268
+to B271.

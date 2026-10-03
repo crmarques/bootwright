@@ -35,10 +35,15 @@ type Service struct {
 	bundle   BundleManager
 	runtime  RuntimeInstaller
 	options  Options
+	// abandon is set on the copy one setup --purge-old-bundles runs as. That
+	// setup cancels a receipt stranded at the bound which this executable
+	// cannot resume, so each of its inspections judges the host as it will
+	// be once that receipt is canceled.
+	abandon bool
 }
 
 func New(storage Storage, compiler Compiler, host HostInspector, catalog DependencyCatalog, bundle BundleManager, runtime RuntimeInstaller, options Options) Service {
-	return Service{storage, compiler, host, catalog, bundle, runtime, options}
+	return Service{storage: storage, compiler: compiler, host: host, catalog: catalog, bundle: bundle, runtime: runtime, options: options}
 }
 
 type inspection struct {
@@ -57,9 +62,12 @@ type inspection struct {
 	// exactly like a reusable one even though its own area is still empty.
 	carried        bool
 	retainedDigest string
-	report         Report
-	toolRequests   []controller.ToolRequest
-	toolsResolved  bool
+	// abandoned is the stored receipt this setup cancels before it sets the
+	// host up afresh, still pending as the store holds it, or none.
+	abandoned     SetupReceipt
+	report        Report
+	toolRequests  []controller.ToolRequest
+	toolsResolved bool
 	// tools, toolsPresent, libvirtClient and libvirtPresent describe what one
 	// selected context adds to a ready host. They are evidence for preflight;
 	// setup never selects, plans or installs them.
@@ -126,21 +134,30 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 // retireSuperseded removes every execution bundle a retained resolution names
 // that the completed receipt does not, and completes every retirement an
 // interruption left unfinished. A client area is never one of them, and
-// neither is an area this record does not account for.
+// neither is an area this record does not account for. A superseded bundle
+// that holds no area, as a canceled receipt's does once a later receipt
+// replaced it, has only its resolution left to retire. The report names the
+// areas removed and nothing else.
 func (s Service) retireSuperseded(ctx context.Context, report *Report) error {
 	return s.storage.MutateController(ctx, SetupContext{}, false, func(tx StorageTransaction) error {
 		view := tx.Snapshot()
-		if view.State.Receipt.Status != "complete" {
+		receipt := view.State.Receipt
+		if receipt.Status != "complete" {
 			return nil
 		}
-		var superseded []string
+		var bundles, resolutions []string
 		name := func(id string) {
-			if id != "" && id != view.State.Receipt.CatalogDigest && !slices.Contains(superseded, id) {
-				superseded = append(superseded, id)
+			if id != "" && id != receipt.CatalogDigest && !slices.Contains(bundles, id) {
+				bundles = append(bundles, id)
 			}
 		}
 		for _, definition := range view.State.RetainedDefinitions {
-			name(definition.CatalogDigest)
+			id := definition.CatalogDigest
+			if slices.ContainsFunc(view.Areas, func(held HeldArea) bool { return held.ID == id }) {
+				name(id)
+			} else if id != "" && id != receipt.CatalogDigest && definition.ResolutionDigest != "" && setupResolution(definition) {
+				resolutions = append(resolutions, definition.ResolutionDigest)
+			}
 		}
 		// A retirement drops the resolutions its areas carry when it records
 		// its intent, so after an interruption only the mark still names them.
@@ -149,23 +166,35 @@ func (s Service) retireSuperseded(ctx context.Context, report *Report) error {
 				name(held.ID)
 			}
 		}
-		slices.Sort(superseded)
-		if len(superseded) == 0 {
-			return nil
+		slices.Sort(bundles)
+		slices.Sort(resolutions)
+		if len(bundles) != 0 {
+			if err := tx.RetireBundles(ctx, bundles); err != nil {
+				return err
+			}
+			report.RetiredBundles = append(report.RetiredBundles, bundles...)
+			slices.Sort(report.RetiredBundles)
 		}
-		if err := tx.RetireBundles(ctx, superseded); err != nil {
-			return err
+		if len(resolutions) != 0 {
+			return tx.RetireResolutions(ctx, resolutions)
 		}
-		report.RetiredBundles = append(report.RetiredBundles, superseded...)
-		slices.Sort(report.RetiredBundles)
 		return nil
 	})
+}
+
+// setupResolution reports a resolution of the closure setup owns, which
+// selects no native client and no target tool a context adds. A controller
+// stage retains the others, and only that stage judges which are superseded.
+func setupResolution(definition Definition) bool {
+	requirements := definition.NativeRequirements
+	return !requirements.LibvirtClient && !requirements.Hypervisor && !requirements.InstallerMedia && len(definition.Tools) == 0
 }
 
 func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
+	s.abandon = request.PurgeOldBundles
 	var current inspection
 	var err error
 	// Setup selects no context, so its dry run needs no stored evidence at all
@@ -224,6 +253,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	if err != nil {
 		return &current.report, err
 	}
+	current.report.Actions = append(current.report.Actions, current.abandonment()...)
 	current.report.Actions = append(current.report.Actions, retiring.actions()...)
 	if s.options.Presenter == nil {
 		return &current.report, failure("controller.setup", "setup plan presentation is not configured", "")
@@ -309,8 +339,14 @@ type inspectionResolution struct {
 // inspect verifies the host. A non-empty phase streams the scope and each
 // check as it settles; the repeated inspections that bind a resolution and
 // guard the transaction pass no phase, so every check is shown exactly once.
+// A receipt this setup abandons is inspected as already canceled.
 func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, phase string, frozen ...inspectionResolution) (inspection, error) {
+	abandoned := s.abandoned(ctx, view)
+	if abandoned.ID != "" {
+		view.State.Receipt = canceled(abandoned)
+	}
 	current, err := s.selectInspection(ctx, view, frozen)
+	current.abandoned = abandoned
 	if err != nil {
 		return current, err
 	}
@@ -463,15 +499,21 @@ func (s Service) settleHostChecks(ctx context.Context, view StorageView, current
 		return failure("controller.identity", "stored setup belongs to a different installed host", "restore the original host and state; setup cannot rebind it")
 	}
 	settle(readiness("installed-host", "verified local identity", true, HostScope))
-	if view.State.Receipt.ID != "" && view.State.Receipt.Incomplete() {
-		foreign := !current.compatibleReceipt(view.State.Receipt) || !current.matchesActions(view.State.Receipt.Actions)
+	if receipt := view.State.Receipt; receipt.ID != "" && receipt.Incomplete() {
+		own := current.compatibleReceipt(receipt) && current.matchesActions(receipt.Actions)
+		foreign := !own || !current.sameRoute(receipt)
 		// A stranded receipt resumes only after a retirement, which is never
 		// undone, makes room for it, so this executable first proves that it
-		// can prepare that receipt's bundle at all.
-		if !foreign && stranded(view) {
+		// can prepare that receipt's bundle at all. One it cannot prepare is
+		// abandoned instead when its setup never took effect, whatever route
+		// it recorded.
+		if own && stranded(view) {
 			if err := s.bundle.Validate(current.definition); err != nil {
 				if !errors.Is(err, ErrBootstrapIncompatible) {
 					return err
+				}
+				if abandonable(view) {
+					return unresumable()
 				}
 				foreign = true
 			}
@@ -535,6 +577,10 @@ func settleSetupState(view StorageView, current *inspection, settle func(Check))
 		current.report.Actions = append(current.report.Actions, "Resolve the exact pending setup receipt")
 	} else if view.State.Receipt.ID == "" || view.State.Receipt.Status != "complete" || !current.bundle.Sealed {
 		observed := view.State.Receipt.Status
+		// The receipt this setup abandons stays pending until it cancels it.
+		if current.abandoned.ID != "" {
+			observed = current.abandoned.Status
+		}
 		if observed == "" {
 			observed = "missing"
 		} else if observed == "complete" && !current.bundle.Sealed {
@@ -694,14 +740,16 @@ func (i inspection) route() SetupEgress {
 }
 
 // compatibleReceipt compares a pending receipt with what setup, which selects
-// no context, would record, so one naming a context is never setup's own. Its
-// route is setup's ambient one, which a context's inspection never reads, so
-// only an inspection without a context compares it; setup enforces it again
-// when it resumes.
+// no context, would record, so one naming a context is never setup's own.
 func (i inspection) compatibleReceipt(receipt SetupReceipt) bool {
-	if receipt.Context != (SetupContext{}) || receipt.CatalogDigest != i.definition.CatalogDigest || !slices.Equal(receipt.Sources, i.definition.Sources) {
-		return false
-	}
+	return receipt.Context == (SetupContext{}) && receipt.CatalogDigest == i.definition.CatalogDigest && slices.Equal(receipt.Sources, i.definition.Sources)
+}
+
+// sameRoute compares the route a pending receipt of setup's recorded with the
+// one this setup would acquire over. That route is setup's ambient one, which
+// a context's inspection never reads, so only an inspection without a context
+// compares it; setup enforces it again when it resumes.
+func (i inspection) sameRoute(receipt SetupReceipt) bool {
 	route := i.route()
 	return i.view.Context.Name != "" || receipt.Egress.HTTPProxy == route.HTTPProxy && receipt.Egress.HTTPSProxy == route.HTTPSProxy && slices.Equal(receipt.Egress.NoProxy, route.NoProxy)
 }
