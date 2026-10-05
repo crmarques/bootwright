@@ -63,7 +63,7 @@ name, Machine name and the private host digest, ordered by context name;
 sources are ordered by source ID. Reusing a source ID with different bytes or
 origin refuses, including after replacing a terminal receipt.
 
-Not yet met: the receipt still encodes, and its plan digest still covers, an always-empty `context` member; tracked as [B94](../milestones/backlog.md#b94).
+Not yet met: the receipt still encodes, and its plan digest still covers, an always-empty `context` member; tracked as [B94](../milestones/m1.md#b94).
 
 Reservations record the host resources that locally hosted services claim,
 under the

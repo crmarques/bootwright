@@ -162,7 +162,7 @@ which fails once the invocation's ends of the channels close.
 Not yet met: a supervisor killed on its own, as by the out-of-memory killer,
 runs no handler, so its `ansible-playbook` child dies with it but an Ansible
 worker in a session of its own runs on; tracked as
-[B23](milestones/m1.md#b23).
+[B23](milestones/m3.md#b23).
 
 Each lifecycle adapter invocation owns a job directory `bootwright-run-<n>`
 beneath `/run` and a scratch directory `bootwright-run-scratch-<n>-<m>` beneath

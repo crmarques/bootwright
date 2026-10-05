@@ -783,7 +783,7 @@ runner carries every adapter run. What the evidence contains, and what proves
 it, belong to each capability. Go decides what an outcome and its evidence
 mean; a plugin neither schedules work nor authorizes it.
 
-Not yet met: `controller/ansiblelocal` and `reconciliation/ansiblerunner` each decode the protocol, with bounds of 132 and 64 records; the lifecycle decoder admits duplicate keys, a `group` on `completed` and any non-empty `status`; and each capability's action plugin copies the phase dispatch, enums and postcondition rule; tracked as [B19](milestones/m1.md#b19).
+Not yet met: `controller/ansiblelocal` and `reconciliation/ansiblerunner` each decode the protocol, with bounds of 132 and 64 records; the lifecycle decoder admits duplicate and case-variant duplicate keys, null or non-object evidence, non-canonical spacing, a `group` on `completed` and any non-empty `status`; and each capability's action plugin copies the phase dispatch, enums and postcondition rule; tracked as [B19](milestones/m1.md#b19).
 
 ## Implementations and version variation
 

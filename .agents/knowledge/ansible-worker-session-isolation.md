@@ -11,6 +11,6 @@ by walking and signalling its own descendants rather than by killing a process
 group, and cancellation signals the supervisor before the group kill. A
 parent-death signal armed in the supervisor and the playbook does not reach the
 forked workers, so a supervisor killed outright (SIGKILL, the OOM killer) still
-leaves them running; [B23](../../specs/milestones/m1.md#b23) tracks that gap.
+leaves them running; [B23](../../specs/milestones/m3.md#b23) tracks that gap.
 
 Lesson: never treat a process-group kill as reaping an Ansible run.

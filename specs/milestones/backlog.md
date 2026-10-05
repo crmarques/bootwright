@@ -17,17 +17,15 @@ Alias cell.
 
 | ID | Alias | Kind | Owner | Outcome | Why parked |
 | --- | --- | --- | --- | --- | --- |
-| [B94](#b94) | F10 | enabling | Controller and Workspace | Delete the dead setup-binding and legacy prerequisites layer | Pruned from M1 on 2026-09-28 so M1 can finish |
-| [B95](#b95) | F11 | enabling | CLI | Help and usage polish | Pruned from M1 on 2026-09-28 |
 | [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
 | [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
-| [B98](#b98) | C30 | enabling | Architecture | Production comments reduced to what the clarity contract keeps | Pruned from M1 on 2026-09-28 |
+| [B98](#b98) | C30; B336 split from it on 2026-10-05 (D101) | enabling | Architecture | Production comments reduced to what the clarity contract keeps | D101: M1 amends the rule, and a ratchet holds the count |
 | [B99](#b99) | C1 (vSphere) | product | Substrate | One vSphere provisioning variant | No milestone names vSphere |
 | [B100](#b100) | C2 (LoadBalancer) | product | Infrastructure services | One managed `LoadBalancer` lifecycle | No consumer; M5's MetalLB is an in-cluster add-on |
 | [B101](#b101) | C6 (rest) | product | CLI | One more view of evidence or access, or a dashboard | No milestone names a view or dashboard |
 | [B102](#b102) | C8 | product | Custom automation | One typed, invertible executable playbook journey | M7's packages are add-ons, not playbooks |
 | [B103](#b103) | C14 | safety | Workspace and Secrets | Explicit complete-store restore | No milestone needs backup and restore |
-| [B104](#b104) | C15 | safety | Secrets | Bounded lifetime allocation for secret reservations | Waits on B103; no defect drives it |
+| [B104](#b104) | C15; B337 split from it on 2026-10-05 (D85) | safety | Secrets | Bounded lifetime allocation for secret reservations | D85: after B337 only applies and new versions consume the budget; waits on B103 |
 | [B105](#b105) | C19 | product | Secrets | One more secret-store implementation | `local-keyring` meets the current scope |
 | [B106](#b106) | M4 (day-2 surface) | product | Container cluster | The day-2 surface a completed cluster exposes | A product non-goal |
 | [B107](#b107) | new, 2026-09-28 | product | Add-ons and Storage | Data Foundation over an external Ceph cluster | M5 integrates a managed Ceph cluster (D19) |
@@ -40,88 +38,49 @@ Alias cell.
 | [B166](#b166) | split from B45 on 2026-09-30 (D41) | safety | State reconciliation | Scoped removal | A state-contract candidate (D41) |
 | [B167](#b167) | split from B34 on 2026-09-30 (D28) | safety | Substrate and Controller | Frozen remote package transactions | The SSH-host install contract was narrowed instead (D28) |
 | [B171](#b171) | new, 2026-09-30 (X21) | enabling | State reconciliation and Secrets | Custody checks each held by its own test | Parked under the 2026-09-30 triage rule: test depth |
-| [B179](#b179) | new, 2026-09-30 (X30) | enabling | CLI and Controller setup | A refused setup names the remedy its refusal gives | Parked under the 2026-09-30 triage rule: wording |
 | [B180](#b180) | new, 2026-09-30 (X30) | enabling | Workspace, Controller setup and State reconciliation | Storage fixtures that can fail | Parked under the 2026-09-30 triage rule: test depth |
 | [B181](#b181) | new, 2026-09-30 (X30) | safety | Secrets and State reconciliation | A bounded run's rebind names its consumer | Bounded at three bindings since X26; closing it changes the keyring format |
 | [B193](#b193) | new, 2026-09-30 (X29) | enabling | Container cluster | A removal observation resolves only the tools it runs | Parked under the 2026-09-30 triage rule: efficiency |
 | [B194](#b194) | new, 2026-09-30 (X29) | enabling | State reconciliation | A local placement asks for no SSH material | Parked under the 2026-09-30 triage rule: tidiness |
-| [B195](#b195) | new, 2026-09-30 (X29) | enabling | Container cluster | Additional trust for the cluster-wide trusted CA | Needs an owner decision; no milestone asks for it |
 | [B196](#b196) | new, 2026-09-30 (X29) | enabling | Architecture | Two lessons for the knowledge pages | Parked under the 2026-09-30 triage rule: knowledge |
 | [B197](#b197) | new, 2026-09-30 (X29) | enabling | Architecture, with each test's owner | Tests X29 left narrower than they read | Parked under the 2026-09-30 triage rule: test depth |
-| [B198](#b198) | new, 2026-09-30 (X29) | enabling | Infrastructure services | IPv6 listener impacts print bracketed | Parked under the 2026-09-30 triage rule: display |
 | [B199](#b199) | new, 2026-09-30 (X29) | enabling | CLI | Completion over word breaks and truncated sets | Needs an owner decision on what the operator sees |
-| [B200](#b200) | new, 2026-09-30 (X29) | enabling | Substrate | Autostart replays report what they change | Parked under the 2026-09-30 triage rule: replay fidelity |
-| [B201](#b201) | new, 2026-09-30 (X29) | enabling | State reconciliation and Workspace | Remediations that match the next command | Parked under the 2026-09-30 triage rule: wording |
-| [B202](#b202) | new, 2026-09-30 (X29) | enabling | Controller setup | Resolution warnings in the plan and on failure | Needs an owner decision on the plan |
-| [B222](#b222) | new, 2026-09-30 (X31) | enabling | State reconciliation and CLI | Status next steps over delete exits and lost bindings | Parked under the 2026-09-30 triage rule; one part needs an owner decision |
-| [B223](#b223) | new, 2026-09-30 (X31) | enabling | State reconciliation, with each capability's owner | Unknown-block reasons for every capability | Parked under the 2026-09-30 triage rule |
-| [B224](#b224) | new, 2026-09-30 (X31) | enabling | Each spec's owner | Wording X31 left | Parked under the 2026-09-30 triage rule: wording |
-| [B225](#b225) | new, 2026-09-30 (X31) | enabling | Workspace | Operation-area capacity scans and shared bounds | Parked under the 2026-09-30 triage rule: performance |
 | [B226](#b226) | new, 2026-09-30 (X31) | enabling | State reconciliation | Status over a revision that no longer compiles | Parked under the 2026-09-30 triage rule |
 | [B227](#b227) | new, 2026-09-30 (X31) | enabling | State reconciliation | A continuation over a reprojected bundle refuses first | Parked under the 2026-09-30 triage rule: no effect runs |
-| [B228](#b228) | new, 2026-09-30 (X31) | enabling | Controller setup | Setup runs: harness, remedy, guide and size | Parked under the 2026-09-30 triage rule; the size needs an owner decision |
 | [B229](#b229) | new, 2026-09-30 (X31) | enabling | Architecture | Knowledge lessons X31 left | Parked under the 2026-09-30 triage rule: knowledge |
 | [B230](#b230) | new, 2026-09-30 (X31) | enabling | Each test's owner | Tests X31 left narrower than they read | Parked under the 2026-09-30 triage rule: test depth |
 | [B231](#b231) | new, 2026-09-30 (X31) | enabling | Controller setup | A completed purge also retires the kept bundle's superseded resolutions | Parked under the 2026-09-30 triage rule |
 | [B232](#b232) | new, 2026-09-30 (X31) | safety | State reconciliation and Secrets | Each block's execution holds only its own parts | The key stays in the operation's memory while the server shares the operation; needs a port |
-| [B233](#b233) | new, 2026-09-30 (X31) | enabling | Each capability spec's owner | Refusal tables X31 left | Parked under the 2026-09-30 triage rule |
-| [B234](#b234) | new, 2026-09-30 (X31) | enabling | Architecture, with each role's owner | Collection rules X31 left | Parked under the 2026-09-30 triage rule |
 | [B235](#b235) | new, 2026-09-30 (X31) | enabling | CLI and Desired state | Refusals for objects that are not API objects | Parked under the 2026-09-30 triage rule |
-| [B236](#b236) | new, 2026-09-30 (X32) | safety | State reconciliation and Workspace | Exits over unreadable or differently spelled evidence | Found after the M1 freeze (D48); one part needs an owner decision |
-| [B237](#b237) | new, 2026-09-30 (X32) | defect | Controller | The controller stage completes only over a sealed client area | Found after the M1 freeze (D48) |
 | [B238](#b238) | new, 2026-09-30 (X32) | defect | Controller setup | Setup counts controller-stage resolutions | Found after the M1 freeze (D48) |
-| [B239](#b239) | new, 2026-09-30 (X32) | defect | Controller | A context keeps the `latest` client it proved | Found after the M1 freeze (D48) |
-| [B240](#b240) | new, 2026-09-30 (X32) | enabling | Controller | The libvirt client rule in the specs | Found after the M1 freeze (D48) |
-| [B241](#b241) | new, 2026-09-30 (X32) | defect | Controller | Stage and preflight failures name their own remedies | Found after the M1 freeze (D48) |
-| [B242](#b242) | new, 2026-09-30 (X32) | defect | Controller and State reconciliation | An acknowledgement after a failed exit keeps that exit | Found after the M1 freeze (D48) |
 | [B243](#b243) | new, 2026-09-30 (X32) | safety | State reconciliation and Workspace | Room for a replacing removal and its records | Found after the M1 freeze (D48) |
-| [B244](#b244) | new, 2026-09-30 (X32) | safety | Architecture and State reconciliation | Request strings are never rendered as templates | Found after the M1 freeze (D48) |
 | [B245](#b245) | new, 2026-09-30 (X32) | enabling | Architecture, with each role's owner | Censored completions that name only fields | Found after the M1 freeze (D48) |
-| [B246](#b246) | new, 2026-09-30 (X32) | defect | Substrate | A drifted machine's apply resolution names its reason | Found after the M1 freeze (D48) |
 | [B247](#b247) | new, 2026-09-30 (X32) | safety | Infrastructure services and Substrate | Socket claims of an SSH placement that is the controller | Found after the M1 freeze (D48); publishing SSH claims needs an owner decision |
 | [B248](#b248) | new, 2026-09-30 (X32) | defect | Infrastructure services | The artifact server compares its start with its files | Found after the M1 freeze (D48) |
-| [B249](#b249) | new, 2026-09-30 (X32) | defect | Managed OS and Infrastructure services | A Machine and a profile of one name share no served directory | Found after the M1 freeze (D48); the consumer directories need an owner decision |
-| [B250](#b250) | new, 2026-09-30 (X32) | enabling | Container cluster and Substrate | Substrate refusals in the cluster's own words | Found after the M1 freeze (D48) |
-| [B251](#b251) | new, 2026-09-30 (X32) | enabling | State reconciliation, with each role's owner | Every lifecycle refusal reaches the operator | Found after the M1 freeze (D48) |
-| [B252](#b252) | new, 2026-09-30 (X32) | defect | State reconciliation, with each capability's owner | An old request refuses by naming its version | Found after the M1 freeze (D48) |
-| [B255](#b255) | new, 2026-10-01 (X33) | enabling | Each test's owner | Mutants the X33 splits found surviving | Found after the M1 freeze (D48) |
 | [B256](#b256) | new, 2026-10-01 (X33) | enabling | Architecture | Line-limit texts for empty lists | Found after the M1 freeze (D48) |
-| [B257](#b257) | new, 2026-10-01 (X33) | defect | Controller | Controller-client refusals carry their remedy | Found after the M1 freeze (D48) |
 | [B258](#b258) | split from B206 on 2026-10-01 (D52) | enabling | State reconciliation | Pruning retained operations | D52 names the existing exits; pruning needs a retention rule for evidence and audit |
-| [B259](#b259) | new, 2026-10-01 (X34) | safety | Container cluster | A grown installer kubeconfig is restored too | Found after the M1 freeze (D48) |
-| [B260](#b260) | new, 2026-10-01 (X34) | enabling | Container cluster | Qualify the registered-hosts read on a real install | Found after the M1 freeze (D48) |
 | [B261](#b261) | new, 2026-10-01 (X34) | defect | Controller setup | A resumed carried-forward receipt reads its approved bytes | Found after the M1 freeze (D48) |
 | [B262](#b262) | new, 2026-10-01 (X34) | safety | Controller setup | A pending receipt this executable cannot prepare refuses first | Found after the M1 freeze (D48) |
 | [B263](#b263) | new, 2026-10-01 (X34) | enabling | Controller setup | The fresh-resolution fallback says why and reuses what it can | Found after the M1 freeze (D48); the display needs an owner decision |
-| [B264](#b264) | new, 2026-10-01 (X34) | safety | Substrate | A network is this context's only when its metadata names this context | Found after the M1 freeze (D48) |
-| [B265](#b265) | new, 2026-10-01 (X34) | safety | Substrate and Machine | No Machine starts while its network restarts | Found after the M1 freeze (D48) |
 | [B266](#b266) | new, 2026-10-01 (X34) | enabling | Substrate | The drifted-network refusal names an exit that works | Found after the M1 freeze (D48) |
 | [B267](#b267) | new, 2026-10-01 (X34) | enabling | State reconciliation | Exits at the retained-operation bound | Found after the M1 freeze (D48); one part needs an owner confirmation |
 | [B268](#b268) | new, 2026-10-03 (X35) | enabling | Controller setup | The storage contract holds doubles to the terminal-receipt rule | Found after the M1 freeze (D48) |
 | [B269](#b269) | new, 2026-10-03 (X35) | defect | Controller setup | A setup at the bound that fails after an effect reports it | Found after the M1 freeze (D48) |
-| [B270](#b270) | new, 2026-10-03 | defect | Infrastructure services, with Substrate | The proxy and emulated BMC units stop within their timeout | Found after the M1 freeze (D48) |
-| [B271](#b271) | new, 2026-10-03 (X35) | defect | Controller setup | A never-started setup survives a host release change | Found after the M1 freeze (D48) |
-| [B272](#b272) | new, 2026-10-03 (X37) | defect | Architecture | CI runs the race job, or no page says it does | Found after the M1 freeze (D48) |
 | [B273](#b273) | new, 2026-10-03 (X37) | enabling | Architecture | Build and gate on Go 1.27 | Found after the M1 freeze (D48); needs an owner decision |
 | [B274](#b274) | new, 2026-10-03 (X37) | enabling | Architecture | The Ansible check gate on CPython 3.14 | Found after the M1 freeze (D48); needs an owner decision |
-| [B275](#b275) | new, 2026-10-05 | defect | State reconciliation, with CLI | `status` does not report a shared service a completed removal took back as done | Found after the M1 freeze (D48) |
-| [B276](#b276) | new, 2026-10-05 | defect | Infrastructure services | The lab-rhel time check waits long enough to answer | Found after the M1 freeze (D48) |
-| [B277](#b277) | new, 2026-10-05 (X38) | enabling | Substrate | A real host shows the forced-share read of a running domain's disk | Found after the M1 freeze (D48) |
-
-### B94
-
-Delete the dead setup-binding and legacy prerequisites layer, and share one
-retained-native matcher between preflight and the controller stage. **Exit
-evidence:** preflight and stage tests over one closure.
-
-Since X32 setup still plans a controller-binding action and appends a binding when a context is named, although its scope is always empty (found in X32).
-
-### B95
-
-Help and usage polish, and the request fields `inventory.ListRequest.Silent`
-and `contexts.CurrentRequest.Short` that only the CLI's result writer reads
-through their flags, which `TestEveryRequestFieldIsRead` allowlists. **Exit
-evidence:** CLI help goldens.
+| [B322](#b322) | new, 2026-10-05 | enabling | Controller setup | `setup --purge-old-bundles` retires the client areas nothing names | D90: no M1 journey reaches 15 client closures, and M1 ships the remedies |
+| [B323](#b323) | new, 2026-10-05 | safety | Infrastructure services | Removals prove a service's sockets free before releasing them | D102: no failure was observed, and the proof belongs in the evidence functions B19 creates |
+| [B324](#b324) | new, 2026-10-05 | enabling | State reconciliation and Workspace | An orphan-acknowledged delete lists the blocks it abandons | D88: M1 names `status --context` as the inventory |
+| [B325](#b325) | new, 2026-10-05 | safety | Workspace | A damaged context is isolated from the rest of the store | D63: M1 keeps store-wide verification and names the damaged entry |
+| [B327](#b327) | new, 2026-10-05 | product | Managed OS | DHCP installation | D80: M1 refuses DHCP-only installations |
+| [B328](#b328) | new, 2026-10-05 | enabling | State reconciliation | The lifecycle's execution file split by concern | An optional move no M1 lane needs; D56 leaves it out of M1 |
+| [B329](#b329) | new, 2026-10-05 | enabling | Architecture | A declaration-spacing check across the tree | An optional check no M1 lane needs; D56 leaves it out of M1 |
+| [B330](#b330) | new, 2026-10-05 | product | Controller | An entitled-source adapter for RHEL client closures | D106: M1 accepts operator-installed `lorax` and `xorriso` by presence |
+| [B331](#b331) | new, 2026-10-05 | product | Controller setup | A FIPS-qualified controller runtime | D108: M1 documents the runtime's own cryptography on a FIPS host |
+| [B332](#b332) | new, 2026-10-05 | product | Machine and Controller | `auth.operatorIdentity` runs under the invoking account | D112: M1 documents what the arm does today; this needs B282's helper |
+| [B333](#b333) | new, 2026-10-05 | enabling | Infrastructure services | A DNSServer binds its endpoint address by default | D114: M1 keeps the wildcard default and names a colliding socket |
+| [B334](#b334) | new, 2026-10-05 | safety | Substrate | The emulated BMC serves TLS, binds loopback and runs confined | D115: M1 binds the examples' emulated BMCs to loopback |
+| [B335](#b335) | new, 2026-10-05 | enabling | Controller setup | An operator-run RHEL 9.8 resolution harness | Optional beside the RHEL 9.8 controller run D60 plans |
 
 ### B96
 
@@ -135,6 +94,8 @@ although the ignore file also exempts the real modules with no action plugin
 Kind field-table to `Shape` parity and the `Value.Get` path checker. **Exit
 evidence:** parity tests over every kind.
 
+[B294](m1.md#b294) writes the Machine kind tables' missing rows in M1 (found by the 2026-10-05 audit); the parity tests and the checker stay here.
+
 ### B98
 
 Reduce production comments to what the
@@ -142,10 +103,12 @@ Reduce production comments to what the
 retains. Most production comments state rationale the contract sends to the
 knowledge catalog, and some state invariants that must survive as tests or
 names rather than prose. Deciding each one is the work; a blanket strip would
-lose the findings the catalog is meant to keep. **Exit evidence:** each
-retained comment justified by language, tooling or a maintained contract;
-every durable finding moved into `.agents/knowledge/` with its links and
-evidence; and a fitness gate that holds the result.
+lose the findings the catalog is meant to keep. Split on 2026-10-05 into
+[B336](m1.md#b336), whose amended rule and ratchet hold the count meanwhile
+(D101). **Exit evidence:** each retained comment justified by language,
+tooling or a maintained contract; every durable finding moved into
+`.agents/knowledge/` with its links and evidence; and B336's ratchet lowered
+to the result.
 
 ### B99
 
@@ -211,12 +174,17 @@ lifecycle recovery evidence preserved.
 ### B104
 
 Replace per-ID secret reservations with bounded lifetime allocation. Current
-opaque random version and binding IDs retain historical reservation files; a
-new allocation scheme must preserve issued-ID non-reuse across crashes and
-restore, so it needs [B103](#b103)'s restore semantics. **Exit evidence:**
-bounded allocator state, reservation before use, counter and namespace
-exhaustion, migration of existing bindings and failed attempts, non-reuse and
-crash tests.
+opaque random version and binding IDs retain historical reservation files,
+about 32,000 of which a context's keyring admits in its lifetime, and every
+bounded run consumes one, so a loop of `machine` power, `rsh` or `exec`
+commands exhausts a context (found by the 2026-10-05 audit, which corrected
+this item's reason). Split on 2026-10-05 into [B337](m1.md#b337), after which
+bounded runs publish no durable binding and only applies and new versions
+consume reservations (D85). A new allocation scheme must preserve issued-ID
+non-reuse across crashes and restore, so it needs [B103](#b103)'s restore
+semantics. **Exit evidence:** bounded allocator state, reservation before use,
+counter and namespace exhaustion, migration of existing bindings and failed
+attempts, non-reuse and crash tests.
 
 ### B105
 
@@ -276,10 +244,6 @@ An SSH-host provider's hypervisor install frozen as one exact transaction under 
 
 Three of X21's custody mutations are caught only by defence in depth: removing the lent area's close, dropping the closed-transaction check, and withdrawing before the removal's record reads done. **Exit evidence:** one test that fails for each mutation alone.
 
-### B179
-
-After a refused setup, the result's Next line always says `bootwright setup`, while the bound refusal's diagnostic names `bootwright setup --purge-old-bundles` (found in X30). **Exit evidence:** a result golden whose Next line follows the refusal's remediation.
-
 ### B180
 
 The contextfs retirement fixture sets retained definitions that `Publish` ignores, so its kept-resolution assertion always passes; the controller storage memory double keeps no receipt's resolution append-only and refuses no replaced one, so the storage suite cannot require that retirement drops a retired bundle's resolution; and the kill harness's workspace clone does not copy the journey double's client files (found in X30). **Exit evidence:** fixtures and doubles that fail when the rule breaks.
@@ -294,13 +258,11 @@ A bounded run's rebind is limited to three bindings rather than closed, which a 
 
 The agent-install removal observation still resolves the openshift-install and oc paths although it runs no oc read; the destroy that follows needs them (found in X29). **Exit evidence:** an observation that resolves only what it runs.
 
+[B309](m3.md#b309) makes the installation block's tool-resolution failure deterministic; this item keeps the removal observation's resolution.
+
 ### B194
 
 The lifecycle's material list adds the SSH identity and host-key files whenever a placement names their Secrets, whatever its connection, so a local placement carrying SSH references still asks for SSH material; since X29 the agent-install decoders refuse such a placement, other decoders do not (found in X29). **Exit evidence:** a material-list test over a local placement.
-
-### B195
-
-Since X29 additional trust bundles reach `install-config`, but `additionalTrustBundlePolicy` stays at the installer default `Proxyonly`, and Bootwright refuses an installation proxy, so the bundles never feed the cluster-wide trusted CA. Whether they should (`Always`) is undecided (found in X29). **Exit evidence:** the decision, with a projection golden.
 
 ### B196
 
@@ -310,41 +272,9 @@ ansible-core 2.21.4 keeps a Jinja string-literal escape such as `'\n'` as a back
 
 Two tests still put wwn hints on libvirt guests that admission now refuses; the media store contract suite has no missing-callback clause and its double would panic; the second-implementation secret store fake assigns no sequence; and two runner consume sites keep no test pinning their remediation (found in X29). **Exit evidence:** each test narrowed or added.
 
-### B198
-
-The managed service and artifact server plan impacts print an IPv6 listener unbracketed, as `open-listener fd00::1:3128`, where the emulated BMC's impact prints `[fd00::1]:8000` since X29. **Exit evidence:** impact goldens over IPv6.
-
 ### B199
 
 Bash's default word breaks also contain `:`, so a path with `:` breaks completion of the rest of the word as `@` and `=` did, and PowerShell's `,` may belong in the withheld set (not verified on a real shell); and when the candidate cap or the read bound truncates a listing, the shell still inserts the longest common prefix of the partial set (found in X29). **Exit evidence:** the chosen sets and truncation behavior, with completion tests.
-
-### B200
-
-The libvirt host apply runs network and pool autostart on every replay reporting no change, and the observation never reads autostart, so an autostart switched off is re-enabled silently (found in X29). **Exit evidence:** a replay test that reports the change and an observation that reads autostart.
-
-### B201
-
-A failed destroy's remediation still says to repeat the operation to continue it, where the next destroy replaces it; status lists a failed destroy's lost block record as a contradiction beside an offered destroy that no record refuses; and a repeated media add whose adopted stage was rewritten promises a publication its next repeat refuses (found in X29). **Exit evidence:** remediation and status goldens for each.
-
-### B202
-
-Since X29 a newer Index API minor warns in setup's result, but the plan shown before confirmation does not show it, and a failure after a warning-bearing selection drops the warning from its report (found in X29). **Exit evidence:** plan and failure goldens that carry the warning.
-
-### B222
-
-Status offers no next step over the two states whose refusal names a delete; it cannot see a keyring whose listing a missing part file breaks, so it still offers apply and destroy there; and over a failed apply whose blocks are all done with a lost binding it offers only the delete, though `apply` would finalize it, which D37's wording chose (found in X31). **Exit evidence:** status goldens for each state.
-
-### B223
-
-Since X31 only the libvirt machine explains why a block stayed unknown; the libvirt host, bare-metal machine, managed services, artifact server, managed-OS installation, cluster install and controller clients give the general reason. Status also shows a null evidence's reason rather than the error an observation that could not run reported, and no command test deletes a context whose controller record holds reservations (found in X31). **Exit evidence:** a reason per capability and the command test.
-
-### B224
-
-The destroy row of the command catalog lists no housekeeping; the dependency-safety section still says destroy uses the exact frozen dependencies although a fresh destroy runs under the build in hand; the architecture spec could name the frozen execution closure; and comments still call a carry source a sealed area and describe cluster reads through the installer's kubeconfig (found in X31). **Exit evidence:** the texts corrected.
-
-### B225
-
-The operation area re-measures its whole subtree, re-verifying each directory's ancestors, before every record write and log append, about a third of a second per write at its entry bound on this host; and the runs and SSH-trust areas share its entry and byte bounds while the bounds table names only the operation area (found in X31). **Exit evidence:** an incremental measure with a bound test, and the table rows.
 
 ### B226
 
@@ -353,10 +283,6 @@ Status compiles the imported revision and refuses when it no longer compiles, so
 ### B227
 
 A continuation run by its registering build over a bundle a later build reprojected passes the closure check and is refused only per attempt by the runner, after its log is restored and it is marked running; comparing the receipt's automation digest before the restore would refuse first (found in X31). **Exit evidence:** a continuation test that refuses before any record changes.
-
-### B228
-
-Setup runs are not driven by the contextfs checkpoint harness; a failure their output explains does not point its remedy at `run.output`; the operator guide does not mention them or that reading them needs root; their output keeps 8 MiB where a bounded run truncates at 4 MiB, although D42 names one limit; and the runner relies on each output writer swallowing its own errors (found in X31). **Exit evidence:** a harness scenario, the remedy, the guide text, one size, and a swallowing wrapper.
 
 ### B229
 
@@ -376,25 +302,9 @@ After a completed setup, `--purge-old-bundles` retires superseded areas but leav
 
 Since X31 a run request lends a block only the Secret parts it writes, but each attempt's execution and quiescence probe still hand the capability's Go code the whole reopened operation map, the artifact server's key included (found in X31). **Exit evidence:** a port through which a capability declares its blocks' parts, with a test that another block's key is absent.
 
-### B233
-
-The managed service's list of unsupported names no longer satisfies the port and is dead; two agent-install checks cannot fire through admitted input; `make docs-check` does not run the refusal-table tests; and the engine's refusal of kinds no capability claims has no table (found in X31). **Exit evidence:** each settled.
-
-### B234
-
-No structural rule checks that a rescue ends in an unconditional fail, so one could swallow a refusal (the only rescue today does end so); and the libvirt host's pool template is rendered by no task but stays in the automation digest (found in X31). **Exit evidence:** the rule, and the template removed or rendered.
-
 ### B235
 
 The lost-binding refusal names its operation and binding only in its message, because a diagnostic's object is an API object; and a refusal inherited from an Environment default gets the generic inherited-field remedy in place of its own, so a file source from a default names `secret set` only in its message (found in X31). **Exit evidence:** a diagnostic shape for such objects and inherited remedies kept.
-
-### B236
-
-A context whose evidence is corrupt or unsupported still has no runnable exit: deletion refuses it even with `--allow-orphans`, and the only remedy named is a whole-store restore no procedure provides; whether `--allow-orphans` may abandon such a context is an owner decision. The lost-binding refusal and its status step still name the orphan-acknowledged delete whatever the evidence reads; the context guard's evidence refusal names no remedy; and the lifecycle compares evidence by exact bytes where the guard accepts any spelling (found in X32). **Exit evidence:** the chosen exit, and each refusal naming a delete the guard admits.
-
-### B237
-
-An attempt interrupted after it publishes the clients but before it seals their area is later proved present and complete without sealing it, so the area stays writable although the specs say the stage completes only once it is sealed; and locating an installed tool reports any store error as not installed, pointing at the controller stage when store state is the cause (found in X32). **Exit evidence:** a resolution and replay that seal the area, and a lookup that names a store failure.
 
 ### B238
 
@@ -402,37 +312,13 @@ Setup's bound decision never counts controller-stage resolutions as retirable, s
 
 **Partly settled in [X35](delivered.md#x35--the-decision-of-2026-10-03).** The purge after a completed setup names and reports only the areas the store holds, and retires a resolution whose bundle holds no area only when it belongs to setup's own closure, so it neither reports a controller stage's resolution as a retired execution bundle nor retires it; `TestSetupsPurgeLeavesAControllerStageResolution` pins this over the real store. The bound clause and the stale-selection clause stay parked.
 
-### B239
-
-The controller stage's recovery and `preflight controller --context` select the newest retained release under a `latest` prefix from the host-wide sources, so once another context retains a newer client, a context's next fresh apply republishes under it undeclared, and its preflight reports its clients missing (found in X32, older than it). **Exit evidence:** stage and preflight tests in which another context's newer release is retained.
-
-### B240
-
-The controller selects the libvirt client for any Machine hosted on a libvirt provider, which the controller and state-reconciliation specs do not state; and no stage test runs a plan that selects the hypervisor closure end to end (found in X32). **Exit evidence:** the rule stated or dropped, and the test.
-
-### B241
-
-Native resolution and Ansible runner failures reached from the controller stage still name setup in their remedies; `preflight controller --context` compares a pending setup receipt's route with the context's Machine proxy, which setup never reads; and it reports a tool selection failure over retained sources with setup's remedy (found in X32). **Exit evidence:** remedy tests for each path.
-
-### B242
-
-In both runners, a record that needs an acknowledgement, read before the adapter's failed exit while the adapter is gone, fails its write with `EPIPE` and reports authorization delivery as uncertain, where reading the exit first keeps the failed exit; for a lifecycle attempt that is unknown against failed (found in X32). **Exit evidence:** runner tests that force each order.
-
 ### B243
 
 An apply keeps room for one removal directory, so at the directory bound a failed removal's replacement refuses at registration; a removal's byte admission covers only its registration, so its records and logs can still stop it part way at the byte bound; and when the reserve cuts an attempt's output to nothing, the attempt log records nothing (found in X32). **Exit evidence:** bound tests for a replacing removal and for a removal's records, and a log entry for dropped output.
 
-### B244
-
-ansible-core 2.21.4 loads a runner's `--extra-vars @request.json` as trusted templates, so a request string holding Jinja delimiters is rendered on the controller, and since X32 argument validation renders every declared request string before the first task; no Go check refuses such delimiters, and whether an authored value can reach one is unverified. The install request would also carry `endpoints: null` if no endpoint address resolved, which validation now refuses (found in X32). **Exit evidence:** requests passed as unsafe data or delimiters refused, with a test per path.
-
 ### B245
 
 Since X32 the adapter output prints nothing a failed `no_log` task raised, so completion refusals that name only fields, never values, now print nowhere; role comments still say ansible-core keeps nothing of such a failure; and the censor overrides a private ansible-core method that a move past 2.21 must re-qualify (found in X32). **Exit evidence:** a decision per refusal, the comments, and the re-qualification note.
-
-### B246
-
-The libvirt machine's apply resolution reads a controller on another image, a domain with another UUID or a resized disk as unknown with no reason, because the adapter proves its postcondition and Go refuses it on the comparison (found in X32). B213's text was also imprecise: before X32 only a silent BMC read partial on removal. **Exit evidence:** observation rows with named reasons.
 
 ### B247
 
@@ -442,45 +328,13 @@ An SSH placement recognized as the controller has its socket, unit and path clai
 
 The artifact server's observation never compares the container's start with its configuration, unit or serving material, so an unknown resolution of an apply stopped before its restart can record it done while nginx serves an earlier configuration; and since X32 a managed-service apply whose host clock stepped back restarts on every attempt until the clock passes the file's time (found in X32). **Exit evidence:** observation and apply tests for both.
 
-### B249
-
-A Machine and a MachineInstallProfile with the same name publish into the same `os/<name>/` directory, and the Machine's removal deletes it recursively, taking the profile's tree; nothing refuses the collision (found in X32 by reading the code). The consumer-level `os/`, `private/` and `private/os/` directories stay until the artifact server's own removal, and no block owns them. **Exit evidence:** a refusal or distinct paths, with a test, and the owner's rule for consumer directories.
-
-### B250
-
-A node's port and credential refusals show the substrate's Machine-worded reason on a ContainerCluster diagnostic that does not name the node's Machine; and whether a provider's substrate is realized is decided by hand in three places (found in X32). **Exit evidence:** the wording, and one owner for the rule.
-
-### B251
-
-Lifecycle refusals other than the pre-boot proof, such as the managed-OS check that a machine holds another installation and the cluster boot's missing image, still reach the operator only through the adapter output; and the physical pre-boot refusals should be exercised end to end once B73 and B67 lift the physical refusals (found in X32). **Exit evidence:** a diagnostic per refusal, and an end-to-end run.
-
-### B252
-
-Every frozen-request decoder decodes strictly before it checks the version, so a request an earlier version froze with a since-removed field refuses as malformed instead of naming its version, as the state-reconciliation spec requires; and four decoders' unsupported-version messages name no version (found in X32). **Exit evidence:** decoder tests over an old request with a removed field.
-
-### B255
-
-Disabling these left every suite passing, before the splits as after: the desired-state issue for a resource path that selects no acquired file; the Machine BMC issue for credentials required after provider inheritance; the schema enum issue; a bootstrap whose wheels lack ansible-core or urllib3; a native recovery whose evidence is not recorded in the receipt; the compiler returning no state and no error; podman's native request intent swapped for libvirt's; the ELF RPATH and RUNPATH search, reached only by a network-tagged test; and in the keyring, secret material and workspace, the initialization-root refusal, the selector and part rotation, the publication preflight, the duplicate-part refusal, the duplicate `NoProxy` refusal and the refusal to adopt an existing reservation directory (found in X33). **Exit evidence:** a test that fails for each mutant.
-
 ### B256
 
 Since X33 both awaiting-split lists are empty, but the collection's line-limit test still says their split is B47, and the Go test's failure message still offers adding a function to the list although the list only shrinks (found in X33). **Exit evidence:** both texts corrected.
 
-### B257
-
-The controller clients' refusal helper passes its remedy where the diagnostic takes a source path, so every such refusal that gives a remedy, the frozen-request version refusal, "run bootwright setup" and "repeat the operation" among them, carries it as a path and shows no remediation (found in X33, older than it). **Exit evidence:** diagnostic tests whose remediation holds the remedy and whose path is empty.
-
 ### B258
 
 No command prunes retained operations, so a context at the 1024-operation bound leaves only through destroy and deletion (D52). Pruning needs a rule for which completed operations no block's ownership and no audit depends on. **Exit evidence:** the retention rule, and a pruning journey that keeps every operation the index names.
-
-### B259
-
-Since X34 a wait restores a truncated installer kubeconfig from the kept copy, but one the install-complete rewrites grew past the 64 KiB read bound and a kill cut to a prefix still over that bound is never read, so it is not restored and the wait fails as before; and a restore is recorded only in the completion evidence, so a wait that restored and then failed leaves no durable note (found in X34). **Exit evidence:** a cut proven without a full read, and the note.
-
-### B260
-
-X34's read of the registered hosts after a stall is proved against fakes taken from `openshift-install` 4.21.10's own `agent create config-image` output; a stalled multi-node install on a real host should name the missing node, and the watcher token should list the hosts. A knowledge page could record what that command writes (state members, `rendezvous-host.env`, `common.sh`, `set-hostname.sh`, `agent.service`) for later fakes (found in X34). **Exit evidence:** an acceptance-ledger row, and the page.
 
 ### B261
 
@@ -493,14 +347,6 @@ Below the bound, a pending receipt whose bundle holds no area and that another e
 ### B263
 
 Since X34 a retained bundle that lost a bootstrap source falls back to a fresh resolution, but its retained row ends as a failure with no warning naming the lost source, and the fresh resolution downloads every source again, including those the retained bundle still holds (found in X34). **Exit evidence:** the display, and a seeded resolution.
-
-### B264
-
-The libvirt host's ownership check counts any Bootwright ownership element as owned, not only this context's, so a network carrying another context's metadata passes the foreign guard, is redefined and, since X34, restarted when idle, although the substrates spec says a network without this context's ownership is foreign and refuses (found in X34, older than it). **Exit evidence:** a host test in which another context's network refuses before any effect.
-
-### B265
-
-Nothing stops a Machine starting, for example through `machine start` in another invocation, between the host apply's guest read and its network restart; whether machine power commands are excluded while an apply runs was not checked (found in X34). **Exit evidence:** the exclusion shown, with a test.
 
 ### B266
 
@@ -518,20 +364,6 @@ The storage contract suite has no clause for the store's rule on settled receipt
 
 When a setup at the bound fails after its first durable effect, the cancellation of a stranded receipt or a retirement, its result reports the outcome `planned`, which implies nothing changed, and does not name the cancellation (found in X35). **Exit evidence:** a failure after the cancellation and one after a retirement, each reported with what changed.
 
-### B270
-
-The managed proxy (Squid) and the emulated BMC (sushy-tools) containers do not exit on SIGTERM within podman's 10-second stop timeout, and their unit templates set no stop timeout or success status, so every stop or removal waits ten seconds per unit, ends with SIGKILL (status 137) and leaves the unit `failed` in systemd. Seen on 2026-10-03 removing lab-rhel's `bootwright-lab-rhel-proxy-lab-proxy` and `bootwright-lab-rhel-bmc-rhel-01` units while preparing B49's run; the destroy itself completed. **Exit evidence:** unit templates whose stop ends cleanly, with their template goldens.
-
-Seen again on 2026-10-05 in B49's run: each removal, and the host restart, stopped both units with status 137 and left them `failed`, and after the last removal both stayed `failed` until the owner's `systemctl reset-failed` at 11:23 UTC.
-
-### B271
-
-A pending setup receipt that never took effect, below the bound, refuses on a host whose release moved since it was recorded, for example after a distribution upgrade, with `controller.unknown` and the remedy to restore the original input, which an upgraded host cannot do; D55's abandonment applies only at the bound (found in X35, older than it). **Exit evidence:** an exit for a never-started pending receipt after a release change, with a test.
-
-### B272
-
-CI's `race` job runs only on the `schedule` event, and GitHub starts a scheduled workflow only from the default branch, `main-v1`, which holds no `check.yml`, so the job has never run: the repository lists no scheduled run. Yet [development](../../docs/development.md) and the [Go reference](../../.agents/skills/code-implementation/references/go.md) say CI runs `make race` nightly (found in X37, older than it). **Exit evidence:** a race run that CI starts, such as a scheduled run once the workflow is on the default branch or a run on each push, or both statements corrected.
-
 ### B273
 
 X37 moved Go only to the newest 1.26 patch, go1.26.8, while go1.27.1 is the newest release. Go 1.27 backs `encoding/json` with its v2 implementation, whose error texts may differ, drains an HTTP/1 response body on close and removes five TLS and X.509 GODEBUG settings, so the move changes product behavior and is the owner's decision (found in X37). **Exit evidence:** the owner's decision; for a move, `scripts/go` and both modules' `go` directives on 1.27 with every gate passing, and those changes reviewed against the product's JSON records, refusals and goldens and its HTTP acquisition.
@@ -540,17 +372,57 @@ X37 moved Go only to the newest 1.26 patch, go1.26.8, while go1.27.1 is the newe
 
 The Ansible check gate runs on CPython 3.13, while fresh setups resolve the newest 3.14 patch, the newest minor ansible-core 2.21 supports as a controller. Moving the gate re-platforms it rather than bumping a pin: `scripts/tools/ansible_check.py` runs ansible-test with `--python 3.13` and `origin:python=3.13`, and `scripts/tools/ansible-test-artifacts.json` holds cp313 wheels of MarkupSafe and PyYAML for ansible-test 2.21.4's exact sanity pins (found in X37). **Exit evidence:** the owner's decision; for a move, the gate interpreter and its lock, the artifact lock and those arguments on 3.14, with the full gate passing.
 
-### B275
+### B322
 
-After a completed destroy, `status` lists each shared service it removed as `[OK]`, and the JSON `shared` row as `done`: the rows take the state of the current operation's block for the service without reading the operation's verb, so a finished removal reads as a realized service (`internal/reconciliation/lifecycle/status.go`), and the [output spec](../cli/output.md) names the values without saying what `done` means after a removal. Seen on 2026-10-05 after the last destroy of B49's run (found then, older than it). **Exit evidence:** a status test after a completed destroy that does not report the removed services as done, with the output spec saying what each value means.
+Client areas count toward the 16-area bound, but nothing removes one, so a long-lived controller eventually wedges setup and the controller stage (found by the 2026-10-05 audit); [B292](m1.md#b292) gives the refusals their remedies and corrects the spec. `setup --purge-old-bundles` would retire a client area that no context binding or proved stage names, the controller record keeping each context's proved area in a field omitted when empty. **Exit evidence:** a purge that retires an unnamed client area and keeps every named one, and the record field.
 
-### B276
+### B323
 
-The [lab-rhel](../../examples/lab-rhel/README.md) README checks the managed time service with `chronyd -Q -t 3`, which timed out on 2026-10-05 against a managed server that had selected its upstream source 36 seconds earlier. The timeout bounds the whole query, and that server itself took four seconds from its start to selecting its source with `iburst` (10:44:44 to 10:44:48 UTC, and 10:59:40 to 10:59:44 UTC for the next instance), so three seconds is shorter than chrony needs to select a source (found in B49's run). Probes the recording session made at 11:02 UTC, outside the run's records, saw the same timeout and an offset with `-t 10`. **Exit evidence:** the README's check with a timeout that answers a synchronized managed server, run on a host.
+Managed-service and artifact-server removals release their socket reservations without proving the sockets free (found by the 2026-10-05 audit); [B301](m1.md#b301) adds the Not-yet-met line. Each reserved socket would be probed after the stop, and its absence required in both absence checks. **Exit evidence:** absence tests in which a socket still held refuses the release.
 
-### B277
+### B324
 
-[B49](delivered.md#x38--the-real-host-run-of-2026-10-05) also named what X20 proves only in-tree, `qemu-img info --force-share` reading a running domain's disk, and its accepted run of 2026-10-05 does not show it: the one such read ran in the first `destroy`'s quiescence probe, which keeps no evidence, and a failed read reports size 0 (found in X38). The lab-rhel run that [B19](m1.md#b19) and [B20](m1.md#b20) need can capture it. **Exit evidence:** a real-host record of the domain inspection reading a running domain's disk at its frozen size.
+An orphan-acknowledged context deletion names `bootwright status --context <name>` as its inventory since [B291](m1.md#b291). A Reconciliation guard port could list the owned blocks in the refusal, the prompt and the result, which serves real machines better (found by the 2026-10-05 audit). **Exit evidence:** the port, and refusal, prompt and result goldens that list the blocks.
+
+### B325
+
+Store-wide verification refuses every command for every context when one context is damaged; since [B281](m1.md#b281) the refusal names the damaged entry and admits that context's purge. Isolating the damage per context, listing it with its reason and admitting its purge would keep the healthy contexts usable, at the cost of the store's fail-closed verification (found by the 2026-10-05 audit). **Exit evidence:** store tests in which a damaged context is listed and purged while the others keep working.
+
+### B327
+
+An Anaconda installation needs a static IPv4 install address, because completion dials and pins the frozen address, and [B289](m1.md#b289) refuses a DHCP-only installation at admission. DHCP installation needs its own completion design (found by the 2026-10-05 audit). **Exit evidence:** that design, with completion and replay tests.
+
+### B328
+
+`internal/reconciliation/lifecycle/execution.go` holds the operation's decision, registration, removal gates and completion in about 1,600 lines, with registration and completion split across files (found by the 2026-10-05 audit). A pure move into one file per concern would make each easier to read. **Exit evidence:** the move with no behavior change, and `make check`.
+
+### B329
+
+Top-level declarations run together against the formatting rule in about 103 places, mostly in container-cluster admission and storage, and two projection names mislead (found by the 2026-10-05 audit). **Exit evidence:** an architecture-suite check with every case fixed, and the two renames.
+
+### B330
+
+A RHEL controller resolves client closures from UBI sources only, and UBI carries no `lorax` or `xorriso`; since [B288](m1.md#b288) the operator installs both from the host's entitled repositories. An adapter over the host's enabled repositories or a Satellite could freeze RHEL client closures as UBI sources are frozen (found by the 2026-10-05 audit). **Exit evidence:** a frozen closure from an entitled source, with acquisition, signature and replay tests.
+
+### B331
+
+On a FIPS-mode controller host, Bootwright's Go binary and its private CPython use their own cryptography, outside the host's validated modules, which [B292](m1.md#b292) documents and preflight reports. Qualifying FIPS would use Go's FIPS 140-3 module and a private CPython linked to the system OpenSSL FIPS provider (found by the 2026-10-05 audit). **Exit evidence:** a qualified FIPS build and runtime, with setup and a lifecycle run on a FIPS-mode host.
+
+### B332
+
+`auth.operatorIdentity` promises the invoking operator's own SSH identity, but the session client runs as root with root's default identities, which [B283](m1.md#b283) documents. Running the arm's client under the invoking account, with its default identities and `-l` defaulting to that account, would build on [B282](m1.md#b282)'s helper (found by the 2026-10-05 audit). **Exit evidence:** argv and session tests under the invoking account.
+
+### B333
+
+A DNSServer's bind address defaults to the wildcard address, which collides with any other resolver on the host; since [B299](m1.md#b299) the pre-start check names the colliding socket. Deriving the default from the single endpoint address moves the effective state and request digests of live contexts, so it waits for a later window (found by the 2026-10-05 audit). **Exit evidence:** a normalization test deriving the bind address, and the effective-state and request goldens.
+
+### B334
+
+The emulated BMC runs as root, unconfined, with the libvirt socket, and serves plain HTTP with a basic-auth credential; [B301](m1.md#b301) binds the examples' BMCs to loopback. TLS from the emulator with a generated certificate its client verifies, a refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](m1.md#b289)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). **Exit evidence:** the emulator's TLS with a verifying client, the refusal and the confined type, each with tests.
+
+### B335
+
+No harness exercises RHEL 9.8's dnf 4.14, rpm 4.16, Python 3.9 and keyring import, so setup's dnf4 path has never run on RHEL (found by the 2026-10-05 audit); [B288](m1.md#b288) marks RHEL 9.8 admitted but not yet run, and a run on a disposable RHEL 9.8 controller qualifies it (D60). An operator-run harness in a ubi9 container could exercise resolution, inspection and signatures. **Exit evidence:** the harness and a recorded run of it.
 
 ## Retired
 
@@ -562,7 +434,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | Old ID | Retired on | Reason and record |
 | --- | --- | --- |
 | V1 | 2026-09-28 | Answered by X14: the identity is the build's trust anchor (S18) and the image is fetched through the listener with its certificate verified (S17). |
-| V2 | 2026-09-28 | Folded into [B72](m4.md#b72)'s operator gate. |
+| V2 | 2026-09-28 | Folded into [B72](delivered.md#x38--the-real-host-run-of-2026-10-05)'s operator gate. |
 | V3, V4 | 2026-09-28 | Folded into [B61](m3.md#b61)'s operator gate. |
 | V5 | 2026-09-28 | Folded into the operator gates of B61 and B72: a row accepted before X19 lands is repeated on a build that contains it. |
 | S13 | 2026-09-28 | Delivered by [X15](delivered.md#x15--installs-that-neither-strand-nor-over-report); its row was left behind. |
@@ -570,12 +442,12 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | C13 | 2026-09-28 | No milestone needs a redistributable release. |
 | O9 | 2026-09-28 | It measures the repository's guidance, not the product. |
 | C16 | before 2026-09 | Delivered by [M1d](delivered.md#m1d--controller-setup) and [M1e](delivered.md#m1e--lifecycle-engine-and-managed-artifact-serving); controller relocation is [B103](#b103). |
-| C17 | before 2026-09 | Promoted into M1h, now [B72](m4.md#b72), as its host-wide media store. |
+| C17 | before 2026-09 | Promoted into M1h, now [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), as its host-wide media store. |
 | C18 | 2026-09-28 | Delivered by `d0980fc3` (refactor(architecture): align packages with the command and port map), which removed its row from the milestones page with no note. |
 | C27 | before 2026-09 | Delivered by [X3](delivered.md#x3--machine-ssh-sessions-and-host-trust). |
 | R1 | 2026-09-28 | Merged into [B19](m1.md#b19) with C28, whose outcome it was. |
 | M2a, M2b, M3, M4, M5, M6 | 2026-09-28 | These rows became items whose Alias cells name them; the numbers M3 to M6 now name milestones. |
-| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](m4.md#b72), [B73](m4.md#b73), [B61](m3.md#b61) and [B71](m3.md#b71); M-letter IDs are no longer issued. |
+| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), [B73](m4.md#b73), [B61](m3.md#b61) and [B71](m3.md#b71); M-letter IDs are no longer issued. |
 | N1 to N5, L2, L4, L5, L6 | 2026-09-28 | Became items whose Alias cells name them; L1 and L3 never existed. |
 | K01 to K73 | 2026-09-28 | The audit plan's cluster tokens, defined nowhere in the repository; the grouping stays in Git history. |
 | Phase 0 to Phase 4 | 2026-09-28 | The audit plan's ordering; slices carry order now. |
@@ -668,3 +540,63 @@ Requires cell as `owner decision: <question>`.
 - **D53** (2026-10-01, the owner accepted the session's recommendation A): B208: a retained bundle that lost a bootstrap source falls back to a fresh resolution.
 - **D54** (2026-10-01, the owner accepted the session's recommendation A): B220: before a wait, the install role restores a truncated installer kubeconfig from the kept copy when it names the same cluster.
 - **D55** (2026-10-03, the owner accepted the session's recommendation A): B175: under `setup --purge-old-bundles`, a receipt stranded at the bound that this executable cannot resume is recorded as canceled, its never-started bundle publication observed as such, and a fresh setup follows; D50's resume stays for one it can prepare.
+- **D56** (2026-10-05, the owner): M1 gates the owner's full bar: well-defined specs; architecture and code that follow best practices; well-structured, domain-constrained APIs with input validation; good UX and CLI output; and a CLI ready for every controller function (context, secret, media, setup, preflight, validate, render effective, status, plan, apply, destroy and the machine commands) and for creating RHEL machines on libvirt and sushy-tools. This amends D48: M1 takes the parked B94, B95, B179, B198, B200 to B202, B222 to B225, B228, B233, B234, B236, B240 to B242, B244, B246, B249, B252, B255, B257, B264, B270 to B272 and B275 to B277, and the new B278 to B302 and B336 to B338.
+- **D57** (2026-10-05, the owner): B17 to B24: X23 is dropped, and X24 keeps B19 to B22, re-planned with the role and request fixes of its lanes. B17 keeps its ID for the managed-OS work area's relocation, and B303 splits from it with per-invocation scratch, disjoint namespaces and the two-concurrent-installs test; B24 keeps its ID for cross-context scoping and an attributed refusal, and B304 splits from it with the exemption of an invocation's own in-flight jobs. B18, B23, B303 and B304 move to M3, B18 recording that context reads refuse during an apply and taking B265 into its exit evidence, and the parked B195, B237, B239, B250, B251, B259, B260 and B265 join them there.
+- **D58** (2026-10-05, the owner): B72: the lab-rhel ledger row of 2026-10-05, which matches B72's acceptance baseline and gate, is accepted for B72 too, so B72 leaves M4 for X38's record; the defects the run found stay M1 items.
+- **D59** (2026-10-05, the owner): M1's closing operator gate is the extended lab-rhel run on a clean build of X44's landing, on a host missing at least one native root so that setup or the controller stage downloads through the Python path: setup with the new bundle, media, context, secrets, a staged apply, preflight, plan, apply, `status` with its four JSON checks, `machine list` and `--power-status`, `machine exec` and `rsh`, restart, a destroy refused and then `machine stop`, destroy, a fresh apply, a host restart, `machine start` and `stop`, destroy, `status` after the destroy, the unit and time checks and an explicit `qemu-img info --force-share` read. One owner-accepted row completes the real-host evidence of B19, B20 and B277.
+- **D60** (2026-10-05, the owner): the real xFusion test follows M1, which closes without physical installation, and B73 to B78 stay in M4, B74 to B77 outside any planned slice. On the owner's explicit request of 2026-10-05, X45, the slice the session's plan called XB, runs out of sequence right after X43 and X24, in the same digest window, and delivers B73's repair and B305, the Redfish client on the owner's xFusion iBMC. A run on a disposable RHEL 9.8 controller, the lab-baremetal rehearsal and one xFusion server with a reduced first-test profile, run from a separate RHEL 9.8 controller (D109) and recorded as an observation, follow it.
+- **D61** (2026-10-05, accepted by the owner from the session's recommendations): B279 and B295: `spec.libvirt.uri` is an enumeration holding `qemu:///system`, which closes the command transports escaping cannot.
+- **D62** (2026-10-05, accepted by the owner from the session's recommendations): B280 and B282: an operator whose account comes from a directory service resolves through NSS with a pinned, root-owned `getent` under the same single-entry and clean-home checks, `/etc/passwd` serving only where `getent` is absent, and a `sudo -i` root shell resolves as direct root.
+- **D63** (2026-10-05, accepted by the owner from the session's recommendations): B281: store-wide verification stays, but a damaged context's refusal names the context, the store-relative entry and the errno, and `context delete --name <it> --purge` runs over exactly that context; per-context isolation is parked as B325.
+- **D64** (2026-10-05, accepted by the owner from the session's recommendations): B283: an installed Machine's SSH session defaults `access.ssh.addressRef` to its `ssh` address, else its install address, else its FQDN, and the mismatch refusal gains a remedy.
+- **D65** (2026-10-05, accepted by the owner from the session's recommendations): B283: a new or replaced trust record whose address collides with the record of a Machine the context no longer declares replaces it in the same confirmed write, shown as a remove row.
+- **D66** (2026-10-05, accepted by the owner from the session's recommendations): B283 and B287: every remedy and next step that names a command carries `--context`, and every per-object prompt names the context.
+- **D67** (2026-10-05, accepted by the owner from the session's recommendations): B275: after a removal, `status` reports a shared service whose destroy is done or released as `pending`, a failed one as `failed` with the token `[FAIL]`, and a running or unknown one as `unknown`.
+- **D68** (2026-10-05, accepted by the owner from the session's recommendations): B284: `status` relabels `Bound` as the bindings count and reports 0 once a completed removal finalized, so that status still reads no keyring.
+- **D69** (2026-10-05, accepted by the owner from the session's recommendations): B222: over a lost binding, `status` offers `bootwright apply` first, which finalizes without reopening the binding, then the orphan-acknowledged delete.
+- **D70** (2026-10-05, accepted by the owner from the session's recommendations): B284 and B300: the `machine list` and `media list` JSON rows rename `address` to `contact` and `ips` to `addresses`, with the columns CONTACT and ADDRESSES, before any consumer exists.
+- **D71** (2026-10-05, accepted by the owner from the session's recommendations): B285: a Secret declaration's fingerprint drops its provenance and covers type, source and parameters only, and a stored version whose fingerprint equals the legacy one stays current.
+- **D72** (2026-10-05, accepted by the owner from the session's recommendations): B285: `secret set` keeps its strict input-file rule for files carrying a value, password, token or private key, and accepts a certificate or public-key file that is a regular single-link file, not writable by others and owned by the invoker or root.
+- **D73** (2026-10-05, accepted by the owner from the session's recommendations): B285: `--value-stdin` and `--password-stdin` at a terminal prompt on standard error with echo off and read one line for tokens and passwords; opaque and `dockerConfigJson` values refuse a terminal with a pipe-or-file remedy.
+- **D74** (2026-10-05, accepted by the owner from the session's recommendations): B287: Bootwright's own refusals before a `machine exec` or `rsh` session opens, `trust.identity` included, exit 255, and once the session opened its own status wins over an interrupt.
+- **D75** (2026-10-05, accepted by the owner from the session's recommendations): B287: a declined or non-interactive confirmation reports its consumer's existing code, with the confirmer's reason and the `--yes` remedy.
+- **D76** (2026-10-05, accepted by the owner from the session's recommendations): B287: the CLI and command specs say that destroy's proofs needing the exclusive lock or a remote observation follow the prompt and still refuse before registration, and the plan names the Machines that must be stopped.
+- **D77** (2026-10-05, accepted by the owner from the session's recommendations): B288: controller egress keeps a pure route grammar for endpoint and bypass at admission and selection, and the executable's limits on a managed proxy, authentication, private trust and extra capabilities refuse as controller Unsupported rows with remedies.
+- **D78** (2026-10-05, accepted by the owner from the session's recommendations): B289: an installation that selects an external DNSServer or NTPServer uses its declared address with no requirement edge.
+- **D79** (2026-10-05, accepted by the owner from the session's recommendations): B289 and B338: network overrides are composed, and secondary addresses, MTUs, non-install bonds and VLANs and extra routes refuse before registration on a Bootwright-installed Machine; post-install NMState convergence is B326 on M4, before B80.
+- **D80** (2026-10-05, accepted by the owner from the session's recommendations): B289: DHCP-only Anaconda installations refuse at admission, and both specs say so; DHCP installation is parked as B327.
+- **D81** (2026-10-05, accepted by the owner from the session's recommendations): B289: MachineImage and hosted-tree media narrow to `local-media:<name>`, and installed consumers need the `redfishVirtualMedia` endpoint.
+- **D82** (2026-10-05, accepted by the owner from the session's recommendations): B289: an installation whose image or tree server is not on the controller refuses before registration, the managed-OS spec is corrected and the unused install tooling deleted.
+- **D83** (2026-10-05, accepted by the owner from the session's recommendations): B249: a Machine and a MachineInstallProfile of one name that publish through one server refuse at admission.
+- **D84** (2026-10-05, accepted by the owner from the session's recommendations): B225: the runs area keeps the newest runs per context, removing the oldest before a new one, as D42 does for setup runs.
+- **D85** (2026-10-05, accepted by the owner from the session's recommendations): B104 stays parked for bounded lifetime allocation, its reason corrected to state that every bounded run consumed a reservation; the narrow fix, in which `machine` power, `rsh` and `exec` read their material in one keyring session and publish no durable binding, splits out as B337 in M1.
+- **D86** (2026-10-05, accepted by the owner from the session's recommendations): B290: media URLs are HTTPS only, in validation, the acquirer, help and the specs.
+- **D87** (2026-10-05, accepted by the owner from the session's recommendations): B291: an identical `context update` over a completed apply keeps the selected revision, reports it unchanged and asks nothing, and changed input over a completed apply warns before the prompt.
+- **D88** (2026-10-05, accepted by the owner from the session's recommendations): B291: an orphan-acknowledged deletion names `bootwright status --context <name>` as its inventory in the refusal and the prompt, and the specs narrow to that; a guard port that lists the owned blocks is parked as B324.
+- **D89** (2026-10-05, accepted by the owner from the session's recommendations): B236: `--allow-orphans` may abandon a context whose evidence is unreadable or differently spelled, saying that its objects cannot be listed, and the refusal names that exit.
+- **D90** (2026-10-05, accepted by the owner from the session's recommendations): B292: M1 ships the remedies and the corrected spec sentence for a 16-area bound held by client areas; their retirement by `setup --purge-old-bundles` is parked as B322.
+- **D91** (2026-10-05, accepted by the owner from the session's recommendations): B202: setup prints resolution warnings with the plan, before the prompt.
+- **D92** (2026-10-05, accepted by the owner from the session's recommendations): B228: setup runs and bounded runs share one 4 MiB output bound.
+- **D93** (2026-10-05, accepted by the owner from the session's recommendations): B271: D55's cancellation extends to a pending setup receipt below the bound that this executable cannot resume, including one whose native action refused before authorizing any transaction.
+- **D94** (2026-10-05, accepted by the owner from the session's recommendations): B294: the dead InfraProvider and Machine fields leave v1alpha1: the libvirt provider's `bmcEmulationDefaults.disableCertificateVerification` is removed; the bare-metal attachment's `vlan` is removed, coordinated with B74; bare metal no longer requires the `attachmentRef` nothing reads; `hardware.boot.nicRef` is removed; and `hardware.nics` MACs and `management.bmc` on a libvirt provider's Machines refuse at admission.
+- **D95** (2026-10-05, accepted by the owner from the session's recommendations): B294: one managed attachment name or bridge on two libvirt providers of one host refuses at admission, naming both providers.
+- **D96** (2026-10-05, accepted by the owner from the session's recommendations): B296: installation media is pinned as the managed-OS spec says: plan freezes the store record's size and digest, a declared checksum must match, and each attempt proves size and digest before first use.
+- **D97** (2026-10-05, accepted by the owner from the session's recommendations): B296: the Kickstart renders formats with their glibc langpack, repositories as `%post` `.repo` files with `gpgcheck`, `gpgkey` and `name`, and a credential-free external proxy that exempts the artifact endpoint; `passwordAuthentication: true` refuses while `initialPassword` does, and the architecture enumerates `x86_64`.
+- **D98** (2026-10-05, accepted by the owner from the session's recommendations): B17 is split: the managed-OS work area moves under a root-only 0700 parent in M1's digest window, and the rest of B17 is B303 in M3.
+- **D99** (2026-10-05, accepted by the owner from the session's recommendations): B19 is not split: progress emission tasks stay in roles, one shared plugin base carries per-capability evidence functions, postcondition decisions stay in Go (D11), and B19's text and the architecture spec's Not-yet-met line are refreshed.
+- **D100** (2026-10-05, accepted by the owner from the session's recommendations): B300: `version`'s `Dependency bundle` field is the embedded automation digest, computed at composition.
+- **D101** (2026-10-05, accepted by the owner from the session's recommendations): B98 stays parked for pruning the narration; the amendment allowing short rationale and safety-invariant comments in the architecture spec, with a shrink-only per-package ratchet on the comment count, splits out as B336 in M1.
+- **D102** (2026-10-05, accepted by the owner from the session's recommendations): B301 adds a Not-yet-met line for removals that release service socket reservations without proving the sockets free; the proof is parked as B323, for the per-capability evidence functions B19 creates.
+- **D103** (2026-10-05, accepted by the owner from the session's recommendations): B73: the per-machine installer ISO is published only under the private token subtree and withdrawn after completion, the in-installer `curl --cacert` fetch stays, and private delivery requires a verified controller-to-BMC leg, because InsertMedia carries the token URL.
+- **D104** (2026-10-05, accepted by the owner from the session's recommendations): B305 and B319: on the xFusion iBMC, under `established` trust, the client reads `VerifyCertificate` and `HttpsTransferCertVerification` before the insert and refuses private delivery when either reads false, the operator importing the CA out of band, within B73's repair; the manager SecurityService root-CA import follows as B319, before the first real-hardware row.
+- **D105** (2026-10-05, accepted by the owner from the session's recommendations): the parked B96 to B107, B122, B161 to B167, B171, B180, B181, B193, B194, B196, B197, B199, B226, B227, B229 to B232, B235, B238, B243, B245, B247, B248, B256, B258, B261 to B263, B266 to B269, B273 and B274 stay parked.
+- **D106** (2026-10-05, accepted by the owner from the session's recommendations): B288: a RHEL controller accepts `lorax` and `xorriso` the operator installed from the host's own entitled, vendor-signed repositories, proved by presence like any root; an entitled-source adapter is parked as B330.
+- **D107** (2026-10-05, accepted by the owner from the session's recommendations): B292 and B297: the execution foundation keeps its byte-exact guard at every launch and gains a named check, a refusal naming package, build and file, a documented hold procedure and a regeneration tool in B292; in B297, within X43's window, setup qualifies vendor-signed glibc and libgcc within the qualified minor against the RPM database and records the proved digests as the receipt's requirement.
+- **D108** (2026-10-05, accepted by the owner from the session's recommendations): B292: on a FIPS-mode controller host, Bootwright's runtime brings its own cryptography, which the docs state and preflight reports beside the host's FIPS mode; a FIPS-qualified runtime is parked as B331.
+- **D109** (2026-10-05, accepted by the owner from the session's recommendations): the real-hardware test runs this build on a separate RHEL 9.8 controller in a subnet the BMC network reaches on the artifact ports, touching nothing on the owner's bastion; B280's host guidance says so.
+- **D110** (2026-10-05, accepted by the owner from the session's recommendations): B301 and B73: the operator owns the controller host's firewall, and the docs list each listener's ports by source with firewalld commands; a per-socket readiness check in preflight and plan is B318, before B78.
+- **D111** (2026-10-05, accepted by the owner from the session's recommendations): B282: operator-named paths are opened by a bounded helper under the invoking credentials, which passes the descriptors to root, and root keeps every proof.
+- **D112** (2026-10-05, accepted by the owner from the session's recommendations): B283: the machines spec documents what `auth.operatorIdentity` does today; running its client under the invoking account is parked as B332, after B282.
+- **D113** (2026-10-05, accepted by the owner from the session's recommendations): B305: generated serving certificates stay P-256; B305 records the iBMC's RSA premise with its check and, as the workaround, a `contextStore` RSA-2048 certificate set with `secret set`; a `keyType` for generation follows only if that check fails.
+- **D114** (2026-10-05, accepted by the owner from the session's recommendations): B299: a DNSServer keeps its wildcard bind default, the new pre-start check names a colliding socket, and the examples and docs declare explicit binds; a derived default is parked as B333.
+- **D115** (2026-10-05, accepted by the owner from the session's recommendations): B301: the examples bind their emulated BMCs to loopback, and the docs state that a privileged or cleartext-credential listener binds loopback or a host-only address unless its network is trusted; emulator TLS, a refusal of a non-loopback bind address and a confined SELinux type are parked as B334.

@@ -708,7 +708,7 @@ continuation of an operation frozen by another build therefore runs under this
 build's bound, which changes no effect, no order and no evidence.
 
 Not yet met: roles still share host scratch paths, so the bound is one block;
-tracked as [B17](milestones/m1.md#b17).
+tracked as [B303](milestones/m3.md#b303).
 
 An operation is `paused` when execution stops because no block is startable,
 nothing is still running, no block is failed or unknown, and pending blocks

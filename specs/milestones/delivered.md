@@ -1567,7 +1567,7 @@ run.
 
 **Constraints left behind:** the registered-hosts read sends the watcher token
 in cleartext on the machine network and is proved only against the installer's
-own generated files ([B260](backlog.md#b260)); completion evidence gains a
+own generated files ([B260](m3.md#b260)); completion evidence gains a
 `restored` member, which a build before X34 refuses; the automation digest
 moves. Under D48 every follow-up was parked: B259 to B267. B264 is a
 cross-context safety gap: another context's network passes the host's
@@ -1615,7 +1615,7 @@ commit. `./scripts/ansible-check` was not required, since nothing under
 **Constraints left behind:** no record, request or automation digest moves, so
 no context is stranded. A never-started pending receipt below the bound still
 refuses after the host's release moves, with a remedy an upgraded host cannot
-follow ([B271](backlog.md#b271)). Under D48 every follow-up was parked: B268
+follow ([B271](m1.md#b271)). Under D48 every follow-up was parked: B268
 to B271.
 
 ### X36 — the resolution test off the host's foundation
@@ -1695,7 +1695,7 @@ then run `python3 scripts/tools/ansible_check_bootstrap.py`. A cache serves one
 lock at a time, so a worktree whose tree predates X37 refuses a rebuilt cache
 and needs its own `BOOTWRIGHT_CACHE_DIR`. The first CI run after X37 starts
 with cold caches: the `.cache` key hashes the tool locks X37 changed and has no
-restore keys, and setup-go's key names the Go version. Under D48 every follow-up was parked: [B272](backlog.md#b272), CI's race job,
+restore keys, and setup-go's key names the Go version. Under D48 every follow-up was parked: [B272](m1.md#b272), CI's race job,
 which never runs although two pages say it runs nightly;
 [B273](backlog.md#b273), Go 1.27; and [B274](backlog.md#b274), the gate on
 CPython 3.14.
@@ -1705,7 +1705,7 @@ CPython 3.14.
 **Owner:** State reconciliation; run by the operator, who ran
 [lab-rhel](../../examples/lab-rhel/README.md#run-it) end to end on a host and
 accepted its [ledger row](../../docs/acceptance.md#ledger) the same day.
-**Items:** B49.
+**Items:** B49, B72. **Decisions:** D58.
 
 **Outcome:** the first owner-accepted real-host apply and destroy. On build
 `35de8f40`, a clean build descending from X22's landing, Bootwright prepared
@@ -1713,19 +1713,20 @@ the controller, served the four managed services, realized the libvirt host
 and a guest behind its emulated Redfish BMC, installed RHEL 9.8 twice, settled
 a repeated apply, refused a removal while the guest ran, removed what it had
 created while retaining the shared clients, and after a host restart powered
-the guest on and off through its BMC. The JSON `status` checks wrote one
-document and nothing to standard error each, ending with `runtime.privilege`
-for a missing sudo password and for a sudoers rule denying the executable.
+the guest on and off through its BMC. The owner accepted the same row for B72,
+managed RHEL on emulated bare metal, on 2026-10-05 (D58). The JSON `status`
+checks wrote one document and nothing to standard error each, ending with
+`runtime.privilege` for a missing sudo password and for a sudoers rule denying
+the executable.
 Every domain inspection read `/proc/1/net` under the elevated worker. The
 ledger row holds the commands as run, each operation's outcome, the refusals
 met and the log digests.
 
 **Constraints left behind:** the run does not show
 `qemu-img info --force-share` succeeding against a running domain's disk,
-which B49 also named ([B277](backlog.md#b277)). It found [B275](backlog.md#b275) and
-[B276](backlog.md#b276) and a new sighting of [B270](backlog.md#b270), all
-parked under D48. Lifecycle concurrency may now rise above one through
-[B17](m1.md#b17), and the adapter protocol, roles and codecs may collapse
-through [B19](m1.md#b19), [B20](m1.md#b20) and [B22](m1.md#b22), each with
-the real-host evidence its own item names. The same row also matches the
-baseline of [B72](m4.md#b72), which awaits the owner's acceptance.
+which B49 also named ([B277](m1.md#b277)). It found [B275](m1.md#b275) and
+[B276](m1.md#b276) and a new sighting of [B270](m1.md#b270), all parked
+under D48 until D56 attached them to M1. Lifecycle concurrency may now rise
+above one through [B303](m3.md#b303), and the adapter protocol, roles and
+codecs may collapse through [B19](m1.md#b19), [B20](m1.md#b20) and
+[B22](m1.md#b22), each with the real-host evidence its own item names.

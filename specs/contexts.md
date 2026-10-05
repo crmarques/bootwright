@@ -286,7 +286,7 @@ confirmation, admitted earlier continues, and each refuses at its next
 exclusive hold, a pinned `media add` keeping its stage for the command's
 repetition.
 Narrowing that boundary to the lease alone is
-[B18](milestones/m1.md#b18). Within it, Workspace
+[B18](milestones/m3.md#b18). Within it, Workspace
 supplies the operation area, the mutation-evidence replacement primitive and
 the reservation publication; Reconciliation owns what they contain and when
 they advance. It also lends a transaction-scoped secrets area, re-proving the

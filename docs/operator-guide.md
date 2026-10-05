@@ -62,7 +62,7 @@ same sockets and the same guest bridge.
 
 | Journey | What it runs | Gate |
 | --- | --- | --- |
-| [lab-rhel](../examples/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, a settled replay, a removal refused while the guest runs, a fresh apply and a host restart | [B72](../specs/milestones/m4.md#b72) operator gate |
+| [lab-rhel](../examples/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, a settled replay, a removal refused while the guest runs, a fresh apply and a host restart | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; next, M1's closing run ([D59](../specs/milestones/backlog.md#decisions)) |
 | [lab-sno](../examples/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
 | [lab-baremetal](../examples/lab-baremetal/README.md#run-it-today) | Admission and import of one physical Machine, then the refusal of its installation; the emulated rehearsal once B73 resumes | [B73](../specs/milestones/m4.md#b73) operator gate, blocked |
 
