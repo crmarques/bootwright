@@ -1637,3 +1637,65 @@ unchanged.
 **Gates:** `make quick` and `make check` pass. Built static and run in a private
 user and mount namespace with a foreign glibc loader bound over the host's, the
 test fails as CI did before the change and passes after it. No real-host run.
+
+### X37 — Go and Ansible dependency versions
+
+**Owner:** Architecture. Delivered out of sequence on the owner's explicit
+request of 2026-10-03 ("Bump all dependency versions"), which the owner
+narrowed on 2026-10-05 to the Go and Ansible development pins; CI's runner and
+the product's own pins, such as its service images, are outside it.
+
+**Outcome:** Go moves to go1.26.8, the newest 1.26 patch: `scripts/go`
+selects it and both modules' `go` directives name it, so CI's setup-go
+installs the same Go, and no GODEBUG default moves. The tools module moves
+govulncheck from v1.4.0 to v1.8.0 with its x/tools, x/mod, x/sync, x/sys and
+x/telemetry requirements, leaving its flags, output and exit statuses
+unchanged. The Ansible check gate moves to CPython 3.13.16 from
+python-build-standalone 20261003, and its lock to ansible-lint and
+ansible-compat 26.9.0, cryptography 50.0.2, filelock 4.0.9, MarkupSafe 3.0.4,
+platformdirs 4.12.2, pytest-mock 3.16.0 and urllib3 2.8.0, dropping
+ruamel.yaml.clib, which nothing requires any more. The
+pages that restate these versions move with them, and the
+[build knowledge](../../.agents/knowledge/build-toolchain.md) now says that a
+worktree nested inside another checkout gets that checkout's VCS stamp. The
+[dependency rule](../architecture.md#dependency-selection-and-reuse) says
+where each version lives.
+
+**Deliberately not moved:** Go 1.27, whose 1.27.1 is the newest release,
+because it changes product behavior ([B273](backlog.md#b273)); the root
+module's requirements, each already at its newest release (only three modules
+of its graph have newer ones, and tidy drops bumps of them); ansible-core
+2.21.4, the newest stable patch of the qualified minor (D10); the gate's 3.13
+minor, because `scripts/tools/ansible_check.py` runs ansible-test on 3.13 and
+the artifact lock holds cp313 wheels for ansible-test's exact sanity pins, so
+moving to 3.14, which fresh setups resolve, re-platforms the gate
+([B274](backlog.md#b274)); the 3.9.25 floor interpreter, the last 3.9 build,
+and the artifact lock; and the product fixtures
+`ansible/controller/requirements.txt`,
+`internal/controller/bundlelocal/catalog.json` and the import probe in
+`internal/controller/bundlelocal/probe_linux_amd64.go`, which still name
+3.13.15 and the earlier wheels, so no automation or bundle digest moves.
+
+**Guard tests:** `scripts/tools/ansible_check.py` refuses any interpreter but
+the pinned one and any package whose version differs from the lock;
+`TestQualifiedAnsibleMinorAgreesEverywhere` holds the lock's ansible-core to
+the qualified minor; and `make modules-check` and `make tidy-check` hold both
+module files.
+
+**Gates:** on go1.26.8, `make check-offline`, `make tidy-check`,
+`make modules-check`, `make vulncheck`, `make race` and `make quick` pass; the
+full `./scripts/ansible-check` passes on a cache bootstrapped from the new
+locks; and on the slice's final tree `make check`, `make docs-check`,
+`./scripts/check-commits` and `git diff --check` pass. No real-host run.
+
+**Constraints left behind:** every shared check cache prepared before X37
+holds CPython 3.13.15 and the earlier lock, which the gate now refuses: remove
+the `ansible-check` directory under the directory `scripts/cache-dir` prints,
+then run `python3 scripts/tools/ansible_check_bootstrap.py`. A cache serves one
+lock at a time, so a worktree whose tree predates X37 refuses a rebuilt cache
+and needs its own `BOOTWRIGHT_CACHE_DIR`. The first CI run after X37 starts
+with cold caches: the `.cache` key hashes the tool locks X37 changed and has no
+restore keys, and setup-go's key names the Go version. Under D48 every follow-up was parked: [B272](backlog.md#b272), CI's race job,
+which never runs although two pages say it runs nightly;
+[B273](backlog.md#b273), Go 1.27; and [B274](backlog.md#b274), the gate on
+CPython 3.14.

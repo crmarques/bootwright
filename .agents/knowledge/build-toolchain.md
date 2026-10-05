@@ -1,6 +1,6 @@
 # Build toolchain and version metadata
 
-The M1a gates use [scripts/go](../../scripts/go) to select exactly Go 1.26.7
+The M1a gates use [scripts/go](../../scripts/go) to select exactly Go 1.26.8
 through `GOTOOLCHAIN`. A module's `go` directive sets a minimum and a `toolchain`
 directive is a suggestion; neither alone fixes the toolchain used by every
 gate. Preserve the explicit selection when changing build tooling. The
@@ -21,12 +21,18 @@ version, commit, or source state from the toolchain's own VCS stamp, which is
 what a plain `go build` or `go install` of this module records.
 
 The Makefile still passes `-buildvcs=false` and injects the identity itself,
-because that toolchain stamp is missing exactly where much of the work happens:
-Go records no `vcs.*` setting when the module sits in a linked Git worktree,
-whose `.git` is a file rather than a directory. It stays silent under `auto` and
-produces neither a stamp nor an error under `-buildvcs=true`; the primary
-checkout stamps normally. Verified with Go 1.26.7 against a worktree of this
-repository. Never treat the toolchain stamp as the release identity.
+because that toolchain stamp is missing or wrong exactly where much of the work
+happens: Go takes only a `.git` directory as a repository root
+([vcs.go](https://github.com/golang/go/blob/go1.26.8/src/cmd/go/internal/vcs/vcs.go#L217-L218)),
+so a linked Git worktree, whose `.git` is a file, is never one. Outside any
+other checkout, Go records no `vcs.*` setting: it stays silent under `auto` and
+produces neither a stamp nor an error under `-buildvcs=true`. Nested inside
+another checkout, as a worktree created under the primary checkout is, Go walks
+up to that checkout and records its revision, its modified state and a module
+pseudo-version derived from them instead. The primary checkout stamps normally.
+Verified with Go 1.26.8 on 2026-10-03 against a clone of this repository, a
+worktree beside it, and a worktree nested in it whose `HEAD` differed from the
+clone's. Never treat the toolchain stamp as the release identity.
 
 `TestCompositionSuppliesRuntimeBuildInformation` and
 `TestCompositionIdentifiesTheBuild` in
@@ -37,7 +43,7 @@ tests do not qualify a release build pipeline. The
 [version output contract](../../specs/cli/commands.md#version-output) owns the
 required representation.
 
-Go 1.26.7's RSA/ECDSA key-generation APIs ignore their supplied `io.Reader`
+Go 1.26.8's RSA/ECDSA key-generation APIs ignore their supplied `io.Reader`
 unless the temporary `cryptocustomrand` compatibility setting is enabled; an
 erroring Reader therefore does not inject a failure into those operations.
 This was verified against the pinned toolchain sources and the

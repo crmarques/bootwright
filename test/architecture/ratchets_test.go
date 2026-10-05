@@ -52,12 +52,12 @@ func TestIgnoredGuidancePathsFailOnceNothingOutsideThemCitesThem(t *testing.T) {
 
 // ratchetGoStub stands in for scripts/go. It answers the two listings
 // quick-test takes with the output their templates define
-// (https://github.com/golang/go/blob/go1.26.7/src/cmd/go/internal/list/list.go#L119-L121),
+// (https://github.com/golang/go/blob/go1.26.8/src/cmd/go/internal/list/list.go#L119-L121),
 // omitting a directory whose files a build tag excludes, as ./... does
-// (https://github.com/golang/go/blob/go1.26.7/src/cmd/go/internal/modload/search.go#L142-L144),
+// (https://github.com/golang/go/blob/go1.26.8/src/cmd/go/internal/modload/search.go#L142-L144),
 // and fails after printing when list-fails exists, as a listing with an
 // erroneous package does
-// (https://github.com/golang/go/blob/go1.26.7/src/cmd/go/internal/list/list.go#L185-L188).
+// (https://github.com/golang/go/blob/go1.26.8/src/cmd/go/internal/list/list.go#L185-L188).
 const ratchetGoStub = `#!/bin/sh
 case "$1" in
 list)
@@ -186,7 +186,7 @@ func TestQuickTestSelectsThePackagesWhoseTestsReadAChangedFile(t *testing.T) {
 
 // A go:embed directory pattern descends into every subdirectory, one holding
 // another package included, and stops only at a module boundary
-// (https://github.com/golang/go/blob/go1.26.7/src/cmd/go/internal/load/pkg.go#L2247-L2251),
+// (https://github.com/golang/go/blob/go1.26.8/src/cmd/go/internal/load/pkg.go#L2247-L2251),
 // so a file of c/completion, like internal/cli's completion scripts, is c's,
 // and a file of c/nested may be c's as well.
 func TestQuickTestSelectsEveryPackageWhoseDirectoryHoldsAChangedFile(t *testing.T) {

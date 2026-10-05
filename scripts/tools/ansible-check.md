@@ -1,4 +1,4 @@
-The Ansible gate runs on CPython 3.13.15 and builds that interpreter itself, so
+The Ansible gate runs on CPython 3.13.16 and builds that interpreter itself, so
 no development host is required to provide it. `./scripts/ansible-check`
 bootstraps on first use: it acquires the interpreter pinned by
 `ansible-check-interpreter.json`, verifies its byte count and SHA-256, extracts

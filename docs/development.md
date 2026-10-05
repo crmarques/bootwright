@@ -40,7 +40,7 @@ Build and verification tools are development dependencies; running the
 Bootwright executable never installs them. Dependency acquisition during a
 build may need network access. See [build knowledge](../.agents/knowledge/build-toolchain.md)
 for the exact toolchain selection and release metadata injection points.
-`scripts/tools` separately locks `govulncheck` v1.4.0 and its
+`scripts/tools` separately locks `govulncheck` v1.8.0 and its
 dependencies, keeping check tooling out of the application module graph.
 Development checks keep their own pinned tool versions for reproducible
 verification: the [Ansible check tool lock and setup](../scripts/tools/ansible-check.md)

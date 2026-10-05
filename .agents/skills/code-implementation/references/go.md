@@ -56,7 +56,7 @@ declares only the helpers it uses. `matchesGolden(t, name, data, terminated)`
 takes one JSON document. A terminated format must end in exactly one LF, which
 is stripped, and any other in no whitespace; the body must then equal its
 `json.Compact` form, because `json.Indent`
-[drops insignificant space inside its input](https://github.com/golang/go/blob/go1.26.7/src/encoding/json/indent.go#L137-L138),
+[drops insignificant space inside its input](https://github.com/golang/go/blob/go1.26.8/src/encoding/json/indent.go#L137-L138),
 so an indented golden is lossless only for compact input.
 `testdata/<name>.golden` holds that body indented by two spaces with one final
 LF; a digest is pinned as a one-key JSON object.

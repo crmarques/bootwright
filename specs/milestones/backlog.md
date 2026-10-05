@@ -101,6 +101,9 @@ Alias cell.
 | [B269](#b269) | new, 2026-10-03 (X35) | defect | Controller setup | A setup at the bound that fails after an effect reports it | Found after the M1 freeze (D48) |
 | [B270](#b270) | new, 2026-10-03 | defect | Infrastructure services, with Substrate | The proxy and emulated BMC units stop within their timeout | Found after the M1 freeze (D48) |
 | [B271](#b271) | new, 2026-10-03 (X35) | defect | Controller setup | A never-started setup survives a host release change | Found after the M1 freeze (D48) |
+| [B272](#b272) | new, 2026-10-03 (X37) | defect | Architecture | CI runs the race job, or no page says it does | Found after the M1 freeze (D48) |
+| [B273](#b273) | new, 2026-10-03 (X37) | enabling | Architecture | Build and gate on Go 1.27 | Found after the M1 freeze (D48); needs an owner decision |
+| [B274](#b274) | new, 2026-10-03 (X37) | enabling | Architecture | The Ansible check gate on CPython 3.14 | Found after the M1 freeze (D48); needs an owner decision |
 
 ### B94
 
@@ -519,6 +522,18 @@ The managed proxy (Squid) and the emulated BMC (sushy-tools) containers do not e
 ### B271
 
 A pending setup receipt that never took effect, below the bound, refuses on a host whose release moved since it was recorded, for example after a distribution upgrade, with `controller.unknown` and the remedy to restore the original input, which an upgraded host cannot do; D55's abandonment applies only at the bound (found in X35, older than it). **Exit evidence:** an exit for a never-started pending receipt after a release change, with a test.
+
+### B272
+
+CI's `race` job runs only on the `schedule` event, and GitHub starts a scheduled workflow only from the default branch, `main-v1`, which holds no `check.yml`, so the job has never run: the repository lists no scheduled run. Yet [development](../../docs/development.md) and the [Go reference](../../.agents/skills/code-implementation/references/go.md) say CI runs `make race` nightly (found in X37, older than it). **Exit evidence:** a race run that CI starts, such as a scheduled run once the workflow is on the default branch or a run on each push, or both statements corrected.
+
+### B273
+
+X37 moved Go only to the newest 1.26 patch, go1.26.8, while go1.27.1 is the newest release. Go 1.27 backs `encoding/json` with its v2 implementation, whose error texts may differ, drains an HTTP/1 response body on close and removes five TLS and X.509 GODEBUG settings, so the move changes product behavior and is the owner's decision (found in X37). **Exit evidence:** the owner's decision; for a move, `scripts/go` and both modules' `go` directives on 1.27 with every gate passing, and those changes reviewed against the product's JSON records, refusals and goldens and its HTTP acquisition.
+
+### B274
+
+The Ansible check gate runs on CPython 3.13, while fresh setups resolve the newest 3.14 patch, the newest minor ansible-core 2.21 supports as a controller. Moving the gate re-platforms it rather than bumping a pin: `scripts/tools/ansible_check.py` runs ansible-test with `--python 3.13` and `origin:python=3.13`, and `scripts/tools/ansible-test-artifacts.json` holds cp313 wheels of MarkupSafe and PyYAML for ansible-test 2.21.4's exact sanity pins (found in X37). **Exit evidence:** the owner's decision; for a move, the gate interpreter and its lock, the artifact lock and those arguments on 3.14, with the full gate passing.
 
 ## Retired
 
