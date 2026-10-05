@@ -106,6 +106,7 @@ Alias cell.
 | [B274](#b274) | new, 2026-10-03 (X37) | enabling | Architecture | The Ansible check gate on CPython 3.14 | Found after the M1 freeze (D48); needs an owner decision |
 | [B275](#b275) | new, 2026-10-05 | defect | State reconciliation, with CLI | `status` does not report a shared service a completed removal took back as done | Found after the M1 freeze (D48) |
 | [B276](#b276) | new, 2026-10-05 | defect | Infrastructure services | The lab-rhel time check waits long enough to answer | Found after the M1 freeze (D48) |
+| [B277](#b277) | new, 2026-10-05 (X38) | enabling | Substrate | A real host shows the forced-share read of a running domain's disk | Found after the M1 freeze (D48) |
 
 ### B94
 
@@ -546,6 +547,10 @@ After a completed destroy, `status` lists each shared service it removed as `[OK
 ### B276
 
 The [lab-rhel](../../examples/lab-rhel/README.md) README checks the managed time service with `chronyd -Q -t 3`, which timed out on 2026-10-05 against a managed server that had selected its upstream source 36 seconds earlier. The timeout bounds the whole query, and that server itself took four seconds from its start to selecting its source with `iburst` (10:44:44 to 10:44:48 UTC, and 10:59:40 to 10:59:44 UTC for the next instance), so three seconds is shorter than chrony needs to select a source (found in B49's run). Probes the recording session made at 11:02 UTC, outside the run's records, saw the same timeout and an offset with `-t 10`. **Exit evidence:** the README's check with a timeout that answers a synchronized managed server, run on a host.
+
+### B277
+
+[B49](delivered.md#x38--the-real-host-run-of-2026-10-05) also named what X20 proves only in-tree, `qemu-img info --force-share` reading a running domain's disk, and its accepted run of 2026-10-05 does not show it: the one such read ran in the first `destroy`'s quiescence probe, which keeps no evidence, and a failed read reports size 0 (found in X38). The lab-rhel run that [B19](m1.md#b19) and [B20](m1.md#b20) need can capture it. **Exit evidence:** a real-host record of the domain inspection reading a running domain's disk at its frozen size.
 
 ## Retired
 
