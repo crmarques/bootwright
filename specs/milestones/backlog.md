@@ -104,6 +104,8 @@ Alias cell.
 | [B272](#b272) | new, 2026-10-03 (X37) | defect | Architecture | CI runs the race job, or no page says it does | Found after the M1 freeze (D48) |
 | [B273](#b273) | new, 2026-10-03 (X37) | enabling | Architecture | Build and gate on Go 1.27 | Found after the M1 freeze (D48); needs an owner decision |
 | [B274](#b274) | new, 2026-10-03 (X37) | enabling | Architecture | The Ansible check gate on CPython 3.14 | Found after the M1 freeze (D48); needs an owner decision |
+| [B275](#b275) | new, 2026-10-05 | defect | State reconciliation, with CLI | `status` does not report a shared service a completed removal took back as done | Found after the M1 freeze (D48) |
+| [B276](#b276) | new, 2026-10-05 | defect | Infrastructure services | The lab-rhel time check waits long enough to answer | Found after the M1 freeze (D48) |
 
 ### B94
 
@@ -519,6 +521,8 @@ When a setup at the bound fails after its first durable effect, the cancellation
 
 The managed proxy (Squid) and the emulated BMC (sushy-tools) containers do not exit on SIGTERM within podman's 10-second stop timeout, and their unit templates set no stop timeout or success status, so every stop or removal waits ten seconds per unit, ends with SIGKILL (status 137) and leaves the unit `failed` in systemd. Seen on 2026-10-03 removing lab-rhel's `bootwright-lab-rhel-proxy-lab-proxy` and `bootwright-lab-rhel-bmc-rhel-01` units while preparing B49's run; the destroy itself completed. **Exit evidence:** unit templates whose stop ends cleanly, with their template goldens.
 
+Seen again on 2026-10-05 in B49's run: each removal, and the host restart, stopped both units with status 137 and left them `failed`, and after the last removal both stayed `failed` until the owner's `systemctl reset-failed` at 11:23 UTC.
+
 ### B271
 
 A pending setup receipt that never took effect, below the bound, refuses on a host whose release moved since it was recorded, for example after a distribution upgrade, with `controller.unknown` and the remedy to restore the original input, which an upgraded host cannot do; D55's abandonment applies only at the bound (found in X35, older than it). **Exit evidence:** an exit for a never-started pending receipt after a release change, with a test.
@@ -534,6 +538,14 @@ X37 moved Go only to the newest 1.26 patch, go1.26.8, while go1.27.1 is the newe
 ### B274
 
 The Ansible check gate runs on CPython 3.13, while fresh setups resolve the newest 3.14 patch, the newest minor ansible-core 2.21 supports as a controller. Moving the gate re-platforms it rather than bumping a pin: `scripts/tools/ansible_check.py` runs ansible-test with `--python 3.13` and `origin:python=3.13`, and `scripts/tools/ansible-test-artifacts.json` holds cp313 wheels of MarkupSafe and PyYAML for ansible-test 2.21.4's exact sanity pins (found in X37). **Exit evidence:** the owner's decision; for a move, the gate interpreter and its lock, the artifact lock and those arguments on 3.14, with the full gate passing.
+
+### B275
+
+After a completed destroy, `status` lists each shared service it removed as `[OK]`, and the JSON `shared` row as `done`: the rows take the state of the current operation's block for the service without reading the operation's verb, so a finished removal reads as a realized service (`internal/reconciliation/lifecycle/status.go`), and the [output spec](../cli/output.md) names the values without saying what `done` means after a removal. Seen on 2026-10-05 after the last destroy of B49's run (found then, older than it). **Exit evidence:** a status test after a completed destroy that does not report the removed services as done, with the output spec saying what each value means.
+
+### B276
+
+The [lab-rhel](../../examples/lab-rhel/README.md) README checks the managed time service with `chronyd -Q -t 3`, which timed out on 2026-10-05 against a managed server that had selected its upstream source 36 seconds earlier. The timeout bounds the whole query, and that server itself took four seconds from its start to selecting its source with `iburst` (10:44:44 to 10:44:48 UTC, and 10:59:40 to 10:59:44 UTC for the next instance), so three seconds is shorter than chrony needs to select a source (found in B49's run). Probes the recording session made at 11:02 UTC, outside the run's records, saw the same timeout and an offset with `-t 10`. **Exit evidence:** the README's check with a timeout that answers a synchronized managed server, run on a host.
 
 ## Retired
 
