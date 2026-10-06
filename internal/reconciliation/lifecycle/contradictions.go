@@ -22,15 +22,31 @@ const unreadableEvidenceExit = "restore the whole store from a matching backup, 
 // deletion must acknowledge the objects it abandons. Evidence the guard cannot
 // read admits no deletion at all, so over it the remedy names none.
 func deletionExit(view View) string {
+	command, readable := deletionCommand(view)
+	switch {
+	case !readable:
+		return unreadableEvidenceExit
+	case strings.HasSuffix(command, " "+allowOrphans):
+		return "delete the context with " + command + ", which abandons what it may still own"
+	}
+	return "delete the context with " + command
+}
+
+const allowOrphans = "--allow-orphans"
+
+// deletionCommand is the deletion the context guard admits, from its own
+// reading of the evidence, and false over evidence it cannot read, which
+// admits none. Status offers it where deletionExit names it.
+func deletionCommand(view View) (string, bool) {
 	evidence, readable := reconciliation.ReadEvidence(view.Evidence())
 	if !readable {
-		return unreadableEvidenceExit
+		return "", false
 	}
 	command := "bootwright context delete --name " + view.Identity().Name + " --purge"
-	if evidence == reconciliation.PristineEvidence() {
-		return "delete the context with " + command
+	if evidence != reconciliation.PristineEvidence() {
+		command += " " + allowOrphans
 	}
-	return "delete the context with " + command + " --allow-orphans, which abandons what it may still own"
+	return command, true
 }
 
 // refuseContradictions refuses the removal of an incomplete apply whose records

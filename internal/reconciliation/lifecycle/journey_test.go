@@ -2803,20 +2803,28 @@ func TestAnOperationNamesItsLogsRelativeToTheStateRoot(t *testing.T) {
 
 // Status reports each setup check in the controller's readiness vocabulary:
 // what stored evidence proves is ready, and anything it does not prove, a
-// missing record or an incomplete receipt alike, is not-ready.
+// missing record or an incomplete receipt alike, is not-ready. A binding the
+// first apply publishes is pending while the context holds no operation, and
+// not-ready once one exists without it.
 func TestStatusSetupChecksUseTheReadinessVocabulary(t *testing.T) {
 	for name, test := range map[string]struct {
+		applied         bool
 		prepare         func(*prerequisites.StorageView)
 		binding, bundle string
 	}{
 		"a bound context with a complete receipt": {prepare: func(*prerequisites.StorageView) {}, binding: "ready", bundle: "ready"},
-		"an unbound context": {
+		"an unbound context that holds no operation": {
+			prepare: func(view *prerequisites.StorageView) { view.State.Bindings = nil },
+			binding: "pending", bundle: "ready",
+		},
+		"an unbound context holding an operation": {
+			applied: true,
 			prepare: func(view *prerequisites.StorageView) { view.State.Bindings = nil },
 			binding: "not-ready", bundle: "ready",
 		},
-		"no controller record, so no binding and no bundle": {
+		"no controller record, so no bundle and no binding yet": {
 			prepare: func(view *prerequisites.StorageView) { view.Exists, view.Initialized = false, false },
-			binding: "not-ready", bundle: "not-ready",
+			binding: "pending", bundle: "not-ready",
 		},
 		"an incomplete receipt": {
 			prepare: func(view *prerequisites.StorageView) { view.State.Receipt.Status = "pending" },
@@ -2825,12 +2833,15 @@ func TestStatusSetupChecksUseTheReadinessVocabulary(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t, "artifact-server-lab")
+			if test.applied {
+				completeApply(t, h)
+			}
 			test.prepare(&h.workspace.controller)
 			status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := []SetupCheck{{ID: "controller-binding", Status: test.binding}, {ID: "dependency-bundle", Status: test.bundle}}
+			want := []SetupCheck{{ID: "controller-binding", Status: test.binding}, {ID: "execution-bundle", Status: test.bundle}}
 			if !slices.Equal(status.SetupChecks, want) {
 				t.Fatalf("setup checks = %+v, want %+v", status.SetupChecks, want)
 			}

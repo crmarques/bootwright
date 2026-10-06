@@ -92,15 +92,12 @@ answer, the refusal says why, and a local account or a clean root login
 
 ### A network home with root squash
 
-Bootwright reads the input directory, the Context file, a media source and the
-secret files you name with your own credentials, so they may stay in a network
-home that squashes root. Root must still execute Bootwright itself, so copy
-`bin/bootwright` to a local directory such as `/usr/local/bin` and run it from
-there. Where root cannot, sudo refuses with `unable to execute` and the
-refusal names that local copy as the remedy.
-`--ssh-id-file` is still opened by root until
-[B283](../specs/milestones/m1.md#b283), so keep a key you offer there on local
-disk.
+Bootwright reads the input directory, the Context file, a media source, the
+secret files and a key you offer with `--ssh-id-file` with your own
+credentials, so they may stay in a network home that squashes root. Root must
+still execute Bootwright itself, so copy `bin/bootwright` to a local directory
+such as `/usr/local/bin` and run it from there. Where root cannot, sudo refuses
+with `unable to execute` and the refusal names that local copy as the remedy.
 
 ### A FIPS-mode controller
 
@@ -132,7 +129,7 @@ same sockets and the same guest bridge.
 
 | Journey | What it runs | Gate |
 | --- | --- | --- |
-| [lab-rhel](../examples/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, a settled replay, a removal refused while the guest runs, a fresh apply and a host restart | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; next, M1's closing run ([D59](../specs/milestones/backlog.md#decisions)) |
+| [lab-rhel](../examples/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, a session through exec and rsh, a restart, a settled replay, a removal refused while the guest runs, a fresh apply and a host restart | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; next, M1's closing run ([D59](../specs/milestones/backlog.md#decisions)) |
 | [lab-sno](../examples/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
 | [lab-baremetal](../examples/lab-baremetal/README.md#run-it-today) | Admission and import of one physical Machine, then the refusal of its installation; the emulated rehearsal once B73 resumes | [B73](../specs/milestones/m4.md#b73) operator gate, blocked |
 

@@ -212,6 +212,54 @@ func TestLabRHELExampleIsRealizableInFull(t *testing.T) {
 // Each capability must derive a complete frozen request from the example
 // alone, because that request is what an operator's apply would freeze, and
 // the whole set must order into one plan.
+func TestAnUnknownFieldInOneLabRHELObjectIsItsOnlyRefusal(t *testing.T) {
+	sources := labExampleSources(t)
+	probed := 0
+	for i, file := range sources.Files {
+		text := string(file.Bytes())
+		at := strings.Index(text, "\nspec:\n  ")
+		if at < 0 {
+			continue
+		}
+		probed++
+		files := slices.Clone(sources.Files)
+		files[i] = desiredstate.NewSourceFile(file.Path(), []byte(text[:at]+"\nspec:\n  extra: x\n"+text[at+len("\nspec:\n"):]))
+		_, _, err := wireCompiler().Compile(context.Background(), desiredstate.Sources{Files: files, Markers: sources.Markers, Roots: sources.Roots})
+		found := diagnostics.Of(err)
+		if len(found) != 1 || found[0].Field != "$.spec.extra" || found[0].Source == nil || found[0].Source.Path != file.Path() {
+			t.Errorf("an unknown field in %s gave %d diagnostics: %+v", filepath.Base(file.Path()), len(found), found)
+		}
+	}
+	if probed != labExampleFiles {
+		t.Fatalf("probed %d of %d example files", probed, labExampleFiles)
+	}
+}
+
+func TestAnUndeclaredInstallAddressIsRefusedOnlyWhereItIsAuthored(t *testing.T) {
+	sources := labExampleSources(t)
+	files := slices.Clone(sources.Files)
+	replaced := 0
+	for i, file := range files {
+		if filepath.Base(file.Path()) == "rhel-01.yaml" && strings.Contains(string(file.Bytes()), "installAddressRef: ip\n") {
+			files[i] = desiredstate.NewSourceFile(file.Path(), []byte(strings.Replace(string(file.Bytes()), "installAddressRef: ip\n", "installAddressRef: missing\n", 1)))
+			replaced++
+		}
+	}
+	if replaced != 1 {
+		t.Fatalf("rewrote %d rhel-01 install addresses", replaced)
+	}
+	_, _, err := wireCompiler().Compile(context.Background(), desiredstate.Sources{Files: files, Markers: sources.Markers, Roots: sources.Roots})
+	found := diagnostics.Of(err)
+	if !slices.ContainsFunc(found, func(d diagnostics.Diagnostic) bool { return d.Field == "$.spec.network.installAddressRef" }) {
+		t.Fatalf("the undeclared install address was not refused: %+v", found)
+	}
+	for _, d := range found {
+		if strings.HasPrefix(d.Field, "$.spec.access") {
+			t.Errorf("the undeclared install address was refused again as access: %+v", d)
+		}
+	}
+}
+
 func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))

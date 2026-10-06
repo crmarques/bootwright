@@ -2,6 +2,7 @@ package encryption
 
 import (
 	"context"
+	"slices"
 
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -63,7 +64,7 @@ func (s Service) Status(ctx context.Context, request EncryptionStatusRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	result := &StatusResult{Keys: []secretstore.Key{}}
+	result := &StatusResult{Context: selected.Context, Keys: []secretstore.Key{}}
 	err = s.access.View(ctx, selected.Context, false, func(session secretstore.StoreSession, selection secretstore.Selection) error {
 		if session == nil {
 			return nil
@@ -122,6 +123,12 @@ func (s Service) Rotate(ctx context.Context, request EncryptionRotateRequest) (*
 				return secretstore.Failure("store.conflict", "key rotation was not confirmed")
 			}
 		}
+		// Rotation re-encrypts every version the store holds under one fresh
+		// key and keeps no other, so each key held before it is retired.
+		snapshot, err := session.Inspect(ctx)
+		if err != nil {
+			return err
+		}
 		active, err := session.Rotate(ctx)
 		if err != nil {
 			return err
@@ -129,6 +136,14 @@ func (s Service) Rotate(ctx context.Context, request EncryptionRotateRequest) (*
 		result.Implementation = selection
 		result.ActiveKey = active
 		result.Changed = true
+		for _, key := range snapshot.Keys {
+			result.RetiredKeys = append(result.RetiredKeys, key.ID)
+		}
+		slices.Sort(result.RetiredKeys)
+		result.ReencryptedVersions = len(snapshot.Versions)
+		for _, version := range snapshot.Versions {
+			result.ReencryptedParts += len(version.Parts)
+		}
 		return nil
 	})
 	if err != nil {

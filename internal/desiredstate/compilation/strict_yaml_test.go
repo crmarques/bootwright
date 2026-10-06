@@ -129,6 +129,9 @@ func TestStrictYAMLAcceptsWhatTheGrammarPermits(t *testing.T) {
 		{name: "exponent ratio", probe: strictYAMLRatio("5e-1"), want: []string{"api.reference $.spec.clusterRef"}},
 		{name: "underflowing ratio", probe: strictYAMLRatio("1e-999"), want: []string{"api.reference $.spec.clusterRef"}},
 		{name: "integer ratio", probe: strictYAMLRatio("1"), want: []string{"api.reference $.spec.clusterRef"}},
+		{name: "signed zeros in a native map", probe: strictYAMLPlaybook("{zero: 0, negative: -0, positive: +0, octal: '0644'}")},
+		{name: "negative zero integer", probe: strings.Replace(strictYAMLPlaybook("{}"), "  playbook:", "  order: -0\n  playbook:", 1)},
+		{name: "positive zero integer", probe: strings.Replace(strictYAMLPlaybook("{}"), "  playbook:", "  order: +0\n  playbook:", 1)},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			got, elsewhere := strictYAMLCompile(t, row.probe)
@@ -171,7 +174,7 @@ func strictYAMLRefusals() []strictYAMLRow {
 		{"plain merge key", strictYAMLSecret("  <<: {type: opaque}\n"), []string{"yaml.alias $.spec"}},
 		{"quoted merge key", strictYAMLSecret("  '<<': {type: opaque}\n"), []string{"yaml.alias $.spec"}},
 		{"tagged merge key", strictYAMLSecret("  !!merge <<: {type: opaque}\n"), []string{"yaml.alias $.spec"}},
-		{"unknown field", strictYAMLSecret("  type: opaque\n  unexpected: value\n"), []string{"api.field $.spec"}},
+		{"unknown field", strictYAMLSecret("  type: opaque\n  unexpected: value\n"), []string{"api.field $.spec.unexpected"}},
 		{"null capabilities element", strictYAMLMachine("  capabilities: [container-runtime, null]\n  os: {provided: true}\n  access: {local: true}\n"), []string{"api.type $.spec.capabilities[1]"}},
 	}
 	for _, tag := range []string{"!custom opaque", "!!binary b3BhcXVl", "!!timestamp 2001-12-14"} {
@@ -187,12 +190,14 @@ func strictYAMLRefusals() []strictYAMLRow {
 	for _, boolean := range []string{"'true'", "True", "yes"} {
 		rows = append(rows, strictYAMLRow{"provided " + boolean, strictYAMLMachine("  os: {provided: " + boolean + "}\n  access: {local: true}\n"), []string{"api.type $.spec.os.provided"}})
 	}
-	for _, integer := range []string{"'32'", "3_2", "0x20", "0o40", "3.5"} {
+	for _, integer := range []string{"'32'", "3_2", "0x20", "0o40", "3.5", "0100", "00", "-010", "!!int 0100"} {
 		rows = append(rows, strictYAMLRow{"bytes " + integer, strictYAMLBytes(integer), []string{"api.type $.spec.source.generated.bytes"}})
 	}
-	for _, ratio := range []string{".inf", ".nan", "0x1", "'0.5'", "1e999"} {
+	for _, ratio := range []string{".inf", ".nan", "0x1", "'0.5'", "1e999", "0100"} {
 		rows = append(rows, strictYAMLRow{"ratio " + ratio, strictYAMLRatio(ratio), []string{"api.type $.spec.autoscale.targetSizeRatio"}})
 	}
+	rows = append(rows, strictYAMLRow{"native leading zero", strictYAMLPlaybook("{mode: 0644}"), []string{"api.type $.spec.extraVars"}})
+	rows = append(rows, strictYAMLRow{"label leading zero", "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: probe\n  labels: {mode: 0644}\nspec:\n  type: opaque\n", []string{"api.type $.metadata.labels"}})
 	return rows
 }
 
@@ -206,6 +211,10 @@ func strictYAMLBytes(value string) string {
 
 func strictYAMLMachine(spec string) string {
 	return "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata:\n  name: probe\nspec:\n" + spec
+}
+
+func strictYAMLPlaybook(extraVars string) string {
+	return "apiVersion: bootwright.io/v1alpha1\nkind: CustomPlaybook\nmetadata:\n  name: probe\nspec:\n  gates: base\n  playbook: site.yml\n  target: {machines: [controller]}\n  extraVars: " + extraVars + "\n"
 }
 
 func strictYAMLRatio(value string) string {

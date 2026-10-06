@@ -1,0 +1,10 @@
+
+  Logs  /var/lib/bootwright/contexts/lab-rhel/state/runs/run-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+Progress
+  [RUNNING]  [1/1] Stop Machine/rhel-01
+  [RUNNING]  [1/1] Stop Machine/rhel-01: read the power state
+  [RUNNING]  [1/1] Stop Machine/rhel-01: shut down
+  [RUNNING]  [1/1] Stop Machine/rhel-01: shut down  still running, 11s
+  [RUNNING]  [1/1] Stop Machine/rhel-01: shut down  still running, 21s
+  [DONE]     [1/1] Stop Machine/rhel-01: off  26s

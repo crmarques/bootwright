@@ -52,17 +52,27 @@ func (s Service) unreopenable(ctx context.Context, name string, decided transiti
 	if ctx.Err() != nil {
 		return cause
 	}
-	if reported := diagnostics.Of(cause); len(reported) != 0 {
-		switch reported[0].Code {
-		case "secret.store.corrupt", "secret.store.crypto":
-			return s.lostBinding(ctx, name, decided, decided.basis, binding, "whose material the context's keyring cannot read: "+reported[0].Message)
-		}
+	if why, unreadable := unreadableMaterial(cause); unreadable {
+		return s.lostBinding(ctx, name, decided, decided.basis, binding, why)
 	}
 	listed, err := s.binder.Bindings(ctx, custody.BindingsRequest{ContextName: name})
 	if err != nil || slices.Contains(listed, binding) {
 		return cause
 	}
 	return s.lostBinding(ctx, name, decided, decided.basis, binding, "which the context's keyring no longer lists")
+}
+
+// unreadableMaterial says why a keyring failure proves a binding lost: the
+// keyring reports its material corrupt or undecryptable. Anything else proves
+// nothing about the binding.
+func unreadableMaterial(err error) (string, bool) {
+	if reported := diagnostics.Of(err); len(reported) != 0 {
+		switch reported[0].Code {
+		case "secret.store.corrupt", "secret.store.crypto":
+			return "whose material the context's keyring cannot read: " + reported[0].Message, true
+		}
+	}
+	return "", false
 }
 
 // lostBinding refuses the transition once the context still holds the
@@ -145,11 +155,14 @@ func objectsOf(plan reconciliation.Plan) []string {
 // frozen binding is lost: the operation, the binding its continuation or a
 // fresh removal of it reopens, and the objects it owns. A completed destroy
 // names none, and neither does one whose blocks are all done: only its own
-// verb acts on it, and that verb finalizes it, which reopens nothing.
+// verb acts on it, and that verb finalizes it, which reopens nothing. An apply
+// whose blocks are all done finalizes too, so finalizes says its own apply is
+// still a way on, while the removal that follows reopens the binding.
 type frozenReopen struct {
 	operation operationstore.Operation
 	binding   string
 	objects   []string
+	finalizes bool
 }
 
 func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, error) {
@@ -185,23 +198,42 @@ func frozenReopenOf(ctx context.Context, store OperationStore) (frozenReopen, er
 	if binding == "" {
 		return frozenReopen{}, nil
 	}
-	return frozenReopen{operation: operation, binding: binding, objects: objectsOf(ownedBy(operation.Verb, plan, states))}, nil
+	return frozenReopen{
+		operation: operation, binding: binding, objects: objectsOf(ownedBy(operation.Verb, plan, states)),
+		finalizes: operation.Verb == reconciliation.Apply && !pendingRemains(plan, states) && slices.Contains([]reconciliation.OperationState{
+			reconciliation.OperationRunning, reconciliation.OperationUnknown, reconciliation.OperationFailed,
+		}, operation.State),
+	}, nil
 }
 
-// nameLostBinding makes the deletion that abandons what the current operation
-// owns the only next step status offers once the keyring no longer lists the
-// binding that operation's continuation or removal reopens, and names why among
-// the contradictions, in the refusal's words. A listing that fails names
-// nothing.
+// nameLostBinding replaces the next steps status offers once the binding the
+// current operation's continuation or removal reopens is lost, and names why
+// among the contradictions, in the refusal's words. The binding is lost when
+// the keyring no longer lists it, or when its listing fails as the reopen
+// would, reporting the material corrupt or undecryptable: every keyring
+// session reads the same metadata and artifacts, so the reopen fails the same
+// way. Any other listing failure names nothing. The steps are the apply that
+// finalizes an apply whose blocks are all done, which reopens nothing, and
+// then the deletion that abandons what the operation owns.
 func (s Service) nameLostBinding(ctx context.Context, name string, result *StatusResult, frozen frozenReopen) {
 	if frozen.binding == "" {
 		return
 	}
+	why := "which the context's keyring no longer lists"
 	listed, err := s.binder.Bindings(ctx, custody.BindingsRequest{ContextName: name})
-	if err != nil || slices.Contains(listed, frozen.binding) {
+	switch {
+	case err != nil:
+		reason, unreadable := unreadableMaterial(err)
+		if !unreadable {
+			return
+		}
+		why = reason
+	case slices.Contains(listed, frozen.binding):
 		return
 	}
-	result.Contradictions = append(result.Contradictions,
-		lostBindingMessage(frozen.operation, frozen.binding, "which the context's keyring no longer lists", frozen.objects))
+	result.Contradictions = append(result.Contradictions, lostBindingMessage(frozen.operation, frozen.binding, why, frozen.objects))
 	result.NextSteps = []string{lostBindingExit(name)}
+	if frozen.finalizes {
+		result.NextSteps = []string{"bootwright apply", lostBindingExit(name)}
+	}
 }

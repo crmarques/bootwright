@@ -27,7 +27,10 @@ const (
 // selection filters presentation alone: it never changes the graph, the
 // evidence, or what a Machine's lifecycle position means.
 func Rows(catalog api.Catalog, clusters []string, owned map[string]machine.OwnershipState) ([]MachineRow, error) {
-	selection, filtered := normalize(clusters)
+	selection, filtered, err := selectClusters(catalog, clusters)
+	if err != nil {
+		return nil, err
+	}
 	memberships := machine.Memberships(catalog)
 	rows := []MachineRow{}
 	for _, object := range catalog.OfKind(api.Machine) {
@@ -94,9 +97,41 @@ func lifecycle(evidence machine.OwnershipState) string {
 	return LifecycleApplying
 }
 
+// selectClusters refuses a member that names no cluster the context selects,
+// since an empty listing would read as a cluster with no Machines, and names
+// the clusters an operator can select instead.
+func selectClusters(catalog api.Catalog, clusters []string) ([]string, bool, error) {
+	selection, filtered := normalize(clusters)
+	selectable := []string{}
+	for _, kind := range []api.Kind{api.ContainerCluster, api.StorageCluster} {
+		for _, cluster := range catalog.OfKind(kind) {
+			selectable = append(selectable, cluster.Name())
+		}
+	}
+	slices.Sort(selectable)
+	selectable = slices.Compact(selectable)
+	unknown := []string{}
+	for _, name := range selection {
+		if !slices.Contains(selectable, name) {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) == 0 {
+		return selection, filtered, nil
+	}
+	slices.Sort(unknown)
+	remedy := "the selected context declares no cluster; omit --clusters"
+	if len(selectable) != 0 {
+		remedy = "select one of " + strings.Join(selectable, ", ") + " with --clusters, or omit --clusters"
+	}
+	return nil, false, failure("access.target",
+		"the selected context declares no ContainerCluster or StorageCluster named "+strings.Join(unknown, ", "), remedy)
+}
+
 // normalize applies the list rules a cluster selector follows: an omitted
-// value selects every Machine, and a value that resolves to no member selects
-// none rather than silently selecting all.
+// value selects every Machine, and a value whose members are all empty
+// selects none rather than silently selecting all. Every other member must
+// name a selected cluster, which selectClusters proves.
 func normalize(clusters []string) ([]string, bool) {
 	if clusters == nil {
 		return nil, false

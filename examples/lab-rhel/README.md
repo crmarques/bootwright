@@ -113,10 +113,10 @@ destroyed.
 ## Run it
 
 Run the block one line at a time from the repository root. `setup`, `apply`,
-`machine stop` and `destroy` present what they will do and ask for
-confirmation, and any command may ask for sudo authorization. The automation
-is embedded in the executable, so run `setup` again after any `make build` that
-changes it; `apply` refuses the retained bundle otherwise.
+`machine restart`, `machine stop` and `destroy` present what they will do and
+ask for confirmation, and any command may ask for sudo authorization. The
+automation is embedded in the executable, so run `setup` again after any
+`make build` that changes it; `apply` refuses the retained bundle otherwise.
 
 ```sh
 make build
@@ -140,6 +140,12 @@ chronyd -Q -t 3 'server 192.0.2.1 iburst port 123'
 systemctl list-units 'bootwright-*'
 ./bin/bootwright apply
 ./bin/bootwright status
+./bin/bootwright machine list
+./bin/bootwright machine list --power-status
+./bin/bootwright machine exec --name rhel-01 cat /etc/os-release
+./bin/bootwright machine rsh --name rhel-01
+./bin/bootwright machine restart --name rhel-01
+./bin/bootwright machine exec --name rhel-01 uptime
 ./bin/bootwright apply
 ./bin/bootwright destroy --authorize data-loss
 ./bin/bootwright machine stop --name rhel-01
@@ -171,6 +177,19 @@ through its emulated BMC; `status` reports the result. A completed apply is
 terminal: the second `apply` settles without an effect, and editing the input
 first refuses with `lifecycle.state`, because there is
 [no reconciliation path](../../specs/state-reconciliation.md#lifecycle-unit).
+
+Before that replay, the machine commands reach the installed guest.
+`machine list` shows `rhel-01` applied, with its install address `198.51.100.11`
+as the contact, and `--power-status` asks its emulated BMC for its power.
+`machine exec` and `machine rsh` log in as `bootwright` with the fleet key at
+that install address and pin the host key its installation proved, so no trust
+prompt appears; leave the `rsh` shell with `exit`. `machine restart` proves the
+stop before the start and returns once the emulated BMC reports the guest
+powered on, which is before the guest has booted. Give it about a minute before
+the second `exec`: while the guest is still in its firmware, boot loader or
+early boot, `exec` makes one connection attempt and exits `255` with the
+client's connection error, so repeat it until it answers. Its answer, a fresh
+`uptime`, shows the guest came back.
 
 The removal deletes the guest's disks, so `destroy` consumes the `data-loss`
 authorization; without `--authorize data-loss` it refuses before registering

@@ -98,21 +98,16 @@ func selectionRows() []selectionRow {
 			dropped: append([]string{"Machine/orphan", "ClusterAddon/a3"}, withoutStorageOne...), excludedStorage: []string{"s1"},
 			problems: []string{"StorageCluster/s1 api.selection $.metadata.name"},
 		},
-		{
-			name: "6 empty container list", objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{})),
-			dropped: withoutContainers, excludedContainer: []string{"c0", "c1"},
-			problems: []string{"Environment/env api.value $.spec.containerClusters", "ContainerCluster/c0 api.selection $.metadata.name", excludedContainerOne},
-		},
+		{name: "6 empty container list", objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{})), asGiven: true},
 		{
 			name: "7 unresolved container name", objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{"missing"})),
 			dropped: withoutContainers, excludedContainer: []string{"c0", "c1"},
-			problems: []string{"Environment/env api.reference $.spec.containerClusters", "ContainerCluster/c0 api.selection $.metadata.name", excludedContainerOne},
+			problems: []string{"Environment/env api.reference $.spec.containerClusters[0]", "ContainerCluster/c0 api.selection $.metadata.name", excludedContainerOne},
 		},
 		{
 			name:    "8 duplicate container root",
 			objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"}), selectionContainer("c0", "c0-n")),
-			dropped: withoutContainerOne, excludedContainer: []string{"c1"},
-			problems: []string{"Environment/env api.reference $.spec.containerClusters", excludedContainerOne},
+			dropped: withoutContainerOne, excludedContainer: []string{"c1"}, problems: []string{excludedContainerOne},
 		},
 		{
 			name:              "9 an attached export keeps its storage cluster's nodes but not its other children",
@@ -147,6 +142,12 @@ func selectionRows() []selectionRow {
 			objects:     selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"}, "storageClusters", []string{"s1"})),
 			attachments: []environment.Attachment{c0e2, c1e2},
 			dropped:     withoutContainerOne, excludedContainer: []string{"c1"}, problems: []string{excludedContainerOne},
+		},
+		{
+			name:    "14 an empty container list beside a storage selection selects as if omitted",
+			objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{}, "storageClusters", []string{"s2"})),
+			dropped: append([]string{"Machine/orphan", "ClusterAddon/a3"}, withoutStorageOne...), excludedStorage: []string{"s1"},
+			problems: []string{"StorageCluster/s1 api.selection $.metadata.name"},
 		},
 	}
 }

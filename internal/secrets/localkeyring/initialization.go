@@ -111,7 +111,7 @@ func (i *Implementation) initializationMarker(ctx context.Context, selected secr
 	}
 	outcome, replaceErr := area.Replace(ctx, initializationPath, data, markerData)
 	if replaceErr != nil || outcome != secretstore.Committed {
-		return initializationRecord{}, publicationFailure(ctx, outcome, replaceErr)
+		return initializationRecord{}, publicationFailure(ctx, selected.Name, outcome, replaceErr)
 	}
 	return marker, nil
 }
@@ -146,7 +146,7 @@ func (i *Implementation) retryInitialization(ctx context.Context, selected secre
 	}
 	outcome, replaceErr := area.Replace(ctx, initializationPath, nextData, current)
 	if replaceErr != nil || outcome != secretstore.Committed {
-		return initializationRecord{}, publicationFailure(ctx, outcome, replaceErr)
+		return initializationRecord{}, publicationFailure(ctx, selected.Name, outcome, replaceErr)
 	}
 	if err := verifyInitializationArtifacts(ctx, area, selected, next, false); err != nil {
 		return initializationRecord{}, err
@@ -174,7 +174,7 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 		}
 	}()
 	if marker.MAC == "" {
-		signed, err := authenticateInitialization(ctx, area, marker, attempt.KeyID, key)
+		signed, err := authenticateInitialization(ctx, selected.Name, area, marker, attempt.KeyID, key)
 		if err != nil {
 			return nil, false, marker, err
 		}
@@ -227,7 +227,7 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 	defer clear(selectorData)
 	outcome, replaceErr := area.Replace(ctx, selectorPath, selectorData, selectorExpected)
 	if replaceErr != nil || outcome != secretstore.Committed {
-		return nil, false, marker, publicationFailure(ctx, outcome, replaceErr)
+		return nil, false, marker, publicationFailure(ctx, selected.Name, outcome, replaceErr)
 	}
 	keepKey = true
 	session := &session{implementation: i, context: selected, area: area, selector: selector, selectorData: slices.Clone(selectorData), index: index, keys: map[string][]byte{attempt.KeyID: key}}
@@ -277,7 +277,7 @@ func (i *Implementation) initializationKey(ctx context.Context, area secretstore
 	return key, false, nil
 }
 
-func authenticateInitialization(ctx context.Context, area secretstore.Area, marker initializationRecord, keyID string, key []byte) (initializationRecord, error) {
+func authenticateInitialization(ctx context.Context, contextName string, area secretstore.Area, marker initializationRecord, keyID string, key []byte) (initializationRecord, error) {
 	current, exists, err := area.ReadMutable(ctx, initializationPath, selectorMaximum)
 	if err != nil || !exists {
 		return marker, areaFailure(ctx, "store.corrupt", "secret initialization record changed before authentication", err)
@@ -293,7 +293,7 @@ func authenticateInitialization(ctx context.Context, area secretstore.Area, mark
 	}
 	outcome, replaceErr := area.Replace(ctx, initializationPath, data, current)
 	if replaceErr != nil || outcome != secretstore.Committed {
-		return marker, publicationFailure(ctx, outcome, replaceErr)
+		return marker, publicationFailure(ctx, contextName, outcome, replaceErr)
 	}
 	return signed, nil
 }
@@ -314,7 +314,7 @@ func (i *Implementation) reserveInitializationSeal(ctx context.Context, selected
 	}
 	outcome, replaceErr := area.Replace(ctx, ledgerPath(keyID), nextLedger, ledgerData)
 	if replaceErr != nil || outcome != secretstore.Committed {
-		return 0, publicationFailure(ctx, outcome, replaceErr)
+		return 0, publicationFailure(ctx, selected.Name, outcome, replaceErr)
 	}
 	return ledger.Seals, nil
 }

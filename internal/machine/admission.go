@@ -111,11 +111,7 @@ func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Val
 	if access.Has("ssh") {
 		ssh := access.Get("ssh").Default("port", api.IntegerValue("22"))
 		if !ssh.Has("addressRef") {
-			if _, ok := namedValue(network.Get("addresses"), "ssh"); ok {
-				ssh = ssh.With("addressRef", api.StringValue("ssh"))
-			} else {
-				ssh = ssh.With("addressRef", api.StringValue("fqdn"))
-			}
+			ssh = ssh.With("addressRef", api.StringValue(sshAddressRef(o, network)))
 		}
 		if !ssh.Has("user") && !ssh.Has("auth", "operatorIdentity") && !ssh.Has("auth", "passwordRef") {
 			ssh = ssh.With("user", api.StringValue("root"))
@@ -123,6 +119,26 @@ func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Val
 		access = access.With("ssh", ssh)
 	}
 	return access
+}
+
+// sshAddressRef names the address a session dials when access authors none.
+// An installed Machine's installation proves its host key at the install
+// address, which the controller routes to, so that address is the one a
+// session can prove; a name only a resolver knows would dial an endpoint the
+// proof does not cover. An authored ssh address still wins, and an OS-ready
+// Machine has no installation to prove anything. An install address the
+// Machine does not declare is refused where it is authored, so the session
+// falls back to the FQDN rather than repeat that refusal.
+func sshAddressRef(o api.Object, network api.Value) string {
+	if _, ok := namedValue(network.Get("addresses"), "ssh"); ok {
+		return "ssh"
+	}
+	if reference := network.Get("installAddressRef").Text(); installed(o) && reference != "" {
+		if _, declared := namedValue(network.Get("addresses"), reference); declared {
+			return reference
+		}
+	}
+	return "fqdn"
 }
 
 func normalizedInstallation(o api.Object, c api.Catalog, s api.Value) api.Value {

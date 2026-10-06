@@ -139,17 +139,6 @@ func fileSourceRemedy(name, kind string, kindDefault bool) string {
 }
 
 func setFileFlags(kind string) string {
-	switch kind {
-	case "opaque", "token", "dockerConfigJson":
-		return "--value-file <path>"
-	case "usernamePassword":
-		return "--username <username> --password-file <path>"
-	case "caBundle":
-		return "--certificate-file <path>"
-	case "tlsCertificate":
-		return "--certificate-file <path> --private-key-file <path>"
-	case "sshKeyPair":
-		return "--private-key-file <path> [--public-key-file <path>]"
-	}
-	return ""
+	shape, _ := shapeOf(kind)
+	return shape.file
 }

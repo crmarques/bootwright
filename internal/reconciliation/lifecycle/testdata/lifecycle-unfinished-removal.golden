@@ -12,7 +12,9 @@
       "contradictions": [
         "bravo (pending)"
       ],
-      "nextSteps": []
+      "nextSteps": [
+        "bootwright context delete --name lab --purge"
+      ]
     },
     "plan": {
       "code": "lifecycle.state",
@@ -43,7 +45,9 @@
       "contradictions": [
         "bravo (pending)"
       ],
-      "nextSteps": []
+      "nextSteps": [
+        "bootwright context delete --name lab --purge --allow-orphans"
+      ]
     },
     "plan": {
       "code": "lifecycle.state",
@@ -59,6 +63,37 @@
       "code": "lifecycle.state",
       "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
       "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
+    }
+  },
+  "beside unreadable evidence": {
+    "status": {
+      "operation": "operation-1",
+      "verb": "destroy",
+      "state": "done",
+      "next": "none",
+      "blocks": [
+        "alpha (done, 1 attempts)",
+        "bravo (pending, 0 attempts)"
+      ],
+      "contradictions": [
+        "bravo (pending)"
+      ],
+      "nextSteps": []
+    },
+    "plan": {
+      "code": "lifecycle.state",
+      "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
+      "remediation": "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
+    },
+    "apply": {
+      "code": "lifecycle.state",
+      "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
+      "remediation": "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
+    },
+    "destroy": {
+      "code": "lifecycle.state",
+      "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
+      "remediation": "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
     }
   }
 }

@@ -155,30 +155,60 @@ func TestAcquireStdinLineTransportBounds(t *testing.T) {
 	}
 }
 
+// A flag set its type does not take, and a --username no username part can
+// hold, are mistakes in how secret set was invoked: each names the Secret, its
+// type and the flags it takes, and nothing is read.
 func TestAcquireRejectsInvalidInputShapesBeforeReading(t *testing.T) {
+	const (
+		value    = "Secret fixture is of type token; secret set takes --value-file <path> or --value-stdin"
+		password = "Secret fixture is of type usernamePassword; secret set takes --username <username> with --password-file <path> or --password-stdin"
+		username = "Secret fixture takes a --username that is one nonempty UTF-8 line of at most 1 MiB with no whitespace or colon"
+	)
+	declared := func(kind, source string) secrets.Declaration {
+		return secrets.Declaration{Name: "fixture", Type: kind, Source: source}
+	}
 	tests := []struct {
 		name        string
 		declaration secrets.Declaration
 		input       secrets.Input
 		code        string
+		message     string
 	}{
-		{"wrong source", secrets.Declaration{Type: "token", Source: "generated"}, secrets.Input{ValueStdin: true}, "secret.source"},
-		{"neither", secrets.Declaration{Type: "token", Source: "contextStore"}, secrets.Input{}, "secret.input"},
-		{"both", secrets.Declaration{Type: "token", Source: "contextStore"}, secrets.Input{ValueFile: "unused", ValueStdin: true}, "secret.input"},
-		{"extra", secrets.Declaration{Type: "caBundle", Source: "contextStore"}, secrets.Input{CertificateFile: "unused", ValueStdin: true}, "secret.input"},
-		{"missing username", secrets.Declaration{Type: "usernamePassword", Source: "contextStore"}, secrets.Input{PasswordStdin: true}, "secret.input"},
-		{"invalid username", secrets.Declaration{Type: "usernamePassword", Source: "contextStore"}, secrets.Input{Username: "invalid name", PasswordStdin: true}, "secret.input"},
-		{"oversized username", secrets.Declaration{Type: "usernamePassword", Source: "contextStore"}, secrets.Input{Username: strings.Repeat("u", secrets.MaxPartBytes+1), PasswordStdin: true}, "secret.store.limit"},
-		{"unknown type", secrets.Declaration{Type: "future", Source: "contextStore"}, secrets.Input{}, "secret.declaration"},
+		{"wrong source", declared("token", "generated"), secrets.Input{ValueStdin: true}, "secret.source", ""},
+		{"neither", declared("token", "contextStore"), secrets.Input{}, "secret.input", value},
+		{"both", declared("token", "contextStore"), secrets.Input{ValueFile: "unused", ValueStdin: true}, "secret.input", value},
+		{"explicitly empty", declared("token", "contextStore"), secrets.Input{Provided: secrets.CertificateFileInput, ValueStdin: true}, "secret.input", value},
+		{"extra", declared("caBundle", "contextStore"), secrets.Input{CertificateFile: "unused", ValueStdin: true}, "secret.input", "Secret fixture is of type caBundle; secret set takes --certificate-file <path>"},
+		{"missing username", declared("usernamePassword", "contextStore"), secrets.Input{PasswordStdin: true}, "secret.input", password},
+		{"invalid username", declared("usernamePassword", "contextStore"), secrets.Input{Username: "invalid name", PasswordStdin: true}, "secret.input", username},
+		{"colon username", declared("usernamePassword", "contextStore"), secrets.Input{Username: "user:name", PasswordStdin: true}, "secret.input", username},
+		{"oversized username", declared("usernamePassword", "contextStore"), secrets.Input{Username: strings.Repeat("u", secrets.MaxPartBytes+1), PasswordStdin: true}, "secret.input", username},
+		{"unknown type", declared("future", "contextStore"), secrets.Input{}, "secret.declaration", ""},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			input := &testInput{reader: strings.NewReader("must-not-be-read")}
+			test.input.ContextName = "lab"
 			value, err := New(input).Acquire(context.Background(), test.declaration, test.input)
 			value.Clear()
 			assertFailureCode(t, err, test.code)
 			if input.reads != 0 {
 				t.Fatalf("invalid input performed %d stdin reads", input.reads)
+			}
+			if test.message == "" {
+				return
+			}
+			found := diagnostics.Of(err)[0]
+			remedy := "bootwright secret set --context lab --name fixture "
+			if test.declaration.Type == "usernamePassword" {
+				remedy += "--username <username> --password-stdin"
+			} else if test.declaration.Type == "caBundle" {
+				remedy += "--certificate-file <path>"
+			} else {
+				remedy += "--value-file <path>"
+			}
+			if !diagnostics.IsUsage(err) || found.Message != test.message || found.Remediation != remedy || found.Object == nil || found.Object.Kind != "Secret" || found.Object.Name != "fixture" {
+				t.Fatalf("refusal = %+v (usage %t), want the usage refusal %q with remedy %q", found, diagnostics.IsUsage(err), test.message, remedy)
 			}
 		})
 	}

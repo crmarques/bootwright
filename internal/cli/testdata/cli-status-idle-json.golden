@@ -11,10 +11,10 @@
     "setupChecks": [
       {
         "id": "controller-binding",
-        "status": "not-ready"
+        "status": "pending"
       },
       {
-        "id": "dependency-bundle",
+        "id": "execution-bundle",
         "status": "ready"
       }
     ],
@@ -38,7 +38,7 @@
     ],
     "secrets": {
       "declared": 3,
-      "bound": 0
+      "bindings": 0
     },
     "nextSteps": [
       "bootwright plan",

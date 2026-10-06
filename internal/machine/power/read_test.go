@@ -3,6 +3,7 @@ package power
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -91,6 +93,61 @@ func TestASurveyLeavesOutAnEmulatedControllerThatIsNotRealized(t *testing.T) {
 	}
 	if len(surveys) != 1 || surveys[0].Targets[0].Object != "metal" {
 		t.Fatalf("surveys = %+v", surveys)
+	}
+}
+
+// installationFailed answers as the Machine aggregate after an apply whose
+// guest block completed and whose installation then failed.
+type installationFailed struct{}
+
+func (installationFailed) Ownership(context.Context, string) (map[string]machine.OwnershipState, error) {
+	return map[string]machine.OwnershipState{"Machine/guest": {Verb: machine.VerbApply, State: machine.BlockFailed}}, nil
+}
+
+// A reading follows the block that realizes a Machine exactly as a power verb
+// does, so machine list reads a guest whose machine block completed whatever
+// its installation reached, and leaves out one whose block never completed.
+func TestAReadingFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		state machine.OwnershipState
+		read  bool
+	}{
+		{"machine block done", machine.OwnershipState{Verb: machine.VerbApply, State: machine.BlockDone}, true},
+		{"machine block pending", machine.OwnershipState{Verb: machine.VerbApply, State: machine.BlockPending}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			states := map[string]machine.OwnershipState{"guest": test.state}
+			surveys, err := readSurveysFor(catalog(), "lab", []string{"guest"}, realizedAs(states))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if surveyed := len(surveys) == 1 && len(surveys[0].Targets) == 1 && surveys[0].Targets[0].Object == "guest"; surveyed != test.read {
+				t.Fatalf("surveys = %+v, want guest read %t", surveys, test.read)
+			}
+			powered := New(stateSource{}, evidenceSource{states: states}, &pins{}, &boundary{},
+				&surveyor{reports: map[string]string{"guest": machine.PowerOn, "metal": machine.PowerOff}}, nil, nil, nil)
+			listed, err := inventory.New(stateSource{}, installationFailed{}, powered, nil).
+				List(context.Background(), inventory.ListRequest{ContextName: "lab", Power: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := ""
+			if test.read {
+				want = machine.PowerOn
+			}
+			for _, row := range listed.Machines {
+				if row.Name == "guest" && row.Power != want {
+					t.Fatalf("machine list read guest as %q, want %q", row.Power, want)
+				}
+			}
+		})
+	}
+	unread := errors.New("the current operation cannot be read")
+	if _, err := readSurveysFor(catalog(), "lab", selected(), func(string) (machine.OwnershipState, bool, error) {
+		return machine.OwnershipState{}, false, unread
+	}); !errors.Is(err, unread) {
+		t.Fatalf("an unreadable realization reported %v", err)
 	}
 }
 

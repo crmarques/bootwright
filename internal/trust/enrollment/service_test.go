@@ -533,3 +533,191 @@ func TestAnUnconfiguredServiceIsUnavailable(t *testing.T) {
 		t.Fatalf("canceled result = %v", err)
 	}
 }
+
+// storedRecords encodes records as the store holds them.
+func storedRecords(t *testing.T, records ...trust.Record) []byte {
+	t.Helper()
+	store := trust.Store{FormatVersion: trust.FormatVersion}
+	for _, record := range records {
+		store.Upsert(record)
+	}
+	data, err := store.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func storedRecord(machine, address string, port int, publicKey string) trust.Record {
+	key := trust.HostKey{Type: "ssh-ed25519", PublicKey: publicKey}
+	return trust.Record{
+		Machine: machine, Address: address, Port: port, KeyType: key.Type, PublicKey: key.PublicKey,
+		Fingerprint: key.Fingerprint(), Source: trust.SourceEnrollment, Recorded: "2026-09-16T00:00:00Z",
+	}
+}
+
+// A Machine this context no longer declares keeps no claim on an address the
+// context reassigned: the confirmed write that trusts node-a there removes the
+// stale record, and both the dry run and the plan show that removal.
+func TestAStaleRecordOfAnUndeclaredMachineIsReplacedInTheConfirmedWrite(t *testing.T) {
+	stale := storedRecord("retired", "192.0.2.10", 22, otherKey)
+	observed := trust.HostKey{Type: "ssh-ed25519", PublicKey: publicKey}
+	dry := newHarness(t)
+	dry.trust.data = storedRecords(t, stale)
+	report, err := enroll(t, dry, EnrollRequest{Machines: []string{"node-a"}, DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Pending != 2 || report.Recorded != 0 || len(dry.trust.written) != 0 || dry.prompt.asked != 0 {
+		t.Fatalf("dry run = %+v, wrote %d, asked %d", report, len(dry.trust.written), dry.prompt.asked)
+	}
+	want := []HostReport{
+		{Machine: "node-a", Address: "192.0.2.10", Port: 22, Action: ActionAdd, KeyType: "ssh-ed25519", Fingerprint: observed.Fingerprint()},
+		{
+			Machine: "retired", Address: "192.0.2.10", Port: 22, Action: ActionRemove, KeyType: "ssh-ed25519",
+			Fingerprint: stale.Fingerprint, Reason: "no longer declared; node-a now uses its address",
+		},
+	}
+	if !reflect.DeepEqual(report.Hosts, want) {
+		t.Fatalf("hosts = %+v, want %+v", report.Hosts, want)
+	}
+
+	confirmed := newHarness(t)
+	confirmed.trust.data = storedRecords(t, stale)
+	report, err = enroll(t, confirmed, EnrollRequest{Machines: []string{"node-a"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(confirmed.events.log, []string{"present", "confirm"}) || len(confirmed.presenter.shown) != 1 {
+		t.Fatalf("events = %v", confirmed.events.log)
+	}
+	if !reflect.DeepEqual(confirmed.presenter.shown[0].Hosts, want) {
+		t.Fatalf("presented %+v, want the removal before the prompt", confirmed.presenter.shown[0].Hosts)
+	}
+	if report.Recorded != 2 || len(confirmed.trust.written) != 1 {
+		t.Fatalf("recorded %d, wrote %d", report.Recorded, len(confirmed.trust.written))
+	}
+	after, err := trust.Decode(confirmed.trust.data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Hosts) != 1 || after.Hosts[0].Machine != "node-a" || after.Hosts[0].PublicKey != publicKey {
+		t.Fatalf("records = %+v", after.Hosts)
+	}
+}
+
+// A record of a Machine the context still declares is never removed, so a key
+// that would diverge from it refuses before anything is shown or asked, in a
+// dry run too, and names the re-trust of that Machine in this context.
+func TestADivergentPinRefusesBeforeTheDryRunReturns(t *testing.T) {
+	for _, request := range []EnrollRequest{
+		{Machines: []string{"node-a"}, DryRun: true},
+		{Machines: []string{"node-a"}},
+	} {
+		h := newHarness(t)
+		h.trust.data = storedRecords(t, storedRecord("node-b", "192.0.2.10", 22, otherKey))
+		_, err := enroll(t, h, request)
+		if err == nil || code(t, err) != "trust.identity" {
+			t.Fatalf("dry run %t: err = %v", request.DryRun, err)
+		}
+		reported := diagnostics.Of(err)[0]
+		if !strings.Contains(reported.Message, "192.0.2.10") || !strings.Contains(reported.Message, "node-a") ||
+			!strings.Contains(reported.Message, "node-b") ||
+			!strings.Contains(reported.Remediation, "--context lab --machines node-b --replace node-b") {
+			t.Fatalf("dry run %t: refusal = %+v", request.DryRun, reported)
+		}
+		if h.prompt.asked != 0 || len(h.presenter.shown) != 0 || len(h.trust.written) != 0 {
+			t.Fatalf("dry run %t: asked %d, presented %d, wrote %d", request.DryRun, h.prompt.asked, len(h.presenter.shown), len(h.trust.written))
+		}
+	}
+}
+
+type fixedState struct{ catalog api.Catalog }
+
+func (f fixedState) RenderEffective(context.Context, compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
+	return &compilation.EffectiveResult{Effective: f.catalog}, nil
+}
+
+// A divergent pin held by a Machine that no longer uses this context's trust
+// never names a re-trust of it, which would refuse. It names the input change
+// that drops its record, and once that Machine leaves the input the write that
+// trusts node-a removes the record.
+func TestADivergentPinHeldByAnExemptMachineNamesTheStepThatClearsIt(t *testing.T) {
+	h := newHarness(t)
+	h.trust.data = storedRecords(t, storedRecord("declared", "192.0.2.10", 22, otherKey))
+	_, err := enroll(t, h, EnrollRequest{Machines: []string{"node-a"}, SkipConfirmation: true})
+	want := "drop declared from the input with bootwright context update --name lab --input-dir <dir>, repeat this command, then restore declared the same way; " +
+		"this needs a context with no incomplete operation and an input in which no other object references declared, " +
+		"and after a completed apply the next apply no longer settles: it refuses the changed input until a destroy"
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" || reported[0].Remediation != want ||
+		!strings.Contains(reported[0].Message, "declared no longer uses this context's SSH trust (declares an explicit knownHostsRef)") {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	if _, err := enroll(t, h, EnrollRequest{Machines: []string{"declared"}, Replace: []string{"declared"}, SkipConfirmation: true}); code(t, err) != "access.unavailable" {
+		t.Fatalf("a re-trust of a Machine that no longer uses the store = %v", err)
+	}
+	var remaining []api.Object
+	for _, object := range catalog().Objects() {
+		if object.Name() != "declared" {
+			remaining = append(remaining, object)
+		}
+	}
+	h.service.state = fixedState{catalog: api.NewCatalog(remaining)}
+	report, err := enroll(t, h, EnrollRequest{Machines: []string{"node-a"}, SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("the remedy did not clear the pin: %v", err)
+	}
+	if removed := action(report, "declared"); removed.Action != ActionRemove || report.Recorded != 2 {
+		t.Fatalf("report = %+v", report)
+	}
+}
+
+// The controller Machine is reached locally, so a stale record it holds is
+// one no re-trust replaces and, once an apply has bound the context, no input
+// edit drops. The refusal says so instead of naming the drop that the
+// controller binding refuses.
+func TestADivergentPinHeldByTheControllerMachineNamesTheBindingThatKeepsIt(t *testing.T) {
+	h := newHarness(t)
+	h.trust.data = storedRecords(t, storedRecord("controller", "192.0.2.10", 22, otherKey))
+	_, err := enroll(t, h, EnrollRequest{Machines: []string{"node-a"}, SkipConfirmation: true})
+	want := "controller is the controller Machine, which leaves the input only when spec.controller.machineRef names another local Machine; " +
+		"before an apply binds this context to controller, and with no incomplete operation, make that change with " +
+		"bootwright context update --name lab --input-dir <dir>, repeat this command, then restore controller the same way; " +
+		"once an apply has bound this context, context update refuses any input that changes the controller Machine, " +
+		"so no input edit drops the record and only a separate context does"
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" || reported[0].Remediation != want ||
+		!strings.Contains(reported[0].Message, "controller no longer uses this context's SSH trust (reached locally)") {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	if len(h.trust.written) != 0 || h.prompt.asked != 0 {
+		t.Fatalf("wrote %d, asked %d", len(h.trust.written), h.prompt.asked)
+	}
+}
+
+// Every remedy that names a command names the context it acts on, so an
+// operator with another context selected never re-trusts or lists the wrong
+// one.
+func TestEveryHostKeyRemedyNamesTheContext(t *testing.T) {
+	changed := newHarness(t)
+	if _, err := enroll(t, changed, EnrollRequest{Machines: []string{"node-a"}, SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	changed.observer.keys["192.0.2.10"] = trust.HostKey{Type: "ssh-ed25519", PublicKey: otherKey}
+	for _, test := range []struct {
+		name    string
+		h       *harness
+		request EnrollRequest
+		want    string
+	}{
+		{"unknown Machine", newHarness(t), EnrollRequest{Machines: []string{"absent"}}, "bootwright machine list --context lab"},
+		{"unknown replacement", newHarness(t), EnrollRequest{Replace: []string{"absent"}}, "bootwright machine list --context lab"},
+		{"changed key", changed, EnrollRequest{Machines: []string{"node-a"}}, "bootwright machine trust --context lab --machines node-a --replace node-a"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := enroll(t, test.h, test.request)
+			if reported := diagnostics.Of(err); len(reported) != 1 || !strings.Contains(reported[0].Remediation, test.want) {
+				t.Fatalf("refusal = %+v (%v), want a remedy naming %q", reported, err, test.want)
+			}
+		})
+	}
+}

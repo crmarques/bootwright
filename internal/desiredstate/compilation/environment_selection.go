@@ -46,12 +46,14 @@ func selectingEnvironment(documents []desiredstate.Document, parseDiagnostics []
 			decodeDocument(document, ds)
 		}
 		if len(invalid) == 0 {
-			ds.add(diagnostics.Diagnostic{Severity: "error", Code: "api.invariant", Message: "exactly one Environment is required"})
+			ds.add(diagnostics.Diagnostic{Severity: "error", Code: "api.invariant", Message: "exactly one Environment is required",
+				Remediation: "add an Environment document, or pass the file that declares it with the others"})
 		}
 	} else {
 		for _, document := range candidates {
 			location := diagnostics.SourceLocation{Path: document.Path, Document: document.Index}
-			if !ds.add(diagnostics.Diagnostic{Severity: "error", Code: "api.invariant", Message: "exactly one Environment is required", Source: &location}) {
+			if !ds.add(diagnostics.Diagnostic{Severity: "error", Code: "api.invariant", Message: "exactly one Environment is required", Source: &location, Object: documentObject(documentBody(document)),
+				Remediation: "keep one Environment in the input and move the others out"}) {
 				break
 			}
 		}

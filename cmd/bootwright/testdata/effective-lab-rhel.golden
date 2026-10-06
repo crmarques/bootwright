@@ -68,7 +68,7 @@ spec:
         interface: enp1s0
   access:
     ssh:
-      addressRef: fqdn
+      addressRef: ip
       port: 22
       user: bootwright
       auth:

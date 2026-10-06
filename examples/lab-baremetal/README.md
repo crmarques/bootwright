@@ -60,8 +60,25 @@ make build
 `validate` admits all 14 files, and the import copies them. `secret generate`
 creates the serving certificate, the fleet key and `metal-01-host-key`.
 `secret check` fails on `lab-bmc-credentials`, the management controller's
-account, until `secret set` stores it with `--username` and `--password-stdin`;
-nothing in this block reads it.
+account, until `secret set` stores it; nothing in this block reads it. At a
+terminal, this command, with `<account>` replaced by that account's name,
+prompts for the password on standard error with echo off and reads one line:
+
+```sh
+./bin/bootwright secret set --context lab-baremetal --name lab-bmc-credentials --username <account> --password-stdin
+```
+
+From a script, refresh sudo first, because an invocation whose standard input
+is a pipe elevates without asking for a password, then pipe one line into the
+same command:
+
+```sh
+sudo -v
+printf '%s\n' "$BMC_PASSWORD" | ./bin/bootwright secret set --context lab-baremetal --name lab-bmc-credentials --username <account> --password-stdin
+```
+
+A sudo policy that logs input (`log_input`, `log_stdin`) records the password
+whichever way it is entered.
 
 `plan` refuses with `lifecycle.unsupported` for `Machine/metal-01`: a delivered
 host key would be readable from the publicly served installer image, and the

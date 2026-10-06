@@ -325,20 +325,24 @@ func areaFailure(ctx context.Context, code, message string, err error) error {
 	return secretstore.Failure(code, message)
 }
 
-func publicationFailure(ctx context.Context, outcome secretstore.Outcome, err error) error {
+// publicationFailure names, for a publication that may have happened, the
+// commands that inspect the store before a retry.
+func publicationFailure(ctx context.Context, contextName string, outcome secretstore.Outcome, err error) error {
 	if outcome == secretstore.NotCommitted {
 		if canceled := ctx.Err(); canceled != nil {
 			return canceled
 		}
 		return areaFailure(ctx, "store.conflict", "secret publication was not committed", err)
 	}
+	remedy := "inspect with " + secrets.Command(contextName, "encryption status") + " and " + secrets.Command(contextName, "check") +
+		" before retrying; " + secrets.Command(contextName, "encryption init") + " completes an interrupted cleanup"
 	if outcome == secretstore.Uncertain {
-		return secretstore.Failure("store.conflict", "secret publication has uncertain durability; inspect before retrying")
+		return diagnostics.NewFailureWithRemediation("secret.store.conflict", "secret publication has uncertain durability; inspect before retrying", "", remedy)
 	}
 	if outcome == secretstore.Committed {
-		return secretstore.Failure("store.conflict", "secret publication committed but did not finish successfully; inspect before retrying")
+		return diagnostics.NewFailureWithRemediation("secret.store.conflict", "secret publication committed but did not finish successfully; inspect before retrying", "", remedy)
 	}
-	return secretstore.Failure("store.conflict", "secret publication outcome is unknown; inspect before retrying")
+	return diagnostics.NewFailureWithRemediation("secret.store.conflict", "secret publication outcome is unknown; inspect before retrying", "", remedy)
 }
 
 func entryNames(ctx context.Context, area secretstore.Area, directory string) (map[string]bool, error) {

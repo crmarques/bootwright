@@ -21,7 +21,9 @@ publication, without requiring Environment input or generating Secret values.
 no `--type` override. It also completes interrupted cleanup. Changing the
 initialized type refuses. Subsequent commands
 resolve exact persisted references; absent, ambiguous or incompatible
-implementations never fall back. Rotation does not migrate implementations.
+implementations never fall back. Rotation confirms unless `--yes`, does not
+migrate implementations, and reports the keys it retired and how many versions
+and parts it re-encrypted.
 Encryption initialization/status/rotation require context identity and
 configuration, but no desired-state revision. Declaration-dependent commands
 require an imported revision and provide `context update --input-dir` guidance
@@ -62,19 +64,50 @@ versions.
 | tlsCertificate | `--certificate-file` and `--private-key-file` |
 | sshKeyPair | `--private-key-file`, optional `--public-key-file` |
 
-Reject inapplicable flags even when explicitly empty or false; the former source
-flags have no aliases. Fresh set does not confirm. Replacement confirms under
-the lease unless `--yes`; stdin
-replacement requires yes before any read. Equal material creates no new version.
-Multipart versions and generation batches publish atomically.
+A flag set that does not fit the declared type, including an inapplicable flag
+supplied explicitly empty or false, refuses with `secret.input` naming the
+Secret, its type and the flags it takes, before any material is read or the
+store is opened, and exits `2` as a usage failure with concise help. The former
+source flags have no aliases. Only the alternatives no type takes together,
+`--value-file` with `--value-stdin`, `--password-file` with `--password-stdin`
+and `--value-stdin` with `--password-stdin`, refuse before the context is read,
+as `cli.usage`. Fresh set does not confirm. File input is confirmed and read
+under the lease: a replacement confirms there unless `--yes`. Standard input
+is read with no store lock held, so a value still being typed or piped blocks
+no other command: under a shared read, set refuses an uninitialized store with
+`secret.store.uninitialized` and a replacement without `--yes` with
+`secret.input`, both before any read; it then reads with no lock, and under
+the lease refuses with `secret.store.conflict`, writing nothing, a current
+version another command stored meanwhile unless `--yes` was given. Equal
+material creates no new version. Multipart versions and generation batches
+publish atomically.
+
+When standard input is a terminal, "`--value-stdin` and `--password-stdin` at
+a terminal prompt on standard error with echo off and read one line for tokens
+and passwords; opaque and `dockerConfigJson` values refuse a terminal with a
+pipe-or-file remedy" (D73). The prompt names the Secret and its context, as
+`Token for Secret <name> in context <context>:` or
+`Password for Secret <name> in context <context>:`. Line editing and
+interrupts keep working, the typed line feed still moves to the next line, and
+the terminal settings are restored on every return, including an interrupted
+one. The line follows the token and password rule below. An opaque or
+`dockerConfigJson` value at a terminal refuses before any read, as a usage
+failure that exits `2`, because one typed line cannot carry its exact bytes;
+the remedy pipes the value into the same command or names `--value-file`.
+From a pipe or a file, standard input is read to its end. Inside an elevated
+invocation the terminal is the pseudo-terminal sudo allocates, whose line
+discipline honours the same settings.
 
 `generate [--name] [--renew]` selects every effective generated declaration or
 one named generated declaration. Unknown/non-generated names fail before writes.
 Without renew, create missing/stale values; renew replaces the selected set with
-no extra prompt. `check` validates all declarations and their current keyring
+no extra prompt. Generate reports by name the generated Secrets it changed and
+those it left unchanged. `check` validates all declarations and their current keyring
 material. `list` reads metadata only; an uninitialized store is empty.
 `delete --name` removes an active mapping, including orphans, while retaining
-bound versions; absence is unchanged, existing deletion confirms unless yes.
+bound versions; existing deletion confirms unless yes. A delete of a name with
+no current version changes nothing, asks nothing, and reports that nothing was
+deleted.
 
 `show --name --part` requires a part and uses only the current declared source.
 Parts are value for opaque/token/Docker JSON; username/password; certificate for
@@ -86,14 +119,19 @@ JSON. A partial writer failure emits no secondary diagnostic.
 
 Bounds: 1 MiB/part, 2 MiB/version, 64 MiB referenced material, 4096 versions and
 4096 bindings. Opaque preserves exact bytes. Tokens/passwords are nonempty UTF-8
-lines, strip one optional final LF and reject embedded CR/LF/NUL. Docker
+lines, strip one optional final LF and reject embedded CR/LF/NUL. A
+`--username` is one nonempty UTF-8 line within the part bound holding no
+whitespace and no colon; any other value refuses like a flag set that does not
+fit, as a usage failure naming the Secret. Docker
 JSON rejects duplicates/trailing data and requires a nonempty auths object.
 The limits apply to decoded, normalized parts. A token/password transport may
 carry one extra final LF; an extra non-LF byte still exceeds the part limit.
 Preflight transport bounds before reads and normalized bounds before material
 copies; this does not enlarge logical material limits.
 CA PEM contains CA certificates; TLS validates key agreement and server-auth
-suitability. SSH accepts one unencrypted Ed25519, RSA >=3072 or API-supported
+suitability, and a TLS leaf with an RSA key needs at least 2048 bits, refusing
+with `secret.input` naming the key's size; a CA bundle's roots are not held to
+that floor. SSH accepts one unencrypted Ed25519, RSA >=3072 or API-supported
 ECDSA private key, derives/verifies public material, and rejects DSA, trailing
 keys, unsupported curves and mismatches. Short of its final line feeds, the
 whole public key line, its edges and field separators included, holds no
@@ -108,14 +146,43 @@ Whole-version file reads hold verified no-follow handles and revalidate
 stability. Each file, and every directory
 above it, is opened under the invoking account's credentials, and root
 re-proves type, owner, link count, permissions and stability on each
-descriptor it receives. A permission denial names the authored path and who
-was denied: the invoking account, or root itself when the invoking account is
-root. Root cannot read a file in a root-squashed network home, so that refusal
-says to copy the file to a local directory and name the copy.
+descriptor it receives. "`secret set` keeps its strict input-file rule for
+files carrying a value, password, token or private key, and accepts a
+certificate or public-key file that is a regular single-link file, not
+writable by others and owned by the invoker or root" (D72):
+
+| Input file | Rule |
+| --- | --- |
+| `--value-file`, `--password-file`, `--private-key-file` | A regular file with one link, no setuid, setgid or sticky bit, owned by the invoking account, mode exactly `0600` or `0400` |
+| `--certificate-file`, `--public-key-file` | A regular file with one link, no setuid, setgid or sticky bit, owned by the invoking account or root, with no group or other write bit |
+
+Each refusal is `secret.input` at the authored path, naming its one condition
+and remedy: a missing file says to check the path; a symbolic link, such as a
+distribution's CA-bundle path, is refused and the remedy names its target with
+`readlink -f`; a symbolic link or non-directory above the file names the path
+without links with `realpath`; a directory, device, socket or FIFO says to
+name a regular file; a second hard link says to copy the file and name the
+copy; a setuid, setgid or sticky bit gives `chmod u-s,g-s,o-t`; a strict file
+of another owner says to copy it to a file the invoking account owns, and one
+of another mode names that mode and gives `chmod 600`; a certificate or public
+key of another owner than the invoking account or root says to copy it, and
+one writable by its group or others gives `chmod go-w`. A permission denial
+names the authored path and who was denied: the invoking account, or root
+itself when the invoking account is root. Root cannot read a file in a
+root-squashed network home, so that refusal says to copy the file to a local
+directory and name the copy.
 
 Generation uses OS entropy. Tokens use API entropy length; passwords 32 bytes;
 both use unpadded base64url. TLS/CA uses P-256, PKCS#8 PEM, self-signed X.509,
 random nonzero 128-bit serial, injected UTC-second clock and declared validity.
+A generated certificate starts 24 hours before its generation second, so a
+verifier whose clock trails accepts it, and ends `validityDays` after that
+second. A certificate an earlier build generated, starting at its generation
+second and ending `validityDays` later, stays current and is never re-minted;
+the validity window alone cannot tell such a certificate of `validityDays` N+1
+from one of N generated now, which the declaration fingerprint tells apart.
+"Generated serving certificates stay P-256" (D113); a serving certificate with
+an RSA key is a contextStore Secret stored with `secret set`.
 CA has signing constraints; TLS server-auth usage. SSH follows API type with
 RSA-3072 and OpenSSH public serialization. Entropy, time and input are injectable
 where the platform API accepts them. A typed adapter-local crypto-operation port
@@ -176,9 +243,18 @@ current declarations or replaced by other material; the lifecycle consumer
 [refuses](state-reconciliation.md#continuation-and-removal) the operation that
 names it.
 
-Canonical non-secret declaration fingerprints cover type/source/parameters and
-provenance. Changed declarations make retained values stale/orphaned, never
-automatically import/generate/delete. Context deletion permanently removes the
+"A Secret declaration's fingerprint drops its provenance and covers type,
+source and parameters only, and a stored version whose fingerprint equals the
+legacy one stays current" (D71). The legacy fingerprint is the one earlier
+builds stored, which also covered the declaring file's path and document index;
+a binding of such a version carries the declaration in that encoding. So an
+identical import from another directory, or with its documents reordered,
+keeps current every version stored under this rule. A version stored before it
+matches only through its legacy fingerprint, so it stays current while its
+declaring file's path and document index are unchanged, and the first import
+from another directory or with its documents reordered stales it once; nothing
+is re-minted or rewritten at the upgrade. Changed declarations make retained
+values stale/orphaned, never automatically import/generate/delete. Context deletion permanently removes the
 verified keyring under [permanent deletion](contexts.md#permanent-deletion),
 including an orphan-acknowledged deletion, which abandons the context's realized
 objects but still removes its keyring. Recreating a name starts with a new
@@ -263,8 +339,8 @@ mappings, bindings, and every JSON result continue to carry it. `sequence` is
 required and at least 1; a version without it is corrupt and refuses with
 `secret.store.corrupt`. A produced version takes no ordinal from a Secret of
 the same name, whose series counts its own versions alone. Compute the
-declaration fingerprint from full canonical
-parameters and provenance at acquisition, then authenticate the summary.
+declaration fingerprint from its canonical type, source and parameters at
+acquisition, then authenticate the summary.
 Original paths, source fields and generation options are not copied into each
 version. Current mappings contain `name` and `version`; bindings contain `id`
 and a sorted `versions` array. They retain whole versions for exact reopening.
@@ -296,7 +372,10 @@ bytes and context under the lease. Atomic `store.json` replacement is the
 visibility commit, followed by parent sync. Readers observe a complete old or
 new metadata snapshot. Outcomes distinguish not committed, committed and
 uncertain; post-rename failure requires inspection before retry and never
-falls back. Rotation reencrypts current, bound and produced material under a
+falls back. Its `secret.store.conflict` remedy, bound to the context, is to
+inspect with `secret encryption status` and `secret check` before retrying, and
+names `secret encryption init` as what completes an interrupted cleanup.
+Rotation reencrypts current, bound and produced material under a
 fresh key without changing logical IDs. Current metadata references only
 required encryption keys, so retired keys cannot prevent access once no retained material needs them.
 
@@ -342,19 +421,39 @@ import/export or FIPS claims.
 ## Results and failures
 
 Check/list JSON has context (name/mode) and name-sorted secrets. Check rows:
-name/type/source/parts/status/nullable version; statuses available/missing/stale/
-invalid. A complete negative check keeps its result and returns 1
-with safe diagnostics. List rows: name/type/source/parts/state/nullable
-currentVersion/boundVersions; states current/stale/orphaned. A version an
-earlier build froze from a file source is never listed.
+name/type/source/parts/status/nullable version/sequence; statuses
+available/missing/stale/invalid. A complete negative check keeps its result and
+returns 1 with one diagnostic per Secret that is not available: missing as
+`secret.input`, stale as `secret.source`, and invalid with the code and reason
+its validation gave. List rows: name/type/source/parts/state/nullable
+currentVersion/currentSequence/boundVersions; states current/stale/orphaned.
+`sequence` and `currentSequence` are the
+[per-secret ordinal](cli/output.md#json-output). A version an earlier build
+froze from a file source is never listed.
 
 Encryption status fields: initialized/nullable implementation/nullable activeKey/
 keys/items. Implementation exposes type/component references/state, no paths or
 config. Keys expose id/state/seals. Items reports currentVersions/boundVersions/
 materialParts/retainedArtifacts/cleanupRequired. Uninitialized has null IDs,
 empty keys and zero counts. Status never prompts/unlocks/initializes/writes.
+Human status lists the keys as a `KEY`, `STATE`, `SEALS` table and, when
+cleanup is required, closes with the next step `secret encryption init` bound to
+the context.
 
 Failures use the `secret.*` codes of the
 [diagnostic taxonomy](cli/output.md#diagnostic-taxonomy-and-order). Existing CLI
-envelope/exit/cancellation rules apply. Normal results, logs, diagnostics and
-evidence never contain material or material digests.
+envelope/exit/cancellation rules apply. Every refusal about a declared or named
+Secret carries the object `Secret/<name>`, for a valid name, and a remedy; a
+remedy that names a command binds it to the context with `--context`. A
+replacement or deletion declined at its prompt, or one no terminal can
+confirm, refuses with `secret.store.conflict`, writes nothing, and names
+`secret check` and then the same command with `--yes`. A missing
+or stale Secret's remedy is by its source: `secret generate --name <name>` for
+a generated Secret, which re-mints missing or stale material, and
+`secret set --name <name>` with the flags of its type for a contextStore
+Secret; current material its validation refuses adds `--renew` for a generated
+Secret. A name the context does not declare refuses with `secret.declaration`
+and points at `secret check`. Bind classifies every requested Secret before it
+reads any material, and one refusal names every missing or stale Secret at
+once. Normal results, logs, diagnostics and evidence never contain material or
+material digests.

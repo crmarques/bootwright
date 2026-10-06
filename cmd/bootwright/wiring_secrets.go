@@ -54,7 +54,7 @@ func wireSecrets(deps serviceDependencies, compiler compilation.Compiler) secret
 	}
 	selected := contexts.SelectionWorkspace{Workspace: deps.Workspace, Selection: deps.Selection}
 	access := secretstore.NewAccess(selected, resolver, deps.SessionMaterial)
-	acquisition := material.New(deps.SecretInput, material.Options{Operator: deps.Operator, Files: secretFiles(deps.Files)})
+	acquisition := material.New(deps.SecretInput, material.Options{Operator: deps.Operator, Files: secretFiles(deps.Files), Terminal: deps.SecretTerminal})
 	secrets := custody.New(access, compiler, acquisition, deps.Confirmer)
 	return secretServices{
 		custody:    secrets,

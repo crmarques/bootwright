@@ -29,14 +29,14 @@ func TestGraphSelectionUsesInjectedCapabilitiesAndOwnsResults(t *testing.T) {
 			t.Fatal("selection lost catalog or translated attachment")
 		}
 		edges[0].ExportRef = "changed"
-		return environment.Selection{Catalog: catalog, ExcludedContainerClusters: excluded, ExcludedStorageClusters: excluded, Problems: []environment.SelectionIssue{{Object: object, Issue: issue}}}
+		return environment.Selection{Catalog: catalog, ExcludedContainerClusters: excluded, ExcludedStorageClusters: excluded, Problems: []environment.SelectionIssue{{Object: object, Issue: issue, Target: "ContainerCluster/cluster"}}}
 	})
 	result := selector.Select(catalog)
 	excluded[0] = "changed"
 	if !reflect.DeepEqual(calls, []string{"attachments", "selection"}) || attachments[0].ExportRef != "export" {
 		t.Fatal("capability ordering or input isolation changed")
 	}
-	if !reflect.DeepEqual(result.Catalog, catalog) || result.ExcludedContainerClusters[0] != "excluded" || result.ExcludedStorageClusters[0] != "excluded" || !reflect.DeepEqual(result.Problems, []compilation.ObjectIssue{{Object: object, Issue: issue}}) {
+	if !reflect.DeepEqual(result.Catalog, catalog) || result.ExcludedContainerClusters[0] != "excluded" || result.ExcludedStorageClusters[0] != "excluded" || !reflect.DeepEqual(result.Problems, []compilation.ObjectIssue{{Object: object, Issue: issue, Target: "ContainerCluster/cluster"}}) {
 		t.Fatal("selection did not preserve independent result values")
 	}
 }

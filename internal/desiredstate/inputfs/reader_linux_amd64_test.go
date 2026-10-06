@@ -82,45 +82,46 @@ func TestReadPermitsExplicitlyAcquiredSkippedDirectory(t *testing.T) {
 
 func TestReadRejectsUnsafeSourcesWithoutReadingTheirContents(t *testing.T) {
 	tests := []struct {
-		name  string
-		setup func(*testing.T, string) string
-		code  string
+		name            string
+		setup           func(*testing.T, string) string
+		code            string
+		message, remedy string
 	}{
-		{"missing", func(t *testing.T, root string) string { return filepath.Join(root, "missing.yaml") }, "input.not-found"},
-		{"wrong suffix", func(t *testing.T, root string) string { return writeFixture(t, root, "file.YAML", "secret sentinel") }, "input.read"},
+		{"missing", func(t *testing.T, root string) string { return filepath.Join(root, "missing.yaml") }, "input.not-found", "input path does not exist", "check the path"},
+		{"wrong suffix", func(t *testing.T, root string) string { return writeFixture(t, root, "file.YAML", "secret sentinel") }, "input.read", "", ""},
 		{"file symlink", func(t *testing.T, root string) string {
 			target := writeFixture(t, root, "private", "secret sentinel")
 			link := filepath.Join(root, "link.yaml")
 			mustLink(t, target, link, true)
 			return link
-		}, "input.symlink"},
+		}, "input.symlink", "symbolic link", "realpath"},
 		{"directory symlink", func(t *testing.T, root string) string {
 			link := filepath.Join(root, "link")
 			mustLink(t, root, link, true)
 			return link
-		}, "input.symlink"},
+		}, "input.symlink", "symbolic link", "realpath"},
 		{"ancestor symlink", func(t *testing.T, root string) string {
 			target := writeFixture(t, root, "actual/input.yaml", "secret sentinel")
 			mustLink(t, filepath.Dir(target), filepath.Join(root, "link"), true)
 			return filepath.Join(root, "link/input.yaml")
-		}, "input.symlink"},
+		}, "input.symlink", "", "realpath"},
 		{"hard link", func(t *testing.T, root string) string {
 			target := writeFixture(t, root, "private", "secret sentinel")
 			link := filepath.Join(root, "link.yaml")
 			mustLink(t, target, link, false)
 			return link
-		}, "input.read"},
+		}, "input.symlink", "hard link", "copy of the file"},
 		{"fifo", func(t *testing.T, root string) string {
 			path := filepath.Join(root, "blocked.yaml")
 			if err := syscall.Mkfifo(path, 0600); err != nil {
 				t.Fatal(err)
 			}
 			return path
-		}, "input.read"},
+		}, "input.read", "regular file", ""},
 		{"non-directory ancestor", func(t *testing.T, root string) string {
 			path := writeFixture(t, root, "file", "secret sentinel")
 			return filepath.Join(path, "input.yaml")
-		}, "input.not-directory"},
+		}, "input.not-directory", "", "check the path"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -129,6 +130,9 @@ func TestReadRejectsUnsafeSourcesWithoutReadingTheirContents(t *testing.T) {
 			assertFailure(t, result, err, test.code)
 			if strings.Contains(err.Error(), "secret sentinel") {
 				t.Fatal("input contents escaped through an error")
+			}
+			if reported := diagnostics.Of(err)[0]; !strings.Contains(reported.Message, test.message) || !strings.Contains(reported.Remediation, test.remedy) {
+				t.Fatalf("diagnostic = %q; next: %q, want %q and a next step naming %q", reported.Message, reported.Remediation, test.message, test.remedy)
 			}
 		})
 	}
@@ -180,9 +184,7 @@ func TestUnsafeMarkersFailAdmission(t *testing.T) {
 			case "symlink", "hardlink":
 				target := writeFixture(t, root, "private", "payload sentinel")
 				mustLink(t, target, marker, kind == "symlink")
-				if kind == "symlink" {
-					code = "input.symlink"
-				}
+				code = "input.symlink"
 			case "directory":
 				if err := os.Mkdir(marker, 0700); err != nil {
 					t.Fatal(err)

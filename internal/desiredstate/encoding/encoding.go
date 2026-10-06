@@ -248,15 +248,20 @@ func validNumber(value string) bool {
 	n, err := strconv.ParseFloat(value, 64)
 	return decimal.MatchString(value) && err == nil && !math.IsNaN(n) && !math.IsInf(n, 0)
 }
+
+var coreSchemaScalar = regexp.MustCompile(`^(?:true|True|TRUE|false|False|FALSE|null|Null|NULL|~|[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+|[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$`)
+
 func plainString(value string) bool {
-	if value == "" || strings.TrimSpace(value) != value || strings.ContainsAny(value, "\n\r\t\x00") || strings.Contains(value, ": ") || strings.Contains(value, " #") {
+	if value == "" || strings.TrimSpace(value) != value || strings.Contains(value, ": ") || strings.Contains(value, " #") || strings.HasSuffix(value, ":") {
 		return false
 	}
-	if strings.ContainsRune("-?:,[]{}#&*!|>'\"%@`", rune(value[0])) {
+	if strings.ContainsRune("-?:,[]{}#&*!|>'\"%@`", rune(value[0])) || strings.HasPrefix(value, "...") || coreSchemaScalar.MatchString(value) {
 		return false
 	}
-	if value == "true" || value == "false" || value == "null" || value == "~" || decimal.MatchString(value) {
-		return false
+	for _, r := range value {
+		if r < 0x20 || r >= 0x7f && r <= 0x9f || r == 0x2028 || r == 0x2029 || r == 0xfeff || r > 0xfffd {
+			return false
+		}
 	}
 	return true
 }

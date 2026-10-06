@@ -15,7 +15,6 @@ import (
 
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/trust"
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -27,6 +26,7 @@ const (
 	observationTimeout = 10 * time.Second
 	terminationGrace   = 5 * time.Second
 	maxObservedBytes   = 64 << 10
+	maxOfferedKeyBytes = 64 << 10
 )
 
 // terminalEnvironment is everything a session's client inherits. A caller
@@ -35,24 +35,43 @@ const (
 // crosses this boundary.
 var terminalEnvironment = []string{"TERM", "COLORTERM", "NO_COLOR"}
 
+// Files begins one session's access to an operator-named key under the
+// invoking account's credentials.
+type Files interface {
+	Begin(context.Context) (FileSession, error)
+}
+
+// FileSession opens one absolute path without following a link at its final
+// component, and opens nothing but a regular file for reading.
+type FileSession interface {
+	OpenFile(string) (*os.File, error)
+	Close() error
+}
+
+// deniedToRoot is what an opener's failure reports when the denied open ran
+// with root's credentials.
+type deniedToRoot interface{ DeniedToRoot() bool }
+
 // Launcher runs the pinned SSH client. Home resolves the invoking account's
 // home directory, so an operator-supplied key path expands from the account
 // database rather than an ambient HOME, and Owner resolves that account's user
 // ID, which an offered key file must be owned by. Each is called only when a
 // key is offered, because an invocation that offers none acquires no account
-// capability. Scratch parents the short-lived directory an observation records
-// into.
+// capability. Files opens an offered key with that account's credentials, so
+// this process never opens the operator's path itself. Scratch parents the
+// short-lived directory an observation records into.
 type Launcher struct {
 	Client     string
 	Home       func() (string, error)
 	Owner      func() (int, error)
+	Files      Files
 	PolicyPath string
 	Scratch    string
 	Environ    func() []string
 }
 
-func New(home func() (string, error), owner func() (int, error)) Launcher {
-	return Launcher{Client: Client, Home: home, Owner: owner, PolicyPath: PolicyPath, Scratch: "/run", Environ: os.Environ}
+func New(home func() (string, error), owner func() (int, error), files Files) Launcher {
+	return Launcher{Client: Client, Home: home, Owner: owner, Files: files, PolicyPath: PolicyPath, Scratch: "/run", Environ: os.Environ}
 }
 
 // Run opens one session and returns the client's own exit status. The streams
@@ -71,7 +90,7 @@ func (l Launcher) Run(ctx context.Context, session machine.Session, in io.Reader
 	if err != nil {
 		return 0, err
 	}
-	held, files, err := l.materialize(policy, session)
+	held, files, err := l.materialize(ctx, policy, session)
 	defer closeAll(files)
 	if err != nil {
 		return 0, err
@@ -158,8 +177,8 @@ func preferred(recorded string) string {
 // IdentityFile resolves an operator-supplied key path. A leading tilde comes
 // from the invoking account database rather than an ambient HOME. The file is
 // proved here, so a refusal comes before any host key is sought, and proved
-// again on the descriptor a session hands the client.
-func (l Launcher) IdentityFile(path string) (string, error) {
+// again on the descriptor the session copies it from.
+func (l Launcher) IdentityFile(ctx context.Context, path string) (string, error) {
 	raw := strings.TrimSpace(path)
 	if raw == "" {
 		return "", nil
@@ -184,7 +203,7 @@ func (l Launcher) IdentityFile(path string) (string, error) {
 	if err != nil {
 		return "", failure("--ssh-id-file is not a resolvable path", "")
 	}
-	file, err := l.openIdentity(resolved)
+	file, err := l.openIdentity(ctx, resolved)
 	if err != nil {
 		return "", err
 	}
@@ -192,14 +211,13 @@ func (l Launcher) IdentityFile(path string) (string, error) {
 	return resolved, nil
 }
 
-// openIdentity resolves an offered key to a path-only descriptor and proves
-// what that descriptor names. Resolving a name this way neither follows a link
-// at its last component nor runs a device's or FIFO's open routine, so nothing
-// the name reaches is opened for reading before its type is known. Every check
-// reads that descriptor rather than the name, and the client opens the key
-// through the same descriptor, so the file it reads is the file that was
-// proved.
-func (l Launcher) openIdentity(path string) (*os.File, error) {
+// openIdentity receives an offered key from the invoking account's opener and
+// proves what the received descriptor names. The opener follows no link at the
+// last component and opens nothing but a regular file for reading, so a
+// device's or FIFO's open routine never runs; every check here reads the
+// descriptor rather than the name, so the bytes a session copies are the bytes
+// of the file that was proved.
+func (l Launcher) openIdentity(ctx context.Context, path string) (*os.File, error) {
 	owner := -1
 	if l.Owner != nil {
 		if resolved, err := l.Owner(); err == nil {
@@ -210,22 +228,26 @@ func (l Launcher) openIdentity(path string) (*os.File, error) {
 		return nil, failure("--ssh-id-file "+path+" cannot be offered, because the invoking account cannot be verified",
 			"omit --ssh-id-file to use the Machine's own identity")
 	}
-	held, err := unix.Open(path, unix.O_PATH|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if l.Files == nil {
+		return nil, failure("the --ssh-id-file opener is not configured", "")
+	}
+	held, err := l.receive(ctx, path)
 	if err != nil {
+		return nil, err
+	}
+	info, err := held.Stat()
+	if err != nil {
+		_ = held.Close()
 		return nil, failure("--ssh-id-file "+path+" cannot be opened", "name an existing private key file")
 	}
-	var stat unix.Stat_t
-	if err := unix.Fstat(held, &stat); err != nil {
-		_ = unix.Close(held)
-		return nil, failure("--ssh-id-file "+path+" cannot be opened", "name an existing private key file")
-	}
+	stat, described := info.Sys().(*syscall.Stat_t)
 	var refusal error
 	switch {
-	case stat.Mode&unix.S_IFMT == unix.S_IFLNK:
+	case info.Mode()&os.ModeSymlink != 0:
 		refusal = failure("--ssh-id-file "+path+" is a symbolic link", "name the key file itself rather than a link to it")
-	case stat.Mode&unix.S_IFMT != unix.S_IFREG:
+	case !info.Mode().IsRegular():
 		refusal = failure("--ssh-id-file "+path+" is not a regular file", "name the private key file itself")
-	case int(stat.Uid) != owner:
+	case !described || int(stat.Uid) != owner:
 		refusal = failure("--ssh-id-file "+path+" is not owned by the invoking account",
 			"offer a key file that account owns")
 	case stat.Mode&0o077 != 0:
@@ -233,10 +255,64 @@ func (l Launcher) openIdentity(path string) (*os.File, error) {
 			"remove those permissions with chmod 600 "+path)
 	}
 	if refusal != nil {
-		_ = unix.Close(held)
+		_ = held.Close()
 		return nil, refusal
 	}
-	return os.NewFile(uintptr(held), path), nil
+	return held, nil
+}
+
+// receive takes the key's descriptor from the invoking account's opener and
+// ends that session; the descriptor outlives it.
+func (l Launcher) receive(ctx context.Context, path string) (*os.File, error) {
+	session, err := l.Files.Begin(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, failure("--ssh-id-file "+path+" cannot be opened under the invoking account", "")
+	}
+	file, err := session.OpenFile(path)
+	_ = session.Close()
+	if err == nil {
+		return file, nil
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	var denied deniedToRoot
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return nil, failure("--ssh-id-file "+path+" cannot be opened", "name an existing private key file")
+	case errors.Is(err, os.ErrPermission) && errors.As(err, &denied) && denied.DeniedToRoot():
+		return nil, failure("root cannot read --ssh-id-file "+path+" (a network home with root squash?)",
+			"copy it to a local directory and name the copy")
+	case errors.Is(err, os.ErrPermission):
+		return nil, failure("the invoking account cannot read --ssh-id-file "+path+" (permission denied)",
+			"give the invoking account read access to it, or offer a key that account can read")
+	}
+	return nil, failure("--ssh-id-file "+path+" cannot be opened", "name an existing private key file")
+}
+
+// offeredCopy reads a proved key through its received descriptor into private
+// session material. The client runs as root and would reopen a handed
+// descriptor through /proc/self/fd, which a root-squashed home refuses, so it
+// is given this copy instead.
+func (l Launcher) offeredCopy(ctx context.Context, directory, path string) (*os.File, error) {
+	held, err := l.openIdentity(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(io.LimitReader(held, maxOfferedKeyBytes+1))
+	_ = held.Close()
+	defer clear(data)
+	if err != nil {
+		return nil, failure("--ssh-id-file "+path+" cannot be read", "name a readable private key file")
+	}
+	if len(data) > maxOfferedKeyBytes {
+		return nil, failure("--ssh-id-file "+path+" exceeds 64 KiB, the bound of a private key file",
+			"name the private key file itself")
+	}
+	return anonymous(directory, data)
 }
 
 // executable refuses anything but the pinned regular executable, so a session
@@ -276,7 +352,7 @@ func (l Launcher) policy() ([]byte, error) {
 // open descriptors. Each is created privately and unlinked before it is
 // written, so the material exists under no name at all and an interruption
 // leaves no plaintext behind.
-func (l Launcher) materialize(policy []byte, session machine.Session) (paths, []*os.File, error) {
+func (l Launcher) materialize(ctx context.Context, policy []byte, session machine.Session) (paths, []*os.File, error) {
 	directory, err := os.MkdirTemp(l.Scratch, "bootwright-ssh-")
 	if err != nil {
 		return paths{}, nil, failure("private session storage is unavailable", "")
@@ -294,7 +370,7 @@ func (l Launcher) materialize(policy []byte, session machine.Session) (paths, []
 	files = append(files, config)
 	held.config = 2 + len(files)
 	if session.IdentityFile != "" {
-		offered, err := l.openIdentity(session.IdentityFile)
+		offered, err := l.offeredCopy(ctx, directory, session.IdentityFile)
 		if err != nil {
 			return paths{}, files, err
 		}

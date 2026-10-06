@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
+	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -35,6 +36,7 @@ type machineDependencies struct {
 	Terminal  func() (bool, error)
 	Home      func() (string, error)
 	Owner     func() (int, error)
+	Files     operatorFiles
 }
 
 // wireMachine binds Machine inspection, explicit access and power. Inspection
@@ -45,9 +47,9 @@ type machineDependencies struct {
 func wireMachine(deps machineDependencies) cli.Services {
 	selection := currentSelection(deps.Selection)
 	evidence := machineOwnership{reconciler: deps.Lifecycle}
-	client := sshlocal.New(deps.Home, deps.Owner)
-	powered := power.New(deps.State, evidence, machineIdentities{reconciler: deps.Lifecycle}, deps.Lifecycle,
-		ansiblerunner.New(operationPlaybook()), deps.Confirmer, deps.Reporter, selection)
+	client := sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
+	powered := power.New(deps.State, machineRealization{reconciler: deps.Lifecycle}, machineIdentities{reconciler: deps.Lifecycle},
+		deps.Lifecycle, ansiblerunner.New(operationPlaybook()), deps.Confirmer, deps.Reporter, selection)
 	return cli.Services{
 		MachineInventory: inventory.New(deps.State, evidence, powered, selection),
 		MachineAccess: machineaccess.New(deps.State, selection, machineaccess.Options{
@@ -58,6 +60,26 @@ func wireMachine(deps machineDependencies) cli.Services {
 		MachinePower: powered,
 		MachineTrust: enrollment.New(deps.State, deps.Trust, selection, trustOptions(deps, client)),
 	}
+}
+
+// sessionFiles opens an offered key through the invoking account's opener, and
+// binds no opener at all when files is nil, so an offered key refuses rather
+// than reaching a wrapper around nothing.
+func sessionFiles(files operatorFiles) sshlocal.Files {
+	if files == nil {
+		return nil
+	}
+	return sshFiles{files: files}
+}
+
+type sshFiles struct{ files operatorFiles }
+
+func (f sshFiles) Begin(ctx context.Context) (sshlocal.FileSession, error) {
+	session, err := f.files.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
 }
 
 // trustOptions shows the trust plan on the process's standard output, ahead of
@@ -93,6 +115,32 @@ func (o machineOwnership) Ownership(ctx context.Context, name string) (map[strin
 		owned[identity] = machine.OwnershipState{Verb: state.Verb, State: state.State}
 	}
 	return owned, nil
+}
+
+// machineRealization reads the block that realizes one Machine on its
+// provider. Its emulated controller is that block's effect, so power asks it
+// alone: the installation that follows it on the same Machine, and the
+// bare-metal claim of a physical one, create no controller.
+type machineRealization struct{ reconciler lifecycle.Service }
+
+func (r machineRealization) Realization(ctx context.Context, contextName, name string) (machine.OwnershipState, bool, error) {
+	published, err := r.reconciler.Evidence(ctx, contextName, "Machine", name)
+	if err != nil {
+		return machine.OwnershipState{}, false, err
+	}
+	state, found := realizationOf(published)
+	return state, found, nil
+}
+
+// realizationOf picks the libvirt machine block out of everything the current
+// plan froze for one Machine, and reports the verb and state it reached.
+func realizationOf(published []lifecycle.BlockEvidence) (machine.OwnershipState, bool) {
+	for _, block := range published {
+		if block.Implementation == libvirt.MachineImplementation {
+			return machine.OwnershipState{Verb: string(block.Verb), State: string(block.State)}, true
+		}
+	}
+	return machine.OwnershipState{}, false
 }
 
 // machineHostKeys reads the host key one context's own installation proved.

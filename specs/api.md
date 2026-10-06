@@ -60,7 +60,9 @@ a value or resolve a collision.
 
 Schema strings require YAML `!!str`. Booleans require unquoted lowercase
 `true` or `false`. Integers require decimal `!!int` notation without base
-prefixes or separators. Their lexical value is parsed without a machine-word
+prefixes or separators, and a multi-digit integer must not start with `0`,
+as `0644` does, because YAML 1.1 readers read it as octal; `0`, `+0` and `-0`
+remain valid. Their lexical value is parsed without a machine-word
 size limit before the owning field applies its range. Quoted booleans and
 integers are strings and therefore type errors.
 
@@ -95,11 +97,34 @@ defaults and owning-schema normalization; a field still missing then receives
 `api.required`.
 
 The registered schema fixes scalar and collection types, and strict decoding
-rejects unknown fields at every typed level. Explicitly documented open native
-or implementation maps remain open only at those exact fields; their presence
-does not make a containing object extensible. Unsupported API versions,
-retired kinds, alternate spellings, aliases between schema generations, and
-translation fallbacks are rejected.
+rejects unknown fields at every typed level. An unknown field is reported at
+its own path when its key is a schema identifier: at most 64 bytes of letters,
+digits, `-` and `_`, starting with a letter or digit. Any other unknown key is
+reported at its containing field and is not repeated. The diagnostic names the
+fields its containing field permits, and offers a rename when exactly one of
+them equals the key ignoring case or, when none does, when exactly one of them
+is nearest to the key within at most two edits. Explicitly
+documented open native or implementation maps remain open only at those exact
+fields; their presence does not make a containing object extensible.
+Unsupported API versions, retired kinds, alternate spellings, aliases between
+schema generations, and translation fallbacks are rejected.
+
+Every refusal carries what the operator needs to correct it:
+
+- the object, as its kind and name, whenever the document's `apiVersion`, its
+  registered `kind` and its DNS-label `metadata.name` decode as strings,
+  including on a decode failure elsewhere in the document;
+- the path of the field it concerns;
+- the schema's expectation: the permitted values, the numeric bounds, the
+  expected YAML type, noting that a quoted value is a string, the referenced
+  kinds, or the accepted Secret types, each list bounded to 16 entries and a
+  count of the rest;
+- a remediation naming the next step; and
+- no authored scalar value, since a value written in the wrong field may be a
+  credential. A diagnostic repeats only an unknown key that is a schema
+  identifier, a reference name that is a DNS label, a repeated entry's name
+  that is a DNS label, and a Secret's declared type that is one of the Secret
+  types.
 
 Loading returns `filesSeen`, `objectsDecoded`, sorted diagnostics, and a state
 only when there are no errors. `filesSeen` counts every unique discovered YAML
@@ -126,7 +151,14 @@ Processing is deterministic:
 
 Every error prevents a returned state. Independent objects continue through
 the phases they can validly reach, while dependent checks are suppressed when
-a required value or reference is missing or invalid.
+a required value or reference is missing or invalid. The Secret-type check on
+a reference is such a dependent check: while the referenced Secret's own
+`type` is absent or not a Secret type, the Secret's own diagnostic is the only
+one. Every `api.reference` check against a selected document that fails
+decoding is another: while a selected document of a referenced kind and name
+does not decode, a reference field naming it, and an Environment cluster
+selection entry naming it, add no diagnostic, so the document's own
+diagnostics are the only ones.
 
 ## Common envelope
 
@@ -193,6 +225,9 @@ particular, Secret source omission selects `contextStore`.
 requires the `rhsm`, `registry`, and `license` arm set defined in
 [secrets.md](api/secrets.md). That page states any forbidden additional arm;
 required arms do not imply that every other arm is automatically rejected.
+An authored `ibm-storage-ceph` type, which forbids `rhsm`, never inherits
+`rhsm` from Entitlement kind defaults
+([kind-default rule 6](api/environment.md#kind-defaults)).
 
 ### Collections, enablement, and reserved words
 
@@ -311,7 +346,8 @@ Composed machine and cluster hostnames, Environment defaults, provider and
 component defaults, cluster networking defaults, and other normalized values
 follow their owning pages. A diagnostic concerning a reference injected from
 an Environment or naming convention identifies it as defaulted and tells the
-operator where to override it.
+operator where to override it. A diagnostic concerning a field the object does
+not hold is not marked defaulted; it keeps its own remediation.
 
 Canonical effective output:
 
@@ -330,7 +366,9 @@ Canonical effective output:
    between documents, no trailing `...`, and one final newline;
 5. retains authored order for ordered lists, applies only the owning schema's
    documented normalization to other lists, uses plain YAML strings only when
-   YAML 1.2 retains string type, and double-quotes other strings; and
+   YAML 1.2 retains string type, and double-quotes every other string,
+   including one the emitter cannot write plain, such as one ending in `:` or
+   holding a Unicode line separator; and
 6. contains source declarations but never source provenance, secret bytes,
    generated material, private native artifacts, or excluded objects.
 
@@ -348,7 +386,8 @@ never round them through binary64. Integer-versus-floating representation is
 not semantic for a native numeric value, but its value is: canonical output
 may select an equivalent integer spelling for an integral binary64 value.
 Nulls, aliases, duplicate keys, unsupported tags, non-finite numbers and
-non-decimal numeric spellings remain forbidden. A field documented as
+non-decimal numeric spellings, a multi-digit integer with a leading zero
+among them, remain forbidden. A field documented as
 `map<string,string>` continues to require strings; an open nested field never
 opens its containing typed schema.
 

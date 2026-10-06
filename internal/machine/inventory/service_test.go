@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -17,9 +18,12 @@ func (s *effectiveState) RenderEffective(_ context.Context, request compilation.
 	return &compilation.EffectiveResult{Effective: catalog()}, nil
 }
 
-type ownership struct{}
+type ownership struct{ reads *int }
 
-func (ownership) Ownership(context.Context, string) (map[string]machine.OwnershipState, error) {
+func (o ownership) Ownership(context.Context, string) (map[string]machine.OwnershipState, error) {
+	if o.reads != nil {
+		*o.reads++
+	}
 	return map[string]machine.OwnershipState{"Machine/guest": {Verb: "apply", State: "done"}}, nil
 }
 
@@ -106,5 +110,20 @@ func TestListRefusesWhenTheReadingCannotBeTaken(t *testing.T) {
 	refusal := errors.New("no runtime")
 	if _, err := service(&controllers{refuse: refusal}).List(context.Background(), ListRequest{Power: true}); !errors.Is(err, refusal) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// An unknown cluster refuses before any evidence is read or any controller is
+// asked, so the refusal costs nothing and reaches no host.
+func TestAnUnknownClusterRefusesBeforeReadingEvidence(t *testing.T) {
+	reads := 0
+	readers := &controllers{readings: map[string]string{}}
+	listing := New(&effectiveState{}, ownership{reads: &reads}, readers, func(context.Context) (string, error) { return "lab", nil })
+	_, err := listing.List(context.Background(), ListRequest{Clusters: []string{"absent"}, Power: true})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "access.target" {
+		t.Fatalf("err = %v", err)
+	}
+	if reads != 0 || readers.calls != 0 {
+		t.Fatalf("a refused listing read evidence %d times and asked %d controllers", reads, readers.calls)
 	}
 }

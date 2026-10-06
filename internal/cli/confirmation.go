@@ -27,13 +27,14 @@ func NewConfirmation(read func(context.Context, []byte) (int, error), out io.Wri
 }
 
 // ConfirmHostKey asks the operator to accept one server identity that nothing
-// has proved yet. It shows the fingerprint they compare out of band, and a
-// declined or unanswerable prompt records nothing at all.
-func (c *Confirmation) ConfirmHostKey(ctx context.Context, name, address, keyType, fingerprint string) error {
+// has proved yet. It shows the fingerprint they compare out of band and the
+// context that would trust it, and a declined or unanswerable prompt records
+// nothing at all.
+func (c *Confirmation) ConfirmHostKey(ctx context.Context, contextName, name, address, keyType, fingerprint string) error {
 	refuse := func(reason string) error {
 		return diagnostics.NewFailureWithRemediation("trust.identity",
 			"host key confirmation "+reason, "",
-			"record it with bootwright machine trust --machines "+name)
+			"record it with bootwright machine trust --context "+contextName+" --machines "+name)
 	}
 	if c == nil || c.read == nil || c.out == nil || c.isTerminal == nil {
 		return refuse("is not configured")
@@ -45,9 +46,9 @@ func (c *Confirmation) ConfirmHostKey(ctx context.Context, name, address, keyTyp
 	if err != nil || !interactive {
 		return refuse("requires interactive input")
 	}
-	prompt := fmt.Sprintf("Trust %s %s for Machine %s at %s? [y/N] ",
+	prompt := fmt.Sprintf("Trust %s %s for Machine %s at %s in context %s? [y/N] ",
 		escapeDisplayLine(keyType), escapeDisplayLine(fingerprint),
-		escapeDisplayLine(name), escapeDisplayLine(address))
+		escapeDisplayLine(name), escapeDisplayLine(address), escapeDisplayLine(contextName))
 	if err := c.ask(ctx, prompt); err != nil {
 		return refuse(strings.TrimPrefix(err.Error(), "confirmation "))
 	}

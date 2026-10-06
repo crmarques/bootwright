@@ -22,7 +22,7 @@ func environmentSelection(catalog api.Catalog) compilation.Selection {
 	selected := environment.Select(catalog, nil)
 	result := compilation.Selection{Catalog: selected.Catalog, ExcludedContainerClusters: selected.ExcludedContainerClusters, ExcludedStorageClusters: selected.ExcludedStorageClusters}
 	for _, problem := range selected.Problems {
-		result.Problems = append(result.Problems, compilation.ObjectIssue{Object: problem.Object, Issue: problem.Issue})
+		result.Problems = append(result.Problems, compilation.ObjectIssue{Object: problem.Object, Issue: problem.Issue, Target: problem.Target})
 	}
 	return result
 }
@@ -94,7 +94,7 @@ func TestSelectedDuplicateRootsRemainAmbiguousAndEachReceiveDiagnostics(t *testi
 	documents := map[int]bool{}
 	selectionFailed := false
 	for _, d := range sink {
-		if d.Code == "api.reference" && d.Field == "$.spec.storageClusters" {
+		if d.Code == "api.reference" && d.Field == "$.spec.storageClusters[0]" {
 			selectionFailed = true
 		}
 		if d.Code == "api.duplicate" && d.Object != nil && d.Object.Kind == string(api.StorageCluster) && d.Object.Name == "storage" && d.Source != nil {
@@ -104,8 +104,8 @@ func TestSelectedDuplicateRootsRemainAmbiguousAndEachReceiveDiagnostics(t *testi
 			t.Fatal("a requested ambiguous root was mislabeled as excluded", d)
 		}
 	}
-	if !selectionFailed || !reflect.DeepEqual(documents, map[int]bool{2: true, 3: true}) {
-		t.Fatalf("duplicate identity evidence was lost: %#v", sink)
+	if selectionFailed || !reflect.DeepEqual(documents, map[int]bool{2: true, 3: true}) {
+		t.Fatalf("duplicate identity evidence was lost or repeated at the selection entry: %#v", sink)
 	}
 }
 

@@ -3,6 +3,7 @@ package compilation
 import (
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -15,34 +16,39 @@ func selectResources(sources desiredstate.Sources, documents []desiredstate.Docu
 	selected := map[string]bool{env.path: true}
 	base := filepath.Dir(env.path)
 	resources := env.object.Spec().Get("resources")
-	if !resources.Present() {
+	if !resources.Present() || resources.Len() == 0 {
 		for _, file := range sources.Files {
 			selected[file.Path()] = true
 		}
 		return selected, []string{}
-	}
-	if resources.Len() == 0 {
-		ds.issue(env, api.Issue{Code: "api.value", Field: "$.spec.resources", Message: "resource selection must not be empty"})
 	}
 	selectDeclaredResources(sources, resources, env, base, selected, ds)
 	selectStoredAddons(sources, documents, base, selected)
 	return selected, excludedResources(sources, documents, base, selected, ds)
 }
 
+const resourceSelectionRemedy = "list a .yaml or .yml file, or a directory holding them, below the Environment's directory, and include it in the input you pass"
+
 func selectDeclaredResources(sources desiredstate.Sources, resources api.Value, env *objectRecord, base string, selected map[string]bool, ds *diagnosticSink) {
-	seen := map[string]bool{}
-	for _, resource := range resources.Items() {
+	cleaned := map[string]int{}
+	raw := map[string]bool{}
+	for i, resource := range resources.Items() {
+		field := "$.spec.resources[" + strconv.Itoa(i) + "]"
 		value := resource.Text()
 		clean := filepath.Clean(value)
+		if raw[value] {
+			continue
+		}
+		raw[value] = true
 		if value == "" || strings.TrimSpace(value) != value || filepath.IsAbs(value) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || strings.ContainsRune(value, 0) {
-			ds.issue(env, api.Issue{Code: "api.value", Field: "$.spec.resources", Message: "resource path must remain inside the Environment directory"})
+			ds.issue(env, api.Issue{Code: "api.value", Field: field, Message: "resource path must stay inside the Environment directory", Remediation: "use a relative path below the Environment's directory"})
 			continue
 		}
-		if seen[clean] {
-			ds.issue(env, api.Issue{Code: "api.duplicate", Field: "$.spec.resources", Message: "resource paths must be unique after cleaning"})
+		if earlier, seen := cleaned[clean]; seen {
+			ds.issue(env, api.Issue{Code: "api.duplicate", Field: field, Message: "resource path repeats entry [" + strconv.Itoa(earlier) + "] after cleaning", Remediation: "remove the repeated entry"})
 			continue
 		}
-		seen[clean] = true
+		cleaned[clean] = i
 		candidate := filepath.Join(base, clean)
 		matches := 0
 		for _, file := range sources.Files {
@@ -52,9 +58,23 @@ func selectDeclaredResources(sources desiredstate.Sources, resources api.Value, 
 			}
 		}
 		if matches == 0 {
-			ds.issue(env, api.Issue{Code: "api.reference", Field: "$.spec.resources", Message: "resource path does not select an acquired desired-state file"})
+			ds.issue(env, api.Issue{Code: "api.reference", Field: field, Message: unmatchedResourceCause(value, clean), Remediation: resourceSelectionRemedy})
 		}
 	}
+}
+
+func unmatchedResourceCause(value, clean string) string {
+	if strings.ContainsAny(value, "*?[") {
+		return "resource paths are literal; glob patterns are not expanded"
+	}
+	segments := strings.Split(filepath.ToSlash(clean), "/")
+	if last := segments[len(segments)-1]; strings.HasSuffix(last, ".yaml") || strings.HasSuffix(last, ".yml") {
+		segments = segments[:len(segments)-1]
+	}
+	if slices.ContainsFunc(segments, func(segment string) bool { return segment != "." && desiredstate.SkippedDirectory(segment) }) {
+		return "resource path is inside a directory discovery skips (dot-prefixed, vendor, node_modules, playbooks, roles, collections, manifests or secrets)"
+	}
+	return "resource path selects no discovered desired-state file"
 }
 
 func selectStoredAddons(sources desiredstate.Sources, documents []desiredstate.Document, base string, selected map[string]bool) {

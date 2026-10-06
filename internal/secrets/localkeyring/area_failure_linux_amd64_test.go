@@ -36,38 +36,43 @@ func TestAreaFailurePassesTheWorkspaceStoreCause(t *testing.T) {
 	}
 }
 
+// A publication that may have happened names the commands that inspect the
+// store before a retry, bound to the store's context; one that provably did
+// not happen needs none.
 func TestPublicationFailurePreservesOnlyPrecommitTypedFailures(t *testing.T) {
 	limit := secretstore.Failure("store.limit", "bounded secret storage is full")
+	const inspect = "inspect with bootwright secret encryption status --context fixture and bootwright secret check --context fixture before retrying; bootwright secret encryption init --context fixture completes an interrupted cleanup"
 	for _, test := range []struct {
 		name    string
 		outcome secretstore.Outcome
 		cause   error
 		code    string
 		message string
+		remedy  string
 	}{
-		{"precommit limit", secretstore.NotCommitted, limit, "secret.store.limit", "bounded secret storage is full"},
-		{"precommit raw", secretstore.NotCommitted, errors.New("synthetic-error-canary"), "secret.store.conflict", "was not committed"},
-		{"uncertain limit", secretstore.Uncertain, limit, "secret.store.conflict", "uncertain durability"},
-		{"committed error", secretstore.Committed, limit, "secret.store.conflict", "committed but did not finish"},
-		{"unknown outcome", secretstore.Outcome("invalid"), limit, "secret.store.conflict", "outcome is unknown"},
+		{"precommit limit", secretstore.NotCommitted, limit, "secret.store.limit", "bounded secret storage is full", ""},
+		{"precommit raw", secretstore.NotCommitted, errors.New("synthetic-error-canary"), "secret.store.conflict", "was not committed", ""},
+		{"uncertain limit", secretstore.Uncertain, limit, "secret.store.conflict", "uncertain durability", inspect},
+		{"committed error", secretstore.Committed, limit, "secret.store.conflict", "committed but did not finish", inspect},
+		{"unknown outcome", secretstore.Outcome("invalid"), limit, "secret.store.conflict", "outcome is unknown", inspect},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			err := publicationFailure(context.Background(), test.outcome, test.cause)
+			err := publicationFailure(context.Background(), "fixture", test.outcome, test.cause)
 			diagnostics := diagnostics.Of(err)
-			if failureCode(err) != test.code || len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, test.message) || strings.Contains(diagnostics[0].Message, "canary") {
-				t.Fatalf("publication failure: %v", err)
+			if failureCode(err) != test.code || len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, test.message) || strings.Contains(diagnostics[0].Message, "canary") || diagnostics[0].Remediation != test.remedy {
+				t.Fatalf("publication failure: %+v, want remedy %q", diagnostics, test.remedy)
 			}
 		})
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := publicationFailure(ctx, secretstore.NotCommitted, limit); !errors.Is(err, context.Canceled) {
+	if err := publicationFailure(ctx, "fixture", secretstore.NotCommitted, limit); !errors.Is(err, context.Canceled) {
 		t.Fatalf("precommit cancellation: %v", err)
 	}
-	if err := publicationFailure(ctx, secretstore.NotCommitted, nil); !errors.Is(err, context.Canceled) {
+	if err := publicationFailure(ctx, "fixture", secretstore.NotCommitted, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("precommit cancellation without a backend error: %v", err)
 	}
-	if err := publicationFailure(ctx, secretstore.Uncertain, context.Canceled); errors.Is(err, context.Canceled) || failureCode(err) != "secret.store.conflict" {
+	if err := publicationFailure(ctx, "fixture", secretstore.Uncertain, context.Canceled); errors.Is(err, context.Canceled) || failureCode(err) != "secret.store.conflict" {
 		t.Fatalf("uncertain cancellation concealed the publication outcome: %v", err)
 	}
 }

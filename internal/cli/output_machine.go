@@ -17,15 +17,18 @@ type machineListPresentation struct {
 	PowerRead bool                     `json:"powerRead"`
 }
 
+// A row omits a scalar it does not have rather than writing it empty: no
+// contact, no provider, or no power reading, which is distinct from a reading
+// that came back unknown.
 type machineRowPresentation struct {
 	Name      string   `json:"name"`
-	Address   string   `json:"address"`
-	IPs       []string `json:"ips"`
+	Contact   string   `json:"contact,omitempty"`
+	Addresses []string `json:"addresses"`
 	OS        string   `json:"os"`
-	Provider  string   `json:"provider"`
+	Provider  string   `json:"provider,omitempty"`
 	Clusters  []string `json:"clusters"`
 	Lifecycle string   `json:"lifecycle"`
-	Power     string   `json:"power"`
+	Power     string   `json:"power,omitempty"`
 }
 
 type machinePowerPresentation struct {
@@ -33,7 +36,7 @@ type machinePowerPresentation struct {
 	Machine  string `json:"machine"`
 	Verb     string `json:"verb"`
 	Power    string `json:"power"`
-	Previous string `json:"previous"`
+	Previous string `json:"previous,omitempty"`
 	Changed  bool   `json:"changed"`
 }
 
@@ -83,7 +86,7 @@ func writeMachineList(out io.Writer, command string, result *inventory.ListResul
 	}
 	// The power column appears only where a reading was taken, so the table
 	// never shows a column of absences for the answer nobody asked for.
-	headings := []string{"NAME", "ADDRESS", "IP", "OS", "PROVIDER", "CLUSTERS", "LIFECYCLE"}
+	headings := []string{"NAME", "CONTACT", "ADDRESSES", "OS", "PROVIDER", "CLUSTERS", "LIFECYCLE"}
 	if result.PowerRead {
 		headings = append(headings, "POWER")
 	}
@@ -107,10 +110,10 @@ func displayMachineList(result *inventory.ListResult) machineListPresentation {
 	rows := make([]machineRowPresentation, 0, len(result.Machines))
 	for _, row := range result.Machines {
 		rows = append(rows, machineRowPresentation{
-			Name: escapeDisplayLine(row.Name), Address: escapeDisplayLine(row.Address),
+			Name: escapeDisplayLine(row.Name), Contact: escapeDisplayLine(row.Address),
 			// Declared order, not sorted: the addresses read the way the
 			// Machine authors them, and the table shows the same sequence.
-			IPs: displayLines(row.IPs), OS: escapeDisplayLine(row.OS),
+			Addresses: displayLines(row.IPs), OS: escapeDisplayLine(row.OS),
 			Provider: escapeDisplayLine(row.Provider),
 			Clusters: displayNames(row.Clusters), Lifecycle: escapeDisplayLine(row.Lifecycle),
 			Power: escapeDisplayLine(row.Power),

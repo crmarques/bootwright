@@ -3,6 +3,7 @@ package environment
 import (
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -27,20 +28,11 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 	if object.Kind() != api.Environment {
 		return nil
 	}
-	issues := []api.Issue{}
+	spec := object.Spec()
+	issues := fleetKeyIssues(spec.Get("remoteMachinesAccessKey", "keyRef"), catalog)
 	add := func(field, message string) {
 		if len(issues) < 999 {
 			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec." + field, Message: message})
-		}
-	}
-	spec := object.Spec()
-	fleetKey := spec.Get("remoteMachinesAccessKey", "keyRef")
-	for _, machine := range catalog.OfKind(api.Machine) {
-		if machine.Spec().Has("os", "installProfileRef") && !fleetKey.Present() {
-			add("remoteMachinesAccessKey.keyRef", "managed OS installation requires a fleet SSH key reference")
-		}
-		if fleetKey.Present() && !machine.Spec().Has("os", "installProfileRef") && machine.Spec().Get("access", "ssh", "auth", "privateKeyRef").Equal(fleetKey) {
-			add("remoteMachinesAccessKey.keyRef", "fleet install key must differ from authored Machine access keys")
 		}
 	}
 	issues = append(issues, validateController(object, catalog)...)
@@ -67,6 +59,45 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 		}
 	}
 	return issues
+}
+
+func fleetKeyIssues(fleetKey api.Value, catalog api.Catalog) []api.Issue {
+	const field = "$.spec.remoteMachinesAccessKey.keyRef"
+	issues := []api.Issue{}
+	installing, names := 0, []string{}
+	for _, machine := range catalog.OfKind(api.Machine) {
+		named, subject := api.ValidLexical("name", machine.Name()), "a Machine"
+		if named {
+			subject = machine.Identity()
+		}
+		installs := machine.Spec().Has("os", "installProfileRef")
+		if installs && !fleetKey.Present() {
+			installing++
+			if named {
+				names = append(names, machine.Name())
+			}
+		}
+		if fleetKey.Present() && !installs && machine.Spec().Get("access", "ssh", "auth", "privateKeyRef").Equal(fleetKey) && len(issues) < 999 {
+			issues = append(issues, api.Issue{Code: "api.invariant", Field: field,
+				Message:     subject + " uses the fleet install key as its access key; the fleet key must differ from authored Machine access keys",
+				Remediation: "give " + subject + " its own sshKeyPair Secret, or choose another fleet key"})
+		}
+	}
+	if installing == 0 {
+		return issues
+	}
+	subject := "a Machine"
+	if len(names) > 0 {
+		subject = string(api.Machine) + "/" + slices.Min(names)
+	}
+	message := subject + " installs a managed OS and needs the fleet SSH key"
+	switch others := installing - 1; {
+	case others == 1:
+		message += " (and 1 other Machine)"
+	case others > 1:
+		message += " (and " + strconv.Itoa(others) + " other Machines)"
+	}
+	return append(issues, api.Issue{Code: "api.required", Field: field, Message: message, Remediation: "set spec.remoteMachinesAccessKey.keyRef to an sshKeyPair Secret"})
 }
 
 func validateController(environment api.Object, catalog api.Catalog) []api.Issue {

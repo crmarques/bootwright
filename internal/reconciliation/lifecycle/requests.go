@@ -196,22 +196,50 @@ type DesiredSummary struct {
 	Objects     int
 }
 
+// RealizationStatus is what status reports a selected cluster or shared
+// service to be. A value outside these constants proves nothing.
+type RealizationStatus string
+
+const (
+	// RealizationUnsupported is an object this executable does not realize: no
+	// capability claims its kind, its capability refuses it, or it is a managed
+	// service retained install-only.
+	RealizationUnsupported RealizationStatus = "unsupported"
+	// RealizationPending is an object this context has not realized: nothing
+	// names it, its blocks have not started, or a removal took it back or
+	// released it.
+	RealizationPending RealizationStatus = "pending"
+	// RealizationDone is an object an apply proved every block of.
+	RealizationDone RealizationStatus = "done"
+	// RealizationFailed is an object a block of which failed, under either verb.
+	RealizationFailed RealizationStatus = "failed"
+	// RealizationUnknown is an object a block of which is running or unknown,
+	// or one no record proves what a removal did to: an object a replacing
+	// removal has not started, or one of a completed removal whose block
+	// record does not read done.
+	RealizationUnknown RealizationStatus = "unknown"
+)
+
 type ClusterSummary struct {
 	Name   string
 	Kind   string
-	Status string
+	Status RealizationStatus
 }
 
 type ServiceSummary struct {
 	Kind    string
 	Name    string
 	Machine string
-	Status  string
+	Status  RealizationStatus
 }
 
+// SecretSummary counts the Secret objects the selected input declares and the
+// Secret bindings the current operation's record holds, one per operation
+// however many Secrets it covers, which is 0 once a completed removal
+// finalized.
 type SecretSummary struct {
 	Declared int
-	Bound    int
+	Bindings int
 }
 
 type LifecycleSummary struct {

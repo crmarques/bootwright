@@ -29,10 +29,17 @@ func (s stateSource) RenderEffective(context.Context, compilation.EffectiveReque
 	return &compilation.EffectiveResult{Effective: catalog()}, nil
 }
 
-type evidenceSource struct{}
+// evidenceSource answers as a current apply that completed guest's machine
+// block, unless states names what each Machine's block reached instead.
+type evidenceSource struct {
+	states map[string]machine.OwnershipState
+}
 
-func (evidenceSource) Ownership(context.Context, string) (map[string]machine.OwnershipState, error) {
-	return realized(), nil
+func (e evidenceSource) Realization(_ context.Context, _, name string) (machine.OwnershipState, bool, error) {
+	if e.states != nil {
+		return realizedAs(e.states)(name)
+	}
+	return realized()(name)
 }
 
 // boundary lends a runtime as the lifecycle does: a run that asks to retain
@@ -71,25 +78,44 @@ func (r *retained) Write(value []byte) (int, error) {
 	return len(value), nil
 }
 
-// announced records what an operator is told before the adapter runs.
-type announced struct{ locations []string }
+// announced records what an operator is told, in the order it is told: the
+// log location as "logs" and each progress event as "progress".
+type announced struct {
+	locations []string
+	events    []lifecycle.ProgressEvent
+	order     []string
+}
 
 func (a *announced) ReportLogLocation(_ context.Context, location string) {
 	a.locations = append(a.locations, location)
+	a.order = append(a.order, "logs")
+}
+
+func (a *announced) ReportProgress(_ context.Context, event lifecycle.ProgressEvent) {
+	a.events = append(a.events, event)
+	a.order = append(a.order, "progress")
 }
 
 // adapter answers for the Machine it is told to, "guest" unless the case names
-// another, because evidence naming any other Machine is refused.
+// another, because evidence naming any other Machine is refused. It reports
+// each of groups to the run's progress, as the power role's group records do,
+// before it answers.
 type adapter struct {
 	seen    lifecycle.RunRequest
 	machine string
 	power   string
 	changed bool
+	groups  [][2]string
 	err     error
 }
 
-func (a *adapter) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+func (a *adapter) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	a.seen = request
+	for _, group := range a.groups {
+		if request.Progress != nil {
+			request.Progress(ctx, group[0], group[1])
+		}
+	}
 	if a.err != nil {
 		return lifecycle.RunResult{}, a.err
 	}
@@ -192,6 +218,76 @@ func TestAPowerRunRetainsItsAdapterOutputAndNamesWhereFirst(t *testing.T) {
 	}
 	if len(reporter.locations) != 1 || reporter.locations[0] != location {
 		t.Fatalf("a refused run left nothing named to read: %+v", reporter.locations)
+	}
+}
+
+// A stop waits on the guest for as long as it takes to shut down, so the run
+// is one progress step after the log location, the role's groups are its
+// sub-steps, and it settles with the outcome and the power it proved. A run
+// that proves nothing settles as what it is: refused, unproved or canceled.
+func TestAPowerRunReportsOneStepWithTheRolesGroups(t *testing.T) {
+	groups := [][2]string{{"read-state", "running"}, {"read-state", "ok"}, {"power-off", "running"}, {"power-off", "ok"}}
+	step := func(description, group, detail, status string) lifecycle.ProgressEvent {
+		return lifecycle.ProgressEvent{Block: "power", Description: description, Group: group, Detail: detail,
+			Status: status, Position: 1, Total: 1}
+	}
+	for _, test := range []struct {
+		name   string
+		force  bool
+		runner Runner
+		want   []lifecycle.ProgressEvent
+	}{
+		{"a stop that changed the power", false, &adapter{power: "off", changed: true, groups: groups}, []lifecycle.ProgressEvent{
+			step("Stop Machine/guest", "", "", "running"),
+			step("Stop Machine/guest", "read-state", "read the power state", "running"),
+			step("Stop Machine/guest", "read-state", "read the power state", "ok"),
+			step("Stop Machine/guest", "power-off", "shut down", "running"),
+			step("Stop Machine/guest", "power-off", "shut down", "ok"),
+			step("Stop Machine/guest", "", "off", "changed"),
+		}},
+		{"a stop of a Machine already off", false, &adapter{power: "off", groups: groups[:2]}, []lifecycle.ProgressEvent{
+			step("Stop Machine/guest", "", "", "running"),
+			step("Stop Machine/guest", "read-state", "read the power state", "running"),
+			step("Stop Machine/guest", "read-state", "read the power state", "ok"),
+			step("Stop Machine/guest", "", "off", "unchanged"),
+		}},
+		{"a forced stop", true, &adapter{power: "off", changed: true, groups: groups[2:3]}, []lifecycle.ProgressEvent{
+			step("Force off Machine/guest", "", "", "running"),
+			step("Force off Machine/guest", "power-off", "power off", "running"),
+			step("Force off Machine/guest", "", "off", "changed"),
+		}},
+		{"a refused run", false, &adapter{err: errors.New("the adapter operation did not complete")}, []lifecycle.ProgressEvent{
+			step("Stop Machine/guest", "", "", "running"),
+			step("Stop Machine/guest", "", "", "failed"),
+		}},
+		{"an unproved run", false, &adapter{power: "on"}, []lifecycle.ProgressEvent{
+			step("Stop Machine/guest", "", "", "running"),
+			step("Stop Machine/guest", "", "", "unknown"),
+		}},
+		{"a canceled run", false, &adapter{err: context.Canceled}, []lifecycle.ProgressEvent{
+			step("Stop Machine/guest", "", "", "running"),
+			step("Stop Machine/guest", "", "", "canceled"),
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reporter := &announced{}
+			_, _ = New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, test.runner, nil, reporter, nil).
+				Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", Force: test.force, SkipConfirmation: true})
+			if len(reporter.order) == 0 || reporter.order[0] != "logs" || slices.Contains(reporter.order[1:], "logs") {
+				t.Fatalf("reported in the order %v, want the log location first", reporter.order)
+			}
+			if !reflect.DeepEqual(reporter.events, test.want) {
+				t.Fatalf("progress =\n%+v\nwant\n%+v", reporter.events, test.want)
+			}
+		})
+	}
+	reporter := &announced{}
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, &surveyor{reports: map[string]string{"guest": machine.PowerOn}}, nil, reporter, nil).
+		Read(context.Background(), "lab", selected()); err != nil {
+		t.Fatal(err)
+	}
+	if len(reporter.order) != 0 {
+		t.Fatalf("a reading reported %v", reporter.order)
 	}
 }
 
@@ -396,8 +492,8 @@ func TestAPinnedRunRefusesAnotherSystemNamingTheMachineAndTheRemedy(t *testing.T
 		Message: "the management controller at https://bmc.example.test/redfish/v1/Systems/1 answers as another system " +
 			"than the one this context's current apply proved, so no power request was sent",
 		Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "Machine", Name: "metal"},
-		Remediation: "correct spec.hardware.management.bmc.address on Machine/metal, or destroy and apply this context so " +
-			"the machine is proved again; " + lentRemediation + " for both identities",
+		Remediation: "correct spec.hardware.management.bmc.address on Machine/metal, or run bootwright destroy --context lab " +
+			"and bootwright apply --context lab so the machine is proved again; " + lentRemediation + " for both identities",
 	}}
 	proved := &pins{identity: machine.HardwareIdentity{UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31", Serial: "SN1"}, found: true}
 	runner := &adapter{machine: "metal", power: "off"}

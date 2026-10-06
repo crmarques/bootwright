@@ -6,6 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -72,11 +73,11 @@ func (s Service) open(ctx context.Context, contextName, name string, options mac
 	if err != nil {
 		return nil, err
 	}
-	resolved, err := resolveTarget(effective.Effective, name)
+	resolved, err := resolveTarget(effective.Effective, name, selected)
 	if err != nil {
 		return nil, err
 	}
-	identity, privateKeyRef, err := resolveIdentity(resolved, options, s.options.Launcher)
+	identity, privateKeyRef, err := resolveIdentity(ctx, resolved, options, s.options.Launcher)
 	if err != nil {
 		return nil, err
 	}
@@ -99,12 +100,12 @@ func (s Service) open(ctx context.Context, contextName, name string, options mac
 			defer clear(key)
 			session.PrivateKey = key
 		}
-		host, err := s.hostKey(inner, selected, resolved, material)
+		host, err := s.hostKey(inner, selected, resolved, material, declaredMachines(effective.Effective))
 		if err != nil {
 			return err
 		}
 		session.HostKey = host
-		s.advise(resolved)
+		s.advise(resolved, selected)
 		code, err := s.options.Launcher.Run(inner, session, s.options.Streams.In, s.options.Streams.Out, s.options.Streams.Err)
 		if err != nil {
 			return err
@@ -121,12 +122,18 @@ func (s Service) open(ctx context.Context, contextName, name string, options mac
 // advise names the reveal an operator performs themselves before the client
 // asks for it. It is written to the operator's own error stream, before the
 // connection, so it can never be mistaken for the session's output.
-func (s Service) advise(selected target) {
-	notice := passwordAdvisory(selected)
-	if notice == "" || s.options.Streams.Err == nil {
+func (s Service) advise(selected target, contextName string) {
+	if notice := passwordAdvisory(selected, contextName); notice != "" {
+		advisory := diagnostics.Diagnostic{Severity: "warning", Code: "access.credential", Message: notice}
+		s.warn(advisory.Code + ": " + advisory.Message)
+	}
+}
+
+func (s Service) warn(notice string) {
+	if s.options.Streams.Err == nil {
 		return
 	}
-	_, _ = s.options.Streams.Err.Write([]byte("[WARN] access.credential: " + notice + "\n"))
+	_, _ = s.options.Streams.Err.Write([]byte("[WARN] " + notice + "\n"))
 }
 
 func (s Service) interactive() (bool, error) {

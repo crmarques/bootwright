@@ -164,10 +164,10 @@ context storage. Nothing else on the host is created, modified or removed.
 
 **TLS.** The [schema](api/infrastructure-services.md#artifactserver) requires a
 serving certificate exactly when an effective listener uses HTTPS. Its bound
-material is validated before effects: bounded PEM parsing, certificate and key agreement, validity at the
-injected clock, server-authentication suitability, not a certificate authority,
-and subject-alternative-name coverage of every address an HTTPS endpoint
-serves. A failure refuses before connection or installation and names the
+material is validated before effects: bounded PEM parsing, certificate and key agreement, an RSA
+serving key of at least 2048 bits, validity at the injected clock,
+server-authentication suitability, not a certificate authority, and
+subject-alternative-name coverage of every address an HTTPS endpoint serves. A failure refuses before connection or installation and names the
 Secret and the unmet condition, never material or its digest. `tls.minVersion`
 selects the exact protocol floor the server enforces.
 

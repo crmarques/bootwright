@@ -126,7 +126,7 @@ func TestARecordForAnotherEndpointRefuses(t *testing.T) {
 	if err == nil || code(t, err) != "trust.identity" {
 		t.Fatalf("err = %v", err)
 	}
-	if reported := remediations(t, err); !strings.Contains(reported, "machine trust --replace") {
+	if reported := remediations(t, err); !strings.Contains(reported, "machine trust --context lab --machines host --replace host") {
 		t.Fatalf("remediation = %q", reported)
 	}
 }
@@ -182,7 +182,7 @@ func TestWithoutATerminalAnUnprovedKeyRefuses(t *testing.T) {
 	if h.observer.probes != 0 || len(h.trust.written) != 0 {
 		t.Fatal("a non-interactive invocation observed or recorded a key")
 	}
-	if reported := remediations(t, err); !strings.Contains(reported, "machine trust --machines host") {
+	if reported := remediations(t, err); !strings.Contains(reported, "machine trust --context lab --machines host") {
 		t.Fatalf("remediation = %q", reported)
 	}
 }

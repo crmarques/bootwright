@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/trust"
 )
 
 // SSHTarget is the effective SSH endpoint one Machine declares. It names the
@@ -92,6 +93,26 @@ func SSH(o api.Object) (SSHTarget, bool) {
 
 // Installed reports a Machine whose operating system Bootwright installs.
 func Installed(o api.Object) bool { return installed(o) }
+
+// TrustExemption reports why a Machine's host key is not the context trust
+// store's to hold, or "" when it is. Every other source of proof outranks the
+// store, so the store's record of an exempt Machine is never read.
+func TrustExemption(o api.Object) string {
+	switch {
+	case o.Spec().Get("access", "local").Bool():
+		return trust.ExemptReachedLocally
+	case installed(o):
+		return "host key comes from its installation evidence"
+	}
+	ssh, ok := SSH(o)
+	switch {
+	case !ok:
+		return "declares no resolvable SSH access"
+	case ssh.KnownHostsRef != "":
+		return "declares an explicit knownHostsRef"
+	}
+	return ""
+}
 
 // Memberships reports which selected clusters name each Machine, in ascending
 // cluster order. A Machine no cluster names has no entry.

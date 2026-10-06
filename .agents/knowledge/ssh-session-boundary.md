@@ -25,6 +25,20 @@ rather than assuming a fixed layout: an identity arm with no key shifts
 OpenSSH's "permissions are too open" check stats through `/proc/self/fd/<n>` to
 the real inode, so the `0600` mode of the unlinked file is what it sees.
 
+## An offered key is copied, never handed on
+
+`--ssh-id-file` is opened by the invoking account's opener
+(`internal/workspace/invokerfs`), so a key in a network home that squashes
+root is readable at all. Handing the client that descriptor is not enough: the
+client runs as root in the elevated child, and naming `/proc/self/fd/<n>` makes
+it **reopen** the file through the magic link, an open that runs with root's
+credentials, which a server squashing root maps to its anonymous account and
+so refuses for a `0600` key. The session therefore reads the key through the
+received descriptor, bounded at 64 KiB, into an unlinked `0600` copy, exactly
+like a stored private key, and the client reads the copy. Pinned by
+`TestTheClientReadsACopyOfTheOfferedKey`, which compares the device and inode
+the client sees with the key file's.
+
 ## `-F` disables both configuration files, which is the point
 
 `ssh -F <file>` skips `/etc/ssh/ssh_config` **and** `~/.ssh/config` (ssh(1)).

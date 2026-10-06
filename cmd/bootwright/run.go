@@ -89,6 +89,7 @@ func interactiveProcess(classification cli.InvocationClass, stdout, stderr io.Wr
 		Streams:            machineaccess.Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr},
 		Terminal:           stdinTerminal,
 		SecretInput:        secretInputFunc(readStdin),
+		SecretTerminal:     newSecretTerminal(os.Stdin, stderr),
 		Progress:           controllerPresenter,
 		Presenter:          controllerPresenter,
 		LifecycleProgress:  lifecycleProgress,

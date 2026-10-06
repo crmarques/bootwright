@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "status",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": "ready"
+    },
+    "setupChecks": [
+      {
+        "id": "controller-binding",
+        "status": "pending"
+      },
+      {
+        "id": "execution-bundle",
+        "status": "not-ready"
+      }
+    ],
+    "desired": {
+      "revision": "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f",
+      "environment": "lab-rhel",
+      "counts": {
+        "filesSeen": 14,
+        "objectsDecoded": 14
+      }
+    },
+    "clusters": [],
+    "storageClusters": [],
+    "shared": [
+      {
+        "kind": "ArtifactServer",
+        "name": "lab-artifacts",
+        "machine": "controller",
+        "status": "pending"
+      }
+    ],
+    "secrets": {
+      "declared": 3,
+      "bindings": 0
+    },
+    "nextSteps": [
+      "bootwright setup"
+    ],
+    "lifecycle": null,
+    "contradictions": []
+  },
+  "diagnostics": [],
+  "logs": []
+}

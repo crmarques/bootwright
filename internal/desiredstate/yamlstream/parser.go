@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"slices"
 	"strconv"
@@ -23,7 +22,7 @@ func (Parser) Parse(ctx context.Context, files []desiredstate.SourceFile) ([]des
 		return nil, nil, err
 	}
 	if len(files) > desiredstate.MaxFiles {
-		err := diagnostics.NewFailure("input.limit", "YAML source files exceeds the ceiling of 4096", "")
+		err := diagnostics.NewFailure("input.limit", desiredstate.LimitMessage("YAML source files", desiredstate.MaxFiles), "")
 		return nil, diagnostics.Of(err), err
 	}
 	ordered := slices.Clone(files)
@@ -78,7 +77,8 @@ func (p *parseSession) parseFile(file desiredstate.SourceFile) error {
 	}
 	data := file.Bytes()
 	if !utf8.Valid(data) {
-		return p.addSyntax(file.Path(), 0, 0)
+		line, column := invalidUTF8Position(data)
+		return p.addSyntax(file.Path(), 0, line, column, "input is not valid UTF-8", "save the file as UTF-8")
 	}
 	text := newSourceText(data)
 	decoder := yaml.NewDecoder(contextReader{ctx: p.ctx, reader: bytes.NewReader(data)})
@@ -95,7 +95,8 @@ func (p *parseSession) parseFile(file desiredstate.SourceFile) error {
 			return nil
 		}
 		if err != nil {
-			return p.addSyntax(file.Path(), index, parserErrorLine(err))
+			message, remediation := syntaxFailure(err)
+			return p.addSyntax(file.Path(), index, parserErrorLine(err), 0, message, remediation)
 		}
 		p.documentNum++
 		if index > desiredstate.MaxFileDocuments {
@@ -115,15 +116,66 @@ func (p *parseSession) parseFile(file desiredstate.SourceFile) error {
 	}
 }
 
-func (p *parseSession) addSyntax(path string, document, line int) error {
+func (p *parseSession) addSyntax(path string, document, line, column int, message, remediation string) error {
 	// At most one syntax failure is retained per byte-bounded source file.
 	// The compiler applies the returned-diagnostic ceiling after resource
 	// selection, so excluded files cannot consume its diagnostic allowance.
 	p.diagnostics = append(p.diagnostics, diagnostics.Diagnostic{
-		Severity: "error", Code: "yaml.syntax", Message: "Input is not valid UTF-8 YAML.",
-		Source: &diagnostics.SourceLocation{Path: path, Document: document, Line: line},
+		Severity: "error", Code: "yaml.syntax", Message: message, Remediation: remediation,
+		Source: &diagnostics.SourceLocation{Path: path, Document: document, Line: line, Column: column},
 	})
 	return nil
+}
+
+func invalidUTF8Position(data []byte) (int, int) {
+	line, column := 1, 1
+	for len(data) > 0 {
+		r, size := utf8.DecodeRune(data)
+		if r == utf8.RuneError && size <= 1 {
+			break
+		}
+		if r == '\n' {
+			line, column = line+1, 1
+		} else {
+			column++
+		}
+		data = data[size:]
+	}
+	return line, column
+}
+
+const syntaxReasonBytes = 120
+
+func syntaxFailure(err error) (string, string) {
+	reason := strings.TrimPrefix(err.Error(), "yaml: ")
+	if rest, found := strings.CutPrefix(reason, "line "); found {
+		if number, tail, cut := strings.Cut(rest, ": "); cut && number != "" && strings.Trim(number, "0123456789") == "" {
+			reason = tail
+		}
+	}
+	switch {
+	case reason == "found incompatible YAML document":
+		return "a %YAML 1.2 directive is not accepted", "remove the directive"
+	case strings.HasPrefix(reason, "unknown anchor "):
+		return "YAML syntax error: an alias names an anchor the document does not define", "write the value out in full instead of an anchor or alias"
+	}
+	if len(reason) > syntaxReasonBytes {
+		reason = reason[:syntaxReasonBytes]
+	}
+	return "YAML syntax error: " + printableReason(reason), "correct the YAML at that line; indent with spaces, not tabs"
+}
+
+func printableReason(reason string) string {
+	const hex = "0123456789abcdef"
+	out := make([]byte, 0, len(reason))
+	for i := 0; i < len(reason); i++ {
+		if c := reason[i]; c >= 0x20 && c < 0x7f {
+			out = append(out, c)
+		} else {
+			out = append(out, '\\', 'x', hex[c>>4], hex[c&15])
+		}
+	}
+	return string(out)
 }
 
 func (p *parseSession) checkRepresentation(path string, document int, root *yaml.Node) error {
@@ -170,7 +222,7 @@ func limitFailure(resource string, ceiling int, path string, document int, node 
 	}
 	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
 		Severity: "error", Code: "input.limit",
-		Message: fmt.Sprintf("%s exceeds the ceiling of %d", resource, ceiling), Source: source,
+		Message: desiredstate.LimitMessage(resource, ceiling), Source: source,
 	}}}
 }
 

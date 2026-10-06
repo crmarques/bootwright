@@ -62,8 +62,9 @@ func ReadContentDigest() string {
 // management controllers, so one bounded run answers for every Machine behind
 // the same host. A Machine this context resolves no reachable controller for
 // is left out of the survey rather than refused: an inspection reports the
-// readings it has, and one unresolvable controller never denies the rest.
-func readSurveysFor(catalog api.Catalog, contextName string, names []string, owned map[string]machine.OwnershipState) ([]ReadSurvey, error) {
+// readings it has, and one unresolvable controller never denies the rest. A
+// realization that cannot be read is not such a Machine, so it refuses.
+func readSurveysFor(catalog api.Catalog, contextName string, names []string, realized realizations) ([]ReadSurvey, error) {
 	controllerMachine, err := lifecycle.ControllerMachine(catalog)
 	if err != nil {
 		return nil, err
@@ -74,7 +75,20 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, own
 		if !ok {
 			continue
 		}
-		controller, placement, _, err := controllerFor(catalog, object, contextName, controllerMachine, owned)
+		managed, err := managedTarget(catalog, object, contextName, controllerMachine)
+		if err != nil {
+			continue
+		}
+		if !managed.Physical {
+			admitted, err := reachable(realized, object.Name())
+			if err != nil {
+				return nil, err
+			}
+			if !admitted {
+				continue
+			}
+		}
+		controller, placement, _, err := endpointFor(managed, controllerMachine)
 		if err != nil {
 			continue
 		}

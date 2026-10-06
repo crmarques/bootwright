@@ -149,7 +149,7 @@ func TestExcludedMachineServiceReferencesDoNotFailSelectedGraph(t *testing.T) {
 		selected := environment.Select(catalog, nil)
 		result := compilation.Selection{Catalog: selected.Catalog, ExcludedContainerClusters: selected.ExcludedContainerClusters, ExcludedStorageClusters: selected.ExcludedStorageClusters}
 		for _, problem := range selected.Problems {
-			result.Problems = append(result.Problems, compilation.ObjectIssue{Object: problem.Object, Issue: problem.Issue})
+			result.Problems = append(result.Problems, compilation.ObjectIssue{Object: problem.Object, Issue: problem.Issue, Target: problem.Target})
 		}
 		return result
 	}

@@ -15,11 +15,13 @@ type EffectiveState interface {
 	RenderEffective(context.Context, compilation.EffectiveRequest) (*compilation.EffectiveResult, error)
 }
 
-// Ownership reports what the context's durable evidence proves about each
-// object. An emulated management controller exists only while the Machine that
-// owns it does, so a power operation asks before it acts.
-type Ownership interface {
-	Ownership(context.Context, string) (map[string]machine.OwnershipState, error)
+// Realization reports the verb of the context's current operation and the
+// state of the one block that realizes a Machine on its provider, and whether
+// the current plan names such a block. An emulated management controller is
+// one of that block's effects, so a power operation asks it rather than the
+// Machine as a whole, whose installation may still be unsettled.
+type Realization interface {
+	Realization(ctx context.Context, contextName, name string) (machine.OwnershipState, bool, error)
 }
 
 // Identities reports the hardware identity the context's current apply proved
@@ -48,11 +50,13 @@ type Confirmer interface {
 }
 
 // Reporter names where this run retains what its adapter prints, before that
-// adapter runs. It is the only thing a power operation reports while it works:
-// a run that refuses reports a diagnostic rather than a result, and its
-// retained output is what an operator is told to read.
+// adapter runs, because a run that refuses reports a diagnostic rather than a
+// result and its retained output is what an operator is told to read. It then
+// carries the run as one progress step whose sub-steps are the adapter's
+// groups, so a stop that waits on a guest is never silent.
 type Reporter interface {
 	ReportLogLocation(context.Context, string)
+	ReportProgress(context.Context, lifecycle.ProgressEvent)
 }
 
 func failure(code, message, remediation string) error {

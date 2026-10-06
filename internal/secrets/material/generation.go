@@ -20,6 +20,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -314,12 +315,24 @@ func (s *Service) validateGeneratedCertificate(declaration secrets.Declaration, 
 	if cert.Version != 3 || cert.PublicKeyAlgorithm != x509.ECDSA || cert.SignatureAlgorithm != x509.ECDSAWithSHA256 ||
 		cert.SerialNumber == nil || cert.SerialNumber.Sign() <= 0 || cert.SerialNumber.BitLen() > 128 || len(cert.UnhandledCriticalExtensions) != 0 ||
 		!bytes.Equal(cert.RawSubject, expectedSubject) || !bytes.Equal(cert.RawIssuer, expectedSubject) ||
-		!validAt(cert, now) || cert.NotBefore.Nanosecond() != 0 || cert.NotAfter.Nanosecond() != 0 || !cert.NotAfter.Equal(cert.NotBefore.AddDate(0, 0, days)) ||
+		!validAt(cert, now) || cert.NotBefore.Nanosecond() != 0 || cert.NotAfter.Nanosecond() != 0 || !generatedValidity(cert, days) ||
 		cert.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature) != nil ||
 		!exactGeneratedSANs(cert, configuration.DNSNames, ipAddresses) || !exactGeneratedCertificateUsage(cert, declaration.Type) {
 		return failure("input", "generated secret material does not conform to its declaration", "")
 	}
 	return nil
+}
+
+// certificateBackdate is how long before its generation second a generated
+// certificate starts, so a verifier whose clock trails still accepts it.
+const certificateBackdate = 24 * time.Hour
+
+// generatedValidity accepts the validity a generated certificate has: it ends
+// days after its generation second, and starts a day before it, or, when an
+// earlier build generated it, at that second.
+func generatedValidity(certificate *x509.Certificate, days int) bool {
+	return certificate.NotAfter.Equal(certificate.NotBefore.AddDate(0, 0, days)) ||
+		certificate.NotAfter.Equal(certificate.NotBefore.Add(certificateBackdate).AddDate(0, 0, days))
 }
 
 func validGeneratedP256PrivateKey(key *ecdsa.PrivateKey) bool {
@@ -446,7 +459,8 @@ func (s *Service) generateCertificate(ctx context.Context, declaration secrets.D
 		return nil, nil, failure("store.crypto", "certificate generation dependencies are unavailable", "")
 	}
 	now := s.now()
-	if now.Year() < 1950 || now.Year() > 9899 {
+	notBefore := now.Add(-certificateBackdate)
+	if notBefore.Year() < 1950 || now.Year() > 9899 {
 		return nil, nil, failure("store.crypto", "certificate generation clock is outside the supported range", "")
 	}
 	notAfter := now.AddDate(0, 0, days)
@@ -465,7 +479,7 @@ func (s *Service) generateCertificate(ctx context.Context, declaration secrets.D
 	template := &x509.Certificate{
 		SerialNumber: serial,
 		Subject:      pkix.Name{CommonName: configuration.CommonName},
-		NotBefore:    now,
+		NotBefore:    notBefore,
 		NotAfter:     notAfter,
 		DNSNames:     dnsNames,
 		IPAddresses:  ipAddresses,

@@ -51,7 +51,7 @@ func TestMachineListShowsEveryDeclaredIPBesideTheContact(t *testing.T) {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
-	if !strings.Contains(lines[0], "ADDRESS") || !strings.Contains(lines[0], "IP") {
+	if !strings.Contains(lines[0], "CONTACT") || !strings.Contains(lines[0], "ADDRESSES") {
 		t.Fatalf("headings = %q", lines[0])
 	}
 	if !strings.Contains(lines[1], "198.51.100.20,192.0.2.20") {
@@ -107,10 +107,9 @@ func TestMachineListJSONCarriesItsContextAndRows(t *testing.T) {
 	}
 	want := `{"schemaVersion":"v1alpha1","command":"machine list","ok":true,"exitCode":0,` +
 		`"result":{"context":"lab","machines":[` +
-		`{"name":"guest","address":"guest.lab.example.test","ips":["198.51.100.20","192.0.2.20"],` +
-		`"os":"installed","provider":"lab","clusters":[],"lifecycle":"applied","power":""},` +
-		`{"name":"node","address":"","ips":[],"os":"provided","provider":"","clusters":["ocp"],` +
-		`"lifecycle":"not-applied","power":""}` +
+		`{"name":"guest","contact":"guest.lab.example.test","addresses":["198.51.100.20","192.0.2.20"],` +
+		`"os":"installed","provider":"lab","clusters":[],"lifecycle":"applied"},` +
+		`{"name":"node","addresses":[],"os":"provided","clusters":["ocp"],"lifecycle":"not-applied"}` +
 		`],"powerRead":false},"diagnostics":[],"logs":[]}` + "\n"
 	if out.String() != want {
 		t.Fatalf("JSON = %q, want %q", out.String(), want)
@@ -128,6 +127,43 @@ func TestMachineListJSONSaysWhetherControllersWereAsked(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"lifecycle":"applied","power":"off"`) || !strings.Contains(out.String(), `"powerRead":true`) {
 		t.Fatalf("JSON = %q", out.String())
+	}
+}
+
+// A row omits a scalar the Machine does not have instead of writing it empty,
+// so a consumer reads an absent power as no reading at all, never as a reading
+// that came back unknown.
+func TestMachineListJSONOmitsAbsentScalars(t *testing.T) {
+	result := &inventory.ListResult{Context: "lab", PowerRead: true, Machines: []inventory.MachineRow{
+		{Name: "rhel-01", Address: "rhel-01.lab.example.test", IPs: []string{"198.51.100.11"}, OS: "installed", Provider: "lab-libvirt", Clusters: []string{}, Lifecycle: "applied", Power: "unknown"},
+		{Name: "sno-01", OS: "provided", Clusters: []string{"sno"}, Lifecycle: "not-applied"},
+	}}
+	var out bytes.Buffer
+	if err := writeMachineList(&out, "machine list", result, false, true); err != nil {
+		t.Fatal(err)
+	}
+	var envelope struct {
+		Result struct {
+			Machines []map[string]json.RawMessage `json:"machines"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || len(envelope.Result.Machines) != 2 {
+		t.Fatalf("JSON = %s: %v", out.String(), err)
+	}
+	read, absent := envelope.Result.Machines[0], envelope.Result.Machines[1]
+	for _, key := range []string{"contact", "provider", "power"} {
+		if _, found := absent[key]; found {
+			t.Errorf("a Machine with no %s wrote the key: %s", key, out.String())
+		}
+		if _, found := read[key]; !found {
+			t.Errorf("a Machine with a %s omitted it: %s", key, out.String())
+		}
+	}
+	if string(absent["addresses"]) != "[]" || string(absent["clusters"]) != `["sno"]` {
+		t.Errorf("collections = %s and %s, want [] and [\"sno\"]", absent["addresses"], absent["clusters"])
+	}
+	if string(read["power"]) != `"unknown"` {
+		t.Errorf("the reading that came back unknown = %s", read["power"])
 	}
 }
 
@@ -174,6 +210,27 @@ func TestPowerResultReportsTheProvedStateAndWhetherItChanged(t *testing.T) {
 		`"diagnostics":[],"logs":[]}` + "\n"
 	if encoded.String() != want {
 		t.Fatalf("JSON = %q, want %q", encoded.String(), want)
+	}
+}
+
+// A controller that reported no earlier state leaves previous out rather than
+// claiming an empty one.
+func TestMachinePowerJSONOmitsAnUnreportedPrevious(t *testing.T) {
+	for _, test := range []struct {
+		previous string
+		want     string
+	}{
+		{previous: "", want: `"power":"off","changed":true`},
+		{previous: "on", want: `"power":"off","previous":"on","changed":true`},
+	} {
+		var out bytes.Buffer
+		result := &power.Result{Context: "lab", Machine: "guest", Verb: "stop", Power: "off", Previous: test.previous, Changed: true}
+		if err := writeMachinePower(&out, "machine stop", result, true); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), test.want) {
+			t.Errorf("previous %q encoded %s, want %s", test.previous, out.String(), test.want)
+		}
 	}
 }
 

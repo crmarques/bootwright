@@ -1,6 +1,7 @@
 package artifactserver
 
 import (
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -8,6 +9,7 @@ import (
 	"encoding/pem"
 	"net/netip"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -16,6 +18,7 @@ import (
 const (
 	maxCertificateBytes = 1 << 20
 	maxPEMBlocks        = 16
+	minimumRSABits      = 2048
 )
 
 // ServingCertificate is the non-secret evidence a validated certificate
@@ -52,6 +55,10 @@ func ValidateServingCertificate(material secrets.Material, addresses []string, n
 	leaf, err := x509.ParseCertificate(pair.Certificate[0])
 	if err != nil {
 		return ServingCertificate{}, refusal("secret.part", "the serving certificate could not be parsed", "regenerate or replace the tlsCertificate Secret")
+	}
+	if key, ok := leaf.PublicKey.(*rsa.PublicKey); ok && key.N.BitLen() < minimumRSABits {
+		return ServingCertificate{}, refusal("secret.part", "the serving certificate's RSA key has "+strconv.Itoa(key.N.BitLen())+" bits; a serving key needs at least 2048",
+			"replace the tlsCertificate Secret with an RSA-2048 or P-256 certificate")
 	}
 	if now.Before(leaf.NotBefore) || now.After(leaf.NotAfter) {
 		return ServingCertificate{}, refusal("secret.part", "the serving certificate is not valid at this time", "regenerate the tlsCertificate Secret with secret generate --renew")

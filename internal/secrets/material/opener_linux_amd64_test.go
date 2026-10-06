@@ -161,16 +161,16 @@ func TestSecretFilesOpenOnlyThroughTheOpener(t *testing.T) {
 }
 
 func TestSecretFilesReproveReceivedDescriptors(t *testing.T) {
-	const unsafe = "secret file type, owner, links, or permissions are unsafe"
 	for _, test := range []struct {
-		name  string
-		mode  os.FileMode
-		links bool
-		owner int
+		name   string
+		mode   os.FileMode
+		links  bool
+		owner  int
+		unsafe string
 	}{
-		{name: "group and world readable", mode: 0644, owner: os.Getuid()},
-		{name: "two links", mode: 0600, links: true, owner: os.Getuid()},
-		{name: "another account's file", mode: 0600, owner: os.Getuid() + 1},
+		{name: "group and world readable", mode: 0644, owner: os.Getuid(), unsafe: "secret file mode is 0644; a file carrying a value, password, token or private key must be 0600 or 0400"},
+		{name: "two links", mode: 0600, links: true, owner: os.Getuid(), unsafe: "secret file has more than one hard link"},
+		{name: "another account's file", mode: 0600, owner: os.Getuid() + 1, unsafe: "secret file is owned by another account"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			files := newVirtualSecretFiles(t)
@@ -184,8 +184,8 @@ func TestSecretFilesReproveReceivedDescriptors(t *testing.T) {
 			value, err := acquireValueFile(service, path)
 			value.Clear()
 			assertFailureCode(t, err, "secret.input")
-			if reported := diagnostics.Of(err)[0]; reported.Message != unsafe || reported.Source == nil || reported.Source.Path != path {
-				t.Fatalf("diagnostic = %#v, want %q at %s", reported, unsafe, path)
+			if reported := diagnostics.Of(err)[0]; reported.Message != test.unsafe || reported.Source == nil || reported.Source.Path != path {
+				t.Fatalf("diagnostic = %#v, want %q at %s", reported, test.unsafe, path)
 			}
 		})
 	}

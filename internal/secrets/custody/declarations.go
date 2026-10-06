@@ -59,7 +59,7 @@ func (s Service) resolve(ctx context.Context, name string) (secretstore.Context,
 
 func declarationOf(object api.Object, origin diagnostics.SourceLocation) secrets.Declaration {
 	spec := object.Spec()
-	d := secrets.Declaration{Name: object.Name(), Type: spec.Get("type").Text(), Source: "contextStore", Origin: origin.Path, Document: origin.Document}
+	d := secrets.Declaration{Name: object.Name(), Type: spec.Get("type").Text(), Source: "contextStore"}
 	if g := spec.Get("source", "generated"); g.Present() {
 		d.Source = "generated"
 		d.Generation = secrets.Generation{Username: g.Get("username").Text(), CommonName: g.Get("commonName").Text(), DNSNames: g.Get("dnsNames").Strings(), IPAddresses: g.Get("ipAddresses").Strings(), KeyType: g.Get("keyType").Text(), Comment: g.Get("comment").Text()}
@@ -71,49 +71,45 @@ func declarationOf(object api.Object, origin diagnostics.SourceLocation) secrets
 		}
 		d.Generation.Bytes = int(entropy)
 	}
-	// Only non-secret declaration data enters this identity digest.
-	canonical, _ := json.Marshal(d)
-	digest := sha256.Sum256(canonical)
-	d.Fingerprint = hex.EncodeToString(digest[:])
+	// Only non-secret declaration data enters these identity digests. The
+	// legacy one also covers where the declaration was read from, so a version
+	// an earlier build stored stays current while that place is unchanged.
+	legacy := d
+	legacy.Origin, legacy.Document = origin.Path, origin.Document
+	d.LegacyFingerprint, d.LegacyOrigin, d.LegacyDocument = fingerprint(legacy), origin.Path, origin.Document
+	d.Fingerprint = fingerprint(d)
 	return d
 }
 
+func fingerprint(d secrets.Declaration) string {
+	d.Fingerprint = ""
+	canonical, _ := json.Marshal(d)
+	digest := sha256.Sum256(canonical)
+	return hex.EncodeToString(digest[:])
+}
+
 func validName(name string) bool { return api.ValidLexical("name", name) }
-func findDeclaration(declarations []secrets.Declaration, name string) (secrets.Declaration, error) {
+
+func lookupDeclaration(declarations []secrets.Declaration, name string) (secrets.Declaration, bool) {
 	if validName(name) {
 		for _, d := range declarations {
 			if d.Name == name {
-				return d, nil
+				return d, true
 			}
 		}
 	}
-	return secrets.Declaration{}, secretstore.Failure("declaration", "name must identify an effective Secret declaration")
+	return secrets.Declaration{}, false
 }
 
-func validateInput(kind string, input secrets.Input) error {
-	if input.Provided & ^secrets.AllowedInputFields(kind) != 0 {
-		return secretstore.Failure("input", "an explicitly supplied input flag is not applicable to the declared secret type")
+// findDeclaration refuses a name the context declares no Secret by, pointing
+// at secret check, which lists the Secrets it declares.
+func findDeclaration(contextName string, declarations []secrets.Declaration, name string) (secrets.Declaration, error) {
+	if d, found := lookupDeclaration(declarations, name); found {
+		return d, nil
 	}
-	value := (input.ValueFile != "") != input.ValueStdin
-	password := (input.PasswordFile != "") != input.PasswordStdin
-	noValue := input.ValueFile == "" && !input.ValueStdin
-	noPassword := input.Username == "" && input.PasswordFile == "" && !input.PasswordStdin
-	noKeys := input.CertificateFile == "" && input.PrivateKeyFile == "" && input.PublicKeyFile == ""
-	valid := false
-	switch kind {
-	case "opaque", "token", "dockerConfigJson":
-		valid = value && noPassword && noKeys
-	case "usernamePassword":
-		valid = password && input.Username != "" && noValue && noKeys
-	case "caBundle":
-		valid = input.CertificateFile != "" && input.PrivateKeyFile == "" && input.PublicKeyFile == "" && noValue && noPassword
-	case "tlsCertificate":
-		valid = input.CertificateFile != "" && input.PrivateKeyFile != "" && input.PublicKeyFile == "" && noValue && noPassword
-	case "sshKeyPair":
-		valid = input.PrivateKeyFile != "" && input.CertificateFile == "" && noValue && noPassword
+	message := "Secret " + name + " is not declared in context " + contextName
+	if !validName(name) {
+		message = "the Secret name is not a valid object name, so it names no Secret declared in context " + contextName
 	}
-	if !valid {
-		return secretstore.Failure("source", "input flags do not match the declared secret type")
-	}
-	return nil
+	return secrets.Declaration{}, secrets.Refusal("declaration", message, contextName, name, secrets.Command(contextName, "check"))
 }

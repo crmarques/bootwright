@@ -287,7 +287,7 @@ func TestStatusRendersTextAndJSON(t *testing.T) {
 	}
 	// The build that registered the operation is what a removal is planned
 	// from, so a refusal naming it as the remedy is readable in advance.
-	for _, want := range []string{"Context lab", "  Mode  ready\n", "controller-binding", "ArtifactServer/lab", "Registered by", "1.4.0 (9f2c1ab)"} {
+	for _, want := range []string{"Context lab", "  Mode  ready\n", "Controller binding", "ArtifactServer/lab", "Registered by", "1.4.0 (9f2c1ab)"} {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("status text = %q, missing %q", text.String(), want)
 		}
@@ -467,9 +467,9 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		Context:         lifecycle.ContextIdentity{Name: raw("ctx"), Revision: raw("rev"), Mode: raw("mode")},
 		SetupChecks:     []lifecycle.SetupCheck{{ID: raw("check"), Status: raw("readiness")}},
 		Desired:         lifecycle.DesiredSummary{Revision: raw("rev"), Environment: raw("env")},
-		Clusters:        []lifecycle.ClusterSummary{{Name: raw("cname"), Kind: raw("ckind"), Status: raw("cstatus")}},
-		StorageClusters: []lifecycle.ClusterSummary{{Name: raw("sname"), Kind: raw("skind"), Status: raw("sstatus")}},
-		Shared:          []lifecycle.ServiceSummary{{Kind: raw("vkind"), Name: raw("vname"), Machine: raw("machine"), Status: raw("vstatus")}},
+		Clusters:        []lifecycle.ClusterSummary{{Name: raw("cname"), Kind: raw("ckind"), Status: lifecycle.RealizationStatus(raw("cstatus"))}},
+		StorageClusters: []lifecycle.ClusterSummary{{Name: raw("sname"), Kind: raw("skind"), Status: lifecycle.RealizationStatus(raw("sstatus"))}},
+		Shared:          []lifecycle.ServiceSummary{{Kind: raw("vkind"), Name: raw("vname"), Machine: raw("machine"), Status: lifecycle.RealizationStatus(raw("vstatus"))}},
 		NextSteps:       []string{raw("step")},
 		Lifecycle: &lifecycle.LifecycleSummary{
 			Operation: raw("operation"), Verb: raw("verb"), State: raw("opstate"), Next: raw("next"),
@@ -493,8 +493,8 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 	for _, want := range []string{
 		"[OK] Context " + shown("ctx") + "\n", "  Mode  " + shown("mode") + "\n", "  [UNKNOWN]  " + shown("check") + "\n",
 		"  Revision         " + shown("rev") + "\n", "  Environment      " + shown("env") + "\n",
-		"  [FAIL]  " + shown("ckind") + "/" + shown("cname") + "\n", "  [FAIL]  " + shown("skind") + "/" + shown("sname") + "\n",
-		"  [FAIL]  " + shown("vkind") + "/" + shown("vname") + "  " + shown("machine") + "\n", "  " + shown("step") + "\n",
+		"  [UNKNOWN]  " + shown("ckind") + "/" + shown("cname") + "\n", "  [UNKNOWN]  " + shown("skind") + "/" + shown("sname") + "\n",
+		"  [UNKNOWN]  " + shown("vkind") + "/" + shown("vname") + "  " + shown("machine") + "\n", "  " + shown("step") + "\n",
 		"  Operation  " + shown("operation") + "\n", "  Verb       " + shown("verb") + "\n",
 		"  State      " + shown("opstate") + "\n", "  Next       " + shown("next") + "\n",
 		"  [FAIL]  " + shown("description") + "\n",

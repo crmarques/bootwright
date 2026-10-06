@@ -453,9 +453,10 @@ func effectGrants() map[string][]string {
 		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
 		"internal/controller/nativelocal":  {"golang.org/x/sys/unix", "io", "net/http", "os", "os/exec", "syscall"},
 		// The SSH session adapter runs the one pinned client as a child and
-		// hands it the operator's streams and its material descriptors, and
-		// resolves an offered key to a path-only descriptor before trusting it.
-		"internal/machine/sshlocal": {"golang.org/x/sys/unix", "io", "os", "os/exec", "syscall"},
+		// hands it the operator's streams and its material descriptors. An
+		// offered key arrives as a descriptor from the invoking account's
+		// opener, proved on that descriptor and copied, never opened here.
+		"internal/machine/sshlocal": {"io", "os", "os/exec", "syscall"},
 		// Machine access names those streams to hand them on; it opens nothing.
 		"internal/machine/access": {"io"},
 		// The invoking account's opener opens only through the descriptors it

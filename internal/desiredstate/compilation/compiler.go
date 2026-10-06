@@ -31,6 +31,7 @@ type Selection struct {
 type ObjectIssue struct {
 	Object api.Object
 	Issue  api.Issue
+	Target string
 }
 type SelectGraph func(api.Catalog) Selection
 

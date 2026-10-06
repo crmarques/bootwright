@@ -8,12 +8,15 @@ type EnrollRequest struct {
 	SkipConfirmation bool
 }
 
-// The actions one enrollment reports. Only Add and Replace change anything;
-// Reuse and Skip exist so an operator can see why a Machine was left alone.
+// The actions one enrollment reports. Add, Replace and Remove change
+// anything; Reuse and Skip exist so an operator can see why a Machine was left
+// alone. Remove names the record of a Machine the context no longer declares
+// whose endpoint a selected Machine now holds.
 const (
 	ActionAdd     = "add"
 	ActionReuse   = "reuse"
 	ActionReplace = "replace"
+	ActionRemove  = "remove"
 	ActionSkip    = "skip"
 )
 
@@ -22,9 +25,9 @@ const (
 type Report struct {
 	Context string `json:"context"`
 	DryRun  bool   `json:"dryRun"`
-	// Pending counts the records this enrollment resolved to write, which is
-	// what an operator confirms and what a dry run reports without writing.
-	// Recorded counts what it actually wrote.
+	// Pending counts the records this enrollment resolved to write or remove,
+	// which is what an operator confirms and what a dry run reports without
+	// writing. Recorded counts what it actually wrote.
 	Pending  int          `json:"pending"`
 	Recorded int          `json:"recorded"`
 	Hosts    []HostReport `json:"hosts"`

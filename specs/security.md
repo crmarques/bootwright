@@ -318,14 +318,16 @@ no credential, proves nothing by itself, and is never the source of a record.
 Session material — the private key, the pinned host key and the client
 configuration — is passed as open descriptors the client inherits, never as
 named paths, arguments or environment values, and is released when the session
-ends. An operator-offered key file joins that material: it is opened without
-following a link at its name, proved on the open handle to be a regular file
-the invoking account owns and no other account can read, and handed to the
-client as that same descriptor, so the file the client reads is the file that
-was proved. The configuration is Bootwright's own: it carries only allowlisted
-cryptographic directives from the host crypto-policy backend where that exists,
-so site and FIPS policy is retained, and it admits no identity, certificate,
-agent, command, forwarding or host rule from system or personal configuration.
+ends. An operator-offered key file joins that material: it is opened under the
+invoking account's credentials without following a link at its name, proved on
+the received handle to be a regular file the invoking account owns and no other
+account can read, and copied through that handle into anonymous session
+material, so the bytes the client reads are those of the file that was proved
+and the client never reopens the operator's file. The configuration is
+Bootwright's own: it carries only allowlisted cryptographic directives from the
+host crypto-policy backend where that exists, so site and FIPS policy is
+retained, and it admits no identity, certificate, agent, command, forwarding
+or host rule from system or personal configuration.
 The client receives only terminal-identifying environment values, so a
 caller-selected askpass helper, agent, loader or crypto-provider override
 cannot cross the process boundary. The session is a waited child whose streams

@@ -68,8 +68,12 @@ so a missing or wrong route costs a refusal rather than a failed install.
 
 The cluster's pull secret is the one secret you supply. Download it from the
 Red Hat console and set it into the context store; it never enters the example.
+A pull secret is a value file, so `secret set` reads it only when it is yours
+and private to you, mode `0600` or `0400`; a browser download is usually
+`0644`, which it refuses with `chmod 600` as the remedy.
 
 ```sh
+chmod 600 ~/pull-secret.json
 ./bin/bootwright secret set --name openshift-pull-secret --value-file ~/pull-secret.json
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
@@ -81,6 +85,7 @@ Red Hat console and set it into the context store; it never enters the example.
 make build
 ./bin/bootwright validate -f examples/lab-sno
 sudo ./bin/bootwright context init --name lab-sno --input-dir "$PWD/examples/lab-sno"
+chmod 600 ~/pull-secret.json
 sudo ./bin/bootwright secret set --name openshift-pull-secret --value-file ~/pull-secret.json
 sudo ./bin/bootwright secret generate
 sudo ./bin/bootwright setup

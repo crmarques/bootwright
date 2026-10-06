@@ -120,7 +120,25 @@ func validSecretMutation(path string, result *custody.MutationResult) bool {
 	if result == nil || !validSecretContext(result.Context) || result.Changed < 0 || result.Unchanged < 0 || !validSecretParts(result.Parts) {
 		return false
 	}
-	return path == "secret generate" || result.Name != ""
+	switch path {
+	case "secret generate":
+		return len(result.Parts) == 0 && len(result.ChangedNames) == result.Changed && len(result.UnchangedNames) == result.Unchanged &&
+			distinctNames(append(slices.Clone(result.ChangedNames), result.UnchangedNames...))
+	case "secret delete":
+		return result.Name != "" && len(result.Parts) == 0 && result.Changed+result.Unchanged == 1
+	}
+	return result.Name != ""
+}
+
+func distinctNames(names []string) bool {
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		if name == "" || seen[name] {
+			return false
+		}
+		seen[name] = true
+	}
+	return true
 }
 
 func validComponentRef(value secretstore.ComponentRef) bool {
@@ -136,11 +154,15 @@ func validSelection(value secretstore.Selection) bool {
 }
 
 func validEncryptionMutation(result *encryption.MutationResult) bool {
-	return result != nil && validSecretContext(result.Context) && validSelection(result.Implementation) && result.ActiveKey != ""
+	return result != nil && validSecretContext(result.Context) && validSelection(result.Implementation) && result.ActiveKey != "" &&
+		result.ReencryptedVersions >= 0 && result.ReencryptedParts >= 0 && distinctNames(result.RetiredKeys)
 }
 
 func validEncryptionStatus(result *encryption.StatusResult) bool {
 	if result == nil || result.Items.CurrentVersions < 0 || result.Items.BoundVersions < 0 || result.Items.MaterialParts < 0 || result.Items.RetainedArtifacts < 0 {
+		return false
+	}
+	if result.Items.CleanupRequired && result.Context.Name == "" {
 		return false
 	}
 	if !result.Initialized {
@@ -163,21 +185,48 @@ func validEncryptionStatus(result *encryption.StatusResult) bool {
 }
 
 func writeSecretMutation(out io.Writer, path string, result *custody.MutationResult) error {
-	action := strings.TrimPrefix(path, "secret ")
-	name := result.Name
-	if name == "" {
-		name = "all"
-	}
 	var text display
-	text.headline("OK", "Secret "+action+" complete")
-	text.section("")
-	text.fields(
-		field{Label: "Name", Value: name},
-		field{Label: "Changed", Value: strconv.Itoa(result.Changed)},
-		field{Label: "Unchanged", Value: strconv.Itoa(result.Unchanged)},
-		field{Label: "Parts", Value: displaySecretParts(result.Parts)},
-	)
+	switch path {
+	case "secret generate":
+		switch {
+		case result.Changed > 0:
+			text.headline("OK", "Secrets generated")
+		case result.Unchanged > 0:
+			text.headline("SKIPPED", "Generated Secrets are current")
+		default:
+			text.headline("SKIPPED", "No generated Secret is declared")
+		}
+		text.section("")
+		text.fields(
+			field{Label: "Changed", Value: displayNameList(result.ChangedNames)},
+			field{Label: "Unchanged", Value: displayNameList(result.UnchangedNames)},
+		)
+	case "secret delete":
+		if result.Changed > 0 {
+			text.headline("OK", "Secret "+result.Name+" deleted")
+		} else {
+			text.headline("SKIPPED", "Secret "+result.Name+" has no current version; nothing was deleted")
+		}
+	default:
+		text.headline("OK", "Secret "+strings.TrimPrefix(path, "secret ")+" complete")
+		text.section("")
+		text.fields(
+			field{Label: "Name", Value: result.Name},
+			field{Label: "Changed", Value: strconv.Itoa(result.Changed)},
+			field{Label: "Unchanged", Value: strconv.Itoa(result.Unchanged)},
+			field{Label: "Parts", Value: displaySecretParts(result.Parts)},
+		)
+	}
 	return text.writeTo(out)
+}
+
+func displayNameList(names []string) string {
+	if len(names) == 0 {
+		return "none"
+	}
+	names = slices.Clone(names)
+	slices.Sort(names)
+	return strings.Join(names, ", ")
 }
 
 func writeSecretCheck(out, errOut io.Writer, command string, result *custody.CheckResult, diagnostics []diagnostic, exitCode int, jsonMode bool) error {
@@ -256,12 +305,19 @@ func writeEncryptionMutation(out io.Writer, path string, result *encryption.Muta
 	var text display
 	text.headline("OK", "Secret encryption "+action)
 	text.section("")
-	text.fields(
-		field{Label: "Type", Value: result.Implementation.Type},
-		field{Label: "Store", Value: result.Implementation.Store.ID},
-		field{Label: "Key custody", Value: result.Implementation.KeyCustody.ID},
-		field{Label: "Active key", Value: result.ActiveKey},
-	)
+	fields := []field{
+		{Label: "Type", Value: result.Implementation.Type},
+		{Label: "Store", Value: result.Implementation.Store.ID},
+		{Label: "Key custody", Value: result.Implementation.KeyCustody.ID},
+		{Label: "Active key", Value: result.ActiveKey},
+	}
+	if path == "secret encryption rotate" {
+		fields = append(fields,
+			field{Label: "Retired keys", Value: displayNameList(result.RetiredKeys)},
+			field{Label: "Re-encrypted", Value: strconv.Itoa(result.ReencryptedVersions) + " versions, " + strconv.Itoa(result.ReencryptedParts) + " parts"},
+		)
+	}
+	text.fields(fields...)
 	return text.writeTo(out)
 }
 
@@ -300,7 +356,7 @@ func writeEncryptionStatus(out io.Writer, command string, result *encryption.Sta
 		for _, key := range sortedEncryptionKeys(result.Keys) {
 			rows = append(rows, []string{key.ID, key.State, strconv.FormatUint(key.Seals, 10)})
 		}
-		text.rows(rows)
+		text.table([]string{"KEY", "STATE", "SEALS"}, rows)
 	}
 	text.section("Items")
 	text.fields(
@@ -310,6 +366,10 @@ func writeEncryptionStatus(out io.Writer, command string, result *encryption.Sta
 		field{Label: "Retained artifacts", Value: strconv.Itoa(result.Items.RetainedArtifacts)},
 		field{Label: "Cleanup required", Value: strconv.FormatBool(result.Items.CleanupRequired)},
 	)
+	if result.Items.CleanupRequired {
+		text.section("")
+		text.fields(field{Label: "Next", Value: secrets.Command(result.Context.Name, "encryption init")})
+	}
 	return text.writeTo(out)
 }
 

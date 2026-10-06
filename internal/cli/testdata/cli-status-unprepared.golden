@@ -1,0 +1,23 @@
+[OK] Context lab
+
+  Mode  ready
+
+Setup
+  [PENDING]  Controller binding  bound by the first apply
+  [FAIL]     Execution bundle
+
+Desired
+  Revision         rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
+  Environment      lab-rhel
+  Files seen       14
+  Objects decoded  14
+
+Shared services
+  [PENDING]  ArtifactServer/lab-artifacts  controller
+
+Secrets
+  Declared  3
+  Bindings  0
+
+Next steps
+  bootwright setup

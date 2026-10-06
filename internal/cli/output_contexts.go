@@ -107,7 +107,7 @@ func writeContextCurrent(out io.Writer, result *contexts.CurrentResult, short bo
 
 func writeContextDelete(out, errOut io.Writer, result *contexts.DeleteResult) error {
 	if result.OrphansAbandoned {
-		warning := diagnostic{Severity: "warning", Code: "context.unsafe-delete", Message: "the objects this context owned were abandoned and are no longer managed"}
+		warning := diagnostic{Severity: "warning", Code: "context.orphaned", Message: "the objects this context owned were abandoned and are no longer managed"}
 		if err := writeHumanDiagnostics(errOut, displayDiagnostics([]diagnostic{warning})); err != nil {
 			return err
 		}

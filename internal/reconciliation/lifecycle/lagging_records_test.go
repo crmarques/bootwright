@@ -305,10 +305,11 @@ func withoutIdentities(data []byte) []byte {
 // what status, a plan preview and both verbs report over them. A lost index
 // beside what no index accounts for and a completed destroy holding a block
 // that is not done still refuse, naming the deletion of the context as their
-// exit, with --allow-orphans only beside evidence that is not pristine; status
-// names what they refuse and offers no verb. A failed apply whose blocks are
-// all done is finalized by its apply and replaced by its destroy, and status
-// offers both.
+// exit, with --allow-orphans only beside evidence that is not pristine, and
+// none beside evidence the context guard cannot read; status names what they
+// refuse and offers no verb, only the deletion their refusal names. A failed
+// apply whose blocks are all done is finalized by its apply and replaced by
+// its destroy, and status offers both.
 func TestTheRecordStatesBothVerbsRefusedMatchTheirGoldens(t *testing.T) {
 	ctx := context.Background()
 	removed := func(blocks ...string) func(*testing.T) *harness {
@@ -350,10 +351,22 @@ func TestTheRecordStatesBothVerbsRefusedMatchTheirGoldens(t *testing.T) {
 				lose(h, "index.json")
 				return h
 			},
+			"beside unreadable evidence": func(t *testing.T) *harness {
+				h := newHarness(t, "alpha")
+				completeApply(t, h)
+				lose(h, "index.json")
+				h.workspace.evidence = []byte("{")
+				return h
+			},
 		},
 		"lifecycle-unfinished-removal": {
 			"beside pristine evidence":  unfinished(false),
 			"beside protected evidence": unfinished(true),
+			"beside unreadable evidence": func(t *testing.T) *harness {
+				h := unfinished(false)(t)
+				h.workspace.evidence = []byte("{")
+				return h
+			},
 		},
 		"lifecycle-lagging-apply": {
 			"every block done": func(t *testing.T) *harness {

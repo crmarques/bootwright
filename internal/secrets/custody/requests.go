@@ -59,12 +59,17 @@ type ReadProducedRequest struct {
 	Name        string
 }
 
+// MutationResult reports a set, generate or delete. Generate names, sorted,
+// the generated Secrets it changed and those it left unchanged; only set
+// reports parts.
 type MutationResult struct {
-	Context   secretstore.Context
-	Name      string
-	Changed   int
-	Unchanged int
-	Parts     []secrets.Part
+	Context        secretstore.Context
+	Name           string
+	Changed        int
+	Unchanged      int
+	ChangedNames   []string
+	UnchangedNames []string
+	Parts          []secrets.Part
 }
 
 type CheckRow struct {

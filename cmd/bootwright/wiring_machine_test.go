@@ -11,6 +11,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
+	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -74,6 +75,52 @@ func TestTheInstallationsReadTheBareMetalPinOfTheirOwnMachine(t *testing.T) {
 		done("metal-04", baremetal.Implementation, []byte(strings.Replace(string(proof), `"postcondition":true`, `"postcondition":false`, 1))),
 	}); err == nil {
 		t.Fatal("a proof that proves nothing was read as a pin")
+	}
+}
+
+// An emulated controller is an effect of the libvirt machine block, so power
+// reads that block of the current plan and never the installation that follows
+// it on the same Machine, whatever order the evidence lists them in, nor a
+// bare-metal claim, which creates no controller.
+func TestPowerAsksTheMachineBlockNotTheInstallation(t *testing.T) {
+	block := func(implementation string, verb reconciliation.Verb, state reconciliation.BlockState) lifecycle.BlockEvidence {
+		return lifecycle.BlockEvidence{Kind: "Machine", Object: "rhel-01", Implementation: implementation, Verb: verb, State: state}
+	}
+	for name, test := range map[string]struct {
+		published []lifecycle.BlockEvidence
+		want      machine.OwnershipState
+		found     bool
+	}{
+		"installation failed": {[]lifecycle.BlockEvidence{
+			block(installation.Implementation, reconciliation.Apply, reconciliation.BlockFailed),
+			block(libvirt.MachineImplementation, reconciliation.Apply, reconciliation.BlockDone),
+		}, machine.OwnershipState{Verb: "apply", State: "done"}, true},
+		"installation unproved": {[]lifecycle.BlockEvidence{
+			block(installation.Implementation, reconciliation.Apply, reconciliation.BlockUnknown),
+			block(libvirt.MachineImplementation, reconciliation.Apply, reconciliation.BlockDone),
+		}, machine.OwnershipState{Verb: "apply", State: "done"}, true},
+		"installation running": {[]lifecycle.BlockEvidence{
+			block(installation.Implementation, reconciliation.Apply, reconciliation.BlockRunning),
+			block(libvirt.MachineImplementation, reconciliation.Apply, reconciliation.BlockDone),
+		}, machine.OwnershipState{Verb: "apply", State: "done"}, true},
+		"machine block failed": {[]lifecycle.BlockEvidence{
+			block(libvirt.MachineImplementation, reconciliation.Apply, reconciliation.BlockFailed),
+		}, machine.OwnershipState{Verb: "apply", State: "failed"}, true},
+		"removal pending": {[]lifecycle.BlockEvidence{
+			block(installation.Implementation, reconciliation.Destroy, reconciliation.BlockDone),
+			block(libvirt.MachineImplementation, reconciliation.Destroy, reconciliation.BlockPending),
+		}, machine.OwnershipState{Verb: "destroy", State: "pending"}, true},
+		"nothing planned":       {nil, machine.OwnershipState{}, false},
+		"only the installation": {[]lifecycle.BlockEvidence{block(installation.Implementation, reconciliation.Apply, reconciliation.BlockDone)}, machine.OwnershipState{}, false},
+		"only a bare-metal claim": {[]lifecycle.BlockEvidence{block(baremetal.Implementation, reconciliation.Apply, reconciliation.BlockDone)},
+			machine.OwnershipState{}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			state, found := realizationOf(test.published)
+			if state != test.want || found != test.found {
+				t.Fatalf("realization = %+v, %t, want %+v, %t", state, found, test.want, test.found)
+			}
+		})
 	}
 }
 

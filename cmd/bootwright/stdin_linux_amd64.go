@@ -71,6 +71,72 @@ func readStdin(ctx context.Context, buffer []byte) (int, error) {
 	return readInputFD(ctx, int(os.Stdin.Fd()), buffer)
 }
 
+// secretTerminal is the terminal behind standard input, at which a token or
+// password is typed with echo off after a prompt on the error stream.
+type secretTerminal struct {
+	fd     int
+	prompt io.Writer
+}
+
+func newSecretTerminal(input *os.File, prompt io.Writer) secretTerminal {
+	return secretTerminal{fd: int(input.Fd()), prompt: prompt}
+}
+
+func (t secretTerminal) Interactive() (bool, error) { return terminalDescriptor(uintptr(t.fd)) }
+
+// ReadHidden turns echo off, keeping the echo of the final line feed so the
+// next output starts on its own line, and reads one line a byte at a time so
+// nothing past it is consumed. It restores the saved settings on every return.
+func (t secretTerminal) ReadHidden(ctx context.Context, prompt string, buffer []byte) (n int, err error) {
+	var saved syscall.Termios
+	if err := termiosControl(t.fd, syscall.TCGETS, &saved); err != nil {
+		return 0, err
+	}
+	hidden := saved
+	hidden.Lflag &^= syscall.ECHO | syscall.ECHOE | syscall.ECHOK
+	hidden.Lflag |= syscall.ECHONL
+	if err := termiosControl(t.fd, syscall.TCSETS, &hidden); err != nil {
+		return 0, err
+	}
+	defer func() {
+		if restored := termiosControl(t.fd, syscall.TCSETS, &saved); restored != nil && err == nil {
+			err = restored
+		}
+	}()
+	if _, err := io.WriteString(t.prompt, prompt); err != nil {
+		return 0, err
+	}
+	for n < len(buffer) {
+		read, err := readInputFD(ctx, t.fd, buffer[n:n+1])
+		n += read
+		if errors.Is(err, io.EOF) {
+			return n, nil
+		}
+		if err != nil {
+			return n, err
+		}
+		if read == 1 && buffer[n-1] == '\n' {
+			return n, nil
+		}
+	}
+	return n, nil
+}
+
+// termiosControl gets or sets terminal settings, repeating a call a signal
+// interrupted; job control stops a background process here as at a read.
+func termiosControl(fd int, request uintptr, settings *syscall.Termios) error {
+	for {
+		_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), request, uintptr(unsafe.Pointer(settings)))
+		if errno == syscall.EINTR {
+			continue
+		}
+		if errno != 0 {
+			return errno
+		}
+		return nil
+	}
+}
+
 func readInputFD(ctx context.Context, fd int, buffer []byte) (int, error) {
 	if len(buffer) == 0 {
 		return 0, nil

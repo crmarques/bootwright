@@ -375,7 +375,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 	defer clear(selectorData)
 	outcome, err := s.area.Replace(ctx, selectorPath, selectorData, s.selectorData)
 	if err != nil || outcome != secretstore.Committed {
-		return publicationFailure(ctx, outcome, err)
+		return publicationFailure(ctx, s.context.Name, outcome, err)
 	}
 	s.selector = next.Selector
 	clear(s.selectorData)
@@ -507,7 +507,7 @@ func (s *session) commitSeals(ctx context.Context, reservation sealReservation) 
 	}
 	outcome, err := s.area.Replace(ctx, path, reservation.data, reservation.expected)
 	if err != nil || outcome != secretstore.Committed {
-		return publicationFailure(ctx, outcome, err)
+		return publicationFailure(ctx, s.context.Name, outcome, err)
 	}
 	setKeySeals(&s.index, reservation.keyID, reservation.seals)
 	return nil

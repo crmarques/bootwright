@@ -87,7 +87,7 @@ spec:
         interfaceName: eno1
   access:
     ssh:
-      addressRef: fqdn
+      addressRef: ip
       port: 22
       user: bootwright
       auth:

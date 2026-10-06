@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
@@ -131,6 +132,88 @@ func losePart(t *testing.T, h *harness) {
 	deleteBinding(t, h)
 	h.binder.lost = nil
 	h.binder.unreadable = map[string]error{"bind-1": secretstore.Failure("store.corrupt", "referenced secret artifact is missing")}
+}
+
+// corruptListing leaves the keyring as a missing part file leaves the local
+// one: every session it opens reads the artifacts first, so its listing fails
+// exactly as a reopen of bind-1 does
+// (internal/secrets/localkeyring/localkeyring.go).
+func corruptListing(t *testing.T, h *harness) {
+	t.Helper()
+	losePart(t, h)
+	h.binder.bindingsErr = secretstore.Failure("store.corrupt", "referenced secret artifact is missing")
+}
+
+// countedReopens counts every reopen of a binding, so a test proves a verb
+// reopened none.
+type countedReopens struct {
+	*testBinder
+	reopened int
+}
+
+func (b *countedReopens) Reopen(ctx context.Context, request custody.BindingRequest) ([]secretstore.BoundMaterial, error) {
+	b.reopened++
+	return b.testBinder.Reopen(ctx, request)
+}
+
+// Over an apply whose blocks are all done and whose frozen binding is lost,
+// status offers that apply first: it finalizes the apply without reopening the
+// binding. Status then offers the orphan-acknowledged deletion alone, because
+// the removal that follows a completed apply reopens the binding.
+func TestStatusOffersTheFinalizingApplyBeforeTheDeletionOfALostBinding(t *testing.T) {
+	ctx := context.Background()
+	exit := "bootwright context delete --name lab --purge --allow-orphans"
+	h := lostBindingStates()["a failed apply whose blocks are all done"](t)
+	deleteBinding(t, h)
+	status, err := h.service.Status(ctx, StatusRequest{ContextName: testContextName})
+	if err != nil || len(status.Contradictions) != 1 || !slices.Equal(status.NextSteps, []string{"bootwright apply", exit}) {
+		t.Fatalf("status = %+v (%v)", status, err)
+	}
+	counted := &countedReopens{testBinder: h.binder}
+	h.service.binder = counted
+	h.service.options.Confirmer = nil
+	result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName})
+	if err != nil || !result.Settled || result.Recovered != RecoveredFinalization || result.Receipt.State != "done" || counted.reopened != 0 {
+		t.Fatalf("the offered apply = %+v (%v), reopening %d bindings", result, err, counted.reopened)
+	}
+	status, err = h.service.Status(ctx, StatusRequest{ContextName: testContextName})
+	if err != nil || len(status.Contradictions) != 1 || !slices.Equal(status.NextSteps, []string{exit}) {
+		t.Fatalf("status after the finalization = %+v (%v)", status, err)
+	}
+}
+
+// A keyring whose listing fails reporting its material corrupt or
+// undecryptable fails the reopen the same way, so status reads the frozen
+// binding as lost, names it in the reopen's words and offers the deletion. Any
+// other listing failure proves nothing, and status names nothing.
+func TestStatusReadsAListingThatFailsAsTheReopenWould(t *testing.T) {
+	for name, test := range map[string]struct {
+		code, message string
+		lost          bool
+	}{
+		"a corrupt keyring":                  {code: "store.corrupt", message: "referenced secret artifact is missing", lost: true},
+		"an undecryptable keyring":           {code: "store.crypto", message: "secret material could not be decrypted", lost: true},
+		"a keyring whose key is unavailable": {code: "store.key-unavailable", message: "the context's key is unavailable"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := lostBindingStates()["a failed apply"](t)
+			h.binder.bindingsErr = secretstore.Failure(test.code, test.message)
+			operation, _ := durableOperation(t, h)
+			status, err := h.service.Status(context.Background(), StatusRequest{ContextName: testContextName})
+			if err != nil {
+				t.Fatal(err)
+			}
+			named := "the apply " + operation.ID + " (failed) froze the Secret binding bind-1, whose material the context's keyring cannot read: " + test.message + "; "
+			contradictions, steps := []string{}, []string{"bootwright apply", "bootwright destroy"}
+			if test.lost {
+				contradictions, steps = []string{named}, []string{"bootwright context delete --name lab --purge --allow-orphans"}
+			}
+			if len(status.Contradictions) != len(contradictions) || (test.lost && !strings.HasPrefix(status.Contradictions[0], named)) ||
+				!slices.Equal(status.NextSteps, steps) {
+				t.Fatalf("status names %q and offers %q", status.Contradictions, status.NextSteps)
+			}
+		})
+	}
 }
 
 // A continuation or fresh removal whose frozen binding the keyring no longer
@@ -294,10 +377,12 @@ func TestALostBindingLeavesARemovalWhoseBlocksAreAllDoneToItsDestroy(t *testing.
 
 // A lost frozen binding has a golden of what status, a plan preview and both
 // verbs report over each operation that names it. Status names the operation
-// and the binding, and offers only the deletion that abandons what it owns; a
-// plan previewing the verb refuses as that verb does. A binding still listed
-// whose material cannot be read is found only when a verb reopens it. A
-// removal whose blocks are all done is left to the destroy that finalizes it.
+// and the binding, and offers the deletion that abandons what it owns, after
+// the apply that finalizes an apply whose blocks are all done; a plan
+// previewing the verb refuses as that verb does. A binding still listed whose
+// material cannot be read is found only when a verb reopens it, unless the
+// listing itself fails as that reopen would. A removal whose blocks are all
+// done is left to the destroy that finalizes it.
 func TestALostFrozenBindingMatchesItsGolden(t *testing.T) {
 	variants := map[string]func(*testing.T) *harness{}
 	for _, states := range []map[string]func(*testing.T) *harness{lostBindingStates(), finalizedRemovalStates()} {
@@ -312,6 +397,11 @@ func TestALostFrozenBindingMatchesItsGolden(t *testing.T) {
 	variants["a failed apply whose bound version lost a part"] = func(t *testing.T) *harness {
 		h := lostBindingStates()["a failed apply"](t)
 		losePart(t, h)
+		return h
+	}
+	variants["a failed apply whose keyring listing fails"] = func(t *testing.T) *harness {
+		h := lostBindingStates()["a failed apply"](t)
+		corruptListing(t, h)
 		return h
 	}
 	reports := map[string]recordStateReport{}

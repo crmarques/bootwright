@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -171,5 +172,45 @@ func TestCanonicalAddressNormalizesLiterals(t *testing.T) {
 		if got := CanonicalAddress(value); got != want {
 			t.Fatalf("CanonicalAddress(%q) = %q, want %q", value, got, want)
 		}
+	}
+}
+
+func issueRSA(t *testing.T, bits int) secrets.Material {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, bits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := validOptions()
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(2026), Subject: pkix.Name{CommonName: "artifacts.lab.example.test"},
+		NotBefore: options.notBefore, NotAfter: options.notAfter, DNSNames: options.dnsNames, IPAddresses: []net.IP{net.ParseIP("192.0.2.1")},
+		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedKey, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return secrets.NewMaterial(map[secrets.Part][]byte{
+		secrets.CertificatePart: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
+		secrets.PrivateKeyPart:  pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encodedKey}),
+	})
+}
+
+// A serving key with fewer than 2048 RSA bits refuses, naming its size and the
+// certificates that replace it.
+func TestTLSServingKeysUnder2048BitsRefuse(t *testing.T) {
+	_, err := ValidateServingCertificate(issueRSA(t, 1024), []string{"192.0.2.1"}, testMoment)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "secret.part" || reported[0].Message != "the serving certificate's RSA key has 1024 bits; a serving key needs at least 2048" ||
+		reported[0].Remediation != "replace the tlsCertificate Secret with an RSA-2048 or P-256 certificate" {
+		t.Fatalf("an RSA-1024 serving key: %+v", reported)
+	}
+	if _, err := ValidateServingCertificate(issueRSA(t, 2048), []string{"192.0.2.1"}, testMoment); err != nil {
+		t.Fatalf("an RSA-2048 serving key was refused: %+v", diagnostics.Of(err))
 	}
 }

@@ -1,0 +1,41 @@
+[OK] Context lab
+
+  Mode  ready
+
+Setup
+  [OK]  Controller binding
+  [OK]  Execution bundle
+
+Desired
+  Revision         rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
+  Environment      lab-rhel
+  Files seen       14
+  Objects decoded  14
+
+Clusters
+  [PENDING]  ContainerCluster/ocp-01
+
+Storage clusters
+  [SKIPPED]  StorageCluster/ceph-01
+
+Shared services
+  [PENDING]  ArtifactServer/lab-artifacts  controller
+  [SKIPPED]  DNSServer/lab-dns             controller
+
+Secrets
+  Declared  3
+  Bindings  0
+
+Lifecycle
+  Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+  Verb       destroy
+  State      done
+  Next       none
+
+  [DONE]  remove the installer media of rhel-01
+  [DONE]  remove the virtual machine rhel-01 and its controller
+  [DONE]  remove the networks and virtual-media pool of lab-libvirt from controller
+  [DONE]  remove the artifact server lab-artifacts from controller
+
+  Registered by  1.4.0 (9f2c1ab)
+  Logs           /var/lib/bootwright/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs

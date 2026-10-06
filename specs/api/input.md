@@ -12,9 +12,9 @@ acquisition and flag cardinality. The compiler receives one ordered source
 universe: the selected context input, the union of file and directory sources
 resolved for context-free validation, or the one file or directory supplied to
 context-free whole rendering. An input file must be a readable, regular
-lowercase `.yaml` or `.yml` file and must not be a symlink. An input directory
-must be readable and must not be a symlink. Kind selectors and object selectors
-are not supported.
+lowercase `.yaml` or `.yml` file with exactly one link and must not be a
+symlink. An input directory must be readable and must not be a symlink. Kind
+selectors and object selectors are not supported.
 
 For multiple sources, discovery cleans each operand, removes repeated cleaned
 path strings, recursively discovers every directory operand, combines the
@@ -34,9 +34,12 @@ whose basename is exactly `vendor`, `node_modules`, `playbooks`, `roles`,
 `collections`, `manifests`, or `secrets`. The last five names are fixed payload
 roots and are never desired-state inputs.
 Directory symlinks are not followed, and a discovered YAML symlink is an input
-error. Paths are cleaned to absolute paths and ordered lexically. A missing,
-unreadable, wrong-type, or symlink source is an input error. An empty source
-universe reaches graph validation and fails because it has no `Environment`.
+error. Every discovered YAML candidate and add-on marker is a regular file with
+exactly one link; a hard-linked one refuses with `input.symlink`, as a symbolic
+link does. Paths are cleaned to absolute paths and ordered lexically. A missing
+source refuses with `input.not-found`; an unreadable, wrong-type, or symlink
+source is an input error. An empty source universe reaches graph validation and
+fails because it has no `Environment`.
 
 ## Environment selection
 
@@ -57,9 +60,11 @@ sets the complete desired-state scope:
    [the compilation phases](../api.md#yaml-streams-and-decoding). Resolve references only
    inside the retained graph after cluster selection and normalization.
 
-An authored empty resource or cluster-selection list is invalid. Operations
-all consume the same complete selected state; selection is not a partial
-operation flag. `validate` warns deterministically for excluded files declaring
+An authored empty resource or cluster-selection list is invalid. It is
+reported once, at its field, and selection otherwise proceeds as if it were
+omitted. A refused resource or cluster-selection entry is reported at its own
+index. Operations all consume the same complete selected state; selection is
+not a partial operation flag. `validate` warns deterministically for excluded files declaring
 Bootwright objects and for excluded cluster roots. `render effective` has no
 success-warning channel.
 
@@ -152,9 +157,13 @@ directive; a `%YAML 1.2` directive is rejected. Bootwright applies the
 [strict scalar rules](../api.md#yaml-streams-and-decoding) in both
 directive-free and accepted-directive streams.
 
-Syntax failure metadata is bounded to one record per acquired file. Apply the
-returned-diagnostic ceiling after resource selection; syntax errors from
-excluded files do not consume that allowance. Structural limits remain global.
+A syntax failure names the parser's reason and line, and is reported
+separately from invalid UTF-8, which names the line and column of the first
+invalid byte. An `input.limit` message names its resource and inclusive
+ceiling. Syntax failure metadata is bounded to one record per acquired file.
+Apply the returned-diagnostic ceiling after resource selection; syntax errors
+from excluded files do not consume that allowance. Structural limits remain
+global.
 For open native maps, diagnostics name the containing typed field and retain
 source coordinates without repeating arbitrary native keys as field paths.
 

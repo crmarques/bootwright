@@ -159,3 +159,25 @@ func TestConfirmationPromptEscapesUntrustedIdentityOnce(t *testing.T) {
 		t.Fatalf("unsafe prompt: %q", output.String())
 	}
 }
+
+// The prompt names the context that would trust the key, and its refusal names
+// the command that records it in that context.
+func TestTheHostKeyPromptNamesTheContext(t *testing.T) {
+	var out bytes.Buffer
+	confirmation := NewConfirmation(func(_ context.Context, p []byte) (int, error) { p[0] = '\n'; return 1, nil },
+		&out, func() (bool, error) { return true, nil })
+	err := confirmation.ConfirmHostKey(context.Background(), "lab", "rhel-01", "198.51.100.11", "ssh-ed25519", "SHA256:aaa")
+	if out.String() != "Trust ssh-ed25519 SHA256:aaa for Machine rhel-01 at 198.51.100.11 in context lab? [y/N] " {
+		t.Fatalf("prompt = %q", out.String())
+	}
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" {
+		t.Fatalf("a declined prompt = %+v (%v)", reported, err)
+	}
+	unattended := NewConfirmation(func(context.Context, []byte) (int, error) { return 0, errors.New("unexpected read") },
+		io.Discard, func() (bool, error) { return false, nil })
+	err = unattended.ConfirmHostKey(context.Background(), "lab", "rhel-01", "198.51.100.11", "ssh-ed25519", "SHA256:aaa")
+	if reported := diagnostics.Of(err); len(reported) != 1 ||
+		reported[0].Remediation != "record it with bootwright machine trust --context lab --machines rhel-01" {
+		t.Fatalf("refusal = %+v", reported)
+	}
+}

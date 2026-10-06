@@ -10,7 +10,9 @@
         "the operation directory operation-1 lists block records",
         "the operation directory operation-2 lists block records"
       ],
-      "nextSteps": []
+      "nextSteps": [
+        "bootwright context delete --name lab --purge"
+      ]
     },
     "plan": {
       "code": "lifecycle.state",
@@ -39,7 +41,9 @@
         "the mutation evidence reads applied and retained",
         "the operation directory operation-1 lists block records"
       ],
-      "nextSteps": []
+      "nextSteps": [
+        "bootwright context delete --name lab --purge --allow-orphans"
+      ]
     },
     "plan": {
       "code": "lifecycle.state",
@@ -55,6 +59,35 @@
       "code": "lifecycle.state",
       "message": "the context holds operation records or evidence that no index names: the mutation evidence reads applied and retained, the operation directory operation-1 lists block records",
       "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
+    }
+  },
+  "beside unreadable evidence": {
+    "status": {
+      "operation": "",
+      "verb": "",
+      "state": "",
+      "next": "",
+      "blocks": [],
+      "contradictions": [
+        "the mutation evidence reads an unrecognized record",
+        "the operation directory operation-1 lists block records"
+      ],
+      "nextSteps": []
+    },
+    "plan": {
+      "code": "lifecycle.state",
+      "message": "the context holds operation records or evidence that no index names: the mutation evidence reads an unrecognized record, the operation directory operation-1 lists block records",
+      "remediation": "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
+    },
+    "apply": {
+      "code": "lifecycle.state",
+      "message": "the context holds operation records or evidence that no index names: the mutation evidence reads an unrecognized record, the operation directory operation-1 lists block records",
+      "remediation": "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
+    },
+    "destroy": {
+      "code": "lifecycle.state",
+      "message": "the context holds operation records or evidence that no index names: the mutation evidence reads an unrecognized record, the operation directory operation-1 lists block records",
+      "remediation": "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
     }
   }
 }

@@ -24,6 +24,9 @@ type Options struct {
 	// Files opens secret files under the invoking account's credentials; with
 	// none, they open with this process's own.
 	Files Files
+	// Terminal is the terminal behind standard input; with none, standard
+	// input is always read to its end.
+	Terminal TerminalInput
 }
 
 type FileIdentity struct {
@@ -38,6 +41,7 @@ type Service struct {
 	cryptography Cryptography
 	operator     Operator
 	files        Files
+	terminal     TerminalInput
 }
 
 var _ custody.Materializer = (*Service)(nil)
@@ -47,6 +51,7 @@ func New(input InputReader, options ...Options) *Service {
 	if len(options) > 0 {
 		service.operator = options[0].Operator
 		service.files = options[0].Files
+		service.terminal = options[0].Terminal
 		if options[0].Random != nil {
 			service.random = options[0].Random
 		}
@@ -72,6 +77,12 @@ func (s *Service) Acquire(ctx context.Context, declaration secrets.Declaration, 
 		return secrets.Material{}, err
 	}
 	defer clearParts(literal)
+	prompt := ""
+	if stdinRequest.Part != "" {
+		if prompt, err = s.terminalPrompt(declaration, input); err != nil {
+			return secrets.Material{}, err
+		}
+	}
 	parts, err := s.readFileParts(ctx, requests)
 	if err != nil {
 		return secrets.Material{}, err
@@ -81,7 +92,7 @@ func (s *Service) Acquire(ctx context.Context, declaration secrets.Declaration, 
 		parts[part] = slices.Clone(value)
 	}
 	if stdinRequest.Part != "" {
-		value, err := s.readInput(ctx, stdinRequest.Encoding)
+		value, err := s.readStdin(ctx, stdinRequest.Encoding, prompt)
 		if err != nil {
 			return secrets.Material{}, err
 		}
@@ -191,6 +202,61 @@ func (s *Service) finish(ctx context.Context, declaration secrets.Declaration, p
 	return value, nil
 }
 
+// terminalPrompt is the prompt a token or password is typed at when standard
+// input is a terminal, and empty when it is not. Any other value is read from
+// a pipe or a file, never typed at a terminal, where nothing would delimit it.
+func (s *Service) terminalPrompt(declaration secrets.Declaration, input secrets.Input) (string, error) {
+	if s.terminal == nil {
+		return "", nil
+	}
+	interactive, err := s.terminal.Interactive()
+	if err != nil {
+		file := " --value-file <path>"
+		if declaration.Type == "usernamePassword" {
+			file = " --username <username> --password-file <path>"
+		}
+		return "", secrets.Refusal("input", "standard input could not be inspected", input.ContextName, declaration.Name, secrets.Command(input.ContextName, "set")+" --name "+declaration.Name+file)
+	}
+	if !interactive {
+		return "", nil
+	}
+	in := ""
+	if input.ContextName != "" {
+		in = " in context " + input.ContextName
+	}
+	switch declaration.Type {
+	case "token":
+		return "Token for Secret " + declaration.Name + in + ": ", nil
+	case "usernamePassword":
+		return "Password for Secret " + declaration.Name + in + ": ", nil
+	}
+	return "", secrets.UsageRefusal("input", "Secret "+declaration.Name+" is a "+declaration.Type+" Secret; its value is read from a pipe or a file, never typed at a terminal", input.ContextName, declaration.Name,
+		"pipe the value into "+secrets.Command(input.ContextName, "set")+" --name "+declaration.Name+" --value-stdin, or use --value-file <path>")
+}
+
+func (s *Service) readStdin(ctx context.Context, encoding transportEncoding, prompt string) ([]byte, error) {
+	if prompt == "" {
+		return s.readInput(ctx, encoding)
+	}
+	maximum, valid := encoding.maximumBytes()
+	if !valid {
+		return nil, failure("input", "secret standard input uses an invalid transport encoding", "")
+	}
+	buffer := make([]byte, maximum+1)
+	defer clear(buffer)
+	n, err := s.terminal.ReadHidden(ctx, prompt, buffer)
+	if canceled := ctx.Err(); canceled != nil {
+		return nil, canceled
+	}
+	if err != nil && !errors.Is(err, io.EOF) || n < 0 || n > len(buffer) {
+		return nil, failure("input", "secret standard input could not be read safely", "")
+	}
+	if n > maximum {
+		return nil, failure("store.limit", "secret standard input exceeds its transport byte limit", "")
+	}
+	return slices.Clone(buffer[:n]), nil
+}
+
 func (s *Service) readInput(ctx context.Context, encoding transportEncoding) ([]byte, error) {
 	if s == nil || s.input == nil {
 		return nil, failure("input", "secret standard input is not configured", "")
@@ -261,75 +327,38 @@ type fileRequest struct {
 	Encoding transportEncoding
 }
 
+// acquisition plans the reads of a flag set the declaration's type takes. The
+// custody checked it already; this check keeps a direct caller to that rule.
 func acquisition(declaration secrets.Declaration, input secrets.Input) ([]fileRequest, map[secrets.Part][]byte, partRequest, error) {
-	if input.Provided&^secrets.AllowedInputFields(declaration.Type) != 0 {
-		return nil, nil, partRequest{}, failure("input", "secret input contains a flag that is not accepted by its declared type", "")
-	}
-	extra := func(allowed ...string) bool {
-		set := make(map[string]bool, len(allowed))
-		for _, name := range allowed {
-			set[name] = true
-		}
-		return input.ValueFile != "" && !set["value-file"] || input.ValueStdin && !set["value-stdin"] ||
-			input.Username != "" && !set["username"] || input.PasswordFile != "" && !set["password-file"] ||
-			input.PasswordStdin && !set["password-stdin"] || input.CertificateFile != "" && !set["certificate-file"] ||
-			input.PrivateKeyFile != "" && !set["private-key-file"] || input.PublicKeyFile != "" && !set["public-key-file"]
+	if err := secrets.CheckInput(input.ContextName, declaration, input); err != nil {
+		return nil, nil, partRequest{}, err
 	}
 	requests := []fileRequest{}
 	literal := map[secrets.Part][]byte{}
 	stdinRequest := partRequest{}
-	requireOne := func(file string, stdin bool, part secrets.Part, encoding transportEncoding) error {
-		if (file == "") == !stdin {
-			return failure("input", "secret input must select exactly one file or standard-input source", "")
-		}
+	one := func(file string, part secrets.Part, encoding transportEncoding) {
 		if file != "" {
 			requests = append(requests, fileRequest{Part: part, Path: file, Encoding: encoding})
 		} else {
 			stdinRequest = partRequest{Part: part, Encoding: encoding}
 		}
-		return nil
 	}
 
 	switch declaration.Type {
 	case "opaque", "token", "dockerConfigJson":
-		if extra("value-file", "value-stdin") {
-			return nil, nil, partRequest{}, failure("input", "secret input contains a flag that is not accepted by its declared type", "")
-		}
 		encoding := transportExact
 		if declaration.Type == "token" {
 			encoding = transportOptionalFinalLF
 		}
-		if err := requireOne(input.ValueFile, input.ValueStdin, secrets.ValuePart, encoding); err != nil {
-			return nil, nil, partRequest{}, err
-		}
+		one(input.ValueFile, secrets.ValuePart, encoding)
 	case "usernamePassword":
-		if extra("username", "password-file", "password-stdin") || input.Username == "" {
-			return nil, nil, partRequest{}, failure("input", "usernamePassword input requires a username and one password source", "")
-		}
-		if len(input.Username) > secrets.MaxPartBytes {
-			return nil, nil, partRequest{}, failure("store.limit", "secret username exceeds the part byte limit", "")
-		}
-		if err := username([]byte(input.Username)); err != nil {
-			return nil, nil, partRequest{}, err
-		}
-		if err := requireOne(input.PasswordFile, input.PasswordStdin, secrets.PasswordPart, transportOptionalFinalLF); err != nil {
-			return nil, nil, partRequest{}, err
-		}
+		one(input.PasswordFile, secrets.PasswordPart, transportOptionalFinalLF)
 		literal[secrets.UsernamePart] = []byte(input.Username)
 	case "caBundle":
-		if extra("certificate-file") || input.CertificateFile == "" {
-			return nil, nil, partRequest{}, failure("input", "caBundle input requires exactly one certificate file", "")
-		}
 		requests = append(requests, fileRequest{Part: secrets.CertificatePart, Path: input.CertificateFile})
 	case "tlsCertificate":
-		if extra("certificate-file", "private-key-file") || input.CertificateFile == "" || input.PrivateKeyFile == "" {
-			return nil, nil, partRequest{}, failure("input", "tlsCertificate input requires certificate and private-key files", "")
-		}
 		requests = append(requests, fileRequest{Part: secrets.CertificatePart, Path: input.CertificateFile}, fileRequest{Part: secrets.PrivateKeyPart, Path: input.PrivateKeyFile})
 	case "sshKeyPair":
-		if extra("private-key-file", "public-key-file") || input.PrivateKeyFile == "" {
-			return nil, nil, partRequest{}, failure("input", "sshKeyPair input requires a private-key file and accepts one public-key file", "")
-		}
 		requests = append(requests, fileRequest{Part: secrets.PrivateKeyPart, Path: input.PrivateKeyFile})
 		if input.PublicKeyFile != "" {
 			requests = append(requests, fileRequest{Part: secrets.PublicKeyPart, Path: input.PublicKeyFile})

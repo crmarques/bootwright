@@ -246,21 +246,21 @@ func normalizeNames(value string) []string {
 	return result
 }
 
+// validateSecretInput refuses only the alternatives no Secret type takes
+// together. Which flags a Secret takes depends on its declared type, so the
+// custody refuses every other flag set once it has read the declaration.
 func validateSecretInput(flags *pflag.FlagSet) string {
 	valueFile, valueStdin := stringValue(flags, "value-file") != "", boolValue(flags, "value-stdin")
-	username := stringValue(flags, "username") != ""
 	passwordFile, passwordStdin := stringValue(flags, "password-file") != "", boolValue(flags, "password-stdin")
-	certificate := stringValue(flags, "certificate-file") != ""
-	privateKey, publicKey := stringValue(flags, "private-key-file") != "", stringValue(flags, "public-key-file") != ""
-
-	valueInput := valueFile != valueStdin && !username && !passwordFile && !passwordStdin && !certificate && !privateKey && !publicKey
-	passwordInput := username && passwordFile != passwordStdin && !valueFile && !valueStdin && !certificate && !privateKey && !publicKey
-	certificateInput := certificate && !valueFile && !valueStdin && !username && !passwordFile && !passwordStdin && !publicKey
-	privateKeyInput := privateKey && !certificate && !valueFile && !valueStdin && !username && !passwordFile && !passwordStdin
-	if valueInput || passwordInput || certificateInput || privateKeyInput {
-		return ""
+	switch {
+	case valueFile && valueStdin:
+		return "--value-file conflicts with --value-stdin"
+	case passwordFile && passwordStdin:
+		return "--password-file conflicts with --password-stdin"
+	case valueStdin && passwordStdin:
+		return "--value-stdin conflicts with --password-stdin"
 	}
-	return "secret set requires exactly one type-specific input shape"
+	return ""
 }
 
 func mediaName(value string) bool {

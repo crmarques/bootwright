@@ -3,8 +3,8 @@
   Mode  ready
 
 Setup
-  [OK]  controller-binding
-  [OK]  dependency-bundle
+  [OK]  Controller binding
+  [OK]  Execution bundle
 
 Desired
   Revision         rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
@@ -13,7 +13,7 @@ Desired
   Objects decoded  14
 
 Clusters
-  [SKIPPED]  ContainerCluster/ocp-01
+  [PENDING]  ContainerCluster/ocp-01
 
 Storage clusters
   [SKIPPED]  StorageCluster/ceph-01
@@ -21,10 +21,11 @@ Storage clusters
 Shared services
   [OK]       ArtifactServer/lab-artifacts  controller
   [SKIPPED]  DNSServer/lab-dns             controller
+  [FAIL]     Proxy/lab-proxy               controller
 
 Secrets
   Declared  3
-  Bound     3
+  Bindings  1
 
 Next steps
   bootwright apply
@@ -37,6 +38,7 @@ Lifecycle
   Next       resolve
 
   [DONE]     serve artifacts for lab-artifacts on controller
+  [FAIL]     proxy egress for lab-proxy on controller
   [DONE]     realize the libvirt host of lab-libvirt on controller
   [UNKNOWN]  realize the virtual machine rhel-01 and its controller
   [PENDING]  install the operating system of rhel-01

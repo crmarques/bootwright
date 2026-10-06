@@ -1159,7 +1159,8 @@ a completed operation does not show `done`, each contradiction of an incomplete 
 above and an incomplete apply that records a state only a started block
 explains beside no block that started, each lost record of an incomplete
 removal, beside no operation, each state no index accounts for, and an
-operation whose frozen Secret binding the keyring no longer lists, as below.
+operation whose frozen Secret binding the keyring no longer lists, or whose
+keyring listing fails as its reopen would, as below.
 
 A frozen block records what creating it did; removing it is the other half of
 the same request. Each capability therefore reads its own frozen request and
@@ -1202,19 +1203,25 @@ records, the binding, why the binding cannot be reopened and every object that
 operation owns, and its remedy names the only two exits: restore the keyring
 from a complete backup and repeat the verb, or run `bootwright context delete
 --name <name> --purge --allow-orphans` and then remove those objects by hand.
-Only a listing that answers proves a binding gone; one that fails proves
-nothing, and the reopen decides. A finalization and a verb that settles reopen
-no binding, so neither refuses on its account: a removal whose blocks are all
-`done` is acted on only by the `destroy` that finalizes it, so `status` names no
-lost binding over it and offers that `destroy`. A binding an operation names is
-released only by an invocation that moved the context on, so a refusal whose
-binding was released after its decision was read re-reads the context and
-reports that change instead. No re-binding of the current declarations,
+Only a listing that answers proves a binding gone; to a verb one that fails
+proves nothing, and the reopen decides. A finalization and a verb that settles
+reopen no binding, so neither refuses on its account: a removal whose blocks
+are all `done` is acted on only by the `destroy` that finalizes it, so `status`
+names no lost binding over it and offers that `destroy`. A binding an
+operation names is released only by an invocation that moved the context on,
+so a refusal whose binding was released after its decision was read re-reads
+the context and reports that change instead. No re-binding of the current declarations,
 substitution of other material, removal without the binding or release of
 ownership inside the context exists, because none of them proves that the
 material a verb presents is the material that created the effects. `status`
-names such an operation among its `contradictions`, in the refusal's words, and
-offers that deletion as its only next step.
+names such an operation among its `contradictions`, in the refusal's words. It
+reads a keyring listing that fails reporting the material corrupt or
+undecryptable (`secret.store.corrupt`, `secret.store.crypto`) as the reopen
+will, since every keyring session reads the same metadata and artifacts, and
+any other failing listing as proving nothing. Over an apply whose blocks are
+all `done` it offers `bootwright apply` first, which finalizes that apply
+without reopening the binding, and then the deletion; over any other such
+operation it offers that deletion as its only next step.
 
 Destroy removes dependents before dependencies, so a removal inverts the
 apply's dependency graph and not merely its order: every edge turns around and

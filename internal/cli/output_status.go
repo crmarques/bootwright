@@ -49,7 +49,7 @@ type statusService struct {
 
 type statusSecrets struct {
 	Declared int `json:"declared"`
-	Bound    int `json:"bound"`
+	Bindings int `json:"bindings"`
 }
 
 // statusLifecycle leaves out the registering build and the host log directory,
@@ -88,7 +88,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 		Clusters:        displayStatusClusters(result.Clusters),
 		StorageClusters: displayStatusClusters(result.StorageClusters),
 		Shared:          make([]statusService, 0, len(result.Shared)),
-		Secrets:         statusSecrets{Declared: result.Secrets.Declared, Bound: result.Secrets.Bound},
+		Secrets:         statusSecrets{Declared: result.Secrets.Declared, Bindings: result.Secrets.Bindings},
 		NextSteps:       displayLines(result.NextSteps),
 		Contradictions:  displayLines(result.Contradictions),
 	}
@@ -98,7 +98,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 	for _, service := range result.Shared {
 		out.Shared = append(out.Shared, statusService{
 			Kind: escapeDisplayLine(service.Kind), Name: escapeDisplayLine(service.Name),
-			Machine: escapeDisplayLine(service.Machine), Status: escapeDisplayLine(service.Status),
+			Machine: escapeDisplayLine(service.Machine), Status: escapeDisplayLine(string(service.Status)),
 		})
 	}
 	if summary := result.Lifecycle; summary != nil {
@@ -126,7 +126,7 @@ func displayStatusClusters(clusters []lifecycle.ClusterSummary) []statusCluster 
 	out := make([]statusCluster, 0, len(clusters))
 	for _, cluster := range clusters {
 		out = append(out, statusCluster{
-			Name: escapeDisplayLine(cluster.Name), Kind: escapeDisplayLine(cluster.Kind), Status: escapeDisplayLine(cluster.Status),
+			Name: escapeDisplayLine(cluster.Name), Kind: escapeDisplayLine(cluster.Kind), Status: escapeDisplayLine(string(cluster.Status)),
 		})
 	}
 	return out
@@ -155,7 +155,7 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 	text.section("Secrets")
 	text.fields(
 		field{Label: "Declared", Value: strconv.Itoa(result.Secrets.Declared)},
-		field{Label: "Bound", Value: strconv.Itoa(result.Secrets.Bound)},
+		field{Label: "Bindings", Value: strconv.Itoa(result.Secrets.Bindings)},
 	)
 	if len(result.NextSteps) != 0 {
 		text.section("Next steps")
@@ -169,6 +169,8 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 	return text.writeTo(out)
 }
 
+// writeStatusSetup labels each check as controller readiness does. A binding
+// still pending says what publishes it.
 func writeStatusSetup(text *display, checks []lifecycle.SetupCheck) {
 	if len(checks) == 0 {
 		return
@@ -176,7 +178,11 @@ func writeStatusSetup(text *display, checks []lifecycle.SetupCheck) {
 	text.section("Setup")
 	rows := make([][]string, 0, len(checks))
 	for _, check := range checks {
-		rows = append(rows, []string{checkToken(check.Status), check.ID})
+		row := []string{checkToken(check.Status), controllerActionLabel(check.ID)}
+		if check.ID == "controller-binding" && check.Status == "pending" {
+			row = append(row, "bound by the first apply")
+		}
+		rows = append(rows, row)
 	}
 	text.rows(rows)
 }
@@ -261,18 +267,19 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 	}
 }
 
-// serviceStatusToken presents a cluster or shared service status: unsupported,
-// pending, done or unknown.
-func serviceStatusToken(status string) string {
+// serviceStatusToken presents a cluster or shared service status. A value
+// outside the vocabulary proves nothing, so it never reads as a definite
+// failure.
+func serviceStatusToken(status lifecycle.RealizationStatus) string {
 	switch status {
-	case "done":
+	case lifecycle.RealizationDone:
 		return "[OK]"
-	case "pending":
+	case lifecycle.RealizationPending:
 		return "[PENDING]"
-	case "unknown":
-		return "[UNKNOWN]"
-	case "unsupported":
+	case lifecycle.RealizationFailed:
+		return "[FAIL]"
+	case lifecycle.RealizationUnsupported:
 		return "[SKIPPED]"
 	}
-	return "[FAIL]"
+	return "[UNKNOWN]"
 }

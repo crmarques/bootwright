@@ -2,10 +2,13 @@ package enrollment
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -52,7 +55,7 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 	if err != nil {
 		return nil, err
 	}
-	chosen, err := candidates(effective.Effective, request.Machines, request.Replace)
+	chosen, err := candidates(effective.Effective, request.Machines, request.Replace, selected)
 	if err != nil {
 		return nil, err
 	}
@@ -62,14 +65,17 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 	}
 	records, err := trust.Decode(data)
 	if err != nil {
-		return nil, err
+		return nil, retrust(err, selected, nil, effective.Effective)
 	}
 	observed, err := s.observe(ctx, chosen)
 	if err != nil {
 		return nil, err
 	}
 	report := &Report{Context: selected, DryRun: request.DryRun, Hosts: make([]HostReport, 0, len(chosen))}
-	pending := trust.Store{FormatVersion: trust.FormatVersion, Hosts: slices.Clone(records.Hosts)}
+	pending := records.Clone()
+	declared := declaredMachines(effective.Effective)
+	writing := map[string]bool{}
+	var removed []HostReport
 	for index, entry := range chosen {
 		host, record, err := evaluate(entry, observed[index], records, slices.Contains(request.Replace, entry.name), selected, s.now())
 		if err != nil {
@@ -77,9 +83,18 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 		}
 		report.Hosts = append(report.Hosts, host)
 		if host.Action == ActionAdd || host.Action == ActionReplace {
-			pending.Upsert(record)
+			writing[entry.name] = true
+			for _, stale := range pending.Supersede(record, declared) {
+				removed = append(removed, removal(stale, entry.name))
+			}
 			report.Pending++
 		}
+	}
+	slices.SortFunc(removed, func(a, b HostReport) int { return strings.Compare(a.Machine, b.Machine) })
+	report.Hosts = append(report.Hosts, removed...)
+	report.Pending += len(removed)
+	if err := pending.Validate(); err != nil {
+		return nil, retrust(err, selected, func(name string) bool { return writing[name] }, effective.Effective)
 	}
 	if request.DryRun || report.Pending == 0 {
 		return report, nil
@@ -143,13 +158,50 @@ func evaluate(entry candidate, observed observation, records trust.Store, replac
 		return HostReport{}, trust.Record{}, failure("trust.identity",
 			"the SSH host key for "+entry.name+" at "+token(entry.address, entry.port)+
 				" changed from "+previous.Fingerprint+" to "+host.Fingerprint,
-			"verify the new fingerprint out of band, then rerun with --replace "+entry.name)
+			"verify the new fingerprint out of band, then rerun bootwright machine trust --context "+contextName+
+				" --machines "+entry.name+" --replace "+entry.name)
 	}
 	host.Action = ActionReplace
 	if moved {
 		host.PreviousAddress, host.PreviousPort = previous.Address, previous.Port
 	}
 	return host, record, nil
+}
+
+// removal reports a record of a Machine the context no longer declares that
+// the write removes, because a selected Machine now holds its endpoint.
+func removal(stale trust.Record, successor string) HostReport {
+	return HostReport{
+		Machine: stale.Machine, Address: stale.Address, Port: stale.Port, Action: ActionRemove,
+		KeyType: stale.KeyType, Fingerprint: stale.HostKey().Fingerprint(),
+		Reason: "no longer declared; " + successor + " now uses its address",
+	}
+}
+
+func declaredMachines(catalog api.Catalog) func(string) bool {
+	return func(name string) bool {
+		_, found := catalog.Find(api.Machine, name)
+		return found
+	}
+}
+
+// retrust names the re-trust that settles a pin the write would leave
+// divergent, in this context.
+func retrust(err error, contextName string, writing func(string) bool, catalog api.Catalog) error {
+	var pin *trust.DivergentPin
+	if errors.As(err, &pin) {
+		return pin.Retrust(contextName, writing, exemptMachines(catalog))
+	}
+	return err
+}
+
+func exemptMachines(catalog api.Catalog) func(string) string {
+	return func(name string) string {
+		if object, found := catalog.Find(api.Machine, name); found {
+			return machine.TrustExemption(object)
+		}
+		return ""
+	}
 }
 
 type observation struct {

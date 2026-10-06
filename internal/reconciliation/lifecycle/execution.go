@@ -1449,8 +1449,7 @@ func (s Service) establishBinding(ctx context.Context, tx Transaction, machine s
 	if err != nil {
 		return err
 	}
-	view := tx.Controller()
-	if !view.Exists || !view.Initialized || view.State.Receipt.Status != "complete" {
+	if !setupComplete(tx.Controller()) {
 		return failure("controller.identity", "this host has no completed controller setup", "run bootwright setup")
 	}
 	return tx.Bind(ctx, machine, host)

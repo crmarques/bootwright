@@ -255,7 +255,7 @@ func TestAbandonedOrphansAreReportedOnceOnStandardError(t *testing.T) {
 	record := &dispatchRecord{result: commandResult{deletion: &contexts.DeleteResult{Name: "example", Outcome: "deleted", OrphansAbandoned: true}}}
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(),
 		[]string{"context", "delete", "--name", "example", "--purge", "--allow-orphans", "--yes"})
-	if code != 0 || strings.Count(errOut.String(), "[WARN] context.unsafe-delete") != 1 || strings.Contains(out.String(), "[WARN]") {
+	if code != 0 || strings.Count(errOut.String(), "[WARN] context.orphaned") != 1 || strings.Contains(out.String(), "[WARN]") {
 		t.Fatal("abandonment warning", code, out.String(), errOut.String())
 	}
 	if !strings.Contains(out.String(), "Orphans abandoned  true") {

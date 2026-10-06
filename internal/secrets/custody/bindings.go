@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -23,10 +24,13 @@ func (s Service) Bind(ctx context.Context, request BindRequest) (secretstore.Bin
 	if len(names) == 0 || len(names) > 4096 || len(slices.Compact(slices.Clone(names))) != len(names) {
 		return secretstore.Binding{}, secretstore.Failure("declaration", "binding requires a bounded unique set of secret names")
 	}
+	requested := make([]secrets.Declaration, 0, len(names))
 	for _, name := range names {
-		if _, err := findDeclaration(declarations, name); err != nil {
+		d, err := findDeclaration(selected.Name, declarations, name)
+		if err != nil {
 			return secretstore.Binding{}, err
 		}
+		requested = append(requested, d)
 	}
 	var result secretstore.Binding
 	err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
@@ -35,34 +39,41 @@ func (s Service) Bind(ctx context.Context, request BindRequest) (secretstore.Bin
 			return err
 		}
 		inputs := make([]secretstore.BoundInput, 0, len(names))
+		var refused []diagnostics.Diagnostic
+		for _, d := range requested {
+			v, exists := currentVersion(snapshot, d.Name)
+			switch {
+			case !exists:
+				refused = append(refused, diagnostics.Of(missingMaterial(selected.Name, d))...)
+			case !d.Current(v.Declaration.Fingerprint):
+				refused = append(refused, diagnostics.Of(staleMaterial(selected.Name, d))...)
+			default:
+				inputs = append(inputs, secretstore.BoundInput{Declaration: d.Stored(v.Declaration.Fingerprint), Version: v.ID})
+			}
+		}
+		if len(refused) > 0 {
+			diagnostics.Sort(refused)
+			return &diagnostics.Failure{Diagnostics: refused}
+		}
 		materialBytes := 0
 		defer func() {
 			for _, input := range inputs {
 				input.Material.Clear()
 			}
 		}()
-		for _, name := range names {
-			d, _ := findDeclaration(declarations, name)
-			v, exists := currentVersion(snapshot, name)
-			if !exists || v.Declaration.Fingerprint != d.Fingerprint {
-				return secretstore.Failure("source", "binding requires current material matching every declaration")
-			}
-			input := secretstore.BoundInput{Declaration: d, Version: v.ID}
-			input.Material, err = session.Read(ctx, v.ID)
+		for i := range inputs {
+			input := &inputs[i]
+			input.Material, err = session.Read(ctx, input.Version)
 			if err != nil {
-				input.Material.Clear()
 				return err
 			}
-			if err = s.material.Validate(ctx, d, input.Material); err != nil {
-				input.Material.Clear()
-				return err
+			if err = s.material.Validate(ctx, input.Declaration, input.Material); err != nil {
+				return secrets.Attribute(err, selected.Name, input.Declaration.Name, secrets.Remedy(selected.Name, input.Declaration, true))
 			}
 			if input.Material.Size() > secrets.MaxMaterialBytes-materialBytes {
-				input.Material.Clear()
 				return secretstore.Failure("store.limit", "binding selection exceeds the material byte limit")
 			}
 			materialBytes += input.Material.Size()
-			inputs = append(inputs, input)
 		}
 		result, err = session.Bind(ctx, inputs)
 		return err

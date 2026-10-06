@@ -130,12 +130,12 @@ func (budget *expansionBudget) admit(record *objectRecord, sink *diagnosticSink)
 			return false
 		}
 		if depth > desiredstate.MaxDepth {
-			sink.add(diagnostics.Diagnostic{Severity: "error", Code: "input.limit", Message: "expanded representation depth exceeds the ceiling of 64"})
+			sink.add(diagnostics.Diagnostic{Severity: "error", Code: "input.limit", Message: desiredstate.LimitMessage("expanded representation depth", desiredstate.MaxDepth)})
 			return false
 		}
 		budget.nodes++
 		if budget.nodes > desiredstate.MaxNodes {
-			sink.add(diagnostics.Diagnostic{Severity: "error", Code: "input.limit", Message: "expanded representation nodes exceed the ceiling of 1000000"})
+			sink.add(diagnostics.Diagnostic{Severity: "error", Code: "input.limit", Message: desiredstate.LimitMessage("aggregate expanded representation nodes", desiredstate.MaxNodes)})
 			return false
 		}
 		for _, field := range value.Fields() {

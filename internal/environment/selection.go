@@ -2,6 +2,7 @@ package environment
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -11,6 +12,7 @@ type Attachment struct{ ClusterRef, ExportRef string }
 type SelectionIssue struct {
 	Object api.Object
 	Issue  api.Issue
+	Target string
 }
 type Selection struct {
 	Catalog                                            api.Catalog
@@ -27,7 +29,7 @@ func Select(catalog api.Catalog, attachments []Attachment) Selection {
 		return result
 	}
 	env := envs[0]
-	if !env.Spec().Has("containerClusters") && !env.Spec().Has("storageClusters") {
+	if !selectsClusters(env, "containerClusters") && !selectsClusters(env, "storageClusters") {
 		return result
 	}
 	closure := &retention{retained: map[string]bool{}, fullStorage: map[string]bool{}}
@@ -46,7 +48,7 @@ func Select(catalog api.Catalog, attachments []Attachment) Selection {
 			result.ExcludedStorageClusters = append(result.ExcludedStorageClusters, object.Name())
 		}
 		if object.Kind() == api.ContainerCluster || object.Kind() == api.StorageCluster {
-			result.Problems = append(result.Problems, SelectionIssue{object, api.Issue{Code: "api.selection", Field: "$.metadata.name", Message: "cluster root is excluded by the Environment selection", Remediation: "include the cluster in the matching Environment root selection"}})
+			result.Problems = append(result.Problems, SelectionIssue{Object: object, Issue: api.Issue{Code: "api.selection", Field: "$.metadata.name", Message: "cluster root is excluded by the Environment selection", Remediation: "include the cluster in the matching Environment root selection"}})
 		}
 	}
 	result.Catalog = CanonicalCatalog(objects)
@@ -78,9 +80,9 @@ func (r *retention) selectRoots(catalog api.Catalog, env api.Object) []Selection
 		field string
 		kind  api.Kind
 	}{{"containerClusters", api.ContainerCluster}, {"storageClusters", api.StorageCluster}} {
-		values := env.Spec().Get(entry.field)
-		if !values.Present() {
-			for _, o := range catalog.OfKind(entry.kind) {
+		objects := catalog.OfKind(entry.kind)
+		if !selectsClusters(env, entry.field) {
+			for _, o := range objects {
 				r.keep(o.Kind(), o.Name())
 				if o.Kind() == api.StorageCluster {
 					r.fullStorage[o.Name()] = true
@@ -88,30 +90,71 @@ func (r *retention) selectRoots(catalog api.Catalog, env api.Object) []Selection
 			}
 			continue
 		}
-		if values.Len() == 0 {
-			problems = append(problems, SelectionIssue{env, api.Issue{Code: "api.value", Field: "$.spec." + entry.field, Message: "cluster root selection must not be empty"}})
+		problems = append(problems, r.selectNamedRoots(env, entry.field, entry.kind, objects)...)
+	}
+	return problems
+}
+
+func (r *retention) selectNamedRoots(env api.Object, field string, kind api.Kind, objects []api.Object) []SelectionIssue {
+	var problems []SelectionIssue
+	declared := make(map[string]bool, len(objects))
+	for _, object := range objects {
+		declared[object.Name()] = true
+	}
+	remediation := ""
+	seen := map[string]bool{}
+	for i, value := range env.Spec().Get(field).Items() {
+		name := value.Text()
+		if seen[name] {
+			continue
 		}
-		for _, value := range values.Items() {
-			name := value.Text()
-			if _, ok := catalog.Find(entry.kind, name); !ok {
-				problems = append(problems, SelectionIssue{env, api.Issue{Code: "api.reference", Field: "$.spec." + entry.field, Message: "cluster selection must resolve to one root of its selected kind"}})
-				matches := 0
-				for _, object := range catalog.OfKind(entry.kind) {
-					if object.Name() == name {
-						matches++
-					}
-				}
-				if matches == 0 {
-					continue
-				}
+		seen[name] = true
+		if !declared[name] {
+			if remediation == "" {
+				remediation = clusterChoices(kind, objects)
 			}
-			r.keep(entry.kind, name)
-			if entry.kind == api.StorageCluster {
-				r.fullStorage[name] = true
-			}
+			problems = append(problems, SelectionIssue{Object: env, Issue: unresolvedCluster(kind, "$.spec."+field+"["+strconv.Itoa(i)+"]", name, remediation), Target: string(kind) + "/" + name})
+			continue
+		}
+		r.keep(kind, name)
+		if kind == api.StorageCluster {
+			r.fullStorage[name] = true
 		}
 	}
 	return problems
+}
+
+func selectsClusters(env api.Object, field string) bool {
+	values := env.Spec().Get(field)
+	return values.Present() && values.Len() > 0
+}
+
+const listedClusterNames = 16
+
+func unresolvedCluster(kind api.Kind, field, name, remediation string) api.Issue {
+	message := "cluster selection entry is not a cluster name"
+	if api.ValidLexical("name", name) {
+		message = "no " + string(kind) + " named " + name + " is declared"
+	}
+	return api.Issue{Code: "api.reference", Field: field, Message: message, Remediation: remediation}
+}
+
+func clusterChoices(kind api.Kind, objects []api.Object) string {
+	declared := make([]string, 0, len(objects))
+	for _, object := range objects {
+		if api.ValidLexical("name", object.Name()) {
+			declared = append(declared, object.Name())
+		}
+	}
+	slices.Sort(declared)
+	declared = slices.Compact(declared)
+	switch {
+	case len(declared) > listedClusterNames:
+		return "select one of: " + strings.Join(declared[:listedClusterNames], ", ") + ", and " + strconv.Itoa(len(declared)-listedClusterNames) + " more"
+	case len(declared) > 0:
+		return "select one of: " + strings.Join(declared, ", ")
+	}
+	return "declare the " + string(kind) + " or remove the entry"
 }
 
 func (r *retention) expand(catalog api.Catalog, attachments []Attachment) {

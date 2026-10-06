@@ -1,6 +1,7 @@
 package power
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -60,8 +61,17 @@ func catalog() api.Catalog {
 	return api.NewCatalog([]api.Object{environment, controller, host, provider, guests, guest, physical})
 }
 
-func realized() map[string]machine.OwnershipState {
-	return map[string]machine.OwnershipState{"Machine/guest": {Verb: "apply", State: "done"}}
+// realizedAs answers as a current plan whose machine block of each named
+// Machine reached the given state; a Machine it does not name has no block.
+func realizedAs(states map[string]machine.OwnershipState) realizations {
+	return func(name string) (machine.OwnershipState, bool, error) {
+		state, found := states[name]
+		return state, found, nil
+	}
+}
+
+func realized() realizations {
+	return realizedAs(map[string]machine.OwnershipState{"guest": {Verb: machine.VerbApply, State: machine.BlockDone}})
 }
 
 func code(t *testing.T, err error) string {
@@ -119,29 +129,75 @@ func TestAnAuthoredControllerIsReachedFromTheControllerHost(t *testing.T) {
 	}
 }
 
-// An emulated controller exists only while the Machine that owns it does, so a
-// power operation asks the evidence before it acts.
-func TestAnEmulatedControllerThatIsNotRealizedRefusesBeforeActing(t *testing.T) {
+// An emulated controller is an effect of the block that realizes its Machine
+// on the provider, so power follows that block alone: the Machine's
+// installation may have failed, be unproved or still run, and the controller
+// still answers. It exists from the apply that completed the block until a
+// removal proves the block gone, so a guest a removal refuses can be stopped.
+func TestPowerFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 	for _, test := range []struct {
-		name  string
-		owned map[string]machine.OwnershipState
+		name     string
+		state    machine.OwnershipState
+		found    bool
+		admitted bool
 	}{
-		{"never applied", nil},
-		{"applying", map[string]machine.OwnershipState{"Machine/guest": {Verb: "apply", State: "pending"}}},
-		{"unproved", map[string]machine.OwnershipState{"Machine/guest": {Verb: "apply", State: "unknown"}}},
-		{"removed", map[string]machine.OwnershipState{"Machine/guest": {Verb: "destroy", State: "done"}}},
+		{"applied", machine.OwnershipState{Verb: machine.VerbApply, State: machine.BlockDone}, true, true},
+		{"removal pending", machine.OwnershipState{Verb: machine.VerbDestroy, State: machine.BlockPending}, true, true},
+		{"removal failed", machine.OwnershipState{Verb: machine.VerbDestroy, State: machine.BlockFailed}, true, true},
+		{"removal unproved", machine.OwnershipState{Verb: machine.VerbDestroy, State: machine.BlockUnknown}, true, true},
+		{"removal running", machine.OwnershipState{Verb: machine.VerbDestroy, State: machine.BlockRunning}, true, true},
+		{"apply pending", machine.OwnershipState{Verb: machine.VerbApply, State: machine.BlockPending}, true, false},
+		{"apply running", machine.OwnershipState{Verb: machine.VerbApply, State: machine.BlockRunning}, true, false},
+		{"apply failed", machine.OwnershipState{Verb: machine.VerbApply, State: machine.BlockFailed}, true, false},
+		{"apply unproved", machine.OwnershipState{Verb: machine.VerbApply, State: machine.BlockUnknown}, true, false},
+		{"removed", machine.OwnershipState{Verb: machine.VerbDestroy, State: machine.BlockDone}, true, false},
+		{"not planned", machine.OwnershipState{}, false, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, _, err := requestFor(catalog(), "lab", "guest", Start, false, test.owned); code(t, err) != "access.unavailable" {
-				t.Fatalf("unrealized Machine accepted a power request: %v", err)
+			var asked []string
+			realized := func(name string) (machine.OwnershipState, bool, error) {
+				asked = append(asked, name)
+				return test.state, test.found, nil
+			}
+			_, _, err := requestFor(catalog(), "lab", "guest", Stop, false, realized)
+			if strings.Join(asked, ",") != "guest" {
+				t.Fatalf("the realization was asked about %v", asked)
+			}
+			if test.admitted {
+				if err != nil {
+					t.Fatalf("a standing realization was refused: %v", err)
+				}
+				return
+			}
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "access.unavailable" ||
+				reported[0].Message != "this Machine's emulated management controller is not realized" ||
+				reported[0].Remediation != "bootwright apply --context lab realizes Machine/guest and its controller" {
+				t.Fatalf("refusal = %+v", reported)
 			}
 		})
+	}
+	unread := errors.New("the current operation cannot be read")
+	if _, _, err := requestFor(catalog(), "lab", "guest", Stop, false, func(string) (machine.OwnershipState, bool, error) {
+		return machine.OwnershipState{}, false, unread
+	}); !errors.Is(err, unread) {
+		t.Fatalf("an unreadable realization reported %v", err)
+	}
+	if _, _, err := requestFor(catalog(), "lab", "metal", Stop, false, func(name string) (machine.OwnershipState, bool, error) {
+		t.Fatalf("a physical Machine asked about the realization of %s", name)
+		return machine.OwnershipState{}, false, nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestAnUnresolvableTargetOrVerbRefuses(t *testing.T) {
-	if _, _, err := requestFor(catalog(), "lab", "absent", Start, false, realized()); code(t, err) != "access.target" {
+	_, _, err := requestFor(catalog(), "lab", "absent", Start, false, realized())
+	if code(t, err) != "access.target" {
 		t.Fatalf("unknown Machine: %v", err)
+	}
+	if remedy := diagnostics.Of(err)[0].Remediation; remedy != "list the Machines this context selects with bootwright machine list --context lab" {
+		t.Fatalf("unknown Machine remedy = %q", remedy)
 	}
 	if _, _, err := requestFor(catalog(), "lab", "controller", Start, false, realized()); code(t, err) != "access.unavailable" {
 		t.Fatalf("a Machine with no controller at all: %v", err)

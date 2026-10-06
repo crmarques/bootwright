@@ -59,14 +59,14 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright add-ons add` | required `--name <name>[:<version>]`; `--version <version>` default catalog default; `--yes` false | registered immutable catalog release | local add-on registration |
 | `bootwright add-ons delete` | required `--name <name>[:<version>]`; `--yes` false | removed matching registration | local add-on registration deletion |
 | `bootwright secret set` | required `--name`; type-specific `--value-file`, `--value-stdin`, `--username`, `--password-file`, `--password-stdin`, `--certificate-file`, `--private-key-file`, `--public-key-file` under [Secrets](../secrets.md); `--yes` false | stored identity and parts, never values | local confidential write |
-| `bootwright secret generate` | optional `--name`; `--renew` false | changed/unchanged counts | atomic selected generated-material batch |
+| `bootwright secret generate` | optional `--name`; `--renew` false | changed and unchanged Secret names | atomic selected generated-material batch |
 | `bootwright secret check` | `--output text\|json` default `text` | declared availability/type checks | bounded material reads; no values emitted |
 | `bootwright secret list` | `--output text\|json` default `text` | context secret identities, types, parts, and availability | read confidential-store metadata |
 | `bootwright secret show` | required `--name` and `--part value\|username\|password\|certificate\|private-key\|public-key` | exact selected sensitive bytes | read and reveal current declared part |
-| `bootwright secret delete` | required `--name <name>`; `--yes` false | removed active mapping or unchanged identity | local logical deletion, preserving bound versions |
+| `bootwright secret delete` | required `--name <name>`; `--yes` false | deleted identity, or nothing deleted | local logical deletion, preserving bound versions |
 | `bootwright secret encryption init` | none | configured implementation and active key | idempotent initialization using Context configuration |
 | `bootwright secret encryption status` | `--output text\|json` default `text` | keyring and encrypted-store status | read confidential metadata |
-| `bootwright secret encryption rotate` | `--yes` false | new active key identity and re-encryption summary | atomic local key rotation and re-encryption |
+| `bootwright secret encryption rotate` | `--yes` false | new active key, retired keys and re-encrypted version and part counts | atomic local key rotation and re-encryption |
 | `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>` or `--from-url <http-or-https-url>`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
 | `bootwright media list` | `--checksums` false; `--output text\|json` default `text` | media names, sizes, and optional computed digests | read local media; `--checksums` reads each image in full |
 | `bootwright media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |
@@ -269,7 +269,7 @@ non-interactive, JSON output is selected, or a safe answer cannot be read.
 its ordinary confirmation, and `--allow-orphans` replaces neither. What each
 flag acknowledges, and when deletion refuses, follow
 [permanent deletion](../contexts.md#permanent-deletion). A deletion that
-abandons objects warns once on standard error.
+abandons objects warns once on standard error with `context.orphaned`.
 
 `--stage` accepts only `controller`, `infra-components`, `substrates`,
 `machines`, `clusters`, and `add-ons`, and only on `plan` and `apply`. Its

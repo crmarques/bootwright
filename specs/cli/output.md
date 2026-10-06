@@ -9,12 +9,12 @@ output.
 
 | Condition | Standard output | Standard error | Exit status |
 | --- | --- | --- | --- |
-| Human structured success | result or help, LF-terminated | ordered warnings only | `0` |
+| Human structured success | result or help, LF-terminated | ordered warnings, and the prompt of an interactive confirmation or input | `0` |
 | Human operational or validation failure | empty, except a complete negative secret check, controller readiness report, or already presented setup plan/progress or lifecycle state | ordered diagnostics, each LF-terminated | `1` |
 | Human usage failure | empty | usage diagnostic and concise help, LF-terminated | `2` |
 | JSON success or failure | exactly one JSON document followed by one LF | empty | the document's required `exitCode` |
 | Effective-state text | exact canonical effective YAML with its required final LF | empty | `0` |
-| Human effectful outcome | ordered plan, progress, status and result | ordered warnings and diagnostics | `0`, `1`, or `130` |
+| Human effectful outcome | ordered plan, progress, status and result | ordered warnings and diagnostics, and the prompt of an interactive confirmation or input | `0`, `1`, or `130` |
 | Explicit sensitive result | exact requested bytes, with no added LF | diagnostics only on failure | `0` or `1` |
 | Completion script | exact script with its required final LF | empty | `0` |
 | Access handoff | one bounded, escaped descriptor followed by one LF | ordered diagnostics only | `0` or `1` |
@@ -42,7 +42,8 @@ Human status lines use these exact tokens:
 
 - `[OK]` for successful work;
 - `[WARN]` for a non-fatal diagnostic;
-- `[PENDING]` for a frozen lifecycle block that has not started;
+- `[PENDING]` for a frozen lifecycle block that has not started, and for a
+  setup check or an object `status` reports not yet bound or realized;
 - `[RUNNING]` for progress with no terminal outcome;
 - `[SKIPPED]` when no work was required or permitted;
 - `[FAIL]` for a definite failure;
@@ -66,7 +67,10 @@ a command supplies content and never its own spacing, padding, or separators.
 
 - An optional **headline** opens the result: either a status line
   (`[OK] Context initialized`) or a plain title (`Controller setup plan`). It is
-  the only line at column zero besides section headings and table headers.
+  the only status or title line at column zero besides section headings and
+  table headers. The [lifecycle receipt](../cli.md#lifecycle-receipt) and a
+  name-only result, such as `machine list --silent` or
+  `context current --short`, are column-zero lines of their own, not headlines.
 - A **section** is an optional capitalized heading followed by its body. One
   blank line separates a section from the block before it. A section with no
   heading groups trailing fields, such as the closing outcome and next action.
@@ -197,9 +201,11 @@ Context identity is presented by the commands that own it. `context init`,
 `context update`, `context use`, `context current`, `context list`, and
 `context delete` present the selected context's name, and its mode where
 [their results](../contexts.md#command-results-and-confirmation) show one.
-Every other human result omits the context block; the selected context is
-already addressable through `context current`. JSON results keep their
-documented `context` field unchanged, so machine consumers lose nothing.
+`status` reports on one context, so it opens with that context as its headline,
+`[OK] Context <name>`, followed by its `Mode`. Every other human result omits
+the context block; the selected context is already addressable through
+`context current`. JSON results keep their documented `context` field
+unchanged, so machine consumers lose nothing.
 
 Human diagnostics have one of these forms:
 
@@ -322,15 +328,43 @@ A diagnostic object orders its fields as follows:
 {"severity":"error","code":"api.required","message":"metadata.name is required","source":{"path":"network.yaml","document":1,"line":4,"column":3},"object":{"apiVersion":"bootwright.io/v1alpha1","kind":"NetworkConfig","name":"management"},"field":"$.metadata.name","remediation":"set metadata.name to a unique DNS label"}
 ```
 
-`severity`, `code`, and `message` are required. `source`, `object`, `field`, and
-`remediation` are omitted when unavailable and are never `null`. A present
-source orders `path`, `document`, `line`, and `column`; positive coordinates are
-one-based and `0` means unavailable. Sensitive explicit-result bytes never
-appear in this structure.
+`severity`, `code`, and `message` are required. `severity` is `error` or
+`warning` (`TestDiagnosticSeveritiesAreErrorOrWarning`), which human output
+presents as `[FAIL]` and `[WARN]`; a warning never changes the exit status.
+`source`, `object`, `field`, and `remediation` are omitted when unavailable and
+are never `null`. A present source orders `path`, `document`, `line`, and
+`column`; positive coordinates are one-based and `0` means unavailable.
+Sensitive explicit-result bytes never appear in this structure.
 
 Safe display text preserves printable UTF-8 and escapes backslash, control
 characters, ESC, newline, and invalid UTF-8 bytes with deterministic `\\`,
 `\n`, `\r`, `\t`, `\uNNNN`, or `\xNN` sequences before JSON encoding.
+
+### Machine results
+
+Each `machines` entry of `machine list` orders its fields as follows:
+
+```json
+{"name":"rhel-01","contact":"rhel-01.lab.example.test","addresses":["198.51.100.11"],"os":"installed","provider":"lab-libvirt","clusters":[],"lifecycle":"applied","power":"on"}
+```
+
+`name`, `os` and `lifecycle` are strings and always present. `addresses` and
+`clusters` are arrays, always present and empty when there are none:
+`addresses` keeps the order the Machine declares, and `clusters` is sorted.
+`contact`, `provider` and `power` are strings, each omitted when the Machine has
+none. An absent `power` means no reading was taken, which `powerRead` reports,
+or no management controller answers for the Machine, and is distinct from
+`unknown`, a controller that was asked and gave no usable answer. What the
+contact, the addresses, the lifecycle position and the power reading mean is
+owned by [resource inspection](../cli.md#resource-inspection-and-explicit-access).
+The human table shows the same columns, `NAME`, `CONTACT`, `ADDRESSES`, `OS`,
+`PROVIDER`, `CLUSTERS`, `LIFECYCLE` and, only when a reading was taken,
+`POWER`, with `-` for an absent value.
+
+`machine start`, `machine stop` and `machine restart` report `power`, the `on`
+or `off` state the management controller proved after the verb; `previous`, the
+state it reported before the verb, omitted when it reported none; and
+`changed`, whether the verb changed it.
 
 ## Cluster discovery
 
@@ -370,19 +404,53 @@ probe. Its result orders these fields:
 | Field | Contract |
 | --- | --- |
 | `context` | `name`, `mode` of the resolved context. `mode` is the context record's mode, which a lifecycle read admits only as `ready`. |
-| `setupChecks` | Ordered `{id, status}` rows derived from stored controller evidence alone, without host probes. `status` uses the check vocabulary of [controller readiness](../controller.md#results-and-qualification). |
+| `setupChecks` | `{id, status}` rows derived from stored controller evidence alone, without host probes: `controller-binding`, then `execution-bundle`, the identities [controller readiness](../controller.md#results-and-qualification) gives the same prerequisites. `execution-bundle` is `ready` when the controller record exists, is initialized and holds a complete setup receipt, which is what an apply needs before it claims the host, and `not-ready` otherwise. `controller-binding` is `ready` when that record binds this context, `pending` when it does not and the context holds no operation, because the first apply publishes it, and `not-ready` when it does not while an operation exists. Readiness itself never reports `pending`. |
 | `desired` | `revision`, `environment` and admission `counts` of the selected immutable input. `counts` holds `filesSeen` and `objectsDecoded`, and an input that does not compile fails `status` with its diagnostics, so `desired` is always an object. |
-| `clusters`, `storageClusters` | Ordered `{name, kind, status}` rows for selected cluster roots. `status` is `unsupported` when this executable has no lifecycle capability for that cluster. |
-| `shared` | Ordered `{kind, name, machine, status}` rows for selected shared services. `status` is `unsupported`, `pending`, `done` or `unknown`, derived from the frozen plan and its durable evidence. |
-| `secrets` | `declared` and `bound` counts. |
+| `clusters`, `storageClusters` | Ordered `{name, kind, status}` rows for selected cluster roots, `status` in the realization vocabulary below. |
+| `shared` | Ordered `{kind, name, machine, status}` rows for selected managed shared services, `status` in the realization vocabulary below. |
+| `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
 | `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does before repeating a verb, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
-| `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists; empty when nothing does. |
+| `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |
 
-Rows sort by their documented key: checks and blocks in frozen order,
-contradictions in the order their refusal names them, everything else in
-ascending bytewise name order. Human `status` presents the same membership and
-order, omitting empty sections.
+The cluster and shared rows share one realization vocabulary. Each object the
+current operation's frozen plan names reads what all of that object's blocks
+prove, whatever its declaration now says:
+
+- `unsupported`: no capability of this executable claims the kind, its
+  capability refuses the object, or it is a managed service retained
+  `install-only`;
+- `pending`: this context has not realized it: nothing names it, its blocks
+  have not started, or a removal took it back or released it; the next apply
+  realizes it;
+- `done`: an apply proved every block of it;
+- `failed`: a block of it failed, under either verb; and
+- `unknown`: a block of it is running or `unknown`, or no record proves what
+  a removal did to it.
+
+Under an apply, an unproved block decides first, then a failed one, then one
+not started. Under a removal, a removal block that is unproved or failed
+decides the same way, and an object of a completed removal whose block record
+does not read done, which only a lost record leaves, reads `unknown`, as the
+contradiction status lists for that block says. Otherwise any removal block
+proved gone makes the object `pending`, and so does a removal that names fewer
+of its blocks than the apply it removes owned, because an earlier attempt took
+the rest back. An object whose removal has not started reads what that apply
+proved about it, except under a removal that names fewer blocks in all than
+that apply owned: such a removal replaced a failed one, whose outcome for the
+object no record keeps, so the object reads `unknown`. An object that apply
+owned and the removal no longer names was released by an earlier attempt and
+reads `pending`. An object no operation names keeps what its declaration gives
+it: `unsupported` for the reasons above, else `pending`. Human `status`
+presents them as `[SKIPPED]`, `[PENDING]`, `[OK]`, `[FAIL]` and `[UNKNOWN]`,
+and any other value as `[UNKNOWN]`.
+
+Rows sort by their documented key: checks in the order above, blocks in frozen
+order, contradictions in the order their refusal names them, everything else
+in ascending bytewise name order. Human `status` presents the same membership
+and order, omitting empty sections. Its Setup rows name each check by the
+label controller readiness gives it, and a `pending` controller binding adds
+`bound by the first apply`.
 Its Lifecycle section also names the build that registered the operation and
 the host directory of its logs, which JSON leaves out, and an `Unresolved
 <block>` section follows it for each block that carries `unresolved`, with its
@@ -444,6 +512,7 @@ it to a variable.
 | `context.input` | The context has no desired-state revision; import one with context update. |
 | `context.state` | Context state does not permit the requested local transition. |
 | `context.unsafe-delete` | Required ownership or recovery evidence prevents deletion. |
+| `context.orphaned` | A completed deletion abandoned objects the context owned, which are no longer managed. |
 | `secret.store` | Confidential material cannot be safely read, generated, written, rotated, or deleted. |
 | `secret.declaration` | A secret name or declaration is invalid, unresolved or duplicated. |
 | `secret.source` | The declared source or its parameters do not permit the operation, or stored material no longer matches the declaration. |
@@ -476,6 +545,7 @@ it to a variable.
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
 | `access.target` | Explicit access cannot resolve one exact authorized target. |
 | `access.handoff` | An explicit access descriptor cannot be safely resolved or encoded. |
+| `access.credential` | A Machine's SSH access names a password credential the operator reveals and types; written before the connection. |
 | `cluster.not-applicable` | A cluster command does not apply to the selected cluster's kind. |
 | `machine.power` | A power transition was refused before it ran, or its confirmation could not be answered. |
 

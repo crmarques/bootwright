@@ -35,6 +35,15 @@ type InputReader interface {
 	Read(context.Context, []byte) (int, error)
 }
 
+// TerminalInput is the terminal behind standard input, when there is one.
+// ReadHidden writes the prompt, reads one line into the buffer with echo off,
+// through its line feed when one arrives before the end of input or a full
+// buffer, and restores the terminal on every return.
+type TerminalInput interface {
+	Interactive() (bool, error)
+	ReadHidden(ctx context.Context, prompt string, buffer []byte) (int, error)
+}
+
 // Cryptography isolates non-context-aware key and certificate operations whose
 // production implementations always use the standard library's OS entropy.
 type Cryptography interface {

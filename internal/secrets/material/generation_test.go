@@ -111,7 +111,7 @@ func TestGenerateCertificatesAreP256PKCS8SelfSignedAndTypeScoped(t *testing.T) {
 				t.Fatalf("generated certificate: %v", err)
 			}
 			certificate := certificates[0]
-			if certificate.Subject.CommonName != "service.example" || !certificate.NotBefore.Equal(generationTime.UTC().Truncate(time.Second)) ||
+			if certificate.Subject.CommonName != "service.example" || !certificate.NotBefore.Equal(generationTime.UTC().Truncate(time.Second).Add(-24*time.Hour)) ||
 				!certificate.NotAfter.Equal(generationTime.UTC().Truncate(time.Second).AddDate(0, 0, 30)) || certificate.SerialNumber.Sign() <= 0 || certificate.SerialNumber.BitLen() > 128 {
 				t.Fatalf("certificate identity/time/serial = %+v %v %v %v", certificate.Subject, certificate.NotBefore, certificate.NotAfter, certificate.SerialNumber)
 			}
@@ -184,9 +184,11 @@ func TestValidateGeneratedCertificateAcceptsStillValidHistoricMaterial(t *testin
 			Type: "tlsCertificate", Source: "generated",
 			Generation: secrets.Generation{CommonName: "service.example", DNSNames: slices.Clone(declaration.Generation.DNSNames), IPAddresses: []string{"192.0.2.10"}, ValidityDays: 30},
 		},
+		// A 31-day declaration would match: an earlier build's 31-day
+		// certificate has this one's validity window.
 		{
 			Type: "tlsCertificate", Source: "generated",
-			Generation: secrets.Generation{CommonName: "service.example", DNSNames: slices.Clone(declaration.Generation.DNSNames), IPAddresses: slices.Clone(declaration.Generation.IPAddresses), ValidityDays: 31},
+			Generation: secrets.Generation{CommonName: "service.example", DNSNames: slices.Clone(declaration.Generation.DNSNames), IPAddresses: slices.Clone(declaration.Generation.IPAddresses), ValidityDays: 32},
 		},
 		{
 			Type: "caBundle", Source: "generated",

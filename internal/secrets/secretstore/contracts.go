@@ -62,9 +62,9 @@ type SecretStoreImplementation interface {
 	Backend() string
 	Selection() Selection
 	Requirements() []SessionRequirement
-	// Initialize may resume attributable initialization, perform an explicitly
-	// supported upgrade, or finish cleanup of authenticated published state.
-	// Unknown nonempty state is never an uninitialized store.
+	// Initialize may resume attributable initialization or finish cleanup of
+	// authenticated published state. Unknown nonempty state is never an
+	// uninitialized store.
 	Initialize(context.Context, Context, Area, SessionMaterial) (StoreSession, error)
 	Open(context.Context, Context, Area, Selector, SessionMaterial) (StoreSession, error)
 }

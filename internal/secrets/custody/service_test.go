@@ -2,6 +2,8 @@ package custody
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -154,6 +156,8 @@ func (s *serviceSession) Delete(_ context.Context, name string) (bool, error) {
 type serviceMaterial struct {
 	acquired, generated, validated int
 	failAt                         int
+	// refused is what Validate returns for the Secret of each name.
+	refused map[string]error
 }
 
 func (m *serviceMaterial) Acquire(context.Context, secrets.Declaration, secrets.Input) (secrets.Material, error) {
@@ -167,14 +171,20 @@ func (m *serviceMaterial) Generate(context.Context, secrets.Declaration) (secret
 	}
 	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("synthetic-generated")}), nil
 }
-func (m *serviceMaterial) Validate(context.Context, secrets.Declaration, secrets.Material) error {
+func (m *serviceMaterial) Validate(_ context.Context, d secrets.Declaration, _ secrets.Material) error {
 	m.validated++
-	return nil
+	return m.refused[d.Name]
 }
 
-type serviceConfirmer struct{ calls int }
+type serviceConfirmer struct {
+	calls   int
+	decline error
+}
 
-func (c *serviceConfirmer) Confirm(context.Context, string, string) error { c.calls++; return nil }
+func (c *serviceConfirmer) Confirm(context.Context, string, string) error {
+	c.calls++
+	return c.decline
+}
 
 func serviceFixture(t *testing.T, secretYAML string) (*Service, *serviceAccess, *serviceMaterial, *serviceConfirmer) {
 	t.Helper()
@@ -324,6 +334,9 @@ func TestGeneratedBatchFailurePublishesNothing(t *testing.T) {
 	}
 }
 
+// A declaration's fingerprint covers its type, source and parameters (D71): a
+// changed parameter stales its stored version, while the same declaration read
+// from another path or document position keeps it current.
 func TestStoredDeclarationSummaryRetainsStalenessIdentity(t *testing.T) {
 	for _, change := range []string{"generation-parameters", "origin-path", "document-position"} {
 		t.Run(change, func(t *testing.T) {
@@ -367,8 +380,21 @@ func TestStoredDeclarationSummaryRetainsStalenessIdentity(t *testing.T) {
 				content = secret + "\n---\n" + environment
 			}
 			access.snapshot.Inputs.Files = []desiredstate.SourceFile{desiredstate.NewSourceFile(path, []byte(content))}
-			reads, validations := access.session.reads, material.validated
+			reads, validations, generated := access.session.reads, material.validated, material.generated
 			result, err := service.Check(ctx, CheckRequest{})
+			if change != "generation-parameters" {
+				if err != nil || result == nil || len(result.Secrets) != 1 || result.Secrets[0].Status != "available" {
+					t.Fatal("the same declaration read from another place lost its material", result, err)
+				}
+				renewed, err := service.Generate(ctx, GenerateRequest{})
+				if err != nil || renewed.Changed != 0 || renewed.Unchanged != 1 || material.generated != generated {
+					t.Fatal("the same declaration read from another place re-minted its material", renewed, err)
+				}
+				if current, exists := currentVersion(access.session.snapshot, "token"); !exists || current.Declaration != original {
+					t.Fatal("the stored version was replaced")
+				}
+				return
+			}
 			if err == nil || result == nil || len(result.Secrets) != 1 || result.Secrets[0].Status != "stale" || access.session.reads != reads || material.validated != validations {
 				t.Fatal("changed complete declaration did not preserve stale refusal", result, err)
 			}
@@ -378,6 +404,92 @@ func TestStoredDeclarationSummaryRetainsStalenessIdentity(t *testing.T) {
 			updated, exists := currentVersion(access.session.snapshot, "token")
 			if !exists || updated.Declaration.Fingerprint == original.Fingerprint {
 				t.Fatal("renewed summary lost the new declaration identity")
+			}
+		})
+	}
+}
+
+// legacyFingerprint is the digest an earlier build stored: the declaration's
+// canonical JSON with the path and document index it was read from.
+func legacyFingerprint(t *testing.T, d secrets.Declaration, path string, document int) string {
+	t.Helper()
+	d.Origin, d.Document, d.Fingerprint = path, document, ""
+	d.LegacyFingerprint, d.LegacyOrigin, d.LegacyDocument = "", "", 0
+	canonical, err := json.Marshal(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(canonical)
+	return hex.EncodeToString(digest[:])
+}
+
+// A version an earlier build stored under the fingerprint that covered its
+// declaring path and document stays current for every command while that place
+// is unchanged, and a version matching neither digest is stale (D71).
+func TestAVersionStoredUnderTheLegacyFingerprintStaysCurrent(t *testing.T) {
+	for _, stored := range []string{"legacy", "neither"} {
+		t.Run(stored, func(t *testing.T) {
+			service, access, material, _ := serviceFixture(t, declarationYAML("generated", "  source: {generated: {bytes: 32}}\n")+declarationYAML("stored", ""))
+			ctx := context.Background()
+			_, declarations, err := service.resolve(ctx, "")
+			if err != nil || len(declarations) != 2 {
+				t.Fatal(declarations, err)
+			}
+			session := access.session
+			for index, d := range declarations {
+				if d.Origin != "" || d.Document != 0 || d.LegacyOrigin != "/synthetic/environment.yaml" {
+					t.Fatalf("declaration %s carries its provenance in its fingerprint: %+v", d.Name, d)
+				}
+				fingerprint := legacyFingerprint(t, d, "/synthetic/environment.yaml", d.LegacyDocument)
+				if fingerprint != d.LegacyFingerprint || fingerprint == d.Fingerprint {
+					t.Fatalf("legacy fingerprint of %s = %s, want %s", d.Name, d.LegacyFingerprint, fingerprint)
+				}
+				if stored == "neither" {
+					fingerprint = legacyFingerprint(t, d, "/synthetic/moved.yaml", d.LegacyDocument)
+				}
+				id := fmt.Sprintf("version-legacy-%d", index)
+				session.materials[id] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("synthetic-value")})
+				session.snapshot.Versions = append(session.snapshot.Versions, secretstore.Version{ID: id, Declaration: secrets.VersionDeclaration{Name: d.Name, Type: d.Type, Source: d.Source, Fingerprint: fingerprint}, Parts: []secrets.Part{secrets.ValuePart}})
+				session.snapshot.Current = append(session.snapshot.Current, secretstore.Current{Name: d.Name, Version: id})
+			}
+			check, checkErr := service.Check(ctx, CheckRequest{})
+			list, listErr := service.List(ctx, ListRequest{})
+			if stored == "neither" {
+				if checkErr == nil || check == nil || check.Secrets[0].Status != "stale" || check.Secrets[1].Status != "stale" || listErr != nil || list.Secrets[0].State != "stale" {
+					t.Fatal("a version matching neither fingerprint read as current", check, checkErr, list, listErr)
+				}
+				if _, err := service.Bind(ctx, BindRequest{Names: []string{"generated", "stored"}}); err == nil || len(session.bound) != 0 {
+					t.Fatal("a stale version was bound")
+				}
+				return
+			}
+			if checkErr != nil || check.Secrets[0].Status != "available" || check.Secrets[1].Status != "available" {
+				t.Fatal("a version under the legacy fingerprint read as unavailable", check, checkErr)
+			}
+			if listErr != nil || len(list.Secrets) != 2 || list.Secrets[0].State != "current" || list.Secrets[1].State != "current" {
+				t.Fatal("a version under the legacy fingerprint listed as not current", list, listErr)
+			}
+			generated, err := service.Generate(ctx, GenerateRequest{})
+			if err != nil || generated.Changed != 0 || generated.Unchanged != 1 || material.generated != 0 {
+				t.Fatal("generate re-minted a version under the legacy fingerprint", generated, err)
+			}
+			shown, err := service.Show(ctx, ShowRequest{Name: "stored", Part: secrets.ValuePart})
+			if err != nil {
+				t.Fatal("show refused a version under the legacy fingerprint", err)
+			}
+			shown.Material.Clear()
+			if _, err := service.Bind(ctx, BindRequest{Names: []string{"generated", "stored"}}); err != nil || len(session.bound) != 2 {
+				t.Fatal("bind refused a version under the legacy fingerprint", err)
+			}
+			for _, input := range session.bound {
+				version, _ := currentVersion(session.snapshot, input.Declaration.Name)
+				if input.Declaration.Summary() != version.Declaration || input.Declaration.Origin != "/synthetic/environment.yaml" {
+					t.Fatalf("bind of %s carried a declaration its stored version was not written with: %+v", input.Declaration.Name, input.Declaration)
+				}
+			}
+			set, err := service.Set(ctx, SetRequest{Name: "stored", SkipConfirmation: true, Input: secrets.Input{ValueStdin: true}})
+			if err != nil || set.Unchanged != 1 || set.Changed != 0 {
+				t.Fatal("equal material replaced a version under the legacy fingerprint", set, err)
 			}
 		})
 	}
@@ -510,19 +622,19 @@ func TestInputMatrixRejectsInapplicableFlags(t *testing.T) {
 		"tlsCertificate": {CertificateFile: "c", PrivateKeyFile: "k"}, "sshKeyPair": {PrivateKeyFile: "k", PublicKeyFile: "p"},
 	}
 	for kind, input := range inputs {
-		if err := validateInput(kind, input); err != nil {
-			t.Fatal(kind, err)
+		if !secrets.ValidInput(kind, input) {
+			t.Fatal(kind)
 		}
 		explicitEmpty := input
 		explicitEmpty.Provided = ^secrets.AllowedInputFields(kind)
-		if err := validateInput(kind, explicitEmpty); err == nil {
+		if secrets.ValidInput(kind, explicitEmpty) {
 			t.Fatal("explicitly empty inapplicable flag accepted", kind)
 		}
 		input.Username = "extra"
 		if kind == "usernamePassword" {
 			input.PublicKeyFile = "extra"
 		}
-		if err := validateInput(kind, input); err == nil {
+		if secrets.ValidInput(kind, input) {
 			t.Fatal("inapplicable flag accepted", kind)
 		}
 	}

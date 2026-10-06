@@ -1,4 +1,4 @@
-NAME        ADDRESS                      IP             OS         PROVIDER     CLUSTERS  LIFECYCLE    POWER
+NAME        CONTACT                      ADDRESSES      OS         PROVIDER     CLUSTERS  LIFECYCLE    POWER
 controller  controller.lab.example.test  192.0.2.1      provided   -            -         not-applied  unknown
 rhel-01     rhel-01.lab.example.test     198.51.100.11  installed  lab-libvirt  -         applied      on
 sno-01      -                            -              provided   -            sno       not-applied  -

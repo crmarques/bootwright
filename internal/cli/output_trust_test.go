@@ -229,3 +229,56 @@ func TestAnIncompleteTrustReportIsNotPresented(t *testing.T) {
 		t.Fatal("a host with no action was presented")
 	}
 }
+
+// A removal names the record a reassigned endpoint takes over: the key it
+// removes and why, in the plan, the result and JSON. It names a Machine the
+// context no longer declares, so the checked count leaves it out.
+func TestARemovalRowNamesTheKeyItRemovesAndWhy(t *testing.T) {
+	report := enrollment.Report{Context: "lab", Pending: 2, Hosts: []enrollment.HostReport{
+		{Machine: "node-a", Address: "192.0.2.10", Port: 22, Action: enrollment.ActionAdd, KeyType: "ssh-ed25519", Fingerprint: "SHA256:aaa"},
+		{
+			Machine: "retired", Address: "192.0.2.10", Port: 22, Action: enrollment.ActionRemove, KeyType: "ssh-ed25519",
+			Fingerprint: "SHA256:old", Reason: "no longer declared; node-a now uses its address",
+		},
+	}}
+	var plan bytes.Buffer
+	if err := NewTrustPlanPresenter(&plan).PresentTrustPlan(context.Background(), report); err != nil {
+		t.Fatal(err)
+	}
+	want := "Host-key trust plan for context lab: 1 machine(s) checked, 2 pending\n" +
+		"\n" +
+		"MACHINE  ADDRESS     ACTION  KEY          FINGERPRINT\n" +
+		"node-a   192.0.2.10  add     ssh-ed25519  SHA256:aaa\n" +
+		"retired  192.0.2.10  remove  ssh-ed25519  SHA256:old (no longer declared; node-a now uses its address)\n"
+	if plan.String() != want {
+		t.Fatalf("plan = %q, want %q", plan.String(), want)
+	}
+	dry := report
+	dry.DryRun = true
+	var text bytes.Buffer
+	if err := writeTrustReport(&text, "machine trust", &dry, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(text.String(), "[OK] 1 machine(s) checked, 2 pending; nothing was recorded\n") ||
+		!strings.Contains(text.String(), "SHA256:old (no longer declared; node-a now uses its address)") {
+		t.Fatalf("result = %q", text.String())
+	}
+	recorded := report
+	recorded.Recorded = 2
+	var headline bytes.Buffer
+	recorded.Presented = true
+	if err := writeTrustReport(&headline, "machine trust", &recorded, false); err != nil {
+		t.Fatal(err)
+	}
+	if headline.String() != "[OK] 1 machine(s) checked, 2 recorded\n" {
+		t.Fatalf("result = %q", headline.String())
+	}
+	var out bytes.Buffer
+	if err := writeTrustReport(&out, "machine trust", &dry, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `{"machine":"retired","address":"192.0.2.10","port":22,"action":"remove","keyType":"ssh-ed25519",`+
+		`"fingerprint":"SHA256:old","reason":"no longer declared; node-a now uses its address"}`) {
+		t.Fatalf("JSON = %s", out.String())
+	}
+}

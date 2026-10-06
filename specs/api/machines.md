@@ -402,10 +402,10 @@ installer-provisioned machine, omission means no Bootwright login.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `addressRef` | string | normalized | `ssh`, else `fqdn` | Machine-local `network.addresses[].name`; no arbitrary only-address fallback. |
+| `addressRef` | string | normalized | `ssh`, else on a Bootwright-installed Machine its `network.installAddressRef` when that address is declared, else `fqdn` | Machine-local `network.addresses[].name`; no arbitrary only-address fallback. |
 | `port` | integer | no | `22` | `1..65535` effective. |
-| `user` | string | no | operator user for operator identity, otherwise `root` | POSIX user name; required explicitly with password auth; `root` on a [lifecycle placement host](#addresses-and-access). |
-| `auth.operatorIdentity` | empty object | union | — | Use the invoking operator's existing SSH identity. |
+| `user` | string | no | none for operator identity: the client then logs in as the account it runs as, today the controller's root account in the elevated child; otherwise `root` | POSIX user name; required explicitly with password auth; `root` on a [lifecycle placement host](#addresses-and-access). |
+| `auth.operatorIdentity` | empty object | union | — | Offer the default identity files of the account the session client runs as, today the controller's root account, with no agent; another account needs `--ssh-user` with `--ssh-id-file`. Running the client under the invoking account is tracked as [B332](../milestones/backlog.md#b332). |
 | `auth.privateKeyRef` | string | union | — | `sshKeyPair` `Secret`. |
 | `auth.passwordRef` | string | union | — | `usernamePassword` `Secret`; requires authored `user`. |
 | `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret`; refused on a [lifecycle placement host](#addresses-and-access), and no consumer escalates with it. |
@@ -443,10 +443,19 @@ and key is therefore bound before observation.
 
 A Bootwright-installed machine authors no `access` or `rootLogin`.
 Normalization derives SSH user `bootwright`, the fleet
-`Environment.spec.remoteMachinesAccessKey.keyRef`, the normal address default,
-and `rootLogin: keep`. Its host key is the one its
+`Environment.spec.remoteMachinesAccessKey.keyRef`, `rootLogin: keep`, and
+`addressRef` `ssh` when the Machine declares that address, else its
+`network.installAddressRef` when the Machine declares the address it names,
+else `fqdn`. An install address the Machine does not declare is refused only at
+`network.installAddressRef`, never again as the derived `addressRef`. The
+installation proves the host key at the install address, which the controller
+can route to, so a session dials
+the address that proof covers rather than a name only a resolver knows. Its
+host key is the one its
 [installation evidence](../substrates.md#identity-and-power-operations)
-delivered or captured, so it consults no trust store.
+delivered or captured, so it consults no trust store, and a session dialing
+any other address refuses `trust.identity` naming the address the installation
+proved.
 
 ## MachineImage
 

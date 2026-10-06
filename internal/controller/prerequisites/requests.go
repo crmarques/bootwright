@@ -24,6 +24,15 @@ const (
 	ContextScope = "context"
 )
 
+// CheckIDs lists every check identity setup and readiness report, in the order
+// a report lists them, so each one a presenter labels is known in one place.
+func CheckIDs() []string {
+	return []string{
+		"host", "installed-host", "execution-bundle", "container-runtime", "target-tools",
+		"libvirt-client", "controller-binding", "setup-recovery", "setup-state",
+	}
+}
+
 type Check struct {
 	ID       string
 	Required string

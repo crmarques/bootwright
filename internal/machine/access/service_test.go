@@ -153,10 +153,20 @@ func (o *observer) Observe(context.Context, string, int) (trust.HostKey, error) 
 type prompt struct {
 	asked   []string
 	decline error
+	// errStream is the operator's error stream, so a test sees what was
+	// written there before the prompt.
+	errStream *strings.Builder
+	before    []string
 }
 
-func (p *prompt) ConfirmHostKey(_ context.Context, name, address, keyType, fingerprint string) error {
+func (p *prompt) ConfirmHostKey(_ context.Context, contextName, name, address, keyType, fingerprint string) error {
 	p.asked = append(p.asked, name+" "+address+" "+keyType+" "+fingerprint)
+	if p.errStream != nil {
+		p.before = append(p.before, p.errStream.String())
+	}
+	if contextName != "lab" {
+		return errors.New("the prompt named another context: " + contextName)
+	}
 	return p.decline
 }
 
@@ -178,7 +188,7 @@ func (c *client) Run(_ context.Context, session machine.Session, _ io.Reader, _,
 	return c.code, c.err
 }
 
-func (c *client) IdentityFile(path string) (string, error) {
+func (c *client) IdentityFile(_ context.Context, path string) (string, error) {
 	if c.idErr != nil {
 		return "", c.idErr
 	}
@@ -215,10 +225,10 @@ func newHarness(t *testing.T, adjust func(*Options)) *harness {
 		}},
 		trust:     &store{},
 		observer:  &observer{key: trusted},
-		prompt:    &prompt{},
 		client:    &client{},
 		errStream: &strings.Builder{},
 	}
+	h.prompt = &prompt{errStream: h.errStream}
 	options := Options{
 		Lender: h.lender, Ownership: owner{realized: true},
 		Evidence:  proof{evidence: machine.HostKeyEvidence{Address: "192.0.2.10", HostKey: trusted}, found: true},
@@ -271,6 +281,37 @@ func TestAnInstalledMachineOpensAsTheIdentityItsStateAuthorizes(t *testing.T) {
 	}
 	if strings.Join(h.lender.requested, ",") != "fleet" {
 		t.Fatalf("opened %v, want the credential alone", h.lender.requested)
+	}
+}
+
+// The installed proof holds only at the address its installation proved, so a
+// session dialing another names that address as the one to declare, and a
+// Machine the context has not installed names the apply of that context.
+func TestAnInstalledProofRefusalNamesItsRemedy(t *testing.T) {
+	moved := newHarness(t, func(o *Options) {
+		parsed, err := trust.ParseAuthorizedKey("ssh-ed25519 " + publicKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		o.Evidence = proof{evidence: machine.HostKeyEvidence{Address: "198.51.100.11", HostKey: parsed}, found: true}
+	})
+	_, err := exec(t, moved, "guest", machine.SSHOptions{}, "true")
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "trust.identity" ||
+		reported[0].Message != "the installation of Machine/guest proved a host key for 198.51.100.11, not for 192.0.2.10" ||
+		reported[0].Remediation != "declare an ssh address of 198.51.100.11 on Machine/guest, the address its installation proved, "+
+			"or remove the ssh address it declares" {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	unowned := newHarness(t, func(o *Options) { o.Ownership = owner{realized: false} })
+	_, err = exec(t, unowned, "guest", machine.SSHOptions{}, "true")
+	reported = diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "access.target" ||
+		reported[0].Remediation != "bootwright apply --context lab, or reach the Machine with its own declared access" {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	if len(moved.client.sessions)+len(unowned.client.sessions) != 0 {
+		t.Fatal("a refused proof opened a session")
 	}
 }
 
@@ -436,4 +477,114 @@ func TestACommandValueThatCannotBeEncodedRefusesTheSession(t *testing.T) {
 	if len(h.client.sessions) != 0 {
 		t.Fatal("a session ran an altered command")
 	}
+}
+
+// A first use whose endpoint a Machine this context no longer declares still
+// holds takes the endpoint over in the one confirmed write, and names the
+// record it removes on the operator's error stream before asking.
+func TestAFirstUseTakesOverAnUndeclaredEndpoint(t *testing.T) {
+	h := newHarness(t, nil)
+	h.trust.data = recorded(t, "retired", "192.0.2.10", 2222, otherKey)
+	if _, err := exec(t, h, "host", machine.SSHOptions{}, "true"); err != nil {
+		t.Fatal(err)
+	}
+	notice := "[WARN] trust.identity: confirming also removes the host key this context trusted for retired, " +
+		"which it no longer declares, at [192.0.2.10]:2222\n"
+	if len(h.prompt.before) != 1 || h.prompt.before[0] != notice {
+		t.Fatalf("before the prompt the operator read %q, want %q", h.prompt.before, notice)
+	}
+	if len(h.trust.written) != 1 {
+		t.Fatalf("writes = %d", len(h.trust.written))
+	}
+	records, err := trust.Decode(h.trust.written[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records.Hosts) != 1 || records.Hosts[0].Machine != "host" || records.Hosts[0].PublicKey != publicKey {
+		t.Fatalf("records = %+v", records.Hosts)
+	}
+
+	declined := newHarness(t, nil)
+	declined.trust.data = recorded(t, "retired", "192.0.2.10", 2222, otherKey)
+	declined.prompt.decline = errors.New("declined")
+	if _, err := exec(t, declined, "host", machine.SSHOptions{}, "true"); err == nil {
+		t.Fatal("a declined first use opened a session")
+	}
+	if len(declined.trust.written) != 0 || len(declined.client.sessions) != 0 {
+		t.Fatal("a declined first use removed or recorded a key")
+	}
+}
+
+// A record of a Machine still declared is never removed, so a first use that
+// would pin its endpoint to a second key refuses before the operator is asked
+// to accept a key no write could record. When that Machine no longer uses this
+// context's trust, a re-trust of it would refuse, so the remedy names the
+// input change that drops its record instead.
+func TestAFirstUseThatWouldPinTwoKeysRefusesBeforeAsking(t *testing.T) {
+	h := newHarness(t, nil)
+	h.trust.data = recorded(t, "secured", "192.0.2.10", 2222, otherKey)
+	_, err := exec(t, h, "host", machine.SSHOptions{}, "true")
+	if err == nil || code(t, err) != "trust.identity" {
+		t.Fatalf("err = %v", err)
+	}
+	if reported := diagnostics.Of(err)[0]; !strings.Contains(reported.Message, "[192.0.2.10]:2222") ||
+		reported.Remediation != "re-trust secured with bootwright machine trust --context lab --machines secured --replace secured" {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	if len(h.prompt.asked) != 0 || len(h.trust.written) != 0 || len(h.client.sessions) != 0 {
+		t.Fatalf("asked %d, wrote %d, opened %d", len(h.prompt.asked), len(h.trust.written), len(h.client.sessions))
+	}
+
+	exempt := newHarness(t, nil)
+	exempt.trust.data = recorded(t, "declared", "192.0.2.10", 2222, otherKey)
+	_, err = exec(t, exempt, "host", machine.SSHOptions{}, "true")
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" ||
+		!strings.Contains(reported[0].Message, "declared no longer uses this context's SSH trust (declares an explicit knownHostsRef)") ||
+		reported[0].Remediation != "drop declared from the input with bootwright context update --name lab --input-dir <dir>, repeat this command, then restore declared the same way; "+
+			"this needs a context with no incomplete operation and an input in which no other object references declared, "+
+			"and after a completed apply the next apply no longer settles: it refuses the changed input until a destroy" {
+		t.Fatalf("a pin held by a Machine that no longer uses the store gave %+v", reported)
+	}
+	if len(exempt.prompt.asked) != 0 || len(exempt.trust.written) != 0 || len(exempt.client.sessions) != 0 {
+		t.Fatalf("asked %d, wrote %d, opened %d", len(exempt.prompt.asked), len(exempt.trust.written), len(exempt.client.sessions))
+	}
+}
+
+// Every remedy and next step that names a command names the context it acts
+// on, so an operator with another context selected never acts on that one.
+func TestEveryHostKeyRemedyNamesTheContext(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		object string
+		adjust func(*harness)
+		want   string
+	}{
+		{"unknown name", "absent", nil, "bootwright machine list --context lab"},
+		{"recorded endpoint mismatch", "host", func(h *harness) {
+			h.trust.data = recorded(t, "host", "192.0.2.10", 22, publicKey)
+		}, "bootwright machine trust --context lab --machines host --replace host"},
+		{"non-interactive first use", "host", func(h *harness) {
+			h.service.options.Terminal = func() (bool, error) { return false, nil }
+		}, "bootwright machine trust --context lab --machines host"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h := newHarness(t, nil)
+			if test.adjust != nil {
+				test.adjust(h)
+			}
+			_, err := exec(t, h, test.object, machine.SSHOptions{}, "true")
+			if reported := diagnostics.Of(err); len(reported) != 1 || !strings.Contains(reported[0].Remediation, test.want) {
+				t.Fatalf("refusal = %+v (%v), want a remedy naming %q", reported, err, test.want)
+			}
+		})
+	}
+	t.Run("password advisory", func(t *testing.T) {
+		h := newHarness(t, nil)
+		if _, err := exec(t, h, "secured", machine.SSHOptions{}, "true"); err != nil {
+			t.Fatal(err)
+		}
+		if notice := h.errStream.String(); !strings.Contains(notice, "bootwright secret show --context lab --name admin-password --part password") {
+			t.Fatalf("advisory = %q", notice)
+		}
+	})
 }

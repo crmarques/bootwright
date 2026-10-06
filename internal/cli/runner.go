@@ -229,6 +229,7 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	if errors.Is(err, context.DeadlineExceeded) {
 		return r.failureNaming(command, path, "runtime.deadline", "operation deadline exceeded", 1, selectedJSON(command), logs)
 	}
+	usage := diagnostics.IsUsage(err)
 	if diagnostics := diagnostics.Of(err); len(diagnostics) != 0 {
 		if handled, presentErr := r.writeNegativeSecretCheck(command, path, result, diagnostics); handled {
 			if presentErr != nil {
@@ -242,10 +243,21 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 			}
 			return 1
 		}
-		if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, selectedJSON(command), logs); err != nil {
+		// A service's refusal of how it was invoked, such as a flag set the
+		// declared Secret type does not take, is a usage failure.
+		exitCode := 1
+		if usage {
+			exitCode = 2
+		}
+		if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, exitCode, selectedJSON(command), logs); err != nil {
 			return 1
 		}
-		return 1
+		if usage && !selectedJSON(command) {
+			if err := writeConciseHelp(r.config.ErrOut, command); err != nil {
+				return 1
+			}
+		}
+		return exitCode
 	}
 	// A session's streams and exit status are the remote process's own. There
 	// is no result to present and no status to add: the operator has already

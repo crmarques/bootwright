@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -98,23 +99,65 @@ func TestFileAcquisitionCancellationDiscardsPartialBytes(t *testing.T) {
 }
 
 func TestSecretFileTrustPredicateRejectsOwnerAndSpecialTypes(t *testing.T) {
-	base := syscall.Stat_t{Mode: syscall.S_IFREG | 0600, Uid: uint32(os.Getuid()), Nlink: 1, Size: 1}
-	if !safeOperatorFile(base) {
-		t.Fatal("private regular file was rejected")
+	files := &secureFiles{failureCode: "input", ownerUID: uint32(os.Getuid())}
+	for _, part := range []secrets.Part{secrets.ValuePart, secrets.PasswordPart, secrets.PrivateKeyPart, secrets.CertificatePart, secrets.PublicKeyPart} {
+		request := fileRequest{Part: part, Path: "secret"}
+		base := syscall.Stat_t{Mode: syscall.S_IFREG | 0600, Uid: uint32(os.Getuid()), Nlink: 1, Size: 1}
+		if err := files.unsafeFile(base, request, "/secret"); err != nil {
+			t.Fatal("private regular file was rejected", part, err)
+		}
+		for _, change := range []func(*syscall.Stat_t){
+			func(s *syscall.Stat_t) { s.Uid++ },
+			func(s *syscall.Stat_t) { s.Nlink = 2 },
+			func(s *syscall.Stat_t) { s.Size = -1 },
+			func(s *syscall.Stat_t) { s.Mode = syscall.S_IFCHR | 0600 },
+			func(s *syscall.Stat_t) { s.Mode = syscall.S_IFBLK | 0600 },
+			func(s *syscall.Stat_t) { s.Mode = syscall.S_IFSOCK | 0600 },
+			func(s *syscall.Stat_t) { s.Mode |= syscall.S_ISUID },
+			func(s *syscall.Stat_t) { s.Mode |= 0020 },
+		} {
+			changed := base
+			change(&changed)
+			if files.unsafeFile(changed, request, "/secret") == nil {
+				t.Fatal("unsafe file identity was accepted", part)
+			}
+		}
 	}
-	for _, change := range []func(*syscall.Stat_t){
-		func(s *syscall.Stat_t) { s.Uid++ },
-		func(s *syscall.Stat_t) { s.Nlink = 2 },
-		func(s *syscall.Stat_t) { s.Size = -1 },
-		func(s *syscall.Stat_t) { s.Mode = syscall.S_IFCHR | 0600 },
-		func(s *syscall.Stat_t) { s.Mode = syscall.S_IFBLK | 0600 },
-		func(s *syscall.Stat_t) { s.Mode = syscall.S_IFSOCK | 0600 },
-		func(s *syscall.Stat_t) { s.Mode |= syscall.S_ISUID },
+}
+
+// Only a certificate or public key file may be readable by others or root's;
+// a value, password or private key file stays the invoking account's own and
+// private to it (D72).
+func TestOnlyCertificateAndPublicKeyFilesTakeTheRelaxedRule(t *testing.T) {
+	const invoker = 4242
+	files := &secureFiles{failureCode: "input", ownerUID: invoker}
+	for _, test := range []struct {
+		part    secrets.Part
+		relaxed bool
+	}{
+		{secrets.ValuePart, false}, {secrets.PasswordPart, false}, {secrets.PrivateKeyPart, false},
+		{secrets.CertificatePart, true}, {secrets.PublicKeyPart, true},
 	} {
-		changed := base
-		change(&changed)
-		if safeOperatorFile(changed) {
-			t.Fatal("unsafe file identity was accepted")
+		request := fileRequest{Part: test.part, Path: "secret"}
+		for _, private := range []syscall.Stat_t{
+			{Mode: syscall.S_IFREG | 0600, Uid: invoker, Nlink: 1, Size: 1},
+			{Mode: syscall.S_IFREG | 0400, Uid: invoker, Nlink: 1, Size: 1},
+		} {
+			if err := files.unsafeFile(private, request, "/secret"); err != nil {
+				t.Fatalf("%s: a private file of mode %04o was refused: %+v", test.part, private.Mode&07777, diagnostics.Of(err))
+			}
+		}
+		for _, shared := range []syscall.Stat_t{
+			{Mode: syscall.S_IFREG | 0644, Uid: invoker, Nlink: 1, Size: 1},
+			{Mode: syscall.S_IFREG | 0640, Uid: invoker, Nlink: 1, Size: 1},
+			{Mode: syscall.S_IFREG | 0444, Uid: invoker, Nlink: 1, Size: 1},
+			{Mode: syscall.S_IFREG | 0600, Uid: 0, Nlink: 1, Size: 1},
+			{Mode: syscall.S_IFREG | 0644, Uid: 0, Nlink: 1, Size: 1},
+		} {
+			err := files.unsafeFile(shared, request, "/secret")
+			if (err == nil) != test.relaxed {
+				t.Fatalf("%s: a file of mode %04o owned by uid %d: admitted %v, want %v", test.part, shared.Mode&07777, shared.Uid, err == nil, test.relaxed)
+			}
 		}
 	}
 }

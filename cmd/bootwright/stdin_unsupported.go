@@ -21,3 +21,16 @@ func readStdin(ctx context.Context, _ []byte) (int, error) {
 	}
 	return 0, errors.New("interactive confirmation requires Linux on amd64")
 }
+
+type secretTerminal struct{}
+
+func newSecretTerminal(*os.File, io.Writer) secretTerminal { return secretTerminal{} }
+
+func (secretTerminal) Interactive() (bool, error) { return false, nil }
+
+func (secretTerminal) ReadHidden(ctx context.Context, _ string, _ []byte) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	return 0, errors.New("a terminal prompt requires Linux on amd64")
+}

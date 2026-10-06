@@ -97,7 +97,7 @@ Parameters are flat and type-scoped:
 | `commonName` | string | `tlsCertificate`, `caBundle` | yes | — | Common name for the self-signed certificate. |
 | `dnsNames` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | DNS subject-alternative names. |
 | `ipAddresses` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | IP subject-alternative names. |
-| `validityDays` | integer | `tlsCertificate`, `caBundle` | no | `3650` | Inclusive range `1..36500`. |
+| `validityDays` | integer | `tlsCertificate`, `caBundle` | no | `3650` | Inclusive range `1..36500`, counted from generation; the [generated certificate](../secrets.md#acquisition-and-commands) starts 24 hours before it. |
 | `keyType` | string | `sshKeyPair` | no | `ed25519` | `ed25519`, `rsa`, `ecdsa-p256`, `ecdsa-p384`, or `ecdsa-p521`. |
 | `comment` | string | `sshKeyPair` | no | omitted | UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands); no leading/trailing whitespace, no control character (newline, tab and NUL included), no Unicode line or paragraph separator, no double quote and no backslash, so the key stays on its quoted Kickstart line. |
 | `bytes` | integer | `token` | no | `32` | Token entropy in bytes; inclusive range `16..1024`. |

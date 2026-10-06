@@ -8,20 +8,19 @@
     "machines": [
       {
         "name": "controller",
-        "address": "controller.lab.example.test",
-        "ips": [
+        "contact": "controller.lab.example.test",
+        "addresses": [
           "192.0.2.1"
         ],
         "os": "provided",
-        "provider": "",
         "clusters": [],
         "lifecycle": "not-applied",
         "power": "unknown"
       },
       {
         "name": "rhel-01",
-        "address": "rhel-01.lab.example.test",
-        "ips": [
+        "contact": "rhel-01.lab.example.test",
+        "addresses": [
           "198.51.100.11"
         ],
         "os": "installed",
@@ -32,15 +31,12 @@
       },
       {
         "name": "sno-01",
-        "address": "",
-        "ips": [],
+        "addresses": [],
         "os": "provided",
-        "provider": "",
         "clusters": [
           "sno"
         ],
-        "lifecycle": "not-applied",
-        "power": ""
+        "lifecycle": "not-applied"
       }
     ],
     "powerRead": true

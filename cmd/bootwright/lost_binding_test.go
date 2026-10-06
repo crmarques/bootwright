@@ -133,18 +133,19 @@ func failedApplyNaming(t *testing.T, repository *contextfs.Store, binding string
 // store and local keyring, whether the binding was dropped from the keyring or
 // the version it binds lost its part file: apply and destroy each refuse the
 // same way three times, writing nothing, and name the operation, the binding
-// and both exits; status offers the orphan-acknowledged deletion as its only
-// next step once the binding is unlisted; a deletion without the
-// acknowledgement refuses, and with it removes the context and its keyring.
+// and both exits; status names the binding in the refusal's words and offers
+// the orphan-acknowledged deletion as its only next step, since a keyring
+// missing a part file fails its listing as it fails the reopen; a deletion
+// without the acknowledgement refuses, and with it removes the context and
+// its keyring.
 func TestALostFrozenBindingLeavesOnlyTheOrphanAcknowledgedDelete(t *testing.T) {
 	for _, loss := range []struct {
-		name     string
-		lose     func(*testing.T, cli.Services, string, string)
-		why      string
-		unlisted bool
+		name string
+		lose func(*testing.T, cli.Services, string, string)
+		why  string
 	}{
 		{
-			name: "a binding the keyring no longer lists", why: "which the context's keyring no longer lists", unlisted: true,
+			name: "a binding the keyring no longer lists", why: "which the context's keyring no longer lists",
 			lose: func(t *testing.T, services cli.Services, _, binding string) {
 				released, err := custodyOf(t, services).Release(context.Background(), custody.BindingRequest{ContextName: "alpha", BindingID: binding})
 				if err != nil || !released {
@@ -218,10 +219,10 @@ func TestALostFrozenBindingLeavesOnlyTheOrphanAcknowledgedDelete(t *testing.T) {
 			if err := json.Unmarshal(status["nextSteps"], &steps); err != nil {
 				t.Fatal(err)
 			}
-			if exit := []string{"bootwright context delete --name alpha --purge --allow-orphans"}; slices.Equal(steps, exit) != loss.unlisted {
+			if exit := []string{"bootwright context delete --name alpha --purge --allow-orphans"}; !slices.Equal(steps, exit) {
 				t.Fatalf("status offers %v", steps)
 			}
-			if loss.unlisted != strings.Contains(string(status["contradictions"]), "froze the Secret binding "+bound.ID+", which the context's keyring no longer lists") {
+			if !strings.Contains(string(status["contradictions"]), "froze the Secret binding "+bound.ID+", "+loss.why+";") {
 				t.Fatalf("status names %s", status["contradictions"])
 			}
 			_, stderr := contextRun(t, services, 1, "context", "delete", "--name", "alpha", "--purge", "--yes")

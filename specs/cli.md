@@ -154,7 +154,10 @@ preserve these command-specific compatibility rules:
 - cluster-backed preflight and render treat an empty or whitespace-only value
   as omission, but reject a nonblank comma-only value;
 - `machine list --clusters` treats an empty or whitespace-only value as
-  omission and a comma-only value as an empty result; and
+  omission and a comma-only value as an empty result, and a member naming no
+  ContainerCluster or StorageCluster the context selects fails
+  `access.target`, naming every such member and the clusters it can select;
+  and
 - `machine trust --machines` treats an empty or comma-only value as omission,
   while an empty or comma-only `--replace` selects no replacement; and
 - a supplied `--stage` must resolve to at least one member, so a comma-only
@@ -329,19 +332,16 @@ account homes without `HOME`. An unverifiable account refuses
 `runtime.privilege`, naming why, and names a local account or a clean root
 login (`su -`, `sudo su -` or a root SSH session) with `--context` as the
 remedy. The input directory and Context file, a media source file, secret
-files and the selection files are opened with the invoking account's
-credentials: a bounded helper passes each descriptor to root, which keeps every
-type, stability and ownership proof. Root identity governs only root-owned
-runtime storage and the Bootwright executable, which root must be able to
-execute; the elevated child re-executes it through `/proc/self/exe` and never
+files, a key offered with `--ssh-id-file` and the selection files are opened
+with the invoking account's credentials: a bounded helper passes each
+descriptor to root, which keeps every type, stability and ownership proof.
+Root identity governs only root-owned runtime storage and the Bootwright
+executable, which root must be able to execute; the elevated child re-executes it through `/proc/self/exe` and never
 resolves its path, which a root-squashed home would refuse. Only the
 unprivileged supervisor resolves that path, before it elevates: an invoking
 account that cannot search a directory on it refuses `runtime.privilege`
 naming the path and that account, with the remedy of a local copy both that
 account and root can read, such as one in `/usr/local/bin`.
-
-Not yet met: `--ssh-id-file` is still opened by root; tracked as
-[B283](milestones/m1.md#b283).
 
 For a usage failure, JSON mode is established only after an exact
 JSON-capable command is resolved and its final scalar `--output` occurrence
@@ -538,9 +538,15 @@ no step at all. No next step names a verb this executable does not expose.
 `status` offers a next step only where that verb's decision would pass over the
 records `status` read, so it never offers a command those records refuse:
 
-- beside no operation, `bootwright plan` and `bootwright apply`, unless it
-  names records or evidence no index accounts for, which both verbs refuse, and
-  then nothing;
+- beside no operation, `bootwright setup` alone while the host's controller
+  setup has not completed, because an apply claims the host only after it
+  ([host identity](controller.md#host-identity-and-shared-prerequisites)), and
+  otherwise `bootwright plan` and `bootwright apply`; but where it names
+  records or evidence no index accounts for, which both verbs refuse, only the
+  deletion their refusal names,
+  `bootwright context delete --name <name> --purge`, with `--allow-orphans`
+  unless the evidence reads pristine, and nothing over evidence the deletion
+  cannot read;
 - over an apply that has not completed, its continuation, which only
   [finalizes](state-reconciliation.md#lifecycle-unit) an apply whose blocks are
   all `done`, a `failed` one included, unless a lost block record refuses it,
@@ -550,14 +556,25 @@ records `status` read, so it never offers a command those records refuse:
 - over a destroy that has not completed, the `destroy` that continues,
   resolves, finalizes or replaces it, unless a lost block record refuses a
   continuation; a replacement reads no such record;
-- over a completed operation, nothing;
+- over either incomplete operation, `bootwright setup` in place of a
+  continuation or resolution that still has a block to run while the host's
+  controller setup has not completed, because that continuation re-proves the
+  setup and refuses an incomplete one; a finalization and a replacement are
+  not held to it and stay offered;
+- over a completed operation, nothing, except over a completed destroy holding
+  a block that is not `done`, which both verbs refuse naming the deletion of
+  the context: there that deletion, as beside unindexed records;
 - over an operation whose continuation or removal reopens a Secret binding the
-  context's keyring no longer lists, in place of any step above, only
+  context's keyring no longer lists, or whose keyring listing fails reporting
+  the material corrupt or undecryptable, as the reopen would, in place of any
+  step above,
   `bootwright context delete --name <name> --purge --allow-orphans`, because
   no verb can reopen that binding and nothing stands in for it
-  ([continuation and removal](state-reconciliation.md#continuation-and-removal));
-  a destroy whose blocks are all `done` reopens none, because the `destroy`
-  offered above finalizes it.
+  ([continuation and removal](state-reconciliation.md#continuation-and-removal)),
+  preceded by `bootwright apply` over an apply whose blocks are all `done`,
+  which that apply finalizes without reopening the binding; a destroy whose
+  blocks are all `done` reopens none, because the `destroy` offered above
+  finalizes it.
 
 An apply that has not completed owns every block it started, whichever state
 it stopped in, so taking them back is as legitimate a way forward as
@@ -608,7 +625,9 @@ whose removal has not completed still owns what it has not removed, so it
 reports `destroying` rather than either settled position.
 
 A Machine's contact and its addresses are separate facts, and the listing
-reports both. The contact is the one address its SSH access resolves, which is
+reports both, as the `CONTACT` and `ADDRESSES` columns and the `contact` and
+`addresses` fields of its [JSON row](cli/output.md#machine-results). The
+contact is the one address its SSH access resolves, which is
 commonly a DNS name; the addresses are every IP the Machine declares, each
 without its prefix, in the order declared and without repetition. A DNS contact
 is not an address, a Machine may declare several, and one whose addresses are
@@ -694,20 +713,28 @@ credential opens exactly the account it was authored for; such an invocation
 must supply `--ssh-id-file`, and without one it fails `access.unavailable`
 rather than putting one account's key on the wire under another's name.
 `--ssh-id-file` is offered ahead of the declared credential, which remains the
-fallback; a leading `~` resolves from the invoking account database, and the
-file must satisfy the private-file rules in [security](security.md). Neither
-flag alters desired state or the managed identity Bootwright installs, and
-neither `--ssh-user-for-provisioned` nor `--ssh-ask-sudo-password` is consumed.
+fallback; a leading `~` resolves from the invoking account database, the file
+is opened with the invoking account's credentials and must satisfy the
+private-file rules in [security](security.md), and the key reaches the client
+as a private copy. Neither flag alters desired state or the managed identity
+Bootwright installs, and neither `--ssh-user-for-provisioned` nor
+`--ssh-ask-sudo-password` is consumed.
 
 The host key is proved before any credential is offered, from exactly one
 source in this order: the Machine's `access.ssh.knownHostsRef` `Secret`; for a
 Bootwright-installed Machine, the host key its
 [installation evidence](substrates.md#identity-and-power-operations) proves,
-which requires that this context currently owns that installation; the
+which requires that this context currently owns that installation and that the
+session dials the address that installation proved, so another address refuses
+`trust.identity` naming the proved one; the
 [context trust store](contexts.md#storage-locking-and-publication); and
 finally, on an interactive terminal alone, one observation of the endpoint
-confirmed against its displayed fingerprint and recorded as context trust.
-Without a terminal an unproved key fails `trust.identity` and names
+confirmed against its displayed fingerprint and recorded as context trust. The
+prompt names the context, and when a record of a Machine the context no longer
+declares holds the endpoint, the confirmed write replaces that record, which
+standard error names before the prompt; a record of a Machine still declared
+that pins the endpoint to another key fails `trust.identity` before anything
+is asked. Without a terminal an unproved key fails `trust.identity` and names
 `machine trust`. Recording requires that explicit confirmation, so an
 observation by itself trusts nothing. The session pins exactly the proved key
 and its algorithm, so a Machine presenting another key fails to connect; a
@@ -739,20 +766,49 @@ It observes each such endpoint exactly once, offering no credential, and
 reports one action for every selected Machine: `add` for a key the context
 does not trust yet, `reuse` for the key it already trusts at that endpoint,
 `replace` for a supersede, and `skip`, with its reason, for every other
-Machine, which it never contacts. One endpoint that cannot be read fails the
-whole enrollment, which records nothing.
+Machine, which it never contacts. An `add` or `replace` whose endpoint a record
+of a Machine the context no longer declares holds removes that record in the
+same write, reported after the selected Machines as a `remove` row naming the
+Machine, the endpoint, the key removed and which Machine now uses the address;
+it counts as pending, but not as a Machine checked. One endpoint that cannot be
+read fails the whole enrollment, which records nothing.
 
 A changed key fails `trust.identity` naming both fingerprints. An unchanged key
 observed at another endpoint fails `trust.identity` naming the endpoint the
 context trusts it at, since the store trusts a key at one address. Either is
-superseded only by `--replace` naming that Machine.
+superseded only by `--replace` naming that Machine. A plan that would still pin
+one endpoint to two keys, because a Machine the context still declares holds it
+with another, fails `trust.identity` before it is shown, in a dry run too,
+naming both Machines, the endpoint and the re-trust of the other Machine. When
+that Machine no longer uses this context's trust, because it is reached
+locally, installed, declares no SSH access or declares a `knownHostsRef`, a
+re-trust of it refuses and nothing reads its record, so the refusal says why
+and names the one change that drops the record: leave it out of the input for
+one `context update`, repeat the command, then restore it. The remedy also
+names what that change needs and costs: `context update` refuses while an
+operation is incomplete, as the
+[mutation guard](state-reconciliation.md#context-mutation-evidence) states; an
+input that drops a Machine another object references, such as a cluster
+member, does not compile; and each update publishes a new input revision, so
+after a completed apply the next apply no longer settles but refuses the
+changed input until a [destroy](state-reconciliation.md#lifecycle-unit). The
+Machine reached locally is the
+[controller Machine](api/environment.md#controller-machine), which leaves the
+input only when the Environment's `spec.controller.machineRef` names another
+local Machine. Before an apply binds the context, that input compiles and the
+same steps drop the record. Once an apply has bound the context, the
+[controller binding](contexts.md#controller-relationship-and-host-binding),
+not compilation, refuses any input that changes the controller Machine, so
+that refusal's remedy says no input edit drops the record and only a separate
+context does.
 
 With pending writes and no `--yes`, the plan is written to standard output
 before the one [ordinary confirmation](#ordinary-confirmation): every Machine's
-action, key and fingerprint, and what a replacement supersedes, the earlier
-fingerprint and, when it moved, the earlier endpoint. The plan is the same
-observation the command records. After recording, the result repeats only its
-headline; a declined, non-interactive or canceled confirmation records nothing.
+action, key and fingerprint, what a replacement supersedes, the earlier
+fingerprint and, when it moved, the earlier endpoint, and every record a
+`remove` row drops. The plan is the same observation the command records.
+After recording, the result repeats only its headline; a declined,
+non-interactive or canceled confirmation records nothing.
 Under `--yes` or `--dry-run`, and in JSON, which
 [requires one of them](cli/commands.md#flag-relationships-and-safeguards),
 nothing precedes the result, which carries every Machine's row once.
@@ -769,9 +825,11 @@ Resolution follows explicit access: an unknown or excluded name fails
 `access.target`, and a Machine this executable cannot reach a management
 controller for fails `access.unavailable`, both with exit `1`, empty standard
 output and no effect. A Machine whose controller is emulated by its provider
-is reachable only while the context owns its realization, because the
-controller is one of that realization's own effects; a Machine that authors its
-own controller is reachable whenever that controller answers.
+is reachable while the provider's machine block for it stands, because the
+controller is one of that block's own effects: from the moment that block
+completed under the current apply, whatever the Machine's installation reached,
+until a removal proves the block gone. A Machine that authors its own
+controller is reachable whenever that controller answers.
 
 Every power request crosses [the Machine's management controller](substrates.md#identity-and-power-operations)
 over the one adapter boundary, under the context's shared lock, so a power

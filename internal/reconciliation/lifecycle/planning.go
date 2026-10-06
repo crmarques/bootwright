@@ -336,17 +336,7 @@ func firstDelimiter(text string) (string, int) {
 // remedy. A capability reports what it cannot do within its own kinds; the
 // engine reports every effect-bearing kind no capability claims at all.
 func (s Service) refuseUnsupported(state *compilation.State) error {
-	var refused []Refusal
-	for _, bound := range s.capabilities.Bindings() {
-		capability, ok := s.capabilities.Resolve(bound.Kind, bound.Implementation)
-		if !ok {
-			continue
-		}
-		if reporter, ok := capability.(UnsupportedReporter); ok {
-			refused = append(refused, reporter.Unsupported(state)...)
-		}
-	}
-	refused = SortRefusals(append(refused, Unrealizable(state.Effective(), s.capabilityKinds())...))
+	refused := s.unsupportedRefusals(state)
 	if len(refused) == 0 {
 		return nil
 	}
@@ -362,6 +352,24 @@ func (s Service) refuseUnsupported(state *compilation.State) error {
 		})
 	}
 	return &diagnostics.Failure{Diagnostics: reported}
+}
+
+// unsupportedRefusals is every refusal of a selected object this executable
+// cannot realize, in canonical order: what each bound capability reports
+// within its own kinds, and every effect-bearing object no capability claims.
+// It is pure, so status reads the same list a plan refuses.
+func (s Service) unsupportedRefusals(state *compilation.State) []Refusal {
+	var refused []Refusal
+	for _, bound := range s.capabilities.Bindings() {
+		capability, ok := s.capabilities.Resolve(bound.Kind, bound.Implementation)
+		if !ok {
+			continue
+		}
+		if reporter, ok := capability.(UnsupportedReporter); ok {
+			refused = append(refused, reporter.Unsupported(state)...)
+		}
+	}
+	return SortRefusals(append(refused, Unrealizable(state.Effective(), s.capabilityKinds())...))
 }
 
 const supportedExample = "examples/lab-rhel"

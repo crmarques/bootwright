@@ -1724,7 +1724,7 @@ met and the log digests.
 
 **Constraints left behind:** the run does not show
 `qemu-img info --force-share` succeeding against a running domain's disk,
-which B49 also named ([B277](m1.md#b277)). It found [B275](m1.md#b275) and
+which B49 also named ([B277](m1.md#b277)). It found [B275](#x40--machine-commands-status-secrets-and-validate-refusals) and
 [B276](m1.md#b276) and a new sighting of [B270](m1.md#b270), all parked
 under D48 until D56 attached them to M1. Lifecycle concurrency may now rise
 above one through [B303](m3.md#b303), and the adapter protocol, roles and
@@ -1837,7 +1837,7 @@ were refused, and root's own, under a root login on a root-squashed home,
 gives the local-copy remedy. `--from-file` refuses a FIFO, a final link, a
 device and a file the invoking account cannot read, and `validate -f` and
 `context init` read one directory alike. `--ssh-id-file` stays root's until
-[B283](m1.md#b283).
+[B283](#x40--machine-commands-status-secrets-and-validate-refusals).
 
 **Operator-visible effects:** refusals only. A public key line of any
 `sshKeyPair` Secret, whatever consumes it (the fleet key, Machine host keys,
@@ -1898,12 +1898,212 @@ leaves the cancellation running ([B339](m1.md#b339)). A host an
 earlier build already left with a partial bundle file under its final name
 still refuses that replay ([B356](m1.md#b356)); X39 prevents new
 ones. Tracked elsewhere:
-`--ssh-id-file` ([B283](m1.md#b283)); `status` over a revision a new rule
+`--ssh-id-file` ([B283](#x40--machine-commands-status-secrets-and-validate-refusals)); `status` over a revision a new rule
 refuses ([B226](backlog.md#b226)); a bind-time refusal naming its Secret
-([B285](m1.md#b285)); the emulator's URI rendered as data
+([B285](#x40--machine-commands-status-secrets-and-validate-refusals)); the emulator's URI rendered as data
 ([B295](m1.md#b295)); the FIPS key types of the bare-metal README
 ([B73](m4.md#b73)); a cancellation inside a binding's publication, which
 bounded runs lose with [B337](m1.md#b337); and a context whose reservation
 is damaged or that owns live objects, now clauses of
 [B325](backlog.md#b325). Under D48 every other follow-up was parked: B339
 to B356.
+
+### X40 — machine commands, status, secrets and validate refusals
+
+**Owner:** Machine and Trust, State reconciliation and CLI, Secrets, and
+Desired state with Environment. Integrated on local `main` on 2026-10-06 as
+one commit. **Items:** B283, B275, B222, B284, B285, B286. **Decisions:**
+D59, D64 to D73, D111 to D113.
+
+**Outcome, B283:** `machine rsh` and `machine exec` reach the guests
+Bootwright installs. An installed Machine that declares no `ssh` address now
+dials its install address when it declares that address, else its FQDN
+(D64): the address at which its installation proved the host key, so
+lab-rhel's rhel-01 opens a session over the address its installation request
+names, a session dialing any other address refuses `trust.identity` naming
+the proved one, and an undeclared install address is refused once, at
+`network.installAddressRef`. `machine start`, `stop` and `restart` and
+`machine list --power-status` follow the provider's machine block instead of
+the installation, so the `machine stop` a live-removal refusal prescribes runs
+while the installation failed, is unknown or still runs, and a power run
+shows one progress step with its sub-steps past the heartbeat.
+`machine list --clusters` refuses a member naming no selected cluster, listing
+the clusters it can select. A trust write that takes over the endpoint of a
+Machine the context no longer declares removes that record in the same
+confirmed write, shown as a `remove` row in the plan and the dry run, and a
+first use names it on standard error before its prompt (D65). A plan that
+would still pin one endpoint to two keys refuses before it is shown, naming
+both Machines; when the other Machine no longer uses the context's SSH trust,
+the refusal says so and names the input change that drops its record, what
+that change needs and what it costs, and, for the controller Machine once an
+apply has bound the context, that only a separate context drops it. Every
+host-key remedy and the first-use prompt carry `--context` (D66).
+`--ssh-id-file` is opened through B282's helper under the invoking account's
+credentials, proved on the received handle and copied into anonymous session
+material, so the client never reopens the operator's file (D111), and the
+machines spec states what `auth.operatorIdentity` does today (D112). The
+lab-rhel README runs `machine list`, `--power-status`, `exec`, `rsh` and
+`restart`, and after a restart waits for the guest to boot before `exec`
+(D59).
+
+**Outcome, B275 and B222:** `status` reads every cluster and shared-service
+row by the current operation's verb through one vocabulary. After a removal,
+an object whose removal is done or released reads `pending`, a failed one
+`failed` with `[FAIL]`, and a running or unknown one `unknown` (D67); an
+object a replacing removal has not started, or one of a completed removal
+whose block record no longer reads done, reads `unknown`, since no record
+proves what the removal did to it. Beside unindexed records, and over a
+completed destroy holding a block that is not done, status offers the
+deletion their refusal names, and nothing over evidence that deletion cannot
+read. It reads a keyring listing that fails as corrupt or undecryptable as the
+reopen will, and over a lost binding it offers `bootwright apply` first where
+that apply finalizes, then the orphan-acknowledged deletion (D69).
+
+**Outcome, B284:** `Bound` becomes `Bindings`, the binding count, which reads
+0 beside no operation and once a completed removal finalized (D68). A claimed
+ContainerCluster reports pending, done, failed or unknown from its blocks
+instead of unsupported. Until the host's controller setup completed, status
+offers `bootwright setup` alone where a verb would re-prove it, and setup rows
+read as labels, an unapplied context's binding `[PENDING]`, bound by the first
+apply. A ready `preflight controller --context` names
+`bootwright plan --context <ctx>` as its next step, and its golden is built
+from real check summaries, the libvirt client labelled. The `machine list`
+JSON row renames `address` to `contact` and `ips` to `addresses`, under the
+CONTACT and ADDRESSES columns, and omits an absent contact, provider and power
+(D70); a power result omits a `previous` the controller did not report. A
+completed orphan-acknowledged deletion warns under its own `context.orphaned`,
+the SSH password advisory's `access.credential` is registered, and the output
+spec defines both severities and settles its three contradictions.
+
+**Outcome, B285:** every Secret refusal names the Secret and the next command
+with `--context`. Apply's binding refusal lists every missing or stale Secret
+with its remedy by source; a `secret set` flag set that does not fit the
+declared type is one `secret.input` usage failure naming the type's flags,
+with exit 2; and an unconfirmed replacement or deletion names the Secret and
+the command with `--yes`. A declaration's fingerprint covers type, source and
+parameters only, so an identical re-import from another directory or with
+reordered documents keeps Secrets available and `secret generate` no longer
+re-mints them, while a version stored under the legacy fingerprint stays
+current (D71). Certificate and public-key files follow a relaxed input rule,
+and each input-file refusal names its condition and remedy (D72).
+`--value-stdin` and `--password-stdin` at a terminal prompt on standard error
+with echo off for tokens and passwords and refuse opaque and
+`dockerConfigJson` values; standard input is read with no store lock held,
+and the replacement decision is proved again under the lease (D73).
+Generated certificates start 24 hours before generation, so a verifier whose
+clock trails accepts them, earlier material stays current and serving keys
+stay P-256 (D113), and an RSA serving key under 2048 bits refuses at
+`secret set` and in the artifact server's check. `secret generate` lists
+changed and unchanged names, a no-op delete says nothing was deleted,
+rotation reports the retired keys and the re-encrypted counts, and
+`secret encryption status` shows its keys as a table with a next step when
+cleanup is required. The secrets and contexts specs and the lab READMEs
+follow.
+
+**Outcome, B286:** `validate` refusals name the object, decode failures
+included, the expectation (permitted values bounded to 16, bounds, the
+expected type, the reference kind) and a next step; an unknown key is
+reported at its own path with a rename only within two edits, and no authored
+scalar beyond an identifier is repeated. Invalid UTF-8 and YAML syntax errors
+get separate fixed messages with their line, `input.not-found` its own
+message, and a hard-linked candidate or marker `input.symlink`; resource and
+cluster selection refusals sit at their indexed entry, and an empty
+`resources` list is reported once. A target that fails decoding is its only
+refusal at every reference field naming it. A multi-digit integer with a
+leading zero refuses `api.type`; effective YAML double-quotes trailing
+colons, Unicode line breaks and YAML 1.2 core-schema spellings; a test holds
+normalization's kind order to the kind catalog; an `ibm-storage-ceph`
+Entitlement no longer inherits `rhsm`, while the RHEL one does; and the
+missing fleet key is one `api.required` naming an installed Machine.
+
+**Operator-visible effects:** beyond the refusals and results above,
+`render effective` shows lab-rhel's rhel-01 and lab-baremetal's installed
+Machine with `access.ssh.addressRef: ip` where it showed `fqdn`, so their
+sessions dial the install address. Output contracts change: the
+`machine list` JSON row's `address` and `ips` become `contact` and
+`addresses` and absent scalars are omitted (D70, with the `media list` row
+left to [B300](m1.md#b300)); the status JSON's `secrets.bound` becomes
+`secrets.bindings`, its setup check `dependency-bundle` becomes
+`execution-bundle`, and its cluster and shared-service rows take the new
+values; the fleet-key refusal moves from `api.invariant` to `api.required`;
+and an orphan-acknowledged deletion warns under `context.orphaned`. A context
+whose stored input holds a multi-digit leading-zero integer no longer
+compiles, so its `status` and `apply` refuse `api.type` until
+`context update` imports corrected input; its `destroy` plans from records,
+and no example or template input holds such an integer. **Digest effects:**
+none. No frozen request, request or record version, plan digest, automation
+digest or keyring format moves, and nothing under `ansible/` changed. A probe
+through the production planner gave lab-rhel's apply plan digest
+`3db600387952ff65b2d3dfdc3618f6d50dfe5c3e060f90309dc31e23eb5b6477` and the
+same block request digests at the base and on this commit, and the
+render-effective, plan-digest and request goldens are byte-identical. Only
+the fingerprint of a Secret version stored from this build on differs, and
+earlier versions stay current. No context is stranded.
+
+**Review:** thirteen findings, nine confirmed in scope, two of them
+blocking, and the first fix round fixed all nine: a destroy that replaced a
+failed one reported what the first attempt took back or failed on as done; a
+unique candidate three edits away gave an empty rename; a target that failed
+decoding was also reported undeclared, up to seven diagnostics for one
+unknown lab-rhel key; a completed destroy that lost a block record read its
+service done; an unconfirmed secret replacement or deletion named neither the
+Secret nor `--yes`; the contexts spec's lock table still held the store lock
+while `secret set` read standard input; an undeclared install address was
+refused twice, once with a remedy an installed Machine cannot follow; the
+lab-rhel journey ran `exec` right after `restart`, before the guest answered;
+and the divergent-pin remedy named a re-trust that refuses when the other
+Machine no longer uses the context's trust. Four were not confirmed: a spec
+example whose contact is a DNS name, which a declared `ssh` address
+produces; `status` refusing over a removal whose source apply lost its plan,
+which the specs require; two `api.required` refusals at one omitted field,
+which predate X40; and a first-use notice under the registered
+`trust.identity`. Three checks followed. The first found that the new
+remedy could still refuse under an incomplete operation, a referenced Machine
+or a new input revision, and a stale comment; the second round made the
+remedy state those limits. The second check found the controller Machine's
+case a dead end once the context is bound; the third round made its refusal
+say that only a separate context drops the record. The third check found
+that the controller remedy no longer says that no other object may reference
+the controller Machine, and that the CLI spec claims the input then compiles,
+which is false for every tracked example; that wording stays with its
+decision in [B357](m1.md#b357).
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` passes on the integrated slice, after each of the three fix rounds and
+on the squashed commit, and each check round's `make check-offline
+docs-check` passes. `./scripts/check-commits` and `git diff --check` pass.
+`./scripts/ansible-check` was not required, since nothing under `ansible/`
+changed, and is unrun. The adversarial review, by reviewers that did not
+write the diff, is the independent review B283 and B285 name. `make race`
+does not cover `internal/trust`, whose enrollment test double races under
+`-race` ([B368](backlog.md#b368)). No real-host run.
+
+**Constraints left behind:** a trust record held by a Machine the context
+still declares but no longer trusts by SSH blocks another Machine at that
+endpoint until the input drops it, and the controller Machine's record has no
+exit inside a bound context; widening D65 is the owner's decision
+([B357](m1.md#b357)). Add-on and Machine checks still repeat a refusal for a
+target that failed decoding ([B358](m1.md#b358)); until a replacing removal
+starts its first block, the object the replaced attempt failed on reads done
+([B359](m1.md#b359)); a YAML parser error can name the line before its own
+([B360](m1.md#b360)); the uninitialized-store refusals and the retired
+file-source remedy name no `--context` ([B361](m1.md#b361));
+`machine list --power-status` reads controllers with no progress row
+([B370](m1.md#b370)); the context store's uncertain secret-state publication
+names no inspection command ([B371](m1.md#b371)); a file-input secret
+replacement, deletion or rotation prompts under the host-wide lock and lease,
+which the owner decides ([B372](m1.md#b372)); and nothing reports a sudo
+policy that logs a standard-input secret ([B373](m1.md#b373)). Under D116 these
+nine join M1 on X46. A Secret version stored before X40 stays current only
+while its declaring path and document index are unchanged, so the first
+re-import from another directory stales it once ([B362](backlog.md#b362)).
+Tracked elsewhere: the confirmation prompts of `secret set`, `delete` and
+rotation, which still call the Secret a context ([B287](m1.md#b287), D75);
+the `media list` row ([B300](m1.md#b300)); the `secret set` help
+([B95](m1.md#b95)); codes the registry scan cannot see
+([B162](backlog.md#b162)); `auth.operatorIdentity` under the invoking account
+([B332](backlog.md#b332)); `status` over input a new rule refuses
+([B226](backlog.md#b226)); `--ssh-id-file` through the helper as root,
+now part of [B352](backlog.md#b352); and the defaulted fleet-key duplicate on
+an installed Machine ([B294](m1.md#b294)). Under D48 (D116) the other
+follow-ups were parked: B362 to B369 and B374 to B376.

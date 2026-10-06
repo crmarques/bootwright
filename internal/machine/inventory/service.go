@@ -39,6 +39,9 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 	if err != nil {
 		return nil, err
 	}
+	if _, _, err := selectClusters(effective.Effective, request.Clusters); err != nil {
+		return nil, err
+	}
 	owned, err := s.ownership.Ownership(ctx, name)
 	if err != nil {
 		return nil, err

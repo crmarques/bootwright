@@ -209,9 +209,44 @@ func TestSecretMutationAndEncryptionResults(t *testing.T) {
 	}
 }
 
+// Generate reports the generated Secrets by name and delete the identity it
+// removed, or that it removed nothing; a result naming what the service
+// cannot report is refused, never shown.
+func TestSecretGenerateAndDeleteResultsNameTheirSecrets(t *testing.T) {
+	for _, test := range []struct {
+		args     string
+		mutation custody.MutationResult
+		want     string
+	}{
+		{"secret generate", custody.MutationResult{}, "[SKIPPED] No generated Secret is declared\n\n  Changed    none\n  Unchanged  none\n"},
+		{"secret generate --name b", custody.MutationResult{Name: "b", Changed: 1, ChangedNames: []string{"b"}}, "[OK] Secrets generated\n\n  Changed    b\n  Unchanged  none\n"},
+		{"secret delete --name b --yes", custody.MutationResult{Name: "b", Unchanged: 1}, "[SKIPPED] Secret b has no current version; nothing was deleted\n"},
+		{"secret generate", custody.MutationResult{Changed: 1}, ""},
+		{"secret generate", custody.MutationResult{Changed: 1, ChangedNames: []string{"b"}, Parts: []secrets.Part{secrets.ValuePart}}, ""},
+		{"secret generate", custody.MutationResult{Changed: 1, Unchanged: 1, ChangedNames: []string{"b"}, UnchangedNames: []string{"b"}}, ""},
+		{"secret delete --name b --yes", custody.MutationResult{Name: "b", Changed: 1, Parts: []secrets.Part{secrets.ValuePart}}, ""},
+		{"secret delete --name b --yes", custody.MutationResult{Name: "b"}, ""},
+	} {
+		mutation := test.mutation
+		mutation.Context = secretResultContext()
+		record := &dispatchRecord{result: commandResult{secretMutation: &mutation}}
+		code, out, errOut := runSecretResult(strings.Fields(test.args), record)
+		if test.want == "" {
+			if code != 1 || out != "" || !strings.Contains(errOut, "runtime.internal") {
+				t.Errorf("%s over %+v: code=%d stdout=%q stderr=%q, want runtime.internal", test.args, test.mutation, code, out, errOut)
+			}
+			continue
+		}
+		if code != 0 || out != test.want || errOut != "" {
+			t.Errorf("%s over %+v: code=%d stdout=%q stderr=%q, want %q", test.args, test.mutation, code, out, errOut, test.want)
+		}
+	}
+}
+
 func TestEncryptionStatusOmitsImplementationConfiguration(t *testing.T) {
 	active := "key-2"
 	status := &encryption.StatusResult{
+		Context:     secretResultContext(),
 		Initialized: true,
 		Implementation: &encryption.ImplementationStatus{
 			Type:       "local-keyring",
@@ -266,8 +301,8 @@ func TestSecretTextEscapesOnce(t *testing.T) {
 			t.Fatalf("encryption status text = %q, missing %q", text, want)
 		}
 	}
-	first := strings.Index(text, "  "+shown("a-key")+"  "+shown("active")+"   3\n")
-	second := strings.Index(text, "  "+shown("b-key")+"  "+shown("retired")+"  8\n")
+	first := strings.Index(text, "\n"+shown("a-key")+"  "+shown("active")+"   3\n")
+	second := strings.Index(text, "\n"+shown("b-key")+"  "+shown("retired")+"  8\n")
 	if first < 0 || second < first {
 		t.Fatalf("encryption status keys = %q, want %s then %s", text, shown("a-key"), shown("b-key"))
 	}

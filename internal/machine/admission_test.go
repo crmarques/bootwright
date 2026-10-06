@@ -171,6 +171,58 @@ func TestAccessLifecycleAndGlobalIdentities(t *testing.T) {
 	}
 }
 
+// An installation proves its Machine's host key at the install address, so a
+// session that authors no address dials that one rather than a name only a
+// resolver knows; a declared ssh address still wins. An OS-ready Machine has
+// no installation to prove anything, so it keeps its FQDN whatever its
+// network selects.
+func TestAnInstalledMachineDialsItsInstallAddress(t *testing.T) {
+	node, fixtures := fixture()
+	addresses := list(m("name", "ip", "address", "192.0.2.11/24", "interface", "eth0"))
+	spec := node.Spec().WithPath(addresses, "network", "addresses")
+	installed := node.WithSpec(spec.With("os", spec.Get("os").With("installProfileRef", api.StringValue("rhel"))))
+	objects := []api.Object{object(api.MachineInstallProfile, "rhel", m()),
+		object(api.Environment, "env", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet")))}
+	for _, existing := range fixtures.Objects() {
+		if existing.Kind() != api.Machine && existing.Kind() != api.Environment {
+			objects = append(objects, existing)
+		}
+	}
+	catalog := api.NewCatalog(objects)
+	dialed := func(o api.Object) api.Value {
+		t.Helper()
+		normalized, issues := Normalize(o, api.NewCatalog(append([]api.Object{o}, catalog.Objects()...)))
+		if len(issues) != 0 {
+			t.Fatal(issues)
+		}
+		return normalized.Spec()
+	}
+	effective := dialed(installed)
+	if effective.Get("network", "installAddressRef").Text() != "ip" || !effective.Has("network", "addresses") {
+		t.Fatalf("network = %v", effective.Get("network"))
+	}
+	if _, found := Address(installed.WithSpec(effective), "fqdn"); !found {
+		t.Fatal("the installed Machine has no FQDN to fall back from")
+	}
+	if got := effective.Get("access", "ssh"); got.Get("addressRef").Text() != "ip" || got.Get("user").Text() != "bootwright" ||
+		got.Get("auth", "privateKeyRef").Text() != "fleet" {
+		t.Fatalf("an installed Machine dials %v", got)
+	}
+	declared := installed.WithSpec(installed.Spec().WithPath(list(addresses.Items()[0],
+		m("name", "ssh", "address", "192.0.2.50")), "network", "addresses"))
+	if got := dialed(declared).Get("access", "ssh", "addressRef").Text(); got != "ssh" {
+		t.Fatalf("an installed Machine that declares an ssh address dials %q", got)
+	}
+	ready := installed.WithSpec(spec.With("os", m("provided", true)).WithPath(api.StringValue("ip"), "network", "installAddressRef"))
+	if got := dialed(ready).Get("access", "ssh", "addressRef").Text(); got != "fqdn" {
+		t.Fatalf("an OS-ready Machine dials %q", got)
+	}
+	undeclared := installed.WithSpec(installed.Spec().WithPath(api.StringValue("missing"), "network", "installAddressRef"))
+	if got := dialed(undeclared).Get("access", "ssh", "addressRef").Text(); got != "fqdn" {
+		t.Fatalf("an installed Machine whose install address is undeclared dials %q", got)
+	}
+}
+
 func TestNetworkConfigurationCanonicalUniqueness(t *testing.T) {
 	n := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.1/24"), m("cidr", "192.0.2.2/24")), "nmstate", m()))
 	n, _ = Normalize(n, api.Catalog{})

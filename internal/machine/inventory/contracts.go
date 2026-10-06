@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -27,4 +28,8 @@ type Ownership interface {
 // controller for.
 type PowerReader interface {
 	Read(ctx context.Context, contextName string, names []string) (map[string]string, error)
+}
+
+func failure(code, message, remediation string) error {
+	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }

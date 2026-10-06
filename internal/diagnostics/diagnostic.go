@@ -28,11 +28,19 @@ type Diagnostic struct {
 	Remediation string          `json:"remediation,omitempty"`
 }
 
+// Failure carries a refusal's diagnostics. Usage marks a refusal of how the
+// command was invoked, which the CLI reports as a usage failure.
 type Failure struct {
 	Diagnostics []Diagnostic
+	Usage       bool
 }
 
 func (f *Failure) Error() string { return "failed with diagnostics" }
+
+func IsUsage(err error) bool {
+	var failure *Failure
+	return errors.As(err, &failure) && failure.Usage
+}
 
 func NewFailure(code, message, path string) error {
 	return NewFailureWithRemediation(code, message, path, "")

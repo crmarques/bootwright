@@ -197,6 +197,8 @@ func controllerActionLabel(id string) string {
 		return "Container runtime"
 	case "target-tools":
 		return "Target tools"
+	case "libvirt-client":
+		return "Libvirt client"
 	case "controller-binding":
 		return "Controller binding"
 	case "setup-recovery":
@@ -263,16 +265,24 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 	if report.LogLocation != "" {
 		fields = append(fields, field{Label: logLocationLabel, Value: report.LogLocation})
 	}
-	if report.Outcome != "ready" {
-		fields = append(fields, field{Label: "Next", Value: controllerNextCommand(report)})
+	if next := controllerNextCommand(command, report); next != "" {
+		fields = append(fields, field{Label: "Next", Value: next})
 	}
 	return fields
 }
 
 // controllerNextCommand offers the one command that settles what is missing.
 // A completed setup moves the operator on to verification; anything a context
-// selects belongs to its own controller stage, never to setup.
-func controllerNextCommand(report *prerequisites.Report) string {
+// selects belongs to its own controller stage, never to setup. A context whose
+// readiness holds moves on to its plan; a ready host names no next command,
+// because which context to plan is the operator's choice.
+func controllerNextCommand(command string, report *prerequisites.Report) string {
+	if report.Outcome == "ready" {
+		if command == "preflight controller" && report.ContextName != "" {
+			return "bootwright plan --context " + report.ContextName
+		}
+		return ""
+	}
 	if report.Outcome == "changed" || report.Outcome == "unchanged" {
 		next := "bootwright preflight controller"
 		if report.ContextName != "" {
@@ -312,13 +322,17 @@ func progressToken(action prerequisites.ActionProgress) string {
 
 // Readiness is reported with the output contract's status tokens: a check that
 // holds is successful work, one that does not is a definite failure, and one the
-// command is not permitted to observe cannot be proved either way.
+// command is not permitted to observe cannot be proved either way. Status
+// reports a binding the first apply has yet to publish as pending, which
+// readiness never does.
 func checkToken(status string) string {
 	switch status {
 	case "ready":
 		return "[OK]"
 	case "not-ready":
 		return "[FAIL]"
+	case "pending":
+		return "[PENDING]"
 	default:
 		return "[UNKNOWN]"
 	}

@@ -53,17 +53,18 @@ type Observer interface {
 	Observe(ctx context.Context, address string, port int) (trust.HostKey, error)
 }
 
-// Confirmer asks the operator to accept one unproved host key. It is the only
-// thing that turns an observation into a record.
+// Confirmer asks the operator to accept one unproved host key for one Machine
+// of one context. It is the only thing that turns an observation into a
+// record.
 type Confirmer interface {
-	ConfirmHostKey(ctx context.Context, name, address, keyType, fingerprint string) error
+	ConfirmHostKey(ctx context.Context, contextName, name, address, keyType, fingerprint string) error
 }
 
 // Launcher runs the one pinned SSH client. Run returns the client's own exit
 // status, so nothing between here and the operator interprets it.
 type Launcher interface {
 	Run(ctx context.Context, session machine.Session, in io.Reader, out, errOut io.Writer) (int, error)
-	IdentityFile(path string) (string, error)
+	IdentityFile(ctx context.Context, path string) (string, error)
 }
 
 // Streams are the operator's own terminal streams. A session hands them to the

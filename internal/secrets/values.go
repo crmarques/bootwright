@@ -97,15 +97,39 @@ type FileSource struct {
 	PublicKey   string `json:"publicKey"`
 }
 
+// Declaration is the non-secret identity of a declared Secret. Origin and
+// Document stay in the encoding only for the legacy fingerprint: a live
+// declaration leaves them empty, so its fingerprint covers type, source and
+// parameters alone. An earlier build's fingerprint also covered the declaring
+// file's path and document index; LegacyFingerprint is that digest, over
+// LegacyOrigin and LegacyDocument, and none of the three is encoded.
 type Declaration struct {
-	Name        string     `json:"name"`
-	Type        string     `json:"type"`
-	Source      string     `json:"source"`
-	Files       FileSource `json:"files"`
-	Generation  Generation `json:"generation"`
-	Origin      string     `json:"origin"`
-	Document    int        `json:"document"`
-	Fingerprint string     `json:"fingerprint"`
+	Name              string     `json:"name"`
+	Type              string     `json:"type"`
+	Source            string     `json:"source"`
+	Files             FileSource `json:"files"`
+	Generation        Generation `json:"generation"`
+	Origin            string     `json:"origin"`
+	Document          int        `json:"document"`
+	Fingerprint       string     `json:"fingerprint"`
+	LegacyFingerprint string     `json:"-"`
+	LegacyOrigin      string     `json:"-"`
+	LegacyDocument    int        `json:"-"`
+}
+
+// Current reports whether a version stored under fingerprint is current for
+// this declaration: stored under its fingerprint, or under the legacy one.
+func (d Declaration) Current(fingerprint string) bool {
+	return fingerprint == d.Fingerprint || d.LegacyFingerprint != "" && fingerprint == d.LegacyFingerprint
+}
+
+// Stored is this declaration in the encoding a version stored under
+// fingerprint was written with, which a binding of that version carries.
+func (d Declaration) Stored(fingerprint string) Declaration {
+	if fingerprint != d.Fingerprint && d.LegacyFingerprint != "" && fingerprint == d.LegacyFingerprint {
+		d.Origin, d.Document, d.Fingerprint = d.LegacyOrigin, d.LegacyDocument, d.LegacyFingerprint
+	}
+	return d
 }
 
 // VersionDeclaration identifies acquired material without retaining acquisition
@@ -144,7 +168,10 @@ func (d VersionDeclaration) Parts() []Part {
 }
 
 // Input is an explicit acquisition request. Stdin is read lazily by its port.
+// ContextName is the context the material is set in, which its refusals and
+// its terminal prompt name.
 type Input struct {
+	ContextName     string
 	Provided        InputFields
 	ValueFile       string
 	ValueStdin      bool
@@ -174,17 +201,6 @@ const (
 )
 
 func AllowedInputFields(kind string) InputFields {
-	switch kind {
-	case "opaque", "token", "dockerConfigJson":
-		return ValueFileInput | ValueStdinInput
-	case "usernamePassword":
-		return UsernameInput | PasswordFileInput | PasswordStdinInput
-	case "caBundle":
-		return CertificateFileInput
-	case "tlsCertificate":
-		return CertificateFileInput | PrivateKeyFileInput
-	case "sshKeyPair":
-		return PrivateKeyFileInput | PublicKeyFileInput
-	}
-	return 0
+	shape, _ := shapeOf(kind)
+	return shape.fields
 }

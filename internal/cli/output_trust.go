@@ -59,8 +59,8 @@ func (p *TrustPlanPresenter) PresentTrustPlan(ctx context.Context, report enroll
 		return &trustOutputFailure{}
 	}
 	var text display
-	text.headline("", "Host-key trust plan for context "+report.Context+": "+strconv.Itoa(len(report.Hosts))+
-		" machine(s) checked, "+strconv.Itoa(report.Pending)+" pending")
+	text.headline("", "Host-key trust plan for context "+report.Context+": "+trustChecked(&report)+
+		", "+strconv.Itoa(report.Pending)+" pending")
 	text.section("")
 	writeTrustTable(&text, report.Hosts)
 	if err := ctx.Err(); err != nil {
@@ -91,7 +91,7 @@ func writeTrustTable(text *display, hosts []enrollment.HostReport) {
 // trustHeadline reports what was recorded rather than what was examined, so a
 // dry run can never read as though it had written something.
 func trustHeadline(report *enrollment.Report) string {
-	checked := strconv.Itoa(len(report.Hosts)) + " machine(s) checked"
+	checked := trustChecked(report)
 	if report.DryRun {
 		return checked + ", " + strconv.Itoa(report.Pending) + " pending; nothing was recorded"
 	}
@@ -99,6 +99,18 @@ func trustHeadline(report *enrollment.Report) string {
 		return checked + "; trust is unchanged"
 	}
 	return checked + ", " + strconv.Itoa(report.Recorded) + " recorded"
+}
+
+// trustChecked counts the selected Machines alone: a removal names the record
+// of a Machine the context no longer declares, which nothing checked.
+func trustChecked(report *enrollment.Report) string {
+	checked := 0
+	for _, host := range report.Hosts {
+		if host.Action != enrollment.ActionRemove {
+			checked++
+		}
+	}
+	return strconv.Itoa(checked) + " machine(s) checked"
 }
 
 func trustEndpoint(host enrollment.HostReport) string {
@@ -115,12 +127,15 @@ func endpointToken(address string, port int) string {
 	return "[" + address + "]:" + strconv.Itoa(port)
 }
 
-// trustDetail shows the fingerprint an operator compares, and for a supersede
-// the key and the endpoint it replaces, so the change is visible in the result
-// itself.
+// trustDetail shows the fingerprint an operator compares, for a supersede the
+// key and the endpoint it replaces, and for a removal the key removed and why,
+// so the change is visible in the result itself.
 func trustDetail(host enrollment.HostReport) string {
-	if host.Action == enrollment.ActionSkip {
+	switch host.Action {
+	case enrollment.ActionSkip:
 		return host.Reason
+	case enrollment.ActionRemove:
+		return host.Fingerprint + " (" + host.Reason + ")"
 	}
 	changed := host.PreviousFingerprint != "" && host.PreviousFingerprint != host.Fingerprint
 	previous := endpointToken(host.PreviousAddress, host.PreviousPort)

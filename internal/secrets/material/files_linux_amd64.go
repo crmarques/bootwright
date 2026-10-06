@@ -5,6 +5,7 @@ package material
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -339,14 +340,19 @@ func (s *secureFiles) openPart(request fileRequest, path string) (heldPart, erro
 				if canceled := s.ctx.Err(); canceled != nil {
 					return heldPart{}, canceled
 				}
-				if denied(err) {
+				switch {
+				case denied(err):
 					return heldPart{}, openDenied(s.failureCode, err, request.Path)
+				case errors.Is(err, syscall.ENOENT):
+					return heldPart{}, missingFile(s.failureCode, request.Path)
+				case errors.Is(err, syscall.ELOOP):
+					return heldPart{}, refusedFile(s.failureCode, request.Path, "secret file is a symbolic link", "name its target (readlink -f "+shellWord(path)+")")
 				}
 				return heldPart{}, failure(s.failureCode, "secret file could not be opened safely", request.Path)
 			}
-			if !safeOperatorFileFor(stat, s.ownerUID) {
+			if err := s.unsafeFile(stat, request, path); err != nil {
 				file.Close()
-				return heldPart{}, failure(s.failureCode, "secret file type, owner, links, or permissions are unsafe", request.Path)
+				return heldPart{}, err
 			}
 			return heldPart{request: request, path: path, file: file, before: stat}, nil
 		}
@@ -362,8 +368,14 @@ func (s *secureFiles) openPart(request fileRequest, path string) (heldPart, erro
 			if canceled := s.ctx.Err(); canceled != nil {
 				return heldPart{}, canceled
 			}
-			if denied(err) {
+			switch {
+			case denied(err):
 				return heldPart{}, openDenied(s.failureCode, err, request.Path)
+			case errors.Is(err, syscall.ENOENT):
+				return heldPart{}, missingFile(s.failureCode, request.Path)
+			case err == nil || errors.Is(err, syscall.ENOTDIR) || errors.Is(err, syscall.ELOOP):
+				return heldPart{}, refusedFile(s.failureCode, request.Path, "a directory above the secret file is a symbolic link or not a directory",
+					"name the path without symbolic links (realpath "+shellWord(path)+")")
 			}
 			return heldPart{}, failure(s.failureCode, "secret file ancestor is not a safe directory", request.Path)
 		}
@@ -503,14 +515,54 @@ func (processFiles) OpenAt(parent *os.File, name string, flags int) (*os.File, e
 
 func (processFiles) Close() error { return nil }
 
-func safeOperatorFile(stat syscall.Stat_t) bool {
-	return safeOperatorFileFor(stat, uint32(os.Getuid()))
+// unsafeFile refuses a secret file by the first condition it fails, with that
+// condition's remedy. A file carrying a value, password, token or private key
+// is the invoking account's own and private to it; a certificate or public key
+// file may also be root's and readable by others, but writable by neither its
+// group nor others.
+func (s *secureFiles) unsafeFile(stat syscall.Stat_t, request fileRequest, path string) error {
+	refuse := func(message, remedy string) error { return refusedFile(s.failureCode, request.Path, message, remedy) }
+	word := shellWord(path)
+	permissions := stat.Mode & 07777
+	public := request.Part == secrets.CertificatePart || request.Part == secrets.PublicKeyPart
+	switch {
+	case stat.Mode&syscall.S_IFMT != syscall.S_IFREG || stat.Size < 0:
+		return refuse("secret file is not a regular file", "name a regular file")
+	case stat.Nlink != 1:
+		return refuse("secret file has more than one hard link", "copy it to a new file you own and name the copy")
+	case permissions&07000 != 0:
+		return refuse("secret file has its setuid, setgid or sticky bit set", "chmod u-s,g-s,o-t "+word)
+	case public && stat.Uid != s.ownerUID && stat.Uid != 0:
+		return refuse("secret file is owned by neither the invoking account nor root", "copy it to a file the invoking account owns, e.g. install -m 644 "+word+" <copy>")
+	case public && permissions&0022 != 0:
+		return refuse("secret file is writable by its group or others", "chmod go-w "+word)
+	case public:
+		return nil
+	case stat.Uid != s.ownerUID:
+		return refuse("secret file is owned by another account", "copy it to a file the invoking account owns, e.g. install -m 600 "+word+" <copy>")
+	case permissions != 0600 && permissions != 0400:
+		return refuse("secret file mode is "+fmt.Sprintf("%04o", permissions)+"; a file carrying a value, password, token or private key must be 0600 or 0400", "chmod 600 "+word)
+	}
+	return nil
 }
 
-func safeOperatorFileFor(stat syscall.Stat_t, uid uint32) bool {
-	permissions := stat.Mode & 07777
-	return stat.Mode&syscall.S_IFMT == syscall.S_IFREG && stat.Uid == uid &&
-		stat.Nlink == 1 && (permissions == 0400 || permissions == 0600) && stat.Size >= 0
+func missingFile(code, path string) error {
+	return refusedFile(code, path, "secret file does not exist", "check the path")
+}
+
+func refusedFile(code, path, message, remedy string) error {
+	return diagnostics.NewFailureWithRemediation("secret."+code, message, path, remedy)
+}
+
+// shellWord is a path as one shell word, quoted unless every byte is one a
+// shell reads literally.
+func shellWord(path string) string {
+	for _, c := range []byte(path) {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte("@%+=:,./_-", c) >= 0) {
+			return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
+		}
+	}
+	return path
 }
 
 func statSecretFile(file *os.File) (syscall.Stat_t, error) {

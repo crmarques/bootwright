@@ -14,7 +14,7 @@
         "status": "ready"
       },
       {
-        "id": "dependency-bundle",
+        "id": "execution-bundle",
         "status": "ready"
       }
     ],
@@ -30,7 +30,7 @@
       {
         "name": "ocp-01",
         "kind": "ContainerCluster",
-        "status": "unsupported"
+        "status": "pending"
       }
     ],
     "storageClusters": [
@@ -52,11 +52,17 @@
         "name": "lab-dns",
         "machine": "controller",
         "status": "unsupported"
+      },
+      {
+        "kind": "Proxy",
+        "name": "lab-proxy",
+        "machine": "controller",
+        "status": "failed"
       }
     ],
     "secrets": {
       "declared": 3,
-      "bound": 3
+      "bindings": 1
     },
     "nextSteps": [],
     "lifecycle": {
@@ -70,6 +76,13 @@
           "description": "serve artifacts for lab-artifacts on controller",
           "stage": "infra-components",
           "state": "done",
+          "attempts": 1
+        },
+        {
+          "id": "proxy-lab-proxy",
+          "description": "proxy egress for lab-proxy on controller",
+          "stage": "infra-components",
+          "state": "failed",
           "attempts": 1
         },
         {

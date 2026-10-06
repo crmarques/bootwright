@@ -37,7 +37,10 @@ type ItemStatus struct {
 	CleanupRequired   bool `json:"cleanupRequired"`
 }
 
+// StatusResult is the store's status. Context names the context it was read
+// from, which a next step names; the documented status JSON carries none.
 type StatusResult struct {
+	Context        secretstore.Context   `json:"-"`
 	Initialized    bool                  `json:"initialized"`
 	Implementation *ImplementationStatus `json:"implementation"`
 	ActiveKey      *string               `json:"activeKey"`
@@ -45,11 +48,16 @@ type StatusResult struct {
 	Items          ItemStatus            `json:"items"`
 }
 
+// MutationResult reports an initialization or a rotation. A rotation names
+// the keys it retired and counts the versions and parts it re-encrypted.
 type MutationResult struct {
-	Context        secretstore.Context
-	Implementation secretstore.Selection
-	ActiveKey      string
-	Changed        bool
+	Context             secretstore.Context
+	Implementation      secretstore.Selection
+	ActiveKey           string
+	Changed             bool
+	RetiredKeys         []string
+	ReencryptedVersions int
+	ReencryptedParts    int
 }
 
 func componentStatus(ref secretstore.ComponentRef) ComponentStatus {

@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "status",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": "ready"
+    },
+    "setupChecks": [
+      {
+        "id": "controller-binding",
+        "status": "ready"
+      },
+      {
+        "id": "execution-bundle",
+        "status": "ready"
+      }
+    ],
+    "desired": {
+      "revision": "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f",
+      "environment": "lab-rhel",
+      "counts": {
+        "filesSeen": 14,
+        "objectsDecoded": 14
+      }
+    },
+    "clusters": [
+      {
+        "name": "ocp-01",
+        "kind": "ContainerCluster",
+        "status": "pending"
+      }
+    ],
+    "storageClusters": [
+      {
+        "name": "ceph-01",
+        "kind": "StorageCluster",
+        "status": "unsupported"
+      }
+    ],
+    "shared": [
+      {
+        "kind": "ArtifactServer",
+        "name": "lab-artifacts",
+        "machine": "controller",
+        "status": "pending"
+      },
+      {
+        "kind": "DNSServer",
+        "name": "lab-dns",
+        "machine": "controller",
+        "status": "unsupported"
+      }
+    ],
+    "secrets": {
+      "declared": 3,
+      "bindings": 0
+    },
+    "nextSteps": [],
+    "lifecycle": {
+      "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+      "verb": "destroy",
+      "state": "done",
+      "next": "none",
+      "blocks": [
+        {
+          "id": "os-install-rhel-01",
+          "description": "remove the installer media of rhel-01",
+          "stage": "machines",
+          "state": "done",
+          "attempts": 1
+        },
+        {
+          "id": "machine-rhel-01",
+          "description": "remove the virtual machine rhel-01 and its controller",
+          "stage": "machines",
+          "state": "done",
+          "attempts": 1
+        },
+        {
+          "id": "substrate-host-lab-libvirt",
+          "description": "remove the networks and virtual-media pool of lab-libvirt from controller",
+          "stage": "substrates",
+          "state": "done",
+          "attempts": 1
+        },
+        {
+          "id": "artifact-server-lab-artifacts",
+          "description": "remove the artifact server lab-artifacts from controller",
+          "stage": "infra-components",
+          "state": "done",
+          "attempts": 1
+        }
+      ],
+      "logs": [
+        "contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs/operation.jsonl"
+      ]
+    },
+    "contradictions": []
+  },
+  "diagnostics": [],
+  "logs": []
+}

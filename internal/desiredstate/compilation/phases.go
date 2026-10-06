@@ -78,6 +78,8 @@ func (r *run) decodeSelected() bool {
 		if record != nil {
 			r.records = append(r.records, record)
 			r.report.Counts.ObjectsDecoded++
+		} else if object := documentObject(documentBody(document)); object != nil {
+			r.ds.undecodable[object.Kind+"/"+object.Name] = true
 		}
 	}
 	return !r.ds.stopped()
@@ -135,6 +137,9 @@ func (r *run) closeGraph() {
 	r.report.ExcludedContainerClusters = sortedNames(selection.ExcludedContainerClusters)
 	r.report.ExcludedStorageClusters = sortedNames(selection.ExcludedStorageClusters)
 	for _, problem := range selection.Problems {
+		if r.ds.undecodable[problem.Target] {
+			continue
+		}
 		for _, record := range r.records {
 			if record.object.Identity() == problem.Object.Identity() {
 				r.ds.issue(record, problem.Issue)

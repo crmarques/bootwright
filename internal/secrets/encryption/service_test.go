@@ -73,8 +73,13 @@ func (s *serviceSession) Inspect(context.Context) (secretstore.Snapshot, error) 
 	}
 	return secretstore.Snapshot{ActiveKey: "fixture-key", Keys: []secretstore.Key{{ID: "fixture-key", State: "active"}}}, nil
 }
+
+// Rotate keeps only the fresh key, as the local keyring does.
 func (s *serviceSession) Rotate(context.Context) (string, error) {
 	s.rotations++
+	if s.snapshot != nil {
+		s.snapshot.ActiveKey, s.snapshot.Keys = "rotated-key", []secretstore.Key{{ID: "rotated-key", State: "active"}}
+	}
 	return "rotated-key", nil
 }
 
@@ -176,7 +181,32 @@ func TestStatusCountsProducedParts(t *testing.T) {
 		Produced: []secretstore.Produced{{Block: "cluster-install-sno", Name: "kubeconfig", Version: "ver-produced"}},
 	}
 	status, err := service.Status(context.Background(), EncryptionStatusRequest{ContextName: "fixture"})
-	if err != nil || status.Items.MaterialParts != 2 || status.Items.CurrentVersions != 1 || status.Items.BoundVersions != 0 {
+	if err != nil || status.Items.MaterialParts != 2 || status.Items.CurrentVersions != 1 || status.Items.BoundVersions != 0 || status.Context != access.selected {
 		t.Fatalf("status = %+v, %v", status, err)
+	}
+}
+
+// A rotation re-encrypts every version the store holds, current, bound and
+// produced, under one fresh key, so it retires every key the store held before
+// it and reports what it re-encrypted.
+func TestRotateReportsRetiredKeysAndReencryptedCounts(t *testing.T) {
+	service, access := serviceFixture()
+	parts := func(count int) []secrets.Part {
+		return []secrets.Part{secrets.CertificatePart, secrets.PrivateKeyPart, secrets.ValuePart}[:count]
+	}
+	access.session.snapshot = &secretstore.Snapshot{
+		ActiveKey: "key-b", Keys: []secretstore.Key{{ID: "key-b", State: "active", Seals: 4}, {ID: "key-a", State: "retired", Seals: 9}},
+		Versions: []secretstore.Version{
+			{ID: "ver-current", Declaration: secrets.VersionDeclaration{Name: "tls", Type: "tlsCertificate", Source: "generated"}, Parts: parts(2)},
+			{ID: "ver-bound", Declaration: secrets.VersionDeclaration{Name: "tls", Type: "tlsCertificate", Source: "generated"}, Parts: parts(3)},
+			{ID: "ver-produced", Declaration: secrets.VersionDeclaration{Name: "kubeconfig", Type: "opaque", Source: "produced"}, Parts: parts(1)},
+		},
+		Current:  []secretstore.Current{{Name: "tls", Version: "ver-current"}},
+		Bindings: []secretstore.Binding{{ID: "binding-a", Versions: []string{"ver-bound"}}},
+		Produced: []secretstore.Produced{{Block: "cluster-install-sno", Name: "kubeconfig", Version: "ver-produced"}},
+	}
+	rotated, err := service.Rotate(context.Background(), EncryptionRotateRequest{ContextName: "fixture", SkipConfirmation: true})
+	if err != nil || rotated.ActiveKey != "rotated-key" || !slices.Equal(rotated.RetiredKeys, []string{"key-a", "key-b"}) || rotated.ReencryptedVersions != 3 || rotated.ReencryptedParts != 6 {
+		t.Fatalf("rotation = %+v (%v), want key-a and key-b retired and 3 versions with 6 parts re-encrypted", rotated, err)
 	}
 }

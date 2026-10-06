@@ -254,23 +254,28 @@ func cliGoldens() []cliGolden {
 		return result
 	}
 	status := func() *lifecycle.StatusResult {
-		// Each block reports the attempts its record counts: the failed one
-		// was retried once, and the pending one never started.
-		attempted := blocks("failed")
-		for index, attempts := range []int{1, 1, 2, 0} {
+		// Each block reports the attempts its record counts: the failed
+		// machine was retried once, and the pending one never started. The
+		// failed proxy block reads its service failed, the cluster no block
+		// names reads pending, and one binding covers the three Secrets.
+		attempted := slices.Insert(blocks("failed"), 1, lifecycle.BlockResult{
+			ID: "proxy-lab-proxy", Description: "proxy egress for lab-proxy on controller", Stage: "infra-components", State: "failed",
+		})
+		for index, attempts := range []int{1, 1, 1, 2, 0} {
 			attempted[index].Attempts = attempts
 		}
 		return &lifecycle.StatusResult{
 			Context:         lifecycle.ContextIdentity{Name: "lab", Revision: revision, Mode: "ready"},
-			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}, {ID: "dependency-bundle", Status: "ready"}},
+			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}, {ID: "execution-bundle", Status: "ready"}},
 			Desired:         lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
-			Clusters:        []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "ContainerCluster", Status: "unsupported"}},
-			StorageClusters: []lifecycle.ClusterSummary{{Name: "ceph-01", Kind: "StorageCluster", Status: "unsupported"}},
+			Clusters:        []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "ContainerCluster", Status: lifecycle.RealizationPending}},
+			StorageClusters: []lifecycle.ClusterSummary{{Name: "ceph-01", Kind: "StorageCluster", Status: lifecycle.RealizationUnsupported}},
 			Shared: []lifecycle.ServiceSummary{
-				{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: "done"},
-				{Kind: "DNSServer", Name: "lab-dns", Machine: "controller", Status: "unsupported"},
+				{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: lifecycle.RealizationDone},
+				{Kind: "DNSServer", Name: "lab-dns", Machine: "controller", Status: lifecycle.RealizationUnsupported},
+				{Kind: "Proxy", Name: "lab-proxy", Machine: "controller", Status: lifecycle.RealizationFailed},
 			},
-			Secrets: lifecycle.SecretSummary{Declared: 3, Bound: 3},
+			Secrets: lifecycle.SecretSummary{Declared: 3, Bindings: 1},
 			// The lost record refuses both the continuation and the removal,
 			// so nothing is offered.
 			NextSteps: []string{},
@@ -292,26 +297,66 @@ func cliGoldens() []cliGolden {
 		result := status()
 		result.NextSteps, result.Contradictions = []string{"bootwright apply", "bootwright destroy"}, []string{}
 		result.Lifecycle.State, result.Lifecycle.Next = "unknown", "resolve"
-		result.Lifecycle.Blocks[2].State, result.Lifecycle.Blocks[2].Attempts = "unknown", 1
-		result.Lifecycle.Blocks[2].Unresolved = &lifecycle.Unresolved{
+		result.Lifecycle.Blocks[3].State, result.Lifecycle.Blocks[3].Attempts = "unknown", 1
+		result.Lifecycle.Blocks[3].Unresolved = &lifecycle.Unresolved{
 			Reason: "domain bootwright-lab-rhel-01 on Machine hypervisor at 192.0.2.5 does not carry this context's ownership",
 			Remedy: "remove or rename domain bootwright-lab-rhel-01 on Machine hypervisor at 192.0.2.5, which this context does not own",
 		}
 		return result
 	}
-	// A context no operation has touched: an unbound controller, no cluster
-	// roots, and a status that offers the first operation.
+	// A context no operation has touched: a binding the first apply
+	// publishes, no cluster roots, and a status that offers the first
+	// operation.
 	idle := func() *lifecycle.StatusResult {
 		return &lifecycle.StatusResult{
 			Context:         lifecycle.ContextIdentity{Name: "lab", Revision: revision, Mode: "ready"},
-			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "not-ready"}, {ID: "dependency-bundle", Status: "ready"}},
+			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "pending"}, {ID: "execution-bundle", Status: "ready"}},
 			Desired:         lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
 			Clusters:        []lifecycle.ClusterSummary{},
 			StorageClusters: []lifecycle.ClusterSummary{},
-			Shared:          []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: "pending"}},
+			Shared:          []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: lifecycle.RealizationPending}},
 			Secrets:         lifecycle.SecretSummary{Declared: 3},
 			NextSteps:       []string{"bootwright plan", "bootwright apply"},
 		}
+	}
+	// A context whose last removal completed and finalized: what it took
+	// back and the cluster no block named read pending, it holds no binding,
+	// and nothing is offered.
+	destroyed := func() *lifecycle.StatusResult {
+		removed := []lifecycle.BlockResult{
+			{ID: "os-install-rhel-01", Description: "remove the installer media of rhel-01", Stage: "machines", State: "done", Attempts: 1},
+			{ID: "machine-rhel-01", Description: "remove the virtual machine rhel-01 and its controller", Stage: "machines", State: "done", Attempts: 1},
+			{ID: "substrate-host-lab-libvirt", Description: "remove the networks and virtual-media pool of lab-libvirt from controller", Stage: "substrates", State: "done", Attempts: 1},
+			{ID: "artifact-server-lab-artifacts", Description: "remove the artifact server lab-artifacts from controller", Stage: "infra-components", State: "done", Attempts: 1},
+		}
+		return &lifecycle.StatusResult{
+			Context:         lifecycle.ContextIdentity{Name: "lab", Revision: revision, Mode: "ready"},
+			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}, {ID: "execution-bundle", Status: "ready"}},
+			Desired:         lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
+			Clusters:        []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "ContainerCluster", Status: lifecycle.RealizationPending}},
+			StorageClusters: []lifecycle.ClusterSummary{{Name: "ceph-01", Kind: "StorageCluster", Status: lifecycle.RealizationUnsupported}},
+			Shared: []lifecycle.ServiceSummary{
+				{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: lifecycle.RealizationPending},
+				{Kind: "DNSServer", Name: "lab-dns", Machine: "controller", Status: lifecycle.RealizationUnsupported},
+			},
+			Secrets:   lifecycle.SecretSummary{Declared: 3},
+			NextSteps: []string{},
+			Lifecycle: &lifecycle.LifecycleSummary{
+				Operation: operationID, Verb: "destroy", State: "done", Next: "none", Blocks: removed,
+				Logs: []string{"contexts/lab/state/operations/" + operationID + "/logs/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
+			},
+			Contradictions: []string{},
+			LogLocation:    logs,
+		}
+	}
+	// A host whose controller setup never completed: the bundle reads
+	// not-ready, the binding waits for the first apply, and setup is the only
+	// step offered.
+	unprepared := func() *lifecycle.StatusResult {
+		result := idle()
+		result.SetupChecks = []lifecycle.SetupCheck{{ID: "controller-binding", Status: "pending"}, {ID: "execution-bundle", Status: "not-ready"}}
+		result.NextSteps = []string{"bootwright setup"}
+		return result
 	}
 	validation := func() *compilation.Report {
 		return &compilation.Report{
@@ -358,6 +403,7 @@ func cliGoldens() []cliGolden {
 	encryptionStatus := func() *encryption.StatusResult {
 		key := activeKey
 		return &encryption.StatusResult{
+			Context:     secretContext,
 			Initialized: true,
 			Implementation: &encryption.ImplementationStatus{
 				Type: "local-keyring", State: "ready",
@@ -453,10 +499,27 @@ func cliGoldens() []cliGolden {
 				RetiredBundles: []string{"bundle-2026-08", "bundle-2026-09"},
 			}
 		}},
+		// Each check carries the summary its constructor in
+		// internal/controller/prerequisites/service.go gives a held check,
+		// which readiness makes both required and observed: the platform, the
+		// verified local identity, versions() of the execution bundle, the
+		// installed podman version-release, toolVersionSummary of the target
+		// tools, the libvirt client and the controller Machine's name.
 		{golden: "cli-preflight-controller", args: "preflight controller --context lab", record: func(r *dispatchRecord) {
+			held := func(id, summary, scope string) prerequisites.Check {
+				return prerequisites.Check{ID: id, Required: summary, Observed: summary, Status: "ready", Scope: scope}
+			}
 			r.result.controller = &prerequisites.Report{
 				ContextName: "lab", Machine: "controller", Platform: platform, Route: "direct", Outcome: "ready",
-				Checks: []prerequisites.Check{ready("host", "fedora 43/amd64"), ready("execution-bundle", "qualified"), ready("target-tools", "qualified"), ready("controller-binding", "bound to lab")},
+				Checks: []prerequisites.Check{
+					held("host", "fedora 43/amd64", prerequisites.HostScope),
+					held("installed-host", "verified local identity", prerequisites.HostScope),
+					held("execution-bundle", "Python 3.14.7, Ansible 2.21.4", prerequisites.HostScope),
+					held("container-runtime", "5.6.1-1.fc43", prerequisites.HostScope),
+					held("target-tools", "openshift-clients 4.21.15, openshift-install 4.21.15", prerequisites.ContextScope),
+					held("libvirt-client", "libvirt client", prerequisites.ContextScope),
+					held("controller-binding", "controller", prerequisites.ContextScope),
+				},
 			}
 		}},
 
@@ -531,6 +594,10 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-status-unresolved-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unresolved() }},
 		{golden: "cli-status-idle", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = idle() }},
 		{golden: "cli-status-idle-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = idle() }},
+		{golden: "cli-status-destroyed", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = destroyed() }},
+		{golden: "cli-status-destroyed-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = destroyed() }},
+		{golden: "cli-status-unprepared", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unprepared() }},
+		{golden: "cli-status-unprepared-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unprepared() }},
 
 		// Desired state: warnings reach standard error in text and the
 		// envelope's diagnostics in JSON; a failed validate has no result.
@@ -573,7 +640,7 @@ func cliGoldens() []cliGolden {
 			record: func(r *dispatchRecord) {
 				r.result.deletion = &contexts.DeleteResult{Name: "retired", Outcome: "deleted", OrphansAbandoned: true, ReleasedReservations: []string{"libvirt-domain:bootwright-lab-rhel-01", "socket:192.0.2.1:8000"}}
 			},
-			stderr: "[WARN] context.unsafe-delete: the objects this context owned were abandoned and are no longer managed\n",
+			stderr: "[WARN] context.orphaned: the objects this context owned were abandoned and are no longer managed\n",
 		},
 
 		// Secrets. A negative check keeps its complete result on standard
@@ -582,10 +649,16 @@ func cliGoldens() []cliGolden {
 			r.result.secretMutation = &custody.MutationResult{Context: secretContext, Name: "registry-pull-secret", Changed: 1, Parts: []secrets.Part{secrets.ValuePart}}
 		}},
 		{golden: "cli-secret-generate", args: "secret generate", record: func(r *dispatchRecord) {
-			r.result.secretMutation = &custody.MutationResult{Context: secretContext, Changed: 2, Unchanged: 1, Parts: []secrets.Part{secrets.PublicKeyPart, secrets.CertificatePart, secrets.PrivateKeyPart}}
+			r.result.secretMutation = &custody.MutationResult{Context: secretContext, Changed: 2, Unchanged: 1, ChangedNames: []string{"artifact-server-tls", "bootwright-machine-key"}, UnchangedNames: []string{"lab-bmc-credentials"}}
+		}},
+		{golden: "cli-secret-generate-current", args: "secret generate", record: func(r *dispatchRecord) {
+			r.result.secretMutation = &custody.MutationResult{Context: secretContext, Unchanged: 3, UnchangedNames: []string{"artifact-server-tls", "bootwright-machine-key", "lab-bmc-credentials"}}
 		}},
 		{golden: "cli-secret-delete", args: "secret delete --name registry-pull-secret --yes", record: func(r *dispatchRecord) {
-			r.result.secretMutation = &custody.MutationResult{Context: secretContext, Name: "registry-pull-secret", Changed: 1, Parts: []secrets.Part{secrets.ValuePart}}
+			r.result.secretMutation = &custody.MutationResult{Context: secretContext, Name: "registry-pull-secret", Changed: 1}
+		}},
+		{golden: "cli-secret-delete-noop", args: "secret delete --name registry-pull-secret --yes", record: func(r *dispatchRecord) {
+			r.result.secretMutation = &custody.MutationResult{Context: secretContext, Name: "registry-pull-secret", Unchanged: 1}
 		}},
 		{golden: "cli-secret-check", args: "secret check", record: func(r *dispatchRecord) { r.result.secretCheck = checked() }},
 		{golden: "cli-secret-check-json", args: "secret check --output json", record: func(r *dispatchRecord) { r.result.secretCheck = checked() }},
@@ -593,13 +666,13 @@ func cliGoldens() []cliGolden {
 			golden: "cli-secret-check-negative", args: "secret check", code: 1,
 			record: func(r *dispatchRecord) {
 				r.result.secretCheck = missing()
-				r.err = diagnostics.NewFailure("secret.input", "secret registry-pull-secret is missing", "")
+				r.err = unstoredSecret
 			},
-			stderr: "[FAIL] secret.input: secret registry-pull-secret is missing\n",
+			stderr: "[FAIL] secret.input: Secret registry-pull-secret has no stored material [Secret/registry-pull-secret]; next: bootwright secret set --context lab --name registry-pull-secret --value-file <path>\n",
 		},
 		{golden: "cli-secret-check-negative-json", args: "secret check --output json", code: 1, record: func(r *dispatchRecord) {
 			r.result.secretCheck = missing()
-			r.err = diagnostics.NewFailure("secret.input", "secret registry-pull-secret is missing", "")
+			r.err = unstoredSecret
 		}},
 		{golden: "cli-secret-list", args: "secret list", record: func(r *dispatchRecord) { r.result.secretList = listed() }},
 		{golden: "cli-secret-list-json", args: "secret list --output json", record: func(r *dispatchRecord) { r.result.secretList = listed() }},
@@ -626,9 +699,13 @@ func cliGoldens() []cliGolden {
 			r.result.encryptionMutation = &encryption.MutationResult{Context: secretContext, Implementation: selection, ActiveKey: retiredKey, Changed: true}
 		}},
 		{golden: "cli-secret-encryption-rotate", args: "secret encryption rotate --yes", record: func(r *dispatchRecord) {
-			r.result.encryptionMutation = &encryption.MutationResult{Context: secretContext, Implementation: selection, ActiveKey: activeKey, Changed: true}
+			r.result.encryptionMutation = &encryption.MutationResult{Context: secretContext, Implementation: selection, ActiveKey: activeKey, Changed: true, RetiredKeys: []string{retiredKey}, ReencryptedVersions: 3, ReencryptedParts: 6}
 		}},
 		{golden: "cli-secret-encryption-status", args: "secret encryption status", record: func(r *dispatchRecord) { r.result.encryptionStatus = encryptionStatus() }},
+		{golden: "cli-secret-encryption-status-cleanup", args: "secret encryption status", record: func(r *dispatchRecord) {
+			r.result.encryptionStatus = encryptionStatus()
+			r.result.encryptionStatus.Items.RetainedArtifacts, r.result.encryptionStatus.Items.CleanupRequired = 2, true
+		}},
 		{golden: "cli-secret-encryption-status-json", args: "secret encryption status --output json", record: func(r *dispatchRecord) { r.result.encryptionStatus = encryptionStatus() }},
 
 		// Media.
@@ -682,6 +759,14 @@ func cliGoldens() []cliGolden {
 }
 
 const kubeconfigFixture = "apiVersion: v1\nclusters:\n- cluster:\n    server: https://api.sno.lab.example:6443\n  name: sno\nkind: Config\n"
+
+// unstoredSecret is the diagnostic secret check gives a declared contextStore
+// Secret with no stored material.
+var unstoredSecret = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+	Severity: "error", Code: "secret.input", Message: "Secret registry-pull-secret has no stored material",
+	Object:      &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "Secret", Name: "registry-pull-secret"},
+	Remediation: "bootwright secret set --context lab --name registry-pull-secret --value-file <path>",
+}}}
 
 var kubeconfigNotApplicable = diagnostics.NewFailureWithRemediation("cluster.not-applicable",
 	"bootwright cluster kubeconfig does not apply to ceph, a managed Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only", "",

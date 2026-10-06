@@ -93,9 +93,6 @@ func TestEnvironmentDependencyVersionsRejectAmbiguousOverrides(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			field := "." + tc.field
-			if tc.code == "api.field" {
-				field = ""
-			}
 			environment := serviceEnvironment + "  dependencyVersions: {" + tc.value + "}\n"
 			trustFailure(t, controllerInputs(environment, serviceHost), tc.code, "$.spec.dependencyVersions"+field)
 			inherited := serviceEnvironment + "  defaults:\n    Environment:\n      dependencyVersions: {" + tc.value + "}\n"

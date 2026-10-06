@@ -83,6 +83,7 @@
         "the apply operation-1 (failed) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie"
       ],
       "nextSteps": [
+        "bootwright apply",
         "bootwright context delete --name lab --purge --allow-orphans"
       ]
     },
@@ -127,6 +128,47 @@
       "nextSteps": [
         "bootwright apply",
         "bootwright destroy"
+      ]
+    },
+    "plan": {
+      "presented": "apply",
+      "continuation": true,
+      "steps": [
+        "alpha (done)",
+        "bravo (done)",
+        "charlie (failed)"
+      ],
+      "operation": "operation-1",
+      "state": "preview",
+      "next": "continue-apply"
+    },
+    "apply": {
+      "code": "lifecycle.state",
+      "message": "the apply operation-1 (failed) froze the Secret binding bind-1, whose material the context's keyring cannot read: referenced secret artifact is missing; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright apply, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+    },
+    "destroy": {
+      "code": "lifecycle.state",
+      "message": "the apply operation-1 (failed) froze the Secret binding bind-1, whose material the context's keyring cannot read: referenced secret artifact is missing; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+    }
+  },
+  "a failed apply whose keyring listing fails": {
+    "status": {
+      "operation": "operation-1",
+      "verb": "apply",
+      "state": "failed",
+      "next": "continue-apply",
+      "blocks": [
+        "alpha (done, 1 attempts)",
+        "bravo (done, 1 attempts)",
+        "charlie (failed, 1 attempts)"
+      ],
+      "contradictions": [
+        "the apply operation-1 (failed) froze the Secret binding bind-1, whose material the context's keyring cannot read: referenced secret artifact is missing; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie"
+      ],
+      "nextSteps": [
+        "bootwright context delete --name lab --purge --allow-orphans"
       ]
     },
     "plan": {

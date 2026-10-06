@@ -1,6 +1,7 @@
 package access
 
 import (
+	"context"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -23,14 +24,14 @@ type target struct {
 // resolveTarget fixes the exact Machine a session acts on. A name outside the
 // selected graph, or one that declares no reachable SSH access, fails before
 // anything is opened or contacted.
-func resolveTarget(catalog api.Catalog, name string) (target, error) {
+func resolveTarget(catalog api.Catalog, name, contextName string) (target, error) {
 	if name == "" {
 		return target{}, failure("access.target", "no Machine name was supplied", "name one with --name <machine>")
 	}
 	object, ok := catalog.Find(api.Machine, name)
 	if !ok {
 		return target{}, failure("access.target", "the selected context declares no Machine named "+name,
-			"list the Machines this context selects with bootwright machine list")
+			"list the Machines this context selects with bootwright machine list --context "+contextName)
 	}
 	if object.Spec().Get("access", "local").Bool() {
 		return target{}, failure("access.unavailable", "this Machine is reached locally and is not an SSH target",
@@ -51,8 +52,9 @@ func resolveTarget(catalog api.Catalog, name string) (target, error) {
 // credential that opens it. The two are one value: a borrowed account naming
 // an identity this context holds no credential for is offered none, rather
 // than being handed the key that belongs to another account.
-func resolveIdentity(selected target, options machine.SSHOptions, launcher Launcher) (machine.Identity, string, error) {
-	offered, err := launcher.IdentityFile(options.IdentityFile)
+func resolveIdentity(ctx context.Context, selected target, options machine.SSHOptions,
+	launcher Launcher) (machine.Identity, string, error) {
+	offered, err := launcher.IdentityFile(ctx, options.IdentityFile)
 	if err != nil {
 		return machine.Identity{}, "", err
 	}
@@ -97,6 +99,29 @@ func command(words []string) ([]string, error) {
 		out = append(out, word)
 	}
 	return out, nil
+}
+
+// declaredTrust is what the selected context declares about the Machine a
+// trust record names: whether it still declares it, which is what makes its
+// record its own rather than stale, and why it no longer uses that record.
+type declaredTrust struct {
+	declared func(string) bool
+	exempt   func(string) string
+}
+
+func declaredMachines(catalog api.Catalog) declaredTrust {
+	return declaredTrust{
+		declared: func(name string) bool {
+			_, found := catalog.Find(api.Machine, name)
+			return found
+		},
+		exempt: func(name string) string {
+			if object, found := catalog.Find(api.Machine, name); found {
+				return machine.TrustExemption(object)
+			}
+			return ""
+		},
+	}
 }
 
 func unsafeRune(r rune) bool {

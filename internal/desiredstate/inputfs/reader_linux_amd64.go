@@ -3,7 +3,6 @@ package inputfs
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -226,7 +225,7 @@ func (s *discovery) source(path string, directoryOnly bool) error {
 		}
 		return nil
 	case syscall.S_IFLNK:
-		return failure("input.symlink", "input source is a symbolic link", path)
+		return diagnostics.NewFailureWithRemediation("input.symlink", "input source is a symbolic link", path, realPathRemedy)
 	default:
 		return failure("input.read", "input source is not a regular file or directory", path)
 	}
@@ -259,7 +258,7 @@ func (s *discovery) directory(path string, depth int) error {
 			return limit("descendant path depth", desiredstate.MaxPathDepth, child)
 		}
 		marker := markerPosition(child)
-		if entry.IsDir() && skippedDirectory(entry.Name()) && !marker {
+		if entry.IsDir() && desiredstate.SkippedDirectory(entry.Name()) && !marker {
 			continue
 		}
 		if !entry.IsDir() && !yamlPath(child) && !marker {
@@ -275,7 +274,7 @@ func (s *discovery) directory(path string, depth int) error {
 				return err
 			}
 		} else if stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
-			if skippedDirectory(entry.Name()) {
+			if desiredstate.SkippedDirectory(entry.Name()) {
 				continue
 			}
 			if err := s.rememberIdentity(child, stat); err != nil {
@@ -321,10 +320,13 @@ func (s *discovery) candidate(path string, stat syscall.Stat_t, marker bool) err
 		}
 	}
 	if stat.Mode&syscall.S_IFMT == syscall.S_IFLNK {
-		return failure("input.symlink", "input candidate is a symbolic link", path)
+		return diagnostics.NewFailureWithRemediation("input.symlink", "input candidate is a symbolic link", path, "replace the symbolic link with a copy of the file it names")
 	}
-	if stat.Mode&syscall.S_IFMT != syscall.S_IFREG || stat.Nlink != 1 {
-		return failure("input.read", "input candidate must be a regular file with one link", path)
+	if stat.Mode&syscall.S_IFMT != syscall.S_IFREG {
+		return failure("input.read", "input candidate must be a regular file", path)
+	}
+	if stat.Nlink != 1 {
+		return diagnostics.NewFailureWithRemediation("input.symlink", "input candidate has more than one hard link", path, "replace the hard link with a copy of the file")
 	}
 	collection[path] = discoveredFile{path: path, before: stat}
 	return nil
@@ -462,11 +464,10 @@ func (s *discovery) openPath(path string, flags int) (*os.File, syscall.Stat_t, 
 		}
 		if stat.Mode&syscall.S_IFMT != syscall.S_IFDIR {
 			file.Close()
-			code := "input.not-directory"
 			if stat.Mode&syscall.S_IFMT == syscall.S_IFLNK {
-				code = "input.symlink"
+				return nil, syscall.Stat_t{}, diagnostics.NewFailureWithRemediation("input.symlink", "input ancestor must be a directory without symbolic links", current, realPathRemedy)
 			}
-			return nil, syscall.Stat_t{}, failure(code, "input ancestor must be a directory without symbolic links", current)
+			return nil, syscall.Stat_t{}, diagnostics.NewFailureWithRemediation("input.not-directory", "input ancestor must be a directory without symbolic links", current, "check the path")
 		}
 		if err := s.rememberIdentity(current, stat); err != nil {
 			file.Close()
@@ -489,17 +490,7 @@ func (s *discovery) openChild(parent *os.File, name string, flags int, path stri
 		if canceled := s.ctx.Err(); canceled != nil {
 			return nil, syscall.Stat_t{}, canceled
 		}
-		code := "input.read"
-		if errors.Is(err, syscall.ENOENT) {
-			code = "input.not-found"
-		} else if errors.Is(err, syscall.ELOOP) {
-			code = "input.symlink"
-		} else if errors.Is(err, syscall.ENOTDIR) {
-			code = "input.not-directory"
-		} else if denied(err) {
-			return nil, syscall.Stat_t{}, openDenied(err, path)
-		}
-		return nil, syscall.Stat_t{}, failure(code, "input path cannot be opened safely", path)
+		return nil, syscall.Stat_t{}, openFailure(err, path)
 	}
 	stat, err := statFile(file)
 	if err != nil {
@@ -507,6 +498,22 @@ func (s *discovery) openChild(parent *os.File, name string, flags int, path stri
 		return nil, syscall.Stat_t{}, failure("input.read", "input handle cannot be verified", path)
 	}
 	return file, stat, nil
+}
+
+const realPathRemedy = "pass a path with no symbolic link in it, such as the output of realpath"
+
+func openFailure(err error, path string) error {
+	switch {
+	case errors.Is(err, syscall.ENOENT):
+		return diagnostics.NewFailureWithRemediation("input.not-found", "input path does not exist", path, "check the path")
+	case errors.Is(err, syscall.ELOOP):
+		return diagnostics.NewFailureWithRemediation("input.symlink", "input path is a symbolic link", path, realPathRemedy)
+	case errors.Is(err, syscall.ENOTDIR):
+		return diagnostics.NewFailureWithRemediation("input.not-directory", "a component of the input path is not a directory", path, "check the path")
+	case denied(err):
+		return openDenied(err, path)
+	}
+	return failure("input.read", "input path cannot be opened safely", path)
 }
 
 func (s *discovery) rememberIdentity(path string, stat syscall.Stat_t) error {
@@ -615,14 +622,10 @@ func markerPosition(path string) bool {
 	return len(parts) >= 4 && parts[len(parts)-4] == "add-ons" && parts[len(parts)-3] == "_store" && parts[len(parts)-1] == ".bootwright-addon"
 }
 
-func skippedDirectory(name string) bool {
-	return strings.HasPrefix(name, ".") || slices.Contains([]string{"vendor", "node_modules", "playbooks", "roles", "collections", "manifests", "secrets"}, name)
-}
-
 func failure(code, message, path string) error {
 	return diagnostics.NewFailure(code, message, path)
 }
 
 func limit(resource string, ceiling int, path string) error {
-	return failure("input.limit", fmt.Sprintf("%s exceeds the inclusive limit of %d", resource, ceiling), path)
+	return failure("input.limit", desiredstate.LimitMessage(resource, ceiling), path)
 }

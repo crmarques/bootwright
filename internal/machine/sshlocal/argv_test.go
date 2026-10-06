@@ -1,6 +1,7 @@
 package sshlocal
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -37,7 +38,7 @@ func TestTheKeyArmOffersExactlyTheResolvedCredential(t *testing.T) {
 
 // An offered key is preferred, and the declared credential stays behind it as
 // the fallback rather than being dropped. The client reads the offered key
-// through the descriptor it was proved on, never by the name it was offered as.
+// through its own descriptor, never by the name it was offered as.
 func TestAnOfferedKeyPrecedesTheDeclaredCredential(t *testing.T) {
 	with := session(machine.IdentityKey)
 	with.IdentityFile = "/home/operator/.ssh/id_ed25519"
@@ -60,6 +61,33 @@ func TestTheOperatorArmOffersNoMaterialFromThisContext(t *testing.T) {
 	}
 	if !strings.Contains(got, "-o IdentityAgent=none") {
 		t.Fatalf("the operator arm admitted an agent: %s", got)
+	}
+}
+
+// The operator arm with no authored user names no account and no key: the
+// client logs in as the account it runs as, with that account's default
+// identity files and no agent, which is what the machines spec documents for
+// auth.operatorIdentity.
+func TestTheOperatorArmWithNoUserLogsInAsTheClientAccount(t *testing.T) {
+	unnamed := session(machine.IdentityOperator)
+	unnamed.User = ""
+	args := arguments(unnamed, paths{config: 3, knownHosts: 4})
+	got := strings.Join(args, " ")
+	for _, absent := range []string{"-l", "-i"} {
+		if slices.Contains(args, absent) {
+			t.Fatalf("the operator arm passed %s: %s", absent, got)
+		}
+	}
+	if strings.Contains(got, "IdentitiesOnly") {
+		t.Fatalf("the operator arm confined the client's default identities: %s", got)
+	}
+	for _, required := range []string{"-o IdentityAgent=none", "-o PreferredAuthentications=publickey"} {
+		if !strings.Contains(got, required) {
+			t.Fatalf("arguments = %s, want %s", got, required)
+		}
+	}
+	if args[len(args)-1] != unnamed.Address {
+		t.Fatalf("arguments = %s", got)
 	}
 }
 

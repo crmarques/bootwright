@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -101,8 +102,8 @@ func TestClusterSelectionFiltersPresentationOnly(t *testing.T) {
 	}{
 		{"omitted", nil, "guest,host,node"},
 		{"named", []string{"ocp"}, "node"},
-		{"unknown", []string{"absent"}, ""},
 		{"resolves to none", []string{}, ""},
+		{"empty members", []string{"", " "}, ""},
 		{"whitespace members", []string{" ocp "}, "node"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -155,5 +156,48 @@ func TestLifecycleFollowsTheEvidenceRatherThanTheDeclaration(t *testing.T) {
 				t.Fatal("a row derived from local state alone carried a power reading")
 			}
 		})
+	}
+}
+
+// A member that names no cluster this context selects is a mistake, not a
+// cluster with no Machines, so it refuses naming every unknown member and the
+// clusters an operator can select instead.
+func TestAnUnknownClusterRefusesNamingTheSelectableClusters(t *testing.T) {
+	withStorage := api.NewCatalog(append(catalog().Objects(),
+		object(api.StorageCluster, "ceph", m("ceph", m("topology", m("nodes", list(m("name", "host", "machineRef", "host"))))))))
+	noClusters := api.NewCatalog(slices.DeleteFunc(catalog().Objects(), func(o api.Object) bool { return o.Kind() == api.ContainerCluster }))
+	for _, test := range []struct {
+		name        string
+		catalog     api.Catalog
+		clusters    []string
+		message     string
+		remediation string
+	}{
+		{"unknown", withStorage, []string{"absent"}, "the selected context declares no ContainerCluster or StorageCluster named absent",
+			"select one of ceph, ocp with --clusters, or omit --clusters"},
+		{"one of several", withStorage, []string{"ocp", "absent"}, "the selected context declares no ContainerCluster or StorageCluster named absent",
+			"select one of ceph, ocp with --clusters, or omit --clusters"},
+		{"several unknown", catalog(), []string{"zeta", " absent ", "absent", "ocp"},
+			"the selected context declares no ContainerCluster or StorageCluster named absent, zeta",
+			"select one of ocp with --clusters, or omit --clusters"},
+		{"no cluster to select", noClusters, []string{"ocp"}, "the selected context declares no ContainerCluster or StorageCluster named ocp",
+			"the selected context declares no cluster; omit --clusters"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			rows, err := Rows(test.catalog, test.clusters, nil)
+			reported := diagnostics.Of(err)
+			if rows != nil || len(reported) != 1 || reported[0].Code != "access.target" ||
+				reported[0].Message != test.message || reported[0].Remediation != test.remediation {
+				t.Fatalf("rows = %+v, refusal = %+v", rows, reported)
+			}
+		})
+	}
+	for _, clusters := range [][]string{{"ceph"}, {"ocp", "ceph"}} {
+		if _, err := Rows(withStorage, clusters, nil); err != nil {
+			t.Fatalf("%v: %v", clusters, err)
+		}
+	}
+	if rows, err := Rows(noClusters, []string{}, nil); err != nil || len(rows) != 0 {
+		t.Fatalf("an empty selection = %+v (%v)", rows, err)
 	}
 }

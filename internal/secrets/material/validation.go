@@ -11,11 +11,16 @@ import (
 	"crypto/subtle"
 	"crypto/x509"
 	"encoding/pem"
+	"strconv"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/secrets"
 	"golang.org/x/crypto/ssh"
 )
+
+// minimumServingRSABits is the smallest RSA modulus a TLS serving key may
+// have. A CA bundle's roots are trusted as given.
+const minimumServingRSABits = 2048
 
 func validateCA(certificate, privateKey []byte, now time.Time) error {
 	certificates, err := parseCertificates(certificate)
@@ -49,6 +54,9 @@ func validateTLS(certificate, privateKey []byte, now time.Time) error {
 	leaf := certificates[0]
 	if !validAt(leaf, now) || len(leaf.UnhandledCriticalExtensions) != 0 || leaf.IsCA || !serverAuth(leaf.ExtKeyUsage) || !serverKeyUsage(leaf.KeyUsage) {
 		return failure("input", "TLS leaf certificate is not suitable for current server authentication", "")
+	}
+	if key, ok := leaf.PublicKey.(*rsa.PublicKey); ok && key.N.BitLen() < minimumServingRSABits {
+		return failure("input", "TLS serving key is RSA-"+strconv.Itoa(key.N.BitLen())+"; a serving key needs at least 2048 RSA bits: issue the certificate with an RSA key of at least 2048 bits or a P-256 key", "")
 	}
 	for _, cert := range certificates[1:] {
 		if !validAt(cert, now) || len(cert.UnhandledCriticalExtensions) != 0 || !cert.BasicConstraintsValid || !cert.IsCA || cert.KeyUsage&x509.KeyUsageCertSign == 0 {

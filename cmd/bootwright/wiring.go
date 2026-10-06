@@ -29,6 +29,7 @@ type processDependencies struct {
 	Streams            machineaccess.Streams
 	Terminal           func() (bool, error)
 	SecretInput        material.InputReader
+	SecretTerminal     material.TerminalInput
 	Progress           prerequisites.ProgressReporter
 	Presenter          prerequisites.PlanPresenter
 	LifecycleProgress  lifecycle.ProgressReporter
@@ -70,6 +71,7 @@ type serviceDependencies struct {
 	Files            operatorFiles
 	Trust            trustStore
 	SecretInput      material.InputReader
+	SecretTerminal   material.TerminalInput
 	Resolver         secretstore.ImplementationResolver
 	SessionMaterial  secretstore.SessionMaterialSource
 	Controller       controllerDependencies
@@ -109,6 +111,7 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 		Operator:         account,
 		Confirmer:        process.Confirmer,
 		SecretInput:      process.SecretInput,
+		SecretTerminal:   process.SecretTerminal,
 		Reporter:         process.LifecycleProgress,
 		Controller:       controllerPorts,
 		AmbientRoute:     process.AmbientRoute,
@@ -139,7 +142,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 		State: services.DesiredState, Lifecycle: reconciler, Trust: deps.Trust,
 		Confirmer: deps.Confirmer, Session: deps.SessionConfirmer, Reporter: deps.Reporter,
 		Selection: deps.Selection, Streams: deps.Streams, Terminal: deps.Terminal,
-		Home: deps.Home, Owner: deps.Owner,
+		Home: deps.Home, Owner: deps.Owner, Files: deps.Files,
 	})
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust

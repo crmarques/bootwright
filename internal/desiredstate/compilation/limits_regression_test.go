@@ -187,3 +187,47 @@ func TestCompilerCancellationStopsAtEveryCallbackBoundary(t *testing.T) {
 		})
 	}
 }
+
+func TestEveryInputLimitNamesItsCeilingOneWay(t *testing.T) {
+	depth := compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: func(object api.Object, _ api.Catalog) (api.Object, []api.Issue) {
+		if object.Kind() == api.Machine {
+			return object.WithSpec(object.Spec().With("nested", nestedNativeValue(desiredstate.MaxDepth))), nil
+		}
+		return object, nil
+	}})
+	issues := compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Validate: func(object api.Object, _ api.Catalog) []api.Issue {
+		if object.Kind() == api.Environment {
+			return repeatedIssues(desiredstate.MaxDiagnostics)
+		}
+		return nil
+	}})
+	for _, row := range []struct {
+		name, want string
+		found      func() []diagnostics.Diagnostic
+	}{
+		{"parser file count", desiredstate.LimitMessage("YAML source files", desiredstate.MaxFiles), func() []diagnostics.Diagnostic {
+			_, found, _ := yamlstream.Parser{}.Parse(context.Background(), make([]desiredstate.SourceFile, desiredstate.MaxFiles+1))
+			return found
+		}},
+		{"returned diagnostics", desiredstate.LimitMessage("returned diagnostics", desiredstate.MaxDiagnostics), func() []diagnostics.Diagnostic {
+			_, _, err := issues.Compile(context.Background(), sources(environmentYAML))
+			return diagnostics.Of(err)
+		}},
+		{"expanded depth", desiredstate.LimitMessage("expanded representation depth", desiredstate.MaxDepth), func() []diagnostics.Diagnostic {
+			_, _, err := depth.Compile(context.Background(), sources(environmentYAML))
+			return diagnostics.Of(err)
+		}},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			limits := []string{}
+			for _, d := range row.found() {
+				if d.Code == "input.limit" {
+					limits = append(limits, d.Message)
+				}
+			}
+			if len(limits) != 1 || limits[0] != row.want {
+				t.Fatalf("input.limit messages = %q, want %q", limits, row.want)
+			}
+		})
+	}
+}
