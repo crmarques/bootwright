@@ -76,12 +76,11 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 	return request
 }
 
-// installsNative reports whether this request selects any native closure. Every
-// gate reads it rather than the client alone, so a context that selects only a
-// hypervisor or the installer-media tooling is resolved, installed and proved
-// exactly as one that selects a client.
-func (r Request) installsNative() bool {
-	return r.LibvirtClient || r.Hypervisor || r.InstallerMedia
+// native is the native selection this frozen request names, exactly as
+// prerequisites.StageNativeOf reads it from the selection the request was
+// frozen from, so the stage and preflight match one retained resolution.
+func (r Request) native() prerequisites.StageNative {
+	return prerequisites.StageNative{LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia, Libvirt: r.Versions().Libvirt}
 }
 
 // ToolRequests restores the catalog's own request shape from the frozen block.
@@ -134,6 +133,8 @@ func ContentDigest() string {
 	return hex.EncodeToString(digest[:])
 }
 
+// refuse is every refusal this package raises. Each one names what settles it,
+// as a remediation and never as a source path.
 func refuse(code, message, remediation string) error {
-	return diagnostics.NewFailure(code, message, remediation)
+	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }

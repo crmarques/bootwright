@@ -46,6 +46,30 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))), "os", "install", "rootDeviceHints"))
 	onMetal := map[string]string{"<machine>": "Machine/metal-01"}
 	onProfile := map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8"}
+	onGuest := map[string]string{"<machine>": "Machine/rhel-01"}
+	unselected := guest(field("network", guest().Spec().Get("network").Without("installAddressRef").With("addresses", api.ListValue(
+		api.MapValue(text("name", "fqdn"), text("address", "rhel-01.lab.example.test")),
+	))))
+	vlan := guest(field("network", guest().Spec().Get("network").With("addresses", api.ListValue(
+		api.MapValue(text("name", "fqdn"), text("address", "rhel-01.lab.example.test")),
+		api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24"), text("interface", "enp1s0.100")),
+	))))
+	secondary := guest(field("network", guest().Spec().Get("network").With("addresses", api.ListValue(
+		api.MapValue(text("name", "fqdn"), text("address", "rhel-01.lab.example.test")),
+		api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24"), text("interface", "enp1s0")),
+		api.MapValue(text("name", "cluster"), text("address", "192.0.2.50/24"), text("interface", "enp2s0")),
+	))))
+	onServices := artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2"))
+	providerOnServices := provider()
+	providerOnServices = providerOnServices.WithSpec(providerOnServices.Spec().WithPath(api.StringValue("services"), "libvirt", "machineRef"))
+	trees := api.NewObject(api.ArtifactServer, "lab-trees", api.Value{}, onServices.Spec())
+	treesProfile := installProfile()
+	treesProfile = treesProfile.WithSpec(treesProfile.Spec().WithPath(api.StringValue("lab-trees"),
+		"installer", "anaconda", "packageSource", "hostedTree", "artifactServerEndpoint", "serverRef"))
+	providerOnHypervisor := provider()
+	providerOnHypervisor = providerOnHypervisor.WithSpec(providerOnHypervisor.Spec().
+		WithPath(api.StringValue("hv-01"), "libvirt", "machineRef").
+		WithPath(api.StringValue("192.0.2.3"), "libvirt", "bmcEmulationDefaults", "bindAddress"))
 	cases := map[string]refusalCase{
 		"A physical Machine naming no root device": {
 			labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))), "Machine/metal-01", onMetal,
@@ -71,6 +95,35 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 			field("diskEncryption", api.MapValue(text("recoveryPassphraseRef", "luks")))))))), "Machine/rhel-01", onProfile},
 		"FIPS": {labCatalog(installProfile(field("customizations", customizations.With("security", api.MapValue(
 			field("fips", api.MapValue(field("enabled", api.BoolValue(true))))))))), "Machine/rhel-01", onProfile},
+		"A DHCP-only install": {labCatalog(unselected), "Machine/rhel-01", onGuest},
+		"A non-ethernet install interface": {labCatalog(vlan, networkWith(
+			api.MapValue(text("name", "enp1s0"), text("type", "ethernet")),
+			api.MapValue(text("name", "enp1s0.100"), text("type", "vlan"),
+				field("vlan", api.MapValue(text("base-iface", "enp1s0"), number("id", "100")))),
+		)), "Machine/rhel-01", onGuest},
+		"Network content the Kickstart cannot carry": {labCatalog(secondary, withRoutes(networkWith(
+			api.MapValue(text("name", "enp1s0"), text("type", "ethernet"), number("mtu", "9000")),
+			api.MapValue(text("name", "enp2s0"), text("type", "ethernet")),
+			api.MapValue(text("name", "bond0"), text("type", "bond"), text("state", "up")),
+			api.MapValue(text("name", "bond1"), text("type", "bond"), text("state", "absent")),
+		),
+			api.MapValue(text("destination", "0.0.0.0/0"), text("next-hop-address", "198.51.100.1")),
+			api.MapValue(text("destination", "203.0.113.0/24"), text("next-hop-address", "198.51.100.254")),
+			api.MapValue(text("destination", "198.18.0.0/15"), text("next-hop-address", "198.51.100.254"), text("state", "absent")),
+		)), "Machine/rhel-01", map[string]string{
+			"<machine>": "Machine/rhel-01",
+			"<network>": "address cluster, interface bond0, mtu 9000 on enp1s0, route 203.0.113.0/24",
+		}},
+		"An installer image server off the controller": {labCatalog(servicesHost(), onServices, providerOnServices), "Machine/rhel-01", map[string]string{
+			"<server>": "ArtifactServer/lab-artifacts", "<server host>": "Machine/services", "<profile>": "MachineInstallProfile/rhel-9-8",
+		}},
+		"A package tree server off the controller": {labCatalog(servicesHost(), trees, treesProfile), "Machine/rhel-01", map[string]string{
+			"<server>": "ArtifactServer/lab-trees", "<server host>": "Machine/services", "<profile>": "MachineInstallProfile/rhel-9-8",
+		}},
+		"A Machine off the artifact server's host": {labCatalog(hypervisorHost(), providerOnHypervisor), "Machine/rhel-01", map[string]string{
+			"<machine>": "Machine/rhel-01", "<provider host>": "Machine/hv-01", "<server>": "ArtifactServer/lab-artifacts",
+			"<server host>": "Machine/controller", "<provider>": "InfraProvider/lab-libvirt",
+		}},
 	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]

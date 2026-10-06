@@ -233,6 +233,55 @@ func TestRequirementsNameEveryServiceTheInstallationUses(t *testing.T) {
 	}
 }
 
+// siteServicesCatalog is the lab-sno shape with its name and time services
+// the site's own, selected without an endpoint as an external selection must
+// be.
+func siteServicesCatalog() api.Catalog {
+	var objects []api.Object
+	for _, object := range base() {
+		switch object.Kind() {
+		case api.DNSServer:
+			object = api.NewObject(api.DNSServer, "lab-dns", api.Value{}, api.MapValue(
+				text("management", "external"), text("address", "203.0.113.53")))
+		case api.NTPServer:
+			object = api.NewObject(api.NTPServer, "lab-ntp", api.Value{}, api.MapValue(
+				text("management", "external"), text("address", "ntp.example.test")))
+		case api.NetworkConfig:
+			object = object.WithSpec(object.Spec().With("dns", api.ListValue(api.MapValue(text("serverRef", "lab-dns")))))
+		}
+		objects = append(objects, object)
+	}
+	return api.NewCatalog(append(objects, guest("sno-01", "198.51.100.21/24"), cluster("sno",
+		installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")).
+			With("ntp", api.ListValue(api.MapValue(text("serverRef", "lab-ntp")))),
+		node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))))
+}
+
+// A site's own name and time services are used at the addresses they declare,
+// and no block of this product realizes them, so neither the installation nor
+// its plan waits for either.
+func TestExternalServicesAreNoRequirement(t *testing.T) {
+	catalog := siteServicesCatalog()
+	if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+		t.Fatalf("unsupported = %v", unsupported)
+	}
+	media, _, needs := onlyRequests(t, catalog)
+	if len(needs.DNSServers) != 0 || len(needs.NTPServers) != 0 {
+		t.Fatalf("requirements = %+v", needs)
+	}
+	for _, required := range installRequires(needs) {
+		if required.Kind == "DNSServer" || required.Kind == "NTPServer" {
+			t.Fatalf("the installation requires %+v", required)
+		}
+	}
+	agentConfig := encoded(t, media.AgentConfig)
+	for _, address := range []string{`"server":["203.0.113.53"]`, `"additionalNTPSources":["ntp.example.test"]`} {
+		if !strings.Contains(agentConfig, address) {
+			t.Fatalf("the agent config carries no %s: %s", address, agentConfig)
+		}
+	}
+}
+
 // The boot image is published where only the machine booting it can find it,
 // because it carries the pull secret in its own ignition.
 func TestTheBootImageIsPublishedPrivately(t *testing.T) {

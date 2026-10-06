@@ -318,7 +318,7 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, 
 		return Request{}, nil, err
 	}
 	if operation == "apply" {
-		if err := refusedContinuation(request); err != nil {
+		if err := refusedContinuation(execution.Context, request); err != nil {
 			return Request{}, nil, err
 		}
 	}
@@ -335,10 +335,11 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, 
 // registration, but an operation registered before that refusal still carries
 // one, and an apply performs exactly what was frozen. A destroy and an
 // observation are never refused: the one takes back published content and the
-// other reads.
-func refusedContinuation(request Request) error {
+// other reads. The removal it names is the one of the context the operation
+// runs in.
+func refusedContinuation(contextName string, request Request) error {
 	machine := "Machine/" + request.Identity.Object
-	remediation := "run bootwright destroy to end this operation, then plan it again under this executable"
+	remediation := "run bootwright destroy --context " + contextName + " to end this operation, then plan it again under this executable"
 	if request.Target.Physical {
 		return refusal("lifecycle.state", "this operation froze a physical installation of "+machine+", which this executable refuses", remediation)
 	}
@@ -361,7 +362,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	var refusals map[string]error
 	if operation == "apply" {
 		// Only an apply proves its target before it boots it.
-		refusals = substrate.PreBootRefusals(request.Target.Substrate, request.Identity.Object, request.Target.Controller.Endpoint)
+		refusals = substrate.PreBootRefusals(request.Target.Substrate, execution.Context, request.Identity.Object, request.Target.Controller.Endpoint)
 		key, err := authorizedKey(execution, request)
 		if err != nil {
 			return lifecycle.RunResult{}, err

@@ -134,10 +134,12 @@ func TestEveryProvenPathToARequestRefusesItsTemplateDelimiter(t *testing.T) {
 			want:   map[string]string{"Machine/rhel-01": "line * of kickstart"},
 		},
 		{
-			name:   "the controller's noProxy",
-			edits:  []exampleEdit{controllerEgress},
-			added:  map[string]string{"infra/components/corp-proxy.yaml": corpProxy("http://proxy.example.test:8080")},
-			edited: []string{"Machine/controller"},
+			name:  "the controller's noProxy",
+			edits: []exampleEdit{controllerEgress},
+			added: map[string]string{"infra/components/corp-proxy.yaml": corpProxy("http://proxy.example.test:8080")},
+			// Admission holds the controller route to the proxy grammar on
+			// the Environment that selects the controller Machine (D77).
+			edited: []string{"Machine/controller", "Environment/lab-rhel"},
 			want:   egress("egress.noProxy[0]"),
 		},
 		{

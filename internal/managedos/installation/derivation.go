@@ -16,7 +16,7 @@ const guestAgent = "qemu-guest-agent"
 
 // installationFor derives the complete unattended installation from effective
 // state alone. It resolves every service the guest uses while installing, and
-// records each as a requirement so those blocks complete first.
+// records each managed one as a requirement so those blocks complete first.
 func installationFor(catalog api.Catalog, machine, profile api.Object, request Request, needs *Requirements) (Installation, error) {
 	template, err := substrate.NetworkTemplate(catalog, machine)
 	if err != nil {
@@ -151,7 +151,8 @@ func machineHostname(machine api.Object) (string, error) {
 }
 
 // resolverAddresses derives the name servers the guest resolves through while
-// installing, from the network configuration's own selections.
+// installing, from the network configuration's own selections: a managed
+// server's endpoint address, or an external server's declared one.
 func resolverAddresses(catalog api.Catalog, machine api.Object, needs *Requirements) ([]string, error) {
 	spec, err := substrate.NetworkSpec(catalog, machine)
 	if err != nil {
@@ -163,7 +164,9 @@ func resolverAddresses(catalog api.Catalog, machine api.Object, needs *Requireme
 		if err != nil {
 			return nil, err
 		}
-		needs.DNSServers = append(needs.DNSServers, name)
+		if name != "" {
+			needs.DNSServers = append(needs.DNSServers, name)
+		}
 		if !slices.Contains(addresses, address) {
 			addresses = append(addresses, address)
 		}
@@ -184,7 +187,9 @@ func timeAddresses(catalog api.Catalog, machine, profile api.Object, needs *Requ
 		if err != nil {
 			return nil, err
 		}
-		needs.NTPServers = append(needs.NTPServers, name)
+		if name != "" {
+			needs.NTPServers = append(needs.NTPServers, name)
+		}
 		if !slices.Contains(addresses, address) {
 			addresses = append(addresses, address)
 		}

@@ -20,5 +20,5 @@ Secrets
   Bindings  0
 
 Next steps
-  bootwright plan
-  bootwright apply
+  bootwright plan --context lab
+  bootwright apply --context lab

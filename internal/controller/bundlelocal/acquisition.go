@@ -18,31 +18,6 @@ import (
 
 type sourceFetcher func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error)
 
-// Acquirer provides the same bounded explicit-route HTTPS transport to the
-// native installer. Only a source exactly present in the compiled catalog can
-// be acquired; the returned bytes already satisfy its size and SHA-256 lock.
-type Acquirer struct{}
-
-func (Acquirer) Acquire(ctx context.Context, source prerequisites.DependencySource, egress prerequisites.SetupEgress) ([]byte, error) {
-	record, _, err := compiledCatalog()
-	if err != nil {
-		return nil, err
-	}
-	approved := false
-	for _, candidate := range record.Baseline {
-		approved = approved || candidate == source
-	}
-	for _, native := range record.Native {
-		for _, candidate := range native.Packages {
-			approved = approved || candidate.Source == source
-		}
-	}
-	if !approved {
-		return nil, bundleFailure("dependency acquisition source differs from the compiled catalog")
-	}
-	return fetchSource(ctx, source, egress)
-}
-
 func fetchSource(ctx context.Context, source prerequisites.DependencySource, egress prerequisites.SetupEgress) ([]byte, error) {
 	if source.Bytes <= 0 || source.Bytes > maxMemberBytes {
 		return nil, bundleFailure("dependency source exceeds its qualified acquisition limit")

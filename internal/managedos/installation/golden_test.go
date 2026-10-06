@@ -15,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -152,18 +153,29 @@ func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 // compared with its golden and still decodes as the version this build writes.
 // The checksummed case declares its boot media digest in the prefixed,
 // uppercase form admission accepts, so its golden pins the canonical form the
-// request freezes; a hosted tree declares no digest. The SSH-placed case puts
-// the artifact server on a host declaring every field a placement freezes, so
-// its golden pins each key of the placement's SSH arm.
+// request freezes; a hosted tree declares no digest. The site-services case
+// resolves names and time through external services at their declared
+// addresses. The SSH-placed case puts the artifact server on a host declaring
+// every field a placement freezes. That shape is refused before registration,
+// because the installer image is built on the controller, so no plan freezes
+// it; it is pinned only for the request's SSH placement arm, which the role's
+// argument specification still admits.
 func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 	checksummed := api.NewObject(api.MachineImage, "rhel-9-8-boot", api.Value{}, api.MapValue(
 		text("bootMedia", "local-media:rhel-9.8-x86_64-boot.iso"),
 		text("checksum", "SHA256:"+strings.ToUpper(strings.Repeat("0123456789abcdef", 4))),
 	))
-	sshPlaced := artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2"))
+	sshPlaced := labCatalog(servicesHost(), artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2")))
+	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
+		Reason: "a managed-OS installation builds and publishes its installer image on the controller, and ArtifactServer/lab-artifacts is placed on Machine/services",
+		Remediation: "place ArtifactServer/lab-artifacts on the controller Machine, or select a server placed there in " +
+			"spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on MachineInstallProfile/rhel-9-8"}}
+	if refused := Refusals(sshPlaced); !slices.Equal(refused, want) {
+		t.Fatalf("the SSH-placed shape is refused by %+v, want only the off-controller image server", refused)
+	}
 	for name, catalog := range map[string]api.Catalog{
 		"lab-rhel": labCatalog(), "lab-rhel-checksummed": labCatalog(checksummed),
-		"lab-rhel-ssh-placed": labCatalog(servicesHost(), sshPlaced),
+		"lab-rhel-ssh-placed": sshPlaced, "lab-rhel-site-services": siteServicesCatalog(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			request, _ := onlyRequest(t, catalog)

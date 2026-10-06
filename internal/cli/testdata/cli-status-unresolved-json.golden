@@ -65,8 +65,8 @@
       "bindings": 1
     },
     "nextSteps": [
-      "bootwright apply",
-      "bootwright destroy"
+      "bootwright apply --context lab",
+      "bootwright destroy --context lab"
     ],
     "lifecycle": {
       "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",

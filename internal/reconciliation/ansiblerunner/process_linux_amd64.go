@@ -74,9 +74,13 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := verifyAutomation(ctx, request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	// Nothing starts while an earlier adapter still holds its job, and what a
-	// dead one left, with the material in it, goes first.
-	if err := r.sweep(); err != nil {
+	if err := checkIdentity(request); err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	// Nothing starts while an earlier adapter of this context still holds its
+	// job, and what a dead one of any context left, with the material in it,
+	// goes first.
+	if err := r.sweep(request.Context); err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	job, err := os.MkdirTemp(r.jobParent, jobPrefix)
@@ -87,16 +91,16 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 		_ = os.RemoveAll(job)
 		return lifecycle.RunResult{}, failure("lifecycle.state", "private adapter invocation storage is unsafe", "")
 	}
-	lock, err := claim(job, request)
+	lock, holder, err := claim(job, request)
 	if err != nil {
-		// Nothing but the lock was written, and no adapter ever held it.
+		// Nothing but its locks was written, and no adapter ever held them.
 		_ = os.RemoveAll(job)
 		return lifecycle.RunResult{}, err
 	}
 	// Operation-scoped material never outlives the adapter processes that
 	// hold the job lock.
 	scratch := ""
-	defer func() { r.release(job, scratch, lock) }()
+	defer func() { r.release(job, scratch, lock, holder) }()
 	scratch, err = os.MkdirTemp(r.scratchParent, scratchPrefix+strings.TrimPrefix(filepath.Base(job), jobPrefix)+"-")
 	if err != nil {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "private adapter staging storage is unavailable", "")
@@ -153,7 +157,7 @@ const (
 
 // jobEntries are every name the runner itself gives an entry of a job. A
 // material file is written into the job too, so it may take none of them.
-var jobEntries = []string{lockName, recordName, outputsDirectory, interpreterName, inventoryName, requestName, localTemp, remoteTemp}
+var jobEntries = []string{lockName, holderName, recordName, outputsDirectory, interpreterName, inventoryName, requestName, localTemp, remoteTemp}
 
 // checkMaterials refuses a material list before anything is written: each file
 // is written once and its value cleared, so a name listed twice would be

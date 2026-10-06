@@ -22,10 +22,6 @@ func (Inspector) Identity(ctx context.Context) (controller.InstalledHostIdentity
 	return controller.InstalledHostIdentity{}, unsupported(ctx)
 }
 
-func (Inspector) Runtime(ctx context.Context, _ prerequisites.RuntimeRequirement) (prerequisites.RuntimeInspection, error) {
-	return prerequisites.RuntimeInspection{}, unsupported(ctx)
-}
-
 func unsupported(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err

@@ -68,20 +68,27 @@ type inspection struct {
 	report        Report
 	toolRequests  []controller.ToolRequest
 	toolsResolved bool
-	// tools, toolsPresent, libvirtClient and libvirtPresent describe what one
-	// selected context adds to a ready host. They are evidence for preflight;
-	// setup never selects, plans or installs them.
-	tools          []ToolDefinition
-	toolsPresent   bool
-	libvirtClient  bool
-	libvirtPresent bool
+	// tools, toolsPresent, native, closures and admission describe what one
+	// selected context adds to a ready host: its target tools, the native
+	// closures its controller stage selects, their presence exactly as that
+	// stage reads it, and the refusal of a selection this platform cannot
+	// realize. They are evidence for preflight; setup never selects, plans or
+	// installs them.
+	tools        []ToolDefinition
+	toolsPresent bool
+	native       StageNative
+	closures     []ClosurePresence
+	admission    error
 }
 
 func (s Service) available(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if s.storage == nil || s.compiler == nil || s.host == nil || s.catalog == nil || s.bundle == nil {
+	// Setup resolves every dependency it prepares, so a composition without
+	// its resolution ports has no setup to offer and fails closed.
+	if s.storage == nil || s.compiler == nil || s.host == nil || s.catalog == nil || s.bundle == nil ||
+		s.options.Bootstrap == nil || s.options.Native == nil || s.options.NativeInspector == nil {
 		return availability.ErrNotImplemented
 	}
 	return nil
@@ -97,17 +104,26 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 		if err != nil {
 			if len(current.report.Checks) != 0 {
 				current.report.Outcome = "not-ready"
+				current.report.Next = current.next()
 				result = &current.report
 			}
 			return err
 		}
 		result = &current.report
+		// A selection this platform cannot realize is settled by no command:
+		// its own refusal and remedy are the answer, and no next command is
+		// offered.
+		if current.admission != nil {
+			result.Outcome = "not-ready"
+			return current.admission
+		}
 		if current.contextReady() {
 			result.Outcome = "ready"
 			return nil
 		}
 		result.Outcome = "not-ready"
-		return failure("preflight.failed", "required controller prerequisites are not ready", readinessCommand(*result))
+		result.Next = current.next()
+		return failure("preflight.failed", "required controller prerequisites are not ready", current.remedy())
 	})
 	return result, err
 }
@@ -211,7 +227,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	// can outlive its executable's automation revision. Its validated
 	// definition remains historical evidence; only a fresh setup may resolve a
 	// new compatible bundle. Pending retry and corruption refuse.
-	if err != nil && (request.DryRun || s.options.Bootstrap == nil || current.view.State.Receipt.Incomplete() || !errors.Is(err, ErrBootstrapIncompatible)) {
+	if err != nil && (request.DryRun || current.view.State.Receipt.Incomplete() || !errors.Is(err, ErrBootstrapIncompatible)) {
 		return nil, err
 	}
 	if request.DryRun {
@@ -233,7 +249,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 		current.report.Outcome = "unchanged"
 		return &current.report, nil
 	}
-	if s.options.Bootstrap != nil && !(current.view.State.Receipt.ID != "" && current.view.State.Receipt.Incomplete()) && current.resolutionRequired() {
+	if !(current.view.State.Receipt.ID != "" && current.view.State.Receipt.Incomplete()) && current.resolutionRequired() {
 		current, err = s.resolveDependencies(ctx, current)
 		if err != nil {
 			return &current.report, err
@@ -352,7 +368,7 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 	}
 	platform := current.platform
 	current.report = Report{ContextName: view.Context.Name, Machine: current.selection.MachineName(), Platform: platform, DryRun: dryRun, Outcome: "planned", Route: current.selection.Route().Summary(), Checks: []Check{}, Actions: []string{}}
-	if s.options.Bootstrap != nil && !current.toolsResolved {
+	if !current.toolsResolved {
 		current.report.Dependencies = dependencyIntent(current.selection)
 	}
 	for _, source := range current.definition.Sources {
@@ -394,8 +410,14 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 	if len(current.toolRequests) != 0 {
 		current.report.Checks = append(current.report.Checks, Check{"target-tools", current.toolSummary(), "unverified", "unverified", ContextScope})
 	}
-	if current.libvirtClient {
-		current.report.Checks = append(current.report.Checks, Check{"libvirt-client", "libvirt client", "unverified", "unverified", ContextScope})
+	if current.native.LibvirtClient {
+		current.report.Checks = append(current.report.Checks, Check{"libvirt-client", closureRequirement("libvirt-client"), "unverified", "unverified", ContextScope})
+	}
+	if current.native.Hypervisor {
+		current.report.Checks = append(current.report.Checks, Check{"hypervisor", closureRequirement("hypervisor"), "unverified", "unverified", ContextScope})
+	}
+	if current.native.InstallerMedia {
+		current.report.Checks = append(current.report.Checks, Check{"installer-media", closureRequirement("installer-media"), "unverified", "unverified", ContextScope})
 	}
 	if view.Context.Name != "" {
 		current.report.Checks = append(current.report.Checks, Check{"controller-binding", current.selection.MachineName(), "unverified", "unverified", ContextScope})
@@ -450,16 +472,13 @@ func (s Service) selectInspection(ctx context.Context, view StorageView, frozen 
 		return current, err
 	}
 	current.platform = platform
-	current.libvirtClient = current.selection.LibvirtClient()
-	// Setup owns the context-independent native closure only. A libvirt client
-	// is selected by one context's desired state, so its controller stage
-	// installs it and this inspection only reports whether it is present.
+	current.native = StageNativeOf(current.selection)
+	// Setup owns the context-independent native closure only. The libvirt
+	// client, the hypervisor and the installer-media tooling are selected by
+	// one context's desired state, so its controller stage installs them and
+	// this inspection only reports whether they are present.
 	requirements := NativeRequirements{ContainerRuntime: current.selection.ContainerRuntime()}
-	if s.options.Bootstrap != nil {
-		current.definition, current.toolsResolved, err = s.selectedResolution(current, requirements, frozen)
-	} else {
-		current.definition, err = s.catalog.Select(platform, requirements)
-	}
+	current.definition, current.toolsResolved, err = s.selectedResolution(current, requirements, frozen)
 	if err != nil {
 		return current, err
 	}
@@ -477,6 +496,11 @@ func (s Service) selectInspection(ctx context.Context, view StorageView, frozen 
 		}
 		current.tools, current.toolsResolved, err = s.options.Tools.Select(current.toolRequests, view.State.RetainedSources)
 		if err != nil {
+			// Target tools are selected only by a context, and only its
+			// controller stage installs them.
+			if view.Context.Name != "" {
+				err = InStage(err, view.Context.Name)
+			}
 			return current, err
 		}
 	}
@@ -593,8 +617,9 @@ func settleSetupState(view StorageView, current *inspection, settle func(Check))
 
 // settleContextChecks reports what one selected context still needs on this
 // host. Every observation is read-only presence: the tools its desired state
-// selects, its libvirt client closure, and its binding to this host. None of
-// them is a setup action, because the context's controller stage owns them.
+// selects, the native closures its controller stage selects, and its binding
+// to this host. None of them is a setup action, because the context's
+// controller stage owns them.
 func (s Service) settleContextChecks(ctx context.Context, view StorageView, current *inspection, settle func(Check), start func(string, string)) error {
 	if view.Context.Name == "" {
 		current.bound = true
@@ -620,15 +645,8 @@ func (s Service) settleContextChecks(ctx context.Context, view StorageView, curr
 		settle(readiness("target-tools", current.toolSummary(), ready, ContextScope))
 		current.toolsPresent = ready
 	}
-	if current.libvirtClient {
-		start("libvirt-client", "inspecting the libvirt client packages")
-		present, err := s.libvirtPresent(ctx, view)
-		if err != nil {
-			settle(unverified("libvirt-client", "libvirt client", ContextScope))
-			return err
-		}
-		settle(readiness("libvirt-client", "libvirt client", present, ContextScope))
-		current.libvirtPresent = present
+	if err := s.settleClosures(ctx, view, current, settle, start); err != nil {
+		return err
 	}
 	for _, binding := range view.State.Bindings {
 		if binding.Context != view.Context.Name {
@@ -644,27 +662,57 @@ func (s Service) settleContextChecks(ctx context.Context, view StorageView, curr
 	return nil
 }
 
-// libvirtPresent proves the context's libvirt roots from a retained resolution
-// that selected them. Without such a resolution nothing installed them, so the
-// answer is a definite absence rather than an unverifiable check.
-func (s Service) libvirtPresent(ctx context.Context, view StorageView) (bool, error) {
-	if s.options.NativeInspector == nil {
-		return false, nil
+// settleClosures reports each native closure the context's stage selects
+// exactly as that stage reads it: from the latest resolution of its own
+// selection, whose absence is a definite absence because nothing installed
+// those roots, and on RHEL the installer-media tooling from what the operator
+// installed. A selection this platform cannot realize settles its closures as
+// unsupported and is kept as the inspection's refusal.
+func (s Service) settleClosures(ctx context.Context, view StorageView, current *inspection, settle func(Check), start func(string, string)) error {
+	if !current.native.selects() {
+		return nil
 	}
-	for index := len(view.State.RetainedDefinitions) - 1; index >= 0; index-- {
-		definition := view.State.RetainedDefinitions[index]
-		if !definition.NativeRequirements.LibvirtClient || definition.Native == nil {
-			continue
+	current.admission = StageAdmission(current.platform, current.native)
+	ids := closureIDs(current.native)
+	start(ids[0], "inspecting the native client packages")
+	closures, err := StageClosures(ctx, s.options.NativeInspector, view.State.RetainedDefinitions, current.platform, current.native)
+	if err != nil {
+		for _, id := range ids {
+			settle(unverified(id, closureRequirement(id), ContextScope))
 		}
-		presence, err := s.options.NativeInspector.Check(ctx, *definition.Native)
-		if err != nil {
-			return false, err
+		return InStage(err, view.Context.Name)
+	}
+	current.closures = closures
+	for _, closure := range closures {
+		check := readiness(closure.ID, closureRequirement(closure.ID), closure.Ready, ContextScope)
+		if current.admission != nil && closure.ID != "installer-media" {
+			check.Observed = "unsupported on " + current.platform.OS + " " + current.platform.Release
 		}
-		if presence.Ready {
-			return true, nil
+		settle(check)
+	}
+	return nil
+}
+
+// closureIDs names the closures a selection names, in report order.
+func closureIDs(native StageNative) []string {
+	var ids []string
+	for _, closure := range closureTable {
+		if closure.selected(native) {
+			ids = append(ids, closure.id)
 		}
 	}
-	return false, nil
+	return ids
+}
+
+// closureRequirement is what a closure check requires, in the operator's words.
+func closureRequirement(id string) string {
+	switch id {
+	case "hypervisor":
+		return "hypervisor closure"
+	case "installer-media":
+		return "installer-media tooling (lorax, xorriso)"
+	}
+	return "libvirt client"
 }
 
 func (i inspection) versions() string {
@@ -686,7 +734,7 @@ func (i inspection) toolSummary() string {
 }
 
 // ready is host readiness: everything context-independent setup owns. It never
-// includes a context's own tools, libvirt client or binding.
+// includes a context's own tools, native closures or binding.
 func (i inspection) ready() bool {
 	return i.bundle.Ready && i.bundle.Sealed && i.dependenciesReady() && i.view.State.Receipt.ID != "" && i.view.State.Receipt.Status == "complete"
 }
@@ -694,7 +742,40 @@ func (i inspection) ready() bool {
 // contextReady adds what one selected context needs on a ready host. Preflight
 // requires it; setup neither observes nor prepares it.
 func (i inspection) contextReady() bool {
-	return i.ready() && i.bound && (len(i.toolRequests) == 0 || i.toolsPresent) && (!i.libvirtClient || i.libvirtPresent)
+	return i.ready() && i.bound && (len(i.toolRequests) == 0 || i.toolsPresent) && i.closuresReady()
+}
+
+// closuresReady requires every native closure the context's stage selects,
+// each settled present, on a platform that can realize the selection.
+func (i inspection) closuresReady() bool {
+	return i.admission == nil && len(i.closures) == len(closureIDs(i.native)) && ClosuresReady(i.closures)
+}
+
+// operatorPending reports that preflight found missing the installer-media
+// tooling a RHEL controller's operator installs, which only that operator's
+// own step, before the stage, settles. Tooling it could not inspect is not
+// found missing: the failure that stopped the inspection names its remedy.
+func (i inspection) operatorPending() bool {
+	if !i.native.InstallerMedia || !OperatorInstallerMedia(i.platform) {
+		return false
+	}
+	for _, closure := range i.closures {
+		if closure.ID == "installer-media" {
+			return !closure.Ready
+		}
+	}
+	return false
+}
+
+// operatorStep is the operator's step for the installer-media tooling
+// preflight found pending, as a correction and as a command.
+func (i inspection) operatorStep() (correction, invocation string) {
+	for _, closure := range i.closures {
+		if closure.ID == "installer-media" {
+			return installerMediaStep(closure.Foreign)
+		}
+	}
+	return installerMediaStep(nil)
 }
 
 func (i inspection) dependenciesReady() bool {
@@ -716,9 +797,6 @@ func (i inspection) resolutionRequired() bool {
 func (i inspection) canPrepare() error {
 	if i.bundle.Sealed && (!i.bundle.Ready || !i.dependenciesReady()) {
 		return failure("controller.unknown", "a sealed dependency bundle or its prerequisites no longer match the approved closure", "restore the exact retained dependencies; setup cannot repair a sealed bundle")
-	}
-	if i.runtime.Conflict && i.definition.Native == nil {
-		return failure("controller.unsupported", "the installed container runtime does not match the qualified closure", "prepare the qualified runtime without replacing dependencies through Bootwright")
 	}
 	if i.view.State.Receipt.ID != "" && i.view.State.Receipt.Incomplete() {
 		for _, action := range i.view.State.Receipt.Actions {
@@ -804,20 +882,49 @@ func readiness(id, required string, ready bool, scope string) Check {
 	return Check{id, required, "missing or unverified", "not-ready", scope}
 }
 
-func setupCommand() string { return "run bootwright setup" }
+func setupCommand() string { return "run " + setupInvocation }
 
-func stageCommand(name string) string {
-	return "run bootwright apply --stage controller --context " + name
+const setupInvocation = "bootwright setup"
+
+func stageInvocation(name string) string {
+	return "bootwright apply --stage controller --context " + name
 }
 
-// readinessCommand names the one command that settles what preflight found
-// missing: setup for a host prerequisite, and the context's own controller
-// stage for anything its desired state selects.
-func readinessCommand(report Report) string {
-	if PendingScope(report) == ContextScope && report.ContextName != "" {
-		return stageCommand(report.ContextName)
+func stageCommand(name string) string { return "run " + stageInvocation(name) }
+
+// next names the one command that settles what preflight found missing:
+// setup for a host prerequisite, and for what a context selects its own
+// controller stage, after the operator's own installation of a RHEL
+// controller's installer-media tooling when that is missing. A context with no
+// stage has nothing pending but its binding, which its first apply publishes.
+// A selection this platform cannot realize has no command at all.
+func (i inspection) next() string {
+	name := i.report.ContextName
+	if i.admission != nil {
+		return ""
 	}
-	return setupCommand()
+	if PendingScope(i.report) != ContextScope || name == "" {
+		return setupInvocation
+	}
+	if i.operatorPending() {
+		_, invocation := i.operatorStep()
+		return invocation + ", then " + stageInvocation(name)
+	}
+	if controller.HasStage(i.selection, i.toolRequests) {
+		return stageInvocation(name)
+	}
+	return "bootwright apply --context " + name
+}
+
+// remedy is the readiness refusal's remediation: the command next names, led
+// by the operator's correction when the installer-media tooling of a RHEL
+// controller is what is missing.
+func (i inspection) remedy() string {
+	if name := i.report.ContextName; name != "" && i.operatorPending() && PendingScope(i.report) == ContextScope {
+		correction, _ := i.operatorStep()
+		return correction + ", then " + stageCommand(name)
+	}
+	return "run " + i.next()
 }
 
 func failure(code, message, remediation string) error {

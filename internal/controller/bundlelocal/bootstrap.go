@@ -29,20 +29,22 @@ const ansibleIndexURL = "https://pypi.org/simple/ansible-core/"
 const simpleIndexJSON = "application/vnd.pypi.simple.v1+json"
 
 type bootstrapMetadataFetcher func(context.Context, string, string, prerequisites.SetupEgress) (toolMetadata, error)
-type bootstrapWheelResolver func(context.Context, *projection, prerequisites.BootstrapDefinition, prerequisites.SetupEgress) ([]byte, error)
+type bootstrapWheelResolver func(context.Context, prerequisites.Staging, *projection, prerequisites.BootstrapDefinition, prerequisites.SetupEgress) ([]byte, error)
 type bootstrapProjectionQualifier func(*projection, prerequisites.ExecutionRequirement) error
 
 // BootstrapCatalog resolves one publisher snapshot. Its private function ports
 // allow parser/isolation tests without network access or the installed host.
+// Its wheel resolution runs in a stage the staging port hands out.
 type BootstrapCatalog struct {
 	metadata bootstrapMetadataFetcher
 	fetch    sourceFetcher
+	staging  prerequisites.Staging
 	resolve  bootstrapWheelResolver
 	qualify  bootstrapProjectionQualifier
 }
 
-func NewBootstrapResolver() *BootstrapCatalog {
-	return &BootstrapCatalog{metadata: fetchBootstrapMetadata, fetch: fetchSource, resolve: resolveBootstrapWheels, qualify: qualifyResolvedProjection}
+func NewBootstrapResolver(staging prerequisites.Staging) *BootstrapCatalog {
+	return &BootstrapCatalog{metadata: fetchBootstrapMetadata, fetch: fetchSource, staging: staging, resolve: resolveBootstrapWheels, qualify: qualifyResolvedProjection}
 }
 
 func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.Platform, versions controller.DependencyVersions, egress prerequisites.SetupEgress) (prerequisites.BootstrapDefinition, []diagnostics.Diagnostic, error) {
@@ -55,7 +57,7 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 	if _, err := explicitProxy(egress); err != nil {
 		return prerequisites.BootstrapDefinition{}, nil, err
 	}
-	record, _, err := compiledCatalog()
+	record, err := compiledCatalog()
 	if err != nil {
 		return prerequisites.BootstrapDefinition{}, nil, err
 	}
@@ -106,7 +108,7 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 	if _, ok := projected.files[value.PythonExecutable]; !ok {
 		return prerequisites.BootstrapDefinition{}, warnings, bundleFailure("selected Python archive lacks its declared executable")
 	}
-	report, err := c.resolve(ctx, projected, value, egress)
+	report, err := c.resolve(ctx, c.staging, projected, value, egress)
 	if err != nil {
 		return prerequisites.BootstrapDefinition{}, warnings, err
 	}

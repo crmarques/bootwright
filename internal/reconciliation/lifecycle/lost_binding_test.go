@@ -166,7 +166,7 @@ func TestStatusOffersTheFinalizingApplyBeforeTheDeletionOfALostBinding(t *testin
 	h := lostBindingStates()["a failed apply whose blocks are all done"](t)
 	deleteBinding(t, h)
 	status, err := h.service.Status(ctx, StatusRequest{ContextName: testContextName})
-	if err != nil || len(status.Contradictions) != 1 || !slices.Equal(status.NextSteps, []string{"bootwright apply", exit}) {
+	if err != nil || len(status.Contradictions) != 1 || !slices.Equal(status.NextSteps, []string{"bootwright apply --context lab", exit}) {
 		t.Fatalf("status = %+v (%v)", status, err)
 	}
 	counted := &countedReopens{testBinder: h.binder}
@@ -204,7 +204,7 @@ func TestStatusReadsAListingThatFailsAsTheReopenWould(t *testing.T) {
 				t.Fatal(err)
 			}
 			named := "the apply " + operation.ID + " (failed) froze the Secret binding bind-1, whose material the context's keyring cannot read: " + test.message + "; "
-			contradictions, steps := []string{}, []string{"bootwright apply", "bootwright destroy"}
+			contradictions, steps := []string{}, []string{"bootwright apply --context lab", "bootwright destroy --context lab"}
 			if test.lost {
 				contradictions, steps = []string{named}, []string{"bootwright context delete --name lab --purge --allow-orphans"}
 			}
@@ -278,7 +278,7 @@ func TestALostFrozenBindingRefusesEveryContinuationAndRemovalBeforeAnyEffect(t *
 					if first.Code != "lifecycle.state" ||
 						!strings.HasPrefix(first.Message, "the "+string(operation.Verb)+" "+operation.ID+" ("+string(operation.State)+") froze the Secret binding bind-1, "+loss.why+"; ") ||
 						!strings.Contains(first.Message, "ArtifactServer/alpha") ||
-						first.Remediation != "restore the context's keyring from a complete backup and repeat bootwright "+string(verb)+
+						first.Remediation != "restore the context's keyring from a complete backup and repeat bootwright "+string(verb)+" --context lab"+
 							", or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand" {
 						t.Fatalf("the refusal = %+v", first)
 					}
@@ -348,7 +348,7 @@ func TestALostBindingLeavesARemovalWhoseBlocksAreAllDoneToItsDestroy(t *testing.
 			deleteBinding(t, h)
 			removal := currentOperation(t, h)
 			status, err := h.service.Status(ctx, StatusRequest{ContextName: testContextName})
-			if err != nil || len(status.Contradictions) != 0 || !slices.Equal(status.NextSteps, []string{"bootwright destroy"}) {
+			if err != nil || len(status.Contradictions) != 0 || !slices.Equal(status.NextSteps, []string{"bootwright destroy --context lab"}) {
 				t.Fatalf("status = %+v (%v)", status, err)
 			}
 			h.service.options.Confirmer = nil

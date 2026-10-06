@@ -288,10 +288,11 @@ the file its own adapter output is
 [retained](cli/output.md#bounded-run-output) in, once its private runtime is
 admitted and only for a run whose result names it, so a reading creates
 nothing. That file is troubleshooting material, never state, so a run still
-repairs and migrates nothing. The transient Secret binding a bounded run or a
-bounded consumer makes is released when its call returns, a call ended by
-cancellation included: the release outlives the cancellation as every
-recording does.
+repairs and migrates nothing. A bounded run or a bounded consumer binds no
+Secret: it [reads](secrets.md#immutable-binding-and-contexts) the current
+version of each Secret it names in one keyring session under the store's
+shared lock, publishes no binding or identity reservation, and clears that
+material when its call returns, a call ended by cancellation included.
 Workspace defines the narrow explicit retry of pending creation/deletion.
 
 State reconciliation owns `<operation-id>`, `<block-id>`, and effect- and
@@ -436,12 +437,15 @@ continuation verifies, before doing work, the operation's verb, its context
 identity and input revision, the frozen-input digest, the plan digest its
 record names, the block states and attempt counts it read (unchanged since the
 command read them), that this executable embeds the automation the operation
-registered under, and the host binding with completed setup. Each block then
-runs the capability this executable offers under the implementation identity
-the block froze. A block whose implementation this executable does not offer
-refuses before its attempt or resolution starts. A block's content digest
-travels with the block and is not compared, because a removal keeps the one
-its apply froze.
+registered under, and the host binding with completed setup. Only a fresh
+apply binds, so a continuation whose context the controller state records no
+binding for names the `destroy` that supersedes its operation where one may,
+and otherwise the binding's restoration or the context's deletion, never an
+`apply`. Each block then runs the capability this executable offers under the
+implementation identity the block froze. A block whose implementation this
+executable does not offer refuses before its attempt or resolution starts. A
+block's content digest travels with the block and is not compared, because a
+removal keeps the one its apply froze.
 
 This table and the four below state the transition code exactly:
 `TestTransitionTablesMatchSpec` drives that code with every row of each, so a
@@ -665,7 +669,7 @@ digest. A stage names the kind of platform work its block performs:
 
 | Stage | Blocks |
 | --- | --- |
-| `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host: the target clients its graph selects and the libvirt client it declares. |
+| `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host: the target clients its graph selects; the libvirt client a declared `libvirt` capability, a libvirt provider hosted on the controller or any Machine a libvirt provider hosts selects, [and nothing else](controller.md#the-controller-stage); the hypervisor closure a hosted provider selects; and the installer-media tooling an artifact server on the controller selects. |
 | `infra-components` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing. |
 | `substrates` | [Provider host realization](substrates.md#provider-host-realization) for a declared `InfraProvider`: its virtualization runtime, managed networks and virtual-media pool. |
 | `machines` | [Machine realization](substrates.md#machine-realization) with its management controller, the [claim and proof](substrates.md#physical-machine-realization) of a physical machine, and [managed operating-system installation](managed-os.md#installation). |
@@ -683,8 +687,8 @@ that plan depends on it, because the clients it installs are what the other
 blocks' adapters run. The edge is a real block dependency frozen with the plan
 and covered by its digest, not a rule about stages; a plan with no controller
 block has no such edge and is ordered by its capabilities alone. A context that
-selects no client beyond the host baseline contributes no controller block at
-all.
+selects no client or native closure beyond the host baseline contributes no
+controller block at all.
 
 A controller block is the only block whose effects are shared host state rather
 than this context's own. Its closure therefore outlives the context that

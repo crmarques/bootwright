@@ -1560,11 +1560,14 @@ func TestAuthorizationTokenAndBorrowedCredentialsRefuseBeforeAnyRead(t *testing.
 	if code := firstCode(err); code != "lifecycle.authorization" {
 		t.Fatalf("authorization refusal = %q", code)
 	}
+	if len(h.presenter.presented) != 1 || h.workspace.mutations != 0 {
+		t.Fatal("a superfluous token refused before presenting its plan, or mutated")
+	}
 	_, err = h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true, SSH: borrowedOptions()})
 	if code := firstCode(err); code != "lifecycle.state" {
 		t.Fatalf("borrowed credential refusal = %q", code)
 	}
-	if len(h.presenter.presented) != 0 || h.workspace.mutations != 0 {
+	if len(h.presenter.presented) != 1 || h.workspace.mutations != 0 {
 		t.Fatal("a refused request presented a plan or mutated")
 	}
 }
@@ -3408,7 +3411,7 @@ func TestDestroyOverAnIncompleteApplyWithNothingUnprovedObservesNothing(t *testi
 	if err != nil || status.Lifecycle == nil || status.Lifecycle.State != "paused" {
 		t.Fatalf("durable operation = %+v (%v)", status.Lifecycle, err)
 	}
-	if !slices.Contains(status.NextSteps, "bootwright destroy") {
+	if !slices.Contains(status.NextSteps, "bootwright destroy --context lab") {
 		t.Fatalf("next steps = %v", status.NextSteps)
 	}
 	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
@@ -3663,7 +3666,7 @@ func requireContextChanged(t *testing.T, err error, verb, moved string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
-		reported[0].Remediation != "repeat bootwright "+verb+" to plan from what the context holds now" {
+		reported[0].Remediation != "repeat bootwright "+verb+" --context lab to plan from what the context holds now" {
 		t.Fatalf("refusal = %+v", reported)
 	}
 	if want := "the context changed after this command read it: " + moved; reported[0].Message != want {
@@ -3761,6 +3764,54 @@ func TestFailedBlockOutsideTheSelectionRefusesRetry(t *testing.T) {
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || !strings.Contains(reported[0].Remediation, "infra-components") {
 		t.Fatalf("retry refusal = %+v", reported)
+	}
+}
+
+// A stage refusal names the exact apply that unblocks work. That apply is
+// authorized against the whole plan, so it carries every token the plan
+// consumes: run exactly as named, fresh, as a continuation or as the retry of
+// a failed block, it starts the work instead of refusing for an authorization.
+func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
+	install := stagedDefinition("install", reconciliation.StageMachines, "artifacts")
+	install.Consumes = []string{reconciliation.AuthorizationDataLoss}
+	definitions := []reconciliation.BlockDefinition{stagedDefinition("artifacts", reconciliation.StageInfraComponents), install}
+	h := newPlannedHarness(t, definitions)
+	authorized := []string{reconciliation.AuthorizationDataLoss}
+	want := "repeat bootwright apply --context lab --stage infra-components,machines --authorize data-loss"
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"machines"}, Authorizations: authorized})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != want {
+		t.Fatalf("fresh refusal = %+v, want the remedy %q", reported, want)
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"}, Authorizations: authorized,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components"}, Authorizations: authorized})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != want {
+		t.Fatalf("continuation refusal = %+v, want the remedy %q", reported, want)
+	}
+	result, err := h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components", "machines"}, Authorizations: authorized,
+	})
+	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("the named apply = %+v (%v), want it to complete the operation", result, err)
+	}
+
+	h = newPlannedHarness(t, definitions)
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Authorizations: authorized}); err == nil {
+		t.Fatal("a failed block reported success")
+	}
+	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"machines"}, Authorizations: authorized})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != want {
+		t.Fatalf("retry refusal = %+v, want the remedy %q", reported, want)
+	}
+	result, err = h.service.Apply(context.Background(), ApplyRequest{
+		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infra-components", "machines"}, Authorizations: authorized,
+	})
+	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("the named retry = %+v (%v), want it to complete the operation", result, err)
 	}
 }
 

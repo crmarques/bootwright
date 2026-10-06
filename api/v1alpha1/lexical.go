@@ -70,6 +70,10 @@ func ValidLexical(rule, value string) bool {
 		return validHTTPURL(value, rule == "https-url")
 	case "repository-url":
 		return validHTTPURL(value, false) && !strings.ContainsAny(value, "#'")
+	case "proxy-endpoint":
+		return validProxyEndpoint(value)
+	case "proxy-bypass":
+		return validProxyBypass(value)
 	case "systemd-unit":
 		return systemdUnitPattern.MatchString(value)
 	case "package-spec":
@@ -138,6 +142,96 @@ func validHTTPURL(value string, secure bool) bool {
 	}
 	u, err := neturl.Parse(value)
 	return err == nil && u.Opaque == "" && u.User == nil && u.Host != "" && validHost(u.Hostname()) && (u.Scheme == "https" || !secure && u.Scheme == "http") && validURLPort(u)
+}
+
+// maxProxyEndpointBytes bounds a proxy endpoint, which a setup receipt and a
+// frozen controller request carry.
+const maxProxyEndpointBytes = 4096
+
+// validProxyEndpoint is the one grammar of a proxy endpoint an acquisition
+// route takes, declared or read from the environment: a bounded ASCII http or
+// https URL with a host and nothing after it, so it carries no credential.
+func validProxyEndpoint(value string) bool {
+	if len(value) > maxProxyEndpointBytes || !printableExcept(value, "") {
+		return false
+	}
+	u, err := neturl.Parse(value)
+	return err == nil && u.Hostname() != "" && u.User == nil && u.Fragment == "" && u.RawQuery == "" && u.Opaque == "" &&
+		(u.Path == "" || u.Path == "/") && (u.Scheme == "http" || u.Scheme == "https")
+}
+
+// maxProxyBypassBytes bounds one proxy bypass entry, which a setup receipt
+// and the controller stage's acquisition each refuse past it.
+const maxProxyBypassBytes = 1024
+
+// validProxyBypass is the one grammar of a proxy bypass entry: "*", a CIDR
+// block, an IP address, or a host name or domain suffix, written as *.domain
+// or .domain, with an optional port, an IPv6 host bracketed before one.
+func validProxyBypass(value string) bool {
+	if len(value) > maxProxyBypassBytes {
+		return false
+	}
+	if value == "*" {
+		return true
+	}
+	if _, err := netip.ParsePrefix(value); err == nil {
+		return true
+	}
+	if _, err := netip.ParseAddr(value); err == nil {
+		return true
+	}
+	if strings.Contains(value, ":") {
+		host, ok := proxyBypassHost(value)
+		if !ok {
+			return false
+		}
+		value = host
+	}
+	value = strings.ToLower(value)
+	if strings.HasPrefix(value, "*.") {
+		value = strings.TrimPrefix(value, "*")
+	}
+	value = strings.TrimPrefix(value, ".")
+	if value == "" || strings.HasSuffix(value, ".") {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == ':') {
+			return false
+		}
+	}
+	return true
+}
+
+// proxyBypassHost is the host of a bypass entry that names a port, which is
+// all digits after the one colon of a host or the bracket of an IPv6 host.
+func proxyBypassHost(value string) (string, bool) {
+	host, port := "", ""
+	if strings.HasPrefix(value, "[") {
+		end := strings.Index(value, "]")
+		if end < 0 || !strings.HasPrefix(value[end+1:], ":") {
+			return "", false
+		}
+		host, port = value[1:end], value[end+2:]
+		if strings.ContainsAny(host, "[]") {
+			return "", false
+		}
+	} else {
+		separator := strings.Index(value, ":")
+		if separator != strings.LastIndex(value, ":") {
+			return "", false
+		}
+		host, port = value[:separator], value[separator+1:]
+	}
+	if port == "" {
+		return "", false
+	}
+	for _, c := range port {
+		if c < '0' || c > '9' {
+			return "", false
+		}
+	}
+	return host, true
 }
 
 // printableExcept holds when every byte is printable ASCII other than space

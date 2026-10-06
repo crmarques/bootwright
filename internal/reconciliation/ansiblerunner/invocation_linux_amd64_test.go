@@ -28,7 +28,7 @@ func TestAdapterInvocationIsUnbufferedSoItsOutputIsReadableWhileItRuns(t *testin
 		},
 	}
 	request := lifecycle.RunRequest{
-		Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
+		Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
 		Bundle: prerequisites.BundleLocation{Path: t.TempDir()},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

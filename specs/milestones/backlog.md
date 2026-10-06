@@ -100,6 +100,19 @@ Alias cell.
 | [B374](#b374) | new, 2026-10-06 (X40) | enabling | State reconciliation | Status names a keyring listing that fails for any reason | Found in X40; parked under D48 (D116) |
 | [B375](#b375) | new, 2026-10-06 (X40) | enabling | State reconciliation, with Controller setup | Status over a failed setup receipt that has no execution definition | Found in X40; parked under D48 (D116) |
 | [B376](#b376) | new, 2026-10-06 (X40) | enabling | Controller and CLI | A ready baseline readiness names its next step | Found in X40; parked under D48 (D116) |
+| [B385](#b385) | split from B94 on 2026-10-06 (X41) | enabling | Workspace, with Controller setup | Setup's receipt and controller mutation drop the context they never use | Found in X41; parked under D48 (D116); dropping the receipt member moves the setup plan digest |
+| [B386](#b386) | new, 2026-10-06 (X41) | enabling | Controller, with Environment and Container cluster | Dead code X41 left | Found in X41; parked under D48 (D116) |
+| [B387](#b387) | new, 2026-10-06 (X41) | enabling | Managed OS | The installation request, its digest and its role drop what D82 retired | Found in X41; parked under D48 (D116); it moves every installation plan digest and the automation digest |
+| [B388](#b388) | new, 2026-10-06 (X41) | enabling | CLI, with Secrets and Machine | One confirmer port carries `ConfirmIn`, and no unconfigured-confirmer refusal is left without its command | Found in X41; parked under D48 (D116) |
+| [B389](#b389) | new, 2026-10-06 (X41) | enabling | Controller | The controller runner's job and scratch use the staging parent | Found in X41; parked under D48 (D116); B19's one runner may carry it |
+| [B390](#b390) | new, 2026-10-06 (X41) | enabling | Controller (privilege), with CLI | An interactive session's sudo refusal exits 255 | Found in X41; parked under D48 (D116); needs a start signal sudo lets through |
+| [B391](#b391) | new, 2026-10-06 (X41) | enabling | CLI, with State reconciliation | Plan previews and interrupts X41 left | Found in X41; parked under D48 (D116) |
+| [B392](#b392) | new, 2026-10-06 (X41) | enabling | Managed OS and Secrets | Two decision readings X41 applied are confirmed | Found in X41; parked under D48 (D116); needs the owner's confirmation |
+| [B393](#b393) | split from B289 on 2026-10-06 (X41) | enabling | CLI, with Managed OS | The CLI calls the managed-OS media-name rule | Found in X41; parked under D48 (D116); a parity test holds the copy |
+| [B394](#b394) | new, 2026-10-06 (X41) | enabling | Each test's owner | Tests X41 left narrower than they read | Found in X41; parked under D48 (D116) |
+| [B395](#b395) | new, 2026-10-06 (X41) | enabling | Each spec's owner | Wording X41 left | Found in X41; parked under D48 (D116) |
+| [B396](#b396) | new, 2026-10-06 (X41) | enabling | Architecture | Knowledge lessons X41 left | Found in X41; parked under D48 (D116) |
+| [B397](#b397) | new, 2026-10-06 (X41) | defect | Container cluster | An off-controller boot-image server refuses through the cluster's refusal table | Found in X41; parked under D48 (D116); container-cluster installs are in no M1 journey |
 
 ### B96
 
@@ -197,7 +210,7 @@ opaque random version and binding IDs retain historical reservation files,
 about 32,000 of which a context's keyring admits in its lifetime, and every
 bounded run consumes one, so a loop of `machine` power, `rsh` or `exec`
 commands exhausts a context (found by the 2026-10-05 audit, which corrected
-this item's reason). Split on 2026-10-05 into [B337](m1.md#b337), after which
+this item's reason). Split on 2026-10-05 into [B337](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs), after which
 bounded runs publish no durable binding and only applies and new versions
 consume reservations (D85). A new allocation scheme must preserve issued-ID
 non-reuse across crashes and restore, so it needs [B103](#b103)'s restore
@@ -409,7 +422,7 @@ Store-wide verification refuses every command for every context when one context
 
 ### B327
 
-An Anaconda installation needs a static IPv4 install address, because completion dials and pins the frozen address, and [B289](m1.md#b289) refuses a DHCP-only installation at admission. DHCP installation needs its own completion design (found by the 2026-10-05 audit). **Exit evidence:** that design, with completion and replay tests.
+An Anaconda installation needs a static IPv4 install address, because completion dials and pins the frozen address, and [B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs) refuses a DHCP-only installation at admission. DHCP installation needs its own completion design (found by the 2026-10-05 audit). **Exit evidence:** that design, with completion and replay tests.
 
 ### B328
 
@@ -421,7 +434,7 @@ Top-level declarations run together against the formatting rule in about 103 pla
 
 ### B330
 
-A RHEL controller resolves client closures from UBI sources only, and UBI carries no `lorax` or `xorriso`; since [B288](m1.md#b288) the operator installs both from the host's entitled repositories. An adapter over the host's enabled repositories or a Satellite could freeze RHEL client closures as UBI sources are frozen (found by the 2026-10-05 audit). **Exit evidence:** a frozen closure from an entitled source, with acquisition, signature and replay tests.
+A RHEL controller resolves client closures from UBI sources only, and UBI carries no `lorax` or `xorriso`; since [B288](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs) the operator installs both from the host's entitled repositories. An adapter over the host's enabled repositories or a Satellite could freeze RHEL client closures as UBI sources are frozen (found by the 2026-10-05 audit). **Exit evidence:** a frozen closure from an entitled source, with acquisition, signature and replay tests.
 
 ### B331
 
@@ -437,11 +450,11 @@ A DNSServer's bind address defaults to the wildcard address, which collides with
 
 ### B334
 
-The emulated BMC runs as root, unconfined, with the libvirt socket, and serves plain HTTP with a basic-auth credential; [B301](m1.md#b301) binds the examples' BMCs to loopback. TLS from the emulator with a generated certificate its client verifies, a refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](m1.md#b289)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). **Exit evidence:** the emulator's TLS with a verifying client, the refusal and the confined type, each with tests.
+The emulated BMC runs as root, unconfined, with the libvirt socket, and serves plain HTTP with a basic-auth credential; [B301](m1.md#b301) binds the examples' BMCs to loopback. TLS from the emulator with a generated certificate its client verifies, a refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). **Exit evidence:** the emulator's TLS with a verifying client, the refusal and the confined type, each with tests.
 
 ### B335
 
-No harness exercises RHEL 9.8's dnf 4.14, rpm 4.16, Python 3.9 and keyring import, so setup's dnf4 path has never run on RHEL (found by the 2026-10-05 audit); [B288](m1.md#b288) marks RHEL 9.8 admitted but not yet run, and a run on a disposable RHEL 9.8 controller qualifies it (D60). An operator-run harness in a ubi9 container could exercise resolution, inspection and signatures. **Exit evidence:** the harness and a recorded run of it.
+No harness exercises RHEL 9.8's dnf 4.14, rpm 4.16, Python 3.9 and keyring import, so setup's dnf4 path has never run on RHEL (found by the 2026-10-05 audit); [B288](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs) marks RHEL 9.8 admitted but not yet run, and a run on a disposable RHEL 9.8 controller qualifies it (D60). An operator-run harness in a ubi9 container could exercise resolution, inspection and signatures. **Exit evidence:** the harness and a recorded run of it.
 
 ### B341
 
@@ -518,6 +531,58 @@ A fresh destroy over a failed setup receipt is proved to decide only in the life
 ### B376
 
 A ready `preflight controller` run without `--context` names no next step, such as the `context init` that follows setup: X40 offers `bootwright plan --context` for a context's readiness and deliberately nothing for the baseline (found in X40). **Exit evidence:** the owner's choice, and under it the baseline golden.
+
+### B385
+
+Setup has run context-free since X32, and X41 deleted its controller-binding action, yet the setup receipt still encodes, and its plan digest still covers, an always-empty `context` member, and the controller mutation keeps a context scope no production caller uses: its lease, its controller-input check and its binding comparison, and the storage contract's scoped mutation (found in X41; the receipt member was tracked under B94, which X41 delivered without it). Dropping the member moves the plan digest of every receipt, so a pending receipt's compatibility is settled first. **Exit evidence:** a receipt without the member that a pending earlier receipt still settles, the controller mutation context-free under its contract tests, and the [controller record](../contexts/controller-record.md)'s Not-yet-met line removed.
+
+### B386
+
+Dead code X41 left: `RuntimeInspection.Conflict` has no producer since the host runtime inspection went; the execution-bundle inspection still checks target tools inside the bundle, which no resolved definition carries; the agent installer's resolver and time-source guards repeat the empty-name filter its sort already applies; and the environment admission's check of a remote rescue image's checksum, with the environment spec's "a remote image requires its checksum", can no longer fire since D81 narrowed boot media to `local-media:` (found in X41). **Exit evidence:** each removed, with every suite and golden unchanged.
+
+### B387
+
+After D82 no installation request can carry the SSH placement arm, yet the request shape keeps it and the `lab-rhel-ssh-placed` request golden pins it; the installation's content digest still hashes the deleted installation tooling as the frozen literal `lorax,xorriso`; and the Anaconda role's SSH-path tooling remedy and its media proof on the placement host are dead automation (found in X41). Removing them moves the installation request version, every installation plan digest and the automation digest, so they go in a digest window. **Exit evidence:** the arm, the literal and the dead tasks removed in one digest window, with the request and plan goldens regenerated.
+
+### B388
+
+The custody and power confirmation ports keep `Confirm` and gain an optional `ContextConfirmer` instead of requiring `ConfirmIn`, because the composition types the shared confirmer as the contexts port; and the refusals given when no confirmer is configured, in the lifecycle, media, trust enrollment and setup, name no exact command, although production always configures one (found in X41). **Exit evidence:** one confirmer type carrying both methods through the composition, the optional path gone, and each unconfigured-confirmer refusal naming its command or removed.
+
+### B389
+
+X41 moved dependency resolution under the staging parent `/var/lib/bootwright-staging`, with locked and swept stages and a refusal that names a noexec mount, while the controller runner's job and scratch parents stay under `/run` and `/var/tmp` (found in X41). [B19](m1.md#b19)'s one runner may carry the move. **Exit evidence:** the controller runner's job and scratch under the staging port, with its sweep and noexec refusal tested.
+
+### B390
+
+At an interactive terminal a sudo refusal before `machine exec` or `machine rsh` starts, such as a failed authentication, exits 1, which a caller cannot tell from the remote command's own 1; the [CLI spec](../cli.md#machine-ssh-sessions) states this exception, and a non-interactive refusal exits 255 since X41 (found in X41). Sudo hands the child the terminal and closes descriptors above 2, so lifting it needs a start signal the unprivileged supervisor can read through sudo. **Exit evidence:** an interactive session whose sudo refuses exiting 255, in a test, or the owner's acceptance of the exception.
+
+### B391
+
+`plan` without `--stage` over a failed or unknown multi-Machine apply marks nothing of what the continuation starts first, because the resolve and retry markers apply only under a selection; and an interrupt of a settled apply over a completed apply prints the settled result, then `runtime.interrupted` (found in X41). **Exit evidence:** an unselected preview marking what the next apply starts first, and a settled result left out of the interrupt branch, each in a golden.
+
+### B392
+
+X41 applied two readings the owner did not state: D79 lists MTUs among what refuses, while X41 refuses only an MTU other than 1500, the installed system's default, which lab-rhel declares; and D75's option text names `secret.store`, while X41 keeps `secret.store.conflict`, which X40 specified for an unconfirmed Secret replacement, deletion or rotation (found in X41). **Exit evidence:** the owner's confirmation, and under another reading the code, the specs and their tests changed.
+
+### B393
+
+The CLI keeps its own copy of the managed-OS media-name rule, held equal by `TestTheCLIMediaNameIsTheStoreRule`, because the layout test forbids the CLI importing the managed-OS domain package, although B289's exit evidence asked the CLI to call the rule (found in X41). Re-exporting the rule from the media service, beside its byte bound, lets the CLI call it. **Exit evidence:** the CLI calling the rule through the media service, its copy and the parity test deleted.
+
+### B394
+
+Tests X41 left narrower than they read: `TestAuthorizationTokenAndBorrowedCredentialsRefuseBeforeAnyRead` now presents its plan before refusing; the engine's rendering of a controller Unsupported row has no test, since a lifecycle test cannot import the clients; the noexec start refusal is exercised only with an injected noexec stage; a bounded run's re-check of its directory after taking its lock, and a run opened after release, have no test; neither the binding nor the bounded read tests the shared material bound; and the sweep's record re-check under the directory lock and its scratch-name re-check reach no deterministic test (found in X41). **Exit evidence:** each covered by a test that fails when its guard is removed, and the first test renamed.
+
+### B395
+
+Wording X41 left: the state-reconciliation spec's status contradictions still list each lost record of an incomplete removal, though a failed removal now lists none, and its authorization paragraph says a missing token's refusal names the blocks that consume it, where it names plan steps after presenting the plan; the output spec says a bounded run's output keeps the retention bounds of an attempt's output, though the runs area keeps the newest 16 runs; the contexts and managed-OS specs could add that repeating a busy media publication re-verifies the retained image; the development guide's `make build` row could say it yields a static executable; the capacity refusal of the operation, runs and SSH-trust areas names no remedy; two comments still say every write measures the whole operation subtree; and the uncarried-network remedy could also name the NetworkConfig that declares the content (found in X41). **Exit evidence:** each page, comment and remedy corrected.
+
+### B396
+
+Knowledge lessons X41 left: the concurrent-block-execution page quotes the old "up to 1 step at once" wording without marking it as history; the operation-store entry page says every write measures the whole subtree; no build page says that `make build` disables cgo while `scripts/go` keeps it, because `make race` needs it; and no page explains why a binding once refused during a bounded run (found in X41). **Exit evidence:** each page updated or written.
+
+### B397
+
+The agent installer refuses a boot-image server placed off the controller at plan, as an object-less `lifecycle.state` outside the container-cluster refusal table, which its projection test pins empty: the cluster counterpart of D82 (found in X41). **Exit evidence:** a refusal-table row held by a table test, the refusal naming its object and field before registration.
 
 ## Retired
 

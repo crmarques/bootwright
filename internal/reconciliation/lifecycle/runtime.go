@@ -3,7 +3,6 @@ package lifecycle
 import (
 	"context"
 	"path"
-	"slices"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -12,13 +11,13 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
 
-// runOutputName is what one bounded run retains beside nothing else: it
+// RunOutputName is what one bounded run retains beside nothing else: it
 // publishes no structured events, so there is no log for its output to sit
 // next to.
-const runOutputName = "run.output"
+const RunOutputName = "run.output"
 
 // RuntimeRequest names the context whose approved bundle a bounded operation
-// runs inside, and the Secret declarations that operation needs bound.
+// runs inside, and the Secret declarations that operation reads.
 // RetainOutput is set by a caller that names its run's output to an operator;
 // one that names none, such as a reading, leaves it unset, and its run keeps
 // nothing and discards what its adapter prints.
@@ -68,13 +67,14 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 	if err != nil {
 		return err
 	}
-	// Binding happens outside the store lock, exactly as a registered
-	// operation binds before it opens its transaction.
-	binding, material, err := s.lend(ctx, name, request.Secrets)
+	// The material is read first, in a keyring session that ends before the
+	// run takes the context, so no keyring session stays open while the
+	// adapter runs.
+	material, err := s.lend(ctx, name, request.Secrets)
 	if err != nil {
 		return err
 	}
-	defer s.giveBack(ctx, name, binding, material)
+	defer clearMaterial(material)
 	return s.workspace.RunLifecycle(ctx, name, func(view RunView) error {
 		approved, err := approvedBundle(ctx, view)
 		if err != nil {
@@ -101,24 +101,25 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 
 // runOutputRemediation points an adapter failure at the one file a bounded run
 // keeps, which has no attempt log to sit beside.
-const runOutputRemediation = "read the adapter output retained in this run's " + runOutputName
+const runOutputRemediation = "read the adapter output retained in this run's " + RunOutputName
 
 // retain opens the file this run's adapter output is kept in, under an
-// identity of its own, and names it relative to the state root. The directory
-// exists before the call, so the path a result names is one an operator can
-// open while the run is still going.
+// identity of its own, and names it relative to the state root. The run view
+// opens the run's directory, making room among the runs the area keeps, and
+// that directory exists before the call, so the path a result names is one an
+// operator can open while the run is still going.
 func (s Service) retain(ctx context.Context, view RunView) (*operationstore.AdapterOutput, []string, string, error) {
 	area := view.Runs()
 	identity, err := reconciliation.AllocateRunID(s.options.Entropy, func(candidate string) bool {
-		_, found, _ := area.Read(ctx, path.Join(candidate, runOutputName), 1)
+		_, found, _ := area.Read(ctx, path.Join(candidate, RunOutputName), 1)
 		return found
 	})
 	if err != nil {
 		return nil, nil, "", err
 	}
-	target := path.Join(identity, runOutputName)
-	if err := area.EnsureDirectory(ctx, identity); err != nil {
-		return nil, nil, "", abandonRun(ctx, area, identity, "", err)
+	target := path.Join(identity, RunOutputName)
+	if err := view.OpenRun(ctx, identity); err != nil {
+		return nil, nil, "", err
 	}
 	// Exclusive creation is what proves the name is this run's own, and it
 	// leaves the file an operator was told about already there to open.
@@ -161,9 +162,10 @@ type MaterialRequest struct {
 }
 
 // WithMaterial opens exactly the declared Secrets for the length of one call
-// and releases them as it returns. It takes no store lock, registers no
-// operation and publishes nothing, so an explicit access command reads a
-// coherent set of material without waiting on, or resembling, an operation.
+// and clears them as it returns. It holds the store's shared lock only while
+// it reads, registers no operation and publishes nothing, so an explicit
+// access command reads a coherent set of material without waiting on, or
+// resembling, an operation.
 func (s Service) WithMaterial(ctx context.Context, request MaterialRequest, use func(context.Context, map[string]secrets.Material) error) error {
 	if err := s.available(ctx); err != nil {
 		return err
@@ -175,67 +177,42 @@ func (s Service) WithMaterial(ctx context.Context, request MaterialRequest, use 
 	if err != nil {
 		return err
 	}
-	binding, material, err := s.lend(ctx, name, request.Secrets)
+	material, err := s.lend(ctx, name, request.Secrets)
 	if err != nil {
 		return err
 	}
-	defer s.giveBack(ctx, name, binding, material)
+	defer clearMaterial(material)
 	return use(ctx, material)
 }
 
-// giveBack clears what a bounded call was lent and releases its binding. The
-// release outlives a cancellation as a recording does, because a binding a
-// cancelled call kept would pin its Secret versions until the next collection.
-func (s Service) giveBack(ctx context.Context, name, binding string, material map[string]secrets.Material) {
-	clearMaterial(material)
-	if binding != "" {
-		_, _ = s.binder.Release(recordingContext(ctx), custody.BindingRequest{ContextName: name, BindingID: binding})
-	}
-}
-
-// lendAttempts bounds how often one bounded operation binds its Secrets, once
-// and again each time a collection released its binding before it reopened
-// it.
-const lendAttempts = 3
-
-// lend freezes exactly the Secret versions one bounded operation reads. The
-// binding is transient: it exists so the operation reads a coherent set, and
-// is released as soon as the call returns. A binding names no consumer, so a
-// lifecycle collection that listed this one before it was reopened may release
-// it; a reopen that fails while the binding is no longer listed binds again,
-// and any other failure, or a listing that fails, is reported.
-func (s Service) lend(ctx context.Context, name string, references []string) (string, map[string]secrets.Material, error) {
+// lend reads the current version of exactly the Secrets one bounded call
+// needs, in one keyring session, and binds nothing: a bounded call publishes
+// no binding and reserves no identity, so a loop of them leaves the keyring as
+// it found it and a registration's collection has nothing of it to release.
+// The caller clears what it was lent when the call returns, a call ended by
+// cancellation included.
+func (s Service) lend(ctx context.Context, name string, references []string) (map[string]secrets.Material, error) {
 	if len(references) == 0 {
-		return "", map[string]secrets.Material{}, nil
+		return map[string]secrets.Material{}, nil
 	}
-	for attempt := 1; ; attempt++ {
-		result, err := s.binder.Bind(ctx, custody.BindRequest{ContextName: name, Names: references})
-		if err != nil {
-			return "", nil, err
-		}
-		request := custody.BindingRequest{ContextName: name, BindingID: result.ID}
-		bound, err := s.binder.Reopen(ctx, request)
-		if err == nil {
-			material := make(map[string]secrets.Material, len(bound))
-			for _, item := range bound {
-				material[item.Version.Declaration.Name] = item.Material
-			}
-			return result.ID, material, nil
-		}
-		listed, listing := s.binder.Bindings(ctx, custody.BindingsRequest{ContextName: name})
-		_, _ = s.binder.Release(recordingContext(ctx), request)
-		if listing != nil || slices.Contains(listed, result.ID) || attempt == lendAttempts {
-			return "", nil, err
-		}
+	current, err := s.binder.ReadCurrent(ctx, custody.ReadCurrentRequest{ContextName: name, Names: references})
+	if err != nil {
+		return nil, err
 	}
+	material := make(map[string]secrets.Material, len(current))
+	for _, item := range current {
+		material[item.Version.Declaration.Name] = item.Material
+	}
+	return material, nil
 }
 
 // bundle is the approved execution boundary one operation runs inside: the
-// area itself, where it sits on this host, and the requirement its runtime
-// must satisfy. An operation opens it once and every attempt shares it,
-// because opening it per attempt would ask the transaction to record what it
-// has open while its own blocks are running.
+// area itself, where it sits on this host, the requirement its runtime must
+// satisfy and the context whose setup approved it. An operation opens it once
+// and every attempt shares it, because opening it per attempt would ask the
+// transaction to record what it has open while its own blocks are running.
 type bundle struct {
+	context     string
 	area        prerequisites.BundleArea
 	location    prerequisites.BundleLocation
 	requirement prerequisites.ExecutionRequirement
@@ -263,5 +240,5 @@ func approvedBundle(ctx context.Context, view View) (bundle, error) {
 	if err != nil {
 		return bundle{}, err
 	}
-	return bundle{area: area, location: location, requirement: receipt.Definition.Execution}, nil
+	return bundle{context: view.Identity().Name, area: area, location: location, requirement: receipt.Definition.Execution}, nil
 }

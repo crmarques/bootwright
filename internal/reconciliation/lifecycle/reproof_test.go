@@ -123,7 +123,7 @@ func requireReplacedOperationMoved(t *testing.T, err error) {
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
 		reported[0].Message != "the operation this removal was planned from is no longer the one the context holds" ||
-		reported[0].Remediation != "repeat the removal to plan it from the operation the context holds now" {
+		reported[0].Remediation != "repeat bootwright destroy --context lab to plan it from the operation the context holds now" {
 		t.Fatalf("refusal = %+v (%v)", reported, err)
 	}
 }

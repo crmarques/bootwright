@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/contextguard"
 )
 
-const reviewWithStatus = "review its durable state with bootwright status"
+const reviewWithStatus = "review its durable state with bootwright status --context lab"
 
 // The exits of the record states neither verb acts on: deleting the context,
 // acknowledging orphans unless its evidence is pristine.
@@ -441,6 +441,39 @@ func TestStatusNamesAnIncompleteApplyThatRecordsNoStartedBlock(t *testing.T) {
 			lose(h, path.Join(currentOperation(t, h), "blocks", "alpha")+"/")
 			requireRefused(t, h, reconciliation.Destroy, "the operation this removal supersedes records no block it still owns", reviewWithStatus)
 			requireStatusNames(t, h, test.named...)
+		})
+	}
+}
+
+// A failed removal holding a block not done is replaced by a fresh removal of
+// what it has not proved gone, which reads no block record of it, so a record
+// it lost contradicts nothing status offers: status names no contradiction
+// beside the replacing destroy, and that destroy decides. A running removal
+// is continued, which reads every record, so its lost record is still named
+// and nothing is offered.
+func TestAFailedDestroysLostRecordIsNoContradiction(t *testing.T) {
+	ctx := context.Background()
+	for _, test := range []struct {
+		state          reconciliation.OperationState
+		contradictions []string
+		steps          []string
+	}{
+		{reconciliation.OperationFailed, []string{}, []string{"bootwright destroy --context lab"}},
+		{reconciliation.OperationRunning, []string{lostRecord("charlie")}, []string{}},
+	} {
+		t.Run(string(test.state), func(t *testing.T) {
+			h := newPlannedHarness(t, chainedDefinitions())
+			failedChainedRemoval(t, h)
+			removal := currentOperation(t, h)
+			if test.state != reconciliation.OperationFailed {
+				rewriteState(t, h, path.Join(removal, "operation.json"), string(test.state))
+			}
+			lose(h, path.Join(removal, "blocks", "charlie", "state.json"))
+			status, err := h.service.Status(ctx, StatusRequest{ContextName: testContextName})
+			if err != nil || !slices.Equal(status.Contradictions, test.contradictions) || !slices.Equal(status.NextSteps, test.steps) {
+				t.Fatalf("status = %+v (%v), want contradictions %q and steps %q", status, err, test.contradictions, test.steps)
+			}
+			requireDecidesIfOffered(t, h, reconciliation.Destroy, len(test.steps) != 0)
 		})
 	}
 }

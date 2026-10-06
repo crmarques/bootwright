@@ -13,9 +13,6 @@ import (
 )
 
 func (s Service) selectedResolution(current inspection, requirements NativeRequirements, frozen []inspectionResolution) (Definition, bool, error) {
-	if s.options.Native == nil || s.options.NativeInspector == nil {
-		return Definition{}, false, failure("controller.unsupported", "native dependency resolution and inspection are not configured", "use a compatible executable")
-	}
 	// A retained resolution serves any context, because setup resolves only the
 	// context-independent closure. Target tools are resolved and retained by the
 	// controller stage and never take part in this selection.
@@ -60,11 +57,10 @@ func (s Service) selectedResolution(current inspection, requirements NativeRequi
 		}
 		return CloneDefinition(*selected), true, nil
 	}
-	// Pure platform admission reuses the catalog's supplied-foundation matrix.
-	// Its historical artifact pins are not the latest-version product policy.
-	// The complete selection is admitted here so an unqualified native client
-	// refuses during inspection, before any dependency is acquired.
-	if _, err := s.catalog.Select(current.platform, requirements); err != nil {
+	// Pure platform admission against the provided execution foundations this
+	// executable was compiled against, so an unqualified platform refuses
+	// during inspection, before any dependency is resolved or acquired.
+	if err := s.catalog.Admit(current.platform); err != nil {
 		return Definition{}, false, err
 	}
 	versions := current.selection.Versions()
@@ -90,15 +86,11 @@ func dependencyIntent(selection controller.Selection) []string {
 	return result
 }
 
+// inspectRuntime proves the native roots of a resolved definition present. An
+// unresolved one names no root yet, so nothing it requires is present.
 func (s Service) inspectRuntime(ctx context.Context, definition Definition) (RuntimeInspection, error) {
 	if definition.Native == nil {
-		if s.options.Bootstrap != nil {
-			return RuntimeInspection{}, nil
-		}
-		return s.host.Runtime(ctx, definition.Runtime)
-	}
-	if s.options.NativeInspector == nil {
-		return RuntimeInspection{}, failure("controller.unsupported", "native dependency inspection is unavailable", "use a compatible executable")
+		return RuntimeInspection{}, nil
 	}
 	presence, err := s.options.NativeInspector.Check(ctx, *definition.Native)
 	inspection := RuntimeInspection{Present: presence.Ready, Ready: presence.Ready}

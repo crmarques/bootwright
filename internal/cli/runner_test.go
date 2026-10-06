@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/availability"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
@@ -35,7 +36,13 @@ func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 	for _, invocation := range cases {
 		t.Run(invocation, func(t *testing.T) {
 			code, out, errOut, record := runRecorded(strings.Fields(invocation))
-			if code != 1 || out != "" || record.calls != 1 || errOut != "[FAIL] cli.not-implemented: bootwright "+record.path+" is not implemented\n" {
+			// A refusal before an SSH session opens exits 255, the client's own
+			// failure status, so it never reads as the remote command's.
+			want := 1
+			if record.path == "machine rsh" || record.path == "machine exec" {
+				want = 255
+			}
+			if code != want || out != "" || record.calls != 1 || errOut != "[FAIL] cli.not-implemented: bootwright "+record.path+" is not implemented\n" {
 				t.Fatalf("code=%d out=%q err=%q calls=%d", code, out, errOut, record.calls)
 			}
 		})
@@ -209,11 +216,11 @@ func TestPayloadParsing(t *testing.T) {
 		want []string
 		code int
 	}{
-		{"machine exec", []string{"echo", "one", "--context", "other", "two"}, []string{"echo", "one", "two"}, 1},
+		{"machine exec", []string{"echo", "one", "--context", "other", "two"}, []string{"echo", "one", "two"}, 255},
 		{"cluster exec", []string{"echo", "one", "--context", "other", "two"}, []string{"echo", "one", "two"}, 1},
 		{"cluster oc", []string{"get", "pods", "--context", "other", "--help"}, []string{"get", "pods", "--context", "other", "--help"}, 1},
 		{"cluster kubectl", []string{"get", "pods", "--context", "other", "--help"}, []string{"get", "pods", "--context", "other", "--help"}, 1},
-		{"machine exec", []string{"--", "--help", "", "a b", "$(payload)"}, []string{"--help", "", "a b", "$(payload)"}, 1},
+		{"machine exec", []string{"--", "--help", "", "a b", "$(payload)"}, []string{"--help", "", "a b", "$(payload)"}, 255},
 		{"cluster exec", []string{"--", "--help"}, []string{"--help"}, 1},
 		{"cluster oc", []string{"--", "--help"}, []string{"--help"}, 1},
 		{"cluster kubectl", []string{"--", "--help"}, []string{"--help"}, 1},
@@ -300,6 +307,67 @@ func TestASessionReportsTheClientsExitStatusAndPrintsNothing(t *testing.T) {
 					t.Fatalf("out = %q err = %q", out.String(), errOut.String())
 				}
 			}
+			// An interrupt that arrives while the session runs is the
+			// session's to answer: its own status stands and nothing is added.
+			for _, want := range []int{0, 143, 255} {
+				var out, errOut bytes.Buffer
+				var cancel context.CancelCauseFunc
+				record := &dispatchRecord{result: commandResult{
+					session: &machine.SessionResult{Context: "lab", Machine: "demo", Address: "192.0.2.10", ExitCode: want},
+				}}
+				record.afterCall = func() { cancel(ErrInterrupted) }
+				code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), BeginOperation: func(ctx context.Context) (context.Context, func()) {
+					ctx, cancel = context.WithCancelCause(ctx)
+					return ctx, func() { cancel(nil) }
+				}}).Run(context.Background(), strings.Fields(invocation))
+				if code != want || out.Len() != 0 || errOut.Len() != 0 {
+					t.Fatalf("interrupted session = %d, want %d; out = %q err = %q", code, want, out.String(), errOut.String())
+				}
+			}
 		})
+	}
+}
+
+// A session's status from 0 to 254 is the remote command's, so every refusal
+// Bootwright reports before the session opens exits 255, the SSH client's own
+// failure status. A refusal of how the command was invoked keeps 2 and an
+// interrupt before the session keeps 130.
+func TestASessionRefusalExitsTwoFiftyFive(t *testing.T) {
+	refusal := func(code string) error {
+		return diagnostics.NewFailureWithRemediation(code, "the session cannot open", "", "do what it says")
+	}
+	for _, invocation := range []string{"machine rsh --name demo", "machine exec --name demo pwd"} {
+		for _, test := range []struct {
+			name      string
+			err       error
+			interrupt bool
+			code      int
+			report    string
+		}{
+			{name: "trust.identity", err: refusal("trust.identity"), code: 255, report: "[FAIL] trust.identity: the session cannot open; next: do what it says\n"},
+			{name: "access.target", err: refusal("access.target"), code: 255, report: "[FAIL] access.target: the session cannot open; next: do what it says\n"},
+			{name: "access.unavailable", err: refusal("access.unavailable"), code: 255, report: "[FAIL] access.unavailable: the session cannot open; next: do what it says\n"},
+			{name: "canceled", err: context.Canceled, code: 255, report: "[FAIL] runtime.canceled: operation canceled\n"},
+			{name: "deadline", err: context.DeadlineExceeded, code: 255, report: "[FAIL] runtime.deadline: operation deadline exceeded\n"},
+			{name: "unsupported", code: 255, report: "[FAIL] runtime.internal: application service returned an unsupported result\n"},
+			{name: "usage", err: &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "access.target", Message: "the session cannot open"}}, Usage: true}, code: 2},
+			{name: "interrupted", err: context.Canceled, interrupt: true, code: 130, report: "[FAIL] runtime.interrupted: operation interrupted\n"},
+		} {
+			t.Run(invocation+"/"+test.name, func(t *testing.T) {
+				var out, errOut bytes.Buffer
+				var cancel context.CancelCauseFunc
+				record := &dispatchRecord{err: test.err}
+				if test.interrupt {
+					record.afterCall = func() { cancel(ErrInterrupted) }
+				}
+				code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), BeginOperation: func(ctx context.Context) (context.Context, func()) {
+					ctx, cancel = context.WithCancelCause(ctx)
+					return ctx, func() { cancel(nil) }
+				}}).Run(context.Background(), strings.Fields(invocation))
+				if code != test.code || out.Len() != 0 || test.report != "" && errOut.String() != test.report {
+					t.Fatalf("exit = %d, want %d; out = %q err = %q", code, test.code, out.String(), errOut.String())
+				}
+			})
+		}
 	}
 }

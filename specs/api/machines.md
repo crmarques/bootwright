@@ -351,9 +351,17 @@ The effective reusable-template merge is deterministic:
 
 These list rules apply when a value is supplied on both sides of the merge;
 untouched native lists retain their authored values. Static-address injection
-occurs after this merge. For a Bootwright-installed Anaconda machine, the
-effective install network is DHCP or static IPv4; IPv6-only install access is
-rejected. Its static installation interface is `ethernet`, `vlan`, or `bond`.
+occurs after this merge. A Bootwright-installed Anaconda machine selects one
+static IPv4 install address; a DHCP-only or IPv6-only install network, or no
+network configuration at all, is rejected at `network.installAddressRef`,
+because the Kickstart carries one static IPv4 `network` line and DHCP
+installation is not supported. Without a network configuration there is no
+install interface yet, so that remedy first selects one with
+`network.configRef` or `network.inline`.
+Its static installation interface is `ethernet`, `vlan`, or `bond`. A `vlan`
+or `bond` install interface is admitted for a later bonded or VLAN
+installation, and the managed-OS installation refuses it before registration,
+as [the refusal table](../managed-os.md#refusal-table) states.
 Every installation consumer uses the same `installAddressRef` selection;
 there is no first-interface fallback.
 
@@ -463,14 +471,15 @@ proved.
 
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
-| `spec.bootMedia` | string | yes | `local-media:<filename.iso>`, an absolute `file://` URI, or an `http://`/`https://` URL. |
+| `spec.bootMedia` | string | yes | `local-media:<filename.iso>` only. |
 | `spec.checksum` | string | no | SHA-256 content pin: 64 hexadecimal digits with an optional `sha256:` prefix. Surrounding whitespace and hex case are accepted; checksum consumers canonicalize the digest to lowercase. |
 
-The local-media key is a basename ending in `.iso` with no path traversal,
-naming an entry of the host-wide [media store](../managed-os.md#media-store).
-Remote lifecycle media requires a checksum; local and file media is pinned by
-the immutable-operation workflow. Authenticated downloads and private-CA
-download fields are not part of this contract. Validation is lexical only.
+`<filename.iso>` follows the [media name grammar](../cli/commands.md#flag-relationships-and-safeguards)
+and names an entry of the host-wide [media store](../managed-os.md#media-store),
+the only source the installation boots from; any other source is rejected at
+`spec.bootMedia`, naming the `bootwright media add` import that fixes it. Store
+media is pinned by the immutable-operation workflow, so the checksum stays
+optional. Validation is lexical only.
 
 ## MachineInstallProfile
 
@@ -500,9 +509,10 @@ The `anaconda` arm contains:
 | `packageSource` | object | no | Exactly one of `mirror`, `fromSubscription`, or `hostedTree`. |
 
 `redfishVirtualMedia` is optional in the standalone install-profile shape. If
-its endpoint block is present, both `serverRef` and `endpointRef` are required; graph validation
-requires that complete endpoint when a consuming managed-OS install uses bare
-metal.
+its endpoint block is present, both `serverRef` and `endpointRef` are required.
+Every installation boots its installer through Redfish virtual media, so graph
+validation requires that complete endpoint whenever a Bootwright-installed
+Machine selects the profile, on any substrate.
 
 The optional package-source arms are exact:
 
@@ -512,10 +522,15 @@ The optional package-source arms are exact:
 - `fromSubscription` has required `entitlementRef` to a `redhat-rhel`
   `Entitlement`. It cannot be combined with top-level `subscription` because it
   already registers during installation.
-- `hostedTree` has required `fromMedia` using local `local-media:` or `file://`
-  DVD media, distinct from the boot image's `bootMedia`, plus required
-  `artifactServerEndpoint` with the same `{serverRef, endpointRef}` shape.
-  Its selected managed endpoint supports HTTP package content.
+- `hostedTree` has required `fromMedia` naming a DVD image of the media store
+  as `local-media:<filename.iso>` only, under the same grammar as
+  [`bootMedia`](#machineimage) and distinct from the boot image's `bootMedia`,
+  plus required `artifactServerEndpoint` with the same
+  `{serverRef, endpointRef}` shape. Its selected managed endpoint supports HTTP
+  package content. Graph validation refuses a profile whose tree and the
+  installer image of a Bootwright-installed Machine of the same name would be
+  published through one server, because both are published beneath
+  `os/<name>/` there.
 
 ### Installation network services
 

@@ -7,6 +7,7 @@ package workspacecontract
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -22,11 +23,12 @@ import (
 // Subject is one fresh workspace holding the ready context Context, with
 // empty operation and run areas, on a host whose completed controller setup
 // identifies it as Host, names its approved bundle, binds no context and
-// retains no dependency.
+// retains no dependency. KeptRuns is how many runs its run area keeps.
 type Subject struct {
 	Workspace lifecycle.Workspace
 	Context   string
 	Host      controller.InstalledHostIdentity
+	KeptRuns  int
 }
 
 // Within provides one fresh Subject and fails the test when it cannot.
@@ -46,6 +48,7 @@ func Verify(t *testing.T, within Within) {
 		{"each entry point refuses a missing callback", eachEntryPointRefusesAMissingCallback},
 		{"an inspection writes nothing", anInspectionWritesNothing},
 		{"a bounded run writes only its run area", aBoundedRunWritesOnlyItsRunArea},
+		{"a run opens its directory once and the oldest runs make room", aRunOpensItsDirectoryOnce},
 		{"a transaction's records are what a later view reads", aTransactionsRecordsAreWhatALaterViewReads},
 		{"evidence is published whole and read back as a copy", evidenceIsPublishedWholeAndReadBackAsACopy},
 		{"a capability ends with its callback", aCapabilityEndsWithItsCallback},
@@ -59,7 +62,7 @@ func Verify(t *testing.T, within Within) {
 	} {
 		t.Run(clause.name, func(t *testing.T) {
 			subject := within(t)
-			if subject.Workspace == nil || subject.Context == "" || !subject.Host.Valid() {
+			if subject.Workspace == nil || subject.Context == "" || !subject.Host.Valid() || subject.KeptRuns < 1 {
 				t.Fatal("the runner provided no complete workspace")
 			}
 			clause.check(t, subject)
@@ -117,6 +120,30 @@ func aBoundedRunWritesOnlyItsRunArea(t *testing.T, s Subject) {
 		holds(t, view.Runs(), "r.json", "output\n")
 		lists(t, view.Operations())
 	})
+}
+
+// A run opens its own directory once, never through an escaped view or under
+// a name that is no run identity, and the runs before it make room: the
+// oldest goes once the area holds as many as it keeps.
+func aRunOpensItsDirectoryOnce(t *testing.T, s Subject) {
+	ctx := context.Background()
+	var escaped lifecycle.RunView
+	run(t, s, func(view lifecycle.RunView) {
+		escaped = view
+		refuses(t, view.OpenRun(ctx, "notes"), "a run named by no run identity")
+		succeeds(t, view.OpenRun(ctx, runIdentity(1)), "opening a run")
+		refuses(t, view.OpenRun(ctx, runIdentity(1)), "opening the same run again")
+		runDirectories(t, view.Runs(), runIdentity(1))
+	})
+	refuses(t, escaped.OpenRun(ctx, runIdentity(2)), "opening a run after its callback returned")
+	kept := []string{}
+	for number := 2; number <= s.KeptRuns+1; number++ {
+		run(t, s, func(view lifecycle.RunView) {
+			succeeds(t, view.OpenRun(ctx, runIdentity(number)), "opening run "+runIdentity(number))
+		})
+		kept = append(kept, runIdentity(number))
+	}
+	run(t, s, func(view lifecycle.RunView) { runDirectories(t, view.Runs(), kept...) })
 }
 
 func aTransactionsRecordsAreWhatALaterViewReads(t *testing.T, s Subject) {
@@ -568,6 +595,31 @@ func holds(t *testing.T, area operationstore.Area, target, want string) {
 	data, found, err := area.Read(context.Background(), target, bound)
 	if err != nil || !found || string(data) != want {
 		t.Fatalf("read of %s = %q %t (%v), want %q", target, data, found, err, want)
+	}
+}
+
+// runIdentity is the run identity numbered number, so identities sort in the
+// order the suite opens them.
+func runIdentity(number int) string {
+	return fmt.Sprintf("run-%032x", number)
+}
+
+// runDirectories requires the area to hold exactly the run directories named.
+func runDirectories(t *testing.T, area operationstore.Area, want ...string) {
+	t.Helper()
+	entries, err := area.Entries(context.Background(), "")
+	if err != nil {
+		t.Fatalf("the run area cannot be listed: %v", err)
+	}
+	held := []string{}
+	for _, entry := range entries {
+		if entry.Directory {
+			held = append(held, entry.Name)
+		}
+	}
+	slices.Sort(held)
+	if !slices.Equal(held, want) {
+		t.Fatalf("the run area holds %v, want %v", held, want)
 	}
 }
 

@@ -104,7 +104,7 @@ func (s *Store) withTrustArea(ctx context.Context, name string, mutation bool, c
 	defer func() { active = false }()
 	area := &operationArea{
 		store: s, subtree: trustSubtree, context: dir, name: record.Name,
-		active: func() bool { return active }, readOnly: !mutation,
+		active: func() bool { return active }, readOnly: !mutation, cached: mutation,
 	}
 	return safeError(callback(area))
 }

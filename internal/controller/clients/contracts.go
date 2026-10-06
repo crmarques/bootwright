@@ -23,9 +23,12 @@ type NativeResolver interface {
 }
 
 // NativeInspector reports whether the selected native root packages are
-// installed by name, without repository metadata or installed-state change.
+// installed by name, without repository metadata or installed-state change,
+// and on a RHEL controller which named roots the operator installed under the
+// platform's qualified vendor key.
 type NativeInspector interface {
 	Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error)
+	OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error)
 }
 
 // Installer runs the fixed controller dependency automation inside an

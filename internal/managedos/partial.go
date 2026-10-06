@@ -15,7 +15,7 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 		issues := []api.Issue{}
 		for _, key := range []string{"organizationRef", "activationKeyRef", "connectToInsights", "satellite"} {
 			if o.Spec().Has("rhsm", key) {
-				issues = add(issues, issue("$.spec.rhsm."+key, "external RHSM permits only management"))
+				issues = add(issues, externalRHSMField(key))
 			}
 		}
 		return issues
@@ -28,11 +28,11 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 	custom := o.Spec().Get("customizations")
 	for _, service := range custom.Get("services", "enabled").Strings() {
 		if slices.Contains(custom.Get("services", "disabled").Strings(), service) {
-			issues = add(issues, issue("$.spec.customizations.services", "enabled and disabled services must be disjoint"))
+			issues = add(issues, serviceOverlap())
 		}
 	}
 	if o.Spec().Has("subscription") && o.Spec().Has("installer", "anaconda", "packageSource", "fromSubscription") {
-		issues = add(issues, issue("$.spec.subscription", "top-level subscription cannot accompany installation fromSubscription"))
+		issues = add(issues, subscriptionConflict())
 	}
 	return issues
 }

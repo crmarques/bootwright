@@ -144,7 +144,7 @@ func TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses(t *testing.T)
 			if reported[0].Message != want {
 				t.Fatalf("refusal = %q, want %q", reported[0].Message, want)
 			}
-			if reported[0].Remediation != "review its durable state with bootwright status" {
+			if reported[0].Remediation != "review its durable state with bootwright status --context lab" {
 				t.Fatalf("remediation = %q", reported[0].Remediation)
 			}
 			if !slices.Equal(h.capability.applies, applies) || len(h.presenter.presented) != presented {

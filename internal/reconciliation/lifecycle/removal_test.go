@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -257,4 +258,120 @@ func sameFiles(current, before *memoryArea) bool {
 		}
 	}
 	return true
+}
+
+// orderRecorder notes, in order, each step a destroy takes up to its
+// registration: the plan it presents, the prompt, each lock-holding proof, and
+// the registration its log location follows.
+type orderRecorder struct {
+	mutex   sync.Mutex
+	steps   []string
+	prompts int
+}
+
+func (r *orderRecorder) note(step string) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	if last := len(r.steps) - 1; last < 0 || r.steps[last] != step {
+		r.steps = append(r.steps, step)
+	}
+}
+
+func (r *orderRecorder) PresentLifecyclePlan(context.Context, PlanResult) error {
+	r.note("present")
+	return nil
+}
+
+func (r *orderRecorder) Confirm(context.Context, string, string) error {
+	r.prompts++
+	r.note("confirm")
+	return nil
+}
+
+func (r *orderRecorder) ReportProgress(_ context.Context, event ProgressEvent) {
+	if event.Phase == CheckPhase {
+		r.note(event.Block)
+	}
+}
+
+func (r *orderRecorder) ReportLogLocation(context.Context, string) { r.note("register") }
+
+// A destroy confirms the plan it presents, and only then takes the proofs that
+// need the exclusive lock or a remote observation: the resolution of every
+// effect it takes back and its quiescence gate. Both still precede
+// registration, so a Machine found running after the prompt refuses with
+// nothing registered and no effect.
+func TestDestroyConfirmsBeforeItsLockHoldingProofsAndRefusesBeforeRegistration(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("the seeded unknown outcome did not fire")
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	recorder := &orderRecorder{}
+	h.service.options.Presenter, h.service.options.Confirmer, h.service.options.Progress = recorder, recorder, recorder
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab"}); err != nil {
+		t.Fatalf("destroy: %v", err)
+	}
+	if want := []string{"present", "confirm", resolutionCheck, quiescenceCheck, "register"}; !slices.Equal(recorder.steps, want) {
+		t.Fatalf("a destroy took %v, want %v", recorder.steps, want)
+	}
+
+	live := newHarness(t, "artifact-server-lab", "machine-rhel-01")
+	if _, err := live.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	live.capability.quiescence = map[string]Quiescence{
+		"machine-rhel-01": {State: Live, Reason: "its domain is running", Stop: "bootwright machine stop --context lab --name rhel-01"},
+	}
+	registered := live.workspace.area.clone()
+	recorder = &orderRecorder{}
+	live.service.options.Presenter, live.service.options.Confirmer, live.service.options.Progress = recorder, recorder, recorder
+	_, err := live.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab"})
+	if code := firstCode(err); code != "lifecycle.live" {
+		t.Fatalf("destroy over a running machine = %q (%v)", code, err)
+	}
+	if want := []string{"present", "confirm", quiescenceCheck}; recorder.prompts != 1 || !slices.Equal(recorder.steps, want) {
+		t.Fatalf("a refused destroy asked %d times and took %v, want one prompt and %v", recorder.prompts, recorder.steps, want)
+	}
+	if len(live.capability.destroys) != 0 || !sameFiles(live.workspace.area, registered) {
+		t.Fatalf("a refused removal destroyed %v or changed durable operation state", live.capability.destroys)
+	}
+}
+
+// probingCapability is a capability whose quiescence is observed on the host.
+type probingCapability struct{ *testCapability }
+
+func (probingCapability) ProbesQuiescence() bool { return true }
+
+// A destroy's plan names the Machines its quiescence gate observes, so the
+// operator reads what to stop before confirming rather than after a refusal.
+// A capability whose quiescence is derived is not named, and an apply's plan
+// names none.
+func TestADestroyPlanNamesTheMachinesToStop(t *testing.T) {
+	machine := definition("machine-rhel-01")
+	machine.Kind, machine.Object, machine.Implementation = "Machine", "rhel-01", "machine-test-v1"
+	h := newPlannedHarness(t, nil)
+	artifacts := &testCapability{definitions: []reconciliation.BlockDefinition{definition("artifacts")}, secrets: []string{"artifact-server-tls"}}
+	machines := &testCapability{definitions: []reconciliation.BlockDefinition{machine}}
+	h.service.capabilities = boundResolver{
+		{Kind: "ArtifactServer", Implementation: "artifact-server-nginx-v1"}: artifacts,
+		{Kind: "Machine", Implementation: "machine-test-v1"}:                 probingCapability{machines},
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(h.presenter.presented) != 1 || len(h.presenter.presented[0].Stops) != 0 {
+		t.Fatalf("an apply's plan named Machines to stop: %+v", h.presenter.presented)
+	}
+	preview, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	if err != nil || preview.Verb != string(reconciliation.Destroy) || !slices.Equal(preview.Stops, []string{"rhel-01"}) {
+		t.Fatalf("destroy preview = %+v (%v), want rhel-01 to stop first", preview, err)
+	}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatalf("destroy: %v", err)
+	}
+	if presented := h.presenter.presented[len(h.presenter.presented)-1]; presented.Verb != "destroy" || !slices.Equal(presented.Stops, []string{"rhel-01"}) {
+		t.Fatalf("destroy presented %+v, want rhel-01 to stop first", presented)
+	}
 }

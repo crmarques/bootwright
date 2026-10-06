@@ -428,8 +428,10 @@ func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
 	}
 }
 
-// An unmanaged service is not this product's to publish through or resolve
-// against, because nothing proves it answers.
+// An unmanaged artifact server is not this product's to publish through,
+// because nothing proves it serves what the installation publishes. Name and
+// time services are another matter: an external one is used at the address it
+// declares.
 func TestOnlyManagedServicesAreUsed(t *testing.T) {
 	external := api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, api.MapValue(
 		text("management", "external"), text("machineRef", "controller"),

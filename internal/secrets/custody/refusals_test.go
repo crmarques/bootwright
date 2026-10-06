@@ -263,54 +263,101 @@ func TestGenerateReportsChangedAndUnchangedNames(t *testing.T) {
 	}
 }
 
+// ConfirmIn is how custody asks, so the fixture's confirmer answers it as it
+// answers Confirm.
+func (c *serviceConfirmer) ConfirmIn(ctx context.Context, action, object, _ string) error {
+	return c.Confirm(ctx, action, object)
+}
+
+// refusingConfirmer refuses every confirmation with its own diagnostic and
+// remembers what it was asked.
+type refusingConfirmer struct {
+	refusal error
+	asked   [][3]string
+}
+
+func (c *refusingConfirmer) Confirm(context.Context, string, string) error {
+	return errors.New("unexpected Confirm")
+}
+
+func (c *refusingConfirmer) ConfirmIn(_ context.Context, action, object, contextName string) error {
+	c.asked = append(c.asked, [3]string{action, object, contextName})
+	return c.refusal
+}
+
 // A replacement or a delete that was not confirmed, because the operator
-// declined it or no terminal could ask, names the Secret and the command that
-// repeats it with --yes, bound to the context, and writes nothing.
+// declined it or no terminal could ask, reports the confirmer's own refusal
+// unchanged, which names the Secret, its context and the command that repeats
+// it with --yes, and writes nothing. Without a confirmer custody names the
+// command itself.
 func TestAnUnconfirmedChangeNamesTheSecretAndTheCommandWithYes(t *testing.T) {
-	const review = "review it with bootwright secret check --context fixture, then run "
 	ctx := context.Background()
-	for name, decline := range map[string]func(*Service, *serviceConfirmer){
-		"declined":     func(_ *Service, c *serviceConfirmer) { c.decline = errors.New("confirmation was declined") },
-		"not asked":    func(_ *Service, c *serviceConfirmer) { c.decline = errors.New("requires interactive input") },
-		"no confirmer": func(s *Service, _ *serviceConfirmer) { s.confirmer = nil },
+	for name, refusal := range map[string]diagnostics.Diagnostic{
+		"declined": {Severity: "error", Code: "secret.store.conflict", Message: "secret replacement confirmation was declined; nothing changed",
+			Object: secretIdentity("token"), Remediation: "review it with bootwright secret check --context fixture, then repeat bootwright secret set --context fixture --name token with --yes"},
+		"not asked": {Severity: "error", Code: "secret.store.conflict", Message: "secret deletion confirmation requires an interactive terminal",
+			Object: secretIdentity("token"), Remediation: "review it with bootwright secret check --context fixture, then repeat bootwright secret delete --context fixture --name token with --yes"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			service, access, _, confirmer := serviceFixture(t, declarationYAML("token", ""))
+			service, access, _, _ := serviceFixture(t, declarationYAML("token", ""))
 			if _, err := service.Set(ctx, SetRequest{Name: "token", Input: secrets.Input{ValueFile: "value"}}); err != nil {
 				t.Fatal(err)
 			}
-			decline(service, confirmer)
+			confirmer := &refusingConfirmer{refusal: &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{refusal}}}
+			service.confirmer = confirmer
 			writes := access.session.writes
-			for _, probe := range []struct {
-				run  func() error
-				want diagnostics.Diagnostic
-			}{
-				{
-					run: func() error {
-						_, err := service.Set(ctx, SetRequest{Name: "token", Input: secrets.Input{ValueFile: "other"}})
-						return err
-					},
-					want: diagnostics.Diagnostic{Severity: "error", Code: "secret.store.conflict", Message: "Secret token was not replaced: the change was declined or could not be confirmed at a terminal",
-						Object: secretIdentity("token"), Remediation: review + "bootwright secret set --context fixture --name token --value-file <path> --yes"},
-				},
-				{
-					run: func() error {
-						_, err := service.Delete(ctx, DeleteRequest{Name: "token"})
-						return err
-					},
-					want: diagnostics.Diagnostic{Severity: "error", Code: "secret.store.conflict", Message: "Secret token was not deleted: the change was declined or could not be confirmed at a terminal",
-						Object: secretIdentity("token"), Remediation: review + "bootwright secret delete --context fixture --name token --yes"},
-				},
-			} {
-				if found := diagnostics.Of(probe.run()); !reflect.DeepEqual(found, []diagnostics.Diagnostic{probe.want}) {
-					t.Errorf("unconfirmed change = %+v, want %+v", found, probe.want)
+			_, setErr := service.Set(ctx, SetRequest{Name: "token", Input: secrets.Input{ValueFile: "other"}})
+			_, deleteErr := service.Delete(ctx, DeleteRequest{Name: "token"})
+			for _, err := range []error{setErr, deleteErr} {
+				if found := diagnostics.Of(err); !reflect.DeepEqual(found, []diagnostics.Diagnostic{refusal}) {
+					t.Errorf("unconfirmed change = %+v, want the confirmer's own %+v", found, refusal)
 				}
+			}
+			if want := [][3]string{{"replace secret", "token", "fixture"}, {"delete secret", "token", "fixture"}}; !reflect.DeepEqual(confirmer.asked, want) {
+				t.Fatalf("asked %v, want %v", confirmer.asked, want)
 			}
 			if access.session.writes != writes {
 				t.Fatalf("an unconfirmed change wrote %d times", access.session.writes-writes)
 			}
 		})
 	}
+	t.Run("no confirmer", func(t *testing.T) {
+		const review = "review it with bootwright secret check --context fixture, then run "
+		service, access, _, _ := serviceFixture(t, declarationYAML("token", ""))
+		if _, err := service.Set(ctx, SetRequest{Name: "token", Input: secrets.Input{ValueFile: "value"}}); err != nil {
+			t.Fatal(err)
+		}
+		service.confirmer = nil
+		writes := access.session.writes
+		for _, probe := range []struct {
+			run  func() error
+			want diagnostics.Diagnostic
+		}{
+			{
+				run: func() error {
+					_, err := service.Set(ctx, SetRequest{Name: "token", Input: secrets.Input{ValueFile: "other"}})
+					return err
+				},
+				want: diagnostics.Diagnostic{Severity: "error", Code: "secret.store.conflict", Message: "Secret token was not replaced: the change was declined or could not be confirmed at a terminal",
+					Object: secretIdentity("token"), Remediation: review + "bootwright secret set --context fixture --name token --value-file <path> --yes"},
+			},
+			{
+				run: func() error {
+					_, err := service.Delete(ctx, DeleteRequest{Name: "token"})
+					return err
+				},
+				want: diagnostics.Diagnostic{Severity: "error", Code: "secret.store.conflict", Message: "Secret token was not deleted: the change was declined or could not be confirmed at a terminal",
+					Object: secretIdentity("token"), Remediation: review + "bootwright secret delete --context fixture --name token --yes"},
+			},
+		} {
+			if found := diagnostics.Of(probe.run()); !reflect.DeepEqual(found, []diagnostics.Diagnostic{probe.want}) {
+				t.Errorf("unconfirmed change = %+v, want %+v", found, probe.want)
+			}
+		}
+		if access.session.writes != writes {
+			t.Fatalf("an unconfirmed change wrote %d times", access.session.writes-writes)
+		}
+	})
 }
 
 // A delete of a Secret with no current version changes nothing and asks

@@ -54,11 +54,9 @@ func newProjection() *projection {
 	return &projection{files: make(map[string]projectedFile), documentation: make(map[string][]byte), parents: make(map[string]bool), site: sitePackages}
 }
 
-func projectionFor(record catalogRecord) *projection {
+func projectionFor(record closureRecord) *projection {
 	p := newProjection()
-	if record.Bootstrap != nil {
-		p.site = record.Bootstrap.SitePackages
-	}
+	p.site = record.Bootstrap.SitePackages
 	return p
 }
 

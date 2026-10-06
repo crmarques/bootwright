@@ -215,7 +215,7 @@ confirmed setup:
 | `state/reservation.json` | Durable name-ownership evidence for interrupted creation and guarded deletion. |
 | `state/mutation.json` | Lifecycle ownership and operation evidence; missing or unknown evidence prevents destructive cleanup. |
 | `state/operations/` | [Reconciliation-owned operation records and logs](state-reconciliation.md#operation-records). Workspace supplies the held area and its publication primitives; it never interprets their content. |
-| `state/runs/` | Retained adapter output of [bounded runs](cli/output.md#bounded-run-output), in an area Workspace supplies and never interprets; removed with the context. |
+| `state/runs/` | Retained adapter output of [bounded runs](cli/output.md#bounded-run-output), in an area Workspace supplies and never interprets. The area keeps the newest runs the bounds table below states: before a run creates its directory, the oldest runs no live run holds are removed, each only while it holds nothing but its own `run.output`, and an entry not named as a run is neither counted nor removed. A run that cannot hold the directory it created removes it (`TestARunThatCannotOpenLeavesNoDirectory`). Runs are removed with the context. |
 | `state/trust/hosts.json` | The context-managed SSH host-key trust an [SSH session](cli.md#machine-ssh-sessions) proves a Machine against when it declares no `knownHostsRef` and Bootwright did not install it: one public-key record per Machine, and one key per address. Written only by `machine trust` and by an explicitly confirmed first use, published atomically against its exact prior content, and removed with the context. A write that takes over the endpoint of a Machine the context no longer declares removes that Machine's record in the same write. It holds no confidential material. |
 | `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring-v4). |
 
@@ -446,8 +446,8 @@ Secrets limits additionally bound their trees.
 | Revisions per context | 4096 | `maxRevisions` in `internal/workspace/contextfs/store.go` |
 | Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_records.go` |
 | Lifecycle operations one context retains | 1024 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
-| Entries in one context's lifecycle operation area | 8192 | `MaxEntries` in `internal/reconciliation/operationstore/records.go` |
-| Bytes in one context's lifecycle operation area | 64 MiB | `MaxBytes` in `internal/reconciliation/operationstore/records.go` |
+| Entries in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | 8192 | `MaxEntries` in `internal/reconciliation/operationstore/records.go` |
+| Bytes in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | 64 MiB | `MaxBytes` in `internal/reconciliation/operationstore/records.go` |
 | One lifecycle adapter invocation whose request states no deadline | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
 | The longest deadline a lifecycle adapter request may state | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
 | One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
@@ -457,6 +457,7 @@ Secrets limits additionally bound their trees.
 | Bytes in an installer media name | 250 | `MaxMediaName` in `internal/managedos/media.go` |
 | Installer media stages at once, live, retained or abandoned | 16 | `maxStagedMedia` in `internal/workspace/contextfs/media_linux_amd64.go` |
 | [Setup runs](contexts/controller-record.md#setup-runs) the controller directory keeps | 8 | `maxSetupRuns` in `internal/workspace/contextfs/controller_runs_linux_amd64.go` |
+| [Bounded runs](cli/output.md#bounded-run-output) one context's runs area keeps | 16 | `maxBoundedRuns` in `internal/workspace/contextfs/runs_linux_amd64.go` |
 
 `TestDocumentedBoundsMatchCode` compares each value with its code, and each
 deadline with the one its runner passes to `context.WithTimeout`: the lifecycle
@@ -509,7 +510,22 @@ refuses at its registration, or stops part way through, only once the records
 and logs written since that apply was admitted used them up. A bounded run's
 output lies in an area of its own, which holds no records, and only its own
 bound cuts it. A record or log write that would take the area past its entries
-or its 64 MiB refuses `context.state`.
+or its 64 MiB refuses `context.state`, naming the lifecycle operation, bounded
+run or SSH trust storage it would overfill. The operation area, which only its
+transaction writes, and the SSH-trust area, which only its trust mutation
+writes, measure their subtree at their first write and then count their own
+writes; a write that fails may still have landed, so the next one measures
+again (`TestTheOperationAreaMeasuresItsSubtreeOncePerTransaction`,
+`TestAFailedOperationWriteMeasuresAgain`). Every bounded run of the context
+writes the runs area beside the others under the shared lock, so it measures
+every write (`TestTheRunsAreaMeasuresEveryWrite`). A run that leaves its name
+while that measure walks inside it, as one another run's retention removes
+does, is absent from it, as a run gone before the walk reached it is, while
+one replaced at its name still refuses
+(`TestARunGoneWhileTheRunsAreaIsMeasuredIsAbsent`). The area's retention keeps
+the runs it holds within its byte bound and far below its entry bound, so
+`machine` power commands keep working however many ran before
+(`TestBoundedRunsKeepWorkingPastTheOldEntryWall`).
 
 No command prunes the operations a context retains, so a refusal at the
 retained-operation bound names the exits that exist, from what a `destroy`

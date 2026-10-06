@@ -7,8 +7,10 @@ Plan
        create-container-unit
   2. realize the libvirt host of lab-libvirt on controller [substrates] [done] [after 1]
        create-libvirt-pool lab-libvirt
+  3. install the operating system of rhel-01 [machines] [done] [data-loss] [after 2]
+       install-operating-system rhel-01
 
-  Concurrency  2 waves, up to 1 step at once
+  Concurrency  3 waves, widest 1 step
 operation: op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
 verb: plan
 state: preview

@@ -180,7 +180,7 @@ func TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses(t *testing.T
 			if reported[0].Message != want {
 				t.Fatalf("refusal = %q, want %q", reported[0].Message, want)
 			}
-			if reported[0].Remediation != "review its durable state with bootwright status" {
+			if reported[0].Remediation != "review its durable state with bootwright status --context lab" {
 				t.Fatalf("remediation = %q", reported[0].Remediation)
 			}
 			// Nothing was planned, presented, bound, locked, probed or removed.

@@ -7,6 +7,7 @@ Result
   [PENDING]  install the operating system of rhel-01
 
   Logs  /var/lib/bootwright/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs
+  Next  bootwright apply --context lab
 operation: op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
 verb: apply
 state: failed

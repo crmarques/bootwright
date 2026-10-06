@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -521,5 +522,102 @@ func TestMachineVirtualMediaDisableVerificationIsAnExplicitException(t *testing.
 	}
 	if issues := Validate(normalized, catalog); len(issues) != 0 {
 		t.Fatalf("the effective exception refused: %v", issues)
+	}
+}
+
+// A Bootwright-installed Anaconda Machine installs over the one static IPv4
+// address the Kickstart carries. DHCP installation is not supported, so a
+// network that would leave the installer to lease its address, or an IPv6
+// install address, refuses at admission with the change that fixes it.
+func TestAnacondaInstallationRequiresAStaticIPv4Address(t *testing.T) {
+	const field = "$.spec.network.installAddressRef"
+	build := func(osSpec, interfaces api.Value, cidr string, addresses api.Value) (api.Object, api.Catalog) {
+		machine, catalog := fixture()
+		var routes, nics []api.Value
+		for i, iface := range interfaces.Items() {
+			routes = append(routes, m("destination", "0.0.0.0/0", "next-hop-interface", iface.Get("name").Text()))
+			nics = append(nics, m("name", iface.Get("name").Text(), "macAddress", fmt.Sprintf("02:00:00:00:00:%02x", i+1)))
+		}
+		network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", cidr)), "nmstate", m("interfaces", interfaces, "routes", m("config", list(routes...)))))
+		machine = machine.WithSpec(machine.Spec().With("os", osSpec).WithPath(addresses, "network", "addresses").WithPath(list(nics...), "hardware", "nics"))
+		objects := []api.Object{machine, network, object(api.MachineInstallProfile, "rhel", m("installer", m("anaconda", m("imageRef", "image"))))}
+		for _, existing := range catalog.Objects() {
+			if existing.Kind() != api.Machine && existing.Kind() != api.NetworkConfig {
+				objects = append(objects, existing)
+			}
+		}
+		normalized, _ := Normalize(machine, api.NewCatalog(objects))
+		objects[0] = normalized
+		return normalized, api.NewCatalog(objects)
+	}
+	at := func(issues []api.Issue) []api.Issue {
+		var found []api.Issue
+		for _, issue := range issues {
+			if issue.Field == field {
+				found = append(found, issue)
+			}
+		}
+		return found
+	}
+	installed := m("provided", false, "installProfileRef", "rhel", "install", m("rootDeviceHints", m("deviceName", "/dev/sda")))
+	dhcp := list(m("name", "eth0", "type", "ethernet", "ipv4", m("enabled", true, "dhcp", true)))
+	contactOnly := list(m("name", "fqdn", "address", "node.example.test"))
+	refused := map[string]func() (api.Object, api.Catalog){
+		"a DHCP-only network": func() (api.Object, api.Catalog) { return build(installed, dhcp, "192.0.2.0/24", contactOnly) },
+		"no network configuration": func() (api.Object, api.Catalog) {
+			machine, catalog := fixture()
+			machine = machine.WithSpec(machine.Spec().With("os", installed).With("network", m("addresses", contactOnly)))
+			objects := []api.Object{machine, object(api.MachineInstallProfile, "rhel", m("installer", m("anaconda", m("imageRef", "image"))))}
+			for _, existing := range catalog.Objects() {
+				if existing.Kind() != api.Machine {
+					objects = append(objects, existing)
+				}
+			}
+			normalized, _ := Normalize(machine, api.NewCatalog(objects))
+			objects[0] = normalized
+			return normalized, api.NewCatalog(objects)
+		},
+		"an IPv6 install address": func() (api.Object, api.Catalog) {
+			return build(installed, list(m("name", "eth0", "type", "ethernet", "ipv6", m("enabled", true))), "2001:db8::/64",
+				list(m("name", "primary", "address", "2001:db8::11/64", "interface", "eth0")))
+		},
+	}
+	for name, setup := range refused {
+		t.Run(name, func(t *testing.T) {
+			found := at(Validate(setup()))
+			remedy := "assign an IPv4 address with its prefix to the install interface in spec.network.addresses and select it with spec.network.installAddressRef"
+			// No install interface exists before a network configuration does,
+			// so its remedy selects one first.
+			if name == "no network configuration" {
+				remedy = "select a network configuration with spec.network.configRef or declare one in spec.network.inline, then " + remedy
+			}
+			if len(found) != 1 || found[0].Code != "api.invariant" ||
+				found[0].Message != "a Bootwright-installed Anaconda Machine installs with one static IPv4 address, and DHCP installation is not supported" ||
+				found[0].Remediation != remedy {
+				t.Fatalf("refusal at %s = %#v, want the static IPv4 rule and its remedy", field, found)
+			}
+		})
+	}
+	admitted := map[string]func() (api.Object, api.Catalog){
+		"a provided Machine on DHCP": func() (api.Object, api.Catalog) { return build(m("provided", true), dhcp, "192.0.2.0/24", contactOnly) },
+		"a cluster node on DHCP": func() (api.Object, api.Catalog) {
+			return build(m("provided", false, "install", m("rootDeviceHints", m("deviceName", "/dev/sda"))), dhcp, "192.0.2.0/24", contactOnly)
+		},
+		"a static IPv4 install address": func() (api.Object, api.Catalog) {
+			return build(installed, list(m("name", "eth0", "type", "ethernet")), "192.0.2.0/24",
+				list(m("name", "fqdn", "address", "node.example.test"), m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")))
+		},
+	}
+	for name, setup := range admitted {
+		t.Run(name, func(t *testing.T) {
+			if found := at(Validate(setup())); len(found) != 0 {
+				t.Fatalf("refused at %s: %#v", field, found)
+			}
+		})
+	}
+	ambiguous, catalog := build(installed, list(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet")), "192.0.2.0/24",
+		list(m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0"), m("name", "secondary", "address", "192.0.2.12/24", "interface", "eth1")))
+	if found := at(Validate(ambiguous, catalog)); len(found) != 1 || !strings.Contains(found[0].Message, "ambiguous") {
+		t.Fatalf("an ambiguous install address refused %#v, want its ambiguity alone", found)
 	}
 }

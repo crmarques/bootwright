@@ -108,7 +108,7 @@ func (s Service) lostBinding(ctx context.Context, name string, decided transitio
 	}
 	return failure("lifecycle.state",
 		lostBindingMessage(decided.basis.record, binding, why, objects),
-		"restore the context's keyring from a complete backup and repeat bootwright "+string(decided.verb)+
+		"restore the context's keyring from a complete backup and repeat "+contextCommand(name, string(decided.verb))+
 			", or run "+lostBindingExit(name)+" and then remove the objects named here by hand")
 }
 
@@ -234,6 +234,6 @@ func (s Service) nameLostBinding(ctx context.Context, name string, result *Statu
 	result.Contradictions = append(result.Contradictions, lostBindingMessage(frozen.operation, frozen.binding, why, frozen.objects))
 	result.NextSteps = []string{lostBindingExit(name)}
 	if frozen.finalizes {
-		result.NextSteps = []string{"bootwright apply", lostBindingExit(name)}
+		result.NextSteps = []string{contextCommand(name, string(reconciliation.Apply)), lostBindingExit(name)}
 	}
 }

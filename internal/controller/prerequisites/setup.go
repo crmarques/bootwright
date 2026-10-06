@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"slices"
-	"strings"
 )
 
 func object(values map[string]any) json.RawMessage {
@@ -19,9 +18,6 @@ func newReceipt(i inspection) (SetupReceipt, error) {
 	actions := []SetupAction{{ID: "execution-bundle", Request: object(map[string]any{"catalogDigest": i.definition.CatalogDigest, "readyBefore": i.bundle.Ready}), Phase: "planned", Evidence: object(map[string]any{})}}
 	if i.selection.ContainerRuntime() {
 		actions = append(actions, SetupAction{ID: "container-runtime", Request: object(map[string]any{"readyBefore": i.dependenciesReady(), "version": i.definition.Runtime.Version}), Phase: "planned", Evidence: object(map[string]any{})})
-	}
-	if i.view.Context.Name != "" {
-		actions = append(actions, SetupAction{ID: "controller-binding", Request: object(map[string]any{"boundBefore": i.bound, "machine": i.selection.MachineName()}), Phase: "planned", Evidence: object(map[string]any{})})
 	}
 	receipt := SetupReceipt{CatalogDigest: i.definition.CatalogDigest, Context: i.view.Context, Egress: i.route(), Sources: slices.Clone(i.definition.Sources), Actions: actions, Status: "pending"}
 	if i.definition.Bootstrap != nil {
@@ -55,15 +51,11 @@ func (i inspection) matchesActions(actions []SetupAction) bool {
 		if json.Unmarshal(action.Request, &actual) != nil || json.Unmarshal(expected.Actions[index].Request, &required) != nil {
 			return false
 		}
-		before := "readyBefore"
-		if action.ID == "controller-binding" {
-			before = "boundBefore"
-		}
-		value, valid := actual[before].(bool)
+		value, valid := actual["readyBefore"].(bool)
 		if !valid {
 			return false
 		}
-		required[before] = value
+		required["readyBefore"] = value
 		if !bytes.Equal(action.Request, object(required)) {
 			return false
 		}
@@ -126,12 +118,12 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 			event.Phase, event.Action, event.Step, event.Steps = SetupPhase, action.ID, index+1, len(state.Receipt.Actions)
 			s.report(ctx, &current.report, event)
 		}
-		ready := action.ID == "execution-bundle" && current.bundle.Ready || action.ID == "container-runtime" && current.dependenciesReady() || action.ID == "controller-binding" && current.bound
+		ready := action.ID == "execution-bundle" && current.bundle.Ready || action.ID == "container-runtime" && current.dependenciesReady()
 		var request map[string]any
 		if json.Unmarshal(action.Request, &request) != nil {
 			return failure("controller.unknown", "retained setup request is invalid", "restore the exact setup evidence")
 		}
-		if !ready && (request["readyBefore"] == true || request["boundBefore"] == true) {
+		if !ready && request["readyBefore"] == true {
 			return failure("controller.unknown", "a prerequisite recorded as ready before setup is missing", "restore the original prerequisite before resolving the pending setup")
 		}
 		if action.Phase == "observed" && (action.Outcome == "changed" || action.Outcome == "unchanged") {
@@ -161,16 +153,9 @@ func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *in
 		progress(ProgressEvent{Status: outcome})
 		action.Phase, action.Outcome = "observed", outcome
 		action.Evidence = evidence
-		if action.ID != "controller-binding" {
-			if err := publish(ctx, tx, state); err != nil {
-				return err
-			}
+		if err := publish(ctx, tx, state); err != nil {
+			return err
 		}
-	}
-	if current.view.Context.Name != "" && !slices.ContainsFunc(state.Bindings, func(binding ControllerBinding) bool { return binding.Context == current.view.Context.Name }) {
-		digest, _ := current.host.PrivateDigest()
-		state.Bindings = append(state.Bindings, ControllerBinding{Context: current.view.Context.Name, Machine: current.selection.MachineName(), HostDigest: digest})
-		slices.SortFunc(state.Bindings, func(a, b ControllerBinding) int { return strings.Compare(a.Context, b.Context) })
 	}
 	state.Receipt.Status = "complete"
 	return publish(ctx, tx, state)
@@ -290,8 +275,6 @@ func (s Service) performAction(ctx context.Context, tx StorageTransaction, curre
 				err = failure("controller.unknown", "container runtime postcondition could not be verified", "resolve the native transaction before repeating setup")
 			}
 		}
-	case "controller-binding":
-		current.bound = true
 	default:
 		err = failure("controller.unknown", "setup contains an unsupported retained action", "restore the original compatible executable")
 	}

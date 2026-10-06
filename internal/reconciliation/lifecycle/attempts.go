@@ -178,11 +178,11 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	case resolvedEffect == reconciliation.EffectNoEffect:
 		return state, failure("lifecycle.state",
 			"the frozen effect was never performed",
-			"repeat the operation to perform it")
+			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, false))
 	case resolvedEffect == reconciliation.EffectPartial:
 		return state, failure("lifecycle.state",
 			"the frozen effect is partly realized and owned by this context",
-			"repeat the operation to converge it, or destroy what it owns")
+			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, true))
 	}
 	return state, unresolvedFailure(block.ID, s.explain(block, observation.Evidence))
 }
@@ -238,10 +238,10 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 			}
 		}
 		execution := Execution{
-			Operation: operation.ID, Attempt: attempt, Resolution: resolution, Block: block, Launch: launch, Bundle: approved.location, Area: approved.area,
-			Material: material, Proved: proved,
+			Operation: operation.ID, Context: tx.Identity().Name, Attempt: attempt, Resolution: resolution, Block: block,
+			Launch: launch, Bundle: approved.location, Area: approved.area, Material: material, Proved: proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
-				return s.locateTool(inner, store, view, operation, plan, tool)
+				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)
 			},
 			Stage: stage,
 			// A failed record latches the boundary, which cancels this run.
@@ -275,12 +275,12 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 // the one a removal takes back, because the stage's removal retains and
 // proves no closure, and recovering the closure again from the host's shared
 // sources would move a latest client to a release another context retained.
-func (s Service) locateTool(ctx context.Context, store OperationStore, view prerequisites.StorageView, operation operationstore.Operation, plan reconciliation.Plan, tool controller.InstalledTool) (string, error) {
+func (s Service) locateTool(ctx context.Context, store OperationStore, view prerequisites.StorageView, contextName string, operation operationstore.Operation, plan reconciliation.Plan, tool controller.InstalledTool) (string, error) {
 	index := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.Stage == reconciliation.StageController })
 	if index < 0 {
 		return "", failure("controller.state",
 			"the "+tool.Executable+" of release "+tool.Version+" is not installed on this controller",
-			"run bootwright apply --stage controller")
+			"run "+contextCommand(contextName, string(reconciliation.Apply), "--stage", string(reconciliation.StageController)))
 	}
 	stage := plan.Blocks[index]
 	capability, ok := s.capabilities.Resolve(stage.Kind, stage.Implementation)
@@ -343,7 +343,8 @@ func (s Service) project(ctx context.Context, tx Transaction, verb reconciliatio
 // keeps it even when the latch could not write it. A completed removal
 // publishes no evidence here: its pristine evidence follows the release of its
 // Secret bindings, outside this transaction, so evidence that is not yet
-// pristine marks a removal whose finalization did not complete.
+// pristine marks a removal whose finalization did not complete. An operation
+// that did not complete also names the exact command its records call for.
 func (s Service) finish(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, boundary, faulted bool, result *OperationResult) (*OperationResult, error) {
 	next, err := reconciliation.NextOperationState(orderedStates(plan, states), boundary)
 	if err != nil {
@@ -373,27 +374,35 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 		result.Logs = logs
 	}
 	result.Receipt = Receipt{Operation: operation.ID, Verb: string(operation.Verb), State: string(next), Next: nextAction(current, plan, states)}
-	if next == reconciliation.OperationDone || next == reconciliation.OperationPaused {
+	if next == reconciliation.OperationDone {
 		return result, nil
 	}
-	return result, terminalFailure(operation.Verb, next)
+	result.NextCommand = continuationCommand(tx.Identity().Name, current, plan, states)
+	if next == reconciliation.OperationPaused {
+		return result, nil
+	}
+	return result, terminalFailure(tx.Identity().Name, current, plan, states)
 }
 
-// terminalFailure reports what an operation that did not complete asks for. An
-// apply names the removal beside the resolution, because the removal proves the
-// same effects itself and is the road out when the repair is to the automation
-// the operation froze. A removal offers only itself.
-func terminalFailure(verb reconciliation.Verb, state reconciliation.OperationState) error {
-	if state == reconciliation.OperationUnknown {
-		remediation := "repeat the operation to resolve it from live evidence"
-		if verb == reconciliation.Apply {
-			remediation += ", or destroy what it owns"
-		}
-		return failure("lifecycle.unknown", "an effect has an unresolved outcome", remediation)
+// terminalFailure reports what an operation that did not complete asks for, as
+// the exact command its records call for. An unknown apply names the removal
+// beside the resolution, because the removal proves the same effects itself
+// and is the road out when the repair is to the automation the operation
+// froze. A failed removal is replaced rather than continued, and says so.
+func terminalFailure(contextName string, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState) error {
+	command := continuationCommand(contextName, operation, plan, states)
+	switch {
+	case operation.State == reconciliation.OperationUnknown && operation.Verb == reconciliation.Apply:
+		return failure("lifecycle.unknown", "an effect has an unresolved outcome",
+			"resolve it with "+command+", which observes that effect before anything else starts, or take back what it started with "+
+				contextCommand(contextName, string(reconciliation.Destroy)))
+	case operation.State == reconciliation.OperationUnknown:
+		return failure("lifecycle.unknown", "an effect has an unresolved outcome", "resolve it with "+command)
+	case nextAction(operation, plan, states) == string(reconciliation.Destroy):
+		return failure("lifecycle.state", "the destroy did not complete",
+			"repeat "+command+", which replaces it with a fresh removal of what it has not proved gone")
 	}
-	return failure("lifecycle.state",
-		"the operation did not complete",
-		"repeat the operation to continue it")
+	return failure("lifecycle.state", "the "+string(operation.Verb)+" did not complete", "continue it with "+command)
 }
 
 // nextAction names what an operation's own records call for, which is nothing
@@ -415,20 +424,6 @@ func nextAction(operation operationstore.Operation, frozen reconciliation.Plan, 
 		return "resolve"
 	}
 	return "continue-" + string(operation.Verb)
-}
-
-// nextCommand is the command an operator actually runs for a next action. The
-// action names a transition rather than a verb this executable offers: a
-// continuation and a resolution are both reached by repeating the operation's
-// own verb, and a completed one asks for nothing at all.
-func nextCommand(verb reconciliation.Verb, action string) string {
-	switch action {
-	case "none":
-		return ""
-	case "resolve", "continue-apply", "continue-destroy":
-		return "bootwright " + string(verb)
-	}
-	return "bootwright " + action
 }
 
 func blockResults(plan reconciliation.Plan, states map[string]reconciliation.BlockState) []BlockResult {

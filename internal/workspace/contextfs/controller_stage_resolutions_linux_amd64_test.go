@@ -63,6 +63,10 @@ func (n *solvingAgain) Check(context.Context, prerequisites.NativeResolvedPlan) 
 	return prerequisites.NativePresence{Ready: true, Installed: []prerequisites.NativeRootPresence{{Key: "libvirt"}}}, nil
 }
 
+func (n *solvingAgain) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
+	return prerequisites.OperatorPresence{}, nil
+}
+
 func (n *solvingAgain) Clients(context.Context, prerequisites.ClientInstallation) (prerequisites.ActionResult, error) {
 	n.installed = true
 	return prerequisites.ActionResult{Outcome: "changed"}, nil
@@ -254,8 +258,13 @@ func (h readyHost) Identity(context.Context) (controller.InstalledHostIdentity, 
 	return h.identity, nil
 }
 
-func (h readyHost) Select(prerequisites.Platform, prerequisites.NativeRequirements) (prerequisites.Definition, error) {
-	return prerequisites.CloneDefinition(h.definition), nil
+func (h readyHost) Admit(prerequisites.Platform) error { return nil }
+
+// unresolved resolves nothing: a ready host's setup consults no publisher.
+type unresolved struct{}
+
+func (unresolved) Resolve(context.Context, prerequisites.Platform, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.BootstrapDefinition, []diagnostics.Diagnostic, error) {
+	return prerequisites.BootstrapDefinition{}, nil, diagnostics.NewFailure("controller.setup", "a ready host's setup resolved Python and Ansible", "")
 }
 
 func (readyHost) ValidateEgress(prerequisites.SetupEgress) error { return nil }
@@ -266,6 +275,10 @@ func (readyHost) Inspect(context.Context, prerequisites.BundleArea, prerequisite
 
 func (readyHost) Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
 	return prerequisites.NativePresence{Ready: true}, nil
+}
+
+func (readyHost) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
+	return prerequisites.OperatorPresence{Ready: true}, nil
 }
 
 // A controller stage's resolution names no bundle area, as the one a canceled
@@ -287,7 +300,7 @@ func TestSetupsPurgeLeavesAControllerStageResolution(t *testing.T) {
 		t.Fatalf("the stage retained no resolution without an area beside the setup's: %d resolutions over %#v", len(held), before.Areas)
 	}
 	host := readyHost{identity: before.State.Host, definition: *before.State.Receipt.Definition}
-	service := prerequisites.New(store, host, host, host, host, nil, prerequisites.Options{NativeInspector: host})
+	service := prerequisites.New(store, host, host, host, host, nil, prerequisites.Options{Bootstrap: unresolved{}, Native: &solvingAgain{}, NativeInspector: host})
 	for purge := 1; purge <= 2; purge++ {
 		report, err := service.Setup(context.Background(), prerequisites.SetupRequest{PurgeOldBundles: true})
 		if err != nil || report.Outcome != "unchanged" || len(report.RetiredBundles) != 0 {

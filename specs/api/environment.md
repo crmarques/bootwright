@@ -420,6 +420,43 @@ Additional installation trust belongs to each
 defaults can share that consumer field using its normal replacement rules.
 Each service declares any connection trust it requires separately.
 
+The controller Machine's route follows the grammar every acquisition route
+shares, the one the [context-free route](../controller.md#the-context-free-acquisition-route)
+reads from the environment. Admission refuses, on this Environment at
+`spec.controller.machineRef` with `api.value`, each `spec.proxy.noProxy` entry
+of the controller Machine that is not `*`, a host name, a `.domain` or
+`*.domain` suffix, an IP address or a CIDR block, each name or address
+optionally with `:port` and an IPv6 address bracketed before one; and each
+`connection.httpProxy` or `connection.httpsProxy` of the external Proxy that
+Machine selects that is not a bare `http` or `https` endpoint: at most 4096
+ASCII bytes with a host and no `userinfo`, path, query or fragment. Its
+diagnostic names the field, never the value, and a value the Proxy's own
+schema already refuses is left to that refusal. This grammar holds a Proxy's
+endpoints only where the controller selects it. Admission never refuses a
+shape only this executable cannot realize: those are the controller's, and
+refuse before registration as the table below states.
+
+### Refusal table
+
+Each row is one controller shape this executable cannot realize, and
+`TestControllerRefusalTableMatchesUnsupported` holds the controller stage
+capability's `Unsupported` to it. A plan or apply refuses each one before
+registration with `lifecycle.unsupported` naming this Environment, and
+controller selection refuses the first one it meets with
+`controller.unsupported` on the declaring object and field. Its reason and
+remedy are the diagnostic's message and remediation, in which `<machine>` is
+the controller Machine, `<proxy>` the Proxy it selects and `<index>` the
+position of the refused capability.
+
+| Refusal | Path | Reason | Remedy |
+| --- | --- | --- | --- |
+| Another capability | `spec.capabilities[<index>]` of the controller `Machine` is neither `container-runtime` nor `libvirt` | `this executable's controller stage prepares only the container-runtime and libvirt capabilities, and <machine> declares another at spec.capabilities[<index>]` | `remove spec.capabilities[<index>] from <machine>` |
+| Too many bypass entries | more than 128 `spec.proxy.noProxy` entries on the controller `Machine` | `this executable's controller route carries at most 128 bypass entries, and <machine> declares more in spec.proxy.noProxy` | `keep at most 128 entries in spec.proxy.noProxy on <machine>` |
+| Managed Proxy | `spec.proxy.proxyRef` of the controller `Machine` names a managed `Proxy` | `this executable's controller stage acquires only directly or through an external Proxy that is already ready, and <machine> selects the managed <proxy>` | `select direct: {} or an external Proxy in spec.proxy on <machine>` |
+| Proxy authentication | `spec.connection.auth.proxyAuthRef` on the selected external `Proxy` | `this executable's controller stage acquires through no authenticated proxy, and <proxy> sets spec.connection.auth.proxyAuthRef` | `select direct: {} or an external Proxy that needs no authentication in spec.proxy on <machine>` |
+| Private trust | `spec.connection.trustBundleRef` on the selected external `Proxy` | `this executable's controller stage trusts only the host's system trust store, and <proxy> sets spec.connection.trustBundleRef` | `select direct: {} or an external Proxy without spec.connection.trustBundleRef that the host's system trust store verifies in spec.proxy on <machine>` |
+| HTTP proxy alone | `spec.connection.httpProxy` without `spec.connection.httpsProxy` on the selected external `Proxy` | `every dependency source is HTTPS, so the spec.connection.httpProxy of <proxy> alone selects no controller acquisition route` | `set connection.httpsProxy on <proxy> to the proxy endpoint; every dependency source is HTTPS` |
+
 ## Lifecycle rescue declaration
 
 `spec.lifecycle` contains only optional `rescue`. When present, `rescue`

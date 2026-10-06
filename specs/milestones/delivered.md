@@ -1159,7 +1159,8 @@ reservations order and refuse as the spec says (B33).
 **Guard tests:** `TestAVerbOverALostIndexRefusesAndStatusNamesWhatNoIndexAccountsFor`,
 `TestAFailedRemovalWhoseBlocksAreAllDoneIsFinalizedByTheDestroy`,
 `TestRefusedFreshAppliesReclaimTheirClaims`,
-`TestABoundedRunWhoseBindingARegistrationCollectedBindsAgain`,
+`TestARegistrationRacingABoundedRunCollectsNothingOfIt` (X41 replaced the
+binding retry test X26 added),
 `TestEvidenceReportsWhatAResolutionProved`,
 `TestResolutionOutcomeRecordsWhatTheCapabilityProved`,
 `TestTheMarginAllowsEveryControllerCallAnApplyMakes`,
@@ -1903,7 +1904,7 @@ refuses ([B226](backlog.md#b226)); a bind-time refusal naming its Secret
 ([B285](#x40--machine-commands-status-secrets-and-validate-refusals)); the emulator's URI rendered as data
 ([B295](m1.md#b295)); the FIPS key types of the bare-metal README
 ([B73](m4.md#b73)); a cancellation inside a binding's publication, which
-bounded runs lose with [B337](m1.md#b337); and a context whose reservation
+bounded runs lose with [B337](#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs); and a context whose reservation
 is damaged or that owns live objects, now clauses of
 [B325](backlog.md#b325). Under D48 every other follow-up was parked: B339
 to B356.
@@ -2098,7 +2099,8 @@ nine join M1 on X46. A Secret version stored before X40 stays current only
 while its declaring path and document index are unchanged, so the first
 re-import from another directory stales it once ([B362](backlog.md#b362)).
 Tracked elsewhere: the confirmation prompts of `secret set`, `delete` and
-rotation, which still call the Secret a context ([B287](m1.md#b287), D75);
+rotation, which still call the Secret a context
+([B287](#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs), D75);
 the `media list` row ([B300](m1.md#b300)); the `secret set` help
 ([B95](m1.md#b95)); codes the registry scan cannot see
 ([B162](backlog.md#b162)); `auth.operatorIdentity` under the invoking account
@@ -2107,3 +2109,279 @@ the `media list` row ([B300](m1.md#b300)); the `secret set` help
 now part of [B352](backlog.md#b352); and the defaulted fleet-key duplicate on
 an installed Machine ([B294](m1.md#b294)). Under D48 (D116) the other
 follow-ups were parked: B362 to B369 and B374 to B376.
+
+### X41 — lifecycle results, the controller stage, installation shapes and bounded runs
+
+**Owner:** State reconciliation and CLI, Controller, Managed OS with
+Infrastructure services and Container cluster, Workspace and Secrets.
+Integrated on local `main` on 2026-10-06 as one commit. **Items:** B201,
+B287, B94, B240, B241, B257, B288, B249, B289, B24, B225, B337.
+**Decisions:** D56, D57, D66, D74 to D85, D106.
+
+**Outcome, B287:** lifecycle results name the command that comes next. A
+paused, failed, unknown or running apply or destroy closes with a `Next` line,
+such as `bootwright apply --context lab`, that carries `--authorize` for every
+token the frozen plan consumes, and `status` offers the same commands. Every
+command a lifecycle remedy or next step names carries `--context` (D66), as do
+the libvirt stop command and the pre-boot refusals. An apply or destroy
+interrupted after it registered its operation writes its result, its logs, its
+`Next` line and its receipt, then `runtime.interrupted`, and exits 130. A
+failed attempt's remedy names its block and its attempt output under the
+operation's logs, which root reads. Status and the continuation and removal
+refusals name the registering build, `devel (<commit>)` for a commit-only
+record, and the executable now records its commit. Every plan presentation
+marks the steps that consume `--authorize data-loss` and closes with a
+`Requires` field naming them, except a finalization's preview, which needs no
+token; a missing token refuses after the plan is shown and before the prompt,
+naming the steps and the exact command that passes. The plan's width reads
+"4 waves, widest 5 steps" and says when this build starts one block at a time,
+and a failed plan write exits 1 instead of a fallback `runtime.internal`.
+Under `--stage` the preview marks what the next apply works first (resolve,
+retry or start), and the stage refusal names the exact apply that widens the
+selection, with the plan's tokens. Confirmations name the object and context
+they act on and keep each consumer's code: `controller.setup`, `media.store`,
+`lifecycle.state`, `trust.identity`, `secret.store.conflict` for a Secret
+replacement, deletion or rotation, and `machine.power` (D75). A declined or
+non-interactive one gives its reason and, as its remedy, the operator's own
+invocation repeated with `--yes`, every flag kept and `--context` first, with
+a placeholder for a URL or username part, so following it never does more
+than the reviewed plan. Destroy's lock-holding proofs follow the prompt, which
+a test pins, and a fresh destroy's plan closes with `Stop first` naming the
+Machines whose quiescence is observed on the host (D76). `machine exec` and
+`rsh` own their exit status: Bootwright's refusals before a session opens, and
+a non-interactive sudo refusal before it starts, exit 255, and a session's own
+status wins over an interrupt (D74). A continuation of a context whose
+controller binding is gone names an exit that works: the destroy that takes
+back what an incomplete apply or a failed destroy owns, then the apply that
+binds again, or a restore of the controller state; for a running, paused or
+unknown removal, that restore or the context's deletion. `make build` sets
+`CGO_ENABLED=0` and yields an executable with no dynamic dependencies.
+
+**Outcome, B201:** a failed destroy's remedy names the destroy that replaces
+it with a fresh removal of what it has not proved gone; `status` no longer
+lists a failed destroy's lost block record as a contradiction, while a running
+or unknown destroy's still counts; and the media lock refusal says a
+repetition re-verifies the retained image, while a rewritten retained stage's
+refusal says it was removed, so repeating acquires it again.
+
+**Outcome, B257 and B241:** the controller clients' refusal helper sets its
+remedy as the remediation instead of a source path, and every clients refusal
+names one. Native resolution and controller Ansible failures reached from the
+controller stage keep their codes and name
+`bootwright apply --stage controller --context <name>`, while setup keeps its
+own rerun; preflight scopes a target-tool selection failure and a libvirt
+presence failure to the stage; an unbound context with no controller stage is
+sent to its first `apply --context`, which binds it; and a not-ready preflight
+prints the next command its service decided. Apply-time and stage refusals of
+the controller record carry their own remedies, except the two
+[B379](m1.md#b379) records, the tool-location remedy names the context's
+stage, and every controller selection refusal, the version and tool refusals
+included, names a remedy.
+
+**Outcome, B288, B94 and B240:** the controller stage and
+`preflight controller --context` read a context's native closures through one
+Controller-owned answer. The stage solves the container runtime beside exactly
+the closures the frozen request selects, so an installer-media-only context
+resolves no libvirt client, and reads only the latest retained resolution of
+its own selection; preflight checks the libvirt client, hypervisor and
+installer-media closures the context selects and reports not ready over another
+selection's resolution. The controller and state-reconciliation specs state
+when the libvirt client is selected, and a stage test runs the hypervisor
+closure end to end (B240). A RHEL 9.8 controller accepts `lorax` and `xorriso`
+the operator installed from the host's Red Hat repositories, proved by
+presence from the RPM database snapshot, read as the unprivileged helper
+account, where every installed instance must carry the RHEL 9 release key; a
+missing package refuses before any acquisition naming
+`dnf install lorax xorriso`, and one another key signed names its removal and
+reinstallation (D106). Controller egress keeps one route grammar, the API's
+proxy endpoint and bypass rules with a 1024-byte bound per bypass entry, at
+admission on the Environment and at selection naming the field: an endpoint
+with a path or a query, an out-of-range CIDR and an `httpProxy`-only Proxy
+refuse, and the executable's own limits (another capability, a managed Proxy,
+`proxyAuthRef`, `trustBundleRef`, an `httpProxy`-only Proxy, more than 128
+bypass entries) refuse before registration as controller Unsupported rows with
+remedies (D77). A Go and Python parity test holds the closure tables equal.
+Dependency resolution stages under `/var/lib/bootwright-staging`, a root-owned
+parent beside the store, each stage locked, swept once stale and removed on
+release, and an `EACCES` or `EPERM` start on a noexec mount refuses naming the
+mount. The dead setup-binding action, the legacy prerequisites layer, the host
+runtime inspection and the static import probe are deleted, and the compiled
+catalog keeps only each release's execution foundation (B94). The development
+and operator guides mark RHEL 9.8 admitted but not yet run.
+
+**Outcome, B289 and B249:** `validate` refuses what the only installation
+cannot use. MachineImage `bootMedia` and hosted-tree `fromMedia` accept only
+`local-media:<name>` for a valid media name, and an installed consumer's
+profile must name its `redfishVirtualMedia` artifact endpoint on every
+substrate (D81). A DHCP-only or IPv6 install network on a Bootwright-installed
+Anaconda Machine refuses at `installAddressRef`, and one with no network
+configuration is told to select one first (D80). A MachineInstallProfile whose
+hosted tree publishes through the server that a same-named installed Machine's
+image uses refuses at its `serverRef`, and the infrastructure-services spec
+says who owns the consumer-level directories (B249, D83). Every managed-OS
+admission refusal names its exact remedy, and the bootstrap-cycle refusals
+state the refused shape. An installation through an external DNSServer or
+NTPServer renders its declared address with no requirement edge (D78). Before
+registration the installation refuses, in refusal-table rows that
+`TestManagedOSRefusalTableMatchesUnsupported` holds, a non-ethernet install
+interface; network content the install line cannot carry, read from the
+composed network: other addresses, non-ethernet interfaces, an MTU other than
+1500 and any route but the default route through the template's gateway (D79);
+an image or tree server off the controller (D82); and a virtual Machine whose
+provider host is not the image server's placement Machine, naming both. Three
+deviations from the exit evidence: the CLI keeps its media-name copy, held to
+the managed-OS rule by a parity test, because the layout test forbids the CLI
+importing the managed-OS domain ([B393](backlog.md#b393)); the DHCP-only
+refusal-table row is unreachable from validated input, since admission refuses
+first; and "a physical target with an SSH-placed server stays valid" conflicts
+with D82, so the tests prove instead that the provider-host row never fires on
+a physical target, and the SSH-placed request golden keeps its bytes.
+
+**Outcome, B24 and B337:** bounded runs (`machine start`, `stop` and
+`restart`, the `machine list --power-status` read, `machine rsh` and `exec`)
+read the current version of each Secret they need in one keyring session under
+the store's shared lock and publish no binding or reservation, so a loop of
+them no longer exhausts a context's keyring, with no keyring format change
+(B337, D85). Each run request carries its context, block and description,
+which the runner records beside a holder lock only the invocation holds, so
+two contexts' bounded runs proceed together. A held job refuses only its own
+context, naming its context, operation and Machine; it says to wait while its
+invocation lives, and names the lock and the processes to end only once that
+invocation is gone. A job an earlier build started, or one with no readable
+record, still refuses every context, and the host-wide sweep still removes
+every unheld job (B24, D57). A job record is published whole, and a sweep
+takes a job's lock shared and removes a job or a scratch tree only under that
+directory's own exclusive lock, so two contexts' sweeps never refuse each
+other.
+
+**Outcome, B225:** the lifecycle operation area and an SSH-trust mutation's
+area measure their subtree once per transaction and then count their own
+writes, measuring again after any failed write; the runs area, which every
+bounded run of its context writes, measures every write. The runs area keeps
+the newest 16 runs per context, retiring the oldest before a new run opens and
+never one a live run holds (D84), so power commands keep working past the old
+shared bound. The contexts spec's bounds table names the runs and SSH-trust
+areas, and a capacity refusal names the storage it would overfill.
+
+**Toward B95:** `bootwright destroy --help` says that destroy removes what the
+apply owns whether or not it completed, that a failed destroy is replaced,
+that Machines are stopped first and that a disk-deleting plan needs
+`--authorize data-loss`. [B95](m1.md#b95) keeps every other command's help for
+X44.
+
+**Operator-visible effects:** `machine exec` and `rsh` exit 255 for a refusal
+before the session, where they exited 1, except an interactive sudo refusal,
+which still exits 1 as the CLI spec now states; an interrupted registered
+apply or destroy prints its result before exiting 130. Results carry the
+`Next` line, plans the `[data-loss]` step marker, the `Requires` and
+`Stop first` fields and the new width wording, and remedies are exact commands
+with `--context`. A declined confirmation reports its consumer's code with the
+repeated invocation as its remedy, and preflight reports the `libvirt-client`,
+`hypervisor` and `installer-media` checks. `validate` refuses more: the
+controller's proxy grammar and its bounds, media sources, DHCP-only installs,
+a same-named Machine and profile on one server, and a missing virtual-media
+endpoint; plan and apply refuse the installation shapes and the controller's
+Unsupported rows before registration. A live context whose stored input one of
+these rules refuses keeps its destroy, while its next fresh apply and its
+`status` refuse until `context update` imports corrected input. A RHEL
+controller needs `lorax` and `xorriso` from its Red Hat repositories for
+installer media, and `/var/lib/bootwright-staging` must be on an exec-capable
+filesystem. A Fedora installer-media-only context that already applied
+resolves again once on its next apply; the first bounded run after the upgrade
+leaves only the newest 16 runs of its context; and a job a build before X41
+left running refuses every context's runs until it ends. `make build` now
+yields a static executable. **Digest effects:** none. No frozen request,
+request or record version, setup or lifecycle plan digest, automation digest
+or keyring format moves, and nothing under `ansible/` changed. The request,
+plan-digest and effective goldens are byte-identical; the new goldens, the
+site-services requests and the paused, running and unknown apply results, are
+additions, and the changed ones are presentation text. `catalog.json` drops
+its dependency pins and keeps `format`, `projection` and each release's `os`,
+`release` and `execution` unchanged, while
+`TestTheCompiledExecutionFoundationIsUnchanged` and
+`TestAResolvedBundleIdentityDoesNotReadTheCatalogPins` pin the execution
+foundation digests and a resolved bundle's identity; the installation's
+content digest keeps the deleted tooling as a frozen literal under
+`TestTheContentDigestIsPinned`. The job record under `/run` is per-boot
+runtime state. No context is stranded.
+
+**Review:** before it, completing the integration replaced X26's guard-test
+citation of a test B337 deleted, tested the session status at the privilege
+boundary, which a lane's own review had found untested, and gave the unbound
+continuation an exit that works where its remedy had named an apply that
+cannot bind. The review then raised eleven
+findings, ten confirmed, nine of them in X41's scope and one blocking, and the
+first fix round fixed all nine: the `--yes` remedy after a declined or
+non-interactive confirmation dropped the operator's own flags, so following it
+applied every stage or trusted every Machine beyond the reviewed plan
+(blocking); the stage refusal's apply left out the plan's `--authorize`
+tokens; a finalization's preview required a token no finalization needs; the
+bare-metal pre-boot remedies named an apply that cannot pick up a corrected
+declaration, and now name the destroy first; a bypass entry over 1024 bytes
+passed admission and failed late in the stage; a foreign-signed `lorax` or
+`xorriso` was offered an install that leaves it in place; the remedy for an
+install Machine with no network configuration looped; another context's job
+mid-claim or mid-removal refused a run; and the CLI spec promised that a
+session status from 0 to 254 is always the remote command's, which now holds
+except for an interactive sudo refusal, which the spec states. The tenth,
+`status` offering an apply over an unbound incomplete apply, predates X41 and
+became [B378](m1.md#b378); the one not confirmed, a remedy that could also
+name the declaring NetworkConfig, is wording in [B395](backlog.md#b395). Three
+checks followed. The first found the job-race fix partial, since a sweep
+removing another context's ended job held its lock as the job's own processes
+do, and the second round made sweeps take it shared under a directory lock.
+The second found that round's race test failing on one processor; the third
+round made it skip there and closed a window, older than X41, in which two
+sweeps emptied one orphaned scratch tree together. The third check found no
+gap.
+
+**Gates:** on the integrated lanes, `make check-offline tidy-check
+modules-check vulncheck docs-check race` failed only on
+`TestDocsCitedTestsExist`, over that stale citation, and the targets it
+stopped before passed under `make -k`, except `docs-check` on the same line.
+After the continuation's fixes the same command passed, as it did after each
+of the three fix rounds and on the squashed commit, and each check round's
+`make check-offline docs-check` passed. `./scripts/check-commits` and
+`git diff --check` pass. `./scripts/ansible-check` was not required, since
+nothing under `ansible/` changed, and is unrun on the slice; the lane that
+changed the controller closures ran its units and lint suites, which passed.
+The adversarial review, by reviewers that did not write the diff, is the
+independent review the items name. The opt-in privileged and qualification
+harnesses, a real noexec mount and RHEL 9.8's `rpm` are unrun. No real-host
+run.
+
+**Constraints left behind:** a fresh destroy, whether it supersedes an
+incomplete apply or a failed destroy or removes a completed apply, verifies
+neither the host identity nor the controller binding, which only a
+continuation does, although the spec runs a controller-hosted service effect
+only under a verified binding, and the unbound continuation's remedy relies on
+it ([B377](m1.md#b377)); `status` still offers a continuation that the
+binding, automation-digest or other continuation proofs refuse, among them an
+apply over an unbound incomplete apply and a destroy over an unbound running,
+paused or unknown removal ([B378](m1.md#b378)); an apply's or a deletion's
+uncertain controller-record publication and an execution-foundation failure
+the stage reaches still name setup's retry ([B379](m1.md#b379)); lifecycle
+resolution, controller-client, pre-boot, agent-install and one context-store
+remedy still lack an exact command, its context or the plan's tokens
+([B380](m1.md#b380)); two Machine network admission refusals keep a slogan
+remedy ([B381](m1.md#b381)); managed-service shape refusals still come at
+plan with no object or table row ([B382](m1.md#b382)); the proxy grammar
+holds only the controller's route ([B383](m1.md#b383)); and the libvirt roles'
+running-guest refusals and the substrates spec name `machine stop` without
+`--context` ([B384](m1.md#b384)). Under D116 these eight join M1 on X46. An
+interactive sudo refusal before a session still exits 1
+([B390](backlog.md#b390)). A bounded run that a build before X41 started
+holds no run lock, so retention could retire its directory if 16 newer runs
+of its context opened beside it, which no later build can change. Tracked
+elsewhere: the uninitialized-store refusal the bounded read shares with a
+binding ([B361](m1.md#b361)); container-cluster admission remedies
+([B313](m3.md#b313)); content the install line still drops, search domains
+and IPv6 policy among it ([B338](m1.md#b338), [B326](m4.md#b326)); RHEL 9.8's
+`rpm` output and the snapshot read as the helper account
+([B335](backlog.md#b335), and the RHEL 9.8 controller run D60 plans); the
+glibc and libgcc builds a RHEL 9.8 controller must hold, and building on a
+workstation ([B292](m1.md#b292)); help beyond destroy ([B95](m1.md#b95)); an
+invocation's own in-flight jobs ([B304](m3.md#b304)); and a bounded run
+beside another context's exclusive apply lock ([B18](m3.md#b18)). Under D48
+(D116) the other follow-ups were parked: B385 to B397, B385 and B393 split
+from B94 and B289.

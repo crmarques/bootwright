@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -179,5 +180,165 @@ func TestTheHostKeyPromptNamesTheContext(t *testing.T) {
 	if reported := diagnostics.Of(err); len(reported) != 1 ||
 		reported[0].Remediation != "record it with bootwright machine trust --context lab --machines rhel-01" {
 		t.Fatalf("refusal = %+v", reported)
+	}
+}
+
+// Each consumer's confirmation names what it acts on and, inside a context,
+// that context; a refusal keeps the consumer's own code, says why in its
+// message and puts the command it confirms, repeated with --yes, in its remedy.
+func TestEachConfirmationNamesItsObjectAndContextAndKeepsItsConsumersCode(t *testing.T) {
+	secret := func(name string) *diagnostics.ObjectIdentity {
+		return &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "Secret", Name: name}
+	}
+	for _, tc := range []struct {
+		action, object, context, prompt, code, label, remedy string
+		args                                                 []string
+		identity                                             *diagnostics.ObjectIdentity
+	}{
+		{action: "setup", object: "this host", prompt: "Confirm controller setup on this host? [y/N] ", args: []string{"setup"},
+			code: "controller.setup", label: "setup", remedy: "review the plan, then repeat bootwright setup with --yes"},
+		{action: "media replace", object: "rhel.iso", prompt: "Confirm replace of stored media rhel.iso? [y/N] ",
+			args: []string{"media", "add", "--name", "rhel.iso", "--from-file", "/srv/rhel.iso"},
+			code: "media.store", label: "media", remedy: "review it, then repeat bootwright media add --from-file /srv/rhel.iso --name rhel.iso with --yes"},
+		{action: "media delete", object: "rhel.iso", prompt: "Confirm delete of stored media rhel.iso? [y/N] ", args: []string{"media", "delete", "--name", "rhel.iso"},
+			code: "media.store", label: "media", remedy: "review it, then repeat bootwright media delete --name rhel.iso with --yes"},
+		{action: "apply", object: "lab", prompt: "Confirm apply for context lab? [y/N] ", args: []string{"apply", "--context", "lab"},
+			code: "lifecycle.state", label: "apply", remedy: "review the plan, then repeat bootwright apply --context lab with --yes"},
+		{action: "destroy", object: "lab", prompt: "Confirm destroy for context lab? [y/N] ", args: []string{"destroy"},
+			code: "lifecycle.state", label: "destroy", remedy: "review the plan, then repeat bootwright destroy --context lab with --yes"},
+		{action: "trust", object: "lab", prompt: "Confirm trust for context lab? [y/N] ", args: []string{"machine", "trust", "--context", "lab"},
+			code: "trust.identity", label: "trust", remedy: "review the plan, then repeat bootwright machine trust --context lab with --yes"},
+		{action: "rotate secret encryption", object: "lab", prompt: "Confirm rotation of the secret encryption key of context lab? [y/N] ",
+			args: []string{"secret", "encryption", "rotate"},
+			code: "secret.store.conflict", label: "key rotation", remedy: "review it, then repeat bootwright secret encryption rotate --context lab with --yes"},
+		{action: "update", object: "lab", prompt: "Confirm update for context lab? [y/N] ", args: []string{"context", "update", "--name", "lab", "--input-dir", "infra"},
+			code: "context.state", label: "context", remedy: "review it, then repeat bootwright context update --input-dir infra --name lab with --yes"},
+		{action: "replace secret", object: "token", context: "lab", prompt: "Confirm replacement of secret token in context lab? [y/N] ",
+			args: []string{"secret", "set", "--name", "token", "--value-file", "token.txt"},
+			code: "secret.store.conflict", label: "secret replacement", identity: secret("token"),
+			remedy: "review it with bootwright secret check --context lab, then repeat bootwright secret set --context lab --name token --value-file token.txt with --yes"},
+		{action: "delete secret", object: "token", context: "lab", prompt: "Confirm deletion of secret token in context lab? [y/N] ",
+			args: []string{"secret", "delete", "--name", "token"},
+			code: "secret.store.conflict", label: "secret deletion", identity: secret("token"),
+			remedy: "review it with bootwright secret check --context lab, then repeat bootwright secret delete --context lab --name token with --yes"},
+		{action: "stop machine", object: "rhel-01", context: "lab", prompt: "Confirm stop of machine rhel-01 in context lab? [y/N] ",
+			args: []string{"machine", "stop", "--name", "rhel-01"},
+			code: "machine.power", label: "power", remedy: "review it, then repeat bootwright machine stop --context lab --name rhel-01 with --yes"},
+		{action: "restart machine", object: "rhel-01", context: "lab", prompt: "Confirm restart of machine rhel-01 in context lab? [y/N] ",
+			args: []string{"machine", "restart", "--name", "rhel-01"},
+			code: "machine.power", label: "power", remedy: "review it, then repeat bootwright machine restart --context lab --name rhel-01 with --yes"},
+		{action: "force stop machine", object: "rhel-01", context: "lab", prompt: "Confirm force stop of machine rhel-01 in context lab? [y/N] ",
+			args: []string{"machine", "stop", "--name", "rhel-01", "--force"},
+			code: "machine.power", label: "power", remedy: "review it, then repeat bootwright machine stop --context lab --force --name rhel-01 with --yes"},
+		{action: "force restart machine", object: "rhel-01", context: "lab", prompt: "Confirm force restart of machine rhel-01 in context lab? [y/N] ",
+			args: []string{"machine", "restart", "--force", "--name", "rhel-01"},
+			code: "machine.power", label: "power", remedy: "review it, then repeat bootwright machine restart --context lab --force --name rhel-01 with --yes"},
+	} {
+		for _, answer := range []struct {
+			name, prompt, reason string
+			terminal             bool
+			read                 func(*strings.Reader, []byte) (int, error)
+		}{
+			{name: "declined", prompt: tc.prompt, reason: "was declined; nothing changed", terminal: true,
+				read: func(input *strings.Reader, p []byte) (int, error) { return input.Read(p) }},
+			{name: "not a terminal", reason: "requires an interactive terminal",
+				read: func(*strings.Reader, []byte) (int, error) { return 0, errors.New("unexpected read") }},
+			{name: "unreadable", prompt: tc.prompt, reason: "answer could not be read", terminal: true,
+				read: func(*strings.Reader, []byte) (int, error) { return 0, errors.New("private input failure") }},
+		} {
+			t.Run(tc.action+"/"+answer.name, func(t *testing.T) {
+				input := strings.NewReader("n\n")
+				var out bytes.Buffer
+				confirmation := NewConfirmation(func(_ context.Context, p []byte) (int, error) { return answer.read(input, p) },
+					&out, func() (bool, error) { return answer.terminal, nil }).Repeating(tc.args)
+				var err error
+				if tc.context == "" {
+					err = confirmation.Confirm(context.Background(), tc.action, tc.object)
+				} else {
+					err = confirmation.ConfirmIn(context.Background(), tc.action, tc.object, tc.context)
+				}
+				if out.String() != answer.prompt {
+					t.Fatalf("prompt = %q, want %q", out.String(), answer.prompt)
+				}
+				want := []diagnostics.Diagnostic{{Severity: "error", Code: tc.code, Message: tc.label + " confirmation " + answer.reason,
+					Object: tc.identity, Remediation: tc.remedy}}
+				if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) {
+					t.Fatalf("refusal = %+v, want %+v", reported, want)
+				}
+				if !strings.Contains(tc.remedy, " --yes") || tc.context != "" && !strings.Contains(tc.remedy, "--context "+tc.context) {
+					t.Fatalf("the remedy %q does not repeat the command in its context with --yes", tc.remedy)
+				}
+			})
+		}
+	}
+}
+
+// Following a refusal's remedy runs exactly the command the operator ran, with
+// --yes: every selection, authorization, source and choice it made stays, so
+// the repeated command never does more than the plan they reviewed. A value
+// output never repeats is named by a placeholder, a value a shell would split
+// is quoted, and a confirmer that was not given the invocation names the same
+// command rather than a shorter one.
+func TestARefusedConfirmationRepeatsTheExactInvocation(t *testing.T) {
+	for _, tc := range []struct {
+		name, action, object, context string
+		args                          []string
+		remedy                        string
+	}{
+		{name: "an apply's stage selection and authorization", action: "apply", object: "lab",
+			args:   []string{"apply", "--stage", "infra-components", "--authorize", "data-loss"},
+			remedy: "review the plan, then repeat bootwright apply --context lab --authorize data-loss --stage infra-components with --yes"},
+		{name: "a destroy's authorization", action: "destroy", object: "lab",
+			args:   []string{"--context", "lab", "destroy", "--authorize", "data-loss"},
+			remedy: "review the plan, then repeat bootwright destroy --context lab --authorize data-loss with --yes"},
+		{name: "a trust selection and replacement", action: "trust", object: "lab",
+			args:   []string{"machine", "trust", "--machines", "rhel-01", "--replace", "rhel-01", "--output", "json"},
+			remedy: "review the plan, then repeat bootwright machine trust --context lab --machines rhel-01 --output json --replace rhel-01 with --yes"},
+		{name: "a setup that retires old bundles", action: "setup", object: "this host",
+			args:   []string{"setup", "--purge-old-bundles"},
+			remedy: "review the plan, then repeat bootwright setup --purge-old-bundles with --yes"},
+		{name: "a media download keeps its digest and hides its URL", action: "media replace", object: "rhel.iso",
+			args:   []string{"media", "add", "--name", "rhel.iso", "--from-url", "https://mirror.example.test/rhel.iso?token=abc", "--sha256", strings.Repeat("a", 64)},
+			remedy: "review it, then repeat bootwright media add --from-url <from-url> --name rhel.iso --sha256 " + strings.Repeat("a", 64) + " with --yes"},
+		{name: "a media path a shell would split", action: "media replace", object: "rhel.iso",
+			args:   []string{"media", "add", "--name", "rhel.iso", "--from-file", "/srv/it's here.iso"},
+			remedy: `review it, then repeat bootwright media add --from-file '/srv/it'\''s here.iso' --name rhel.iso with --yes`},
+		{name: "a secret's username stays undisclosed", action: "replace secret", object: "login", context: "lab",
+			args:   []string{"secret", "set", "--name", "login", "--username", "alice", "--password-file", "password.txt"},
+			remedy: "review it with bootwright secret check --context lab, then repeat bootwright secret set --context lab --name login --password-file password.txt --username <username> with --yes"},
+		{name: "a context deletion's acknowledgements", action: "delete", object: "lab",
+			args:   []string{"context", "delete", "--name", "lab", "--purge", "--allow-orphans"},
+			remedy: "review it, then repeat bootwright context delete --allow-orphans --name lab --purge with --yes"},
+		{name: "no invocation", action: "apply", object: "lab",
+			remedy: "review the plan, then repeat the same command with --yes"},
+		{name: "an invocation that names no command", action: "apply", object: "lab", args: []string{"no-such-command"},
+			remedy: "review the plan, then repeat the same command with --yes"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			confirmation := NewConfirmation(func(context.Context, []byte) (int, error) { return 0, errors.New("unexpected read") },
+				io.Discard, func() (bool, error) { return false, nil }).Repeating(tc.args)
+			var err error
+			if tc.context == "" {
+				err = confirmation.Confirm(context.Background(), tc.action, tc.object)
+			} else {
+				err = confirmation.ConfirmIn(context.Background(), tc.action, tc.object, tc.context)
+			}
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Remediation != tc.remedy {
+				t.Fatalf("refusal = %+v, want the remedy %q", reported, tc.remedy)
+			}
+		})
+	}
+}
+
+// A canceled confirmation names no remedy: nothing about the command was
+// refused, and repeating it with --yes is not what the operator asked for.
+func TestACanceledConfirmationKeepsItsCodeAndNamesNoRemedy(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := NewConfirmation(func(context.Context, []byte) (int, error) { return 0, errors.New("unexpected read") }, io.Discard,
+		func() (bool, error) { return true, nil }).ConfirmIn(ctx, "stop machine", "rhel-01", "lab")
+	want := []diagnostics.Diagnostic{{Severity: "error", Code: "machine.power", Message: "power confirmation was canceled"}}
+	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) {
+		t.Fatalf("cancellation = %+v", reported)
 	}
 }

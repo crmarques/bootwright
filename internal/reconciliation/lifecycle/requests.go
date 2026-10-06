@@ -53,10 +53,17 @@ type PlanStep struct {
 	After []int
 	// Wave is the earliest round this step can start in, counted from one.
 	Wave int
+	// Consumes names the authorizations this step's consequence needs, which
+	// the invocation must supply for the whole plan before it registers.
+	Consumes []string
 }
 
+// A stage selection's marker for one step. StepResolve and StepRetry mark the
+// unproved or failed blocks the next apply works first, whatever else is ready.
 const (
 	StepStart       = "start"
+	StepResolve     = "resolve"
+	StepRetry       = "retry"
 	StepWaiting     = "waiting"
 	StepNotSelected = "not-selected"
 )
@@ -72,15 +79,22 @@ type PlanResult struct {
 	// many of its steps share the fullest one. Together they say how much of
 	// the work the graph lets run at once, which is what an operator reads to
 	// know whether a long plan is a long queue or a wide one.
-	Waves        int
-	Widest       int
+	Waves  int
+	Widest int
+	// Bound is how many blocks this executable starts at once, whatever the
+	// plan's width permits.
+	Bound        int
 	Startable    int
 	Deferred     int
 	Continuation bool
 	// Finalizes marks a preview whose verb only completes the operation's
 	// interrupted finalization and then settles, running no block.
 	Finalizes bool
-	Receipt   Receipt
+	// Stops names, in plan order, the Machines a fresh destroy proves stopped
+	// before it registers, so the plan says what to stop before it is
+	// confirmed.
+	Stops   []string
+	Receipt Receipt
 }
 
 type MachineOutcome struct {
@@ -143,7 +157,10 @@ type OperationResult struct {
 	// settled: RecoveredFinalization or RecoveredRelease, or empty when it did
 	// nothing at all. It is never set on a result that performed work.
 	Recovered string
-	Receipt   Receipt
+	// NextCommand is the exact command an operator runs for an operation that
+	// is paused, failed, unknown or running, and empty for any other result.
+	NextCommand string
+	Receipt     Receipt
 }
 
 // What a settled invocation may have done before it settled. Either performs

@@ -508,7 +508,7 @@ func TestAFrozenRefusedInstallationRefusesOnlyItsApply(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			call.Block.Request = canonical
+			call.Block.Request, call.Context = canonical, "lab-b"
 			marker, _ := MarkerFor(request, "digest")
 			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: completeEvidence(request, "digest", string(marker))}}
 			result, err := New(runner).Apply(context.Background(), call)
@@ -519,7 +519,7 @@ func TestAFrozenRefusedInstallationRefusesOnlyItsApply(t *testing.T) {
 			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != test.message {
 				t.Fatalf("refusal = %#v", reported)
 			}
-			if reported[0].Remediation != "run bootwright destroy to end this operation, then plan it again under this executable" {
+			if reported[0].Remediation != "run bootwright destroy --context lab-b to end this operation, then plan it again under this executable" {
 				t.Fatalf("remediation = %q", reported[0].Remediation)
 			}
 			if len(runner.requests) != 0 {

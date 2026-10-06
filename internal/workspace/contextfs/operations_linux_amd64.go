@@ -6,10 +6,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -80,7 +82,7 @@ const entryConfirmations = 3
 // resolveEntry reads one listed entry, separating an entry this area does not
 // own from one a concurrent publication moved while the walk read the
 // directory. Every publication stages a pending name beside its target and
-// renames it away while every lifecycle write measures the whole subtree, so a
+// renames it away while another write may be measuring the whole subtree, so a
 // refusal is evidence about the entry only once it reproduces.
 func (a *operationArea) resolveEntry(ctx context.Context, dir *directory, name string) (syscall.Stat_t, bool, error) {
 	var stat syscall.Stat_t
@@ -155,6 +157,95 @@ type operationArea struct {
 	name     string
 	active   func() bool
 	readOnly bool
+	// cached is set by a constructor whose area is its subtree's only writer
+	// for as long as it lives: a lifecycle transaction's operation area, under
+	// the exclusive root lock and the context lease, and an SSH-trust
+	// mutation's area, under the exclusive root lock. Such an area measures its
+	// subtree once and then counts its own writes. A bounded run's area never
+	// caches, because every run of its context writes beside it under the
+	// shared lock.
+	cached  bool
+	measure operationMeasure
+}
+
+// operationMeasure is what a caching area last measured of its subtree, and
+// which measurement that was. A write that succeeds counts its own change into
+// the measurement it was admitted against. A write that fails may still have
+// landed, and one a later measurement overlapped may already be in it, so
+// either discards the measurement and the next write measures again. The
+// mutex is held because an attempt's adapter output flushes beside the
+// engine's own writes.
+type operationMeasure struct {
+	mutex      sync.Mutex
+	valid      bool
+	generation uint64
+	entries    int
+	bytes      int64
+}
+
+// generation names the measurement a write that calls no capacity check is
+// counted into.
+func (a *operationArea) generation() uint64 {
+	if !a.cached {
+		return 0
+	}
+	a.measure.mutex.Lock()
+	defer a.measure.mutex.Unlock()
+	return a.measure.generation
+}
+
+// settle counts one successful write's change into the measurement it was
+// admitted against, or discards the measurement another one replaced since.
+func (a *operationArea) settle(generation uint64, entries int, bytes int64) {
+	if !a.cached {
+		return
+	}
+	a.measure.mutex.Lock()
+	defer a.measure.mutex.Unlock()
+	if generation != a.measure.generation {
+		a.measure.valid = false
+		return
+	}
+	if a.measure.valid {
+		a.measure.entries += entries
+		a.measure.bytes += bytes
+	}
+}
+
+// forget discards the measurement after a write that failed, because a failed
+// publication may have landed.
+func (a *operationArea) forget(err error) {
+	if err == nil || !a.cached {
+		return
+	}
+	a.measure.mutex.Lock()
+	defer a.measure.mutex.Unlock()
+	a.measure.valid = false
+}
+
+// newDirectory creates one directory of this subtree and counts it as an
+// entry.
+func (a *operationArea) newDirectory(ctx context.Context, parent *directory, name string) (*directory, error) {
+	generation := a.generation()
+	child, err := a.store.newDirectory(ctx, parent, name)
+	if err != nil {
+		a.forget(err)
+		return nil, err
+	}
+	a.settle(generation, 1, 0)
+	return child, nil
+}
+
+// storage names this area's subtree in a refusal at its bounds, since three
+// areas share them.
+func (a *operationArea) storage() string {
+	switch a.subtree {
+	case runsSubtree:
+		return "bounded run storage"
+	case trustSubtree:
+		return "SSH trust storage"
+	}
+	return "lifecycle operation storage"
 }
 
 // Location names this area's subtree on the host. It is built for a human to
@@ -231,7 +322,7 @@ func (a *operationArea) descend(ctx context.Context, parts []string, create bool
 	for _, part := range parts[:max(len(parts)-1, 0)] {
 		child, err := openDirectory(parent, part)
 		if errors.Is(err, syscall.ENOENT) && create {
-			child, err = a.store.newDirectory(ctx, parent, part)
+			child, err = a.newDirectory(ctx, parent, part)
 		}
 		if err != nil {
 			release()
@@ -338,7 +429,7 @@ func (a *operationArea) directory(ctx context.Context, parts []string, create bo
 	for _, part := range parts {
 		child, err := openDirectory(parent, part)
 		if errors.Is(err, syscall.ENOENT) && create {
-			child, err = a.store.newDirectory(ctx, parent, part)
+			child, err = a.newDirectory(ctx, parent, part)
 		}
 		if err != nil {
 			release()
@@ -353,7 +444,8 @@ func (a *operationArea) directory(ctx context.Context, parts []string, create bo
 	return parent, release, nil
 }
 
-func (a *operationArea) EnsureDirectory(ctx context.Context, target string) error {
+func (a *operationArea) EnsureDirectory(ctx context.Context, target string) (err error) {
+	defer func() { a.forget(err) }()
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}
@@ -372,7 +464,8 @@ func (a *operationArea) EnsureDirectory(ctx context.Context, target string) erro
 // RemoveDirectory removes one empty directory of this subtree and syncs its
 // parent. The kernel refuses a directory that holds anything, so a record is
 // never removed through it, and one already absent is left so.
-func (a *operationArea) RemoveDirectory(ctx context.Context, target string) error {
+func (a *operationArea) RemoveDirectory(ctx context.Context, target string) (err error) {
+	defer func() { a.forget(err) }()
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}
@@ -397,17 +490,23 @@ func (a *operationArea) RemoveDirectory(ctx context.Context, target string) erro
 	}
 	identity := child.identity
 	child.file.Close()
+	generation := a.generation()
 	if err := unlinkVerified(parent, name, identity, true); err != nil {
 		return state("lifecycle operation directory could not be removed: " + filepath.Join(parent.path, name))
 	}
-	return a.store.syncDirectory(ctx, parent)
+	if err := a.store.syncDirectory(ctx, parent); err != nil {
+		return err
+	}
+	a.settle(generation, -1, 0)
+	return nil
 }
 
 // RemoveRecord unlinks one record of this subtree only while it is the same
 // file that held exactly expected when read, and syncs its parent. A directory
 // or any other entry refuses as a read does, and a record already absent is
 // left so.
-func (a *operationArea) RemoveRecord(ctx context.Context, target string, expected []byte) error {
+func (a *operationArea) RemoveRecord(ctx context.Context, target string, expected []byte) (err error) {
+	defer func() { a.forget(err) }()
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}
@@ -433,13 +532,19 @@ func (a *operationArea) RemoveRecord(ctx context.Context, target string, expecte
 	if !bytes.Equal(current, expected) {
 		return state("lifecycle operation record changed before its removal: " + filepath.Join(parent.path, name))
 	}
+	generation := a.generation()
 	if err := unlinkVerified(parent, name, identity, false); err != nil {
 		return state("lifecycle operation record could not be removed: " + filepath.Join(parent.path, name))
 	}
-	return a.store.syncDirectory(ctx, parent)
+	if err := a.store.syncDirectory(ctx, parent); err != nil {
+		return err
+	}
+	a.settle(generation, -1, -int64(len(current)))
+	return nil
 }
 
-func (a *operationArea) WriteExclusive(ctx context.Context, target string, data []byte) error {
+func (a *operationArea) WriteExclusive(ctx context.Context, target string, data []byte) (err error) {
+	defer func() { a.forget(err) }()
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}
@@ -455,16 +560,22 @@ func (a *operationArea) WriteExclusive(ctx context.Context, target string, data 
 		return err
 	}
 	defer release()
-	if err := a.capacity(ctx, len(data)); err != nil {
+	generation, err := a.capacity(ctx, len(data))
+	if err != nil {
 		return err
 	}
-	return a.store.writeExclusiveAtomic(ctx, parent, name, data, false)
+	if err := a.store.writeExclusiveAtomic(ctx, parent, name, data, false); err != nil {
+		return err
+	}
+	a.settle(generation, 1, int64(len(data)))
+	return nil
 }
 
 // Replace publishes atomically after proving the destination still holds
 // exactly expected, so a concurrent or mistaken write is refused rather than
 // silently overwritten. A nil expectation requires an absent destination.
-func (a *operationArea) Replace(ctx context.Context, target string, data, expected []byte) error {
+func (a *operationArea) Replace(ctx context.Context, target string, data, expected []byte) (err error) {
+	defer func() { a.forget(err) }()
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}
@@ -480,11 +591,16 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 		return err
 	}
 	defer release()
-	if err := a.capacity(ctx, len(data)); err != nil {
+	generation, err := a.capacity(ctx, len(data))
+	if err != nil {
 		return err
 	}
 	if expected == nil {
-		return a.store.writeExclusiveAtomic(ctx, parent, name, data, false)
+		if err := a.store.writeExclusiveAtomic(ctx, parent, name, data, false); err != nil {
+			return err
+		}
+		a.settle(generation, 1, int64(len(data)))
+		return nil
 	}
 	_, err = a.store.publishStage(ctx, parent, name, data, stagedPublication{
 		subject: "lifecycle record", suffix: ".json", replace: true, bound: maxOperationRecord,
@@ -497,12 +613,17 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 			return nil
 		},
 	}, checkpointBeforeOperationRename, checkpointAfterOperationRename)
-	return err
+	if err != nil {
+		return err
+	}
+	a.settle(generation, 0, int64(len(data))-int64(len(expected)))
+	return nil
 }
 
 // Append is the only non-atomic effect here: a log is troubleshooting material
 // whose partial tail is acceptable, never operation evidence.
-func (a *operationArea) Append(ctx context.Context, target string, data []byte) error {
+func (a *operationArea) Append(ctx context.Context, target string, data []byte) (err error) {
+	defer func() { a.forget(err) }()
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}
@@ -515,13 +636,14 @@ func (a *operationArea) Append(ctx context.Context, target string, data []byte) 
 		return err
 	}
 	defer release()
-	if err := a.capacity(ctx, len(data)); err != nil {
+	generation, err := a.capacity(ctx, len(data))
+	if err != nil {
 		return err
 	}
 	if err := a.store.checkpoint(ctx, checkpointAppendOperationLog); err != nil {
 		return err
 	}
-	file, err := openRelative(parent, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_APPEND, 0600)
+	file, created, err := openLog(parent, name)
 	if err != nil {
 		return state("private operation log could not be opened")
 	}
@@ -539,7 +661,28 @@ func (a *operationArea) Append(ctx context.Context, target string, data []byte) 
 	if err := file.Sync(); err != nil {
 		return state("private operation log durability could not be established")
 	}
+	entries := 0
+	if created {
+		entries = 1
+	}
+	a.settle(generation, entries, int64(len(data)))
 	return nil
+}
+
+// openLog opens a log for appending and reports whether this call created it,
+// which a caching area counts as one more entry. A log another writer created
+// first is appended to as if it had existed.
+func openLog(parent *directory, name string) (*os.File, bool, error) {
+	file, err := openRelative(parent, name, syscall.O_WRONLY|syscall.O_APPEND, 0)
+	if !errors.Is(err, syscall.ENOENT) {
+		return file, false, err
+	}
+	file, err = openRelative(parent, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL|syscall.O_APPEND, 0600)
+	if errors.Is(err, syscall.EEXIST) {
+		file, err = openRelative(parent, name, syscall.O_WRONLY|syscall.O_APPEND, 0)
+		return file, false, err
+	}
+	return file, err == nil, err
 }
 
 func (a *operationArea) Sync(ctx context.Context, target string) error {
@@ -562,24 +705,50 @@ func (a *operationArea) Sync(ctx context.Context, target string) error {
 }
 
 // capacity bounds the subtree before an allocation, so a runaway operation
-// cannot consume the store its own recovery evidence lives in.
-func (a *operationArea) capacity(ctx context.Context, additional int) error {
-	operations, release, err := a.root(ctx, false)
+// cannot consume the store its own recovery evidence lives in. It reports the
+// measurement the write it admits counts its change into.
+func (a *operationArea) capacity(ctx context.Context, additional int) (uint64, error) {
+	entries, bytes, generation, err := a.measured(ctx)
 	if errors.Is(err, syscall.ENOENT) {
-		return nil
+		return generation, nil
 	}
 	if err != nil {
-		return err
-	}
-	defer release()
-	entries, bytes, err := a.scan(ctx, operations, 0)
-	if err != nil {
-		return err
+		return generation, err
 	}
 	if entries+1 > maxOperationEntries || bytes+int64(additional) > maxOperationBytes {
-		return state("lifecycle operation storage has reached its bounds")
+		return generation, state(a.storage() + " has reached its bounds")
 	}
-	return nil
+	return generation, nil
+}
+
+// measured is the subtree's size: scanned for every write of an area that
+// does not cache, and scanned once and then counted for one that does.
+func (a *operationArea) measured(ctx context.Context) (int, int64, uint64, error) {
+	if !a.cached {
+		entries, bytes, err := a.measureSubtree(ctx)
+		return entries, bytes, 0, err
+	}
+	a.measure.mutex.Lock()
+	defer a.measure.mutex.Unlock()
+	if a.measure.valid {
+		return a.measure.entries, a.measure.bytes, a.measure.generation, nil
+	}
+	entries, bytes, err := a.measureSubtree(ctx)
+	if err != nil {
+		return 0, 0, a.measure.generation, err
+	}
+	a.measure.generation++
+	a.measure.valid, a.measure.entries, a.measure.bytes = true, entries, bytes
+	return entries, bytes, a.measure.generation, nil
+}
+
+func (a *operationArea) measureSubtree(ctx context.Context) (int, int64, error) {
+	operations, release, err := a.root(ctx, false)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer release()
+	return a.scan(ctx, operations, 0)
 }
 
 // scan measures the subtree, and one entry this store does not own refuses the
@@ -620,6 +789,10 @@ func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (in
 			}
 			childEntries, childBytes, err := a.scan(ctx, nested, depth+1)
 			nested.file.Close()
+			if err != nil && vanished(dir, name) {
+				entries--
+				continue
+			}
 			if err != nil {
 				return 0, 0, err
 			}
@@ -630,4 +803,17 @@ func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (in
 		total += stat.Size
 	}
 	return entries, total, nil
+}
+
+// vanished reports whether a directory whose walk failed is gone from its name,
+// as a run another run's retention removed under the shared lock is. Its walk
+// failed only because it went, so it is absent, as a directory gone before the
+// walk opened it is; one replaced at its name has not vanished and still
+// refuses.
+func vanished(parent *directory, name string) bool {
+	entry, err := openRelative(parent, name, pathHandle, 0)
+	if err == nil {
+		entry.Close()
+	}
+	return errors.Is(err, syscall.ENOENT)
 }

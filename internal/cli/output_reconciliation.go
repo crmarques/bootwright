@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -27,7 +28,7 @@ func (p *LifecyclePlanPresenter) PresentLifecyclePlan(ctx context.Context, resul
 		return err
 	}
 	if p == nil || p.out == nil {
-		return &lifecycleOutputFailure{}
+		return diagnostics.NewFailure("runtime.internal", "lifecycle plan presentation is not configured", "")
 	}
 	var text display
 	text.headline("", lifecycleHeadline(result))
@@ -41,6 +42,8 @@ func (p *LifecyclePlanPresenter) PresentLifecyclePlan(ctx context.Context, resul
 	return nil
 }
 
+// lifecycleOutputFailure is a plan that could not be written. Nothing written
+// after it could be trusted, so the runner exits with no further output.
 type lifecycleOutputFailure struct{}
 
 func (*lifecycleOutputFailure) Error() string { return "lifecycle plan output failed" }
@@ -132,6 +135,9 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		if result.Continuation {
 			line += " [" + planned.State + "]"
 		}
+		for _, token := range planned.Consumes {
+			line += " [" + token + "]"
+		}
 		if marker := selectionMarker(planned); marker != "" {
 			line += " [" + marker + "]"
 		}
@@ -148,6 +154,16 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 	}
 	if summary := concurrencySummary(result); summary != "" {
 		closing = append(closing, field{Label: "Concurrency", Value: summary})
+	}
+	// A fresh removal refuses while any Machine it takes back runs, after the
+	// prompt, so the plan names them before it is confirmed.
+	if len(result.Stops) != 0 {
+		closing = append(closing, field{Label: "Stop first", Value: strings.Join(result.Stops, ", ")})
+	}
+	// A finalization runs no block, so the apply that completes it consumes,
+	// and requires, no authorization.
+	if required := requiredAuthorizations(result.Steps); required != "" && !result.Finalizes {
+		closing = append(closing, field{Label: "Requires", Value: required})
 	}
 	if len(closing) != 0 {
 		text.section("")
@@ -169,30 +185,60 @@ func waitMarker(planned lifecycle.PlanStep) string {
 	return "[after " + strings.Join(places, ", ") + "]"
 }
 
-// concurrencySummary says how much of the plan its own shape lets run at once.
-// A plan whose steps are one long chain says so, which is the difference
-// between a long queue and a wide one.
+// requiredAuthorizations names each token the plan consumes and the steps that
+// consume it, by their place in the plan, so the closing field says what the
+// invocation must acknowledge and for which steps.
+func requiredAuthorizations(steps []lifecycle.PlanStep) string {
+	var tokens []string
+	consumers := map[string][]string{}
+	for index, planned := range steps {
+		for _, token := range planned.Consumes {
+			if _, seen := consumers[token]; !seen {
+				tokens = append(tokens, token)
+			}
+			consumers[token] = append(consumers[token], strconv.Itoa(index+1))
+		}
+	}
+	required := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		required = append(required, "--authorize "+token+" (step "+strings.Join(consumers[token], ", ")+")")
+	}
+	return strings.Join(required, "; ")
+}
+
+// concurrencySummary says how wide the plan's own shape is and, when this
+// build starts fewer blocks at a time than that, how many it starts. A plan
+// whose steps are one long chain says so, which is the difference between a
+// long queue and a wide one, and a wide plan never reads as running wider than
+// the build does.
 func concurrencySummary(result lifecycle.PlanResult) string {
 	if result.Waves == 0 || len(result.Steps) == 0 {
 		return ""
 	}
-	steps := "steps"
-	if result.Widest == 1 {
-		steps = "step"
+	summary := fmt.Sprintf("%d %s, widest %d %s", result.Waves, plural(result.Waves, "wave", "waves"), result.Widest, plural(result.Widest, "step", "steps"))
+	if result.Bound > 0 && result.Bound < result.Widest {
+		summary += fmt.Sprintf("; this build starts %d %s at a time", result.Bound, plural(result.Bound, "block", "blocks"))
 	}
-	waves := "waves"
-	if result.Waves == 1 {
-		waves = "wave"
-	}
-	return fmt.Sprintf("%d %s, up to %d %s at once", result.Waves, waves, result.Widest, steps)
+	return summary
 }
 
-// selectionMarker says what a stage selection would do with one pending step,
-// so the operator sees the consequence of the selection before confirming it.
+func plural(count int, one, many string) string {
+	if count == 1 {
+		return one
+	}
+	return many
+}
+
+// selectionMarker says what a stage selection would do with one step, so the
+// operator sees the consequence of the selection before confirming it.
 func selectionMarker(planned lifecycle.PlanStep) string {
 	switch planned.Selection {
 	case lifecycle.StepStart:
 		return "start"
+	case lifecycle.StepResolve:
+		return "resolve"
+	case lifecycle.StepRetry:
+		return "retry"
 	case lifecycle.StepNotSelected:
 		return "not selected"
 	case lifecycle.StepWaiting:
@@ -242,9 +288,16 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 		}
 		text.rows(rows)
 	}
+	var closing []field
 	if result.LogLocation != "" {
+		closing = append(closing, field{Label: logLocationLabel, Value: result.LogLocation})
+	}
+	if result.NextCommand != "" {
+		closing = append(closing, field{Label: "Next", Value: result.NextCommand})
+	}
+	if len(closing) != 0 {
 		text.section("")
-		text.fields(field{Label: logLocationLabel, Value: result.LogLocation})
+		text.fields(closing...)
 	}
 	if err := text.writeTo(out); err != nil {
 		return err

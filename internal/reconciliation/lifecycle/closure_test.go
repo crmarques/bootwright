@@ -177,7 +177,7 @@ func TestAContinuationRefusesAMovedClosureWithNoEffect(t *testing.T) {
 		remediation string
 		continued   func(*harness) []string
 	}{
-		{reconciliation.Apply, failedApply, "destroy what this operation owns under the approved bundle, or " + restore, func(h *harness) []string { return h.capability.applies }},
+		{reconciliation.Apply, failedApply, "take back what this operation owns under the approved bundle with bootwright destroy --context lab, or " + restore, func(h *harness) []string { return h.capability.applies }},
 		{reconciliation.Destroy, unknownRemoval, restore, func(h *harness) []string { return h.capability.observes }},
 	} {
 		t.Run(string(test.verb), func(t *testing.T) {
@@ -230,7 +230,7 @@ func TestAContinuationRefusesAClosureMovedUnderTheSameReleases(t *testing.T) {
 			start       func(*testing.T, *harness)
 			remediation string
 		}{
-			{reconciliation.Apply, failedApply, "destroy what this operation owns under the approved bundle, or " + restore},
+			{reconciliation.Apply, failedApply, "take back what this operation owns under the approved bundle with bootwright destroy --context lab, or " + restore},
 			{reconciliation.Destroy, unknownRemoval, restore},
 		} {
 			t.Run(name+"/"+string(test.verb), func(t *testing.T) {
@@ -287,7 +287,7 @@ func TestAContinuationRefusesAnEarlierVersionOperationRecord(t *testing.T) {
 		start       func(*testing.T, *harness)
 		remediation string
 	}{
-		{reconciliation.Apply, failedApply, "destroy what this operation owns under this executable, or " + continued},
+		{reconciliation.Apply, failedApply, "take back what this operation owns under this executable with bootwright destroy --context lab, or " + continued},
 		{reconciliation.Destroy, unknownRemoval, continued},
 	} {
 		t.Run(string(test.verb), func(t *testing.T) {
@@ -321,7 +321,7 @@ func TestAnEarlierVersionRecordNamesNoEarlierBuildOnceSetupKeepsRuns(t *testing.
 		start       func(*testing.T, *harness)
 		remediation string
 	}{
-		{reconciliation.Apply, failedApply, "destroy what this operation owns under this executable"},
+		{reconciliation.Apply, failedApply, "take back what this operation owns under this executable with bootwright destroy --context lab"},
 		{reconciliation.Destroy, unknownRemoval, "delete the context with bootwright context delete --name " + testContextName + " --purge --allow-orphans, which abandons what it may still own"},
 	} {
 		for _, moved := range []bool{false, true} {
@@ -372,6 +372,41 @@ func registeredEarlier(t *testing.T, h *harness) {
 	h.workspace.area.files[target] = append(data, '\n')
 }
 
+// A build stamped with a commit and no version, as make build stamps one cut
+// from no tag, is devel in the version command's spelling, so status, the
+// continuation refusal and the removal refusal name devel and that commit
+// rather than losing the build that registered the operation. A record naming
+// neither names the record itself.
+func TestARecordWithOnlyACommitNamesDevelAndTheCommit(t *testing.T) {
+	ctx := context.Background()
+	for _, test := range []struct {
+		executable Executable
+		named      string
+		build      string
+	}{
+		{Executable{Commit: "abcdef1"}, "devel (abcdef1)", "bootwright devel (abcdef1)"},
+		{Executable{}, "", "the executable its operation.json records"},
+	} {
+		t.Run(test.build, func(t *testing.T) {
+			h := newHarness(t, "artifact-server-lab")
+			h.service.options.Executable = test.executable
+			failedApply(t, h)
+			status, err := h.service.Status(ctx, StatusRequest{ContextName: testContextName})
+			if err != nil || status.Lifecycle == nil || status.Lifecycle.Executable != test.named {
+				t.Fatalf("status names the registering build %+v (%v), want %q", status.Lifecycle, err, test.named)
+			}
+			h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
+			refusedUnchanged(t, h, reconciliation.Apply, "this executable's automation differs from the one this operation froze",
+				"take back what this operation owns under this executable with bootwright destroy --context lab, or install "+test.build+", which registered it")
+			h.capability.removalErr = failure("lifecycle.state", "the frozen request has an unsupported version", "")
+			_, err = h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Remediation != "remove it with "+test.build {
+				t.Fatalf("the removal of an unreadable block reported %+v, want it to name %q", reported, test.build)
+			}
+		})
+	}
+}
+
 // A changed automation digest is refused as before, and the refusal now names
 // the build a continuation needs.
 func TestAChangedAutomationRefusalNamesTheExecutable(t *testing.T) {
@@ -380,7 +415,7 @@ func TestAChangedAutomationRefusalNamesTheExecutable(t *testing.T) {
 		start       func(*testing.T, *harness)
 		remediation string
 	}{
-		{reconciliation.Apply, failedApply, "destroy what this operation owns under this executable, or install bootwright devel (abcdef1), which registered it"},
+		{reconciliation.Apply, failedApply, "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"},
 		{reconciliation.Destroy, unknownRemoval, "install bootwright devel (abcdef1), which registered this operation, and run bootwright setup"},
 	} {
 		t.Run(string(test.verb), func(t *testing.T) {

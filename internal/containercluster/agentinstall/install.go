@@ -319,7 +319,7 @@ func (c InstallCapability) prepare(ctx context.Context, execution lifecycle.Exec
 		return InstallRequest{}, err
 	}
 	if operation == "apply" {
-		if err := refusedContinuation(request); err != nil {
+		if err := refusedContinuation(execution.Context, request); err != nil {
 			return InstallRequest{}, err
 		}
 	}
@@ -331,13 +331,14 @@ func (c InstallCapability) prepare(ctx context.Context, execution lifecycle.Exec
 // Planning refuses a physical node before registration, but an operation
 // registered before that refusal still carries one, and an apply boots exactly
 // the nodes that were frozen. A destroy and an observation are never refused:
-// the one ejects media and the other reads.
-func refusedContinuation(request InstallRequest) error {
+// the one ejects media and the other reads. The removal it names is the one of
+// the context the operation runs in.
+func refusedContinuation(contextName string, request InstallRequest) error {
 	for _, node := range request.Nodes {
 		if node.Physical {
 			return refusal("lifecycle.state", "this operation froze Machine/"+node.Machine+" as a physical node of ContainerCluster/"+
 				request.Identity.Cluster+", which this executable refuses",
-				"run bootwright destroy to end this operation, then plan it again under this executable")
+				"run bootwright destroy --context "+contextName+" to end this operation, then plan it again under this executable")
 		}
 	}
 	return nil
@@ -373,7 +374,7 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 			return lifecycle.RunResult{}, err
 		}
 		maps.Copy(values, pins)
-		refusals = preBootRefusals(request)
+		refusals = preBootRefusals(execution.Context, request)
 	}
 	// The attempt adds the placement's identity and host key, so only the
 	// nodes' own credentials are listed here.
@@ -400,11 +401,11 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 
 // preBootRefusals names what each node's pre-boot proof may refuse under that
 // node's position, the one its boot names it by, so a refusal reports the
-// Machine it refused.
-func preBootRefusals(request InstallRequest) map[string]error {
+// Machine it refused and the commands of the context it runs in.
+func preBootRefusals(contextName string, request InstallRequest) map[string]error {
 	refusals := map[string]error{}
 	for index, node := range request.Nodes {
-		for reason, refused := range substrate.PreBootRefusals(node.Substrate, node.Machine, node.Controller.Endpoint) {
+		for reason, refused := range substrate.PreBootRefusals(node.Substrate, contextName, node.Machine, node.Controller.Endpoint) {
 			refusals[nodeRefusal(reason, index)] = refused
 		}
 	}

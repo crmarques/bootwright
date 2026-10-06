@@ -39,18 +39,18 @@ sys.argv = ['pip'] + sys.argv[1:]
 runpy.run_module('pip', run_name='__main__')
 `
 
-func resolveBootstrapWheels(ctx context.Context, projected *projection, value prerequisites.BootstrapDefinition, egress prerequisites.SetupEgress) ([]byte, error) {
+func resolveBootstrapWheels(ctx context.Context, staging prerequisites.Staging, projected *projection, value prerequisites.BootstrapDefinition, egress prerequisites.SetupEgress) ([]byte, error) {
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	trust, err := qualifiedTrustPEM(bounded)
 	if err != nil {
 		return nil, err
 	}
-	root, cleanup, err := stageBootstrap(bounded, projected, value, trust)
+	root, stage, err := stageBootstrap(bounded, staging, projected, value, trust)
 	if err != nil {
 		return nil, err
 	}
-	defer cleanup()
+	defer stage.Release()
 	broker, err := newPublisherBroker(bounded, egress, trust)
 	if err != nil {
 		return nil, err
@@ -70,16 +70,49 @@ func resolveBootstrapWheels(ctx context.Context, projected *projection, value pr
 		return syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
 	}
 	command.WaitDelay = 2 * time.Second
+	return runResolver(ctx, command, stage)
+}
+
+// runResolver runs the staged resolver and returns its bounded report. A start
+// failure is classified apart from a run that fails, because only a start the
+// kernel denies can name the stage's mount.
+func runResolver(ctx context.Context, command *exec.Cmd, stage prerequisites.Stage) ([]byte, error) {
 	output := &boundedOutput{maximum: 8 << 20}
 	diagnostic := &boundedOutput{maximum: 64 << 10}
 	command.Stdout, command.Stderr = output, diagnostic
-	if err := command.Run(); err != nil || output.exceeded || diagnostic.exceeded {
+	if err := command.Start(); err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, bundleFailure("isolated wheel resolution failed; compatible binary wheels and unprivileged Linux namespaces are required")
+		return nil, bootstrapStartFailure(err, stage)
+	}
+	if err := command.Wait(); err != nil || output.exceeded || diagnostic.exceeded {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, wheelResolutionFailure()
 	}
 	return slices.Clone(output.Bytes()), nil
+}
+
+// bootstrapStartFailure names why the staged interpreter could not start. An
+// execution the kernel denies on a stage whose filesystem is mounted noexec is
+// that mount, which only remounting it settles; any other start failure keeps
+// the resolution's own requirements.
+func bootstrapStartFailure(err error, stage prerequisites.Stage) error {
+	if stage.Noexec && (errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)) {
+		parent := filepath.Dir(stage.Path)
+		return &prerequisites.ScopedFailure{
+			Code:       "controller.setup",
+			Message:    "the staged resolver cannot execute because " + parent + " is on a filesystem mounted noexec",
+			Correction: "Mount the filesystem holding " + parent + " with exec",
+		}
+	}
+	return wheelResolutionFailure()
+}
+
+func wheelResolutionFailure() error {
+	return bundleFailure("isolated wheel resolution failed; compatible binary wheels and unprivileged Linux namespaces are required, and an execution policy such as fapolicyd or SELinux must allow the staged interpreter")
 }
 
 func bootstrapProcessAttributes(root string) *syscall.SysProcAttr {
@@ -95,16 +128,18 @@ func bootstrapProcessAttributes(root string) *syscall.SysProcAttr {
 	}
 }
 
-func stageBootstrap(ctx context.Context, projected *projection, value prerequisites.BootstrapDefinition, trust []byte) (string, func(), error) {
+func stageBootstrap(ctx context.Context, staging prerequisites.Staging, projected *projection, value prerequisites.BootstrapDefinition, trust []byte) (string, prerequisites.Stage, error) {
 	if !validExecutionRequirement(value.Execution) || value.Execution.PythonExecutable != value.PythonExecutable {
-		return "", nil, bundleFailure("bootstrap execution foundation is invalid")
+		return "", prerequisites.Stage{}, bundleFailure("bootstrap execution foundation is invalid")
 	}
-	root, err := os.MkdirTemp("/tmp", "bootwright-resolver-")
+	root, stage, err := bootstrapStage(ctx, staging)
 	if err != nil {
-		return "", nil, bundleFailure("disposable bootstrap workspace cannot be created")
+		return "", prerequisites.Stage{}, err
 	}
-	cleanup := func() { os.RemoveAll(root) }
-	fail := func(err error) (string, func(), error) { cleanup(); return "", nil, err }
+	fail := func(err error) (string, prerequisites.Stage, error) {
+		stage.Release()
+		return "", prerequisites.Stage{}, err
+	}
 	uid, gid := os.Getuid(), os.Getgid()
 	if uid == 0 {
 		uid, gid = 65534, 65534
@@ -185,7 +220,25 @@ func stageBootstrap(ctx context.Context, projected *projection, value prerequisi
 			return fail(err)
 		}
 	}
-	return root, cleanup, nil
+	return root, stage, nil
+}
+
+// bootstrapStage takes the stage the resolver's chroot is built in and creates
+// that chroot within it; a stage it cannot complete is released.
+func bootstrapStage(ctx context.Context, staging prerequisites.Staging) (string, prerequisites.Stage, error) {
+	if staging == nil {
+		return "", prerequisites.Stage{}, bundleFailure("disposable bootstrap workspace cannot be created")
+	}
+	stage, err := staging.Stage(ctx, "resolver")
+	if err != nil {
+		return "", prerequisites.Stage{}, err
+	}
+	root := filepath.Join(stage.Path, "root")
+	if err := os.Mkdir(root, 0700); err != nil {
+		stage.Release()
+		return "", prerequisites.Stage{}, bundleFailure("disposable bootstrap workspace cannot be created")
+	}
+	return root, stage, nil
 }
 
 // Every ELF dependency needed by the staged interpreter must be supplied by

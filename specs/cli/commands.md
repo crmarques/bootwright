@@ -88,7 +88,7 @@ The three `media` commands follow the host-wide
 | `bootwright preflight storage-cluster` | same flags as `preflight infra`, with StorageCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight add-ons` | `--clusters <list>` default all ContainerClusters; `--output text\|json` default `text` | add-on prerequisite checks | bounded observation |
 | `bootwright preflight all` | `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true` | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
-| `bootwright plan` | `--stage <list>` default all stages | next legal full-context plan or exact continuation point, with the steps each block waits for, how much of it can run at once, and the blocks a stage selection would start | none |
+| `bootwright plan` | `--stage <list>` default all stages | next legal full-context plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks this build starts at a time, and the blocks a stage selection would start | none |
 | `bootwright status` | `--output text\|json` default `text` | context readiness, lifecycle state, and next safe commands | read local state |
 | `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false; `--output text\|json` default `text` | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
 | `bootwright render effective` | `--output text\|json` default `text` | normalized effective desired state and object counts | none |
@@ -257,7 +257,10 @@ YAML output mode, global output flag, or `--format` alias. `apply`, `destroy`,
 
 `--yes` suppresses only the named command's
 [ordinary confirmation](../cli.md#ordinary-confirmation) after target
-selection and every independent safeguard and authorization succeeds. It may
+selection and every independent safeguard and authorization decidable from
+durable local state succeeds; a proof that needs the exclusive lock or a remote
+observation, such as `destroy`'s resolution and quiescence gate, follows the
+prompt and still refuses before registration or any effect. It may
 confirm a safe command-owned overwrite, recreation, or replacement, but it
 does not itself select a target or authorize data loss,
 a changed or unknown identity, a failed probe, or another named risk. If a

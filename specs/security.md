@@ -183,31 +183,67 @@ Each lifecycle adapter invocation owns a job directory `bootwright-run-<n>`
 beneath `/run` and a scratch directory `bootwright-run-scratch-<n>-<m>` beneath
 `/var/tmp` that carries its job's `<n>`. Before it writes anything else into
 the job, the runner takes an exclusive advisory lock on its `lock` file, then
-records beside it the adapter's implementation, operation, Machine and request
-digest. The adapter inherits the lock, and so do the `ansible-playbook` child
-its supervisor forks and every Ansible worker, so the lock is free only once
-none of them runs, and the worker that a supervisor killed on its own leaves
-running still holds it. A run refuses with `lifecycle.adapter-running`, naming
-the held lock, while another job's lock is held, and starts nothing. An
-invocation removes its own directories when it ends only if their lock is free;
-otherwise they stay, with the material in them, for the processes that still
-use them. Every run first removes each job whose lock is free, with its
-scratch, and each scratch whose job is gone, as after a reboot empties `/run`.
-Like the [abandoned media stage](contexts.md#media-acquisition), it considers
-only entries with the runner's exact names that are private directories owned
-by root, reaches each through its held parent, decides on the opened handle,
+one on its `holder` file, which only the invocation holds: it is opened
+close-on-exec and never handed to the adapter. It then records beside them the
+context the run is for, its block and description, and the adapter's
+implementation, operation, Machine and request digest. A run that names no
+valid context, or whose record a sweep could not read back, refuses before any
+job exists. The adapter inherits the lock, and so do the `ansible-playbook`
+child its supervisor forks and every Ansible worker, so the lock is free only
+once none of them runs, and the worker that a supervisor killed on its own
+leaves running still holds it. A run refuses with `lifecycle.adapter-running`,
+and starts nothing, only while a job of its own context holds its lock. While
+the invocation that started that job still holds its holder, the refusal names
+the job's context, description, operation and Machine and says to wait for it
+to end; only once the holder is free, so that what holds the lock is what the
+invocation left behind, does it name the lock and advise ending the processes
+that hold it. A held job of another context neither refuses nor goes, so
+bounded runs of two contexts proceed together. A held job whose record is
+unreadable or names no valid context, or that has no holder, refuses a run of
+every context, naming the held lock, until it ends: that is what a job a build
+before this rule started looks like across an upgrade
+(`TestTwoContextsRunsProceedTogether`,
+`TestASameContextRunRefusesNamingTheHeldJob`,
+`TestAJobAnEarlierBuildStartedRefusesEveryContext`). An invocation removes its
+own directories when it ends only if their lock is free; otherwise they stay,
+with the material in them, for the processes that still use them. Every run
+first removes each job on the host whose lock is free, whatever its context,
+with its scratch, and each scratch whose job is gone, as after a reboot empties
+`/run` (`TestTheSweepRemovesAnotherContextsUnheldJob`). Like the
+[abandoned media stage](contexts.md#media-acquisition), it considers only
+entries with the runner's exact names that are private directories owned by
+root, reaches each through its held parent, decides on the opened handle,
 which must be the entry listed, follows no link, crosses no filesystem and
 fails closed when it cannot remove one, or when a parent holds more run
-directories or a tree more depth or entries than its bounds allow. A job's
-record and lock go last, so a job it could not remove fails every later sweep
-closed too, while a job without its record is still being created and is left
-alone.
-
-Not yet met: the run request carries neither its context nor its block, so a
-job records the adapter's implementation, operation, Machine and request digest
-in their place, and the refusal covers every context on the host rather than
-the held job's own; tracked as
-[B24](milestones/m1.md#b24).
+directories or a tree more depth or entries than its bounds allow, and reads
+no more than 4 KiB of a held job's record. Only a job's own processes hold
+its lock exclusively. A sweep takes it shared, which it can only once none of
+them runs and which keeps it so, and removes the job only while it also holds
+the job directory's own lock exclusively, which keeps every other sweep from
+removing it too: a sweep that cannot take that lock leaves the job to the one
+removing it, and one that takes it after the job went finds the job's record
+gone and leaves it. A job a sweep is removing therefore never looks held, and
+neither refuses a run of its own context nor names the sweeping process as
+one to end; only a sweep of a build before this rule takes the lock
+exclusively, so across an upgrade a job it is removing refuses as a held one
+until it is gone (`TestAJobAnotherSweepIsRemovingRefusesNoRun`,
+`TestARunBesideAnotherContextsSweepsNeverRefusesOverItsEndedJob`). A sweep
+likewise removes a scratch, with its job or once its job is gone, only while
+it holds the scratch directory's own lock exclusively, which a sweep of a
+build before this rule never takes, so two sweeps of this build never empty
+one scratch together: one that cannot take that lock leaves the scratch to
+the sweep removing it, and one that takes it after the scratch went leaves it
+(`TestAnOrphanedScratchAnotherSweepIsRemovingRefusesNoRun`,
+`TestTwoContextsSweepsOverOneOrphanedScratchNeverRefuse`). A held
+job's record and holder decide what it says to a run only while its lock is
+still held once they are read; a job let go meanwhile is free. A job's
+record, holder and lock go last, in that order, so a job it could not remove
+fails every later sweep closed too, while a job without its record is still
+being created, or already going, and is left alone. A job publishes its
+record whole, written under another name and renamed into place once its
+holder exists, so a sweep never reads one half written, and another context's
+job a sweep finds mid-claim or mid-removal neither refuses nor goes
+(`TestASweepBesideAnotherContextsClaimsAndReleasesNeverRefuses`).
 
 The process that runs a Bootwright-owned operation cancels it on SIGHUP exactly
 as on SIGINT and SIGTERM, so a closed terminal or a lost session interrupts the
@@ -267,8 +303,14 @@ by default. Its one insecure exception, `disable-verification`, is explicit,
 declared on one Machine and visible in that Machine's effective state. It is
 never inherited, never a provider default and never an Environment kind
 default, and a Machine whose installation delivers private material refuses it
-before registration; the one bounded exception is the emulated controller the
-[container-cluster boot media](container-clusters.md#boot-media) records. A
+before registration. The one bounded exception is the emulated controller of a
+virtual Machine, which is reached over plain HTTP with its credential and
+fetches without verifying the server. Every consumer booting through one has
+its artifact server placed on that controller's provider host, so neither leg
+leaves that host: the
+[container-cluster boot media](container-clusters.md#boot-media) and the
+[managed-OS installation](managed-os.md#refusal-table) each refuse before
+registration otherwise. A
 controller's own transport verifies against its declared CA bundle alone, or
 against the system trust store when it declares none
 ([Machine BMC trust](api/machines.md#bmc-and-root-device-shape)).
@@ -461,8 +503,8 @@ require qualified real-system tests, recorded in the
 | An authored, operator or remote string reaches Ansible as data and is never rendered as a template. | `TestExtraVariablesMarkEveryStringAsData`, `TestExtraVariablesRefuseAKeyAnsibleCoreReserves`, `TestThePlanRefusesEveryKeyTheRunnersCannotEncode`, `TestTheAdapterReadsEveryRequestStringAsData`, `TestTheLifecycleRunnerWritesTheCollectionsFixture`, `TestTheLargestRequestStillFitsTheVariablesBound`, `TestTheControllerRunnerWritesEveryRequestStringAsData`, `TestTheControllerRunnerWritesTheCollectionsFixture`, `TestAPlanRefusesARequestHoldingATemplateDelimiter`, `TestTheControllerPrerequisitesBlockIsScannedLikeEveryOther`, `TestARequestWithoutATemplateDelimiterPlans`, `TestEveryProvenPathToARequestRefusesItsTemplateDelimiter`, and the collection's `test_a_runner_request_string_reaches_the_module_verbatim` and `test_the_same_strings_unmarked_are_rendered` | none |
 | Invalid TLS and SSH identity, failed and ambiguous remote probes, target drift and unauthorized scope expansion refuse. | `TestCertificateValidationRejectsMismatchExpiryUsageAndFalseChain`, `TestADeclaredHostKeyForAnotherTargetRefuses`, `TestInstalledHostIdentityRefusesUntrustedOrAmbiguousEvidence`, `TestContinuationRefusesDriftedInputExecutableOrHost`, `TestEveryCapabilityHonoursTheCapabilityContract`, `TestOnlyADoneBareMetalApplyProofPinsAMachine`, `TestAProvedMachineCarriesItsIdentityToTheAdapter`, `TestAnUnreadableProofRefusesBeforeAnyPromptOrRun`, `TestTrustBundleRequiresVerification`, `TestAMachineBundleWithAnInheritedOptOutRefuses`, `TestAProviderBundleIsNotInheritedByAMachineThatOptsOut`, `TestProviderVirtualMediaDisableVerificationRefuses`, `TestAMachineKindDefaultCannotDefaultDisableVerification`, `TestDisableVerificationIsNeverAKindDefault`, `TestAKindDefaultTrustBundleSkipsAMachineThatOptsOut`, `TestAPrivateInstallationRefusesDisabledVerification`, `TestImportCertificateNeedsAnHttpsImageAndItsCertificate`, `TestTheClaimReadsTheControllerThroughItsBundle`, `TestPowerCarriesTheControllerBundle`, `TestEachReadTargetReadsItsOwnBundle`, `TestTheProbeVerifiesTheListenerAgainstTheBoundServingCertificate` | B73 |
 | Secret and credential material never reaches output, diagnostics, verbose paths, logs, adapter events, retries, errors, cancellation or `no_log` handling. | `TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests`, `TestMaterialNeverAppearsInMetadataOrErrors`, `TestVariablesCarryPathsNotMaterial`, `TestAcquisitionRequiresExactBoundedPublisherBytesAndRedactsFailures`, `TestProducedMaterialNeverReachesRecordsLogsOrAdapterOutput`, `TestSecretCommandsNeverListOrTouchProducedMaterial`, `TestTheInstallOffersItsKubeconfigOnlyOnProvedCompletion`, `TestManagedAndExternalStorageClustersAreNotApplicableAndReadNoCustody`, `TestAFailedRunReadsNoOutput`, `TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic`, `TestTheAdapterOutputPrintsNothingANoLogTaskRaised`, and the collection's `test_no_material_or_completion_reaches_the_adapters_own_output`, `test_the_censored_callback_prints_nothing_a_hidden_task_raised`, `test_no_management_controller_refusal_is_censored`, `test_every_controller_refusal_names_the_controllers_message_and_nothing_it_was_given`, `test_the_module_reports_the_registration_and_never_the_token` and `test_the_read_after_a_stall_runs_under_no_log_and_never_fails_the_wait_itself` | none |
-| Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestAKilledInvocationTakesItsAdapter`, `TestStoppingAnAdapterEndsItsTreeBeyondItsGroup`, `TestThreadChurnNeverSignalsARunningAdapter`, `TestAnAdapterStillRunningRefusesTheNextRun`, `TestAStaleRunDirectoryIsRemovedWithItsSecretFiles`, `TestHangupCancelsTheOperationLikeTerminate`, `TestAnIgnoredHangupLeavesTheOperationRunning`, `TestHangupIsRelayedToThePrivilegedOperation`, `TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline`, `TestABoundedRunCancelledInsideItsCallReleasesItsBinding`, `TestABoundedConsumerCancelledInsideItsCallReleasesItsBinding`, `TestABoundedConsumerCancelledWhileReopeningReleasesItsBinding`, and the collection's `test_the_read_is_bounded_in_time_however_slowly_the_answer_arrives` and `test_the_read_is_bounded_in_size` | B17, B23 |
-| Dependency integrity, lock agreement and native-schema compatibility hold, and runtime-tool substitution or drift refuses. | `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution`, `TestBootstrapRejectsSelfConsistentSourceAndVersionSubstitution`, `TestNativeSolveRefusesChangedBytesForSameRetainedRelease`, `TestRuntimeRequiresSelectedNativeCLIToRemainExecutable`, `TestEveryCapabilityHonoursTheCapabilityContract`, `TestThePowerRolesAdmitTheRequestsThisBuildSends`, `TestTheRoleAdmitsEveryRequestThisBuildSends`, `TestRoleVersionAssertionsMatchTheirArgumentSpecs` | none |
+| Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestAKilledInvocationTakesItsAdapter`, `TestStoppingAnAdapterEndsItsTreeBeyondItsGroup`, `TestThreadChurnNeverSignalsARunningAdapter`, `TestAnAdapterStillRunningRefusesTheNextRun`, `TestAStaleRunDirectoryIsRemovedWithItsSecretFiles`, `TestHangupCancelsTheOperationLikeTerminate`, `TestAnIgnoredHangupLeavesTheOperationRunning`, `TestHangupIsRelayedToThePrivilegedOperation`, `TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline`, `TestABoundedRunCancelledInsideItsCallKeepsNoMaterial`, `TestABoundedConsumerCancelledInsideItsCallKeepsNoMaterial`, `TestABoundedConsumerCancelledWhileReadingRunsNothing`, and the collection's `test_the_read_is_bounded_in_time_however_slowly_the_answer_arrives` and `test_the_read_is_bounded_in_size` | B17, B23 |
+| Dependency integrity, lock agreement and native-schema compatibility hold, and runtime-tool substitution or drift refuses. | `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution`, `TestBootstrapRejectsSelfConsistentSourceAndVersionSubstitution`, `TestNativeSolveRefusesChangedBytesForSameRetainedRelease`, `TestOperatorRootsAcceptOnlyTheVendorKey`, `TestEveryCapabilityHonoursTheCapabilityContract`, `TestThePowerRolesAdmitTheRequestsThisBuildSends`, `TestTheRoleAdmitsEveryRequestThisBuildSends`, `TestRoleVersionAssertionsMatchTheirArgumentSpecs` | none |
 | Mutation crash points, lease conflict, replay, partial success, rollback, evidence loss and required-log write failure leave a recoverable context. | `TestCrashReleasesLocksAndLeavesCompleteSelection`, `TestLifecyclePublicationCheckpointsFireAndFailClosed`, `TestMutationGuardLayoutAndLeases`, `TestAPartlyRealizedBlockIsConvergedByRepeatingTheOperation`, `TestRequiredLogFaultStopsTheOperation`, `TestARestorationWhoseClearFailsStartsNothing`, `TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry`, `TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves`, `TestAnInterruptedRemovalFinalizationIsCompletedByTheNextDestroy`, `TestARemovalWhoseBindingReleaseFailsReportsIncompleteFinalization`, `TestAnInterruptedApplyFinalizationIsCompletedByTheRepeatedApply`, `TestARunningOperationWhoseBlocksAreAllDoneIsFinalized`, `TestAFreshApplyOverAnUnfinalizedRemovalFinishesItFirst`, `TestNoFinalizationOverContradictedRecords`, `TestAReservationHeldBesideACompletedRemovalIsReleasedByTheNextDestroy`, `TestAFinalizationRefusesWhenTheContextChangedBeforeIt`, `TestEvidenceProtectsTheContextBeforeItBindsOrReserves`, `TestAFreshApplyClaimsItsOperationBeforeItBinds`, `TestAFailedEvidencePublicationBindsNothing`, `TestConcurrentFreshAppliesThatBothFailLeaveNothingRaised`, `TestABindingListingThatFailsBlocksNothing`, `TestARegistrationThatProvablyFailedRestoresTheEvidence`, `TestAFailedRegistrationWithReservationsKeepsItsEvidence`, `TestARegistrationThatMayHaveHappenedKeepsItsBinding`, `TestAContinuationProjectsBeforeItsFirstEffect`, `TestTheNextRegistrationReleasesBindingsNoOperationNames`, `TestADestroyReleasesWhatAnInterruptedRegistrationLeft`, `TestAnApplyWhoseBindingAnUnclaimedReleaseTookRefuses`, `TestAnApplyRefusesWhenAnotherClaimRaisedTheEvidenceAgain`, `TestAnApplyOverACompletedDestroyRefusesWhenAFinalizationTookItsBinding`, `TestADestroyOverUnindexedRecordsRefuses`, `TestARemovalRaisesItsEvidenceBeforeItRegisters`, `TestAnApplyInterruptedBeforeItRegistersGivesBackWhatItRaised`, `TestAFailedRestorationIsReportedBesideItsCause`, `TestADestroyReleaseRefusesWhenAnOperationRegisteredBeforeIt`, `TestARemovalWhosePublicationFailedCollectsNothing`, `TestAClaimedOperationRegistersIntoItsDirectory`, `TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb`, `TestAFreshApplyWhoseClaimFailedRestoresTheEvidenceItsDirectoryMayHold`, `TestAnUnclaimedReleaseCollectsOnlyTheBindingsItReadFirst`, `TestAFinalizationCollectsOnlyTheBindingsItReadFirst`, `TestAnIncompleteApplyWithoutAContradictionIsStillRemovable`, `TestAnInitializationResumesOverATornStageAtEveryStagedWrite`, `TestAnInitializationRefusesAStageThatParsesButAttributesNothing`, `TestAContextInitRetryResumesOverATornKeyringStage`, `TestTheKillHarnessReachesTheCustodyPublications`, `TestAFailedPublicationLeavesTheAttemptUnknown`, `TestADestroyAfterAFailedPublicationCapturesBeforeAnyInverse`, `TestACancelledPublicationLeavesItUnknown`, `TestAStoppedDestroyKeepsTheAccess`, `TestAFinalizationWithdrawsWhatAnInterruptedRemovalLeft` | none |
 | Read-only commands perform no writes, payload reads, processes, network access, secret lookup or generation. | `TestImmutableInputAndReadOnlyLifecycleBoundary`, `TestALifecycleInspectionRunsNothing`, `TestPlanPreviewsWithoutWritingAnything`, `TestStubServicesRemainStubs`, `TestReadsNeverCollectAStage` | none |
 | Rejected operations perform no effect. | `TestCancellationBeforeAnyEffectRegistersNothing`, `TestDeclinedConfirmationRegistersNothing`, `TestUnsupportedObjectsRefuseBeforeRegistration`, `TestInvalidAdmissionAndUnavailableRoutesDoNotWrite`, `TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses`, `TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses`, `TestATransitionRefusesWhenItsFrozenPlanChangedBeforeMutation`, `TestATransitionRefusesWhenTheOperationRecordChangedBeforeMutation`, `TestAContinuationRefusesWhenABlockWasRetriedBeforeMutation`, `TestAFrozenPlanThatIsNotItsOperationsRefuses`, `TestARepeatedMaterialRefusesBeforeAnyJobExists`, `TestAnUnsafeMaterialNameOrValueRefusesBeforeAnyJobExists`, `TestAFrozenPlacementOffTheControllerRefusesEveryVerb` | none |

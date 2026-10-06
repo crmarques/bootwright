@@ -17,7 +17,7 @@ func lifecycleInspectionCommands() []commandSpec {
 func lifecycleMutationCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "apply", short: "Apply the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), stageFlag(), confirmationFlag()}, long: "Realize the complete selected Environment, or continue the exact operation an interruption left behind. The plan is always complete; --stage only gates which blocks this invocation starts, and the operation pauses at that boundary. Review the plan before confirming; --yes skips ordinary confirmation."}),
-		available(commandSpec{path: "destroy", short: "Destroy the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), confirmationFlag()}, long: "Remove everything a completed apply recorded as owned, proving each removal. Review the plan before confirming; --yes skips ordinary confirmation."}),
+		available(commandSpec{path: "destroy", short: "Destroy the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), confirmationFlag()}, long: "Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Stop every Machine it takes back first (bootwright machine stop); a plan that deletes disks needs --authorize data-loss. Review the plan before confirming; --yes skips ordinary confirmation."}),
 	}
 }
 

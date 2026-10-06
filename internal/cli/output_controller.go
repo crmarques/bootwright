@@ -199,6 +199,10 @@ func controllerActionLabel(id string) string {
 		return "Target tools"
 	case "libvirt-client":
 		return "Libvirt client"
+	case "hypervisor":
+		return "Hypervisor"
+	case "installer-media":
+		return "Installer media"
 	case "controller-binding":
 		return "Controller binding"
 	case "setup-recovery":
@@ -272,8 +276,10 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 }
 
 // controllerNextCommand offers the one command that settles what is missing.
-// A completed setup moves the operator on to verification; anything a context
-// selects belongs to its own controller stage, never to setup. A context whose
+// A completed setup moves the operator on to verification; a not-ready
+// preflight offers the command its service decided, never one re-derived here,
+// and none when its service decided none, as for a selection the platform
+// cannot realize, whose refusal names its own remedy. A context whose
 // readiness holds moves on to its plan; a ready host names no next command,
 // because which context to plan is the operator's choice.
 func controllerNextCommand(command string, report *prerequisites.Report) string {
@@ -290,8 +296,8 @@ func controllerNextCommand(command string, report *prerequisites.Report) string 
 		}
 		return next
 	}
-	if prerequisites.PendingScope(*report) == prerequisites.ContextScope && report.ContextName != "" {
-		return "bootwright apply --stage controller --context " + report.ContextName
+	if report.Outcome == "not-ready" {
+		return report.Next
 	}
 	return "bootwright setup"
 }

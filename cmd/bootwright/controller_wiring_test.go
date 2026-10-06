@@ -12,12 +12,16 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestComposedBaselineDryRunUsesOnlyPlatformAndCatalog(t *testing.T) {
 	for _, flag := range []string{"", "--context="} {
 		ports := &controllerPorts{}
-		services := assembleServices(serviceDependencies{Controller: controllerDependencies{Storage: ports, Host: ports, Catalog: ports, Bundle: ports}})
+		services := assembleServices(serviceDependencies{Controller: controllerDependencies{
+			Storage: ports, Host: ports, Catalog: ports, Bundle: ports,
+			Bootstrap: bootstrapPort{ports}, Native: nativePort{ports}, NativeInspector: nativePort{ports},
+		}})
 		args := []string{"setup", "--dry-run"}
 		if flag != "" {
 			args = append(args, flag)
@@ -36,18 +40,37 @@ func (p *controllerPorts) Platform(context.Context) (prerequisites.Platform, err
 	p.platform++
 	return prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, nil
 }
-func (p *controllerPorts) Select(prerequisites.Platform, prerequisites.NativeRequirements) (prerequisites.Definition, error) {
-	p.catalog++
-	return prerequisites.Definition{CatalogDigest: strings.Repeat("a", 64), PythonVersion: "3.13.15", AnsibleVersion: "2.21.4", Runtime: prerequisites.RuntimeRequirement{Version: "5.8.4"}}, nil
-}
+func (p *controllerPorts) Admit(prerequisites.Platform) error             { p.catalog++; return nil }
 func (p *controllerPorts) ValidateEgress(prerequisites.SetupEgress) error { p.egress++; return nil }
 func (p *controllerPorts) Identity(context.Context) (controller.InstalledHostIdentity, error) {
 	p.effects++
 	return controller.InstalledHostIdentity{}, errors.New("unexpected identity inspection")
 }
-func (p *controllerPorts) Runtime(context.Context, prerequisites.RuntimeRequirement) (prerequisites.RuntimeInspection, error) {
-	p.effects++
-	return prerequisites.RuntimeInspection{}, errors.New("unexpected runtime inspection")
+
+// bootstrapPort and nativePort are the resolution ports a dry run never
+// reaches: each call is an effect.
+type bootstrapPort struct{ ports *controllerPorts }
+
+func (b bootstrapPort) Resolve(context.Context, prerequisites.Platform, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.BootstrapDefinition, []diagnostics.Diagnostic, error) {
+	b.ports.effects++
+	return prerequisites.BootstrapDefinition{}, nil, errors.New("unexpected bootstrap resolution")
+}
+
+type nativePort struct{ ports *controllerPorts }
+
+func (n nativePort) Resolve(context.Context, prerequisites.Platform, prerequisites.NativeRequirements, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
+	n.ports.effects++
+	return prerequisites.NativeResolvedPlan{}, errors.New("unexpected native resolution")
+}
+
+func (n nativePort) Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
+	n.ports.effects++
+	return prerequisites.NativePresence{}, errors.New("unexpected native inspection")
+}
+
+func (n nativePort) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
+	n.ports.effects++
+	return prerequisites.OperatorPresence{}, errors.New("unexpected operator inspection")
 }
 func (p *controllerPorts) ReadController(context.Context, string, func(prerequisites.StorageView) error) error {
 	p.effects++

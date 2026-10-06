@@ -17,6 +17,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
+	"github.com/crmarques/bootwright/internal/controller/nativelocal"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
@@ -36,7 +37,7 @@ func TestQualifiedRootInvocationResolver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, _, err := compiledCatalog()
+	catalog, err := compiledCatalog()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,6 +45,7 @@ func TestQualifiedRootInvocationResolver(t *testing.T) {
 	if !ok {
 		t.Fatal("unsupported current platform")
 	}
+	staging := nativelocal.NewStaging(nativelocal.StagingParent)
 	// This first stage contains only the repository's trusted Go test binary.
 	// No downloaded interpreter executes before the external mapping proof.
 	projected := newProjection()
@@ -60,11 +62,11 @@ func TestQualifiedRootInvocationResolver(t *testing.T) {
 	}
 	requirement := cloneExecution(native.Execution)
 	requirement.PythonExecutable = "python/bin/python3.14"
-	root, cleanup, err := stageBootstrap(ctx, projected, prerequisites.BootstrapDefinition{PythonExecutable: requirement.PythonExecutable, Execution: requirement}, []byte("unused probe trust"))
+	root, stage, err := stageBootstrap(ctx, staging, projected, prerequisites.BootstrapDefinition{PythonExecutable: requirement.PythonExecutable, Execution: requirement}, []byte("unused probe trust"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanup()
+	defer stage.Release()
 	command := exec.CommandContext(ctx, "/"+requirement.PythonExecutable, "-test.run", "^TestBootstrapNamespaceProbeChild$")
 	command.Dir = "/"
 	command.Env = []string{"BOOTWRIGHT_NAMESPACE_PROBE=1", "GOMAXPROCS=1", "HOME=/home", "TMPDIR=/tmp"}
@@ -122,7 +124,7 @@ func TestQualifiedRootInvocationResolver(t *testing.T) {
 	if err := command.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	resolved, _, err := NewBootstrapResolver().Resolve(ctx, platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
+	resolved, _, err := NewBootstrapResolver(staging).Resolve(ctx, platform, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{})
 	if err != nil {
 		t.Fatalf("%v: %+v", err, diagnostics.Of(err))
 	}

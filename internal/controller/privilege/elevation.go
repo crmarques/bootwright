@@ -25,6 +25,9 @@ type Invocation struct {
 	Output, Error                 io.Writer
 	InputTerminal                 bool
 	OutputTerminal, ErrorTerminal *os.File
+	// Session marks a command whose exit status is an SSH session's, which
+	// is the remote command's once the child ran.
+	Session bool
 }
 
 // Elevator relaunches one invocation as root through the qualified sudo and
@@ -81,6 +84,7 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 	outcome := conclude(elevationRun{
 		json: invocation.JSON, interactive: !noninteractive, failed: err != nil,
 		interrupted: ExitCode(ctx, 0) != 0, code: code, wrote: output.bytes != 0,
+		session: invocation.Session,
 	}, errorStream)
 	if outcome.Diagnostic == nil {
 		errorStream.release()
@@ -89,8 +93,8 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 }
 
 type elevationRun struct {
-	json, interactive, failed, interrupted, wrote bool
-	code                                          int
+	json, interactive, failed, interrupted, wrote, session bool
+	code                                                   int
 }
 
 // conclude decides what an ended elevation reports. Sudo exits 1 for its own
@@ -101,6 +105,9 @@ type elevationRun struct {
 // exits with the status sudo returned, the child's own once it ran, so a JSON
 // document's exitCode is the process's status after any signal.
 func conclude(run elevationRun, stderr *startFilter) Outcome {
+	if run.session {
+		return concludeSession(run, stderr)
+	}
 	switch {
 	case run.interrupted && !run.failed && run.code > 128 && run.code != 130:
 		if run.wrote {
@@ -132,6 +139,34 @@ func conclude(run elevationRun, stderr *startFilter) Outcome {
 		return authorizationRefusal(stderr.held)
 	}
 	return Outcome{ExitCode: run.code}
+}
+
+// concludeSession decides what an ended session elevation reports. Once sudo
+// ran the child, the child's status is the session's and nothing replaces it,
+// an interrupt included. A sudo that failed, or that a noninteractive
+// invocation saw exit 1 before the child announced its start, refused before
+// the session opened, so it exits 255, the SSH client's own failure status,
+// rather than a status a remote command could have returned; an interrupt that
+// stopped sudo keeps 130. Only held lines are reported in sudo's place: any
+// other line it wrote, such as a sudoers denial, already reached standard
+// error. An interactive invocation hands sudo the terminal, where the child
+// announces nothing, so sudo's own refusal there keeps its status, 1.
+func concludeSession(run elevationRun, stderr *startFilter) Outcome {
+	switch {
+	case run.failed && run.interrupted && !run.wrote:
+		return interruption()
+	case run.failed && run.wrote:
+		return Outcome{ExitCode: 255}
+	case run.failed:
+		return Outcome{ExitCode: 255, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "sudo invocation failed"}}
+	case run.code != 1 || run.interactive || run.wrote || stderr.started:
+		return Outcome{ExitCode: run.code}
+	case !stderr.other && stderr.count != 0:
+		refusal := authorizationRefusal(stderr.held)
+		refusal.ExitCode = 255
+		return refusal
+	}
+	return Outcome{ExitCode: 255}
 }
 
 func interruption() Outcome {

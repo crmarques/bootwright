@@ -382,6 +382,28 @@ func TestDisconnectedAndBaremetalArtifactSelections(t *testing.T) {
 	}
 }
 
+// A server placed on one of a cluster's nodes cannot serve that node's
+// installation, and the refusal says so rather than the opposite rule.
+func TestAClusterCycleIsStatedAsRefused(t *testing.T) {
+	o, c := fixture("baremetal", 4, false)
+	server := obj(api.ArtifactServer, "artifacts", m("management", "managed", "machineRef", "node-0", "endpoints", list(m("name", "media"))))
+	c = api.NewCatalog(append(c.Objects(), server))
+	o = o.WithSpec(o.Spec().WithPath(m("serverRef", "artifacts", "endpointRef", "media"), "install", "agent", "redfishVirtualMedia", "artifactServerEndpoint"))
+	o, _ = Normalize(o, c)
+	const field = "$.spec.install.agent.redfishVirtualMedia.artifactServerEndpoint.serverRef"
+	var found []api.Issue
+	for _, issue := range Validate(o, c) {
+		if issue.Field == field {
+			found = append(found, issue)
+		}
+	}
+	if len(found) != 1 || found[0].Code != "api.invariant" ||
+		found[0].Message != "a cluster installation cannot publish through an artifact server placed on one of its nodes, because that server cannot serve until the node is installed" ||
+		found[0].Remediation != "place ArtifactServer/artifacts on the controller Machine, or select a server placed there" {
+		t.Fatalf("refusal at %s = %#v, want the cycle stated as refused with a remedy naming the server and the controller", field, found)
+	}
+}
+
 func TestMissingPrerequisitesSuppressSecondaryErrors(t *testing.T) {
 	o, _ := fixture("vsphere", 4, false)
 	o, _ = Normalize(o, api.Catalog{})

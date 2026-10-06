@@ -61,18 +61,18 @@ func scriptedElevator(child scriptedChild, commands *[]Command) Elevator {
 // is a terminal the child writes to directly, as sudo hands it to an
 // interactive child, and stderr is everything that reached either writer.
 type elevationCase struct {
-	name                          string
-	json, terminal, errorTerminal bool
-	child                         scriptedChild
-	exit                          int
-	code, message, remediation    string
-	stderr                        string
+	name                                   string
+	json, terminal, errorTerminal, session bool
+	child                                  scriptedChild
+	exit                                   int
+	code, message, remediation             string
+	stderr                                 string
 }
 
 func (c elevationCase) check(t *testing.T, ctx context.Context) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	invocation := Invocation{JSON: c.json, InputTerminal: c.terminal, Arguments: []string{"status"}, Output: &stdout, Error: &stderr}
+	invocation := Invocation{JSON: c.json, InputTerminal: c.terminal, Arguments: []string{"status"}, Output: &stdout, Error: &stderr, Session: c.session}
 	var terminal *os.File
 	if c.errorTerminal {
 		read, write, err := os.Pipe()
@@ -199,6 +199,33 @@ func TestElevationOutcomes(t *testing.T) {
 		{name: "a policy denial speaks for itself", child: scriptedChild{stderr: []string{denial}, code: 1}, exit: 1, stderr: denial},
 		{name: "held lines reach an unexpected status", child: scriptedChild{stderr: []string{passwordNeeded}, code: 2}, exit: 2, stderr: passwordNeeded},
 		{name: "a silent failure keeps its status", child: scriptedChild{code: 1}, exit: 1},
+	} {
+		t.Run(c.name, func(t *testing.T) { c.check(t, context.Background()) })
+	}
+}
+
+// A session's status from 0 to 254 is the remote command's, so once sudo ran
+// the child its status stands with nothing added, and what stopped sudo from
+// running it, in a noninteractive invocation whatever sudo wrote, exits 255.
+// At a terminal the child announces nothing, so sudo's own refusal there is
+// indistinguishable from a remote failure of 1 and keeps that status.
+func TestASessionElevationKeepsTheChildsStatusAndRefusesWithTwoFiftyFive(t *testing.T) {
+	failed := errors.New("sudo could not be waited for")
+	for _, c := range []elevationCase{
+		{name: "a remote status stands", session: true, child: scriptedChild{stdout: "remote\n", stderr: []string{startAnnouncement}, code: 7}, exit: 7},
+		{name: "a remote failure of 1 stands", session: true, terminal: true, child: scriptedChild{code: 1}, exit: 1},
+		{name: "the client's own failure stands", session: true, child: scriptedChild{stderr: []string{startAnnouncement}, code: 255}, exit: 255},
+		{name: "a sudo that could not run", session: true, child: scriptedChild{code: 1, err: failed}, exit: 255, code: "runtime.privilege", message: "sudo invocation failed"},
+		{name: "a sudo that failed after output", session: true, child: scriptedChild{stdout: "partial\n", code: 3, err: failed}, exit: 255},
+		{
+			name: "a sudo refusal before the child started", session: true, child: scriptedChild{stderr: []string{passwordNeeded}, code: 1}, exit: 255, code: "runtime.privilege",
+			message: authorization + ": a password is required", remediation: reauthenticate,
+		},
+		{name: "a sudoers denial before the child started speaks for itself", session: true, child: scriptedChild{stderr: []string{denial}, code: 1}, exit: 255, stderr: denial},
+		{name: "an account no rule names", session: true, child: scriptedChild{stderr: []string{unlisted}, code: 1}, exit: 255, stderr: unlisted},
+		{name: "a warning and a denial before the child started", session: true, child: scriptedChild{stderr: []string{hostWarning, denial}, code: 1}, exit: 255, stderr: hostWarning + denial},
+		{name: "a silent sudo before the child started", session: true, child: scriptedChild{code: 1}, exit: 255},
+		{name: "a remote failure of 1 after the start stands", session: true, child: scriptedChild{stderr: []string{startAnnouncement, stateFailure}, code: 1}, exit: 1, stderr: stateFailure},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.check(t, context.Background()) })
 	}

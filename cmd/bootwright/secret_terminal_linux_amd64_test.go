@@ -193,7 +193,8 @@ func TestTheComposedSecretSetReadsFromTheTerminalBehindStandardInput(t *testing.
 	}
 
 	var errOut bytes.Buffer
-	process, _ := interactiveProcess(cli.ClassifyInvocation([]string{"secret", "set", "--name", "token", "--value-stdin"}), io.Discard, &errOut, controller.Route{})
+	args := []string{"secret", "set", "--name", "token", "--value-stdin"}
+	process, _ := interactiveProcess(cli.ClassifyInvocation(args), args, io.Discard, &errOut, controller.Route{})
 	want := newSecretTerminal(os.Stdin, &errOut)
 	if process.SecretTerminal != want {
 		t.Fatalf("an interactive process bound %#v as the secret terminal, want %#v", process.SecretTerminal, want)

@@ -144,7 +144,7 @@ func (s Service) finalizeFirst(ctx context.Context, name string, verb reconcilia
 	if decided.finalize {
 		return transition{}, ContextIdentity{}, failure("lifecycle.state",
 			"the operation's finalization did not complete",
-			"repeat bootwright "+string(verb))
+			"repeat "+contextCommand(name, string(verb)))
 	}
 	return decided, identity, nil
 }
@@ -201,7 +201,7 @@ func (s Service) finalize(ctx context.Context, name string, decided transition) 
 	if err != nil || decided.operation.Verb == reconciliation.Apply {
 		return err
 	}
-	if err := incompleteRemoval(s.completeRemoval(recordingContext(ctx), name, completion)); err != nil {
+	if err := incompleteRemoval(name, s.completeRemoval(recordingContext(ctx), name, completion)); err != nil {
 		return err
 	}
 	s.collect(ctx, name, held, decided.release)
@@ -243,6 +243,7 @@ func captureRemoval(ctx context.Context, store OperationStore, id string, releas
 // callers pass the recording boundary, because a removal whose record reads
 // done owes these even once its invocation is interrupted.
 func (s Service) completeRemoval(ctx context.Context, name string, completion removalCompletion) error {
+	completion.basis.context = name
 	for _, binding := range completion.release {
 		if _, err := s.binder.Release(ctx, custody.BindingRequest{ContextName: name, BindingID: binding}); err != nil {
 			return err
@@ -277,13 +278,13 @@ func releaseHeld(ctx context.Context, tx Transaction) error {
 // incompleteRemoval reports a completed removal that could not give back
 // everything it owned. Its record still says done, so repeating the destroy
 // finalizes it instead of removing anything again.
-func incompleteRemoval(cause error) error {
+func incompleteRemoval(contextName string, cause error) error {
 	if cause == nil {
 		return nil
 	}
 	return withCause(cause, failure("lifecycle.state",
 		"the removal completed, but releasing what it owned is incomplete",
-		"repeat bootwright destroy to finish it"))
+		"repeat "+contextCommand(contextName, string(reconciliation.Destroy))+" to finish it"))
 }
 
 // completedRemoval reports a removal whose run recorded it done.

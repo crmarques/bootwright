@@ -25,7 +25,6 @@ import (
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"golang.org/x/sys/unix"
 )
 
@@ -37,13 +36,31 @@ type MetadataReader func(context.Context, string, string, int64, prerequisites.S
 // package state has moved. Close releases what it retains.
 type Resolver struct {
 	metadata MetadataReader
+	staging  prerequisites.Staging
+	host     providedHost
 	mu       sync.Mutex
 	retained *retainedDatabase
 }
 
+// providedHost reads the provided OS foundation a stage is built from: the
+// interpreter the helper runs under, and the installed package database's
+// identity and copy. The zero value reads this host.
+type providedHost struct {
+	interpreter func(prerequisites.Platform) (string, error)
+	state       func(prerequisites.Platform) (databaseIdentity, error)
+	copy        func(prerequisites.Platform, string) (string, databaseIdentity, error)
+}
+
+func (r *Resolver) provided() providedHost {
+	if r.host.interpreter == nil || r.host.state == nil || r.host.copy == nil {
+		return providedHost{interpreter: providedInterpreter, state: databaseState, copy: copyDatabase}
+	}
+	return r.host
+}
+
 type retainedDatabase struct {
-	parent   string
 	root     string
+	release  func()
 	platform prerequisites.Platform
 	identity databaseIdentity
 }
@@ -73,7 +90,9 @@ const unprivilegedID = 65534
 
 var databaseMembers = [2]string{"rpmdb.sqlite", "rpmdb.sqlite-wal"}
 
-func New(metadata MetadataReader) *Resolver { return &Resolver{metadata: metadata} }
+func New(metadata MetadataReader, staging prerequisites.Staging) *Resolver {
+	return &Resolver{metadata: metadata, staging: staging}
+}
 
 // Close releases the retained database snapshot. It is safe to call on a
 // resolver that never took one and to call more than once.
@@ -88,7 +107,7 @@ func (r *Resolver) Close() {
 
 func (r *Resolver) discard() {
 	if r.retained != nil {
-		_ = os.RemoveAll(r.retained.parent)
+		r.retained.release()
 		r.retained = nil
 	}
 }
@@ -125,11 +144,11 @@ func (r *Resolver) Resolve(ctx context.Context, platform prerequisites.Platform,
 	if err != nil {
 		return prerequisites.NativeResolvedPlan{}, err
 	}
-	stage, err := r.newStage(platform)
+	stage, err := r.newStage(ctx, platform)
 	if err != nil {
 		return prerequisites.NativeResolvedPlan{}, err
 	}
-	defer os.RemoveAll(stage.root)
+	defer stage.release()
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	for index := range repositories {
@@ -180,11 +199,11 @@ func (r *Resolver) Check(ctx context.Context, plan prerequisites.NativeResolvedP
 	if prerequisites.ValidateNativePlan(plan) != nil {
 		return prerequisites.NativePresence{}, failure("native readiness requires an exact frozen plan")
 	}
-	stage, err := r.newStage(plan.Platform)
+	stage, err := r.newStage(ctx, plan.Platform)
 	if err != nil {
 		return prerequisites.NativePresence{}, err
 	}
-	defer os.RemoveAll(stage.root)
+	defer stage.release()
 	bounded, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	data, err := stage.run(bounded, helperRequest{Operation: "present", Platform: plan.Platform, Requirements: plan.Requirements, Versions: plan.Requests, Egress: prerequisites.SetupEgress{NoProxy: []string{}}, Snapshot: stage.snapshot, Repositories: []repository{}, Plan: &plan})
@@ -232,6 +251,11 @@ func decodePresence(plan prerequisites.NativeResolvedPlan, data []byte) (prerequ
 	return presence, nil
 }
 
+// rhel9Signer is the fingerprint of the vendor key the RHEL 9 profile
+// qualifies: every package it resolves, and every operator-installed root it
+// accepts, carries a signature of this key.
+const rhel9Signer = "567e347ad0044ade55ba8a5f199e2f91fd431d51"
+
 func profiles(platform prerequisites.Platform, requirements prerequisites.NativeRequirements) ([]repository, error) {
 	if platform.Architecture != "amd64" {
 		return nil, failure("native dependency resolution requires Linux amd64")
@@ -241,11 +265,16 @@ func profiles(platform prerequisites.Platform, requirements prerequisites.Native
 		signer := "c6e7f081cf80e13146676e88829b606631645531"
 		return []repository{{ID: "fedora", BaseURL: "https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os", Signer: signer}, {ID: "updates", BaseURL: "https://dl.fedoraproject.org/pub/fedora/linux/updates/43/Everything/x86_64", Signer: signer}}, nil
 	case platform.OS == "rhel" && platform.Release == "9.8":
-		if requirements.LibvirtClient {
-			return nil, diagnostics.NewFailureWithRemediation("controller.unsupported", "RHEL libvirt requires an authenticated AppStream source adapter", "", "Use a Fedora controller for libvirt preparation until RHEL AppStream credential acquisition is configured.")
+		if err := prerequisites.StageAdmission(platform, prerequisites.StageNative{LibvirtClient: requirements.LibvirtClient, Hypervisor: requirements.Hypervisor}); err != nil {
+			return nil, err
 		}
-		signer := "567e347ad0044ade55ba8a5f199e2f91fd431d51"
-		return []repository{{ID: "ubi-baseos", BaseURL: "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os", Signer: signer}, {ID: "ubi-appstream", BaseURL: "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/appstream/os", Signer: signer}}, nil
+		// UBI carries neither lorax nor xorriso: a RHEL controller's
+		// installer-media tooling is the operator's own (D106), so no request
+		// may ask this resolver for it.
+		if requirements.InstallerMedia {
+			return nil, prerequisites.InstallerMediaRefusal(nil, nil)
+		}
+		return []repository{{ID: "ubi-baseos", BaseURL: "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os", Signer: rhel9Signer}, {ID: "ubi-appstream", BaseURL: "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/appstream/os", Signer: rhel9Signer}}, nil
 	default:
 		return nil, failure("native dependency resolution requires a supported Fedora 43 or RHEL 9.8 package-manager foundation")
 	}
@@ -317,6 +346,7 @@ func (r *Resolver) stageRepository(ctx context.Context, work string, repo *repos
 type nativeStage struct {
 	root, work, script, interpreter, snapshot string
 	uid, gid                                  int
+	release                                   func()
 }
 
 // stageDatabase returns a snapshot root the unprivileged helper can read,
@@ -326,27 +356,36 @@ type nativeStage struct {
 func (r *Resolver) stageDatabase(platform prerequisites.Platform) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	identity, err := databaseState(platform)
+	host := r.provided()
+	identity, err := host.state(platform)
 	if err != nil {
 		return "", err
 	}
 	if r.retained.serves(platform, identity) {
 		return r.retained.root, nil
 	}
-	parent, err := os.MkdirTemp("/tmp", "bootwright-rpmdb-")
+	if r.staging == nil {
+		return "", failure("native database snapshot staging is unavailable")
+	}
+	stage, err := r.staging.Stage(context.Background(), "rpmdb")
 	if err != nil {
+		return "", err
+	}
+	parent := filepath.Join(stage.Path, "root")
+	if os.Mkdir(parent, 0700) != nil {
+		stage.Release()
 		return "", failure("native database snapshot staging failed")
 	}
-	root, taken, err := copyDatabase(platform, parent)
+	root, taken, err := host.copy(platform, parent)
 	if err == nil {
 		err = shareDatabase(parent, root)
 	}
 	if err != nil {
-		_ = os.RemoveAll(parent)
+		stage.Release()
 		return "", err
 	}
 	r.discard()
-	r.retained = &retainedDatabase{parent: parent, root: root, platform: platform, identity: taken}
+	r.retained = &retainedDatabase{root: root, release: stage.Release, platform: platform, identity: taken}
 	return root, nil
 }
 
@@ -432,28 +471,42 @@ func lockDatabase(directory string) (func(), error) {
 	return func() { unix.Close(descriptor) }, nil
 }
 
-func (r *Resolver) newStage(platform prerequisites.Platform) (*nativeStage, error) {
+// providedInterpreter is the provided OS Python the helper runs under, which
+// only the host may have installed.
+func providedInterpreter(platform prerequisites.Platform) (string, error) {
 	interpreter := "/usr/bin/python3"
 	if platform.OS == "rhel" {
 		interpreter = "/usr/bin/python3.9"
 	}
 	resolved, err := filepath.EvalSymlinks(interpreter)
 	if err != nil || providedFile(resolved, true) != nil {
-		return nil, failure("native resolution requires the provided OS Python and DNF foundation")
+		return "", failure("native resolution requires the provided OS Python and DNF foundation")
 	}
-	root, err := os.MkdirTemp("/tmp", "bootwright-native-")
+	return resolved, nil
+}
+
+func (r *Resolver) newStage(ctx context.Context, platform prerequisites.Platform) (*nativeStage, error) {
+	resolved, err := r.provided().interpreter(platform)
 	if err != nil {
+		return nil, err
+	}
+	if r.staging == nil {
 		return nil, failure("native resolver staging is unavailable")
 	}
-	stage := &nativeStage{root: root, work: filepath.Join(root, "work"), script: filepath.Join(root, "native_resolution.py"), interpreter: resolved, uid: os.Geteuid(), gid: os.Getegid()}
+	staged, err := r.staging.Stage(ctx, "native")
+	if err != nil {
+		return nil, err
+	}
+	root := filepath.Join(staged.Path, "root")
+	stage := &nativeStage{root: root, work: filepath.Join(root, "work"), script: filepath.Join(root, "native_resolution.py"), interpreter: resolved, uid: os.Geteuid(), gid: os.Getegid(), release: staged.Release}
 	cleanup := true
 	defer func() {
 		if cleanup {
-			_ = os.RemoveAll(root)
+			staged.Release()
 		}
 	}()
 	asset := ansible.Automation()["collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py"]
-	if len(asset) == 0 || os.Mkdir(stage.work, 0700) != nil || os.WriteFile(stage.script, asset, 0600) != nil {
+	if len(asset) == 0 || os.Mkdir(root, 0700) != nil || os.Mkdir(stage.work, 0700) != nil || os.WriteFile(stage.script, asset, 0600) != nil {
 		return nil, failure("native resolution helper is unavailable")
 	}
 	stage.snapshot, err = r.stageDatabase(platform)
@@ -588,7 +641,7 @@ func (s *nativeStage) run(ctx context.Context, request helperRequest) ([]byte, e
 	}
 	command := exec.CommandContext(ctx, s.interpreter, "-I", "-B", s.script, s.work)
 	command.Dir = s.work
-	command.Env = []string{"PATH=/usr/sbin:/usr/bin", "LANG=C", "LC_ALL=C", "PYTHONDONTWRITEBYTECODE=1", "HOME=" + filepath.Join(s.work, "home")}
+	command.Env = helperEnvironment(filepath.Join(s.work, "home"))
 	command.Stdin = bytes.NewReader(input)
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if os.Geteuid() == 0 {
@@ -613,6 +666,14 @@ func (s *nativeStage) run(ctx context.Context, request helperRequest) ([]byte, e
 	}
 	return slices.Clone(output.Bytes()), nil
 }
+
+// helperEnvironment is the whole environment a provided native tool runs
+// with: the provided search path, the C locale and a home that holds nothing
+// it could read configuration from.
+func helperEnvironment(home string) []string {
+	return []string{"PATH=/usr/sbin:/usr/bin", "LANG=C", "LC_ALL=C", "PYTHONDONTWRITEBYTECODE=1", "HOME=" + home}
+}
+
 func strictDecode(data []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -624,6 +685,9 @@ func strictDecode(data []byte, target any) error {
 	}
 	return nil
 }
+
+// failure is a definite resolution failure. Setup and a context's controller
+// stage share this resolver, so the scope that met it names what settles it.
 func failure(message string) error {
-	return diagnostics.NewFailureWithRemediation("controller.setup", message, "", "Restore the provided OS package-manager foundation and approved repository access, then retry setup.")
+	return &prerequisites.ScopedFailure{Code: "controller.setup", Message: message, Correction: "Restore the provided OS package-manager foundation and approved repository access"}
 }

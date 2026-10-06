@@ -43,6 +43,7 @@ func documentedBounds() []documentedBound {
 		store            = "internal/workspace/contextfs/store.go"
 		bundles          = "internal/workspace/contextfs/controller_records.go"
 		setupRuns        = "internal/workspace/contextfs/controller_runs_linux_amd64.go"
+		boundedRuns      = "internal/workspace/contextfs/runs_linux_amd64.go"
 		operations       = "internal/reconciliation/operationstore/records.go"
 		lifecycleRun     = "internal/reconciliation/ansiblerunner/process_linux_amd64.go"
 		lifecycleRequest = "internal/reconciliation/lifecycle/invocation.go"
@@ -61,10 +62,11 @@ func documentedBounds() []documentedBound {
 		{contexts, "| [Setup runs](contexts/controller-record.md#setup-runs) the controller directory keeps | %s |", setupRuns, "maxSetupRuns", nil, false},
 		{"specs/contexts/controller-record.md", "There are at most %s runs:", setupRuns, "maxSetupRuns", nil, false},
 		{"specs/contexts/controller-record.md", "`run.output`, which is bounded at %s.", setupRuns, "maxSetupRunOutput", nil, true},
+		{contexts, "| [Bounded runs](cli/output.md#bounded-run-output) one context's runs area keeps | %s |", boundedRuns, "maxBoundedRuns", nil, false},
 		{contexts, "| Lifecycle operations one context retains | %s |", operations, "MaxOperations", nil, false},
-		{contexts, "| Entries in one context's lifecycle operation area | %s |", operations, "MaxEntries", nil, false},
+		{contexts, "| Entries in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | %s |", operations, "MaxEntries", nil, false},
 		{contexts, "and must still keep %s entries free", operations, "ReservedEntries", nil, false},
-		{contexts, "| Bytes in one context's lifecycle operation area | %s |", operations, "MaxBytes", nil, true},
+		{contexts, "| Bytes in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | %s |", operations, "MaxBytes", nil, true},
 		{contexts, "fresh apply needs %s of them free", operations, "ReservedBytes", nil, true},
 		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}, false},
 		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}, false},
@@ -81,6 +83,7 @@ func documentedBounds() []documentedBound {
 		{commands, "stops once it holds %s candidates", completion, "maxCompletionPaths", nil, false},
 		{commands, "A prefix longer than %s bytes", completion, "maxCompletionPrefix", nil, false},
 		{commands, "an entry whose name is longer than %s bytes", completion, "maxCompletionEntry", nil, false},
+		{"specs/controller.md", "each entry at most %s bytes", "api/v1alpha1/lexical.go", "maxProxyBypassBytes", nil, false},
 	}
 }
 

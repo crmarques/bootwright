@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -54,6 +55,12 @@ func ClearProduced(produced []Produced) {
 // to operation-scoped files it removes, and never to arguments, environment,
 // evidence or logs.
 type RunRequest struct {
+	// Context, Block and Description name the run for the runner's job record
+	// and its refusals alone: none of them reaches the adapter, its variables
+	// or any digest.
+	Context        string
+	Block          string
+	Description    string
 	Implementation string
 	Operation      string
 	Variable       string
@@ -131,6 +138,9 @@ type Invocation struct {
 func RunFor(execution Execution, invocation Invocation) RunRequest {
 	materials := append(slices.Clone(invocation.Materials), Materials(invocation.Placement)...)
 	return RunRequest{
+		Context:           execution.Context,
+		Block:             execution.Block.ID,
+		Description:       execution.Block.Description,
 		Implementation:    invocation.Implementation,
 		Operation:         invocation.Operation,
 		Variable:          invocation.Variable,
@@ -147,7 +157,7 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		Log:               execution.Log,
 		Progress:          execution.Progress,
 		Output:            execution.Output,
-		OutputRemediation: attemptOutputRemediation,
+		OutputRemediation: attemptOutputRemediation(execution),
 		Refusals:          maps.Clone(invocation.Refusals),
 		Deadline:          invocation.Deadline,
 	}
@@ -172,9 +182,29 @@ func lend(bound map[string]secrets.Material, files []MaterialFile) map[string]se
 	return lent
 }
 
-// attemptOutputRemediation points an adapter failure at the output an attempt
-// keeps beside its own log.
-const attemptOutputRemediation = "read the adapter output retained beside this attempt's log"
+// attemptOutputRemediation points an adapter failure at the output this
+// attempt keeps beside its own log, by its path in the operation's Logs
+// directory, which only root reads. An execution that names no attempt of a
+// block, as a probe does, names the output as the retained one.
+func attemptOutputRemediation(execution Execution) string {
+	retained := "read the adapter output retained beside this attempt's log"
+	if execution.Operation == "" || execution.Block.ID == "" {
+		return retained
+	}
+	log, err := operationstore.AttemptLogPath(execution.Operation, execution.Block.ID, execution.Attempt, execution.Resolution)
+	if err != nil {
+		return retained
+	}
+	output, err := operationstore.AdapterOutputPath(log)
+	if err != nil {
+		return retained
+	}
+	relative, found := strings.CutPrefix(output, execution.Operation+"/logs/")
+	if !found {
+		return retained
+	}
+	return "read " + relative + " in this operation's Logs directory, as root, for why block " + execution.Block.ID + " failed"
+}
 
 // Materials lists exactly which bound parts a placement needs on disk. A local
 // placement needs none; the SSH arm needs its identity and host key.

@@ -397,7 +397,7 @@ func requireIncompleteRemoval(t *testing.T, reported []diagnostics.Diagnostic, e
 	t.Helper()
 	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
 		reported[0].Message != "the removal completed, but releasing what it owned is incomplete" ||
-		reported[0].Remediation != "repeat bootwright destroy to finish it" {
+		reported[0].Remediation != "repeat bootwright destroy --context lab to finish it" {
 		t.Fatalf("the removal failed with %+v (%v)", reported, err)
 	}
 }
@@ -511,9 +511,10 @@ func TestARunningOperationWhoseBlocksAreAllDoneIsFinalized(t *testing.T) {
 			t.Fatalf("the unauthorized destroy = %+v (%v)", reported, err)
 		}
 		if !sameFiles(w.area, records) || !bytes.Equal(w.evidence, evidence) || w.mutations != mutations ||
-			killStateOf(w, run.snapshot.binder, run.snapshot.host) != before || len(run.rig.harness.presenter.presented) != presented {
-			t.Fatal("the unauthorized destroy finalized the apply it supersedes")
+			killStateOf(w, run.snapshot.binder, run.snapshot.host) != before || len(run.rig.harness.presenter.presented) != presented+1 {
+			t.Fatal("the unauthorized destroy finalized the apply it supersedes, or refused before presenting its removal")
 		}
+		presented++
 		result, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true})
 		if err != nil || result.Settled || result.Receipt.State != "done" || result.Receipt.Operation == superseded {
 			t.Fatalf("the destroy = %+v (%v)", result, err)
@@ -578,9 +579,10 @@ func TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb(t *testi
 			t.Fatalf("the unauthorized destroy = %+v (%v)", reported, err)
 		}
 		if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations ||
-			len(h.presenter.presented) != presented {
-			t.Fatal("the unauthorized destroy finalized the apply it supersedes")
+			len(h.presenter.presented) != presented+1 {
+			t.Fatal("the unauthorized destroy finalized the apply it supersedes, or refused before presenting its removal")
 		}
+		presented++
 		h.capability.destroys = nil
 		result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true})
 		if err != nil || result.Settled || result.Receipt.State != "done" || result.Receipt.Operation == applied {
@@ -763,7 +765,7 @@ func TestAFinalizationThatLeavesAnotherBehindRefuses(t *testing.T) {
 	result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true})
 	reported := diagnostics.Of(err)
 	if result != nil || len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
-		reported[0].Message != "the operation's finalization did not complete" || reported[0].Remediation != "repeat bootwright apply" {
+		reported[0].Message != "the operation's finalization did not complete" || reported[0].Remediation != "repeat bootwright apply --context lab" {
 		t.Fatalf("the apply = %+v, %+v (%v)", result, reported, err)
 	}
 	if len(h.capability.applies) != applies || len(h.presenter.presented) != presented || h.workspace.mutations != mutations+1 {

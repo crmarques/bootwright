@@ -590,6 +590,38 @@ func TestAnAdoptedStagePublishesWithoutOpeningItsSource(t *testing.T) {
 	}
 }
 
+// The refusal of a pinned add whose publication met another command's lock
+// promises only what repeating it does: re-verifying the image it retained
+// before publishing it without acquiring it again. A retained stage rewritten
+// meanwhile fails that re-verification and is removed, and its refusal says
+// so, so the next repetition acquires the image again rather than refusing
+// the same way.
+func TestARetainedStageRefusalPromisesOnlyWhatItsRepetitionDoes(t *testing.T) {
+	request := AddMediaRequest{Name: "demo.iso", SourceFile: "/images/demo.iso", SHA256: digestOf("installer bytes"), SkipConfirmation: true}
+	store := &fakeStore{busyAt: 2}
+	acquirer := &fakeAcquirer{data: "installer bytes", origin: "file:///images/demo.iso"}
+	_, err := newService(store, acquirer, nil).Add(context.Background(), request)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
+		!strings.Contains(reported[0].Remediation, "it re-verifies the image it retained and publishes it without acquiring it again") {
+		t.Fatalf("the lock-refused publication reported %#v", reported)
+	}
+	store.retainedBytes["demo.iso"] = []byte("INSTALLER BYTES")
+	_, err = newService(store, acquirer, nil).Add(context.Background(), request)
+	reported = diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "media.store" ||
+		reported[0].Message != "the image retained for demo.iso no longer holds the bytes it verified, so it was removed" ||
+		reported[0].Remediation != "repeat the command to acquire it again" {
+		t.Fatalf("the repetition over a rewritten stage reported %#v", reported)
+	}
+	if _, kept := store.retained["demo.iso"]; kept || store.published != nil || acquirer.opens != 1 {
+		t.Fatalf("the rewritten stage was kept, published or acquired again: retained %v, acquisitions %d", store.retained, acquirer.opens)
+	}
+	if result, err := newService(store, acquirer, nil).Add(context.Background(), request); err != nil || result.Outcome != "stored" || acquirer.opens != 2 {
+		t.Fatalf("the next repetition = %+v (%#v), acquisitions %d", result, diagnostics.Of(err), acquirer.opens)
+	}
+}
+
 func TestListReportsReservationsAndOptionalVerification(t *testing.T) {
 	entry := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
 	other := managedos.MediaEntry{Name: "alt.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///alt.iso", Added: "2026-09-15T09:00:00Z"}

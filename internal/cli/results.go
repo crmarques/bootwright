@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/spf13/cobra"
 )
@@ -177,4 +178,29 @@ func (r *Runner) writeExecutedLifecycle(path string, result commandResult, diagn
 		return true, err
 	}
 	return true, writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, 1, false, nil)
+}
+
+// interruptedLifecycle reports an interrupt of an apply or destroy that
+// registered its operation. That operation's records already say what it did,
+// so its result is still evidence the operator continues from.
+func interruptedLifecycle(ctx context.Context, path string, result commandResult) bool {
+	if (path != "apply" && path != "destroy") || result.lifecycleOperation == nil {
+		return false
+	}
+	operation := result.lifecycleOperation.Receipt.Operation
+	return operation != "" && operation != "none" && errors.Is(context.Cause(ctx), ErrInterrupted)
+}
+
+// writeInterruptedLifecycle presents the interrupted operation's result, its
+// log reference, next command and receipt, then the interrupt alone: what the
+// cancellation made each block report is in the result and its logs.
+func (r *Runner) writeInterruptedLifecycle(path string, operation *lifecycle.OperationResult) int {
+	if err := writeLifecycleOperation(r.config.Out, operation); err != nil {
+		return 1
+	}
+	interrupted := []diagnostic{{Severity: "error", Code: "runtime.interrupted", Message: "operation interrupted", Remediation: operation.NextCommand}}
+	if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, interrupted, 130, false, nil); err != nil {
+		return 1
+	}
+	return 130
 }

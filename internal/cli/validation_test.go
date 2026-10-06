@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/spf13/cobra"
 )
 
@@ -87,17 +88,30 @@ func TestResolvedValuesAndDefaults(t *testing.T) {
 	}
 }
 
-func TestMediaNameAndURLBoundaries(t *testing.T) {
-	for _, value := range []string{"a.iso", "Image_1.2-test.iso", strings.Repeat("a", 246) + ".iso"} {
-		if !mediaName(value) {
-			t.Errorf("valid basename rejected: %q", value)
+// The CLI admits a media name exactly when the managed-OS media rule does: a
+// name the rule refuses never dispatches, and a name it admits always does.
+func TestTheCLIMediaNameIsTheStoreRule(t *testing.T) {
+	values := []string{"a.iso", "Image_1.2-test.iso", "rhel-9.8-x86_64-dvd.iso", "COM10.iso", "CONSOLE.iso", strings.Repeat("a", 246) + ".iso",
+		".iso", "a.ISO", "../image.iso", "a/b.iso", "a\\b.iso", "a_.iso", "_a.iso", "a..iso", "rhel@9.8+boot.iso", "CON.iso", "prn.iso", "AUX.iso", "nul.iso", "com9.iso", "LPT1.iso", "á.iso", strings.Repeat("a", 247) + ".iso"}
+	admitted, refused := 0, 0
+	for _, value := range values {
+		valid := managedos.ValidMediaName(value)
+		if valid {
+			admitted++
+		} else {
+			refused++
+		}
+		code, _, errOut, record := runRecorded([]string{"media", "add", "--name", value, "--from-file", "image.iso"})
+		if refusedHere := code == 2 && record.calls == 0; refusedHere == valid || !valid && !strings.Contains(errOut, "--name") {
+			t.Errorf("--name %q: code=%d calls=%d err=%q, want a refusal exactly when the media store refuses it (store admits: %t)", value, code, record.calls, errOut, valid)
 		}
 	}
-	for _, value := range []string{".iso", "a.ISO", "../image.iso", "a/b.iso", "a\\b.iso", "a_.iso", "_a.iso", "CON.iso", "prn.iso", "AUX.iso", "nul.iso", "com9.iso", "LPT1.iso", "á.iso", strings.Repeat("a", 247) + ".iso"} {
-		if mediaName(value) {
-			t.Errorf("unsafe basename accepted: %q", value)
-		}
+	if admitted == 0 || refused == 0 {
+		t.Fatalf("the boundary values hold %d admitted and %d refused names, want both", admitted, refused)
 	}
+}
+
+func TestMediaURLBoundaries(t *testing.T) {
 	for _, value := range []string{"https://account@example.invalid/image.iso", "file:///image.iso", "https:///image.iso", "https://[invalid/image.iso"} {
 		args := []string{"media", "add", "--name", "image.iso", "--from-url", value, "--sha256", strings.Repeat("a", 64)}
 		code, _, _, record := runRecorded(args)

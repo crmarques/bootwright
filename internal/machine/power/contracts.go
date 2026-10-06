@@ -45,8 +45,15 @@ type Runner interface {
 	Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error)
 }
 
+// Confirmer is the confirmation capability the composition supplies. Power
+// asks through its ContextConfirmer when it has one, so a prompt names the
+// Machine and the context it acts in.
 type Confirmer interface {
 	Confirm(context.Context, string, string) error
+}
+
+type ContextConfirmer interface {
+	ConfirmIn(ctx context.Context, action, object, contextName string) error
 }
 
 // Reporter names where this run retains what its adapter prints, before that

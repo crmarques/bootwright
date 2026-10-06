@@ -113,7 +113,7 @@ func TestInspectionStreamsEachCheckOnceAndReadinessUsesItsOwnPhase(t *testing.T)
 	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	fresh := []string{"host:ok", "installed-host:ok", "execution-bundle:failed", "container-runtime:ok", "setup-state:failed"}
+	fresh := []string{"host:ok", "installed-host:ok", "execution-bundle:failed", "container-runtime:failed", "setup-state:failed"}
 	if !slices.Equal(f.scopes, []string{InspectionPhase}) || !slices.Equal(progress.settled(t, InspectionPhase), fresh) {
 		t.Fatalf("scopes=%v inspection=%v", f.scopes, progress.settled(t, InspectionPhase))
 	}

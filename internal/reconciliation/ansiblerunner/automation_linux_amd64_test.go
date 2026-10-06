@@ -28,14 +28,14 @@ func TestTheRunnerComparesOnlyTheDigestedAutomation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			files := maps.Clone(ansible.Assets())
 			change(files)
-			if err := verifyAutomation(t.Context(), lifecycle.RunRequest{Area: embeddedArea{files: files}}); err != nil {
+			if err := verifyAutomation(t.Context(), lifecycle.RunRequest{Context: "lab", Area: embeddedArea{files: files}}); err != nil {
 				t.Fatalf("a bundle whose documentation differs was refused: %v", err)
 			}
 		})
 	}
 	files := maps.Clone(ansible.Assets())
 	files[module] = append([]byte("# drifted\n"), files[module]...)
-	err := verifyAutomation(t.Context(), lifecycle.RunRequest{Area: embeddedArea{files: files}})
+	err := verifyAutomation(t.Context(), lifecycle.RunRequest{Context: "lab", Area: embeddedArea{files: files}})
 	if code, _ := codeOf(err); code != "controller.identity" {
 		t.Fatalf("a bundle whose module differs = %q (%v)", code, err)
 	}

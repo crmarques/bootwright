@@ -203,7 +203,7 @@ func TestAnsibleIndexIsNegotiatedAsPEP691JSON(t *testing.T) {
 
 func TestAnsibleIsSelectedFromTheIndexAPI(t *testing.T) {
 	for _, intent := range []string{"latest", "2.21.4"} {
-		resolver := NewBootstrapResolver()
+		resolver := NewBootstrapResolver(nil)
 		requested := []string{}
 		resolver.metadata = func(_ context.Context, method, endpoint string, _ prerequisites.SetupEgress) (toolMetadata, error) {
 			requested = append(requested, method+" "+endpoint)
@@ -324,7 +324,7 @@ func TestExactReleasesOutsideTheQualifiedSetRefuseBeforeResolverEffects(t *testi
 		{"latest", "2.22.0", "ansible-core " + prerequisites.QualifiedAnsibleMinor + " "},
 		{"3.15.0", "latest", "CPython " + strings.Join(prerequisites.QualifiedControllerPythons(), ", ") + " "},
 	} {
-		resolver := NewBootstrapResolver()
+		resolver := NewBootstrapResolver(nil)
 		resolver.metadata = func(context.Context, string, string, prerequisites.SetupEgress) (toolMetadata, error) {
 			t.Fatalf("exact Python %s, Ansible %s reached publisher metadata", exact.python, exact.ansible)
 			return toolMetadata{}, nil

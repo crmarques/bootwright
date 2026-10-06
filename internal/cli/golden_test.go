@@ -242,14 +242,22 @@ func cliGoldens() []cliGolden {
 			{ID: "os-install-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", State: "pending"},
 		}
 	}
+	// An operation that did not complete names the command its records call
+	// for, which for an apply is that apply repeated with its context.
 	operation := func(state string) *lifecycle.OperationResult {
 		result := &lifecycle.OperationResult{
 			Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply", Blocks: blocks(state),
 			Logs: []string{"contexts/lab/state/operations/" + operationID + "/logs/operation.jsonl"}, LogLocation: logs,
-			Receipt: lifecycle.Receipt{Operation: operationID, Verb: "apply", State: state, Next: "continue-apply"},
+			NextCommand: "bootwright apply --context lab",
+			Receipt:     lifecycle.Receipt{Operation: operationID, Verb: "apply", State: state, Next: "continue-apply"},
 		}
-		if state == "done" {
-			result.Blocks[3].State, result.Receipt.Next = "done", "none"
+		switch state {
+		case "done":
+			result.Blocks[3].State, result.Receipt.Next, result.NextCommand = "done", "none", ""
+		case "paused", "running":
+			result.Blocks[2].State = "pending"
+		case "unknown":
+			result.Receipt.Next = "resolve"
 		}
 		return result
 	}
@@ -295,7 +303,7 @@ func cliGoldens() []cliGolden {
 	// about it, and both verbs observe it again.
 	unresolved := func() *lifecycle.StatusResult {
 		result := status()
-		result.NextSteps, result.Contradictions = []string{"bootwright apply", "bootwright destroy"}, []string{}
+		result.NextSteps, result.Contradictions = []string{"bootwright apply --context lab", "bootwright destroy --context lab"}, []string{}
 		result.Lifecycle.State, result.Lifecycle.Next = "unknown", "resolve"
 		result.Lifecycle.Blocks[3].State, result.Lifecycle.Blocks[3].Attempts = "unknown", 1
 		result.Lifecycle.Blocks[3].Unresolved = &lifecycle.Unresolved{
@@ -316,7 +324,7 @@ func cliGoldens() []cliGolden {
 			StorageClusters: []lifecycle.ClusterSummary{},
 			Shared:          []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: lifecycle.RealizationPending}},
 			Secrets:         lifecycle.SecretSummary{Declared: 3},
-			NextSteps:       []string{"bootwright plan", "bootwright apply"},
+			NextSteps:       []string{"bootwright plan --context lab", "bootwright apply --context lab"},
 		}
 	}
 	// A context whose last removal completed and finalized: what it took
@@ -341,9 +349,10 @@ func cliGoldens() []cliGolden {
 			},
 			Secrets:   lifecycle.SecretSummary{Declared: 3},
 			NextSteps: []string{},
+			// A build stamped with a commit and no version registered it.
 			Lifecycle: &lifecycle.LifecycleSummary{
 				Operation: operationID, Verb: "destroy", State: "done", Next: "none", Blocks: removed,
-				Logs: []string{"contexts/lab/state/operations/" + operationID + "/logs/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
+				Logs: []string{"contexts/lab/state/operations/" + operationID + "/logs/operation.jsonl"}, Executable: "devel (9f2c1ab)",
 			},
 			Contradictions: []string{},
 			LogLocation:    logs,
@@ -474,8 +483,8 @@ func cliGoldens() []cliGolden {
 		return &compilation.EffectiveResult{Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 2}, Effective: api.NewCatalog([]api.Object{controller, environment})}
 	}
 	unauthorized := diagnostics.NewFailureWithRemediation("lifecycle.authorization",
-		"this plan has data-loss consequences that are not authorized: os-install-rhel-01", "",
-		"review the plan's impacts and repeat the command with --authorize data-loss")
+		"this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01)", "",
+		"repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss")
 	noInput := diagnostics.NewFailure("context.input", "context has no desired state; run context update --name lab --input-dir <dir>", "")
 	return []cliGolden{
 		// Controller reports: an unpresented dry-run plan, a presented setup
@@ -523,22 +532,25 @@ func cliGoldens() []cliGolden {
 			}
 		}},
 
-		// Lifecycle: a staged preview, a preview whose apply only completes an
-		// interrupted finalization, a completed apply, a settled destroy, a
+		// Lifecycle: a staged preview wider than the build's bound with a step
+		// that consumes an authorization, a preview whose apply only completes
+		// an interrupted finalization, a completed apply, a settled destroy, a
 		// settled apply that first completed an interrupted finalization, a
 		// settled destroy that first released what an interrupted registration
-		// left, an apply that ran and failed, and a refusal that registered
-		// nothing.
+		// left, an apply that ran and failed, one that paused, lost an outcome
+		// or stopped running, each naming the command that continues it, and a
+		// refusal that registered nothing.
 		{golden: "cli-plan", args: "plan --stage infra-components,substrates", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
 				Steps: []lifecycle.PlanStep{
 					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infra-components", Impacts: []string{"create-container-unit", "open-listener 192.0.2.1:8443"}, State: "pending", Selection: lifecycle.StepStart, Wave: 1},
 					{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", Impacts: []string{"create-libvirt-pool lab-libvirt", "create-libvirt-network lab"}, State: "pending", Selection: lifecycle.StepStart, After: []int{1}, Wave: 2},
+					{ID: "os-install-metal-01", Description: "install the operating system of metal-01", Stage: "machines", Impacts: []string{"install-operating-system metal-01", "power-on metal-01"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{1}, Wave: 2, Consumes: []string{"data-loss"}},
 					{ID: "machine-rhel-01", Description: "realize the virtual machine rhel-01 and its controller", Stage: "machines", Impacts: []string{"create-libvirt-domain rhel-01"}, State: "pending", Selection: lifecycle.StepNotSelected, After: []int{2}, Wave: 3},
-					{ID: "os-install-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", Impacts: []string{"power-on rhel-01"}, State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "machine-rhel-01", After: []int{3}, Wave: 4},
+					{ID: "os-install-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", Impacts: []string{"power-on rhel-01"}, State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "machine-rhel-01", After: []int{4}, Wave: 4},
 				},
-				Stages: []string{"infra-components", "substrates"}, Waves: 4, Widest: 1, Startable: 2, Deferred: 2,
+				Stages: []string{"infra-components", "substrates"}, Waves: 4, Widest: 2, Bound: 1, Startable: 2, Deferred: 3,
 				Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
 			}
 		}},
@@ -548,8 +560,9 @@ func cliGoldens() []cliGolden {
 				Steps: []lifecycle.PlanStep{
 					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infra-components", Impacts: []string{"create-container-unit"}, State: "done", Wave: 1},
 					{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", Impacts: []string{"create-libvirt-pool lab-libvirt"}, State: "done", After: []int{1}, Wave: 2},
+					{ID: "os-installation-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", Impacts: []string{"install-operating-system rhel-01"}, Consumes: []string{"data-loss"}, State: "done", After: []int{2}, Wave: 3},
 				},
-				Waves: 2, Widest: 1, Continuation: true, Finalizes: true,
+				Waves: 3, Widest: 1, Bound: 1, Continuation: true, Finalizes: true,
 				Receipt: lifecycle.Receipt{Operation: operationID, Verb: "plan", State: "preview", Next: "continue-apply"},
 			}
 		}},
@@ -577,13 +590,31 @@ func cliGoldens() []cliGolden {
 			golden: "cli-apply-failed", args: "apply --yes", code: 1,
 			record: func(r *dispatchRecord) {
 				r.result.lifecycleOperation = operation("failed")
-				r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the operation did not complete", "", "repeat the operation to continue it")
+				r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the apply did not complete", "", "continue it with bootwright apply --context lab")
 			},
-			stderr: "[FAIL] lifecycle.state: the operation did not complete; next: repeat the operation to continue it\n",
+			stderr: "[FAIL] lifecycle.state: the apply did not complete; next: continue it with bootwright apply --context lab\n",
+		},
+		{golden: "cli-apply-paused", args: "apply --yes --stage infra-components,substrates", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("paused") }},
+		{
+			golden: "cli-apply-unknown", args: "apply --yes", code: 1,
+			record: func(r *dispatchRecord) {
+				r.result.lifecycleOperation = operation("unknown")
+				r.err = diagnostics.NewFailureWithRemediation("lifecycle.unknown", "an effect has an unresolved outcome", "",
+					"resolve it with bootwright apply --context lab, which observes that effect before anything else starts, or take back what it started with bootwright destroy --context lab")
+			},
+			stderr: "[FAIL] lifecycle.unknown: an effect has an unresolved outcome; next: resolve it with bootwright apply --context lab, which observes that effect before anything else starts, or take back what it started with bootwright destroy --context lab\n",
 		},
 		{
-			args: "apply --yes --authorize data-loss --stage machines", code: 1, record: func(r *dispatchRecord) { r.err = unauthorized },
-			stderr: "[FAIL] lifecycle.authorization: this plan has data-loss consequences that are not authorized: os-install-rhel-01; next: review the plan's impacts and repeat the command with --authorize data-loss\n",
+			golden: "cli-apply-running", args: "apply --yes", code: 1,
+			record: func(r *dispatchRecord) {
+				r.result.lifecycleOperation = operation("running")
+				r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the apply did not complete", "", "continue it with bootwright apply --context lab")
+			},
+			stderr: "[FAIL] lifecycle.state: the apply did not complete; next: continue it with bootwright apply --context lab\n",
+		},
+		{
+			args: "apply --yes --stage machines", code: 1, record: func(r *dispatchRecord) { r.err = unauthorized },
+			stderr: "[FAIL] lifecycle.authorization: this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01); next: repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss\n",
 		},
 		// Status: an apply that failed beside records that contradict it,
 		// which offers no next step, and an idle context, whose empty row
@@ -847,6 +878,33 @@ func TestCommandOutputMatchesItsGoldens(t *testing.T) {
 				matchesTextGolden(t, test.golden, out.Bytes())
 			}
 		})
+	}
+}
+
+// An apply that did not complete closes with the exact command its records
+// call for, after its logs and before its receipt, whether it paused, failed,
+// lost an outcome or stopped running; a completed apply names none.
+func TestPausedFailedUnknownAndRunningResultsNameTheNextCommand(t *testing.T) {
+	names := map[string]bool{"cli-apply": false, "cli-apply-paused": true, "cli-apply-failed": true, "cli-apply-unknown": true, "cli-apply-running": true}
+	for _, test := range cliGoldens() {
+		want, listed := names[test.golden]
+		if !listed {
+			continue
+		}
+		delete(names, test.golden)
+		t.Run(test.golden, func(t *testing.T) {
+			record := &dispatchRecord{}
+			test.record(record)
+			var out bytes.Buffer
+			New(Config{Out: &out, Services: dispatchSpies(record)}).Run(context.Background(), strings.Fields(test.args))
+			named := strings.Contains(out.String(), "/logs\n  Next  bootwright apply --context lab\noperation: ")
+			if named != want || strings.Contains(out.String(), "Next ") != want {
+				t.Fatalf("the result names a next command: %t, want %t: %q", named, want, out.String())
+			}
+		})
+	}
+	if len(names) != 0 {
+		t.Fatalf("no case writes %v", names)
 	}
 }
 

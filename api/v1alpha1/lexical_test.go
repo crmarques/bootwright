@@ -141,6 +141,29 @@ func TestAnHTTPURLIsWrittenInRFC3986Characters(t *testing.T) {
 	lexicalRows(t, "https-url", admitted, append(refused, "http://192.0.2.1:8080/os/x/tree"))
 }
 
+// A proxy endpoint names where every acquisition goes and nothing else: an
+// http or https URL with a host, no credential and nothing after its authority.
+func TestAProxyEndpointIsABareHTTPAuthority(t *testing.T) {
+	lexicalRows(t, "proxy-endpoint",
+		[]string{"http://proxy.example.test:3128", "https://proxy.example.test:8443/", "http://192.0.2.10:3128", "http://[2001:db8::1]:3128", "http://proxy"},
+		[]string{"http://proxy.example.test:3128/path", "http://proxy.example.test:3128/?q=1", "http://proxy.example.test:3128/#x",
+			"http://user@proxy.example.test:3128", "http://user:secret@proxy.example.test:3128", "socks5://proxy.example.test:1080",
+			"mailto:proxy@example.test", "proxy.example.test:3128", "http:///", "http://proxy.example.test:3128/é",
+			" http://proxy.example.test:3128", "http://" + strings.Repeat("a", 4096) + ".test", ""})
+}
+
+// A proxy bypass entry matches destinations without a resolver, so it is a
+// wildcard, an address, a block or a name, optionally with a port, and never a
+// URL fragment.
+func TestAProxyBypassEntryIsAHostAddressOrBlock(t *testing.T) {
+	lexicalRows(t, "proxy-bypass",
+		[]string{"*", "10.0.0.0/8", "2001:db8::/32", "192.0.2.7", "2001:db8::1", "lab.example.test", ".example.test", "*.example.test",
+			"registry.example.test:443", "192.0.2.7:8080", "[2001:db8::1]:443", "LAB.Example.TEST"},
+		[]string{"10.0.0.0/33", "lab.example.test/path", "user@lab.example.test", "lab.example.test?", "lab.example.test#", "lab example",
+			"lab.example.test.", "*.", ".", "**", "lab.example.test:", "lab.example.test:https", "a:1:2", "[2001:db8::1]", "[2001:db8::1]443",
+			"lab_example.test", " lab.example.test", "http://lab.example.test", ""})
+}
+
 // A repository base URL reaches a Kickstart command line, where '#' ends the
 // line and a quote re-tokenizes it.
 func TestARepositoryURLRefusesAFragmentOrAQuote(t *testing.T) {

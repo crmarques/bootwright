@@ -127,31 +127,283 @@ func TestRHSMManagedExternalAndSatellite(t *testing.T) {
 		t.Fatal(issues)
 	}
 }
-func TestMachineImageMediaAndPinning(t *testing.T) {
-	for _, raw := range []string{"local-media:rhel.iso", "file:///var/lib/media/rhel.iso", "https://images.example.test/rhel.iso", "http://images.example.test/rhel.iso"} {
+
+// The installation reads boot media only from the host media store, so a
+// MachineImage admits exactly local-media:<name> for a name the store admits,
+// and every other source is one refusal naming the import that fixes it.
+func TestMachineImageAcceptsOnlyStoreMedia(t *testing.T) {
+	consumers := api.NewCatalog([]api.Object{anaconda(), obj(api.Environment, "env", m("lifecycle", m("rescue", m("imageRef", "image"))))})
+	for _, raw := range []string{"local-media:rhel.iso", "local-media:Image_1.2-test.iso"} {
 		o := obj(api.MachineImage, "image", m("bootMedia", raw))
-		if issues := Validate(o, api.Catalog{}); len(issues) > 0 {
+		if issues := Validate(o, consumers); len(issues) > 0 {
 			t.Fatal(raw, issues)
 		}
 	}
-	for _, raw := range []string{"local-media:../rhel.iso", "local-media:dir/rhel.iso", "local-media:rhel.img", "file://remote/rhel.iso", "ftp://images.example.test/rhel.iso", "https://user:pass@images.example.test/rhel.iso"} {
-		o := obj(api.MachineImage, "image", m("bootMedia", raw))
-		if issues := Validate(o, api.Catalog{}); len(issues) == 0 {
-			t.Fatal("unsafe media admitted", raw)
-		}
+	for _, raw := range []string{"https://images.example.test/rhel.iso", "http://images.example.test/rhel.iso", "file:///var/lib/media/rhel.iso",
+		"local-media:rhel@9.8+boot.iso", "local-media:CON.iso", "local-media:a_.iso", "local-media:rhel.ISO",
+		"local-media:../rhel.iso", "local-media:dir/rhel.iso", "local-media:rhel.img", "ftp://images.example.test/rhel.iso", "rhel.iso"} {
+		t.Run(raw, func(t *testing.T) {
+			o := obj(api.MachineImage, "image", m("bootMedia", raw))
+			issues := Validate(o, consumers)
+			if len(issues) != 1 || issues[0].Code != "api.value" || issues[0].Field != "$.spec.bootMedia" ||
+				!strings.Contains(issues[0].Remediation, "bootwright media add") || !strings.Contains(issues[0].Remediation, "local-media:") ||
+				!strings.Contains(issues[0].Remediation, "MachineImage/image") {
+				t.Fatalf("refusal = %#v, want one api.value at $.spec.bootMedia naming the media import", issues)
+			}
+		})
 	}
-	image := obj(api.MachineImage, "image", m("bootMedia", "https://images.example.test/rhel.iso"))
-	if issues := Validate(image, api.NewCatalog([]api.Object{anaconda()})); len(issues) == 0 {
-		t.Fatal("consumed remote image admitted without checksum")
-	}
-	image = image.WithSpec(image.Spec().With("checksum", api.StringValue("  SHA256:"+strings.Repeat("A", 64)+"  ")))
+	image := obj(api.MachineImage, "image", m("bootMedia", "local-media:rhel.iso", "checksum", "  SHA256:"+strings.Repeat("A", 64)+"  "))
 	normalized, _ := Normalize(image, api.Catalog{})
 	if normalized.Spec().Get("checksum").Text() != strings.Repeat("a", 64) {
 		t.Fatal("checksum not normalized")
 	}
-	rescue := obj(api.Environment, "env", m("lifecycle", m("rescue", m("imageRef", "image"))))
-	if issues := Validate(image.WithSpec(image.Spec().Without("checksum")), api.NewCatalog([]api.Object{rescue})); len(issues) == 0 {
-		t.Fatal("rescue media pin omitted")
+	if issues := Validate(normalized, consumers); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+}
+
+func hostedTreeProfile(fromMedia string) (api.Object, api.Catalog) {
+	server := obj(api.ArtifactServer, "artifacts", m("management", "managed", "machineRef", "controller",
+		"listeners", list(m("name", "plain", "protocol", "http"), m("name", "secure", "protocol", "https")),
+		"endpoints", list(m("name", "packages", "listenerRef", "plain"), m("name", "media", "listenerRef", "secure"))))
+	profile := anaconda()
+	profile = profile.WithSpec(profile.Spec().
+		WithPath(m("serverRef", "artifacts", "endpointRef", "media"), "installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint").
+		WithPath(m("fromMedia", fromMedia, "artifactServerEndpoint", m("serverRef", "artifacts", "endpointRef", "packages")), "installer", "anaconda", "packageSource", "hostedTree"))
+	return profile, api.NewCatalog([]api.Object{server, obj(api.MachineImage, "image", m("bootMedia", "local-media:boot.iso"))})
+}
+
+// A hosted package tree is copied from a DVD image of the host media store,
+// the only source the installation extracts a tree from.
+func TestHostedTreeAcceptsOnlyStoreMedia(t *testing.T) {
+	const field = "$.spec.installer.anaconda.packageSource.hostedTree.fromMedia"
+	profile, catalog := hostedTreeProfile("local-media:dvd.iso")
+	if issues := Validate(profile, catalog); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	for _, raw := range []string{"file:///var/lib/media/dvd.iso", "local-media:CON.iso", "https://images.example.test/dvd.iso"} {
+		t.Run(raw, func(t *testing.T) {
+			profile, catalog := hostedTreeProfile(raw)
+			issues := Validate(profile, catalog)
+			if len(issues) != 1 || issues[0].Code != "api.value" || issues[0].Field != field ||
+				!strings.Contains(issues[0].Remediation, "bootwright media add") || !strings.Contains(issues[0].Remediation, "MachineInstallProfile/install") {
+				t.Fatalf("refusal = %#v, want one api.value at %s naming the media import", issues, field)
+			}
+		})
+	}
+	profile, catalog = hostedTreeProfile("local-media:boot.iso")
+	issues := Validate(profile, catalog)
+	if len(issues) != 1 || issues[0].Field != field || !strings.Contains(issues[0].Remediation, "MachineImage/image") {
+		t.Fatalf("refusal = %#v, want the boot image refused as the tree's media", issues)
+	}
+}
+
+// Every installation boots its installer through Redfish virtual media, so a
+// profile that a Bootwright-installed Machine selects names the endpoint its
+// image is published through, whatever the substrate, once per profile.
+func TestAnInstalledConsumerNeedsTheVirtualMediaEndpoint(t *testing.T) {
+	const field = "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint"
+	provider := obj(api.InfraProvider, "virtual", m("libvirt", m("machineProfiles", list(m("name", "small")))))
+	virtual := obj(api.Machine, "virtual-node", m("os", m("provided", false, "installProfileRef", "install"), "substrate", m("providerRef", "virtual", "profileRef", "small")))
+	loose := obj(api.Machine, "loose-node", m("os", m("provided", false, "installProfileRef", "install")))
+	for name, objects := range map[string][]api.Object{
+		"a libvirt consumer":        {provider, virtual},
+		"a provider-less consumer":  {loose},
+		"two consumers report once": {provider, virtual, loose},
+	} {
+		t.Run(name, func(t *testing.T) {
+			issues := Validate(anaconda(), api.NewCatalog(objects))
+			if len(issues) != 1 || issues[0].Code != "api.invariant" || issues[0].Field != field ||
+				!strings.Contains(issues[0].Remediation, "MachineInstallProfile/install") {
+				t.Fatalf("refusal = %#v, want one api.invariant at %s naming the profile", issues, field)
+			}
+		})
+	}
+	provided := obj(api.Machine, "provided-node", m("os", m("provided", true, "installProfileRef", "install")))
+	for name, catalog := range map[string]api.Catalog{"a provided Machine": api.NewCatalog([]api.Object{provided}), "no consumer": {}} {
+		if issues := Validate(anaconda(), catalog); len(issues) != 0 {
+			t.Fatalf("%s: %v", name, issues)
+		}
+	}
+}
+
+// A Machine's installer image is published beneath os/<machine>/ and a
+// profile's package tree beneath os/<profile>/, so a Machine and a profile of
+// one name that publish through one server would share a directory whose
+// removal takes both.
+func TestAMachineAndAProfileOfOneNameShareNoServedDirectory(t *testing.T) {
+	const field = "$.spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef"
+	endpoints := m("listeners", list(m("name", "plain", "protocol", "http"), m("name", "secure", "protocol", "https")),
+		"endpoints", list(m("name", "packages", "listenerRef", "plain"), m("name", "media", "listenerRef", "secure")))
+	server := func(name string) api.Object {
+		return obj(api.ArtifactServer, name, endpoints.With("management", api.StringValue("managed")).With("machineRef", api.StringValue("controller")))
+	}
+	profile := func(name, treeServer string) api.Object {
+		p := obj(api.MachineInstallProfile, name, anaconda().Spec())
+		return p.WithSpec(p.Spec().
+			WithPath(m("serverRef", "lab-artifacts", "endpointRef", "media"), "installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint").
+			WithPath(m("fromMedia", "local-media:dvd.iso", "artifactServerEndpoint", m("serverRef", treeServer, "endpointRef", "packages")), "installer", "anaconda", "packageSource", "hostedTree"))
+	}
+	machine := func(name, selected string, provided bool) api.Object {
+		return obj(api.Machine, name, m("os", m("provided", provided, "installProfileRef", selected)))
+	}
+	servers := []api.Object{server("lab-artifacts"), server("other-artifacts")}
+	refused := map[string]struct {
+		profile api.Object
+		others  []api.Object
+	}{
+		"the Machine selects that profile":    {profile("rhel-01", "lab-artifacts"), []api.Object{machine("rhel-01", "rhel-01", false)}},
+		"the Machine selects another profile": {profile("rhel-01", "lab-artifacts"), []api.Object{profile("rhel-9", "lab-artifacts"), machine("rhel-01", "rhel-9", false), machine("rhel-02", "rhel-01", false)}},
+	}
+	for name, test := range refused {
+		t.Run(name, func(t *testing.T) {
+			issues := Validate(test.profile, api.NewCatalog(append(append([]api.Object{test.profile}, servers...), test.others...)))
+			if len(issues) != 1 || issues[0].Code != "api.invariant" || issues[0].Field != field {
+				t.Fatalf("refusal = %#v, want one api.invariant at %s", issues, field)
+			}
+			for _, named := range []string{"os/rhel-01/", "Machine/rhel-01", "ArtifactServer/lab-artifacts"} {
+				if !strings.Contains(issues[0].Message, named) {
+					t.Errorf("message %q does not name %s", issues[0].Message, named)
+				}
+			}
+			if !strings.Contains(issues[0].Remediation, "rename Machine/rhel-01 or MachineInstallProfile/rhel-01") {
+				t.Errorf("remediation %q does not name the rename", issues[0].Remediation)
+			}
+		})
+	}
+	admitted := map[string]struct {
+		profile api.Object
+		others  []api.Object
+	}{
+		"the tree uses another server":      {profile("rhel-01", "other-artifacts"), []api.Object{machine("rhel-01", "rhel-01", false)}},
+		"the Machine is provided":           {profile("rhel-01", "lab-artifacts"), []api.Object{profile("rhel-9", "lab-artifacts"), machine("rhel-01", "rhel-9", true), machine("rhel-02", "rhel-01", false)}},
+		"the profile has no installed user": {profile("rhel-01", "lab-artifacts"), []api.Object{profile("rhel-9", "lab-artifacts"), machine("rhel-01", "rhel-9", false), machine("rhel-02", "rhel-01", true)}},
+	}
+	for name, test := range admitted {
+		t.Run(name, func(t *testing.T) {
+			if issues := Validate(test.profile, api.NewCatalog(append(append([]api.Object{test.profile}, servers...), test.others...))); len(issues) != 0 {
+				t.Fatal(issues)
+			}
+		})
+	}
+}
+
+// A server placed on the Machine an installation lays down cannot serve that
+// installation, and the refusal says so rather than the opposite rule.
+func TestTheBootstrapCycleIsStatedAsRefused(t *testing.T) {
+	profile, catalog := hostedTreeProfile("local-media:dvd.iso")
+	objects := []api.Object{obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install")))}
+	for _, existing := range catalog.Objects() {
+		if existing.Kind() == api.ArtifactServer {
+			existing = existing.WithSpec(existing.Spec().With("machineRef", api.StringValue("node")))
+		}
+		objects = append(objects, existing)
+	}
+	issues := Validate(profile, api.NewCatalog(objects))
+	for _, path := range []string{"redfishVirtualMedia", "packageSource.hostedTree"} {
+		field := "$.spec.installer.anaconda." + path + ".artifactServerEndpoint.serverRef"
+		found := issuesAt(issues, field)
+		if len(found) != 1 || found[0].Code != "api.invariant" ||
+			found[0].Message != "an installation cannot publish through an artifact server placed on the Machine it installs, because that server cannot serve until the installation completes" ||
+			strings.Contains(found[0].Message, "requires an artifact server hosted on") ||
+			!strings.Contains(found[0].Remediation, "ArtifactServer/artifacts") || !strings.Contains(found[0].Remediation, "controller") {
+			t.Errorf("refusal at %s = %#v, want the cycle stated as refused with a remedy naming the server and the controller", field, found)
+		}
+	}
+}
+
+func issuesAt(issues []api.Issue, field string) []api.Issue {
+	var found []api.Issue
+	for _, issue := range issues {
+		if issue.Field == field {
+			found = append(found, issue)
+		}
+	}
+	return found
+}
+
+// Every managed-OS admission refusal names the exact field or object whose
+// change clears it, instead of one slogan shared by every rule.
+func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
+	const slogan = "make OS installation intent consistent with its consumers and references"
+	profile := func(edit func(api.Value) api.Value) api.Object {
+		o := anaconda()
+		return o.WithSpec(edit(o.Spec()))
+	}
+	custom := func(value api.Value) api.Object {
+		return profile(func(s api.Value) api.Value { return s.With("customizations", value) })
+	}
+	clone := obj(api.MachineInstallProfile, "install", m("os", m("family", "rhel", "version", "9", "architecture", "x86_64"), "installer", m("templateClone", m())))
+	provider := obj(api.InfraProvider, "virtual", m("libvirt", m("machineProfiles", list(m("name", "small")))))
+	consumer := obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install"), "substrate", m("providerRef", "virtual", "profileRef", "small")))
+	consumed := api.NewCatalog([]api.Object{provider, consumer})
+	served, servedCatalog := hostedTreeProfile("local-media:dvd.iso")
+	cycle := []api.Object{consumer}
+	for _, existing := range servedCatalog.Objects() {
+		if existing.Kind() == api.ArtifactServer {
+			existing = existing.WithSpec(existing.Spec().With("machineRef", api.StringValue("node")))
+		}
+		cycle = append(cycle, existing)
+	}
+	sameName := obj(api.MachineInstallProfile, "node", served.Spec())
+	rhel := func(rhsm api.Value) api.Object {
+		return obj(api.Entitlement, "rhel", m("type", "redhat-rhel", "rhsm", rhsm))
+	}
+	registered := func(value api.Value) api.Object {
+		return profile(func(s api.Value) api.Value {
+			return s.With("subscription", m("entitlementRef", "rhel")).With("customizations", m("repositories", m("subscription", value)))
+		})
+	}
+	cases := map[string]struct {
+		issues []api.Issue
+		field  string
+	}{
+		"OS family":              {Validate(profile(func(s api.Value) api.Value { return s.WithPath(api.StringValue("debian"), "os", "family") }), api.Catalog{}), "$.spec.os.family"},
+		"OS version":             {Validate(profile(func(s api.Value) api.Value { return s.WithPath(api.StringValue("8.10"), "os", "version") }), api.Catalog{}), "$.spec.os.version"},
+		"repository key missing": {Validate(custom(m("repositories", m("configure", list(m("id", "custom", "baseURL", "https://example.test/repo"))))), api.Catalog{}), "$.spec.customizations.repositories.configure[0].gpgKeyURL"},
+		"repository key URL":     {Validate(custom(m("repositories", m("configure", list(m("id", "repo", "gpgKeyURL", "ftp://example.test/key"))))), api.Catalog{}), "$.spec.customizations.repositories.configure[0].gpgKeyURL"},
+		"two registrations": {Validate(profile(func(s api.Value) api.Value {
+			return s.With("subscription", m("entitlementRef", "rhel")).WithPath(m("entitlementRef", "rhel"), "installer", "anaconda", "packageSource", "fromSubscription")
+		}), api.Catalog{}), "$.spec.subscription"},
+		"a non-RHEL entitlement":            {Validate(profile(func(s api.Value) api.Value { return s.With("subscription", m("entitlementRef", "ceph")) }), api.NewCatalog([]api.Object{obj(api.Entitlement, "ceph", m("type", "redhat-ceph"))})), "$.spec.subscription.entitlementRef"},
+		"empty subscription repositories":   {Validate(registered(m()), api.Catalog{}), "$.spec.customizations.repositories.subscription"},
+		"unregistered repositories":         {Validate(custom(m("repositories", m("subscription", m("enable", api.StringList("repo"))))), api.Catalog{}), "$.spec.customizations.repositories.subscription"},
+		"an enabled wildcard":               {Validate(registered(m("enable", api.StringList("*"))), api.Catalog{}), "$.spec.customizations.repositories.subscription.enable"},
+		"an enabled and disabled ID":        {Validate(registered(m("enable", api.StringList("repo"), "disable", api.StringList("repo"))), api.Catalog{}), "$.spec.customizations.repositories.subscription"},
+		"a disabled ID":                     {Validate(registered(m("disable", api.StringList("bad/id"))), api.Catalog{}), "$.spec.customizations.repositories.subscription.disable"},
+		"an enabled and disabled service":   {Validate(custom(m("services", m("enabled", api.StringList("sshd"), "disabled", api.StringList("sshd")))), api.Catalog{}), "$.spec.customizations.services"},
+		"a firewall without firewalld":      {Validate(custom(m("security", m("firewall", m("enabled", true)))), api.Catalog{}), "$.spec.customizations.security.firewall.enabled"},
+		"a PCR bank without PCRs":           {Validate(custom(m("security", m("diskEncryption", m("unlock", m("tpm2", m("pcrBank", "sha256")))))), api.Catalog{}), "$.spec.customizations.security.diskEncryption.unlock.tpm2.pcrBank"},
+		"a server on the installed Machine": {Validate(served, api.NewCatalog(cycle)), "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.serverRef"},
+		"tree media off the store":          {Validate(hostedTreeProfile("file:///media/dvd.iso")), "$.spec.installer.anaconda.packageSource.hostedTree.fromMedia"},
+		"tree media is the boot image":      {Validate(hostedTreeProfile("local-media:boot.iso")), "$.spec.installer.anaconda.packageSource.hostedTree.fromMedia"},
+		"a clone on libvirt":                {Validate(clone, consumed), "$.spec.installer.templateClone"},
+		"no virtual media endpoint":         {Validate(anaconda(), consumed), "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint"},
+		"encryption without a TPM":          {Validate(custom(m("security", m("diskEncryption", m()))), consumed), "$.spec.customizations.security.diskEncryption"},
+		"a cluster-bound machine name":      {Validate(custom(m("hostname", m("source", "machineName"))), api.NewCatalog([]api.Object{provider, consumer, obj(api.ContainerCluster, "cluster", m("nodes", list(m("machineRef", "node"))))})), "$.spec.customizations.hostname.source"},
+		"a shared served directory":         {Validate(sameName, api.NewCatalog(append(servedCatalog.Objects(), sameName, obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "node")))))), "$.spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef"},
+		"boot media off the store":          {Validate(obj(api.MachineImage, "image", m("bootMedia", "https://images.example.test/rhel.iso")), api.Catalog{}), "$.spec.bootMedia"},
+		"no RHSM intent":                    {Validate(obj(api.Entitlement, "rhel", m("type", "redhat-rhel")), api.Catalog{}), "$.spec.rhsm"},
+		"external RHSM detail":              {Validate(rhel(m("management", "external", "organizationRef", "organization")), api.Catalog{}), "$.spec.rhsm.organizationRef"},
+		"managed RHSM without keys":         {Validate(rhel(m("management", "managed")), api.Catalog{}), "$.spec.rhsm.activationKeyRef"},
+		"a clone customization":             {ValidateAuthored(clone.WithSpec(clone.Spec().With("customizations", m("packages", m()))), api.Catalog{}), "$.spec.customizations.packages"},
+		"partial external RHSM detail":      {ValidatePartial(rhel(m("management", "external", "satellite", m())), api.Catalog{}), "$.spec.rhsm.satellite"},
+		"partial service overlap":           {ValidatePartial(custom(m("services", m("enabled", api.StringList("sshd"), "disabled", api.StringList("sshd")))), api.Catalog{}), "$.spec.customizations.services"},
+		"partial two registrations": {ValidatePartial(profile(func(s api.Value) api.Value {
+			return s.With("subscription", m("entitlementRef", "rhel")).WithPath(m("entitlementRef", "rhel"), "installer", "anaconda", "packageSource", "fromSubscription")
+		}), api.Catalog{}), "$.spec.subscription"},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			if len(issuesAt(test.issues, test.field)) == 0 {
+				t.Fatalf("no refusal at %s: %#v", test.field, test.issues)
+			}
+			for _, issue := range test.issues {
+				if issue.Remediation == "" || issue.Remediation == slogan || !strings.Contains(issue.Remediation, "spec.") && !strings.Contains(issue.Remediation, "/") {
+					t.Errorf("refusal at %s carries remediation %q, want the exact field or object to change", issue.Field, issue.Remediation)
+				}
+			}
+		})
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 
 func mediaCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "media add", short: "Import and verify an installer image", flags: []flagSpec{nameFlag(), fileFlag("from-file", "Import a local image"), stringFlag("from-url", "Import an HTTP or HTTPS image"), stringFlag("sha256", "Verify a SHA-256 digest"), confirmationFlag()}, long: "Import one installer image into this host's media store, where every context shares it. A download requires --sha256 and follows no redirect. Replacing a stored image needs ordinary confirmation; --yes skips it."}),
+		available(commandSpec{path: "media add", short: "Import and verify an installer image", flags: []flagSpec{nameFlag(), fileFlag("from-file", "Import a local image"), undisclosedFlag("from-url", "Import an HTTP or HTTPS image"), stringFlag("sha256", "Verify a SHA-256 digest"), confirmationFlag()}, long: "Import one installer image into this host's media store, where every context shares it. A download requires --sha256 and follows no redirect. Replacing a stored image needs ordinary confirmation; --yes skips it."}),
 		available(commandSpec{path: "media list", short: "List installer images", flags: []flagSpec{boolFlag("checksums", "Compute image checksums"), outputFlag()}, long: "List the images this host stores. The default reads records and file metadata only; --checksums reads every image in full and reports whether its bytes still match its record."}),
 		available(commandSpec{path: "media delete", short: "Delete an unbound installer image", flags: []flagSpec{nameFlag(), confirmationFlag()}, long: "Delete one stored image and its record. An image any context reserves is refused, because a frozen operation still needs exactly those bytes."}),
 	}

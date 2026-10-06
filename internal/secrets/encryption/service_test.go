@@ -3,9 +3,11 @@ package encryption
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -208,5 +210,41 @@ func TestRotateReportsRetiredKeysAndReencryptedCounts(t *testing.T) {
 	rotated, err := service.Rotate(context.Background(), EncryptionRotateRequest{ContextName: "fixture", SkipConfirmation: true})
 	if err != nil || rotated.ActiveKey != "rotated-key" || !slices.Equal(rotated.RetiredKeys, []string{"key-a", "key-b"}) || rotated.ReencryptedVersions != 3 || rotated.ReencryptedParts != 6 {
 		t.Fatalf("rotation = %+v (%v), want key-a and key-b retired and 3 versions with 6 parts re-encrypted", rotated, err)
+	}
+}
+
+type rotationConfirmer struct {
+	refusal error
+	asked   [][2]string
+}
+
+func (c *rotationConfirmer) Confirm(_ context.Context, action, name string) error {
+	c.asked = append(c.asked, [2]string{action, name})
+	return c.refusal
+}
+
+// A rotation that was not confirmed reports the confirmer's own refusal
+// unchanged, which names the context and the command that repeats it with
+// --yes, and rotates nothing. Without a confirmer rotation names that command
+// itself, under the same code.
+func TestAnUnconfirmedRotationNamesItsContextAndTheCommandWithYes(t *testing.T) {
+	declined := diagnostics.Diagnostic{Severity: "error", Code: "secret.store.conflict", Message: "key rotation confirmation was declined; nothing changed",
+		Remediation: "review it, then repeat bootwright secret encryption rotate --context fixture with --yes"}
+	service, access := serviceFixture()
+	confirmer := &rotationConfirmer{refusal: &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{declined}}}
+	service.confirmer = confirmer
+	_, err := service.Rotate(context.Background(), EncryptionRotateRequest{ContextName: "fixture"})
+	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, []diagnostics.Diagnostic{declined}) {
+		t.Fatalf("a declined rotation = %+v, want the confirmer's own refusal", reported)
+	}
+	if !reflect.DeepEqual(confirmer.asked, [][2]string{{"rotate secret encryption", "fixture"}}) || access.session.rotations != 0 {
+		t.Fatalf("asked %v and rotated %d times", confirmer.asked, access.session.rotations)
+	}
+	service.confirmer = nil
+	_, err = service.Rotate(context.Background(), EncryptionRotateRequest{ContextName: "fixture"})
+	want := []diagnostics.Diagnostic{{Severity: "error", Code: "secret.store.conflict", Message: "key rotation requires confirmation",
+		Remediation: "repeat bootwright secret encryption rotate --context fixture with --yes"}}
+	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) || access.session.rotations != 0 {
+		t.Fatalf("an unconfirmable rotation = %+v, want %+v", reported, want)
 	}
 }

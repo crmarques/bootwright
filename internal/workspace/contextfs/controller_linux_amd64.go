@@ -24,8 +24,18 @@ type controllerStored struct {
 	runs     bool
 }
 
-func controllerFailure(code, message string) error {
-	return diagnostics.NewFailureWithRemediation(code, message, "", "repeat the same controller setup command with its original input and compatible executable")
+// setupRetry settles a refusal setup itself meets: only the exact setup that
+// recorded the controller state may continue it.
+const setupRetry = "repeat the same controller setup command with its original input and compatible executable"
+
+// completeSetup settles a command other than setup that needs the completed
+// setup this host lacks.
+const completeSetup = "run bootwright setup, then repeat the command"
+
+// controllerFailure is a controller-state refusal and the action that settles
+// it, which belongs to the command that met it.
+func controllerFailure(code, message, remediation string) error {
+	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }
 
 func openControllerDirectory(root *directory, registry contexts.Registry) (*directory, error) {
@@ -246,7 +256,7 @@ func (s *Store) MutateController(ctx context.Context, expected prerequisites.Set
 			return err
 		}
 		if view.Context.Name != expected.Name || view.Context.Revision != expected.Revision {
-			return controllerFailure("controller.conflict", "controller input changed after setup inspection")
+			return controllerFailure("controller.conflict", "controller input changed after setup inspection", setupRetry)
 		}
 		view.Context.Machine = expected.Machine
 		if expected.Name != "" {
@@ -262,11 +272,11 @@ func (s *Store) MutateController(ctx context.Context, expected prerequisites.Set
 			}
 		}
 		if stored.data != nil && stored.value.Receipt.Incomplete() && stored.value.Receipt.Context != expected {
-			return controllerFailure("controller.conflict", "another setup receipt requires exact recovery before host mutation")
+			return controllerFailure("controller.conflict", "another setup receipt requires exact recovery before host mutation", setupRetry)
 		}
 		for _, binding := range stored.value.Bindings {
 			if binding.Context == expected.Name && binding.Machine != expected.Machine {
-				return controllerFailure("controller.identity", "controller Machine differs from its established host binding")
+				return controllerFailure("controller.identity", "controller Machine differs from its established host binding", setupRetry)
 			}
 		}
 		tx := &controllerTransaction{base: t, view: view, stored: stored, active: true}
@@ -318,7 +328,7 @@ func (t *controllerTransaction) Snapshot() prerequisites.StorageView {
 
 func (t *controllerTransaction) available(ctx context.Context) error {
 	if !t.active || t.uncertain {
-		return controllerFailure("controller.unknown", "controller storage capability is no longer available")
+		return controllerFailure("controller.unknown", "controller storage capability is no longer available", setupRetry)
 	}
 	if err := t.base.available(ctx); err != nil {
 		return err
@@ -362,7 +372,7 @@ func validateControllerTransition(before, next prerequisites.HostState, scope pr
 		return nil
 	}
 	if !before.Host.Equal(next.Host) {
-		return controllerFailure("controller.identity", "stored controller host evidence does not match the executing host")
+		return controllerFailure("controller.identity", "stored controller host evidence does not match the executing host", setupRetry)
 	}
 	for _, binding := range before.Bindings {
 		if !slices.Contains(next.Bindings, binding) {
@@ -376,7 +386,7 @@ func validateControllerTransition(before, next prerequisites.HostState, scope pr
 	}
 	if before.Receipt.ID != next.Receipt.ID {
 		if before.Receipt.Incomplete() {
-			return controllerFailure("controller.unknown", "pending setup must be resolved before replacing its receipt")
+			return controllerFailure("controller.unknown", "pending setup must be resolved before replacing its receipt", setupRetry)
 		}
 		for _, action := range next.Receipt.Actions {
 			if len(action.Preparation) != 0 {
@@ -386,7 +396,7 @@ func validateControllerTransition(before, next prerequisites.HostState, scope pr
 		return nil
 	}
 	if before.Receipt.PlanDigest != next.Receipt.PlanDigest {
-		return controllerFailure("controller.unknown", "exact setup retry requires the original host, input, catalog and plan")
+		return controllerFailure("controller.unknown", "exact setup retry requires the original host, input, catalog and plan", setupRetry)
 	}
 	if len(before.Receipt.Actions) != len(next.Receipt.Actions) {
 		return state("setup retry changed its fixed action count")
@@ -461,7 +471,7 @@ func (t *controllerTransaction) Publish(ctx context.Context, requested prerequis
 			defer dir.file.Close()
 			if err := t.base.store.syncDirectory(ctx, dir); err != nil {
 				t.uncertain = true
-				return prerequisites.Unknown, controllerFailure("controller.unknown", "controller receipt durability could not be established")
+				return prerequisites.Unknown, controllerFailure("controller.unknown", "controller receipt durability could not be established", setupRetry)
 			}
 			if err := t.available(ctx); err != nil {
 				t.uncertain = true
@@ -564,13 +574,13 @@ func (t *controllerTransaction) publishValue(ctx context.Context, value prerequi
 		registry.Controller.Mode = "ready"
 		if err := t.base.save(ctx, registry); err != nil {
 			t.uncertain = true
-			return prerequisites.Unknown, controllerFailure("controller.unknown", "controller receipt publication may have completed")
+			return prerequisites.Unknown, controllerFailure("controller.unknown", "controller receipt publication may have completed", setupRetry)
 		}
 	}
 	stored, err := readControllerStored(ctx, t.base.root, t.base.registry)
 	if err != nil {
 		t.uncertain = true
-		return prerequisites.Unknown, controllerFailure("controller.unknown", "published controller receipt could not be reverified")
+		return prerequisites.Unknown, controllerFailure("controller.unknown", "published controller receipt could not be reverified", setupRetry)
 	}
 	t.stored = stored
 	t.view.State = cloneControllerState(stored.value)
@@ -604,7 +614,7 @@ func (s *Store) replaceControllerRecord(ctx context.Context, dir *directory, exp
 	case publicationCommitted:
 		return prerequisites.Committed, nil
 	case publicationUnknown:
-		return prerequisites.Unknown, controllerFailure("controller.unknown", "controller receipt publication may have completed; preserve all verified progress")
+		return prerequisites.Unknown, controllerFailure("controller.unknown", "controller receipt publication may have completed; preserve all verified progress", setupRetry)
 	}
 	return prerequisites.NotCommitted, err
 }

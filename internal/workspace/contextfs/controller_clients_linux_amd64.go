@@ -32,7 +32,7 @@ func (t *lifecycleTransaction) ClientArea(ctx context.Context, id string) (prere
 		return nil, state("controller client area identity is invalid")
 	}
 	if t.stored.data == nil || t.stored.value.Receipt.Status != "complete" {
-		return nil, controllerFailure("controller.identity", "this host has no completed controller setup; run bootwright setup")
+		return nil, controllerFailure("controller.identity", "this host has no completed controller setup", completeSetup)
 	}
 	if id == t.stored.value.Receipt.CatalogDigest {
 		return nil, state("the approved setup bundle is not a client publication area")
@@ -163,7 +163,7 @@ func (t *lifecycleTransaction) RetainDependencies(ctx context.Context, definitio
 		return err
 	}
 	if t.stored.data == nil || t.stored.value.Receipt.Status != "complete" {
-		return controllerFailure("controller.identity", "this host has no completed controller setup; run bootwright setup")
+		return controllerFailure("controller.identity", "this host has no completed controller setup", completeSetup)
 	}
 	value, err := retainDependencies(cloneControllerState(t.stored.value), t.stored.bundles, definition, sources, superseded)
 	if err != nil {

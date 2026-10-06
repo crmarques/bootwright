@@ -29,7 +29,7 @@ const (
 func CheckIDs() []string {
 	return []string{
 		"host", "installed-host", "execution-bundle", "container-runtime", "target-tools",
-		"libvirt-client", "controller-binding", "setup-recovery", "setup-state",
+		"libvirt-client", "hypervisor", "installer-media", "controller-binding", "setup-recovery", "setup-state",
 	}
 }
 
@@ -64,6 +64,9 @@ type Report struct {
 	Actions       []string
 	Dependencies  []string
 	PlanPresented bool
+	// Next is the one command that settles a not-ready readiness check, as
+	// preflight decided it. It is empty for every other outcome.
+	Next string
 	// ProgressPresented records that progress rows were already streamed, so a
 	// failure report adds only its outcome rather than repeating the headline.
 	ProgressPresented bool

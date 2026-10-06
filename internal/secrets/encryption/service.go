@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
@@ -114,13 +115,16 @@ func (s Service) Rotate(ctx context.Context, request EncryptionRotateRequest) (*
 	err = s.access.Mutate(ctx, selected.Context, func(session secretstore.StoreSession, selection secretstore.Selection) error {
 		if !request.SkipConfirmation {
 			if s.confirmer == nil {
-				return secretstore.Failure("store.conflict", "key rotation requires confirmation; use --yes after review")
+				return diagnostics.NewFailureWithRemediation("secret.store.conflict", "key rotation requires confirmation", "",
+					"repeat bootwright secret encryption rotate --context "+selected.Context.Name+" with --yes")
 			}
+			// The confirmer's refusal names the context and the command that
+			// repeats the rotation with --yes, so it is returned unchanged.
 			if err := s.confirmer.Confirm(ctx, "rotate secret encryption", selected.Context.Name); err != nil {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				return secretstore.Failure("store.conflict", "key rotation was not confirmed")
+				return err
 			}
 		}
 		// Rotation re-encrypts every version the store holds under one fresh

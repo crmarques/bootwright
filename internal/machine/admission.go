@@ -364,9 +364,9 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 				issues = appendIssues(issues, validateManagedAttachmentContainment(prefix, network, provider)...)
 			}
 		}
-		if installed(o) {
+		if installed(o) && len(selectionIssues) == 0 {
 			if profile, ok := c.Find(api.MachineInstallProfile, s.Get("os", "installProfileRef").Text()); ok && profile.Spec().Has("installer", "anaconda") {
-				issues = appendIssues(issues, validateAnacondaNetwork(address, native)...)
+				issues = appendIssues(issues, validateAnacondaNetwork(address, native, configured)...)
 			}
 		}
 	}
@@ -596,27 +596,35 @@ func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
 	return issues
 }
 
-func validateAnacondaNetwork(address, native api.Value) []api.Issue {
-	if !native.Present() {
+// validateAnacondaNetwork admits the one install network the Kickstart
+// carries: a static IPv4 address on the install interface. DHCP installation
+// is not supported, so a network that would leave the installer to lease one,
+// including no network configuration at all, is refused here rather than at
+// plan, and without a configuration the remedy selects one first, since no
+// install interface exists before it. A configuration that does not resolve is
+// another rule's refusal.
+func validateAnacondaNetwork(address, native api.Value, configured bool) []api.Issue {
+	if configured && !native.Present() {
 		return nil
 	}
-	if address.Present() {
-		prefix, err := netip.ParsePrefix(address.Get("address").Text())
-		if err == nil && !prefix.Addr().Is4() {
-			return []api.Issue{invariant("$.spec.network.installAddressRef", "Anaconda installation requires static IPv4 or DHCP")}
-		}
-		iface, ok := namedValue(native.Get("interfaces"), address.Get("interface").Text())
-		if ok && !slices.Contains([]string{"ethernet", "vlan", "bond"}, iface.Get("type").Text()) {
-			return []api.Issue{invariant("$.spec.network.installAddressRef", "Anaconda static install interface must be ethernet, vlan, or bond")}
-		}
-		return nil
+	remediation := "assign an IPv4 address with its prefix to the install interface in spec.network.addresses and select it with spec.network.installAddressRef"
+	if !configured {
+		remediation = "select a network configuration with spec.network.configRef or declare one in spec.network.inline, then " + remediation
 	}
-	for _, iface := range native.Get("interfaces").Items() {
-		if !unavailableInterface(iface) && iface.Get("ipv4", "dhcp").Bool() {
-			return nil
-		}
+	static := api.Issue{Code: "api.invariant", Field: "$.spec.network.installAddressRef",
+		Message:     "a Bootwright-installed Anaconda Machine installs with one static IPv4 address, and DHCP installation is not supported",
+		Remediation: remediation}
+	if !address.Present() {
+		return []api.Issue{static}
 	}
-	return []api.Issue{invariant("$.spec.network", "Anaconda install networking requires DHCP or a static IPv4 installation address")}
+	if prefix, err := netip.ParsePrefix(address.Get("address").Text()); err == nil && !prefix.Addr().Is4() {
+		return []api.Issue{static}
+	}
+	iface, ok := namedValue(native.Get("interfaces"), address.Get("interface").Text())
+	if ok && !slices.Contains([]string{"ethernet", "vlan", "bond"}, iface.Get("type").Text()) {
+		return []api.Issue{invariant("$.spec.network.installAddressRef", "Anaconda static install interface must be ethernet, vlan, or bond")}
+	}
+	return nil
 }
 
 func normalizeConfiguration(config api.Value, c api.Catalog) api.Value {

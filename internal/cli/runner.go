@@ -189,13 +189,14 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 }
 
 func (r *Runner) execute(ctx context.Context, command *cobra.Command, path string) int {
+	refused := refusalStatus(path)
 	if r.config.BeginOperation != nil && implementedOperation(path) && ctx.Err() == nil {
 		operationContext, finish := r.config.BeginOperation(ctx)
 		if finish != nil {
 			defer finish()
 		}
 		if operationContext == nil || finish == nil {
-			return r.failure(command, path, "runtime.internal", "operation cancellation is not configured", 1, selectedJSON(command))
+			return r.failure(command, path, "runtime.internal", "operation cancellation is not configured", refused, selectedJSON(command))
 		}
 		ctx = operationContext
 	}
@@ -206,13 +207,23 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 		r.config.FinishProgress()
 	}
 	var controllerOutput *controllerOutputFailure
-	if errors.As(err, &controllerOutput) {
+	var lifecycleOutput *lifecycleOutputFailure
+	if errors.As(err, &controllerOutput) || errors.As(err, &lifecycleOutput) {
 		return 1
+	}
+	// A session's streams and exit status are the remote process's own, even
+	// when an interrupt arrived while it ran. There is no result to present and
+	// no status to add: the operator has already seen everything it produced.
+	if err == nil && result.session != nil {
+		return result.session.ExitCode
 	}
 	if err != nil && (path == "setup" || path == "preflight controller") && validControllerReport(result.controller) {
 		if presentErr := writeControllerReport(r.config.Out, r.config.ErrOut, path, result.controller); presentErr != nil {
 			return 1
 		}
+	}
+	if interruptedLifecycle(ctx, path, result) {
+		return r.writeInterruptedLifecycle(path, result.lifecycleOperation)
 	}
 	if canceled := ctx.Err(); canceled != nil {
 		err = canceled
@@ -221,13 +232,13 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 		return r.failureNaming(command, path, "runtime.interrupted", "operation interrupted", 130, selectedJSON(command), logs)
 	}
 	if errors.Is(err, availability.ErrNotImplemented) {
-		return r.failure(command, path, "cli.not-implemented", "bootwright "+path+" is not implemented", 1, selectedJSON(command))
+		return r.failure(command, path, "cli.not-implemented", "bootwright "+path+" is not implemented", refused, selectedJSON(command))
 	}
 	if errors.Is(err, context.Canceled) {
-		return r.failureNaming(command, path, "runtime.canceled", "operation canceled", 1, selectedJSON(command), logs)
+		return r.failureNaming(command, path, "runtime.canceled", "operation canceled", refused, selectedJSON(command), logs)
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return r.failureNaming(command, path, "runtime.deadline", "operation deadline exceeded", 1, selectedJSON(command), logs)
+		return r.failureNaming(command, path, "runtime.deadline", "operation deadline exceeded", refused, selectedJSON(command), logs)
 	}
 	usage := diagnostics.IsUsage(err)
 	if diagnostics := diagnostics.Of(err); len(diagnostics) != 0 {
@@ -245,7 +256,7 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 		}
 		// A service's refusal of how it was invoked, such as a flag set the
 		// declared Secret type does not take, is a usage failure.
-		exitCode := 1
+		exitCode := refused
 		if usage {
 			exitCode = 2
 		}
@@ -258,12 +269,6 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 			}
 		}
 		return exitCode
-	}
-	// A session's streams and exit status are the remote process's own. There
-	// is no result to present and no status to add: the operator has already
-	// seen everything the session produced.
-	if err == nil && result.session != nil {
-		return result.session.ExitCode
 	}
 	if err == nil {
 		handled, presentErr := r.writeResult(ctx, command, path, result)
@@ -278,7 +283,18 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 			return 0
 		}
 	}
-	return r.failureNaming(command, path, "runtime.internal", "application service returned an unsupported result", 1, selectedJSON(command), logs)
+	return r.failureNaming(command, path, "runtime.internal", "application service returned an unsupported result", refused, selectedJSON(command), logs)
+}
+
+// refusalStatus is the status of a refusal of path. An SSH session's status is
+// the remote command's, 0 to 254, so every refusal Bootwright reports before
+// the session opens exits 255, the SSH client's own failure status. A usage
+// refusal and an interrupt keep theirs.
+func refusalStatus(path string) int {
+	if path == "machine exec" || path == "machine rsh" {
+		return 255
+	}
+	return 1
 }
 
 func selectedJSON(command *cobra.Command) bool {

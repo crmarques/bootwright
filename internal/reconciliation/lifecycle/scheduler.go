@@ -156,32 +156,62 @@ func (c *scheduler) admit(ctx context.Context) {
 // already worked it: a worked block still pending is one whose attempt never
 // ran, and admitting it again would only meet the same refusal.
 func (c *scheduler) next() (reconciliation.Block, int, bool) {
-	for index, block := range c.plan.Blocks {
-		if unproved(c.states[block.ID]) && !c.running[block.ID] && !c.worked[block.ID] {
-			return block, index, true
+	kind, admitted := firstAdmission(c.plan, c.states, c.selection, c.worked)
+	switch {
+	case kind == StepResolve:
+		for _, index := range admitted {
+			if !c.running[c.plan.Blocks[index].ID] {
+				return c.plan.Blocks[index], index, true
+			}
 		}
-	}
-	if c.observeOnly || c.anyState(unproved) {
 		return reconciliation.Block{}, 0, false
-	}
-	failed := func(state reconciliation.BlockState) bool { return state == reconciliation.BlockFailed }
-	if c.anyState(failed) {
-		block, index, ok := retryCandidate(c.plan, c.states, c.selection, c.worked)
-		if !ok || len(c.running) != 0 || !c.free(block) {
+	case c.observeOnly:
+		return reconciliation.Block{}, 0, false
+	case kind == StepRetry:
+		if len(admitted) == 0 || len(c.running) != 0 || !c.free(c.plan.Blocks[admitted[0]]) {
 			return reconciliation.Block{}, 0, false
 		}
-		return block, index, true
+		return c.plan.Blocks[admitted[0]], admitted[0], true
 	}
-	startable := reconciliation.Startable(c.plan, c.states, c.selection)
-	for index, block := range c.plan.Blocks {
-		if c.running[block.ID] || c.worked[block.ID] || !c.free(block) {
-			continue
-		}
-		if slices.ContainsFunc(startable, func(ready reconciliation.Block) bool { return ready.ID == block.ID }) {
+	for _, index := range admitted {
+		block := c.plan.Blocks[index]
+		if !c.running[block.ID] && !c.worked[block.ID] && c.free(block) {
 			return block, index, true
 		}
 	}
 	return reconciliation.Block{}, 0, false
+}
+
+// firstAdmission is what admission takes first, as plan positions in frozen
+// order: while any effect is unproved, StepResolve and every unproved block not
+// yet worked; otherwise, while any block is failed, StepRetry and the retry
+// candidate, or none when the selection admits no failed block; otherwise
+// StepStart and every startable block. The scheduler, the refusal of a
+// selection that admits nothing and the stage preview all derive from it, so
+// the preview marks exactly what the next apply admits.
+func firstAdmission(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection, worked map[string]bool) (string, []int) {
+	admitted := []int{}
+	if slices.ContainsFunc(plan.Blocks, func(block reconciliation.Block) bool { return unproved(states[block.ID]) }) {
+		for index, block := range plan.Blocks {
+			if unproved(states[block.ID]) && !worked[block.ID] {
+				admitted = append(admitted, index)
+			}
+		}
+		return StepResolve, admitted
+	}
+	if slices.ContainsFunc(plan.Blocks, func(block reconciliation.Block) bool { return states[block.ID] == reconciliation.BlockFailed }) {
+		if _, index, ok := retryCandidate(plan, states, selection, worked); ok {
+			admitted = append(admitted, index)
+		}
+		return StepRetry, admitted
+	}
+	startable := reconciliation.Startable(plan, states, selection)
+	for index, block := range plan.Blocks {
+		if slices.ContainsFunc(startable, func(ready reconciliation.Block) bool { return ready.ID == block.ID }) {
+			admitted = append(admitted, index)
+		}
+	}
+	return StepStart, admitted
 }
 
 // retryCandidate chooses the failed block a retry may start: the first in

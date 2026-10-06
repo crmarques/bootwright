@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -38,17 +39,25 @@ func destructive(id string) reconciliation.BlockDefinition {
 	return block
 }
 
-// An irreversible consequence is acknowledged before the operation registers,
-// so a plan that consumes an authorization the invocation did not supply
-// refuses without presenting a plan or writing anything.
+// An irreversible consequence is acknowledged before the operation registers.
+// The plan is presented first, so a plan that consumes an authorization the
+// invocation did not supply refuses naming the steps the operator has just
+// read and the exact command that passes, before the prompt and before
+// anything is written.
 func TestAPlanThatConsumesAnAuthorizationRefusesWithoutIt(t *testing.T) {
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts")})
-	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.authorization" {
-		t.Fatalf("missing authorization refusal = %q", code)
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab"})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.authorization" ||
+		reported[0].Message != "this plan has data-loss consequences that are not authorized: step 1 (serve artifacts)" ||
+		reported[0].Remediation != "repeat it with the authorization: bootwright apply --context lab --authorize data-loss" {
+		t.Fatalf("missing authorization refusal = %+v (%v)", reported, err)
 	}
-	if len(h.presenter.presented) != 0 || h.workspace.mutations != 0 || len(h.capability.applies) != 0 {
-		t.Fatal("a refused request presented a plan, mutated or ran a block")
+	if len(h.presenter.presented) != 1 || !slices.Equal(h.presenter.presented[0].Steps[0].Consumes, []string{"data-loss"}) {
+		t.Fatalf("the refusal did not follow the presented plan: %+v", h.presenter.presented)
+	}
+	if h.confirmer.asked != 0 || h.workspace.mutations != 0 || len(h.capability.applies) != 0 {
+		t.Fatal("a refused request asked for confirmation, mutated or ran a block")
 	}
 	result, err := h.service.Apply(context.Background(), ApplyRequest{
 		ContextName: "lab", Authorizations: []string{"data-loss"}, SkipConfirmation: true,
@@ -58,6 +67,47 @@ func TestAPlanThatConsumesAnAuthorizationRefusesWithoutIt(t *testing.T) {
 	}
 	if !slices.Equal(h.capability.applies, []string{"artifacts"}) {
 		t.Fatalf("applied %v", h.capability.applies)
+	}
+}
+
+// Every presentation marks the steps an authorization acknowledges, and the
+// whole frozen plan decides what is required: a preview and the apply that
+// presents it carry the same marks, a token the plan consumes nowhere refuses
+// naming the command without it, and a selection is kept in the command a
+// refusal names.
+func TestAPlanMarksTheStepsAnAuthorizationAcknowledges(t *testing.T) {
+	network := stagedDefinition("network", reconciliation.StageSubstrates, "artifacts")
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts"), network})
+	preview, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumes := map[string][]string{}
+	for _, step := range preview.Steps {
+		consumes[step.ID] = step.Consumes
+	}
+	if !slices.Equal(consumes["artifacts"], []string{"data-loss"}) || len(consumes["network"]) != 0 {
+		t.Fatalf("the preview marked %v", consumes)
+	}
+	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", Stages: []string{"substrates", "infra-components"}})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Remediation != "repeat it with the authorization: bootwright apply --context lab --stage infra-components,substrates --authorize data-loss" {
+		t.Fatalf("the staged refusal = %+v (%v)", reported, err)
+	}
+	if len(h.presenter.presented) != 1 || !slices.EqualFunc(h.presenter.presented[0].Steps, preview.Steps, func(x, y PlanStep) bool {
+		return x.ID == y.ID && slices.Equal(x.Consumes, y.Consumes)
+	}) {
+		t.Fatalf("the apply presented %+v, the preview showed %+v", h.presenter.presented, preview.Steps)
+	}
+	plain := newHarness(t, "artifacts")
+	_, err = plain.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}})
+	reported = diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Message != "this plan requires no data-loss authorization" ||
+		reported[0].Remediation != "repeat bootwright apply --context lab without --authorize data-loss" {
+		t.Fatalf("the superfluous token refusal = %+v (%v)", reported, err)
+	}
+	if len(plain.presenter.presented) != 1 || plain.confirmer.asked != 0 || plain.workspace.mutations != 0 {
+		t.Fatal("the superfluous token refused before presenting, or asked or mutated")
 	}
 }
 

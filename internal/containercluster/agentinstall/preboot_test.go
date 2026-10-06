@@ -3,6 +3,7 @@ package agentinstall
 import (
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -34,7 +35,7 @@ func TestAnApplyRemediesEachNodesPreBootRefusalsUnderItsPosition(t *testing.T) {
 			want := map[string][]diagnostics.Diagnostic{}
 			if operation == "apply" {
 				for index, node := range request.Nodes {
-					for reason, err := range substrate.PreBootRefusals(node.Substrate, node.Machine, node.Controller.Endpoint) {
+					for reason, err := range substrate.PreBootRefusals(node.Substrate, mixedRunContext, node.Machine, node.Controller.Endpoint) {
 						want[reason+"-node-"+strconv.Itoa(index)] = diagnostics.Of(err)
 					}
 				}
@@ -42,7 +43,8 @@ func TestAnApplyRemediesEachNodesPreBootRefusalsUnderItsPosition(t *testing.T) {
 				if len(want) != 7 || !reflect.DeepEqual(arms, []string{substrate.ArmBaremetal, substrate.ArmLibvirt, substrate.ArmBaremetal}) {
 					t.Fatalf("nodes on %v name %d refusals, want 7", arms, len(want))
 				}
-				if refused := got["machine-running-node-2"]; len(refused) != 1 || refused[0].Object.Name != "metal-03" {
+				if refused := got["machine-running-node-2"]; len(refused) != 1 || refused[0].Object.Name != "metal-03" ||
+					!strings.Contains(refused[0].Remediation, "bootwright machine stop --context "+mixedRunContext+" --name metal-03") {
 					t.Fatalf("the third node's running refusal reports %#v", refused)
 				}
 			}

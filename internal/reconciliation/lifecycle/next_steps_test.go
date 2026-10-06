@@ -74,7 +74,7 @@ func TestStatusOffersOnlyTheVerbsTheRecordsAllow(t *testing.T) {
 				applyChained(t, h, failed)
 				rewriteState(t, h, path.Join(currentOperation(t, h), "blocks", "bravo", "state.json"), string(reconciliation.BlockFailed))
 			},
-			steps: []string{"bootwright apply"}, next: "continue-apply",
+			steps: []string{"bootwright apply --context lab"}, next: "continue-apply",
 		},
 		{
 			name: "a failed apply that started nothing",
@@ -82,7 +82,7 @@ func TestStatusOffersOnlyTheVerbsTheRecordsAllow(t *testing.T) {
 				applyChained(t, h, map[string]Result{"alpha": {Outcome: reconciliation.OutcomeFailed}})
 				lose(h, path.Join(currentOperation(t, h), "blocks", "alpha")+"/")
 			},
-			steps: []string{"bootwright apply"}, next: "continue-apply",
+			steps: []string{"bootwright apply --context lab"}, next: "continue-apply",
 		},
 		{
 			name: "a running destroy with a lost block record",
@@ -105,7 +105,7 @@ func TestStatusOffersOnlyTheVerbsTheRecordsAllow(t *testing.T) {
 				}
 				h.capability.outcomes = nil
 			},
-			steps: []string{"bootwright destroy"}, next: "destroy",
+			steps: []string{"bootwright destroy --context lab"}, next: "destroy",
 		},
 		{
 			name: "a failed destroy with a lost block record",
@@ -113,7 +113,7 @@ func TestStatusOffersOnlyTheVerbsTheRecordsAllow(t *testing.T) {
 				failedChainedRemoval(t, h)
 				lose(h, path.Join(currentOperation(t, h), "blocks", "charlie", "state.json"))
 			},
-			steps: []string{"bootwright destroy"}, next: "destroy",
+			steps: []string{"bootwright destroy --context lab"}, next: "destroy",
 		},
 		{
 			// bravo reads unknown as a superseding removal killed once its
@@ -125,7 +125,7 @@ func TestStatusOffersOnlyTheVerbsTheRecordsAllow(t *testing.T) {
 				rewriteState(t, h, path.Join(removal, "blocks", "bravo", "state.json"), string(reconciliation.BlockUnknown))
 				lose(h, path.Join(removal, "blocks", "charlie", "state.json"))
 			},
-			steps: []string{"bootwright destroy"}, next: "destroy",
+			steps: []string{"bootwright destroy --context lab"}, next: "destroy",
 		},
 	} {
 		t.Run(row.name, func(t *testing.T) {
@@ -144,9 +144,103 @@ func TestStatusOffersOnlyTheVerbsTheRecordsAllow(t *testing.T) {
 			}
 			requirePreviewDecidesIfOffered(t, h, previewed, row.steps, row.next)
 			for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
-				requireDecidesIfOffered(t, h, verb, slices.Contains(row.steps, "bootwright "+string(verb)))
+				requireDecidesIfOffered(t, h, verb, offers(row.steps, verb))
 			}
 		})
+	}
+}
+
+// Every plan, apply and destroy status offers names the context it read, so a
+// copied step never acts on another context's object of the same name, and a
+// continuation, resolution or replacement carries every token its own decision
+// requires, so the step runs past authorization exactly as offered. A fresh
+// plan names its own tokens, so the first apply and a removal offered beside
+// an incomplete apply carry none.
+func TestNextStepsCarryTheContextAndTheTokensTheirDecisionNeeds(t *testing.T) {
+	ctx := context.Background()
+	authorized := []string{reconciliation.AuthorizationDataLoss}
+	applied := func(outcomes map[string]Result, stages ...string) func(*testing.T, *harness) {
+		return func(t *testing.T, h *harness) {
+			h.capability.outcomeFor = outcomes
+			defer func() { h.capability.outcomeFor = nil }()
+			result, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab-b", Authorizations: authorized, SkipConfirmation: true, Stages: stages})
+			if result == nil || (err == nil) != (len(outcomes) == 0) {
+				t.Fatalf("the apply = %+v (%v)", result, err)
+			}
+		}
+	}
+	continued := "bootwright apply --context lab-b --authorize data-loss"
+	for _, row := range []struct {
+		name    string
+		arrange func(*testing.T, *harness)
+		steps   []string
+	}{
+		{name: "an idle context", arrange: func(*testing.T, *harness) {}, steps: []string{"bootwright plan --context lab-b", "bootwright apply --context lab-b"}},
+		{name: "a paused apply", arrange: applied(nil, string(reconciliation.StageInfraComponents)), steps: []string{continued, "bootwright destroy --context lab-b"}},
+		{name: "a failed apply", arrange: applied(map[string]Result{"charlie": {Outcome: reconciliation.OutcomeFailed}}), steps: []string{continued, "bootwright destroy --context lab-b"}},
+		{name: "an unknown apply", arrange: applied(map[string]Result{"charlie": {Outcome: reconciliation.OutcomeUnknown}}), steps: []string{continued, "bootwright destroy --context lab-b"}},
+		{
+			name: "a failed destroy",
+			arrange: func(t *testing.T, h *harness) {
+				applied(nil)(t, h)
+				h.capability.consumes = map[string][]string{"bravo": authorized}
+				h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeFailed}}
+				defer func() { h.capability.outcomes = nil }()
+				if result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: "lab-b", Authorizations: authorized, SkipConfirmation: true}); err == nil || result.Receipt.State != "failed" {
+					t.Fatalf("the removal = %+v (%v)", result, err)
+				}
+			},
+			steps: []string{"bootwright destroy --context lab-b --authorize data-loss"},
+		},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			definitions := chainedDefinitions()
+			definitions[1].Consumes = authorized
+			h := newPlannedHarness(t, definitions)
+			renamed(h, "lab-b")
+			row.arrange(t, h)
+			status, err := h.service.Status(ctx, StatusRequest{ContextName: "lab-b"})
+			if err != nil || !slices.Equal(status.NextSteps, row.steps) {
+				t.Fatalf("status = %+v (%v), want steps %q", status, err, row.steps)
+			}
+			if status.Lifecycle == nil {
+				return
+			}
+			fields := strings.Fields(status.NextSteps[0])
+			verb, tokens := reconciliation.Verb(fields[1]), []string{}
+			for index := 4; index+1 < len(fields); index += 2 {
+				tokens = append(tokens, fields[index+1])
+			}
+			requireAuthorizedAs(t, h, verb, nil, "lifecycle.authorization")
+			requireAuthorizedAs(t, h, verb, tokens, "")
+		})
+	}
+}
+
+// requireAuthorizedAs runs verb in context lab-b with tokens under a declined
+// confirmation: with the tokens its decision requires it presents its plan and
+// asks, and without them it refuses with code before it presents anything.
+func requireAuthorizedAs(t *testing.T, h *harness, verb reconciliation.Verb, tokens []string, code string) {
+	t.Helper()
+	requireAuthorizedIn(t, h, "lab-b", verb, tokens, code)
+}
+
+// requireAuthorizedIn is requireAuthorizedAs in the named context.
+func requireAuthorizedIn(t *testing.T, h *harness, contextName string, verb reconciliation.Verb, tokens []string, code string) {
+	t.Helper()
+	h.confirmer.decline = true
+	defer func() { h.confirmer.decline = false }()
+	var err error
+	if verb == reconciliation.Destroy {
+		_, err = h.service.Destroy(context.Background(), DestroyRequest{ContextName: contextName, Authorizations: tokens})
+	} else {
+		_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: contextName, Authorizations: tokens})
+	}
+	switch {
+	case code == "" && (err == nil || err.Error() != "declined"):
+		t.Fatalf("the offered %s with %q = %v, want it to ask", verb, tokens, err)
+	case code != "" && firstCode(err) != code:
+		t.Fatalf("the offered %s with %q = %v, want %s", verb, tokens, err, code)
 	}
 }
 
@@ -220,6 +314,15 @@ func TestStatusOffersTheDeletionItsRefusalNames(t *testing.T) {
 	}
 }
 
+// offers reports whether steps offer verb in the harness's context, with or
+// without the tokens its decision requires.
+func offers(steps []string, verb reconciliation.Verb) bool {
+	command := "bootwright " + string(verb) + " --context " + testContextName
+	return slices.ContainsFunc(steps, func(step string) bool {
+		return step == command || strings.HasPrefix(step, command+" --authorize ")
+	})
+}
+
 // containsCommand reports whether text names command whole, with no further
 // flag after it.
 func containsCommand(text, command string) bool {
@@ -276,7 +379,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright setup", "bootwright destroy"}, gated: []reconciliation.Verb{reconciliation.Apply},
+			steps: []string{"bootwright setup", "bootwright destroy --context lab"}, gated: []reconciliation.Verb{reconciliation.Apply},
 		},
 		{
 			name: "a failed receipt over a lagging apply",
@@ -285,7 +388,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright apply", "bootwright destroy"},
+			steps: []string{"bootwright apply --context lab", "bootwright destroy --context lab"},
 		},
 		{
 			name: "a failed receipt over a failed destroy",
@@ -295,7 +398,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright destroy"},
+			steps: []string{"bootwright destroy --context lab"},
 		},
 	} {
 		t.Run(row.name, func(t *testing.T) {
@@ -305,7 +408,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				t.Fatalf("status = %+v (%v), want steps %q", status, err, row.steps)
 			}
 			for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
-				offered := slices.Contains(row.steps, "bootwright "+string(verb))
+				offered := offers(row.steps, verb)
 				switch {
 				case slices.Contains(row.gated, verb):
 					requireSetupRefuses(t, h, verb)
@@ -411,7 +514,7 @@ func requirePreviewDecidesIfOffered(t *testing.T, h *harness, verb reconciliatio
 	t.Helper()
 	before := untouchedOf(h)
 	preview, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName})
-	if slices.Contains(steps, "bootwright "+string(verb)) {
+	if offers(steps, verb) {
 		if err != nil || preview.Verb != string(verb) || preview.Receipt.Next != next {
 			t.Fatalf("the preview of the offered %s = %+v (%v), want one naming %q", verb, preview, err, next)
 		}

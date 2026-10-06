@@ -23,15 +23,7 @@ const rebasePython = "3.13.15"
 // digest is deliberately not this executable's.
 func retainedBootstrap(t *testing.T) (prerequisites.BootstrapDefinition, *memoryArea) {
 	t.Helper()
-	record, _, err := compiledCatalog()
-	if err != nil {
-		t.Fatal(err)
-	}
-	platform := prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
-	profile, ok := selectNative(record, platform)
-	if !ok {
-		t.Fatal("fixture platform missing")
-	}
+	platform := fedoraPlatform
 	payloads := [][]byte{
 		pythonArchive(t, archiveMember{name: "python/bin/python" + minorOf(rebasePython), data: "interpreter"}),
 		wheelArchive(t, "ansible_core/__init__.py"),
@@ -56,13 +48,13 @@ func retainedBootstrap(t *testing.T) (prerequisites.BootstrapDefinition, *memory
 			published("python-metadata", pythonMetadataURL, []byte("python metadata")),
 			published("ansible-metadata", "https://pypi.org/pypi/ansible-core/json", []byte("ansible metadata")),
 		},
-		Execution: cloneExecution(profile.Execution), ExecutionPackages: executionPackageOwners(),
+		Execution: compiledExecution(t, platform), ExecutionPackages: executionPackageOwners(),
 		// A superseded revision and a projection identity that belongs to it.
 		AutomationDigest: strings.Repeat("f", 64), ProjectionSHA256: strings.Repeat("e", 64),
 		FileCount: 1, ExpandedBytes: 1,
 	}
 	value.Execution.PythonExecutable = value.PythonExecutable
-	value, err = prerequisites.CanonicalBootstrap(value)
+	value, err := prerequisites.CanonicalBootstrap(value)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +288,7 @@ func TestPreparationRecoversRetainedSourcesInsteadOfAcquiringThem(t *testing.T) 
 	}
 }
 
-func mustValidate(t *testing.T, definition prerequisites.Definition) catalogRecord {
+func mustValidate(t *testing.T, definition prerequisites.Definition) closureRecord {
 	t.Helper()
 	record, err := validateDefinition(definition)
 	if err != nil {

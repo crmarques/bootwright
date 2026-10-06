@@ -65,9 +65,15 @@ func (f *resolvingFixture) Check(_ context.Context, plan NativeResolvedPlan) (Na
 	return presence, nil
 }
 
+// OperatorRoots answers as a host whose operator installed nothing.
+func (f *resolvingFixture) OperatorRoots(_ context.Context, _ Platform, names []string) (OperatorPresence, error) {
+	return OperatorPresence{Installed: []NativeRootPresence{}, Missing: slices.Clone(names), Foreign: []string{}}, nil
+}
+
 func dynamicFixture(t *testing.T, platform ...Platform) (*fixture, *resolvingFixture) {
 	t.Helper()
-	return wireResolution(t, newFixture(t, platform...))
+	f := newFixture(t, platform...)
+	return f, f.resolution
 }
 
 // wireResolution gives a fixture the composed resolution ports, so its journeys
@@ -712,8 +718,9 @@ func TestNativeSolveRefusesChangedBytesForSameRetainedRelease(t *testing.T) {
 // A libvirt client is selected by one context's desired state, so it never
 // enters the context-independent closure setup admits and prepares. Its own
 // controller stage installs it, and preflight reports it as a context check.
+// The host is Fedora, whose stage can realize that client.
 func TestSelectedLibvirtClientIsNotASetupPrerequisite(t *testing.T) {
-	f, r := dynamicFixture(t)
+	f, r := dynamicFixture(t, Platform{"fedora", "43", "amd64"})
 	f.compiler.extra = []api.Object{
 		api.NewObject(api.InfraProvider, "hypervisor", api.Value{}, api.MapValue().With("libvirt", api.MapValue())),
 		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("hypervisor"), "substrate", "providerRef")),
@@ -724,10 +731,8 @@ func TestSelectedLibvirtClientIsNotASetupPrerequisite(t *testing.T) {
 	if err != nil || report.Outcome != "changed" {
 		t.Fatalf("setup refused a context's libvirt selection: %#v %v", report, err)
 	}
-	for _, admitted := range f.catalog.admitted {
-		if admitted.LibvirtClient || !admitted.ContainerRuntime {
-			t.Fatalf("setup admitted %#v; the closure is not context-independent", f.catalog.admitted)
-		}
+	if frozen := f.store.state.Receipt.Definition.NativeRequirements; frozen != (NativeRequirements{ContainerRuntime: true}) {
+		t.Fatalf("setup froze %#v; the closure is not context-independent", frozen)
 	}
 	if r.nativeCalls != 1 {
 		t.Fatalf("setup solved the native transaction %d times", r.nativeCalls)

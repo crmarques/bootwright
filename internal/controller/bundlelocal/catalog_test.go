@@ -2,6 +2,7 @@ package bundlelocal
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -9,56 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-func TestCatalogIsClosedAndItsNamespaceBindsNativeSelection(t *testing.T) {
-	digests := map[string]bool{}
-	for _, platform := range []prerequisites.Platform{{OS: "rhel", Release: "9.8", Architecture: "amd64"}, {OS: "fedora", Release: "43", Architecture: "amd64"}} {
-		for _, runtime := range []bool{false, true} {
-			definition, err := (Catalog{}).Select(platform, prerequisites.NativeRequirements{ContainerRuntime: runtime})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if digests[definition.CatalogDigest] {
-				t.Fatal("distinct native selections share a mutable namespace")
-			}
-			digests[definition.CatalogDigest] = true
-			if definition.PythonVersion != "3.13.15" || definition.AnsibleVersion != "2.21.4" {
-				t.Fatal("baseline version changed unexpectedly")
-			}
-			if _, err := validateDefinition(definition); err != nil {
-				t.Fatal(err)
-			}
-			if !runtime && len(definition.Sources) != 11 {
-				t.Fatal("baseline includes sources outside the Python and wheel closure")
-			}
-			if len(definition.Execution.Files) != 8 || len(definition.Execution.Preload) != 7 || definition.Execution.Loader != "/usr/lib64/ld-linux-x86-64.so.2" {
-				t.Fatal("initial Python execution closure is incomplete")
-			}
-			seen := map[string]bool{}
-			for _, source := range definition.Sources {
-				if seen[source.ID] || !validPath(source.ID) || strings.Contains(source.ID, "/") || len(source.SHA256) != 64 || source.Bytes <= 0 {
-					t.Fatalf("invalid catalog source %q", source.ID)
-				}
-				seen[source.ID] = true
-			}
-			definition.Sources[0].URL = "https://invalid.example/changed"
-			again, err := (Catalog{}).Select(platform, prerequisites.NativeRequirements{ContainerRuntime: runtime})
-			if err != nil || again.Sources[0].URL == definition.Sources[0].URL {
-				t.Fatal("catalog exposed mutable source aliases")
-			}
-			if _, err := validateDefinition(definition); err == nil {
-				t.Fatal("accepted source substitution")
-			}
-		}
-	}
-	for _, platform := range []prerequisites.Platform{{OS: "rhel", Release: "9.7", Architecture: "amd64"}, {OS: "fedora", Release: "44", Architecture: "amd64"}, {OS: "rhel", Release: "9.8", Architecture: "arm64"}, {OS: "centos", Release: "9", Architecture: "amd64"}} {
-		if _, err := (Catalog{}).Select(platform, prerequisites.NativeRequirements{}); err == nil {
-			t.Fatalf("accepted unqualified platform %+v", platform)
-		}
-	}
-}
-
 func TestCatalogRejectsExecutionFoundationSubstitution(t *testing.T) {
-	platform := prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
 	for _, change := range []func(*prerequisites.ExecutionRequirement){
 		func(value *prerequisites.ExecutionRequirement) { value.Loader = "/unapproved/loader" },
 		func(value *prerequisites.ExecutionRequirement) { value.LockPath = "/unapproved/lock" },
@@ -66,63 +18,24 @@ func TestCatalogRejectsExecutionFoundationSubstitution(t *testing.T) {
 		func(value *prerequisites.ExecutionRequirement) { value.Links[0].Target = "unapproved" },
 		func(value *prerequisites.ExecutionRequirement) { value.Preload[0] = "/unapproved/library" },
 	} {
-		definition, err := (Catalog{}).Select(platform, prerequisites.NativeRequirements{})
-		if err != nil {
-			t.Fatal(err)
+		definition := resolvedDefinitionFixture(t)
+		bootstrap := *definition.Bootstrap
+		change(&bootstrap.Execution)
+		if canonical, err := prerequisites.CanonicalBootstrap(bootstrap); err == nil {
+			if substituted, err := prerequisites.NewResolvedDefinition(canonical, *definition.Native); err == nil {
+				if _, err := validateDefinition(substituted); !errors.Is(err, prerequisites.ErrBootstrapIncompatible) {
+					t.Fatalf("accepted a substituted execution foundation: %v", err)
+				}
+			}
 		}
-		change(&definition.Execution)
-		if _, err := validateDefinition(definition); err == nil {
-			t.Fatal("accepted a substituted execution foundation")
-		}
-		again, err := (Catalog{}).Select(platform, prerequisites.NativeRequirements{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := validateDefinition(again); err != nil {
+		if _, err := validateDefinition(resolvedDefinitionFixture(t)); err != nil {
 			t.Fatal("caller changed the compiled execution profile", err)
 		}
 	}
 }
 
-func TestLibvirtSelectionHasSeparateCompleteNativeNamespace(t *testing.T) {
-	platform := prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
-	baseline, err := (Catalog{}).Select(platform, prerequisites.NativeRequirements{ContainerRuntime: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	requirements := prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true}
-	selected, err := (Catalog{}).Select(platform, requirements)
-	if err != nil || selected.CatalogDigest == baseline.CatalogDigest {
-		t.Fatal("selected native tools share the baseline namespace", err)
-	}
-	packages, err := (Catalog{}).NativePackages(platform, requirements)
-	if err != nil || len(packages) != 136 || len(selected.Sources) != len(packages)+11 {
-		t.Fatal("libvirt package closure is incomplete", len(packages), err)
-	}
-	paths := map[string]bool{}
-	for _, file := range selected.Runtime.Files {
-		if paths[file.Path] {
-			t.Fatal("conflicting selected native file evidence", file.Path)
-		}
-		paths[file.Path] = true
-	}
-	if !paths["/usr/bin/virsh"] || !paths["/usr/bin/ssh"] || !paths["/usr/bin/nmstatectl"] || !paths["/usr/bin/podman"] {
-		t.Fatal("selected native CLI evidence is incomplete")
-	}
-	if _, err := validateDefinition(selected); err != nil {
-		t.Fatal(err)
-	}
-	platform.OS, platform.Release = "rhel", "9.8"
-	if _, err := (Catalog{}).Select(platform, requirements); err == nil {
-		t.Fatal("RHEL libvirt selection admitted without authenticated source authority")
-	}
-}
-
 func TestDryInspectionNeverAcquiresOrExecutes(t *testing.T) {
-	definition, err := (Catalog{}).Select(prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, prerequisites.NativeRequirements{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	definition := resolvedDefinitionFixture(t)
 	m := &Manager{
 		fetch: func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error) {
 			t.Fatal("inspection acquired a dependency")
@@ -160,10 +73,7 @@ func TestCatalogRejectsUnsupportedEgressBeforeEffects(t *testing.T) {
 }
 
 func TestPreparationRejectsUnapprovedBytesBeforeFilePublication(t *testing.T) {
-	definition, err := (Catalog{}).Select(prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, prerequisites.NativeRequirements{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	definition := resolvedDefinitionFixture(t)
 	m := &Manager{
 		fetch: func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error) {
 			return []byte("changed upstream payload"), nil
@@ -186,17 +96,14 @@ func TestPreparationRejectsUnapprovedBytesBeforeFilePublication(t *testing.T) {
 // failure. Setup selects no context and consumes no --context value, so its
 // remedy repeats setup as it is invoked.
 func TestBundleFailureRemedyNamesOnlyWhatSetupAccepts(t *testing.T) {
-	definition, err := (Catalog{}).Select(prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, prerequisites.NativeRequirements{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	definition := resolvedDefinitionFixture(t)
 	m := &Manager{
 		fetch: func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error) {
 			return []byte("changed upstream payload"), nil
 		},
 		probe: func(context.Context, prerequisites.BundleArea, prerequisites.Definition) error { return nil },
 	}
-	_, err = m.Prepare(t.Context(), newMemoryArea(), nil, definition, prerequisites.SetupEgress{}, nil)
+	_, err := m.Prepare(t.Context(), newMemoryArea(), nil, definition, prerequisites.SetupEgress{}, nil)
 	found := diagnostics.Of(err)
 	if len(found) != 1 || found[0].Code != "controller.setup" || found[0].Message != "dependency source changed before bundle publication" {
 		t.Fatalf("setup bundle failure: %+v", found)
@@ -207,5 +114,39 @@ func TestBundleFailureRemedyNamesOnlyWhatSetupAccepts(t *testing.T) {
 	}
 	if remedy != "Restore approved dependency sources or the exact retained bundle, then rerun bootwright setup." {
 		t.Fatalf("remedy: %q", remedy)
+	}
+}
+
+// A bundle holds what one resolution froze, so a definition without its
+// resolved Python and Ansible closure names no bundle: validation, inspection
+// and preparation refuse it before any area is read or written.
+func TestABundleDefinitionWithoutABootstrapRefuses(t *testing.T) {
+	resolved := resolvedDefinitionFixture(t)
+	unresolved := prerequisites.Definition{
+		CatalogDigest: resolved.CatalogDigest, PythonVersion: resolved.PythonVersion, AnsibleVersion: resolved.AnsibleVersion,
+		Sources: resolved.Sources, Execution: resolved.Execution, NativeRequirements: resolved.NativeRequirements, Native: resolved.Native,
+	}
+	m := &Manager{
+		fetch: func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error) {
+			t.Fatal("a definition without a bootstrap acquired a dependency")
+			return nil, nil
+		},
+		probe: func(context.Context, prerequisites.BundleArea, prerequisites.Definition) error {
+			t.Fatal("a definition without a bootstrap executed a process")
+			return nil
+		},
+	}
+	if err := m.Validate(unresolved); err == nil {
+		t.Fatal("validation admitted a definition without a bootstrap")
+	}
+	area := newMemoryArea()
+	if _, err := m.Inspect(t.Context(), area, unresolved, true); err == nil {
+		t.Fatal("inspection admitted a definition without a bootstrap")
+	}
+	if _, err := m.Prepare(t.Context(), area, nil, unresolved, prerequisites.SetupEgress{}, nil); err == nil {
+		t.Fatal("preparation admitted a definition without a bootstrap")
+	}
+	if area.writes != 0 || len(area.files) != 0 {
+		t.Fatal("a definition without a bootstrap wrote to its area")
 	}
 }

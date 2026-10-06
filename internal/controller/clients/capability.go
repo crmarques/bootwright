@@ -4,16 +4,20 @@ import (
 	"context"
 	"slices"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // Capability realizes the controller prerequisites one context adds to the
-// host `bootwright setup` prepared: the target clients its graph selects and
-// the libvirt client a declared capability or referenced provider selects. It
-// owns nothing context-independent, and it never uninstalls: the closure it
+// host `bootwright setup` prepared: the target clients its graph selects, the
+// libvirt client a declared capability, a hosted provider or a Machine on a
+// libvirt provider selects, the hypervisor closure a hosted provider selects
+// and the installer-media tooling an artifact server here selects. It owns
+// nothing context-independent, and it never uninstalls: the closure it
 // publishes is shared by every context on this host.
 type Capability struct {
 	tools     ToolCatalog
@@ -35,7 +39,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	empty := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
 	if input.State == nil {
-		return empty, refuse("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return empty, refuse("lifecycle.state", "lifecycle planning requires compiled desired state", "use a compatible executable")
 	}
 	catalog := input.State.Effective()
 	selection, err := controller.Select(catalog)
@@ -46,11 +50,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if err != nil {
 		return empty, err
 	}
-	if len(requests) == 0 && !selection.LibvirtClient() && !selection.Hypervisor() && !selection.InstallerMedia() {
+	if !controller.HasStage(selection, requests) {
 		return empty, nil
 	}
 	if selection.MachineName() != input.Controller {
-		return empty, refuse("lifecycle.state", "the controller prerequisites block does not name the selected controller Machine", "")
+		return empty, refuse("lifecycle.state", "the controller prerequisites block does not name the selected controller Machine", "use a compatible executable")
 	}
 	request := NewRequest(selection, requests)
 	canonical, err := request.Canonical()
@@ -69,6 +73,26 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		ContentDigest:  ContentDigest(),
 		Request:        canonical,
 	}}}, nil
+}
+
+// Unsupported refuses, before registration, every controller shape this
+// executable cannot realize. Each refusal names the Environment this
+// capability plans for, with the shape's own reason and remedy, which name the
+// Machine or Proxy that declares it. It is pure and reads no host.
+func (Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
+	if state == nil {
+		return nil
+	}
+	catalog := state.Effective()
+	environments := catalog.OfKind(api.Environment)
+	if len(environments) != 1 {
+		return nil
+	}
+	var refusals []lifecycle.Refusal
+	for _, shape := range controller.Unsupported(catalog) {
+		refusals = append(refusals, lifecycle.RefusalOf(environments[0], shape.Reason, shape.Remediation))
+	}
+	return refusals
 }
 
 // description says what the planned verb does here. A removal retains, so it
@@ -200,22 +224,25 @@ func (c Capability) observe(ctx context.Context, execution lifecycle.Execution) 
 	if err != nil {
 		return unknown, err
 	}
+	want := request.native()
+	if err := prerequisites.StageAdmission(setup.Platform, want); err != nil {
+		return unknown, err
+	}
 	tools, complete, err := c.retained(execution, request)
 	if err != nil {
 		return unknown, err
 	}
-	native := retainedNative(execution, setup.Platform, request)
-	roots, installed, err := c.nativeRoots(ctx, native)
+	closures, err := prerequisites.StageClosures(ctx, c.inspector, execution.Stage.Setup.State.RetainedDefinitions, setup.Platform, want)
 	if err != nil {
 		return unknown, err
 	}
-	present := complete && (!request.installsNative() || installed)
+	present := complete && prerequisites.ClosuresReady(closures)
 	if present {
 		if present, err = c.published(ctx, execution, tools); err != nil {
 			return unknown, err
 		}
 	}
-	evidence, err := newEvidence(execution.Block.RequestDigest, prerequisites.ToolsDigest(tools), request.LibvirtClient, tools, roots).encode()
+	evidence, err := newEvidence(execution.Block.RequestDigest, prerequisites.ToolsDigest(tools), request.LibvirtClient, tools, prerequisites.ClosureRoots(closures)).encode()
 	if err != nil {
 		return unknown, err
 	}
@@ -252,7 +279,7 @@ func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (l
 		return failed, refuse("controller.unsupported", "controller prerequisite installation is not configured", "use a compatible executable")
 	}
 	if execution.Stage == nil || execution.Stage.ClientArea == nil || execution.Stage.SealClientArea == nil || execution.Stage.RetainDependencies == nil || execution.Stage.Prepare == nil || execution.Stage.ReleaseFoundation == nil {
-		return failed, refuse("lifecycle.state", "the controller prerequisites block has no publication capability", "")
+		return failed, refuse("lifecycle.state", "the controller prerequisites block has no publication capability", "use a compatible executable")
 	}
 	request, err := DecodeRequest(execution.Block.Request)
 	if err != nil {
@@ -262,23 +289,34 @@ func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (l
 	if err != nil {
 		return failed, err
 	}
+	// What this platform can never realize refuses before anything is read,
+	// and the operator's own installer-media tooling a RHEL controller lacks
+	// refuses before any target client is recovered or publisher contacted.
+	want := request.native()
+	if err := prerequisites.StageAdmission(setup.Platform, want); err != nil {
+		return failed, err
+	}
 	report(ctx, execution, "resolve-clients", "running")
+	retained := execution.Stage.Setup.State.RetainedDefinitions
+	closures, err := prerequisites.StageClosures(ctx, c.inspector, retained, setup.Platform, want)
+	if err != nil {
+		return failed, err
+	}
+	if err := prerequisites.OperatorRefusal(setup.Platform, closures); err != nil {
+		return failed, err
+	}
 	tools, complete, err := c.retained(execution, request)
 	if err != nil {
 		return failed, err
 	}
-	native := retainedNative(execution, setup.Platform, request)
-	roots, installed, err := c.nativeRoots(ctx, native)
-	if err != nil {
-		return failed, err
-	}
-	if complete && (!request.installsNative() || installed) {
+	ready := prerequisites.ClosuresReady(closures)
+	if complete && ready {
 		present, err := c.published(ctx, execution, tools)
 		if err != nil {
 			return failed, err
 		}
 		if present {
-			return c.settled(ctx, execution, request, tools, roots)
+			return c.settled(ctx, execution, request, tools, closures)
 		}
 	}
 	if !complete {
@@ -288,16 +326,18 @@ func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (l
 	}
 	// A frozen native transaction binds the exact before-inventory it was
 	// solved from, so a missing root is solved again rather than replayed, and
-	// roots already installed need no transaction at all.
+	// roots already installed need no transaction at all. Only what a
+	// transaction solves on this platform counts: a RHEL controller's
+	// installer-media tooling is the operator's, so it is never solved.
 	var transaction *prerequisites.Definition
 	var superseded []string
-	if request.installsNative() && !installed {
-		value, err := c.resolveNative(ctx, setup, request)
+	if requirements, solves := prerequisites.StageTransaction(setup.Platform, want); solves && !ready {
+		value, err := c.resolveNative(ctx, setup, request, requirements)
 		if err != nil {
 			return failed, err
 		}
-		transaction, native = &value, &value
-		superseded = supersededNative(execution, setup.Platform, request, value)
+		transaction = &value
+		superseded = prerequisites.SupersededStageResolutions(retained, setup.Platform, want, value)
 	}
 	report(ctx, execution, "resolve-clients", "ok")
 	install, err := installDefinition(setup, transaction, tools)
@@ -310,12 +350,22 @@ func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (l
 	if err := execution.Stage.RetainDependencies(ctx, transaction, install.Sources, superseded); err != nil {
 		return failed, err
 	}
-	return c.publish(ctx, execution, request, install, tools, native)
+	return c.publish(ctx, execution, request, install, tools, setup.Platform, transaction)
+}
+
+// closures proves the selected closures after publication: from the
+// transaction this attempt ran when it ran one, and otherwise from the
+// resolution the stage read before it.
+func (c Capability) closures(ctx context.Context, execution lifecycle.Execution, request Request, platform prerequisites.Platform, transaction *prerequisites.Definition) ([]prerequisites.ClosurePresence, error) {
+	if transaction != nil {
+		return prerequisites.ResolutionClosures(ctx, c.inspector, transaction, platform, request.native())
+	}
+	return prerequisites.StageClosures(ctx, c.inspector, execution.Stage.Setup.State.RetainedDefinitions, platform, request.native())
 }
 
 // publish opens the shared area under its durable reservation, runs the fixed
 // controller automation, then proves and seals what it published.
-func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, request Request, install prerequisites.Definition, tools []prerequisites.ToolDefinition, native *prerequisites.Definition) (lifecycle.Result, error) {
+func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, request Request, install prerequisites.Definition, tools []prerequisites.ToolDefinition, platform prerequisites.Platform, transaction *prerequisites.Definition) (lifecycle.Result, error) {
 	failed := lifecycle.Result{Outcome: reconciliation.OutcomeFailed}
 	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
 	area := prerequisites.ToolsDigest(tools)
@@ -357,11 +407,11 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 	if err != nil {
 		return unknown, err
 	}
-	roots, installed, err := c.nativeRoots(ctx, native)
+	closures, err := c.closures(ctx, execution, request, platform, transaction)
 	if err != nil {
 		return unknown, err
 	}
-	if request.installsNative() && !installed {
+	if !prerequisites.ClosuresReady(closures) {
 		return unknown, refuse("controller.unknown", "the selected native clients are not installed after their transaction", "repeat the operation to resolve it from live evidence")
 	}
 	if !present {
@@ -371,7 +421,7 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 		return unknown, err
 	}
 	report(ctx, execution, "verify-clients", "ok")
-	evidence, err := newEvidence(execution.Block.RequestDigest, area, request.LibvirtClient, tools, roots).encode()
+	evidence, err := newEvidence(execution.Block.RequestDigest, area, request.LibvirtClient, tools, prerequisites.ClosureRoots(closures)).encode()
 	if err != nil {
 		return unknown, err
 	}
@@ -380,10 +430,10 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 
 // settled is the proved no-op: every selected client is already published and
 // installed, so the block completes without acquisition or effect.
-func (c Capability) settled(ctx context.Context, execution lifecycle.Execution, request Request, tools []prerequisites.ToolDefinition, roots []prerequisites.NativeRootPresence) (lifecycle.Result, error) {
+func (c Capability) settled(ctx context.Context, execution lifecycle.Execution, request Request, tools []prerequisites.ToolDefinition, closures []prerequisites.ClosurePresence) (lifecycle.Result, error) {
 	report(ctx, execution, "resolve-clients", "ok")
 	report(ctx, execution, "verify-clients", "ok")
-	evidence, err := newEvidence(execution.Block.RequestDigest, prerequisites.ToolsDigest(tools), request.LibvirtClient, tools, roots).encode()
+	evidence, err := newEvidence(execution.Block.RequestDigest, prerequisites.ToolsDigest(tools), request.LibvirtClient, tools, prerequisites.ClosureRoots(closures)).encode()
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
@@ -457,20 +507,6 @@ func (c Capability) provedClosure(request Request, block reconciliation.Block, p
 	return tools, nil
 }
 
-// nativeRoots reports each selected native client root that is installed, by
-// name. Without a resolution nothing installed them, so their absence is
-// definite rather than unverifiable.
-func (c Capability) nativeRoots(ctx context.Context, native *prerequisites.Definition) ([]prerequisites.NativeRootPresence, bool, error) {
-	if native == nil {
-		return []prerequisites.NativeRootPresence{}, false, nil
-	}
-	presence, err := c.inspector.Check(ctx, *native.Native)
-	if err != nil {
-		return []prerequisites.NativeRootPresence{}, false, err
-	}
-	return presence.Installed, presence.Ready, nil
-}
-
 // published proves the target clients by presence alone. It opens the shared
 // area read-only through the setup view, so an inspection can neither reserve
 // nor create one.
@@ -488,58 +524,17 @@ func (c Capability) published(ctx context.Context, execution lifecycle.Execution
 	return c.tools.Present(ctx, area, tools)
 }
 
-// resolveNative solves the native client transaction against this host's
-// current inventory. A frozen transaction binds the exact before-inventory it
-// was solved from, so it is solved again whenever a root is missing.
-func (c Capability) resolveNative(ctx context.Context, setup prerequisites.Definition, request Request) (prerequisites.Definition, error) {
-	requirements := prerequisites.NativeRequirements{
-		ContainerRuntime: true, LibvirtClient: true,
-		Hypervisor: request.Hypervisor, InstallerMedia: request.InstallerMedia,
-	}
+// resolveNative solves the native transaction of what this platform solves of
+// the selection against this host's current inventory: the libvirt client only
+// when the graph selects it, never because another closure is selected beside
+// it. A frozen transaction binds the exact before-inventory it was solved
+// from, so it is solved again whenever a root is missing.
+func (c Capability) resolveNative(ctx context.Context, setup prerequisites.Definition, request Request, requirements prerequisites.NativeRequirements) (prerequisites.Definition, error) {
 	plan, err := c.native.Resolve(ctx, setup.Platform, requirements, request.Versions(), request.Egress)
 	if err != nil {
 		return prerequisites.Definition{}, err
 	}
 	return prerequisites.NewResolvedDefinition(*setup.Bootstrap, plan)
-}
-
-// retainedNative recovers a native client resolution this host already froze.
-// Without one nothing installed those roots, so their absence is definite.
-func retainedNative(execution lifecycle.Execution, platform prerequisites.Platform, request Request) *prerequisites.Definition {
-	if !request.installsNative() {
-		return nil
-	}
-	retained := execution.Stage.Setup.State.RetainedDefinitions
-	for index := len(retained) - 1; index >= 0; index-- {
-		if !sameNativeSelection(retained[index], platform, request) {
-			continue
-		}
-		definition := prerequisites.CloneDefinition(retained[index])
-		return &definition
-	}
-	return nil
-}
-
-// sameNativeSelection reports a retained native client resolution this
-// request would read. Only the latest of them is ever read.
-func sameNativeSelection(value prerequisites.Definition, platform prerequisites.Platform, request Request) bool {
-	return value.Native != nil && value.NativeRequirements.LibvirtClient && value.Platform == platform &&
-		value.NativeRequirements.Hypervisor == request.Hypervisor && value.NativeRequirements.InstallerMedia == request.InstallerMedia &&
-		value.Versions.Libvirt == request.Versions().Libvirt
-}
-
-// supersededNative names every retained resolution of this request's selection
-// but the one it now retains. Once that one is retained it is the latest, so no
-// stage reads the others again, and a stage that solves again whenever a root
-// is missing would otherwise fill the host's bound of retained resolutions.
-func supersededNative(execution lifecycle.Execution, platform prerequisites.Platform, request Request, retained prerequisites.Definition) []string {
-	var superseded []string
-	for _, value := range execution.Stage.Setup.State.RetainedDefinitions {
-		if sameNativeSelection(value, platform, request) && value.ResolutionDigest != retained.ResolutionDigest {
-			superseded = append(superseded, value.ResolutionDigest)
-		}
-	}
-	return superseded
 }
 
 // foundation is the host resolution setup froze. This stage extends it; it

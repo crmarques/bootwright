@@ -40,6 +40,9 @@ func registerFlags(flags *pflag.FlagSet, specs []flagSpec) {
 		if spec.path != "" {
 			annotations["bootwright.path"] = []string{spec.path}
 		}
+		if spec.undisclosed {
+			annotations[undisclosedAnnotation] = []string{"true"}
+		}
 		if len(annotations) > 0 {
 			flags.Lookup(spec.name).Annotations = annotations
 		}

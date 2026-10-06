@@ -14,6 +14,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
+	"github.com/crmarques/bootwright/internal/controller/nativelocal"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
@@ -33,7 +34,7 @@ func TestQualifiedLatestBootstrapResolution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolver := NewBootstrapResolver()
+	resolver := NewBootstrapResolver(nativelocal.NewStaging(t.TempDir()))
 	if fixtures := os.Getenv("BOOTWRIGHT_BOOTSTRAP_SOURCE_FIXTURES"); fixtures != "" {
 		if err := os.MkdirAll(fixtures, 0700); err != nil {
 			t.Fatal(err)

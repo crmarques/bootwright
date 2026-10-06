@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -340,6 +341,34 @@ func TestPlanResultMarksWhatAStageSelectionWouldStart(t *testing.T) {
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("plan text = %q, missing %q", rendered, want)
+		}
+	}
+}
+
+// While a block is unproved or failed, the steps the next apply works first
+// read resolve or retry, and every other ready step reads deferred behind the
+// first of them.
+func TestPlanResultMarksTheBlockTheNextApplyWorksFirst(t *testing.T) {
+	for _, kind := range []string{lifecycle.StepRetry, lifecycle.StepResolve} {
+		result := previewResult()
+		result.Continuation, result.Stages = true, []string{"machines"}
+		result.Steps = []lifecycle.PlanStep{
+			{ID: "os-install-rhel-01", Description: "install rhel-01", Stage: "machines", State: "failed", Selection: kind},
+			{ID: "os-install-rhel-02", Description: "install rhel-02", Stage: "machines", State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "os-install-rhel-01"},
+		}
+		result.Startable, result.Deferred = 1, 1
+		var out bytes.Buffer
+		if err := writeLifecyclePlan(&out, result); err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{
+			"  1. install rhel-01 [machines] [failed] [" + kind + "]\n",
+			"  2. install rhel-02 [machines] [pending] [deferred: waits on os-install-rhel-01]\n",
+			"  Starts  1 of 2 blocks, 1 deferred\n",
+		} {
+			if !strings.Contains(out.String(), want) {
+				t.Fatalf("plan text = %q, missing %q", out.String(), want)
+			}
 		}
 	}
 }
@@ -744,7 +773,7 @@ func TestPlanNamesTheStepsEachOneWaitsFor(t *testing.T) {
 		"1. serve artifacts for lab [infra-components]\n",
 		"3. realize the libvirt host [substrates] [after 1, 2]\n",
 		"4. realize the machine rhel-01 [machines] [after 3]\n",
-		"Concurrency  3 waves, up to 2 steps at once\n",
+		"Concurrency  3 waves, widest 2 steps\n",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("plan text %q omits %q", rendered, want)
@@ -768,7 +797,112 @@ func TestPlanReportsAChainAsOneStepAtATime(t *testing.T) {
 	if err := writeLifecyclePlan(&out, result); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "Concurrency  2 waves, up to 1 step at once\n") {
+	if !strings.Contains(out.String(), "Concurrency  2 waves, widest 1 step\n") {
 		t.Fatalf("plan text = %q", out.String())
+	}
+}
+
+// The plan's own width and the build's bound are two facts: a plan wider than
+// the blocks this build starts at a time says how many it starts, so a wide
+// plan never reads as running wider than it does, and one the bound covers
+// adds nothing.
+func TestPlanReportsItsWidthAndTheBuildsBound(t *testing.T) {
+	for _, test := range []struct {
+		waves, widest, bound int
+		want                 string
+	}{
+		{4, 5, 1, "4 waves, widest 5 steps; this build starts 1 block at a time"},
+		{4, 5, 2, "4 waves, widest 5 steps; this build starts 2 blocks at a time"},
+		{4, 5, 5, "4 waves, widest 5 steps"},
+		{4, 5, 8, "4 waves, widest 5 steps"},
+		{1, 1, 1, "1 wave, widest 1 step"},
+		{3, 2, 0, "3 waves, widest 2 steps"},
+	} {
+		result := previewResult()
+		result.Waves, result.Widest, result.Bound = test.waves, test.widest, test.bound
+		var out bytes.Buffer
+		if err := writeLifecyclePlan(&out, result); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), "\n  Concurrency  "+test.want+"\n") || strings.Contains(out.String(), "at once") {
+			t.Fatalf("waves %d, widest %d, bound %d: plan text = %q, want %q", test.waves, test.widest, test.bound, out.String(), test.want)
+		}
+	}
+}
+
+// Every presentation marks a step that consumes an authorization and closes
+// with the tokens the plan requires and the steps that consume each, by their
+// place in the plan; a plan that consumes none requires nothing.
+func TestPlanMarksTheStepsAnAuthorizationAcknowledges(t *testing.T) {
+	result := previewResult()
+	result.Continuation = true
+	result.Steps = []lifecycle.PlanStep{
+		{ID: "machine", Description: "realize the machine rhel-01", Stage: "machines", State: "done", Consumes: []string{"data-loss"}},
+		{ID: "artifacts", Description: "serve artifacts for lab", Stage: "infra-components", State: "pending", Selection: lifecycle.StepStart},
+		{ID: "metal", Description: "install metal-01", Stage: "machines", State: "pending", Consumes: []string{"data-loss"}, Selection: lifecycle.StepNotSelected, After: []int{2}},
+	}
+	var out bytes.Buffer
+	if err := writeLifecyclePlan(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"  1. realize the machine rhel-01 [machines] [done] [data-loss]\n",
+		"  2. serve artifacts for lab [infra-components] [pending] [start]\n",
+		"  3. install metal-01 [machines] [pending] [data-loss] [not selected] [after 2]\n",
+		"\n  Requires  --authorize data-loss (step 1, 3)\noperation: ",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("plan text = %q, missing %q", out.String(), want)
+		}
+	}
+	out.Reset()
+	if err := writeLifecyclePlan(&out, previewResult()); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "Requires") || strings.Contains(out.String(), "[data-loss]") {
+		t.Fatalf("a plan that consumes nothing required an authorization: %q", out.String())
+	}
+}
+
+// The presenter writes the plan apply and destroy confirm as its exact bytes
+// and nothing once the invocation is cancelled. A plan it could not write ends
+// the invocation with status 1 and no further output, because nothing written
+// after it could be trusted; a presenter that was never configured says so.
+func TestLifecyclePlanPresenterWritesBeforeConfirmationAndStopsOnFailure(t *testing.T) {
+	result := previewResult()
+	result.Steps[0].Consumes = []string{"data-loss"}
+	result.Waves, result.Widest, result.Bound = 1, 1, 1
+	var out bytes.Buffer
+	if err := NewLifecyclePlanPresenter(&out).PresentLifecyclePlan(context.Background(), *result); err != nil {
+		t.Fatal(err)
+	}
+	want := "Apply plan\n\nPlan\n" +
+		"  1. serve artifacts for lab on controller [infra-components] [data-loss]\n" +
+		"       open-listener 192.0.2.1:8443\n\n" +
+		"  Concurrency  1 wave, widest 1 step\n" +
+		"  Requires     --authorize data-loss (step 1)\n"
+	if out.String() != want {
+		t.Fatalf("presented %q, want %q", out.String(), want)
+	}
+	out.Reset()
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := NewLifecyclePlanPresenter(&out).PresentLifecyclePlan(canceled, *result); !errors.Is(err, context.Canceled) || out.Len() != 0 {
+		t.Fatalf("a cancelled presentation = %v, wrote %q", err, out.String())
+	}
+	for name, presenter := range map[string]*LifecyclePlanPresenter{"a failing writer": NewLifecyclePlanPresenter(rejectingWriter{}), "no writer": nil} {
+		t.Run(name, func(t *testing.T) {
+			presented := presenter.PresentLifecyclePlan(context.Background(), *result)
+			record := &dispatchRecord{err: presented}
+			var stdout, stderr bytes.Buffer
+			code := New(Config{Out: &stdout, ErrOut: &stderr, Services: dispatchSpies(record)}).Run(context.Background(), []string{"apply", "--yes"})
+			wantErr := ""
+			if presenter == nil {
+				wantErr = "[FAIL] runtime.internal: lifecycle plan presentation is not configured\n"
+			}
+			if code != 1 || stdout.Len() != 0 || stderr.String() != wantErr {
+				t.Fatalf("exit %d, stdout %q, stderr %q, want stderr %q", code, stdout.String(), stderr.String(), wantErr)
+			}
+		})
 	}
 }

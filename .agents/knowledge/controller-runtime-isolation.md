@@ -30,12 +30,11 @@ and why each mechanism is necessary.
   releases that lock, and package installation then acquires native transaction
   coordination and revalidates the selected foundation. No ambient loader cache,
   library search variable or preload configuration can select executable code.
-  Code: `internal/controller/hostlinux/runtime_links_linux_amd64.go`,
-  `internal/controller/hostlinux/runtime_lock_linux_amd64.go`,
+  Code: `internal/controller/bundlelocal/execution_linux_amd64.go`,
   `internal/controller/ansiblelocal/runner_linux_amd64.go`.
-- Evidence: the `internal/controller/bundlelocal` and `internal/controller/hostlinux`
-  package tests, and the operator-run `-tags controllerqualification` harnesses
-  listed in [development](../../docs/development.md).
+- Evidence: the `internal/controller/bundlelocal` package tests, and the
+  operator-run `-tags controllerqualification` harnesses listed in
+  [development](../../docs/development.md).
 
 Applies to RHEL 9 and Fedora on Linux/amd64. Revisit when a dependency release
 changes its foundation requirements or when another host family is qualified.

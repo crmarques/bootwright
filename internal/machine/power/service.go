@@ -180,26 +180,41 @@ func (s Service) converge(ctx context.Context, request PowerRequest) (*Result, e
 			pin = proved
 		}
 	}
-	if err := s.confirm(ctx, request, frozen); err != nil {
+	if err := s.confirm(ctx, name, request, frozen); err != nil {
 		return nil, err
 	}
 	return s.execute(ctx, name, frozen, pin)
 }
 
 // confirm asks before an operation interrupts a running system. Powering a
-// machine on interrupts nothing, so only stopping and restarting ask.
-func (s Service) confirm(ctx context.Context, request PowerRequest, frozen Request) error {
+// machine on interrupts nothing, so only stopping and restarting ask. The
+// prompt names the Machine and its context, and a refusal is the confirmer's
+// own, which names the command that repeats it with --yes.
+func (s Service) confirm(ctx context.Context, contextName string, request PowerRequest, frozen Request) error {
 	if request.Verb == Start || request.SkipConfirmation {
 		return nil
 	}
 	if s.confirmer == nil {
-		return failure("lifecycle.state", "this operation requires confirmation", "repeat the command with --yes")
+		command := "bootwright machine " + frozen.Verb + " --context " + contextName + " --name " + frozen.Identity.Object
+		if frozen.Force {
+			command += " --force"
+		}
+		return failure("machine.power", "this operation requires confirmation", "repeat "+command+" with --yes")
 	}
 	action := frozen.Verb + " machine"
 	if frozen.Force {
 		action = "force " + action
 	}
-	return s.confirmer.Confirm(ctx, action, frozen.Identity.Object)
+	var err error
+	if confirmer, ok := s.confirmer.(ContextConfirmer); ok {
+		err = confirmer.ConfirmIn(ctx, action, frozen.Identity.Object, contextName)
+	} else {
+		err = s.confirmer.Confirm(ctx, action, frozen.Identity.Object)
+	}
+	if err != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
 }
 
 func (s Service) execute(ctx context.Context, name string, frozen Request, pin machine.HardwareIdentity) (*Result, error) {
@@ -335,6 +350,8 @@ func (s Service) report(ctx context.Context, event lifecycle.ProgressEvent) {
 
 func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []byte, digest string) lifecycle.RunRequest {
 	return lifecycle.RunRequest{
+		Context:        runtime.Context.Name,
+		Description:    "Read the power state through " + string(api.Machine) + "/" + frozen.Placement.Machine,
 		Implementation: ReadImplementation,
 		Operation:      ReadOperation,
 		Variable:       ReadVariable,
@@ -361,6 +378,8 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: frozen.Controller.TrustBundleRef, Variable: "controllerCA"})
 	}
 	request := lifecycle.RunRequest{
+		Context:           runtime.Context.Name,
+		Description:       powerStep(frozen).Description,
 		Implementation:    Implementation,
 		Operation:         Operation,
 		Variable:          Variable,

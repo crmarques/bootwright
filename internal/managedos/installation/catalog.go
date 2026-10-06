@@ -83,13 +83,10 @@ const (
 	HostKeyPath = "/etc/bootwright/host-key.pub"
 )
 
-// installTooling is the closure that builds a per-Machine installer image and
-// extracts a DVD tree. On the controller the controller stage installs it; on
-// an SSH host this block does.
-var installTooling = []string{"lorax", "xorriso"}
-
-// InstallTooling is that closure in canonical order.
-func InstallTooling() []string { return append([]string(nil), installTooling...) }
+// frozenTooling is the tooling closure an earlier build named here, which the
+// controller stage now owns. It stays in the content digest unchanged, so
+// deleting the name moved no frozen plan.
+const frozenTooling = "lorax,xorriso"
 
 // BlockID names the block this capability contributes. A consumer states
 // requirements by API object, never by this identity.
@@ -103,7 +100,7 @@ func ContentDigest() string {
 		"bootwright.managedos.install-anaconda-v1",
 		Implementation, requestVersion, kickstartVersion,
 		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
-		strings.Join(installTooling, ","),
+		frozenTooling,
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

@@ -424,8 +424,8 @@ func TestFailedBlocksAreRetriedOneAtATime(t *testing.T) {
 
 // A failed block outside the stage selection is never retried, even by an
 // invocation that retries a failed block the selection admits. A selection
-// that admits no failed block refuses before any effect and names the stage of
-// the first one.
+// that admits no failed block refuses before any effect and names the apply
+// whose selection adds the stage of the first one.
 func TestAFailedBlockOutsideTheSelectionIsNeverRetried(t *testing.T) {
 	first := definition("alpha")
 	first.Stage = reconciliation.StageInfraComponents
@@ -460,7 +460,7 @@ func TestAFailedBlockOutsideTheSelectionIsNeverRetried(t *testing.T) {
 		ContextName: "lab", Stages: []string{"substrates"}, SkipConfirmation: true,
 	})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || !strings.Contains(reported[0].Remediation, "infra-components") {
+	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != "repeat bootwright apply --context lab --stage infra-components,substrates" {
 		t.Fatalf("retry refusal = %+v", reported)
 	}
 	if len(h.capability.applies) != 3 {
@@ -524,7 +524,7 @@ func TestAStageBoundaryPausesWhileBlocksRunTogether(t *testing.T) {
 
 // A preview derives what orders the work from the frozen plan itself: each
 // step's predecessors by their place in the list, and how many rounds the
-// plan's own shape needs.
+// plan's own shape needs, beside how many blocks this build starts at once.
 func TestPlanPreviewNamesPredecessorsAndWaves(t *testing.T) {
 	h := scheduled(t, 4, definition("alpha"), definition("zulu"),
 		dependent("bravo", "alpha", "zulu"), dependent("charlie", "bravo"))
@@ -532,8 +532,8 @@ func TestPlanPreviewNamesPredecessorsAndWaves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Waves != 3 || result.Widest != 2 {
-		t.Fatalf("schedule = %d waves, widest %d", result.Waves, result.Widest)
+	if result.Waves != 3 || result.Widest != 2 || result.Bound != 4 {
+		t.Fatalf("schedule = %d waves, widest %d, bound %d", result.Waves, result.Widest, result.Bound)
 	}
 	places := map[string]plannedPlace{}
 	for index, planned := range result.Steps {

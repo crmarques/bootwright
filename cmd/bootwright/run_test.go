@@ -90,7 +90,7 @@ func TestAJSONInvocationWritesNoProgress(t *testing.T) {
 		t.Fatalf("classification = %+v, want JSON", classification)
 	}
 	var out, errOut bytes.Buffer
-	process, hooks := interactiveProcess(classification, &out, &errOut, controller.Route{})
+	process, hooks := interactiveProcess(classification, nil, &out, &errOut, controller.Route{})
 	process.LifecycleProgress.ReportLogLocation(ctx, location)
 	process.LifecycleProgress.ReportProgress(ctx, lifecycle.ProgressEvent{
 		Block: "machine-power-rhel-01", Description: "start rhel-01", Status: "running", Position: 1, Total: 1,
@@ -99,7 +99,7 @@ func TestAJSONInvocationWritesNoProgress(t *testing.T) {
 	if out.Len() != 0 || errOut.Len() != 0 {
 		t.Fatalf("a JSON invocation reported progress: stdout %q, stderr %q", out.String(), errOut.String())
 	}
-	process, hooks = interactiveProcess(cli.ClassifyInvocation(start), &out, &errOut, controller.Route{})
+	process, hooks = interactiveProcess(cli.ClassifyInvocation(start), start, &out, &errOut, controller.Route{})
 	process.LifecycleProgress.ReportLogLocation(ctx, location)
 	hooks.finish()
 	if want := "\n  Logs  " + location + "\n"; out.String() != want || errOut.Len() != 0 {

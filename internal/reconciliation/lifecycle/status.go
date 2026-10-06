@@ -239,7 +239,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	summary := &LifecycleSummary{
 		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
 		Next: nextAction(operation, plan, states), Blocks: blocks, Logs: logs,
-		Executable: executableIdentity(operation.Executable),
+		Executable: buildIdentity(operation.Executable),
 	}
 	if summary.Logs == nil {
 		summary.Logs = []string{}
@@ -290,7 +290,8 @@ func idleSteps(view View, unindexed []string) []string {
 	case !setupComplete(view.Controller()):
 		return []string{"bootwright setup"}
 	}
-	return []string{"bootwright plan", "bootwright apply"}
+	name := view.Identity().Name
+	return []string{contextCommand(name, "plan"), contextCommand(name, string(reconciliation.Apply))}
 }
 
 // offered is each command whose decision would pass over the records status
@@ -320,10 +321,10 @@ func offered(ctx context.Context, view View, store OperationStore, operation ope
 		return nil, err
 	}
 	if len(refused) == 0 || next == string(reconciliation.Destroy) {
-		steps = append(steps, continuation(view, operation.Verb, frozen, states, next))
+		steps = append(steps, continuation(view, operation, frozen, states, next))
 	}
 	if operation.Verb == reconciliation.Apply && len(contradicted) == 0 {
-		steps = append(steps, "bootwright destroy")
+		steps = append(steps, contextCommand(view.Identity().Name, string(reconciliation.Destroy)))
 	}
 	return steps, nil
 }
@@ -333,11 +334,11 @@ func offered(ctx context.Context, view View, store OperationStore, operation ope
 // controller setup and refuses an incomplete one, so setup takes its place;
 // a finalization runs no block and a replacement is a fresh removal, and
 // neither is held to that re-proof.
-func continuation(view View, verb reconciliation.Verb, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string) string {
+func continuation(view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string) string {
 	if next != string(reconciliation.Destroy) && pendingRemains(frozen, states) && !setupComplete(view.Controller()) {
 		return "bootwright setup"
 	}
-	return nextCommand(verb, next)
+	return continuationCommand(view.Identity().Name, operation, frozen, states)
 }
 
 // setupComplete is the controller setup an apply needs before it claims this
@@ -542,13 +543,17 @@ func realizedServices(services []ServiceSummary, realized map[string]Realization
 	return services
 }
 
-// executableIdentity names the build an operation recorded, in the spelling the
-// version command reports, so it can be read back as a command to run.
-func executableIdentity(executable operationstore.Executable) string {
-	if executable.Version == "" {
+// buildIdentity names the build an operation recorded, in the spelling the
+// version command reports, so it can be read back as a command to run: a
+// build stamped with a commit and no version is devel, as that command calls
+// it. A record naming neither names no build.
+func buildIdentity(executable operationstore.Executable) string {
+	switch {
+	case executable.Version == "" && executable.Commit == "":
 		return ""
-	}
-	if executable.Commit == "" {
+	case executable.Version == "":
+		return "devel (" + executable.Commit + ")"
+	case executable.Commit == "":
 		return executable.Version
 	}
 	return executable.Version + " (" + executable.Commit + ")"

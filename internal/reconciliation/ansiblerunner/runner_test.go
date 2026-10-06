@@ -13,6 +13,7 @@ import (
 
 func localRequest() lifecycle.RunRequest {
 	return lifecycle.RunRequest{
+		Context: "context-canary", Block: "block-canary", Description: "Serve description-canary",
 		Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
 		Digest:    strings.Repeat("d", 64),
 		Canonical: []byte(`{"unit":"bootwright-lab-artifacts-lab"}`),
@@ -126,7 +127,7 @@ func TestVariablesCarryPathsNotMaterial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, forbidden := range []string{"CERTIFICATE", "PRIVATE", "BEGIN", "SSHKEY", "ansible_become_password", "escalate"} {
+	for _, forbidden := range []string{"CERTIFICATE", "PRIVATE", "BEGIN", "SSHKEY", "ansible_become_password", "escalate", "context-canary", "block-canary", "description-canary"} {
 		if strings.Contains(string(encoded), forbidden) {
 			t.Fatalf("the variables carry %q", forbidden)
 		}

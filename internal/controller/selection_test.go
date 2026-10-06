@@ -1,6 +1,7 @@
 package controller_test
 
 import (
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -87,7 +88,7 @@ func TestUnsupportedControllerRouteRefusesBeforeAcquisition(t *testing.T) {
 			objects = append(objects, api.NewObject(api.Proxy, "egress", api.Value{}, testCase.proxy))
 			selected, err := controller.Select(api.NewCatalog(objects))
 			diagnostics := diagnostics.Of(err)
-			if len(diagnostics) != 1 || diagnostics[0].Code != "controller.unsupported" || diagnostics[0].Field != testCase.field {
+			if len(diagnostics) != 1 || diagnostics[0].Code != "controller.unsupported" || diagnostics[0].Field != testCase.field || diagnostics[0].Remediation == "" {
 				t.Fatal("unsupported route did not refuse with its exact field", diagnostics)
 			}
 			// Refusal must not degrade into the direct route it explicitly rejects.
@@ -95,6 +96,112 @@ func TestUnsupportedControllerRouteRefusesBeforeAcquisition(t *testing.T) {
 				t.Fatal("refused route fell back to direct acquisition", selected)
 			}
 		})
+	}
+}
+
+// The controller route follows the grammar every acquisition route shares, so
+// a value outside it refuses at selection, before any acquisition, naming the
+// object and field that declare it and the action that settles it; an
+// HTTP-only Proxy is one of the executable's own limits.
+func TestControllerRouteGrammarRefusesAtSelection(t *testing.T) {
+	const endpoint = "http://proxy.example.test:3128"
+	external := func(connection api.Value) api.Value {
+		return api.MapValue().With("management", api.StringValue("external")).With("connection", connection)
+	}
+	secure := func(value string) api.Value { return api.MapValue().With("httpsProxy", api.StringValue(value)) }
+	for _, test := range []struct {
+		name   string
+		proxy  api.Value
+		bypass []string
+		object string
+		field  string
+		code   string
+	}{
+		{name: "an endpoint with a path", proxy: external(secure(endpoint + "/path")), object: "Proxy/egress", field: "$.spec.connection.httpsProxy", code: "api.value"},
+		{name: "an endpoint with a query", proxy: external(secure(endpoint + "/?route=1")), object: "Proxy/egress", field: "$.spec.connection.httpsProxy", code: "api.value"},
+		{name: "an HTTP endpoint with a fragment", proxy: external(secure(endpoint).With("httpProxy", api.StringValue(endpoint+"/#x"))), object: "Proxy/egress", field: "$.spec.connection.httpProxy", code: "api.value"},
+		{name: "a CIDR beyond its family", proxy: external(secure(endpoint)), bypass: []string{".example.test", "10.0.0.0/33"}, object: "Machine/controller", field: "$.spec.proxy.noProxy[1]", code: "api.value"},
+		{name: "a host with a path", proxy: external(secure(endpoint)), bypass: []string{"lab.example.test/path"}, object: "Machine/controller", field: "$.spec.proxy.noProxy[0]", code: "api.value"},
+		{name: "an entry longer than the stage's acquisition reads", proxy: external(secure(endpoint)), bypass: []string{".example.test", strings.Repeat("a", 1012) + ".example.test"}, object: "Machine/controller", field: "$.spec.proxy.noProxy[1]", code: "api.value"},
+		{name: "an HTTP proxy alone", proxy: external(api.MapValue().With("httpProxy", api.StringValue(endpoint))), object: "Proxy/egress", field: "$.spec.connection.httpsProxy", code: "controller.unsupported"},
+		{name: "a valid route", proxy: external(secure(endpoint)), bypass: []string{"10.0.0.0/8", ".example.test", "registry.example.test:443", strings.Repeat("a", 1011) + ".example.test"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			objects := selectionObjects()
+			choice := api.MapValue().With("proxyRef", api.StringValue("egress"))
+			if test.bypass != nil {
+				choice = choice.With("noProxy", api.StringList(test.bypass...))
+			}
+			objects[1] = objects[1].WithSpec(objects[1].Spec().With("proxy", choice))
+			objects = append(objects, api.NewObject(api.Proxy, "egress", api.Value{}, test.proxy))
+			selected, err := controller.Select(api.NewCatalog(objects))
+			reported := diagnostics.Of(err)
+			if test.object == "" {
+				if err != nil || selected.Route().HTTPSProxy() != endpoint || len(selected.Route().NoProxy()) != len(test.bypass) {
+					t.Fatalf("a valid route was refused: %+v", reported)
+				}
+				return
+			}
+			if len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Kind+"/"+reported[0].Object.Name != test.object ||
+				reported[0].Field != test.field || reported[0].Code != test.code || reported[0].Remediation == "" {
+				t.Fatalf("refusal = %+v", reported)
+			}
+			if selected.MachineName() != "" || selected.Route().Configured() {
+				t.Fatal("a refused route was selected", selected)
+			}
+		})
+	}
+}
+
+// Every refusal Select raises carries the action that settles it.
+func TestEverySelectionRefusalNamesItsRemedy(t *testing.T) {
+	for _, edit := range []func([]api.Object) []api.Object{
+		func(objects []api.Object) []api.Object { return objects[1:] },
+		func(objects []api.Object) []api.Object {
+			objects[1] = objects[1].WithSpec(objects[1].Spec().WithPath(api.BoolValue(false), "os", "provided"))
+			return objects
+		},
+		func(objects []api.Object) []api.Object {
+			objects[1] = objects[1].WithSpec(objects[1].Spec().With("capabilities", api.StringList("container-runtime", "ceph-node")))
+			return objects
+		},
+		func(objects []api.Object) []api.Object {
+			objects[1] = objects[1].WithSpec(objects[1].Spec().With("capabilities", api.StringList("libvirt")))
+			return objects
+		},
+		func(objects []api.Object) []api.Object {
+			objects[1] = objects[1].WithSpec(objects[1].Spec().With("proxy", api.MapValue().With("proxyRef", api.StringValue("absent"))))
+			return objects
+		},
+		func(objects []api.Object) []api.Object {
+			objects[0] = objects[0].WithSpec(objects[0].Spec().With("dependencyVersions", api.StringValue("latest")))
+			return objects
+		},
+		func(objects []api.Object) []api.Object {
+			objects[0] = objects[0].WithSpec(objects[0].Spec().WithPath(api.StringValue("latest"), "dependencyVersions", "unknown"))
+			return objects
+		},
+		func(objects []api.Object) []api.Object {
+			objects[0] = objects[0].WithSpec(objects[0].Spec().WithPath(api.StringValue("not a version"), "dependencyVersions", "helm"))
+			return objects
+		},
+	} {
+		reported := diagnostics.Of(func() error { _, err := controller.Select(api.NewCatalog(edit(selectionObjects()))); return err }())
+		if len(reported) != 1 || reported[0].Remediation == "" {
+			t.Errorf("refusal = %+v", reported)
+		}
+	}
+}
+
+// A dependency version Select refuses names the field to correct, so the
+// remedy is that field on the Environment that declares it.
+func TestADependencyVersionRefusalNamesItsField(t *testing.T) {
+	objects := selectionObjects()
+	objects[0] = objects[0].WithSpec(objects[0].Spec().WithPath(api.StringValue("latest"), "dependencyVersions", "unknown"))
+	reported := diagnostics.Of(func() error { _, err := controller.Select(api.NewCatalog(objects)); return err }())
+	if len(reported) != 1 || reported[0].Field != "$.spec.dependencyVersions.unknown" ||
+		reported[0].Remediation != "correct spec.dependencyVersions.unknown on Environment/example" {
+		t.Fatalf("refusal = %+v", reported)
 	}
 }
 

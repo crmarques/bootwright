@@ -30,9 +30,11 @@ type controllerDependencies struct {
 
 // localControllerDependencies also returns the release its native resolver
 // needs: that resolver retains one copy of the installed package database
-// between inspections, and the invocation that took it owns removing it.
+// between inspections, and the invocation that took it owns removing it. Both
+// resolvers stage beneath the one Bootwright-owned staging parent.
 func localControllerDependencies(storage prerequisites.Storage, process processDependencies) (controllerDependencies, func()) {
-	native := nativelocal.New(bundlelocal.FetchMetadata)
+	staging := nativelocal.NewStaging(nativelocal.StagingParent)
+	native := nativelocal.New(bundlelocal.FetchMetadata, staging)
 	guard := bundlelocal.ExecutionGuard{}
 	installer := ansiblelocal.New(guard)
 	return controllerDependencies{
@@ -43,7 +45,7 @@ func localControllerDependencies(storage prerequisites.Storage, process processD
 		Runtime:         installer,
 		ClientInstaller: installer,
 		Tools:           bundlelocal.NewToolCatalog(),
-		Bootstrap:       bundlelocal.NewBootstrapResolver(),
+		Bootstrap:       bundlelocal.NewBootstrapResolver(staging),
 		Native:          native,
 		NativeInspector: native,
 		Presenter:       process.Presenter,

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -21,10 +22,7 @@ var (
 	ErrProxyBypass   = errors.New("proxy bypass entry is outside the qualified host, IP or CIDR grammar")
 )
 
-const (
-	maxProxyEndpointBytes = 4096
-	maxProxyBypassEntries = 128
-)
+const maxProxyBypassEntries = 128
 
 // ProxySelector answers the route one exact target takes. A nil result is
 // direct access. DNS is not consulted to evaluate bypass entries.
@@ -65,25 +63,17 @@ func NewProxySelector(httpProxy, httpsProxy string, bypass []string) (ProxySelec
 	}, nil
 }
 
+// parseProxyEndpoint admits exactly the proxy-endpoint grammar admission and
+// selection check, so a route never refuses an endpoint either admitted.
 func parseProxyEndpoint(value string) (*url.URL, error) {
-	if len(value) > maxProxyEndpointBytes || !printableASCII(value) {
+	if !api.ValidLexical("proxy-endpoint", value) {
 		return nil, ErrProxyEndpoint
 	}
 	endpoint, err := url.Parse(value)
-	if err != nil || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Fragment != "" || endpoint.RawQuery != "" ||
-		endpoint.Opaque != "" || endpoint.Path != "" && endpoint.Path != "/" || endpoint.Scheme != "http" && endpoint.Scheme != "https" {
+	if err != nil {
 		return nil, ErrProxyEndpoint
 	}
 	return endpoint, nil
-}
-
-func printableASCII(value string) bool {
-	for _, c := range value {
-		if c <= 32 || c >= 127 {
-			return false
-		}
-	}
-	return true
 }
 
 // Selector builds this route's target selection. A route selected from desired
@@ -204,7 +194,7 @@ func parseBypassList(value string) ([]string, error) {
 func environmentFault(err error) error {
 	switch {
 	case errors.Is(err, ErrProxyBypass):
-		return routeFailure("a NO_PROXY entry is outside the qualified host, IP or CIDR grammar", "Use host names, domain suffixes, IP addresses or CIDR blocks in NO_PROXY.")
+		return routeFailure("a NO_PROXY entry is outside the qualified host, IP or CIDR grammar", "Use host names, domain suffixes, IP addresses or CIDR blocks of at most 1024 bytes each in NO_PROXY.")
 	case errors.Is(err, ErrProxyScheme):
 		return routeFailure("every dependency source is HTTPS, so HTTP_PROXY alone selects no acquisition route", "Set HTTPS_PROXY to the proxy endpoint, or unset HTTP_PROXY for direct access.")
 	default:
@@ -224,7 +214,13 @@ type bypassRule struct {
 	prefix     netip.Prefix
 }
 
+// parseBypass builds the rule of an entry in the proxy-bypass grammar
+// admission and selection check; it refuses whatever that grammar refuses and
+// nothing else.
 func parseBypass(value string) (bypassRule, bool) {
+	if !api.ValidLexical("proxy-bypass", value) {
+		return bypassRule{}, false
+	}
 	if value == "*" {
 		return bypassRule{all: true}, true
 	}
@@ -236,57 +232,25 @@ func parseBypass(value string) (bypassRule, bool) {
 	}
 	rule := bypassRule{}
 	if strings.Contains(value, ":") {
-		host, port, ok := splitBypassPort(value)
-		if !ok {
-			return bypassRule{}, false
-		}
-		value, rule.port = host, port
+		value, rule.port = splitBypassPort(value)
 	}
 	value = strings.ToLower(value)
 	if strings.HasPrefix(value, "*.") {
 		value = strings.TrimPrefix(value, "*")
 	}
 	rule.subdomains = strings.HasPrefix(value, ".")
-	value = strings.TrimPrefix(value, ".")
-	if value == "" || strings.HasSuffix(value, ".") || strings.ContainsAny(value, "/\\@?#\x00\r\n\t ") {
-		return bypassRule{}, false
-	}
-	for _, c := range value {
-		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == ':') {
-			return bypassRule{}, false
-		}
-	}
-	rule.host = value
+	rule.host = strings.TrimPrefix(value, ".")
 	return rule, true
 }
 
-func splitBypassPort(value string) (string, string, bool) {
-	host, port := "", ""
-	if strings.HasPrefix(value, "[") {
-		end := strings.Index(value, "]")
-		if end < 0 || !strings.HasPrefix(value[end+1:], ":") {
-			return "", "", false
-		}
-		host, port = value[1:end], value[end+2:]
-		if strings.ContainsAny(host, "[]") {
-			return "", "", false
-		}
-	} else {
-		separator := strings.Index(value, ":")
-		if separator != strings.LastIndex(value, ":") {
-			return "", "", false
-		}
-		host, port = value[:separator], value[separator+1:]
+// splitBypassPort splits an admitted entry into its host and port.
+func splitBypassPort(value string) (string, string) {
+	if bracketed, ok := strings.CutPrefix(value, "["); ok {
+		host, port, _ := strings.Cut(bracketed, "]:")
+		return host, port
 	}
-	if port == "" {
-		return "", "", false
-	}
-	for _, c := range port {
-		if c < '0' || c > '9' {
-			return "", "", false
-		}
-	}
-	return host, port, true
+	host, port, _ := strings.Cut(value, ":")
+	return host, port
 }
 
 func (r bypassRule) matches(target *url.URL) bool {

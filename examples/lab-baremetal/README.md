@@ -35,6 +35,17 @@ Bootwright and outliving this context:
   the key pair the installation delivers, so completion is proved against a key
   that was known before the machine was ever contacted.
 
+**A RHEL controller brings its own `lorax` and `xorriso`.** The artifact
+server sits on the controller, so the installation builds its media there with
+`lorax` and `xorriso`, and no public source Bootwright resolves from carries
+them for RHEL. On a RHEL controller, install both from the host's own enabled
+Red Hat repositories (`dnf install lorax xorriso`) before the apply
+([D106](../../specs/milestones/backlog.md#decisions)). The controller stage
+proves them by presence and the qualified Red Hat release key, and otherwise
+refuses before it acquires anything, naming the package that is missing or
+signed by another key; `preflight controller --context lab-baremetal` reports
+the same check. A Fedora controller's stage installs them itself.
+
 ## Run it today
 
 What runs today is everything before the installation: admission, the import

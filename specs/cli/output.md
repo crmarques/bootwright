@@ -18,12 +18,19 @@ output.
 | Explicit sensitive result | exact requested bytes, with no added LF | diagnostics only on failure | `0` or `1` |
 | Completion script | exact script with its required final LF | empty | `0` |
 | Access handoff | one bounded, escaped descriptor followed by one LF | ordered diagnostics only | `0` or `1` |
-| [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status |
+| [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status, even after an interrupt; `255` for a Bootwright refusal before the session opens |
 | Interrupt-driven cancellation | as required by the selected structured mode | as required by that mode | `130` |
 
 An operating-system interrupt reports `runtime.interrupted` and exits `130` for
-a Bootwright-owned operation. Another canceled context or expired deadline
-reports `runtime.canceled` or `runtime.deadline` and exits `1`.
+a Bootwright-owned operation. Once an SSH session opened, the session owns its
+streams and its status, so an interrupt adds nothing and the client's status
+stands. An `apply` or `destroy` interrupted after it
+registered its operation first writes that operation's
+[result](#lifecycle-and-status-results) and receipt on standard output, and its
+`runtime.interrupted` diagnostic names as `next:` the command that continues
+it; the diagnostics the cancellation made its blocks report are not repeated.
+Another canceled context or expired deadline reports `runtime.canceled` or
+`runtime.deadline` and exits `1`.
 
 A write or flush failure on standard output exits `1` with best-effort cleanup
 and never recursively emits a second representation or fallback on standard
@@ -220,7 +227,11 @@ deterministically escaped, and contains neither a secret nor an untrusted
 terminal sequence. When remediation is available, the labeled `next:` clause
 states the shortest exact safe action. A refusal names the object or block,
 observed or missing evidence, safety reason, and exact safe next action. It
-never invents a force command.
+never invents a force command. A `next:` clause or next step that names a
+context-backed command carries `--context <name>` for the context the
+invocation resolved, so a copied remedy never acts on another context's object
+of the same name; the context-free commands `setup`, `media` and `version`
+take none.
 
 ## JSON output
 
@@ -380,20 +391,37 @@ whose steps are the frozen blocks in plan order, each naming its stage and
 carrying its own impacts as indented lines, a `Checks` section for what the
 operation proves before it registers, a `Progress` section while effects run, a
 `Result` section of status rows, the `Logs` reference when an operation log
-exists, and the receipt as the final four lines.
+exists, a `Next` field naming the exact command, with `--context`, that
+continues a `paused`, `failed`, `unknown` or `running` operation, and the
+receipt as the final four lines.
 
 Because the plan is frozen
 [wave by wave](../state-reconciliation.md#plan-and-execution), the numbered
 steps are the order the work is started in. Each step that waits for another
 names the steps it waits for by their place in that list, as `[after 2, 5]`,
 and a step that waits for nothing carries no such marker, which is what marks
-it as one of the first to start. A closing `Concurrency` field reports how many
-waves the plan needs and how many of its steps share the fullest one, so a long
-plan that is one chain reads differently from a long plan that is wide. With a
-stage selection,
+it as one of the first to start. A step whose consequence consumes an
+authorization carries the token, as `[data-loss]`, after its stage and state
+and before its selection and `[after …]` markers. A closing `Concurrency`
+field reports the plan's own width, as `4 waves, widest 5 steps`, so a long
+plan that is one chain reads differently from a long plan that is wide, and
+when this build starts fewer blocks at a time than its widest wave holds it
+adds that bound, as `; this build starts 1 block at a time`. A fresh
+`destroy`'s plan, previewed or presented, adds a `Stop first` field naming in
+plan order the Machines whose removal its quiescence gate observes on the host,
+as `Stop first  rhel-01, rhel-02`, because that gate follows the prompt; a
+continuation is not gated again and carries none. Every
+presentation of a plan that consumes an authorization closes with a `Requires`
+field naming each token the whole frozen plan requires and the steps that
+consume it, as `--authorize data-loss (step 3, 5)`; a finalization's preview
+carries none, because the `apply` or `destroy` that completes it runs no block
+and requires no authorization. With a stage selection,
 each pending step also says whether this invocation would start it, that it is
 not selected, or which block it waits on, and a closing field reports how many
-blocks would start and how many are deferred. A block row leads with its status
+blocks would start and how many are deferred. While a block is unproved or
+failed, the blocks the next `apply` works first are marked `resolve` or
+`retry` and counted as started, and every other ready step reads deferred,
+waiting on the first of them. A block row leads with its status
 token and names the block description and its outcome; its
 [presentation groups](#multi-machine-presentation) are never result rows. A
 preview and a refusal have no progress, result rows or log reference.
@@ -451,8 +479,10 @@ in ascending bytewise name order. Human `status` presents the same membership
 and order, omitting empty sections. Its Setup rows name each check by the
 label controller readiness gives it, and a `pending` controller binding adds
 `bound by the first apply`.
-Its Lifecycle section also names the build that registered the operation and
-the host directory of its logs, which JSON leaves out, and an `Unresolved
+Its Lifecycle section also names the build that registered the operation, as
+`version` spells it, `<version> (<commit>)`, or `devel (<commit>)` for a build
+stamped with no version, and the host directory of its logs, which JSON leaves
+out, and an `Unresolved
 <block>` section follows it for each block that carries `unresolved`, with its
 `Reason` and `Remedy`.
 
@@ -540,7 +570,7 @@ it to a variable.
 | `lifecycle.lease` | The context root lock or mutation lease cannot be safely acquired or recovered. |
 | `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |
 | `lifecycle.live` | A removal would take back state that is still in use, and refuses before registering. |
-| `lifecycle.adapter-running` | An earlier lifecycle adapter still holds its job lock, so no adapter starts until it ends. |
+| `lifecycle.adapter-running` | An adapter of the same context, or one whose record names no context, still holds its job lock, so no adapter of that context starts until it ends. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
 | `access.target` | Explicit access cannot resolve one exact authorized target. |

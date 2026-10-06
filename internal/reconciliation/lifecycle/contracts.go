@@ -38,11 +38,19 @@ type View interface {
 // RunView is what a bounded operation outside the lifecycle reads. It adds
 // exactly two things an inspection has no use for: the controller's approved
 // execution bundle, which the adapter call runs inside, and a writable area
-// holding what that adapter printed. Neither is desired state, ownership or a
-// continuation cursor, so a bounded run still registers no operation.
+// holding what that adapter printed, in run directories it opens itself.
+// Neither is desired state, ownership or a continuation cursor, so a bounded
+// run still registers no operation.
 type RunView interface {
 	View
 	Runs() operationstore.Area
+	// OpenRun makes room among the newest runs the area keeps, removing the
+	// oldest that no live run holds, each only while it holds nothing but its
+	// own RunOutputName. It then creates identity's directory exclusively and
+	// holds it until the callback that received this view returns, so no
+	// other run's retention removes a run still in progress. A failure leaves
+	// no directory it created.
+	OpenRun(ctx context.Context, identity string) error
 }
 
 // Transaction adds the publications an operation performs. Each holds the root
@@ -98,12 +106,18 @@ type Compiler interface {
 // registration or by its next destroy. Bindings lists identities only, so the
 // engine can tell those bindings apart without reading any material.
 //
+// ReadCurrent serves a bounded run or consumer instead: it reads the current
+// versions in one keyring session and binds nothing, so a bounded call leaves
+// no binding or identity reservation behind and nothing for a collection to
+// release.
+//
 // Produce and Withdraw work only through the area a transaction lends, so what
 // a block produced enters custody before that block is recorded done, and a
 // completed removal withdraws all of it inside the transaction that records it.
 type SecretBinder interface {
 	Bind(context.Context, custody.BindRequest) (secretstore.Binding, error)
 	Reopen(context.Context, custody.BindingRequest) ([]secretstore.BoundMaterial, error)
+	ReadCurrent(context.Context, custody.ReadCurrentRequest) ([]secretstore.BoundMaterial, error)
 	Release(context.Context, custody.BindingRequest) (bool, error)
 	Bindings(context.Context, custody.BindingsRequest) ([]string, error)
 	Produce(context.Context, secretstore.Context, secretstore.Area, custody.ProduceRequest) ([]secretstore.Produced, error)
@@ -157,6 +171,15 @@ type Capability interface {
 	ObserveRemoval(context.Context, Execution) (Observation, error)
 }
 
+// QuiescenceProber is the optional half of a capability whose quiescence is
+// observed on the host, so a removal of its block refuses while its target
+// runs. A destroy's plan names the Machines of those blocks as the ones to stop
+// first; a capability whose quiescence is derived never refuses and is not
+// named.
+type QuiescenceProber interface {
+	ProbesQuiescence() bool
+}
+
 // Removal is the half of a frozen block that removing it decides: the words it
 // is planned and reported in, the impacts it lists and the authorization it
 // consumes. The block's identity, request and digests are deliberately absent,
@@ -172,6 +195,10 @@ type Removal struct {
 // carries no operation identity, log or before-state publication, because it
 // runs before any operation is registered and may change nothing.
 type Probe struct {
+	// Context names the context the removal runs in, which a stop command the
+	// probe composes names too, and which the runner records against the
+	// probe's adapter job, as an attempt's.
+	Context  string
 	Block    reconciliation.Block
 	Launch   prerequisites.PythonLaunch
 	Bundle   prerequisites.BundleLocation
@@ -184,7 +211,7 @@ type Probe struct {
 // progress or before-state hook, because a probe runs before any operation
 // exists to record against and may change nothing.
 func (p Probe) Execution() Execution {
-	return Execution{Block: p.Block, Launch: p.Launch, Bundle: p.Bundle, Area: p.Area, Material: p.Material}
+	return Execution{Context: p.Context, Block: p.Block, Launch: p.Launch, Bundle: p.Bundle, Area: p.Area, Material: p.Material}
 }
 
 // QuiescenceState is what a probe proved about one block's targets.
@@ -364,7 +391,13 @@ type SSHReservation struct {
 // Execution is one authorized attempt against one frozen block. Material is
 // bounded memory owned by the caller and cleared after the attempt.
 type Execution struct {
-	Operation  string
+	Operation string
+	// Context names the context the operation belongs to, so a command a
+	// capability's diagnostic names acts on this context's object only, and
+	// the runner records it against the adapter's job, so a job it holds
+	// refuses only that context's next run. It is never part of what the
+	// block froze.
+	Context    string
 	Attempt    int
 	Resolution int
 	Block      reconciliation.Block

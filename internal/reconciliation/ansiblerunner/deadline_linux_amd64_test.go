@@ -35,7 +35,7 @@ func TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling(t *testing.T) {
 			},
 		}
 		request := lifecycle.RunRequest{
-			Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
+			Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
 			Bundle: prerequisites.BundleLocation{Path: bundle}, Output: io.Discard,
 			Deadline: 300 * time.Millisecond,
 		}
@@ -74,7 +74,7 @@ func TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling(t *testing.T) {
 			var observed time.Time
 			var bounded bool
 			request := lifecycle.RunRequest{
-				Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
+				Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
 				Bundle: prerequisites.BundleLocation{Path: bundle}, Output: io.Discard,
 				Deadline: test.requested,
 				Progress: func(run context.Context, _, _ string) {

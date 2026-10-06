@@ -192,11 +192,15 @@ client's connection error, so repeat it until it answers. Its answer, a fresh
 `uptime`, shows the guest came back.
 
 The removal deletes the guest's disks, so `destroy` consumes the `data-loss`
-authorization; without `--authorize data-loss` it refuses before registering
-anything. It also proves every Machine it would take back is down before it
-registers, so the first `destroy` refuses `lifecycle.live` while `rhel-01` runs
-and names the command that stops it. Nothing is removed and no operation is
-created, so stopping the guest and repeating the command is the whole recovery.
+authorization; without `--authorize data-loss` it presents its plan, whose
+`Requires` line names the step that deletes them, and refuses before
+registering anything. It also proves every Machine it would take back is down
+before it registers: it presents its plan, whose `Stop first` line names
+`rhel-01`, asks for confirmation, and only then proves the Machine down, so the
+first `destroy` refuses `lifecycle.live` while `rhel-01` runs, with nothing
+registered, and names the command that stops it. Nothing is removed and no
+operation is created, so stopping the guest and repeating the command is the
+whole recovery.
 The inverse removes exactly what the apply created, and destroy ends
 `state: done` and `next: none`; repeating it settles.
 
@@ -238,8 +242,9 @@ operation is incomplete refuses that road instead, and names the recovery it
 needs.
 
 A `destroy` takes the environment back rather than finishing it. It resolves
-every effect whose outcome the interruption lost, reporting that proof under
-`Checks` before anything else, and then removes every block the apply started.
+every effect whose outcome the interruption lost, after its confirmation,
+under `Checks`, before it registers anything, and then removes every block the
+apply started.
 Nothing is registered until each one is proved, so a removal that cannot reach
 the host leaves the context exactly as it found it:
 
@@ -250,11 +255,13 @@ the host leaves the context exactly as it found it:
 ```
 
 A block that fails for a nameable reason behaves the same way, except that
-nothing is left to resolve: the operation is `failed`, the next `apply` retries
-that block, and a `destroy` removes what the apply started. That removal is the
-road out of a repaired adapter. A continuation runs the automation its operation
-froze, so rebuilding the collection refuses one, while a fresh removal runs
-under the build in hand:
+nothing is left to resolve: the operation is `failed` and the next `apply`
+retries that block. With several Machines, the other Machines' installations
+wait until the failed one's retry succeeds, and
+`bootwright plan --stage machines` marks them deferred behind it. A `destroy`
+removes what the apply started, and that removal is the road out of a repaired
+adapter. A continuation runs the automation its operation froze, so rebuilding
+the collection refuses one, while a fresh removal runs under the build in hand:
 
 ```sh
 make build && ./bin/bootwright setup        # publish the repaired automation

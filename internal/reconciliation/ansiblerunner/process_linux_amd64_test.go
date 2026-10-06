@@ -189,7 +189,7 @@ func TestAProtocolRefusalEndsTheAdapterPromptly(t *testing.T) {
 			}
 			var output bytes.Buffer
 			request := lifecycle.RunRequest{
-				Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
+				Context: "lab", Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
 				Canonical: []byte(`{}`), Placement: machineref.Placement{Connection: "local", Machine: "controller"},
 				Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
 				Bundle: prerequisites.BundleLocation{Path: bundle}, Area: embeddedArea{files: assets}, Output: &output,
@@ -428,7 +428,7 @@ func TestStoppingAnAdapterEndsItsTreeBeyondItsGroup(t *testing.T) {
 			}
 			defer progress.Close()
 			request := lifecycle.RunRequest{
-				Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
+				Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
 				Bundle: prerequisites.BundleLocation{Path: bundle}, Output: output,
 			}
 			ctx, cancel := context.WithCancel(context.Background())
@@ -500,7 +500,7 @@ func TestTheSupervisorIsStartedInLifecycleMode(t *testing.T) {
 		},
 	}
 	request := lifecycle.RunRequest{
-		Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
+		Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
 		Bundle: prerequisites.BundleLocation{Path: t.TempDir()},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -537,7 +537,7 @@ func TestLifecycleInvocationHelper(t *testing.T) {
 		},
 	}
 	request := lifecycle.RunRequest{
-		Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
+		Context: "lab", Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
 		Canonical: []byte(`{}`), Placement: machineref.Placement{Connection: "local", Machine: "controller"},
 		Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
 		Bundle: prerequisites.BundleLocation{Path: bundle}, Area: embeddedArea{files: ansible.Assets()}, Output: os.Stdout,
@@ -600,7 +600,7 @@ func TestThreadChurnNeverSignalsARunningAdapter(t *testing.T) {
 		},
 	}
 	request := lifecycle.RunRequest{
-		Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
+		Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
 		Bundle: prerequisites.BundleLocation{Path: bundle}, Output: io.Discard,
 	}
 	job, scratch := t.TempDir(), t.TempDir()

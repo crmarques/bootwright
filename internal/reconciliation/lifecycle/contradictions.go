@@ -55,7 +55,7 @@ func deletionCommand(view View) (string, bool) {
 // its effect in place and then release the binding that effect needs. It reads
 // only, under the lock the decision holds, before anything is presented,
 // bound, probed, registered or released.
-func refuseContradictions(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) error {
+func refuseContradictions(ctx context.Context, store OperationStore, contextName string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) error {
 	lost, err := store.LostBlockRecords(ctx, operation.ID, frozen)
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func refuseContradictions(ctx context.Context, store OperationStore, operation o
 	}
 	return failure("lifecycle.state",
 		"the incomplete apply "+operation.ID+" holds records that contradict what it started, and a removal that skipped such a block would leave its effect in place: "+strings.Join(entries, ", "),
-		"review its durable state with bootwright status")
+		reviewStatus(contextName))
 }
 
 // contradictions names what an apply's own records prove impossible, per block
@@ -135,14 +135,14 @@ func lostRecord(block string) string {
 // rather than skip the observation an effect that may have begun requires. A
 // failed apply whose every block is done never reaches it, because its own
 // verb finalizes it first.
-func refuseUncontinuable(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan) error {
+func refuseUncontinuable(ctx context.Context, store OperationStore, contextName string, operation operationstore.Operation, frozen reconciliation.Plan) error {
 	entries, err := uncontinuable(ctx, store, operation, frozen)
 	if err != nil || len(entries) == 0 {
 		return err
 	}
 	return failure("lifecycle.state",
 		"the incomplete "+string(operation.Verb)+" "+operation.ID+" holds records that contradict what it started, so it cannot be continued: "+strings.Join(entries, ", "),
-		"review its durable state with bootwright status")
+		reviewStatus(contextName))
 }
 
 func uncontinuable(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan) ([]string, error) {
@@ -161,13 +161,18 @@ func uncontinuable(ctx context.Context, store OperationStore, operation operatio
 // contradict, as the refusals that point at bootwright status name it: each
 // block a completed operation's records do not show done, what an incomplete
 // apply's records prove impossible and an incomplete apply that started no
-// block although its own state says it did, and each block of an incomplete
-// removal that lost its record beside an attempt of it.
+// block although its own state says it did, and each block of a running or
+// unknown removal that lost its record beside an attempt of it. A failed
+// removal holding a block not done is replaced by a fresh removal, which reads
+// no block record of it, so a record it lost contradicts nothing that follows.
 func recordContradictions(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) ([]string, error) {
 	if operation.State == reconciliation.OperationDone {
 		return unfinishedBlocks(frozen, states), nil
 	}
 	if operation.Verb == reconciliation.Destroy {
+		if nextAction(operation, frozen, states) == string(reconciliation.Destroy) {
+			return []string{}, nil
+		}
 		return uncontinuable(ctx, store, operation, frozen)
 	}
 	lost, err := store.LostBlockRecords(ctx, operation.ID, frozen)

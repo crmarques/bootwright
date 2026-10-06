@@ -14,6 +14,9 @@ import (
 // froze its controller Machine's proxy choice with its block. Read without a
 // scope, it is setup's.
 type ScopedFailure struct {
+	// Code is the diagnostic code the failure keeps in every scope, and
+	// controller.setup when it names none.
+	Code       string
 	Message    string
 	Correction string
 	// Routable marks a publisher this host could not reach or resolve, which
@@ -48,5 +51,9 @@ func (f *ScopedFailure) remedied(route, command string) error {
 	if f.Routable && route != "" {
 		remedy += ", or " + route
 	}
-	return diagnostics.NewFailureWithRemediation("controller.setup", f.Message, "", remedy+", then "+command+".")
+	code := f.Code
+	if code == "" {
+		code = "controller.setup"
+	}
+	return diagnostics.NewFailureWithRemediation(code, f.Message, "", remedy+", then "+command+".")
 }

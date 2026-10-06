@@ -46,7 +46,7 @@ func TestReadOnlyToolInspectionRequiresRetainedSourceAndEveryExactMember(t *test
 	check := func(ready, recoverable bool) {
 		t.Helper()
 		before := area.writes
-		got, _, err := inspectFiles(t.Context(), area, catalogRecord{}, []prerequisites.ToolDefinition{tool})
+		got, _, err := inspectFiles(t.Context(), area, closureOf(t, nil), []prerequisites.ToolDefinition{tool})
 		if err != nil || got.ToolsReady != ready || got.Recoverable != recoverable || area.writes != before {
 			t.Fatal(got, err, before, area.writes)
 		}
@@ -136,7 +136,7 @@ func TestReadOnlyToolInspectionStreamsTheSourceAndEachMember(t *testing.T) {
 			var before, after runtime.MemStats
 			runtime.GC()
 			runtime.ReadMemStats(&before)
-			got, _, err := inspectFiles(t.Context(), area, catalogRecord{}, []prerequisites.ToolDefinition{tool})
+			got, _, err := inspectFiles(t.Context(), area, closureOf(t, nil), []prerequisites.ToolDefinition{tool})
 			runtime.ReadMemStats(&after)
 			if err != nil || !got.ToolsReady || !got.Recoverable {
 				t.Fatal(got, err)
@@ -154,10 +154,10 @@ func TestToolInspectionRefusesAnAreaThatCannotStream(t *testing.T) {
 	area := newMemoryArea()
 	area.files[sourcePath(tool.Source)] = projectedFile{data: archive}
 	unstreamed := struct{ prerequisites.BundleArea }{area}
-	if _, _, err := inspectFiles(t.Context(), unstreamed, catalogRecord{}, []prerequisites.ToolDefinition{tool}); !failedWith(err, "streaming capability is unavailable") {
+	if _, _, err := inspectFiles(t.Context(), unstreamed, closureOf(t, nil), []prerequisites.ToolDefinition{tool}); !failedWith(err, "streaming capability is unavailable") {
 		t.Fatal("inspection proved a tool without a stream:", err)
 	}
-	if _, _, err := inspectFiles(t.Context(), unstreamed, catalogRecord{}, nil); err != nil {
+	if _, _, err := inspectFiles(t.Context(), unstreamed, closureOf(t, nil), nil); err != nil {
 		t.Fatal("an inspection that selects no tool needs no stream:", err)
 	}
 }
@@ -360,7 +360,7 @@ func TestReadOnlyInspectionRefusesARetainedOCThatNamesNoRelease(t *testing.T) {
 		for _, file := range tool.Files {
 			area.files[file.Path] = projectedFile{data: []byte(oc), executable: true}
 		}
-		got, _, err := inspectFiles(t.Context(), area, catalogRecord{}, []prerequisites.ToolDefinition{tool})
+		got, _, err := inspectFiles(t.Context(), area, closureOf(t, nil), []prerequisites.ToolDefinition{tool})
 		if proved && (err != nil || !got.ToolsReady || !got.Recoverable) {
 			t.Fatal(got, err)
 		}

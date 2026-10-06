@@ -7,6 +7,7 @@ import (
 	"time"
 
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -22,10 +23,27 @@ func TestRunForCarriesTheInvocationsDeadline(t *testing.T) {
 }
 
 // An attempt keeps its adapter's output beside its own log, so a failure that
-// output explains points there, whatever the capability asked for.
-func TestRunForPointsAnAdapterFailureBesideTheAttemptLog(t *testing.T) {
-	if got := RunFor(Execution{}, Invocation{}).OutputRemediation; got != "read the adapter output retained beside this attempt's log" {
-		t.Fatalf("an attempt's request points an adapter failure at %q", got)
+// output explains names the block and that output's file in the operation's
+// Logs directory, which only root reads, whatever the capability asked for. An
+// execution that names no attempt of a block, as a quiescence probe does,
+// points beside the attempt's log.
+func TestAFailedAttemptNamesItsBlockAndOutputFile(t *testing.T) {
+	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "os-install-rhel-01"}}
+	const retained = "read the adapter output retained beside this attempt's log"
+	for _, test := range []struct {
+		execution Execution
+		want      string
+	}{
+		{Execution{Operation: "op-x", Attempt: 2, Block: block},
+			"read blocks/os-install-rhel-01/attempt-000002.output in this operation's Logs directory, as root, for why block os-install-rhel-01 failed"},
+		{Execution{Operation: "op-x", Attempt: 2, Resolution: 1, Block: block},
+			"read blocks/os-install-rhel-01/attempt-000002-resolution-000001.output in this operation's Logs directory, as root, for why block os-install-rhel-01 failed"},
+		{Execution{Operation: "op-x", Block: block}, retained},
+		{Execution{}, retained},
+	} {
+		if got := RunFor(test.execution, Invocation{}).OutputRemediation; got != test.want {
+			t.Fatalf("attempt %d of %q points an adapter failure at %q, want %q", test.execution.Attempt, test.execution.Block.ID, got, test.want)
+		}
 	}
 }
 

@@ -111,7 +111,7 @@ func applicationDependencies() map[string][]string {
 		// the controller evidence its host was prepared with, and most also the
 		// compiler that produced their input and the operation store's log
 		// record.
-		"internal/controller/clients":                    {"internal/controller/prerequisites", "internal/reconciliation/lifecycle"},
+		"internal/controller/clients":                    {"internal/controller/prerequisites", "internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
 		"internal/substrate/libvirt":                     capabilityDependencies(),
 		"internal/substrate/baremetal":                   {"internal/controller/prerequisites", "internal/reconciliation/lifecycle", "internal/reconciliation/operationstore"},
 		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),

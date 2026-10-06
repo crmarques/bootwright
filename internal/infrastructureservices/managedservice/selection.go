@@ -186,10 +186,13 @@ func hostPrefix(value string) string {
 	return host + "/" + strconv.Itoa(address.BitLen())
 }
 
-// ServiceEndpoint resolves one managed service selection to the address a
-// consumer reaches it at, and to the object whose block must complete first.
-// It is the one reader of that grammar, so every consumer of a name or time
-// service resolves the same selection to the same address.
+// ServiceEndpoint resolves one name or time service selection to the address a
+// consumer reaches it at, and to the object to require, whose block must
+// complete first. A managed server is reached at its endpoint's address and is
+// required; an external one is reached at the address it declares and requires
+// nothing, because no block of this product realizes it. It is the one reader
+// of that grammar, so every consumer of a name or time service resolves the
+// same selection to the same address.
 func ServiceEndpoint(catalog api.Catalog, kind api.Kind, selection api.Value, identity string) (string, string, error) {
 	reference := selection.Get("serverRef").Text()
 	server, ok := catalog.Find(kind, reference)
@@ -197,7 +200,11 @@ func ServiceEndpoint(catalog api.Catalog, kind api.Kind, selection api.Value, id
 		return "", "", Refusal("api.reference", "a selected "+string(kind)+" is not in the selected graph", "declare "+reference+" or correct the selection on "+identity)
 	}
 	if server.Spec().Get("management").Text() != "managed" {
-		return "", "", Refusal("lifecycle.state", "an installation uses only managed name and time services", "select a managed "+string(kind)+" on "+identity)
+		address := server.Spec().Get("address").Text()
+		if address == "" {
+			return "", "", Refusal("api.required", "the selected external "+string(kind)+" declares no address", "set spec.address on "+server.Identity())
+		}
+		return address, "", nil
 	}
 	placement, ok := catalog.Find(api.Machine, server.Spec().Get("machineRef").Text())
 	if !ok {

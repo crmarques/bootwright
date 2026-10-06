@@ -61,7 +61,7 @@ func TestAFailedApplyWhoseBlocksAreAllDoneIsFinalizedByTheApply(t *testing.T) {
 		h, applied := laggingApply(t)
 		status, err := h.service.Status(ctx, StatusRequest{ContextName: testContextName})
 		if err != nil || status.Lifecycle == nil || status.Lifecycle.Operation != applied || status.Lifecycle.Next != "continue-apply" ||
-			len(status.Contradictions) != 0 || !slices.Equal(status.NextSteps, []string{"bootwright apply", "bootwright destroy"}) {
+			len(status.Contradictions) != 0 || !slices.Equal(status.NextSteps, []string{"bootwright apply --context lab", "bootwright destroy --context lab"}) {
 			t.Fatalf("status = %+v (%v)", status, err)
 		}
 		before := untouchedOf(h)

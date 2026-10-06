@@ -28,8 +28,8 @@ Secrets
   Bindings  1
 
 Next steps
-  bootwright apply
-  bootwright destroy
+  bootwright apply --context lab
+  bootwright destroy --context lab
 
 Lifecycle
   Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a

@@ -32,9 +32,19 @@ type flagSpec struct {
 	enumList bool
 	catalog  string
 	path     string
+	// undisclosed marks a value no output repeats.
+	undisclosed bool
 }
 
 func stringFlag(name, help string) flagSpec { return flagSpec{name: name, help: help, kind: "string"} }
+
+// undisclosedFlag is a string flag whose value no output repeats: a Secret's
+// username part, or a download URL whose query may carry a token.
+func undisclosedFlag(name, help string) flagSpec {
+	f := stringFlag(name, help)
+	f.undisclosed = true
+	return f
+}
 
 // directoryFlag and fileFlag mark a path-valued flag so completion offers
 // real filesystem candidates instead of refusing every value.

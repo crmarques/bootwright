@@ -23,9 +23,8 @@ type filesystemView struct {
 }
 
 type heldFilesystem struct {
-	view           filesystemView
-	root           *os.File
-	qualifiedLinks map[string]string
+	view filesystemView
+	root *os.File
 }
 
 func (v filesystemView) open(ctx context.Context) (*heldFilesystem, error) {
@@ -51,10 +50,6 @@ func (f *heldFilesystem) close() { f.root.Close() }
 // Every directory and final read handle is checked; no path is resolved and
 // subsequently reopened through an unheld absolute pathname.
 func (f *heldFilesystem) openPath(ctx context.Context, name string, readable bool) (*os.File, unix.Stat_t, error) {
-	return f.openPathPolicy(ctx, name, readable, true)
-}
-
-func (f *heldFilesystem) openPathPolicy(ctx context.Context, name string, readable, followFinal bool) (*os.File, unix.Stat_t, error) {
 	if !strings.HasPrefix(name, "/") || path.Clean(name) != name || strings.ContainsRune(name, 0) || len(name) > 4096 || name == "/" {
 		return nil, unix.Stat_t{}, errEvidence
 	}
@@ -90,15 +85,8 @@ func (f *heldFilesystem) openPathPolicy(ctx context.Context, name string, readab
 			return nil, unix.Stat_t{}, errEvidence
 		}
 		if stat.Mode&unix.S_IFMT == unix.S_IFLNK {
-			if len(pending) == 0 && !followFinal {
-				if !readable {
-					return os.NewFile(uintptr(fd), name), stat, nil
-				}
-				unix.Close(fd)
-				return nil, unix.Stat_t{}, errEvidence
-			}
 			links++
-			target, err := f.linkTarget(fd, current, resolved, links)
+			target, err := f.linkTarget(fd, resolved, links)
 			if err != nil {
 				return nil, unix.Stat_t{}, err
 			}
@@ -129,7 +117,7 @@ func (f *heldFilesystem) openPathPolicy(ctx context.Context, name string, readab
 	return nil, unix.Stat_t{}, errEvidence
 }
 
-func (f *heldFilesystem) linkTarget(fd int, current string, resolved []string, links int) (string, error) {
+func (f *heldFilesystem) linkTarget(fd int, resolved []string, links int) (string, error) {
 	var filesystem unix.Statfs_t
 	if unix.Fstatfs(fd, &filesystem) != nil || filesystem.Type == unix.PROC_SUPER_MAGIC {
 		unix.Close(fd)
@@ -144,9 +132,6 @@ func (f *heldFilesystem) linkTarget(fd int, current string, resolved []string, l
 		return "", errEvidence
 	}
 	target := string(buffer[:n])
-	if f.qualifiedLinks != nil && f.qualifiedLinks[current] != target {
-		return "", errEvidence
-	}
 	if !strings.HasPrefix(target, "/") {
 		target = "/" + strings.Join(resolved, "/") + "/" + target
 	}

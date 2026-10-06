@@ -4,10 +4,7 @@ package hostlinux
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"golang.org/x/sys/unix"
 	"os"
@@ -77,56 +74,13 @@ func TestPlatformRejectsAmbiguousDeclaration(t *testing.T) {
 	assertDiagnostic(t, err, "controller.unsupported")
 }
 
-func TestRuntimeRejectsManifestAndFileBoundaryViolations(t *testing.T) {
-	for _, tc := range []struct {
-		name            string
-		edit            func(*testing.T, Inspector, *prerequisites.RuntimeRequirement)
-		invalidManifest bool
-	}{
-		{"empty", func(t *testing.T, i Inspector, r *prerequisites.RuntimeRequirement) { r.Files = nil }, true},
-		{"duplicate", func(t *testing.T, i Inspector, r *prerequisites.RuntimeRequirement) {
-			r.Files = append(r.Files, r.Files[0])
-		}, true},
-		{"unbounded", func(t *testing.T, i Inspector, r *prerequisites.RuntimeRequirement) {
-			r.Files = make([]prerequisites.InstalledFile, 129)
-		}, true},
-		{"path-traversal", func(t *testing.T, i Inspector, r *prerequisites.RuntimeRequirement) {
-			r.Files[1].Path = "/usr/../etc/secret"
-		}, true},
-		{"missing-primary", func(t *testing.T, i Inspector, r *prerequisites.RuntimeRequirement) { r.Files = r.Files[1:] }, true},
-		{"mutable-primary", func(t *testing.T, i Inspector, r *prerequisites.RuntimeRequirement) {
-			must(t, os.Chmod(filepath.Join(i.view.root, "usr/bin/podman"), 0777))
-		}, false},
-		{"not-executable", func(t *testing.T, i Inspector, r *prerequisites.RuntimeRequirement) {
-			must(t, os.Chmod(filepath.Join(i.view.root, "usr/bin/podman"), 0644))
-		}, false},
-		{"oversized-support", func(t *testing.T, i Inspector, r *prerequisites.RuntimeRequirement) {
-			must(t, os.Truncate(filepath.Join(i.view.root, "usr/lib/podman/support"), maxRuntimeFile+1))
-		}, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			i := fixture(t, "btrfs")
-			r := runtimeFixture(t, i)
-			tc.edit(t, i, &r)
-			got, err := i.Runtime(context.Background(), r)
-			if tc.invalidManifest {
-				assertDiagnostic(t, err, "controller.unsupported")
-			} else if err != nil || !got.Present || got.Ready {
-				t.Fatalf("unsafe runtime = %#v %v", got, err)
-			}
-		})
-	}
-}
-
 func TestInspectionCancellationPreservesCause(t *testing.T) {
 	i := fixture(t, "btrfs")
-	r := runtimeFixture(t, i)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, platformErr := i.Platform(ctx)
 	_, identityErr := i.Identity(ctx)
-	_, runtimeErr := i.Runtime(ctx, r)
-	for _, err := range []error{platformErr, identityErr, runtimeErr} {
+	for _, err := range []error{platformErr, identityErr} {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("cancellation lost: %v", err)
 		}
@@ -180,20 +134,6 @@ func mountLine(kind string) string {
 		return "1 2 0:30 /root / rw - btrfs /dev/vda4 rw,subvol=/root\n"
 	}
 	return "1 2 8:4 / / rw - " + kind + " /dev/vda4 rw\n"
-}
-
-func runtimeFixture(t *testing.T, i Inspector) prerequisites.RuntimeRequirement {
-	t.Helper()
-	writeFixture(t, i, "/usr/lib/sysimage/rpm/.rpm.lock", "", 0644)
-	files := []prerequisites.InstalledFile{}
-	for _, name := range []string{"/usr/bin/podman", "/usr/lib/podman/support"} {
-		// Execution would fail and create a marker; inspection must only hash.
-		data := "#!/bin/sh\ntouch /tmp/host-inspection-ran\nexit 1\n"
-		writeFixture(t, i, name, data, 0755)
-		digest := sha256.Sum256([]byte(data))
-		files = append(files, prerequisites.InstalledFile{Path: name, SHA256: hex.EncodeToString(digest[:])})
-	}
-	return prerequisites.RuntimeRequirement{Version: "5.6.2", LockPath: "/usr/lib/sysimage/rpm/.rpm.lock", Files: files}
 }
 
 func writeFixture(t *testing.T, i Inspector, name, data string, mode os.FileMode) {

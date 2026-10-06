@@ -119,7 +119,7 @@ func TestControllerConfirmationUsesSetupScope(t *testing.T) {
 	confirmation := NewConfirmation(func(context.Context, []byte) (int, error) { return 0, errors.New("unexpected input") }, &out, func() (bool, error) { return false, nil })
 	err := confirmation.Confirm(context.Background(), "setup", "this host")
 	diagnostics := diagnostics.Of(err)
-	if len(diagnostics) != 1 || diagnostics[0].Code != "controller.setup" || !strings.Contains(diagnostics[0].Message, "--yes") || out.Len() != 0 {
+	if len(diagnostics) != 1 || diagnostics[0].Code != "controller.setup" || !strings.Contains(diagnostics[0].Remediation, "--yes") || out.Len() != 0 {
 		t.Fatal(diagnostics, out.String())
 	}
 }

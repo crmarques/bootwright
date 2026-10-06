@@ -551,6 +551,10 @@ func (HostCapability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Qui
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its machines are probed in this removal"}, nil
 }
 
+// ProbesQuiescence says a guest's removal is gated on its domain being shut
+// off, which only the host can show.
+func (MachineCapability) ProbesQuiescence() bool { return true }
+
 // Quiescent proves this machine is not running. Only a domain the hypervisor
 // reports shut off is idle: paused, suspended and crashed domains still hold
 // the memory and disks the removal would delete. A hypervisor that will not
@@ -564,7 +568,7 @@ func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe)
 	if err != nil {
 		return lifecycle.Quiescence{}, err
 	}
-	stop := "bootwright machine stop --name " + request.Identity.Object
+	stop := "bootwright machine stop --context " + execution.Context + " --name " + request.Identity.Object
 	result, err := c.run(ctx, execution, "observe", request)
 	if err != nil {
 		return unprovedStop("its power state could not be read", stop), nil

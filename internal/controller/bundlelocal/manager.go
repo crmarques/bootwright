@@ -19,6 +19,15 @@ import (
 
 type bundleProbe func(context.Context, prerequisites.BundleArea, prerequisites.Definition) error
 
+// closureRecord is what one resolved definition's bundle holds: the bootstrap
+// it projects, the sources that projection is built from, and the native
+// packages attributable to it as retained sources.
+type closureRecord struct {
+	Bootstrap *prerequisites.BootstrapDefinition
+	Baseline  []prerequisites.DependencySource
+	Native    []prerequisites.NativePackage
+}
+
 // Manager has no filesystem authority of its own. Its callbacks receive only
 // the invocation-scoped bundle area while Workspace holds coordination.
 type Manager struct {
@@ -47,7 +56,7 @@ func (m *Manager) Inspect(ctx context.Context, area prerequisites.BundleArea, de
 	}
 	// A sealed bundle was verified byte for byte and probed when it was
 	// published; its readiness confirms only that the published files remain.
-	if location.Sealed && record.Bootstrap != nil {
+	if location.Sealed {
 		inspection, err = presentFiles(ctx, area, record, definition.Tools)
 		return inspection, err
 	}
@@ -77,7 +86,7 @@ func (m *Manager) Validate(definition prerequisites.Definition) error {
 // by size, the published projection by file count and total bytes, the
 // collection documentation that count leaves out, the private interpreter,
 // and each target tool's source and files. It reads no bytes.
-func presentFiles(ctx context.Context, area prerequisites.BundleArea, record catalogRecord, tools []prerequisites.ToolDefinition) (prerequisites.BundleInspection, error) {
+func presentFiles(ctx context.Context, area prerequisites.BundleArea, record closureRecord, tools []prerequisites.ToolDefinition) (prerequisites.BundleInspection, error) {
 	if err := ctx.Err(); err != nil {
 		return prerequisites.BundleInspection{}, err
 	}
@@ -236,7 +245,7 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 	return after, nil
 }
 
-func (m *Manager) acquireSources(ctx context.Context, area, retained prerequisites.BundleArea, record catalogRecord, entries map[string]prerequisites.BundleEntry, projected *projection, egress prerequisites.SetupEgress, acquiring func(string, int)) error {
+func (m *Manager) acquireSources(ctx context.Context, area, retained prerequisites.BundleArea, record closureRecord, entries map[string]prerequisites.BundleEntry, projected *projection, egress prerequisites.SetupEgress, acquiring func(string, int)) error {
 	for index, source := range record.Baseline {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -327,62 +336,23 @@ func publishDocumentation(ctx context.Context, area prerequisites.BundleArea, pr
 	return nil
 }
 
-func validateDefinition(definition prerequisites.Definition) (catalogRecord, error) {
-	if definition.Bootstrap != nil {
-		if err := prerequisites.ValidateResolvedDefinition(definition); err != nil {
-			return catalogRecord{}, err
-		}
-		bootstrap := definition.Bootstrap
-		// The provided execution profile is checked first because no local
-		// reprojection can repair it, so a resolution failing both must not be
-		// reported as the automation revision a host can settle by itself.
-		if err := qualifiedFoundation(bootstrap); err != nil {
-			return catalogRecord{}, err
-		}
-		if bootstrap.AutomationDigest != ansible.Digest() {
-			return catalogRecord{}, errors.Join(prerequisites.ErrBootstrapIncompatible, prerequisites.ErrAutomationSuperseded, bundleFailure("retained bootstrap automation is superseded by the current executable"))
-		}
-		record := catalogRecord{Bootstrap: bootstrap, PythonVersion: bootstrap.PythonVersion, AnsibleVersion: bootstrap.AnsibleVersion, Baseline: slices.Clone(bootstrap.Sources)}
-		if definition.Native != nil {
-			record.Native = []nativeRecord{{Packages: slices.Clone(definition.Native.Packages)}}
-		}
-		return record, nil
+// validateDefinition admits only a resolved definition: a bundle holds the
+// closure one resolution froze, and no other identity names a bundle.
+func validateDefinition(definition prerequisites.Definition) (closureRecord, error) {
+	if err := prerequisites.ValidateResolvedDefinition(definition); err != nil {
+		return closureRecord{}, err
 	}
-	record, _, err := compiledCatalog()
-	if err != nil {
-		return record, err
+	bootstrap := definition.Bootstrap
+	// The provided execution profile is checked first because no local
+	// reprojection can repair it, so a resolution failing both must not be
+	// reported as the automation revision a host can settle by itself.
+	if err := qualifiedFoundation(bootstrap); err != nil {
+		return closureRecord{}, err
 	}
-	for _, tool := range definition.Tools {
-		if err := validateFrozenTool(tool); err != nil {
-			return record, err
-		}
+	if bootstrap.AutomationDigest != ansible.Digest() {
+		return closureRecord{}, errors.Join(prerequisites.ErrBootstrapIncompatible, prerequisites.ErrAutomationSuperseded, bundleFailure("retained bootstrap automation is superseded by the current executable"))
 	}
-	for _, native := range record.Native {
-		platform := prerequisites.Platform{OS: native.OS, Release: native.Release, Architecture: "amd64"}
-		expected, err := (Catalog{}).Select(platform, definition.NativeRequirements)
-		if err != nil {
-			continue
-		}
-		if definition.BaseCatalogDigest != "" || len(definition.Tools) != 0 {
-			expected, err = prerequisites.WithTools(expected, definition.Tools)
-			if err != nil {
-				return record, err
-			}
-		}
-		if !equalDefinition(expected, definition) {
-			continue
-		}
-		// Only sources from this selected native closure are attributable to
-		// the bundle. Other platforms and unselected optional packages remain
-		// unexpected content even when present in the compiled catalog.
-		native.Packages, err = selectedNativePackages(native, definition.NativeRequirements)
-		if err != nil {
-			return record, err
-		}
-		record.Native = []nativeRecord{native}
-		return record, nil
-	}
-	return record, bundleFailure("bundle definition differs from its exact compiled native and frozen target tool closure")
+	return closureRecord{Bootstrap: bootstrap, Baseline: slices.Clone(bootstrap.Sources), Native: slices.Clone(definition.Native.Packages)}, nil
 }
 
 // qualifiedFoundation admits a retained bootstrap against the provided
@@ -390,7 +360,7 @@ func validateDefinition(definition prerequisites.Definition) (catalogRecord, err
 // evidence rather than retained content, so a mismatch is a plain
 // incompatibility no reprojection can settle.
 func qualifiedFoundation(bootstrap *prerequisites.BootstrapDefinition) error {
-	foundation, _, err := compiledCatalog()
+	foundation, err := compiledCatalog()
 	if err != nil {
 		return err
 	}
@@ -451,22 +421,7 @@ func (m *Manager) Rebase(ctx context.Context, area prerequisites.BundleArea, ret
 	return prerequisites.CanonicalBootstrap(retained)
 }
 
-func equalDefinition(a, b prerequisites.Definition) bool {
-	return a.CatalogDigest == b.CatalogDigest && a.BaseCatalogDigest == b.BaseCatalogDigest &&
-		a.NativeRequirements == b.NativeRequirements && a.PythonVersion == b.PythonVersion && a.AnsibleVersion == b.AnsibleVersion &&
-		slices.Equal(a.Sources, b.Sources) && equalExecution(a.Execution, b.Execution) && equalRuntime(a.Runtime, b.Runtime) &&
-		slices.EqualFunc(a.Tools, b.Tools, func(a, b prerequisites.ToolDefinition) bool {
-			return a.Kind == b.Kind && a.Version == b.Version && a.Compatibility == b.Compatibility &&
-				a.Archive == b.Archive && a.Source == b.Source && slices.Equal(a.Files, b.Files)
-		})
-}
-
-func equalRuntime(a, b prerequisites.RuntimeRequirement) bool {
-	return a.Version == b.Version && a.LockPath == b.LockPath && a.SELinuxMode == b.SELinuxMode &&
-		slices.Equal(a.Files, b.Files) && slices.Equal(a.Links, b.Links)
-}
-
-func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record catalogRecord, selectedTools ...[]prerequisites.ToolDefinition) (prerequisites.BundleInspection, map[string]prerequisites.BundleEntry, error) {
+func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record closureRecord, selectedTools ...[]prerequisites.ToolDefinition) (prerequisites.BundleInspection, map[string]prerequisites.BundleEntry, error) {
 	entries, err := bundleInventory(ctx, area)
 	if err != nil {
 		return prerequisites.BundleInspection{}, nil, err
@@ -499,25 +454,23 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record cat
 			return prerequisites.BundleInspection{}, entries, err
 		}
 	}
-	for _, native := range record.Native {
-		for _, pkg := range native.Packages {
-			name := sourcePath(pkg.Source)
-			entry, found := entries[name]
-			if !found {
-				continue
-			}
-			if entry.Directory || entry.Executable || entry.Size != pkg.Source.Bytes {
-				return prerequisites.BundleInspection{}, entries, nil
-			}
-			data, err := area.Read(ctx, name, int(pkg.Source.Bytes))
-			if err != nil {
-				return prerequisites.BundleInspection{}, entries, err
-			}
-			if !approvedBytes(pkg.Source, data) {
-				return prerequisites.BundleInspection{}, entries, nil
-			}
-			expected[name] = projectedFile{data: data}
+	for _, pkg := range record.Native {
+		name := sourcePath(pkg.Source)
+		entry, found := entries[name]
+		if !found {
+			continue
 		}
+		if entry.Directory || entry.Executable || entry.Size != pkg.Source.Bytes {
+			return prerequisites.BundleInspection{}, entries, nil
+		}
+		data, err := area.Read(ctx, name, int(pkg.Source.Bytes))
+		if err != nil {
+			return prerequisites.BundleInspection{}, entries, err
+		}
+		if !approvedBytes(pkg.Source, data) {
+			return prerequisites.BundleInspection{}, entries, nil
+		}
+		expected[name] = projectedFile{data: data}
 	}
 	for name, file := range projected.files {
 		expected[name] = file

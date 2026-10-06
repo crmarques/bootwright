@@ -34,9 +34,12 @@ func (p *pinsByName) PinnedIdentity(name string, proved []lifecycle.BlockEvidenc
 // physical metal-03, in that frozen order, straight through its adapter call,
 // beneath the refusal that stops a physical apply before it, and reports the
 // pins that reached the adapter.
+const mixedRunContext = "lab-b"
+
 func mixedRun(t *testing.T, operation string, capability InstallCapability) (map[string]string, *fakeRunner, error) {
 	t.Helper()
 	execution, request := installExecution(t, singleNodeCatalog(), testDigest)
+	execution.Context = mixedRunContext
 	request.Nodes = []Node{
 		{Machine: "metal-01", Name: "master-0", Physical: true, Substrate: "baremetal"},
 		request.Nodes[0],

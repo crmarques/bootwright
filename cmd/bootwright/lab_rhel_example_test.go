@@ -474,18 +474,34 @@ func (p *labControllerPorts) Identity(context.Context) (controller.InstalledHost
 	return p.identity, nil
 }
 
-func (p *labControllerPorts) Runtime(context.Context, prerequisites.RuntimeRequirement) (prerequisites.RuntimeInspection, error) {
-	return prerequisites.RuntimeInspection{Present: true, Ready: false}, nil
+func (p *labControllerPorts) Admit(prerequisites.Platform) error { return nil }
+
+// labResolution is the dependency resolution setup would run. Neither a dry
+// run nor preflight reaches it, so every call is an effect.
+type labResolution struct{ ports *labControllerPorts }
+
+func (r labResolution) Resolve(context.Context, prerequisites.Platform, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.BootstrapDefinition, []diagnostics.Diagnostic, error) {
+	r.ports.effects++
+	return prerequisites.BootstrapDefinition{}, nil, errors.New("unexpected bootstrap resolution")
 }
 
-// Setup admits the context-independent closure only. The lab example libvirt
-// client is selected by its desired state, so it reaches the controller stage
-// rather than this catalog.
-func (p *labControllerPorts) Select(_ prerequisites.Platform, requirements prerequisites.NativeRequirements) (prerequisites.Definition, error) {
-	if !requirements.ContainerRuntime || requirements.LibvirtClient {
-		return prerequisites.Definition{}, errors.New("setup must select the container runtime without the libvirt client")
-	}
-	return prerequisites.Definition{CatalogDigest: strings.Repeat("a", 64), PythonVersion: "3.13.15", AnsibleVersion: "2.21.4", Runtime: prerequisites.RuntimeRequirement{Version: "5.8.4"}}, nil
+// labNative is the host's package manager. Setup's closure is not resolved
+// yet and this host is Fedora, so preflight asks it nothing.
+type labNative struct{ ports *labControllerPorts }
+
+func (n labNative) Resolve(context.Context, prerequisites.Platform, prerequisites.NativeRequirements, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
+	n.ports.effects++
+	return prerequisites.NativeResolvedPlan{}, errors.New("unexpected native resolution")
+}
+
+func (n labNative) Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
+	n.ports.effects++
+	return prerequisites.NativePresence{}, errors.New("unexpected native inspection")
+}
+
+func (n labNative) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
+	n.ports.effects++
+	return prerequisites.OperatorPresence{}, errors.New("unexpected operator inspection")
 }
 
 func (p *labControllerPorts) ValidateEgress(egress prerequisites.SetupEgress) error {
@@ -543,7 +559,10 @@ func labContextServices(t *testing.T) (cli.Services, string, *labControllerPorts
 	}
 	options := testContextWiring(t, root)
 	options.Repository, options.Workspace = repository, repository
-	options.Controller = controllerDependencies{Storage: repository, Host: ports, Catalog: ports, Bundle: ports, Tools: labToolCatalog{ports}}
+	options.Controller = controllerDependencies{
+		Storage: repository, Host: ports, Catalog: ports, Bundle: ports, Tools: labToolCatalog{ports},
+		Bootstrap: labResolution{ports}, Native: labNative{ports}, NativeInspector: labNative{ports},
+	}
 	return assembleServices(options), input, ports
 }
 

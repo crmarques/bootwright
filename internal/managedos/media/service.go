@@ -241,7 +241,7 @@ func (s Service) obtain(ctx context.Context, stage Stage, name string, source So
 		return managedos.MediaEntry{}, err
 	}
 	if staged.Size != retained.Size || staged.SHA256 != retained.SHA256 || staged.SHA256 != expected {
-		return managedos.MediaEntry{}, failure("the image retained for "+name+" no longer holds the bytes it verified",
+		return managedos.MediaEntry{}, failure("the image retained for "+name+" no longer holds the bytes it verified, so it was removed",
 			"repeat the command to acquire it again")
 	}
 	return managedos.MediaEntry{Name: name, Size: staged.Size, SHA256: staged.SHA256, Source: retained.Source, Added: s.now()}, nil
@@ -249,15 +249,17 @@ func (s Service) obtain(ctx context.Context, stage Stage, name string, source So
 
 // unpublished reports a publication that did not happen. A pinned add whose
 // publication met another command's lock first retains its verified stage, so
-// repeating the command publishes it without acquiring it again; a stage it
-// cannot retain is removed like any other, and the lock's refusal stands.
+// repeating the command re-verifies it and publishes it without acquiring it
+// again; a stage it cannot retain is removed like any other, and the lock's
+// refusal stands. The repetition promises no publication outright, because a
+// retained stage rewritten meanwhile fails that re-verification and is removed.
 func unpublished(ctx context.Context, err error, stage Stage, record []byte, name, expected string) error {
 	if !errors.Is(err, ErrBusy) || expected == "" || stage.Retain(ctx, record) != nil {
 		return err
 	}
 	return diagnostics.NewFailureWithRemediation("lifecycle.lease",
 		"another Bootwright command holds the media store, so image "+name+" was verified but not published", "",
-		"repeat this command once that command finishes: it publishes the verified image without acquiring it again; "+
+		"repeat this command once that command finishes: it re-verifies the image it retained and publishes it without acquiring it again; "+
 			"or discard it with bootwright media delete --name "+name)
 }
 

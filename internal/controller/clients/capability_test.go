@@ -122,23 +122,53 @@ func (f *fakeTools) Present(context.Context, prerequisites.BundleArea, []prerequ
 }
 
 type fakeNative struct {
-	plan     prerequisites.NativeResolvedPlan
-	ready    bool
-	resolves int
-	checks   int
+	plan       prerequisites.NativeResolvedPlan
+	ready      bool
+	resolves   int
+	checks     int
+	resolveErr error
+	// requirements is every native transaction the stage asked to solve, and
+	// checked every plan whose presence it asked about, by digest.
+	requirements []prerequisites.NativeRequirements
+	checked      []string
+	// operator answers OperatorRoots, which operators counts.
+	operator  prerequisites.OperatorPresence
+	operators int
+	// absent names the root keys a ready host still lacks.
+	absent map[string]bool
 }
 
-func (f *fakeNative) Resolve(context.Context, prerequisites.Platform, prerequisites.NativeRequirements, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
+func (f *fakeNative) Resolve(_ context.Context, _ prerequisites.Platform, requirements prerequisites.NativeRequirements, _ controller.DependencyVersions, _ prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
 	f.resolves++
+	f.requirements = append(f.requirements, requirements)
+	if f.resolveErr != nil {
+		return prerequisites.NativeResolvedPlan{}, f.resolveErr
+	}
 	return f.plan, nil
 }
 
-func (f *fakeNative) Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
+// Check answers as the provided package manager does: every root of the plan
+// installed when the host is ready, and none otherwise.
+func (f *fakeNative) Check(_ context.Context, plan prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
 	f.checks++
+	f.checked = append(f.checked, plan.Digest)
 	if !f.ready {
 		return prerequisites.NativePresence{}, nil
 	}
-	return prerequisites.NativePresence{Ready: true, Installed: []prerequisites.NativeRootPresence{{Key: "libvirt"}}}, nil
+	presence := prerequisites.NativePresence{Ready: true}
+	for _, root := range plan.Roots {
+		if f.absent[root.Key] {
+			presence.Ready = false
+			continue
+		}
+		presence.Installed = append(presence.Installed, prerequisites.NativeRootPresence{Key: root.Key, Package: root.Package})
+	}
+	return presence, nil
+}
+
+func (f *fakeNative) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
+	f.operators++
+	return f.operator, nil
 }
 
 type fakeInstaller struct {
@@ -211,8 +241,14 @@ func source(id, url string) prerequisites.DependencySource {
 // than a stand-in.
 func testBootstrap(t *testing.T) prerequisites.BootstrapDefinition {
 	t.Helper()
+	return bootstrapOn(t, testPlatform)
+}
+
+// bootstrapOn is that foundation as setup froze it on another platform.
+func bootstrapOn(t *testing.T, platform prerequisites.Platform) prerequisites.BootstrapDefinition {
+	t.Helper()
 	bootstrap, err := prerequisites.CanonicalBootstrap(prerequisites.BootstrapDefinition{
-		Format: "bootwright.controller.bootstrap-v1", Platform: testPlatform,
+		Format: "bootwright.controller.bootstrap-v1", Platform: platform,
 		PythonIntent: "latest", AnsibleIntent: "latest", PythonVersion: "3.14.7", AnsibleVersion: "2.21.4",
 		PythonExecutable: "python/bin/python3.14", SitePackages: "python/lib/python3.14/site-packages/",
 		Sources: []prerequisites.DependencySource{
@@ -246,13 +282,19 @@ func resolvedDefinition(t *testing.T, requirements prerequisites.NativeRequireme
 // the same releases under a new resolution digest.
 func resolvedFrom(t *testing.T, requirements prerequisites.NativeRequirements, inventory string) prerequisites.Definition {
 	t.Helper()
-	plan := nativePlanFor(t, requirements)
+	return resolvedOn(t, testPlatform, requirements, inventory)
+}
+
+// resolvedOn is a resolution solved on another platform.
+func resolvedOn(t *testing.T, platform prerequisites.Platform, requirements prerequisites.NativeRequirements, inventory string) prerequisites.Definition {
+	t.Helper()
+	plan := nativePlanOn(t, platform, requirements)
 	plan.BeforeSHA256, plan.AfterSHA256 = inventory, inventory
 	plan, err := prerequisites.CanonicalNativePlan(plan)
 	if err != nil {
 		t.Fatalf("native plan fixture: %v", err)
 	}
-	definition, err := prerequisites.NewResolvedDefinition(testBootstrap(t), plan)
+	definition, err := prerequisites.NewResolvedDefinition(bootstrapOn(t, platform), plan)
 	if err != nil {
 		t.Fatalf("resolution fixture: %v", err)
 	}
@@ -268,25 +310,42 @@ func setupDefinition(t *testing.T) prerequisites.Definition {
 // is what a host that already carries its roots resolves to.
 func nativePlanFor(t *testing.T, requirements prerequisites.NativeRequirements) prerequisites.NativeResolvedPlan {
 	t.Helper()
+	return nativePlanOn(t, testPlatform, requirements)
+}
+
+// nativePlanOn is that transaction solved by the platform's own solver, with
+// every root the selected requirements name.
+func nativePlanOn(t *testing.T, platform prerequisites.Platform, requirements prerequisites.NativeRequirements) prerequisites.NativeResolvedPlan {
+	t.Helper()
+	solver, version, release, repository := "dnf5", "5.2.0", "1.fc43", "https://packages.example.test/fedora"
+	if platform.OS == "rhel" {
+		solver, version, release, repository = "dnf4", "4.14.0", "1.el9", "https://packages.example.test/rhel"
+	}
 	plan := prerequisites.NativeResolvedPlan{
-		Format: "bootwright.native-plan-v1", Platform: testPlatform, Solver: "dnf5", SolverVersion: "5.2.0",
+		Format: "bootwright.native-plan-v1", Platform: platform, Solver: solver, SolverVersion: version,
 		Requests: controller.DefaultDependencyVersions(), Requirements: requirements,
 		Roots: []prerequisites.NativeRoot{}, Packages: []prerequisites.NativePackage{},
-		Repositories: []prerequisites.NativeRepository{{ID: "base", BaseURL: "https://packages.example.test/fedora", MetadataSHA256: strings.Repeat("d", 64)}},
+		Repositories: []prerequisites.NativeRepository{{ID: "base", BaseURL: repository, MetadataSHA256: strings.Repeat("d", 64)}},
 		Actions:      []prerequisites.NativeAction{},
 		BeforeSHA256: strings.Repeat("e", 64), AfterSHA256: strings.Repeat("e", 64),
 	}
-	roots := []struct{ key, name string }{{"nmstate", "nmstate"}, {"openssh", "openssh-clients"}, {"podman", "podman"}}
+	keys := []string{"nmstate", "openssh", "podman"}
 	if requirements.LibvirtClient {
-		roots = append(roots, struct{ key, name string }{"libvirt", "libvirt-client"})
+		keys = append(keys, "libvirt")
+	}
+	if requirements.Hypervisor {
+		keys = append(keys, "hypervisor")
 	}
 	if requirements.InstallerMedia {
-		roots = append(roots, struct{ key, name string }{"installer-media", "lorax"}, struct{ key, name string }{"installer-media", "xorriso"})
+		keys = append(keys, "installer-media")
 	}
-	for _, root := range roots {
-		identity := prerequisites.NativeIdentity{Name: root.name, Version: "1.2.3", Release: "1.fc43", Architecture: "x86_64"}
-		plan.Roots = append(plan.Roots, prerequisites.NativeRoot{Key: root.key, Requested: "latest", Package: identity})
-		plan.Packages = append(plan.Packages, prerequisites.NativePackage{Name: identity.Name, Version: identity.Version, Release: identity.Release, Architecture: identity.Architecture, Signer: strings.Repeat("f", 40), Source: source(root.name, "https://packages.example.test/fedora/"+root.name+".rpm")})
+	names := prerequisites.NativeRootNames()
+	for _, key := range keys {
+		for _, name := range names[key] {
+			identity := prerequisites.NativeIdentity{Name: name, Version: "1.2.3", Release: release, Architecture: "x86_64"}
+			plan.Roots = append(plan.Roots, prerequisites.NativeRoot{Key: key, Requested: "latest", Package: identity})
+			plan.Packages = append(plan.Packages, prerequisites.NativePackage{Name: identity.Name, Version: identity.Version, Release: identity.Release, Architecture: identity.Architecture, Signer: strings.Repeat("f", 40), Source: source(name, repository+"/"+name+".rpm")})
+		}
 	}
 	canonical, err := prerequisites.CanonicalNativePlan(plan)
 	if err != nil {
@@ -689,6 +748,41 @@ func TestStageFailuresNameTheStageThatSettlesThem(t *testing.T) {
 	}
 }
 
+// The native resolver and the controller Ansible installer are shared with
+// setup too. A failure either raises inside this stage keeps its own code and
+// names this stage, not setup, as what settles it.
+func TestStageFailuresKeepTheirCodesAndNameTheStage(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		code         string
+		capabilities []string
+		objects      []api.Object
+		tools        *fakeTools
+		native       *fakeNative
+		installer    *fakeInstaller
+	}{
+		{name: "native resolution", code: "controller.setup", capabilities: []string{"container-runtime", "libvirt"},
+			tools: &fakeTools{complete: true}, installer: &fakeInstaller{},
+			native: &fakeNative{resolveErr: &prerequisites.ScopedFailure{Code: "controller.setup", Message: "the native solver failed", Correction: "Restore the provided OS package-manager foundation and approved repository access"}}},
+		{name: "controller Ansible", code: "controller.unknown", capabilities: []string{"container-runtime"}, objects: []api.Object{cluster()},
+			tools: &fakeTools{resolved: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}}, native: &fakeNative{},
+			installer: &fakeInstaller{outcome: "unknown", err: &prerequisites.ScopedFailure{Code: "controller.unknown", Message: "the Ansible operation has no complete result", Correction: "Preserve the controller state and restore the qualified controller execution environment"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			capability := New(test.tools, test.native, test.native, test.installer)
+			block := planBlock(t, capability, stateOf(append([]api.Object{environment(), machine(test.capabilities...)}, test.objects...)...), reconciliation.Apply)
+			execution := newRecorder(&fakeArea{}).execution(t, block, hostState(t))
+			execution.Stage.Setup.Context = prerequisites.SetupContext{Name: "lab", Revision: "rev-" + strings.Repeat("2", 32)}
+			_, err := capability.Apply(context.Background(), execution)
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != test.code || reported[0].Source != nil ||
+				!strings.HasSuffix(reported[0].Remediation, ", then run bootwright apply --stage controller --context lab.") {
+				t.Fatalf("stage failure: %+v", reported)
+			}
+		})
+	}
+}
+
 // A block frozen by another build must not be reinterpreted by this one.
 func TestDecodeRefusesAnotherRequestVersion(t *testing.T) {
 	_, err := DecodeRequest([]byte(`{"egress":{"httpProxy":"","httpsProxy":"","noProxy":[]},"libvirt":"","libvirtClient":false,"machine":"controller","tools":[],"version":"controller-clients-v0"}`))
@@ -730,7 +824,8 @@ func TestApplyNamesTheResolutionsItsNewSolveSupersedes(t *testing.T) {
 	again := resolvedDefinition(t, libvirt)
 	earlier, later := resolvedFrom(t, libvirt, strings.Repeat("1", 64)), resolvedFrom(t, libvirt, strings.Repeat("2", 64))
 	media := resolvedDefinition(t, prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true, InstallerMedia: true})
-	state.RetainedDefinitions = []prerequisites.Definition{*state.Receipt.Definition, again, earlier, media, later}
+	mediaOnly := resolvedDefinition(t, prerequisites.NativeRequirements{ContainerRuntime: true, InstallerMedia: true})
+	state.RetainedDefinitions = []prerequisites.Definition{*state.Receipt.Definition, again, earlier, media, mediaOnly, later}
 	recorder := newRecorder(&fakeArea{})
 	if _, err := capability.Apply(context.Background(), recorder.execution(t, block, state)); err == nil {
 		t.Fatal("an unproved native postcondition reported success")

@@ -440,15 +440,23 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*MutationRe
 	return result, nil
 }
 
+// confirm returns the confirmer's own refusal unchanged, which names the
+// Secret, the context and the command that repeats the change with --yes.
 func (s Service) confirm(ctx context.Context, action, contextName, name, outcome, command string) error {
 	if s.confirmer != nil {
-		err := s.confirmer.Confirm(ctx, action, name)
+		var err error
+		if confirmer, ok := s.confirmer.(ContextConfirmer); ok {
+			err = confirmer.ConfirmIn(ctx, action, name, contextName)
+		} else {
+			err = s.confirmer.Confirm(ctx, action, name)
+		}
 		if err == nil {
 			return nil
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		return err
 	}
 	return secrets.Refusal("store.conflict", "Secret "+name+" was not "+outcome+": the change was declined or could not be confirmed at a terminal", contextName, name,
 		"review it with "+secrets.Command(contextName, "check")+", then run "+command)

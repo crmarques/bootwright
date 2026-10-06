@@ -7,7 +7,6 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type Installer struct {
@@ -177,6 +176,8 @@ func actionResult(outcome string, intentRecorded bool) prerequisites.ActionResul
 	return prerequisites.ActionResult{Outcome: outcome, Evidence: evidence}
 }
 
+// failure keeps its code in every scope. Setup and a context's controller
+// stage share this adapter, so the scope that met it names what settles it.
 func failure(code, message string) error {
-	return diagnostics.NewFailureWithRemediation(code, message, "", "Preserve the exact dependency receipt and restore the qualified execution environment before retrying setup.")
+	return &prerequisites.ScopedFailure{Code: code, Message: message, Correction: "Preserve the controller state and restore the qualified controller execution environment"}
 }

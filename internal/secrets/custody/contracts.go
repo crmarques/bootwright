@@ -24,8 +24,15 @@ type Materializer interface {
 	Validate(context.Context, secrets.Declaration, secrets.Material) error
 }
 
+// Confirmer is the confirmation capability the composition supplies. Custody
+// asks through its ContextConfirmer when it has one, so a prompt names the
+// Secret and the context it belongs to.
 type Confirmer interface {
 	Confirm(context.Context, string, string) error
+}
+
+type ContextConfirmer interface {
+	ConfirmIn(ctx context.Context, action, object, contextName string) error
 }
 
 type Compiler interface {

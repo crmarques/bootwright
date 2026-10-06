@@ -7,14 +7,18 @@ Plan
   2. realize the libvirt host of lab-libvirt on controller [substrates] [start] [after 1]
        create-libvirt-pool lab-libvirt
        create-libvirt-network lab
-  3. realize the virtual machine rhel-01 and its controller [machines] [not selected] [after 2]
+  3. install the operating system of metal-01 [machines] [data-loss] [not selected] [after 1]
+       install-operating-system metal-01
+       power-on metal-01
+  4. realize the virtual machine rhel-01 and its controller [machines] [not selected] [after 2]
        create-libvirt-domain rhel-01
-  4. install the operating system of rhel-01 [machines] [deferred: waits on machine-rhel-01] [after 3]
+  5. install the operating system of rhel-01 [machines] [deferred: waits on machine-rhel-01] [after 4]
        power-on rhel-01
 
   Stages       infra-components, substrates
-  Starts       2 of 4 blocks, 2 deferred
-  Concurrency  4 waves, up to 1 step at once
+  Starts       2 of 5 blocks, 3 deferred
+  Concurrency  4 waves, widest 2 steps; this build starts 1 block at a time
+  Requires     --authorize data-loss (step 3)
 operation: none
 verb: plan
 state: preview

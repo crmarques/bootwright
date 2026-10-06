@@ -121,7 +121,7 @@ code evolves:
 | Harness | Selected by |
 | --- | --- |
 | Current-OS native metadata resolution and frozen file verification | `BOOTWRIGHT_NATIVE_RESOLVE_QUALIFY=1`, `BOOTWRIGHT_NATIVE_INSPECT_PLAN` |
-| Bundle acquisition, projection and readiness against real sources | `-tags controllerqualification`, `BOOTWRIGHT_BUNDLE_FIXTURES` |
+| Bundle acquisition, projection and readiness of a resolved closure against real sources | `-tags controllerqualification`, `BOOTWRIGHT_RESOLVED_BOOTSTRAP_OUTPUT`, `BOOTWRIGHT_RESOLVED_NATIVE_INPUT`, `BOOTWRIGHT_BOOTSTRAP_SOURCE_FIXTURES` |
 | Bootstrap publisher resolution and root-invocation isolation | `-tags controllerqualification`, `BOOTWRIGHT_QUALIFY_DYNAMIC_BOOTSTRAP`, `BOOTWRIGHT_QUALIFY_ROOT_RESOLVER` |
 | Ansible `controller_native` target, which builds an RPM and drives the host package manager | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
 | Ansible `controller_prerequisites` target, which runs the shipped setup playbook and role over the real runner protocol against the host inventory | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
@@ -132,9 +132,20 @@ Executed native installation is not covered by any of these; it is a manual
 
 ## Qualified hosts and images
 
-`setup` qualifies Fedora 43 and RHEL 9.8 on Linux/amd64: the compiled catalog
-`internal/controller/bundlelocal/catalog.json` records exact dependency
-artifacts for those releases only, and any other release refuses.
+`setup` admits Fedora 43 and RHEL 9.8 on Linux/amd64 and refuses any other
+release. The compiled catalog `internal/controller/bundlelocal/catalog.json`
+holds each admitted release's provided execution foundation, the loader, glibc
+and libgcc files the private interpreter runs on, pinned by digest; setup
+resolves every dependency release itself, and the catalog pins none.
+
+Fedora 43 has run: the [acceptance ledger](acceptance.md#ledger) records setup
+and the controller stage on it. RHEL 9.8 is admitted but not yet run. No ledger
+row records setup or the controller stage on it, so its native path has never
+executed: the DNF4 solver under the host's Python 3.9, its rpm database
+snapshot and the publisher key import that verifies package signatures. Until a
+ledger row records it, a RHEL 9.8 controller must hold exactly the glibc and
+libgcc builds whose files the compiled execution foundation pins; a host with
+any other build refuses before the private interpreter runs.
 
 Setup's private runtime is qualified for `ansible-core` 2.21 at its latest
 stable patch, on controller CPython 3.12, 3.13 or 3.14 at the latest patch of
@@ -148,8 +159,8 @@ runs their unit tests under it. The ansible-core
 minor is one constant, in `internal/controller/prerequisites/qualified.go`.
 `TestQualifiedAnsibleMinorAgreesEverywhere` holds every statement of it
 together: the collection's `requires_ansible`, both `ansible-core` pins, the
-ansible-lint supported list, the sanity ignore file, the compiled catalog and
-this paragraph. Qualifying another minor changes all of them in one commit.
+ansible-lint supported list, the sanity ignore file and this paragraph.
+Qualifying another minor changes all of them in one commit.
 
 Each managed service runs one container image pinned by content digest in its
 capability's `catalog.go`. All four were resolved from their publisher's

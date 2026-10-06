@@ -48,9 +48,17 @@ func newFixture(t *testing.T, platform ...Platform) *fixture {
 	f.store.owner = f
 	f.bundle.owner = f
 	f.bundle.recoverable = true
-	f.catalog.definition = Definition{CatalogDigest: strings.Repeat("a", 64), PythonVersion: "3.13.15", AnsibleVersion: "2.21.4", Sources: []DependencySource{{ID: "python", URL: "https://artifacts.example.test/python.tar.gz", SHA256: strings.Repeat("b", 64), Bytes: 10}}, Runtime: RuntimeRequirement{Version: "5.8.2"}}
 	f.service = New(&f.store, &f.compiler, &f.host, &f.catalog, &f.bundle, nil, Options{Confirmer: f, Presenter: f})
+	wireResolution(t, f)
 	return f
+}
+
+// withRoute is this fixture's service over the same ports, acquiring
+// context-free work over route.
+func (f *fixture) withRoute(route controller.Route) Service {
+	options := f.service.options
+	options.AmbientRoute = route
+	return New(&f.store, &f.compiler, &f.host, &f.catalog, &f.bundle, f.service.runtime, options)
 }
 
 func (f *fixture) Confirm(ctx context.Context, _, _ string) error {
@@ -477,12 +485,14 @@ func (dummyArea) Verify(context.Context) error                      { return nil
 func (dummyArea) Location(context.Context) (BundleLocation, error)  { return BundleLocation{}, nil }
 func (dummyArea) Entries(context.Context) ([]BundleEntry, error)    { return nil, nil }
 
+// testHost is the installed host. Its runtime is whether the native roots a
+// resolution names are installed, which the native inspector reports.
 type testHost struct {
-	owner                *fixture
-	identity             controller.InstalledHostIdentity
-	platform             Platform
-	runtime              RuntimeInspection
-	identities, runtimes int
+	owner      *fixture
+	identity   controller.InstalledHostIdentity
+	platform   Platform
+	runtime    RuntimeInspection
+	identities int
 }
 
 func (h *testHost) Platform(context.Context) (Platform, error) {
@@ -493,22 +503,17 @@ func (h *testHost) Identity(context.Context) (controller.InstalledHostIdentity, 
 	h.identities++
 	return h.identity, nil
 }
-func (h *testHost) Runtime(context.Context, RuntimeRequirement) (RuntimeInspection, error) {
-	h.runtimes++
-	return h.runtime, nil
-}
 
 type testCatalog struct {
-	definition Definition
-	err        error
-	admitted   []NativeRequirements
+	err      error
+	admitted []Platform
 }
 
 func (c *testCatalog) ValidateEgress(SetupEgress) error { return nil }
 
-func (c *testCatalog) Select(_ Platform, requirements NativeRequirements) (Definition, error) {
-	c.admitted = append(c.admitted, requirements)
-	return c.definition, c.err
+func (c *testCatalog) Admit(platform Platform) error {
+	c.admitted = append(c.admitted, platform)
+	return c.err
 }
 
 type testBundle struct {
@@ -607,7 +612,7 @@ func TestBaselineDryRunHasNoPrivateOrEffectCapabilities(t *testing.T) {
 	if err != nil || result == nil || result.Outcome != "planned" || !result.DryRun {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
-	if !reflect.DeepEqual(f.events, []string{"platform"}) || f.host.identities != 0 || f.host.runtimes != 0 || f.compiler.calls != 0 || f.bundle.inspections != 0 || f.store.writes != 0 {
+	if !reflect.DeepEqual(f.events, []string{"platform"}) || f.host.identities != 0 || f.resolution.inspections != 0 || f.resolution.bootstrapCalls != 0 || f.resolution.nativeCalls != 0 || f.compiler.calls != 0 || f.bundle.inspections != 0 || f.store.writes != 0 {
 		t.Fatalf("dry-run crossed effect boundary: %#v", f)
 	}
 	if result.Checks[1].Status != "unverified" {
@@ -621,7 +626,7 @@ func TestSetupDurableIntentAndReadOnlyNoop(t *testing.T) {
 	if err != nil || result.Outcome != "changed" || !result.PlanPresented || f.store.state.Receipt.Status != "complete" {
 		t.Fatalf("setup=%#v err=%v state=%#v", result, err, f.store.state)
 	}
-	want := []string{"read:", "platform", "present", "confirm", "mutate", "platform", "prepare"}
+	want := []string{"read:", "platform", "resolve-bootstrap", "resolve-native", "read:", "platform", "present", "confirm", "mutate", "platform", "prepare"}
 	if !reflect.DeepEqual(f.events, want) {
 		t.Fatalf("order=%v", f.events)
 	}
@@ -767,7 +772,7 @@ func TestPendingReceiptRejectsChangedCatalogWithoutEffects(t *testing.T) {
 	f := newFixture(t)
 	f.bundle.err = errors.New("failed")
 	_, _ = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
-	f.catalog.definition.CatalogDigest = strings.Repeat("c", 64)
+	f.store.state.Receipt.CatalogDigest = strings.Repeat("c", 64)
 	writes := f.store.writes
 	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if code(err) != "controller.unknown" || f.store.writes != writes || f.bundle.prepares != 1 {
@@ -782,7 +787,7 @@ func TestAnotherPendingReceiptNamesSetupAndNoContext(t *testing.T) {
 	f := newFixture(t)
 	f.bundle.err = errors.New("failed")
 	_, _ = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
-	f.catalog.definition.CatalogDigest = strings.Repeat("c", 64)
+	f.store.state.Receipt.CatalogDigest = strings.Repeat("c", 64)
 	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	reported := diagnostics.Of(err)
 	want := "restore the executable that recorded it and the HTTPS_PROXY, HTTP_PROXY and NO_PROXY values it ran with, then run bootwright setup"
@@ -841,7 +846,7 @@ func TestSetupsOwnReceiptKeepsItsRoute(t *testing.T) {
 		t.Fatalf("setup left no pending receipt: %v", err)
 	}
 	f.bundle.err = nil
-	moved := New(&f.store, &f.compiler, &f.host, &f.catalog, &f.bundle, nil, Options{Confirmer: f, Presenter: f})
+	moved := f.withRoute(controller.Route{})
 	writes := f.store.writes
 	if _, err := moved.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); code(err) != "controller.unknown" || f.store.writes != writes {
 		t.Fatalf("setup resumed its receipt over another route: %v", err)
@@ -968,15 +973,6 @@ func TestMissingNativeDependencyWithExistingPodmanIsPrepared(t *testing.T) {
 	}
 }
 
-func TestConflictingNativeDependencyRefusesBeforeMutation(t *testing.T) {
-	f, installer := explicitRuntimeFixture(t)
-	f.host.runtime = RuntimeInspection{Present: true, Conflict: true}
-	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
-	if code(err) != "controller.unsupported" || installer.calls != 0 || f.store.writes != 0 {
-		t.Fatalf("conflicting native dependency was mutated: %v", err)
-	}
-}
-
 func TestDefiniteNativeRefusalPreservesBundleAndPermitsFreshAttempt(t *testing.T) {
 	f, r := explicitRuntimeFixture(t)
 	r.err = failure("controller.unsupported", "provided native foundation is incompatible", "prepare the qualified foundation")
@@ -1002,13 +998,15 @@ func TestUnknownNativeOutcomeBlocksReinstallUntilPositiveReadiness(t *testing.T)
 	if code(err) != "controller.unknown" || !f.store.state.Receipt.Incomplete() {
 		t.Fatalf("native unknown=%v", err)
 	}
+	// The recorded transaction is recovered, never installed again, and its
+	// recovery completes nothing while the roots it names are missing.
 	_, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
-	if code(err) != "controller.unknown" || r.calls != 1 {
+	if code(err) != "controller.unknown" || r.calls != 1 || r.recovers != 1 || !f.store.state.Receipt.Incomplete() {
 		t.Fatalf("repeated unproved native action=%v", err)
 	}
 	f.host.runtime = RuntimeInspection{Present: true, Ready: true}
 	_, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
-	if err != nil || r.calls != 1 || r.recovers != 1 || f.store.state.Receipt.Status != "complete" {
+	if err != nil || r.calls != 1 || r.recovers != 2 || f.store.state.Receipt.Status != "complete" {
 		t.Fatalf("positive native resolution=%v", err)
 	}
 }
@@ -1275,7 +1273,7 @@ func testRoute(t *testing.T, pairs ...string) controller.Route {
 func ambientFixture(t *testing.T, pairs ...string) *fixture {
 	t.Helper()
 	f := newFixture(t)
-	f.service = New(&f.store, &f.compiler, &f.host, &f.catalog, &f.bundle, nil, Options{Confirmer: f, Presenter: f, AmbientRoute: testRoute(t, pairs...)})
+	f.service = f.withRoute(testRoute(t, pairs...))
 	return f
 }
 
@@ -1385,7 +1383,7 @@ func TestAnInterruptedSetupRefusesAChangedAmbientRoute(t *testing.T) {
 				t.Fatal("the interrupted setup left no receipt to protect")
 			}
 			f.bundle.err = nil
-			f.service = New(&f.store, &f.compiler, &f.host, &f.catalog, &f.bundle, nil, Options{Confirmer: f, Presenter: f, AmbientRoute: testRoute(t, test.resumed...)})
+			f.service = f.withRoute(testRoute(t, test.resumed...))
 			_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 			if code(err) != test.code {
 				t.Fatalf("resumed under %v: %v", test.resumed, err)

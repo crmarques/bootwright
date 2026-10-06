@@ -134,6 +134,10 @@ func (noNative) Check(context.Context, prerequisites.NativeResolvedPlan) (prereq
 	return prerequisites.NativePresence{}, nil
 }
 
+func (noNative) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
+	return prerequisites.OperatorPresence{}, nil
+}
+
 // resolvedSetupFixture completes a setup whose receipt carries the resolved
 // definition the controller stage extends.
 func resolvedSetupFixture(t *testing.T, store *Store, record contexts.Record) {

@@ -12,6 +12,8 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *testing.T) {
@@ -200,5 +202,62 @@ func TestInterruptedOutputFailureStillFinishesWithoutFallback(t *testing.T) {
 	}}).Run(context.Background(), []string{"render", "effective", "--output", "json"})
 	if code != 1 || errOut.Len() != 0 || finishes != 1 {
 		t.Fatal("interrupted output failure", code, errOut.String(), finishes)
+	}
+}
+
+// An apply or destroy interrupted after it registered its operation still
+// writes that operation's result, its logs, the command that continues it and
+// its receipt, which are what the operator continues from, then the interrupt
+// alone, naming that command: what the cancellation made each block report is
+// in the result and its logs. An interrupt with no registered operation keeps
+// the bare diagnostic and writes no result.
+func TestAnInterruptedRegisteredOperationKeepsItsResultAndReceipt(t *testing.T) {
+	interrupted := func(result *lifecycle.OperationResult, path string) (int, string, string) {
+		var cancel context.CancelCauseFunc
+		record := &dispatchRecord{result: commandResult{lifecycleOperation: result}}
+		record.err = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the " + path + " did not complete"}}}
+		record.afterCall = func() { cancel(ErrInterrupted) }
+		var out, errOut bytes.Buffer
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), BeginOperation: func(ctx context.Context) (context.Context, func()) {
+			ctx, cancel = context.WithCancelCause(ctx)
+			return ctx, func() { cancel(nil) }
+		}}).Run(context.Background(), []string{path, "--yes"})
+		return code, out.String(), errOut.String()
+	}
+	for _, path := range []string{"apply", "destroy"} {
+		t.Run(path, func(t *testing.T) {
+			next := "bootwright " + path + " --context lab"
+			result := &lifecycle.OperationResult{
+				Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: path,
+				Blocks: []lifecycle.BlockResult{
+					{ID: "artifact-server-lab", Description: "serve artifacts for lab-artifacts", State: "done"},
+					{ID: "dns-lab", Description: "resolve names for lab-dns", State: "pending"},
+				},
+				LogLocation: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs",
+				NextCommand: next,
+				Receipt:     lifecycle.Receipt{Operation: "op-abc", Verb: path, State: "running", Next: "continue-" + path},
+			}
+			code, out, errOut := interrupted(result, path)
+			verb := strings.ToUpper(path[:1]) + path[1:]
+			want := "[FAIL] " + verb + " running\n\nResult\n" +
+				"  [DONE]     serve artifacts for lab-artifacts\n" +
+				"  [PENDING]  resolve names for lab-dns\n\n" +
+				"  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n" +
+				"  Next  " + next + "\n" +
+				"operation: op-abc\nverb: " + path + "\nstate: running\nnext: continue-" + path + "\n"
+			if code != 130 || out != want || errOut != "[FAIL] runtime.interrupted: operation interrupted; next: "+next+"\n" {
+				t.Fatalf("exit %d\nstdout %q\nwant   %q\nstderr %q", code, out, want, errOut)
+			}
+		})
+	}
+	settled := &lifecycle.OperationResult{
+		Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "destroy", Settled: true,
+		Receipt: lifecycle.Receipt{Operation: "none", Verb: "destroy", State: "done", Next: "none"},
+	}
+	for name, result := range map[string]*lifecycle.OperationResult{"a settled result": settled, "no result": nil} {
+		t.Run(name, func(t *testing.T) {
+			code, out, errOut := interrupted(result, "destroy")
+			assertInterruptOutput(t, code, out, errOut, false)
+		})
 	}
 }

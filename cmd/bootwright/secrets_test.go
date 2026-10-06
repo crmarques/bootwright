@@ -347,3 +347,61 @@ func TestSecretNameReuseCannotExposeAnotherContextIdentity(t *testing.T) {
 		t.Fatal("new identity revealed another context's material")
 	}
 }
+
+// Each secret confirmation names the Secret or the key it would change and the
+// context it acts in, on standard error. A declined or unanswerable one refuses
+// under secret.store.conflict with its reason in the message and the command
+// it confirms, repeated with --yes, as next, and changes nothing.
+func TestConfirmationPromptsNameTheSecretAndTheContext(t *testing.T) {
+	services, repository, input, root := contextFixture(t)
+	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "secret", "encryption", "init")
+	value := addSecretInput(t, t.TempDir(), "value", "synthetic-prompt-canary")
+	contextRun(t, services, 0, "secret", "set", "--name", "payload", "--value-file", value)
+	for _, terminal := range []bool{true, false} {
+		var errOut bytes.Buffer
+		answers := strings.NewReader(strings.Repeat("n\n", 3))
+		deps := testContextWiring(t, root)
+		deps.Repository, deps.Workspace = repository, repository
+		confirmer := cli.NewConfirmation(func(_ context.Context, p []byte) (int, error) { return answers.Read(p) },
+			&errOut, func() (bool, error) { return terminal, nil })
+		for _, probe := range []struct {
+			args                          []string
+			prompt, label, object, remedy string
+		}{
+			{
+				args: []string{"secret", "set", "--name", "payload", "--value-file", value}, label: "secret replacement", object: " [Secret/payload]",
+				prompt: "Confirm replacement of secret payload in context alpha? [y/N] ",
+				remedy: "review it with bootwright secret check --context alpha, then repeat bootwright secret set --context alpha --name payload --value-file " + value + " with --yes",
+			},
+			{
+				args: []string{"secret", "delete", "--name", "payload"}, label: "secret deletion", object: " [Secret/payload]",
+				prompt: "Confirm deletion of secret payload in context alpha? [y/N] ",
+				remedy: "review it with bootwright secret check --context alpha, then repeat bootwright secret delete --context alpha --name payload with --yes",
+			},
+			{
+				args: []string{"secret", "encryption", "rotate"}, label: "key rotation",
+				prompt: "Confirm rotation of the secret encryption key of context alpha? [y/N] ",
+				remedy: "review it, then repeat bootwright secret encryption rotate --context alpha with --yes",
+			},
+		} {
+			errOut.Reset()
+			before := stateFingerprint(t, root)
+			var out bytes.Buffer
+			deps.Confirmer = confirmer.Repeating(probe.args)
+			code := runServices(t.Context(), probe.args, &out, &errOut, assembleServices(deps))
+			prompt, reason := probe.prompt, "was declined; nothing changed"
+			if !terminal {
+				prompt, reason = "", "requires an interactive terminal"
+			}
+			want := prompt + "[FAIL] secret.store.conflict: " + probe.label + " confirmation " + reason + probe.object + "; next: " + probe.remedy + "\n"
+			if code != 1 || out.Len() != 0 || errOut.String() != want {
+				t.Fatalf("%v at a terminal %t = %d, stdout %q\nstderr %q\nwant   %q", probe.args, terminal, code, out.String(), errOut.String(), want)
+			}
+			if !sameFingerprints(before, stateFingerprint(t, root)) {
+				t.Fatalf("a refused %v changed state", probe.args)
+			}
+		}
+	}
+}

@@ -100,22 +100,6 @@ func TestAcquisitionOriginsRejectAuthoritySubstitution(t *testing.T) {
 	}
 }
 
-func TestPublicAcquirerRejectsSourceSubstitutionBeforeTrustOrNetwork(t *testing.T) {
-	source := fixtureSource("unapproved", []byte("synthetic"))
-	if _, err := (Acquirer{}).Acquire(t.Context(), source, prerequisites.SetupEgress{}); err == nil {
-		t.Fatal("public acquisition accepted a source outside the compiled catalog")
-	}
-	definition, err := (Catalog{}).Select(prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, prerequisites.NativeRequirements{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	source = definition.Sources[0]
-	source.URL = "https://files.pythonhosted.org/unapproved-origin"
-	if _, err := (Acquirer{}).Acquire(t.Context(), source, prerequisites.SetupEgress{}); err == nil {
-		t.Fatal("public acquisition accepted a substituted URL with a retained digest")
-	}
-}
-
 func TestExplicitProxyIgnoresAmbientAndMatchesWithoutDNS(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "http://ambient.invalid:3128")
 	t.Setenv("HTTP_PROXY", "http://ambient.invalid:3128")

@@ -221,10 +221,27 @@ func (a *memoryArea) Location(context.Context) (prerequisites.BundleLocation, er
 	return prerequisites.BundleLocation{Sealed: a.sealed}, nil
 }
 
+// closureOf is the closure whose bootstrap projects exactly the payloads of
+// sources beside the embedded automation, as their resolution records it.
+func closureOf(t *testing.T, sources []prerequisites.DependencySource, payloads ...[]byte) closureRecord {
+	t.Helper()
+	projected := newProjection()
+	if err := projected.automation(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for index, data := range payloads {
+		if err := projectSource(t.Context(), projected, index, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bootstrap := &prerequisites.BootstrapDefinition{SitePackages: sitePackages, ProjectionSHA256: projected.identity(), FileCount: len(projected.files), ExpandedBytes: projected.bytes}
+	return closureRecord{Bootstrap: bootstrap, Baseline: sources}
+}
+
 func TestInspectionRequiresCompleteExactProjectionAndAttributablePartialFiles(t *testing.T) {
 	archive := pythonArchive(t, archiveMember{name: "python/bin/python3.13", data: "executable"})
 	wheel := wheelArchive(t, "package/__init__.py")
-	record := catalogRecord{Baseline: []prerequisites.DependencySource{fixtureSource("python", archive), fixtureSource("wheel", wheel)}}
+	record := closureOf(t, []prerequisites.DependencySource{fixtureSource("python", archive), fixtureSource("wheel", wheel)}, archive, wheel)
 	area := newMemoryArea()
 	assertInspection := func(ready, recoverable bool) {
 		t.Helper()
@@ -329,7 +346,7 @@ func TestArchiveAndInspectionCancellation(t *testing.T) {
 	if err := newProjection().archive(ctx, pythonArchive(t, archiveMember{name: "python/file", data: "data"})); !errors.Is(err, context.Canceled) {
 		t.Fatalf("archive cancellation: %v", err)
 	}
-	if _, _, err := inspectFiles(ctx, newMemoryArea(), catalogRecord{}); !errors.Is(err, context.Canceled) {
+	if _, _, err := inspectFiles(ctx, newMemoryArea(), closureRecord{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("inspection cancellation: %v", err)
 	}
 }

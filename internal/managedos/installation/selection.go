@@ -55,10 +55,11 @@ func Unsupported(catalog api.Catalog) []string {
 	return lifecycle.Identities(Refusals(catalog))
 }
 
-// Refusals refuses every installation this contract cannot realize. A profile
-// arm or a target it refuses is named through the Machine that selects it,
-// because that is the object an operator removes or changes, and its remedy
-// names the field to change.
+// Refusals refuses every installation this contract cannot realize. A target,
+// its network, a profile arm or the servers it publishes through are refused
+// in that order, and only the first refusal a Machine meets is named, through
+// that Machine, because that is the object an operator removes or changes; its
+// remedy names the field to change.
 func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	// A graph naming no controller leaves a physical target underived, and the
 	// request builder refuses it for that reason instead.
@@ -68,7 +69,8 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 		// Nothing a target is refused for depends on the context, so none is
 		// named here.
 		derived, err := substrate.TargetFor(catalog, machine, "", controllerMachine)
-		if err == nil {
+		derivedOK := err == nil
+		if derivedOK {
 			if reason, remediation := refusedTarget(machine, derived); reason != "" {
 				found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 				continue
@@ -78,7 +80,20 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 		if !ok {
 			continue
 		}
+		// Only the anaconda installer has a Kickstart whose network line
+		// could drop what the Machine declares; any other installer is
+		// refused as the profile's own choice.
+		if profile.Spec().Has("installer", "anaconda") {
+			if reason, remediation := refusedNetwork(catalog, machine); reason != "" {
+				found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
+				continue
+			}
+		}
 		if reason, remediation := refusedProfile(profile); reason != "" {
+			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
+			continue
+		}
+		if reason, remediation := refusedPublication(catalog, machine, profile, derived, derivedOK, controllerMachine); reason != "" {
 			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 		}
 	}
@@ -105,7 +120,8 @@ func InstalledMachines(catalog api.Catalog) []api.Object {
 
 // Requirements are the API objects one installation waits for: the Machine's
 // own realization, every artifact server it publishes through and every
-// resolver and time source the guest uses while installing.
+// managed resolver and time source the guest uses while installing. An
+// external one is used at its declared address and is waited for by nothing.
 type Requirements struct {
 	ArtifactServers []string
 	DNSServers      []string
@@ -153,7 +169,7 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if err != nil {
 		return Request{}, Requirements{}, err
 	}
-	imageServer, image, err := publicationFor(catalog, anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), contextName, name, "install.iso", machine.Identity())
+	imageServer, image, err := publicationFor(catalog, anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), contextName, name, "install.iso", profile.Identity())
 	if err != nil {
 		return Request{}, Requirements{}, err
 	}
@@ -183,7 +199,7 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	// the key cannot travel in publicly served content.
 	if target.Channel == substrate.ChannelDeliveredKey {
 		published, certificate, err := artifactserver.PrivatePath(catalog, imageServer,
-			anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), contextName, consumerPrefix, name, machine.Identity())
+			anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), contextName, consumerPrefix, name, profile.Identity())
 		if err != nil {
 			return Request{}, Requirements{}, err
 		}
@@ -239,13 +255,16 @@ func mediaFor(catalog api.Catalog, reference, identity string) (Media, error) {
 	if !ok {
 		return Media{}, refusal("api.reference", "the profile's boot image is not in the selected graph", "declare "+reference+" or correct imageRef on "+identity)
 	}
-	return storeMedia(image.Spec().Get("bootMedia").Text(), image.Spec().Get("checksum").Text(), image.Identity())
+	return storeMedia(image.Spec().Get("bootMedia").Text(), image.Spec().Get("checksum").Text(), "spec.bootMedia", image.Identity())
 }
 
-func storeMedia(reference, checksum, identity string) (Media, error) {
+// storeMedia reads one media store reference, and its remedy names the field
+// that holds it on the object that declares it.
+func storeMedia(reference, checksum, field, identity string) (Media, error) {
 	name, local := strings.CutPrefix(reference, "local-media:")
 	if !local || !managedos.ValidMediaName(name) {
-		return Media{}, refusal("lifecycle.state", "this installation supports only media the host store holds", "import the image with bootwright media add and reference it as local-media:<name> on "+identity)
+		return Media{}, refusal("lifecycle.state", "this installation supports only media the host store holds",
+			"import the image with bootwright media add --name <filename.iso> and set "+field+" to local-media:<filename.iso> on "+identity)
 	}
 	media := Media{Name: name}
 	if checksum != "" {
@@ -264,7 +283,7 @@ type hostedTree struct {
 }
 
 func treeFor(catalog api.Catalog, source api.Value, contextName string, profile api.Object, needs *Requirements) (hostedTree, error) {
-	media, err := storeMedia(source.Get("fromMedia").Text(), "", profile.Identity())
+	media, err := storeMedia(source.Get("fromMedia").Text(), "", "spec.installer.anaconda.packageSource.hostedTree.fromMedia", profile.Identity())
 	if err != nil {
 		return hostedTree{}, err
 	}

@@ -20,11 +20,13 @@ type Confirmer interface {
 type HostInspector interface {
 	Platform(context.Context) (Platform, error)
 	Identity(context.Context) (controller.InstalledHostIdentity, error)
-	Runtime(context.Context, RuntimeRequirement) (RuntimeInspection, error)
 }
 
+// DependencyCatalog is pure: Admit refuses a platform whose provided execution
+// foundation this executable was not compiled against, before any dependency
+// is resolved or acquired, and ValidateEgress the acquisition policy.
 type DependencyCatalog interface {
-	Select(Platform, NativeRequirements) (Definition, error)
+	Admit(Platform) error
 	ValidateEgress(SetupEgress) error
 }
 
@@ -77,6 +79,23 @@ type BootstrapResolver interface {
 	Resolve(context.Context, Platform, controller.DependencyVersions, SetupEgress) (BootstrapDefinition, []diagnostics.Diagnostic, error)
 }
 
+// Staging hands dependency resolution its private scratch. Each Stage is a new
+// directory beneath one Bootwright-owned parent outside the verified store,
+// held by this invocation until Release; a stage whose holder is gone is swept
+// by the next Stage. Noexec reports that the parent's filesystem refuses to
+// execute what is staged there.
+type Staging interface {
+	Stage(ctx context.Context, kind string) (Stage, error)
+}
+
+// Stage is one invocation's scratch directory. Release removes it and is safe
+// to call more than once.
+type Stage struct {
+	Path    string
+	Noexec  bool
+	Release func()
+}
+
 // NativeResolver may use disposable unprivileged staging for repository
 // metadata and maintained solver caches. It never applies a host transaction.
 type NativeResolver interface {
@@ -85,9 +104,13 @@ type NativeResolver interface {
 
 // NativeInspector reports whether the selected native root packages are
 // installed by name, without consulting repository metadata, verifying
-// installed files or modifying installed state.
+// installed files or modifying installed state. OperatorRoots reads, on a RHEL
+// controller, the named root packages the operator installed and whether a
+// signature of the platform's qualified vendor key covers each installed
+// instance; like Check it proves presence and signer, never file integrity.
 type NativeInspector interface {
 	Check(context.Context, NativeResolvedPlan) (NativePresence, error)
+	OperatorRoots(context.Context, Platform, []string) (OperatorPresence, error)
 }
 
 type TargetToolCatalog interface {

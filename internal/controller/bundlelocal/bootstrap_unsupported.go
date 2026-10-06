@@ -7,7 +7,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-func resolveBootstrapWheels(ctx context.Context, _ *projection, _ prerequisites.BootstrapDefinition, _ prerequisites.SetupEgress) ([]byte, error) {
+func resolveBootstrapWheels(ctx context.Context, _ prerequisites.Staging, _ *projection, _ prerequisites.BootstrapDefinition, _ prerequisites.SetupEgress) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

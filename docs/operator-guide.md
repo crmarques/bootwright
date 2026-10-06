@@ -9,10 +9,18 @@ gate and which build it must match.
 
 ## Prepare a host
 
-`setup` supports RHEL 9 and Fedora on Linux/amd64 at the exact releases its
-catalog [qualifies](development.md#qualified-hosts-and-images) and refuses any
-other. Each example's host prerequisites add what its journey needs, such as
-`/dev/kvm` for a libvirt guest. Run as root, or from an account that may run
+`setup` supports RHEL 9 and Fedora on Linux/amd64 at the exact releases it
+[admits](development.md#qualified-hosts-and-images), Fedora 43 and RHEL 9.8,
+and refuses any other. Fedora 43 has run; RHEL 9.8 is admitted but not yet run,
+and until the [acceptance ledger](acceptance.md#ledger) records it a RHEL 9.8
+controller must hold exactly the glibc and libgcc builds
+[development](development.md#qualified-hosts-and-images) describes. Setup,
+preflight and the controller stage stage their dependency resolution and
+package inspection beneath /var/lib/bootwright-staging, which the first of them
+creates, and run what they stage from there, so that directory must be on a
+filesystem mounted with exec; /tmp may stay noexec. Each example's host
+prerequisites add what its journey needs, such as `/dev/kvm` for a libvirt
+guest. Run as root, or from an account that may run
 `sudo`: Bootwright asks for authorization when a command needs it, and keeps its
 state under `/var/lib/bootwright`
 ([contexts](../specs/contexts.md#storage-locking-and-publication)).
@@ -44,6 +52,24 @@ its `controller` stage installs the clients its graph selects
 ([controller](../specs/controller.md#the-controller-stage)). Media images live
 in one host-wide store that every context shares, so `setup` runs before the
 first `media add`.
+
+A RHEL controller that publishes installer media, because the artifact server
+an Anaconda installation uses is placed on it, builds that media with `lorax`
+and `xorriso`, which no public source Bootwright resolves from carries for
+RHEL. Install both from the host's own enabled Red Hat repositories, as root,
+before that context's first apply ([D106](../specs/milestones/backlog.md#decisions)):
+
+```sh
+dnf install lorax xorriso
+```
+
+Its controller stage accepts them by presence and the qualified Red Hat release
+key, and otherwise refuses before it acquires anything, naming the package that
+is missing or signed by another key; `preflight controller --context <name>`
+reports the same check and names this step first. A package another key signed
+is already installed, so the step for it removes it first, as
+`dnf remove xorriso && dnf install lorax xorriso`. A Fedora controller's stage
+installs them itself.
 
 ### On a proxied network
 
@@ -119,7 +145,9 @@ environments are retired and its store removed. Store commands refuse there
 that store aside while the services it manages run. The real-hardware test
 runs this build on a separate RHEL 9.8 controller, in a subnet the BMC network
 reaches on the artifact ports
-([D109](../specs/milestones/backlog.md#decisions)).
+([D109](../specs/milestones/backlog.md#decisions)); RHEL 9.8 is admitted but
+not yet run, as [development](development.md#qualified-hosts-and-images)
+records.
 
 ## Run a lab journey
 

@@ -38,10 +38,14 @@ func (v *lifecycleView) Operations() operationstore.Area       { return v.operat
 
 // lifecycleRun is the view one bounded operation outside the lifecycle holds.
 // It adds the area its adapter output is retained in and nothing else: it
-// publishes no evidence, takes no lease and registers no operation.
+// publishes no evidence, takes no lease and registers no operation. held are
+// the run directories it opened, each held shared until its callback returns.
 type lifecycleRun struct {
 	*lifecycleView
-	runs *operationArea
+	runs     *operationArea
+	mutex    sync.Mutex
+	held     []*directory
+	released bool
 }
 
 func (r *lifecycleRun) Runs() operationstore.Area { return r.runs }
@@ -140,7 +144,9 @@ func (s *Store) RunLifecycle(ctx context.Context, name string, callback func(lif
 		return state("bounded lifecycle run callback is missing")
 	}
 	return s.readLifecycle(ctx, name, true, func(view *lifecycleView, runs *operationArea) error {
-		return callback(&lifecycleRun{lifecycleView: view, runs: runs})
+		run := &lifecycleRun{lifecycleView: view, runs: runs}
+		defer run.release()
+		return callback(run)
 	})
 }
 
@@ -239,7 +245,7 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 		evidence:   evidence,
 		operations: &operationArea{store: s, subtree: "operations", context: dir, name: record.Name, active: live, readOnly: true},
 	}
-	runs := &operationArea{store: s, subtree: "runs", context: dir, name: record.Name, active: live, readOnly: !bounded}
+	runs := &operationArea{store: s, subtree: runsSubtree, context: dir, name: record.Name, active: live, readOnly: !bounded}
 	return safeError(callback(view, runs))
 }
 
@@ -282,7 +288,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 				inputs:     inputs,
 				controller: controllerView,
 				evidence:   evidence,
-				operations: &operationArea{store: s, subtree: "operations", context: dir, name: record.Name, active: func() bool { return active }},
+				operations: &operationArea{store: s, subtree: "operations", context: dir, name: record.Name, active: func() bool { return active }, cached: true},
 			},
 			base: t, stored: stored, context: dir, record: record,
 		}
@@ -415,10 +421,11 @@ func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host co
 		return state("a controller binding requires the selected Machine name")
 	}
 	if t.stored.data == nil || t.stored.value.Receipt.Status != "complete" {
-		return controllerFailure("controller.identity", "this host has no completed controller setup; run bootwright setup")
+		return controllerFailure("controller.identity", "this host has no completed controller setup", completeSetup)
 	}
 	if !t.stored.value.Host.Equal(host) {
-		return controllerFailure("controller.identity", "this host is not the host this controller state belongs to")
+		return controllerFailure("controller.identity", "this host is not the host this controller state belongs to",
+			"restore the host this controller state belongs to; Bootwright never rebinds it")
 	}
 	digest, err := host.PrivateDigest()
 	if err != nil {
@@ -430,7 +437,8 @@ func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host co
 			continue
 		}
 		if binding.Machine != machine || binding.HostDigest != digest {
-			return controllerFailure("controller.identity", "this context is already bound to another controller Machine or host; restore it, or create a context here")
+			return controllerFailure("controller.identity", "this context is already bound to another controller Machine or host",
+				"restore the bound controller Machine input, or create a context on this host")
 		}
 		return nil
 	}
@@ -446,7 +454,7 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 		if len(next) == 0 {
 			return nil
 		}
-		return controllerFailure("controller.identity", "locally hosted services require a completed controller setup on this host")
+		return controllerFailure("controller.identity", "locally hosted services require a completed controller setup on this host", completeSetup)
 	}
 	retained := []prerequisites.HostReservation{}
 	for _, reservation := range t.stored.value.Reservations {

@@ -180,7 +180,8 @@ scalar `serverRef` followed by optional scalar `endpointRef`. The consumer
 field fixes the target kind to DNSServer or NTPServer. Pairs are unique;
 order is retained. External services forbid `endpointRef`. Managed services
 require an explicit endpoint or exactly one endpoint, whose name normalization
-materializes. An omitted list requests its owning consumer's fallback; an
+materializes. A consumer reaches a managed service at its selected endpoint's
+address and an external one at its declared `address`. An omitted list requests its owning consumer's fallback; an
 explicit empty list clears inherited selections. Empty NTP selections do not
 request disabling time synchronization.
 
@@ -203,7 +204,10 @@ placement on the controller is explicit and obeys the same capability and
 endpoint rules as other hosts. Controller selection does not imply placement,
 create a service, or install its runtime.
 
-Reference resolution is not a readiness edge; the runtime edges between a
+Reference resolution is not a readiness edge. An installation that selects a
+managed DNSServer or NTPServer waits for it; one that selects an external
+DNSServer or NTPServer uses its declared `address` and gains no readiness edge,
+because no block of this product realizes it. The runtime edges between a
 service, its host and its consumers belong to
 [infrastructure services](../infrastructure-services.md#selection-and-refusal)
 and the [dependency DAG](../state-reconciliation.md#plan-and-execution).

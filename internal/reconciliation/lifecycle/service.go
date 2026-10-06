@@ -145,7 +145,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 	if verb == reconciliation.Destroy && len(selection) != 0 {
 		return nil, transition{}, basis{}, failure("lifecycle.stage",
 			"the next operation is a destroy, which accepts no stage selection",
-			"repeat bootwright plan without --stage")
+			"repeat "+contextCommand(view.Identity().Name, "plan")+" without --stage")
 	}
 	var result PlanResult
 	switch {
@@ -163,7 +163,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 		result = presentation(decided)
 		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(decided.operation, decided.plan, decided.states)}
 	}
-	result.Context = view.Identity()
+	result.Context, result.Bound = view.Identity(), s.Concurrency()
 	return &result, decided, marked.basis, nil
 }
 
@@ -216,7 +216,7 @@ func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState
 		out = append(out, PlanStep{
 			ID: block.ID, Description: block.Description, Stage: string(block.Stage),
 			Impacts: slices.Clone(block.Impacts), State: state,
-			After: after, Wave: schedule.Waves[block.ID] + 1,
+			After: after, Wave: schedule.Waves[block.ID] + 1, Consumes: slices.Clone(block.Consumes),
 		})
 	}
 	return out
@@ -224,7 +224,10 @@ func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState
 
 // planPreview marks what a stage selection would start and why it would leave
 // the rest, so an operator reads the consequence of the selection before
-// confirming it. Without a selection the steps carry no marker.
+// confirming it. The marks are what the next apply's admission takes first:
+// an unproved block it resolves or the failed block it retries holds back every
+// other ready block, which is deferred behind the first of them. Without a
+// selection the steps carry no marker.
 func planPreview(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) PlanResult {
 	schedule := reconciliation.ScheduleOf(plan)
 	result := PlanResult{
@@ -234,9 +237,18 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 	if len(selection) == 0 {
 		return result
 	}
+	kind, admitted := firstAdmission(plan, states, selection, nil)
+	holding := ""
+	if kind != StepStart {
+		holding = heldBehind(plan, states, admitted)
+	}
 	deferrals := reconciliation.Deferrals(plan, states, selection)
-	startable := reconciliation.Startable(plan, states, selection)
 	for index, step := range result.Steps {
+		if slices.Contains(admitted, index) {
+			result.Steps[index].Selection = kind
+			result.Startable++
+			continue
+		}
 		if step.State != string(reconciliation.BlockPending) {
 			continue
 		}
@@ -248,12 +260,27 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 		case waiting:
 			result.Steps[index].Selection, result.Steps[index].WaitsOn = StepWaiting, deferral.Block
 			result.Deferred++
-		case slices.ContainsFunc(startable, func(block reconciliation.Block) bool { return block.ID == step.ID }):
-			result.Steps[index].Selection = StepStart
-			result.Startable++
+		case holding != "":
+			result.Steps[index].Selection, result.Steps[index].WaitsOn = StepWaiting, holding
+			result.Deferred++
 		}
 	}
 	return result
+}
+
+// heldBehind names the block a ready block waits on while admission resolves
+// or retries: the first block it admits, or, where a selection admits no
+// failed block, the first failed block, which the apply refuses over.
+func heldBehind(plan reconciliation.Plan, states map[string]reconciliation.BlockState, admitted []int) string {
+	if len(admitted) != 0 {
+		return plan.Blocks[admitted[0]].ID
+	}
+	for _, block := range plan.Blocks {
+		if states[block.ID] == reconciliation.BlockFailed {
+			return block.ID
+		}
+	}
+	return ""
 }
 
 func failure(code, message, remediation string) error {

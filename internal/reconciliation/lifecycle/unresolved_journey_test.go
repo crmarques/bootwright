@@ -179,7 +179,7 @@ func requireRefusal(t *testing.T, journey *lifecycle.CapabilityJourney, adapter 
 		{Severity: "error", Code: "lifecycle.unknown", Message: "the outcome of " + lostMachine + " is still unknown: " + reason,
 			Remediation: remedy + ", then repeat the operation to observe it again"},
 		{Severity: "error", Code: "lifecycle.unknown", Message: "this removal cannot prove what these effects left behind, so it registered nothing: " + lostMachine,
-			Remediation: "do what the diagnostic of each reports, then repeat bootwright destroy"},
+			Remediation: "do what the diagnostic of each reports, then repeat bootwright destroy --context lab"},
 	}
 	if got := diagnostics.Of(err); !slices.Equal(got, want) {
 		t.Fatalf("the refusal reported %+v, want %+v", got, want)

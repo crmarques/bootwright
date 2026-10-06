@@ -500,7 +500,8 @@ func installAddress(catalog api.Catalog, node api.Object) (string, error) {
 }
 
 // resolverAddresses derives the name servers a node resolves through, from its
-// own network configuration's selections, and records each as a requirement.
+// own network configuration's selections, and records each managed one as a
+// requirement; an external one is used at its declared address.
 func resolverAddresses(catalog api.Catalog, node api.Object, needs *Requirements) ([]string, error) {
 	spec, err := substrate.NetworkSpec(catalog, node)
 	if err != nil {
@@ -512,7 +513,9 @@ func resolverAddresses(catalog api.Catalog, node api.Object, needs *Requirements
 		if err != nil {
 			return nil, err
 		}
-		needs.DNSServers = append(needs.DNSServers, name)
+		if name != "" {
+			needs.DNSServers = append(needs.DNSServers, name)
+		}
 		if !slices.Contains(addresses, address) {
 			addresses = append(addresses, address)
 		}
@@ -521,7 +524,8 @@ func resolverAddresses(catalog api.Catalog, node api.Object, needs *Requirements
 }
 
 // timeAddresses derives the time sources the cluster installs with, from its
-// own selections, and records each as a requirement.
+// own selections, and records each managed one as a requirement; an external
+// one is used at its declared address.
 func timeAddresses(catalog api.Catalog, cluster api.Object, needs *Requirements) ([]string, error) {
 	var addresses []string
 	for _, selection := range cluster.Spec().Get("install", "ntp").Items() {
@@ -529,7 +533,9 @@ func timeAddresses(catalog api.Catalog, cluster api.Object, needs *Requirements)
 		if err != nil {
 			return nil, err
 		}
-		needs.NTPServers = append(needs.NTPServers, name)
+		if name != "" {
+			needs.NTPServers = append(needs.NTPServers, name)
+		}
 		if !slices.Contains(addresses, address) {
 			addresses = append(addresses, address)
 		}

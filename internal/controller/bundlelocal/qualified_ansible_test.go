@@ -97,17 +97,6 @@ func TestQualifiedAnsibleMinorAgreesEverywhere(t *testing.T) {
 		t.Errorf("sanity ignore files %q, want exactly ignore-%s.txt", ignores, minor)
 	}
 
-	record, _, err := compiledCatalog()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := prerequisites.ValidateQualifiedAnsibleVersion(record.AnsibleVersion); err != nil {
-		t.Errorf("the compiled catalog's ansible-core %s is outside the qualified minor", record.AnsibleVersion)
-	}
-	if !prerequisites.QualifiedControllerPython(record.PythonVersion) {
-		t.Errorf("the compiled catalog's Python %s is not a qualified controller Python", record.PythonVersion)
-	}
-
 	guide, err := os.ReadFile(developmentGuide)
 	if err != nil {
 		t.Fatal(err)

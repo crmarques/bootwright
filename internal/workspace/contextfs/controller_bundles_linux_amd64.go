@@ -115,10 +115,10 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 		return nil, nil
 	}
 	if stored.bundles[index].Mode == "retiring" {
-		return nil, controllerFailure("controller.state", "this controller bundle is being retired; repeat setup to complete its removal")
+		return nil, controllerFailure("controller.state", "this controller bundle is being retired", "run bootwright setup to complete its retirement")
 	}
 	if stored.bundles[index].DirectoryInode == 0 {
-		return nil, controllerFailure("controller.identity", "required controller bundle is not attributable; run controller setup")
+		return nil, controllerFailure("controller.identity", "required controller bundle is not attributable", "run bootwright setup")
 	}
 	area := &controllerBundleArea{store: store, root: root, registry: registry, reservation: stored.bundles[index], active: active, writeAllowed: writable, guard: guard}
 	owner, err := openControllerDirectory(root, registry)

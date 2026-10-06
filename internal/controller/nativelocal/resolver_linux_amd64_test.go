@@ -69,7 +69,7 @@ func TestNativeCurrentOSResolution(t *testing.T) {
 	if err != nil || !strings.Contains(string(release), "ID=fedora\n") || !strings.Contains(string(release), "VERSION_ID=43\n") {
 		t.Skip("qualification is only applicable to the current Fedora 43 OS")
 	}
-	plan, err := New(bundlelocal.FetchMetadata).Resolve(t.Context(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, prerequisites.NativeRequirements{ContainerRuntime: true}, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{NoProxy: []string{}})
+	plan, err := New(bundlelocal.FetchMetadata, NewStaging(t.TempDir())).Resolve(t.Context(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, prerequisites.NativeRequirements{ContainerRuntime: true}, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{NoProxy: []string{}})
 	if err != nil {
 		detail, _ := json.Marshal(err)
 		t.Fatal(string(detail))
@@ -110,7 +110,7 @@ func TestNativeCurrentOSInspection(t *testing.T) {
 	if json.Unmarshal(data, &plan) != nil || prerequisites.ValidateNativePlan(plan) != nil {
 		t.Fatal("invalid qualification plan")
 	}
-	presence, err := New(nil).Check(t.Context(), plan)
+	presence, err := New(nil, NewStaging(t.TempDir())).Check(t.Context(), plan)
 	if err != nil || !presence.Ready {
 		t.Fatalf("frozen native root presence ready=%t: %v", presence.Ready, err)
 	}

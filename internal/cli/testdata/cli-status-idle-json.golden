@@ -41,8 +41,8 @@
       "bindings": 0
     },
     "nextSteps": [
-      "bootwright plan",
-      "bootwright apply"
+      "bootwright plan --context lab",
+      "bootwright apply --context lab"
     ],
     "lifecycle": null,
     "contradictions": []

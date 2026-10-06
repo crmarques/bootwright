@@ -111,7 +111,7 @@ func syntheticResolver(t *testing.T, apiVersion string, fetched, qualified *int)
 		"https://files.pythonhosted.org/packages/urllib3-2.7.0-py3-none-any.whl":       wheelArchive(t, "urllib3/__init__.py"),
 	}
 	python := pythonArchive(t, archiveMember{name: "python/bin/python3.14", data: "interpreter"})
-	resolver := NewBootstrapResolver()
+	resolver := NewBootstrapResolver(nil)
 	resolver.metadata = func(_ context.Context, method, endpoint string, _ prerequisites.SetupEgress) (toolMetadata, error) {
 		switch {
 		case method == http.MethodGet && endpoint == pythonMetadataURL:
@@ -131,7 +131,7 @@ func syntheticResolver(t *testing.T, apiVersion string, fetched, qualified *int)
 		}
 		return python, nil
 	}
-	resolver.resolve = func(context.Context, *projection, prerequisites.BootstrapDefinition, prerequisites.SetupEgress) ([]byte, error) {
+	resolver.resolve = func(context.Context, prerequisites.Staging, *projection, prerequisites.BootstrapDefinition, prerequisites.SetupEgress) ([]byte, error) {
 		install := []map[string]any{}
 		for name, version := range map[string]string{"ansible-core": "2.21.4", "urllib3": "2.7.0"} {
 			file := strings.ReplaceAll(name, "-", "_") + "-" + version + "-py3-none-any.whl"
@@ -174,7 +174,7 @@ func TestAResolutionOverANewerIndexAPIMinorWarnsAndANewerMajorRefuses(t *testing
 	newer, stopped := "1."+strconv.Itoa(indexAPIMinor+1), errors.New("publisher unavailable")
 	for name, stop := range map[string]func(*BootstrapCatalog){
 		"pip resolve": func(c *BootstrapCatalog) {
-			c.resolve = func(context.Context, *projection, prerequisites.BootstrapDefinition, prerequisites.SetupEgress) ([]byte, error) {
+			c.resolve = func(context.Context, prerequisites.Staging, *projection, prerequisites.BootstrapDefinition, prerequisites.SetupEgress) ([]byte, error) {
 				return nil, stopped
 			}
 		},

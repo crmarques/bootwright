@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
@@ -173,6 +174,77 @@ func TestProxySelectorRefusesWhatTheReceiptCannotCarry(t *testing.T) {
 	}
 	if _, err := controller.NewProxySelector("", "http://proxy.example:3128", overflow); err != controller.ErrProxyBypass {
 		t.Fatal("an unbounded bypass list was admitted", err)
+	}
+}
+
+// Admission and selection check a declared route with the API's proxy rules,
+// and the selector builds every route with its own parser, so the two must be
+// one grammar: an entry either admits is one the other admits.
+func TestProxyGrammarIsOneRule(t *testing.T) {
+	for _, test := range []struct {
+		value string
+		valid bool
+	}{
+		{"http://proxy.example.test:3128", true},
+		{"https://proxy.example.test:8443/", true},
+		{"http://192.0.2.10:3128", true},
+		{"http://[2001:db8::1]:3128", true},
+		{"http://proxy.example.test:3128/path", false},
+		{"http://proxy.example.test:3128/?q=1", false},
+		{"http://proxy.example.test:3128/#fragment", false},
+		{"http://user:secret@proxy.example.test:3128", false},
+		{"socks5://proxy.example.test:1080", false},
+		{"mailto:proxy@example.test", false},
+		{"http:///path", false},
+		{"http://proxy.example.test:3128/é", false},
+		{"http://" + strings.Repeat("a", 4096) + ".test", false},
+	} {
+		_, err := controller.NewProxySelector("", test.value, nil)
+		if api.ValidLexical("proxy-endpoint", test.value) != test.valid || (err == nil) != test.valid {
+			t.Errorf("endpoint %.40q: the API admits %t, the selector %t, want %t", test.value, api.ValidLexical("proxy-endpoint", test.value), err == nil, test.valid)
+		}
+	}
+	for _, test := range []struct {
+		value string
+		valid bool
+	}{
+		{"*", true},
+		{"10.0.0.0/8", true},
+		{"2001:db8::/32", true},
+		{"192.0.2.7", true},
+		{"2001:db8::1", true},
+		{"lab.example.test", true},
+		{".example.test", true},
+		{"*.example.test", true},
+		{"registry.example.test:443", true},
+		{"[2001:db8::1]:443", true},
+		{"LAB.Example.TEST", true},
+		{strings.Repeat("a", 1011) + ".example.test", true},
+		{strings.Repeat("a", 1012) + ".example.test", false},
+		{strings.Repeat("a", 1007) + ".example.test:443", true},
+		{strings.Repeat("a", 1008) + ".example.test:443", false},
+		{"10.0.0.0/33", false},
+		{"lab.example.test/path", false},
+		{"user@lab.example.test", false},
+		{"lab.example.test?", false},
+		{"lab.example.test#", false},
+		{"lab example", false},
+		{"lab.example.test.", false},
+		{"*.", false},
+		{".", false},
+		{"lab.example.test:", false},
+		{"lab.example.test:https", false},
+		{"a:1:2", false},
+		{"[2001:db8::1]", false},
+		{"[2001:db8::1]443", false},
+		{"lab_example.test", false},
+		{" lab.example.test", false},
+		{"", false},
+	} {
+		_, err := controller.NewProxySelector("", "http://proxy.example.test:3128", []string{test.value})
+		if api.ValidLexical("proxy-bypass", test.value) != test.valid || (err == nil) != test.valid {
+			t.Errorf("bypass %.40q: the API admits %t, the selector %t, want %t", test.value, api.ValidLexical("proxy-bypass", test.value), err == nil, test.valid)
+		}
 	}
 }
 

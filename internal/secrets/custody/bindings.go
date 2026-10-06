@@ -12,68 +12,20 @@ import (
 // Bind freezes current material before a future consumer publishes its effects.
 // Recovery reopens a prior binding; it never creates a new binding from live input.
 func (s Service) Bind(ctx context.Context, request BindRequest) (secretstore.Binding, error) {
-	selected, declarations, err := s.resolve(ctx, request.ContextName)
+	selected, requested, err := s.requested(ctx, request.ContextName, request.Names)
 	if err != nil {
 		return secretstore.Binding{}, err
 	}
-	if err = requireActive(selected); err != nil {
-		return secretstore.Binding{}, err
-	}
-	names := slices.Clone(request.Names)
-	slices.Sort(names)
-	if len(names) == 0 || len(names) > 4096 || len(slices.Compact(slices.Clone(names))) != len(names) {
-		return secretstore.Binding{}, secretstore.Failure("declaration", "binding requires a bounded unique set of secret names")
-	}
-	requested := make([]secrets.Declaration, 0, len(names))
-	for _, name := range names {
-		d, err := findDeclaration(selected.Name, declarations, name)
-		if err != nil {
-			return secretstore.Binding{}, err
-		}
-		requested = append(requested, d)
-	}
 	var result secretstore.Binding
 	err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
-		snapshot, err := session.Inspect(ctx)
+		selection, err := s.readCurrent(ctx, session, selected.Name, requested)
 		if err != nil {
 			return err
 		}
-		inputs := make([]secretstore.BoundInput, 0, len(names))
-		var refused []diagnostics.Diagnostic
-		for _, d := range requested {
-			v, exists := currentVersion(snapshot, d.Name)
-			switch {
-			case !exists:
-				refused = append(refused, diagnostics.Of(missingMaterial(selected.Name, d))...)
-			case !d.Current(v.Declaration.Fingerprint):
-				refused = append(refused, diagnostics.Of(staleMaterial(selected.Name, d))...)
-			default:
-				inputs = append(inputs, secretstore.BoundInput{Declaration: d.Stored(v.Declaration.Fingerprint), Version: v.ID})
-			}
-		}
-		if len(refused) > 0 {
-			diagnostics.Sort(refused)
-			return &diagnostics.Failure{Diagnostics: refused}
-		}
-		materialBytes := 0
-		defer func() {
-			for _, input := range inputs {
-				input.Material.Clear()
-			}
-		}()
-		for i := range inputs {
-			input := &inputs[i]
-			input.Material, err = session.Read(ctx, input.Version)
-			if err != nil {
-				return err
-			}
-			if err = s.material.Validate(ctx, input.Declaration, input.Material); err != nil {
-				return secrets.Attribute(err, selected.Name, input.Declaration.Name, secrets.Remedy(selected.Name, input.Declaration, true))
-			}
-			if input.Material.Size() > secrets.MaxMaterialBytes-materialBytes {
-				return secretstore.Failure("store.limit", "binding selection exceeds the material byte limit")
-			}
-			materialBytes += input.Material.Size()
+		defer clearCurrent(selection)
+		inputs := make([]secretstore.BoundInput, 0, len(selection))
+		for _, item := range selection {
+			inputs = append(inputs, secretstore.BoundInput{Declaration: item.declaration, Version: item.version.ID, Material: item.material})
 		}
 		result, err = session.Bind(ctx, inputs)
 		return err
@@ -82,6 +34,96 @@ func (s Service) Bind(ctx context.Context, request BindRequest) (secretstore.Bin
 		return secretstore.Binding{}, err
 	}
 	return result, nil
+}
+
+// requested resolves what one bind or bounded read names: a ready context and
+// the declarations of a bounded unique set of its Secrets, in name order.
+func (s Service) requested(ctx context.Context, contextName string, names []string) (secretstore.Context, []secrets.Declaration, error) {
+	selected, declarations, err := s.resolve(ctx, contextName)
+	if err != nil {
+		return secretstore.Context{}, nil, err
+	}
+	if err = requireActive(selected); err != nil {
+		return secretstore.Context{}, nil, err
+	}
+	sorted := slices.Clone(names)
+	slices.Sort(sorted)
+	if len(sorted) == 0 || len(sorted) > 4096 || len(slices.Compact(slices.Clone(sorted))) != len(sorted) {
+		return secretstore.Context{}, nil, secretstore.Failure("declaration", "binding requires a bounded unique set of secret names")
+	}
+	requested := make([]secrets.Declaration, 0, len(sorted))
+	for _, name := range sorted {
+		d, err := findDeclaration(selected.Name, declarations, name)
+		if err != nil {
+			return secretstore.Context{}, nil, err
+		}
+		requested = append(requested, d)
+	}
+	return selected, requested, nil
+}
+
+// current is one requested Secret's current version, with the declaration it
+// is current for and the material the session read for it.
+type current struct {
+	declaration secrets.Declaration
+	version     secretstore.Version
+	material    secrets.Material
+}
+
+// readCurrent selects, reads and validates the current version of each
+// requested Secret inside one store session, so a bind and a bounded read
+// cannot select differently. Every missing or stale Secret refuses at once,
+// before any is read; an invalid stored version or a selection past the
+// material byte limit refuses after, and nothing read survives a refusal.
+func (s Service) readCurrent(ctx context.Context, session secretstore.StoreSession, contextName string, requested []secrets.Declaration) ([]current, error) {
+	snapshot, err := session.Inspect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	selection := make([]current, 0, len(requested))
+	var refused []diagnostics.Diagnostic
+	for _, d := range requested {
+		v, exists := currentVersion(snapshot, d.Name)
+		switch {
+		case !exists:
+			refused = append(refused, diagnostics.Of(missingMaterial(contextName, d))...)
+		case !d.Current(v.Declaration.Fingerprint):
+			refused = append(refused, diagnostics.Of(staleMaterial(contextName, d))...)
+		default:
+			selection = append(selection, current{declaration: d.Stored(v.Declaration.Fingerprint), version: v})
+		}
+	}
+	if len(refused) > 0 {
+		diagnostics.Sort(refused)
+		return nil, &diagnostics.Failure{Diagnostics: refused}
+	}
+	materialBytes := 0
+	for i := range selection {
+		item := &selection[i]
+		if item.material, err = session.Read(ctx, item.version.ID); err != nil {
+			break
+		}
+		if err = s.material.Validate(ctx, item.declaration, item.material); err != nil {
+			err = secrets.Attribute(err, contextName, item.declaration.Name, secrets.Remedy(contextName, item.declaration, true))
+			break
+		}
+		if item.material.Size() > secrets.MaxMaterialBytes-materialBytes {
+			err = secretstore.Failure("store.limit", "binding selection exceeds the material byte limit")
+			break
+		}
+		materialBytes += item.material.Size()
+	}
+	if err != nil {
+		clearCurrent(selection)
+		return nil, err
+	}
+	return selection, nil
+}
+
+func clearCurrent(selection []current) {
+	for _, item := range selection {
+		item.material.Clear()
+	}
 }
 
 func (s Service) Reopen(ctx context.Context, request BindingRequest) ([]secretstore.BoundMaterial, error) {
@@ -105,13 +147,17 @@ func (s Service) Reopen(ctx context.Context, request BindingRequest) ([]secretst
 		return err
 	})
 	if err != nil {
-		for _, bound := range result {
-			bound.Material.Clear()
-		}
+		clearBound(result)
 		return nil, err
 	}
-	// Binding pins whole versions, but the ordinary caBundle consumer is not
-	// granted the separately managed signing key.
+	narrowCABundles(result)
+	return result, nil
+}
+
+// narrowCABundles lends each caBundle as its certificate alone. A version holds
+// its whole material, but the ordinary caBundle consumer is not granted the
+// separately managed signing key.
+func narrowCABundles(result []secretstore.BoundMaterial) {
 	for i := range result {
 		if result[i].Version.Declaration.Type == "caBundle" {
 			certificate, _ := result[i].Material.Part("certificate")
@@ -121,7 +167,12 @@ func (s Service) Reopen(ctx context.Context, request BindingRequest) ([]secretst
 			result[i].Version.Parts = []secrets.Part{secrets.CertificatePart}
 		}
 	}
-	return result, nil
+}
+
+func clearBound(result []secretstore.BoundMaterial) {
+	for _, bound := range result {
+		bound.Material.Clear()
+	}
 }
 
 // Bindings names every binding a context's store holds, in identity order, so

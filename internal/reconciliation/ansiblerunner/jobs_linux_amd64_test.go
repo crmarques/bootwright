@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -66,6 +67,7 @@ func adapterRequest(t *testing.T, output prerequisites.RunOutput) lifecycle.RunR
 		t.Fatal(err)
 	}
 	return lifecycle.RunRequest{
+		Context: "alpha", Block: "artifact-server-lab", Description: "Serve ArtifactServer/artifact-server-lab",
 		Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
 		Digest:    "sha256:" + strings.Repeat("5f", 32),
 		Canonical: []byte(`{}`), Placement: machineref.Placement{Connection: "local", Machine: "controller"},
@@ -138,10 +140,13 @@ func codeOf(err error) (string, string) {
 
 // An adapter's descendant that outlives its run still holds the job lock it
 // inherited, as an Ansible worker left by a supervisor killed on its own does.
-// Its job, which records what it is for, and its scratch stay. The next run
-// refuses naming the lock and starts no adapter, yet still removes a free stale
-// job and scratch whose job is gone. The first run after the descendant ends
-// removes both.
+// Its job, which records what it is for and for which context, and its
+// scratch stay. The invocation that started it has ended and freed its
+// holder, so the next run of that context refuses naming the lock and advising
+// to end the processes that hold it, starts no adapter, and still removes a
+// free stale job and scratch whose job is gone. A run of another context
+// proceeds and leaves the held job and its scratch in place. The first run
+// after the descendant ends removes both.
 func TestAnAdapterStillRunningRefusesTheNextRun(t *testing.T) {
 	adapter := func() *exec.Cmd {
 		return exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-orphaning")
@@ -165,7 +170,7 @@ func TestAnAdapterStillRunningRefusesTheNextRun(t *testing.T) {
 		t.Fatalf("run directories = %v and %v; a job whose lock is still held must stay", jobs, scratch)
 	}
 	job := filepath.Join(runner.jobParent, jobs[0])
-	for _, name := range []string{lockName, recordName} {
+	for _, name := range []string{lockName, holderName, recordName} {
 		if info, err := os.Lstat(filepath.Join(job, name)); err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
 			t.Fatalf("the job's %s is not a private regular file: %v", name, err)
 		}
@@ -179,6 +184,7 @@ func TestAnAdapterStillRunningRefusesTheNextRun(t *testing.T) {
 		t.Fatalf("the job's record is unreadable: %v", err)
 	}
 	if want := (jobRecord{
+		Context: request.Context, Block: request.Block, Description: request.Description,
 		Implementation: request.Implementation, Operation: request.Operation,
 		Machine: request.Placement.Machine, RequestDigest: request.Digest,
 	}); record != want {
@@ -191,16 +197,25 @@ func TestAnAdapterStillRunningRefusesTheNextRun(t *testing.T) {
 	plant(t, filepath.Join(runner.scratchParent, "bootwright-run-scratch-999999998-1"), map[string]string{"snapshot": "state"})
 	adapter = completing
 	_, err = runner.Run(ctx, request)
-	code, remediation := codeOf(err)
-	if code != "lifecycle.adapter-running" || started != 1 {
-		t.Fatalf("beside a running adapter, a run started %d adapters and ended with %v", started, err)
-	}
 	lock := filepath.Join(job, lockName)
-	if !strings.Contains(remediation, lock) {
-		t.Fatalf("the remedy %q does not name the held lock %s", remediation, lock)
+	want := []diagnostics.Diagnostic{{
+		Severity: "error", Code: "lifecycle.adapter-running",
+		Message:     "context alpha's Serve ArtifactServer/artifact-server-lab ended, but processes it started still hold its adapter job lock",
+		Remediation: "end the processes that hold " + lock + ", then repeat the command",
+	}}
+	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) || started != 1 {
+		t.Fatalf("beside a descendant its ended invocation left, a run started %d adapters and reported %+v, want %+v", started, reported, want)
 	}
 	if now, nowScratch := runNames(t, runner.jobParent), runNames(t, runner.scratchParent); !slices.Equal(now, jobs) || !slices.Equal(nowScratch, scratch) {
 		t.Fatalf("the refused run left %v and %v; only the held job %v and its scratch %v may stay", now, nowScratch, jobs, scratch)
+	}
+	other := adapterRequest(t, &output)
+	other.Context = "beta"
+	if _, err := runner.Run(ctx, other); err != nil || started != 2 {
+		t.Fatalf("a run of another context beside the held job started %d adapters and ended with %v", started, err)
+	}
+	if now, nowScratch := runNames(t, runner.jobParent), runNames(t, runner.scratchParent); !slices.Equal(now, jobs) || !slices.Equal(nowScratch, scratch) {
+		t.Fatalf("a run of another context left %v and %v; the held job %v and its scratch %v must stay", now, nowScratch, jobs, scratch)
 	}
 	_ = syscall.Kill(orphan, syscall.SIGKILL)
 	for deadline := time.Now().Add(5 * time.Second); lockHeld(t, lock); time.Sleep(20 * time.Millisecond) {

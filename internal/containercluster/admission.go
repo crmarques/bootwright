@@ -261,7 +261,9 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		if server, ok := infrastructureservices.ArtifactEndpoint(selection, c); ok && server.Spec().Get("management").Text() == "managed" {
 			for _, node := range nodes {
 				if server.Spec().Get("machineRef").Equal(node.Get("machineRef")) {
-					issues = add(issues, invariant(path+".serverRef", "cluster installation requires an artifact server hosted on a node being installed; place the server on an independently available Machine"))
+					issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".serverRef",
+						Message:     "a cluster installation cannot publish through an artifact server placed on one of its nodes, because that server cannot serve until the node is installed",
+						Remediation: "place " + server.Identity() + " on the controller Machine, or select a server placed there"})
 					break
 				}
 			}

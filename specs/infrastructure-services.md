@@ -243,6 +243,14 @@ removes the root only after every consumer subtree is gone. Published content
 is non-sensitive. The first consumer is the installer image and package tree of
 [managed OS](managed-os.md#installation).
 
+The consumer-level directories above those subtrees, such as `os/`,
+`private/` and `private/os/`, are created by the first consumer that needs
+them and owned by no block: no consumer's inverse removes them, and they stay
+until the server's own inverse removes the root. Object names beneath one
+consumer prefix are unique per server, because two objects of one name would
+share one subtree that neither block owns alone; managed OS enforces this for
+its Machines and profiles at [admission](managed-os.md#installation).
+
 ### Private consumer publication
 
 A consumer that must hand one machine a secret it cannot embed in publicly

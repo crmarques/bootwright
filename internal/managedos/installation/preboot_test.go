@@ -20,7 +20,7 @@ func TestAnApplyRemediesItsTargetsPreBootRefusalsByName(t *testing.T) {
 			t.Run(arm+" "+operation, func(t *testing.T) {
 				call, request := execution(t, "digest")
 				request.Target.Substrate, request.Target.Physical = arm, arm == substrate.ArmBaremetal
-				call.Proved = dependencyProof()
+				call.Proved, call.Context = dependencyProof(), "lab-b"
 				marker, _ := MarkerFor(request, "digest")
 				runner := &fakeRunner{}
 				capability := New(nil).WithIdentities(&pinReader{})
@@ -34,7 +34,7 @@ func TestAnApplyRemediesItsTargetsPreBootRefusalsByName(t *testing.T) {
 				}
 				want := map[string][]diagnostics.Diagnostic{}
 				if operation == "apply" {
-					for reason, err := range substrate.PreBootRefusals(arm, "rhel-01", request.Target.Controller.Endpoint) {
+					for reason, err := range substrate.PreBootRefusals(arm, "lab-b", "rhel-01", request.Target.Controller.Endpoint) {
 						want[reason] = diagnostics.Of(err)
 					}
 					if len(want[substrate.RefusalMachineRunning]) != 1 || request.Target.Controller.Endpoint == "" {

@@ -266,7 +266,7 @@ func TestAFrozenPhysicalNodeRefusesOnlyItsApply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution.Block.Request = canonical
+	execution.Block.Request, execution.Context = canonical, "lab-b"
 	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: installEvidence(t, testDigest, nil)}}
 	result, err := NewInstall(runner).Apply(context.Background(), execution)
 	if err == nil {
@@ -280,7 +280,7 @@ func TestAFrozenPhysicalNodeRefusesOnlyItsApply(t *testing.T) {
 		reported[0].Message != "this operation froze Machine/sno-01 as a physical node of ContainerCluster/sno, which this executable refuses" {
 		t.Fatalf("refusal = %#v", reported)
 	}
-	if reported[0].Remediation != "run bootwright destroy to end this operation, then plan it again under this executable" {
+	if reported[0].Remediation != "run bootwright destroy --context lab-b to end this operation, then plan it again under this executable" {
 		t.Fatalf("remediation = %q", reported[0].Remediation)
 	}
 	if len(runner.requests) != 0 {

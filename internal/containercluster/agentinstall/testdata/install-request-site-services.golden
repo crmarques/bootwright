@@ -1,0 +1,64 @@
+{
+  "budgets": {
+    "bootSeconds": 900,
+    "bootstrapSeconds": 5400,
+    "installSeconds": 5400
+  },
+  "endpoints": [
+    {
+      "address": "198.51.100.21",
+      "name": "api-int.sno.lab.example.test"
+    },
+    {
+      "address": "198.51.100.21",
+      "name": "api.sno.lab.example.test"
+    },
+    {
+      "address": "198.51.100.21",
+      "name": "console-openshift-console.apps.sno.lab.example.test"
+    }
+  ],
+  "identity": {
+    "block": "cluster-install-sno",
+    "cluster": "sno",
+    "context": "lab"
+  },
+  "image": {
+    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/sno",
+    "url": "https://192.0.2.1:8443/private/clusters/sno"
+  },
+  "nodes": [
+    {
+      "address": "198.51.100.21",
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "http://192.0.2.1:8000/redfish/v1/Systems/99fb0e65-44db-88dc-80ee-660148714293",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "established"
+        }
+      },
+      "machine": "sno-01",
+      "name": "master-0",
+      "physical": false,
+      "substrate": "libvirt"
+    }
+  ],
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "release": {
+    "distribution": "openshift",
+    "version": "4.21.15"
+  },
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-install",
+    "version": "4.21.15"
+  },
+  "version": "cluster-install-agent-v3",
+  "workRoot": "/var/lib/bootwright-clusters/lab/sno"
+}

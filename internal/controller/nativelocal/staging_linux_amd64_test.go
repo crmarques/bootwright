@@ -81,13 +81,16 @@ func TestRetainedDatabaseServesOnlyTheStateItWasCopiedFrom(t *testing.T) {
 // Releasing is what keeps exactly one snapshot on the host, so it must be safe
 // wherever an invocation ends, including before anything was ever copied.
 func TestClosingReleasesNothingItNeverTook(t *testing.T) {
-	resolver := New(nil)
+	resolver := New(nil, nil)
 	resolver.Close()
 	resolver.Close()
-	directory := t.TempDir()
-	resolver.retained = &retainedDatabase{parent: directory, root: filepath.Join(directory, "snapshot")}
+	stage, err := NewStaging(t.TempDir()).Stage(t.Context(), "rpmdb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver.retained = &retainedDatabase{root: filepath.Join(stage.Path, "root", "snapshot"), release: stage.Release}
 	resolver.Close()
-	if _, err := os.Stat(directory); !os.IsNotExist(err) {
+	if _, err := os.Stat(stage.Path); !os.IsNotExist(err) {
 		t.Fatalf("the retained snapshot outlived its invocation: %v", err)
 	}
 	resolver.Close()

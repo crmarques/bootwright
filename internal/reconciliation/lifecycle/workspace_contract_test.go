@@ -19,6 +19,6 @@ func TestJourneyWorkspaceHonoursTheWorkspaceContract(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return workspacecontract.Subject{Workspace: workspace, Context: name, Host: host}
+		return workspacecontract.Subject{Workspace: workspace, Context: name, Host: host, KeptRuns: lifecycle.JourneyKeptRuns}
 	})
 }

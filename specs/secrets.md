@@ -228,12 +228,18 @@ pristine evidence and no reservation, the destroy that
 [settles](state-reconciliation.md#lifecycle-unit) there releases it. A
 consumer may list a context's binding identities for this; the listing unlocks
 nothing, reveals no material or version, and a store never initialized lists
-none. A binding names no consumer, so a bounded consumer's transient binding
-read in such a listing before it was reopened may be released with them. A
-bounded consumer whose reopen fails while its binding is no longer listed binds
-again, at most three bindings in all, and releases each it made; one whose
-binding is still listed, or whose listing fails, reports the failure without
-reading any material. Binding and release occur outside the lifecycle
+none. Bounded consumers bind nothing: `machine start`, `stop` and `restart`,
+the reading `machine list --power-status` makes, `machine rsh` and
+`machine exec` each read the current version of every Secret they name in one
+keyring session under the store's shared lock, and raise the missing, stale
+and validation refusals a binding raises. A caBundle reaches them narrowed to
+its certificate. They publish no binding and no identity reservation, so any
+number of them leaves the keyring as it found it, and bounded consumers of two
+contexts read together. Their material lives in memory for the length of the
+call and is cleared when it returns, a call ended by cancellation included
+(`TestReadCurrentReadsInOneSessionAndPublishesNothing`,
+`TestBoundedConsumersOfTwoContextsReadTogetherAndLeaveTheKeyringAsTheyFoundIt`).
+Binding and release occur outside the lifecycle
 operation's own store transaction, because acquisition holds the same store
 lock. [Produced material](#produced-material) is the reverse: it is published
 and withdrawn only inside that transaction, through the secret area it lends.

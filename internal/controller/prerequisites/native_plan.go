@@ -32,6 +32,17 @@ var nativeRootNames = map[string][]string{
 	},
 }
 
+// NativeRootNames is a copy of that table: the packages each requirement key
+// installs as roots, in the solver's order. Every other reader of a closure's
+// package names reads it here.
+func NativeRootNames() map[string][]string {
+	names := make(map[string][]string, len(nativeRootNames))
+	for key, packages := range nativeRootNames {
+		names[key] = slices.Clone(packages)
+	}
+	return names
+}
+
 // CanonicalNativePlan copies, orders, validates and hashes a resolved manifest.
 func CanonicalNativePlan(value NativeResolvedPlan) (NativeResolvedPlan, error) {
 	data, err := json.Marshal(value)

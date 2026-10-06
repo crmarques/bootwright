@@ -20,7 +20,7 @@
     "plan": {
       "code": "lifecycle.state",
       "message": "the apply operation-1 (done) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     },
     "apply": {
       "settled": true,
@@ -31,7 +31,7 @@
     "destroy": {
       "code": "lifecycle.state",
       "message": "the apply operation-1 (done) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     }
   },
   "a failed apply whose binding is deleted": {
@@ -55,17 +55,17 @@
     "plan": {
       "code": "lifecycle.state",
       "message": "the apply operation-1 (failed) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright apply, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright apply --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     },
     "apply": {
       "code": "lifecycle.state",
       "message": "the apply operation-1 (failed) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright apply, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright apply --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     },
     "destroy": {
       "code": "lifecycle.state",
       "message": "the apply operation-1 (failed) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     }
   },
   "a failed apply whose blocks are all done whose binding is deleted": {
@@ -83,7 +83,7 @@
         "the apply operation-1 (failed) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie"
       ],
       "nextSteps": [
-        "bootwright apply",
+        "bootwright apply --context lab",
         "bootwright context delete --name lab --purge --allow-orphans"
       ]
     },
@@ -110,7 +110,7 @@
     "destroy": {
       "code": "lifecycle.state",
       "message": "the apply operation-1 (failed) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     }
   },
   "a failed apply whose bound version lost a part": {
@@ -126,8 +126,8 @@
       ],
       "contradictions": [],
       "nextSteps": [
-        "bootwright apply",
-        "bootwright destroy"
+        "bootwright apply --context lab",
+        "bootwright destroy --context lab"
       ]
     },
     "plan": {
@@ -145,12 +145,12 @@
     "apply": {
       "code": "lifecycle.state",
       "message": "the apply operation-1 (failed) froze the Secret binding bind-1, whose material the context's keyring cannot read: referenced secret artifact is missing; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright apply, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright apply --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     },
     "destroy": {
       "code": "lifecycle.state",
       "message": "the apply operation-1 (failed) froze the Secret binding bind-1, whose material the context's keyring cannot read: referenced secret artifact is missing; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     }
   },
   "a failed apply whose keyring listing fails": {
@@ -186,12 +186,12 @@
     "apply": {
       "code": "lifecycle.state",
       "message": "the apply operation-1 (failed) froze the Secret binding bind-1, whose material the context's keyring cannot read: referenced secret artifact is missing; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright apply, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright apply --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     },
     "destroy": {
       "code": "lifecycle.state",
       "message": "the apply operation-1 (failed) froze the Secret binding bind-1, whose material the context's keyring cannot read: referenced secret artifact is missing; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     }
   },
   "a failed destroy whose binding is deleted": {
@@ -215,17 +215,17 @@
     "plan": {
       "code": "lifecycle.state",
       "message": "the destroy operation-2 (failed) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     },
     "apply": {
       "code": "lifecycle.state",
       "message": "an incomplete destroy must be continued before another operation",
-      "remediation": "run destroy to continue it"
+      "remediation": "replace it with bootwright destroy --context lab"
     },
     "destroy": {
       "code": "lifecycle.state",
       "message": "the destroy operation-2 (failed) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     }
   },
   "a failed destroy whose blocks are all done whose binding is deleted": {
@@ -239,7 +239,7 @@
       ],
       "contradictions": [],
       "nextSteps": [
-        "bootwright destroy"
+        "bootwright destroy --context lab"
       ]
     },
     "plan": {
@@ -256,7 +256,7 @@
     "apply": {
       "code": "lifecycle.state",
       "message": "an incomplete destroy must be continued before another operation",
-      "remediation": "run destroy to continue it"
+      "remediation": "continue it with bootwright destroy --context lab"
     },
     "destroy": {
       "settled": true,
@@ -277,7 +277,7 @@
       ],
       "contradictions": [],
       "nextSteps": [
-        "bootwright destroy"
+        "bootwright destroy --context lab"
       ]
     },
     "plan": {
@@ -294,7 +294,7 @@
     "apply": {
       "code": "lifecycle.state",
       "message": "an incomplete destroy must be continued before another operation",
-      "remediation": "run destroy to continue it"
+      "remediation": "continue it with bootwright destroy --context lab"
     },
     "destroy": {
       "settled": true,
@@ -325,17 +325,17 @@
     "plan": {
       "code": "lifecycle.state",
       "message": "the destroy operation-2 (unknown) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     },
     "apply": {
       "code": "lifecycle.state",
       "message": "an incomplete destroy must be continued before another operation",
-      "remediation": "run destroy to continue it"
+      "remediation": "continue it with bootwright destroy --context lab"
     },
     "destroy": {
       "code": "lifecycle.state",
       "message": "the destroy operation-2 (unknown) froze the Secret binding bind-1, which the context's keyring no longer lists; no other material stands in for it, so nothing continues or removes what that operation owns: ArtifactServer/alpha, ArtifactServer/bravo, ArtifactServer/charlie",
-      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
+      "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     }
   },
   "an unknown destroy whose blocks are all done whose binding is deleted": {
@@ -349,7 +349,7 @@
       ],
       "contradictions": [],
       "nextSteps": [
-        "bootwright destroy"
+        "bootwright destroy --context lab"
       ]
     },
     "plan": {
@@ -366,7 +366,7 @@
     "apply": {
       "code": "lifecycle.state",
       "message": "an incomplete destroy must be continued before another operation",
-      "remediation": "run destroy to continue it"
+      "remediation": "continue it with bootwright destroy --context lab"
     },
     "destroy": {
       "settled": true,

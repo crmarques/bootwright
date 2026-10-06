@@ -13,7 +13,7 @@ SOURCE ?= $(if $(COMMIT),$(if $(shell git status --porcelain --untracked-files=n
 STAMP = -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.source=$(SOURCE)
 
 build:
-	$(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright ./cmd/bootwright
+	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright ./cmd/bootwright
 
 test:
 	$(GO) test ./...

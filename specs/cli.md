@@ -212,12 +212,29 @@ The fixed state root is defined by
 ### Ordinary confirmation
 
 Every command that confirms uses one prompt, after the plan it confirms and
-every safeguard it enforces. Only `y` or `yes`, case-insensitive with
-surrounding whitespace ignored, accepts. Read one answer of at most 64 bytes
-including LF without read-ahead. Decline, non-interactive input, cancellation
-or an I/O failure refuses, and the command performs none of the effects it
-asked about. The host-key confirmation of an [SSH session](#machine-ssh-sessions)
-reads its answer the same way. `--yes` suppresses only this prompt, under
+every safeguard decidable from durable local state. A proof that needs the
+exclusive lock or a remote observation (a removal's resolution of every effect
+it takes back and its quiescence gate, the reopened Secret binding, a power
+command's controller identity) follows the prompt and still refuses before
+registration or any effect. Every prompt names the object it acts on and, for
+an object of a context, the context it acts in; `setup` and `media` act on the
+host and name none. Only `y` or `yes`, case-insensitive with surrounding
+whitespace ignored, accepts. Read one answer of at most 64 bytes including LF
+without read-ahead. Decline, non-interactive input, cancellation or an I/O
+failure refuses, and the command performs none of the effects it asked about.
+A declined, non-interactive or unanswerable confirmation refuses under the
+confirming command's own code (`controller.setup`, `media.store`,
+`machine.power`, `lifecycle.state`, `trust.identity`, `context.state` or
+`secret.store.conflict`), with the reason in its message and the command
+repeated with `--yes` in `next:`; a cancellation names no command. The
+repeated command is the invocation's own: its command path and every flag it
+set, so a stage, Machine or source selection, an authorization and every other
+choice stay, and following it never does more than the plan the operator
+reviewed. A command that acts in a context names it with `--context <name>`
+whether or not the invocation did, and a value no output repeats, a Secret's
+`--username` or a `--from-url`, is named by a placeholder such as
+`<username>`. The host-key confirmation of an [SSH session](#machine-ssh-sessions) reads its
+answer the same way. `--yes` suppresses only this prompt, under
 [its flag rule](cli/commands.md#flag-relationships-and-safeguards).
 
 ### Local privilege and user identity
@@ -458,17 +475,28 @@ completed an interrupted finalization or a `destroy` first released what an
 interrupted registration left, that it did only that, so a table of completed
 blocks is never read as work this invocation performed.
 
-`apply` and `destroy` present the frozen plan, then any required
-authorizations, then the ordinary confirmation. The
+`apply` and `destroy` present the frozen plan, which marks each step that
+consumes an authorization and closes with the tokens it requires, then check
+the authorizations, then ask the ordinary confirmation. A required token not
+supplied, or a supplied one the whole frozen plan does not require, then
+refuses `lifecycle.authorization`, naming the consuming steps by their number
+in that plan and their description and the exact command that passes, before
+the ordinary confirmation and before registration. A fresh `destroy`'s plan
+also closes with `Stop first`, naming the Machines whose removal its quiescence
+gate observes on the host; that gate and the resolution of every effect the
+removal takes back need the exclusive lock, so they follow the prompt and
+still refuse before registration. The
 [finalization](state-reconciliation.md#lifecycle-unit) of an interrupted
 operation precedes them and presents nothing, as does a `destroy`'s release of
 what an interrupted registration left. During execution they report
 [progress](cli/output.md#long-running-progress) per block, with its
 [presentation groups](cli/output.md#multi-machine-presentation) as sub-steps,
-and they close with the ordered result, the safe log reference and the
-[receipt](#lifecycle-receipt). A refusal before registration reports its
-diagnostics and no receipt. An authorization token the frozen plan does not
-require fails `lifecycle.authorization` before registration. A root lock or
+and they close with the ordered result, the safe log reference, `Next` (the
+exact command, with `--context`, that continues a `paused`, `failed`,
+`unknown` or `running` operation) and the [receipt](#lifecycle-receipt). An
+interrupt after registration writes that result and receipt, then
+`runtime.interrupted` naming the same command, and exits `130`. A refusal
+before registration reports its diagnostics and no receipt. A root lock or
 context lease that cannot be acquired fails `lifecycle.lease`, naming the safe
 retry; Bootwright never takes a lease over.
 
@@ -486,9 +514,16 @@ or safety gate.
 what a selection gates, pauses and refuses is owned by the
 [stage contract](state-reconciliation.md#stages-and-the-pause-boundary).
 `plan --stage` previews which blocks the selection would start and which it
-would defer. Previewing a fresh or continued `apply`, it fails
-`lifecycle.stage` exactly where that `apply` would; previewing a `destroy`,
-which accepts no selection, it fails `lifecycle.stage` for any selection.
+would defer, as the next `apply` admits them. While a block is unproved or
+failed, that `apply` first resolves every unproved block, whatever its stage,
+or retries the one failed block the selection admits, so the preview marks
+those `resolve` or `retry`, and every other ready block is deferred behind the
+first of them until that resolution or retry succeeds. Previewing a fresh or
+continued `apply`, it fails `lifecycle.stage` exactly where that `apply` would,
+naming the exact `apply` whose `--stage` adds the stage that would unblock
+work, with `--authorize <token>` for each token the plan consumes, since that
+`apply` is authorized against the whole plan; previewing a `destroy`, which accepts no selection, it fails
+`lifecycle.stage` for any selection.
 
 ### Lifecycle receipt
 
@@ -512,7 +547,20 @@ carries the exact durable `running`, `paused`, `failed`, `unknown`, or `done`
 state owned by state reconciliation. A refusal before registration has no
 trustworthy lifecycle result and emits no receipt. A `paused` apply is a
 successful result: it exits zero and its next action is `continue-apply`. The
-receipt and `status --output json` derive from the same trustworthy state.
+receipt and `status --output json` derive from the same trustworthy state. A
+`running`, `failed` or `unknown` result's diagnostic names as its `next:` the
+exact command its records call for, with the `--context` and `--authorize`
+flags a next step carries below: a failed destroy
+names the `destroy` that replaces it with a fresh removal, and an unknown apply
+names beside its resolution the `destroy` that takes back what it started. A
+resolution that proves an effect never performed or only partly realized names,
+for an apply, that continuation with the frozen plan's tokens; for a destroy it
+names no command of its own and defers to the result's last diagnostic, because
+the tokens of the `destroy` that follows are those of every block still not
+proved gone once the whole run settles. A
+failed attempt's adapter diagnostic names its block and the
+`blocks/<block-id>/attempt-NNNNNN.output` file to read in the operation's
+[log directory](cli/output.md#private-operation-logs).
 
 `next` names what the operation's own records call for, by one rule the
 receipt, `plan` and `status` share: `none` once the operation is `done`;
@@ -532,8 +580,16 @@ appears only as the previewed verb of a pure plan, and `destroy` only as that
 or as what a failed destroy calls for. Where `status` offers a next step it
 offers a command this executable runs: a continuation, a resolution and a
 replacement are all offered as the operation's own verb repeated —
-`continue-apply` and `resolve` as `bootwright apply` — and `none` is offered as
-no step at all. No next step names a verb this executable does not expose.
+`continue-apply` and `resolve` as `bootwright apply --context <name>` — and
+`none` is offered as no step at all. No next step names a verb this executable
+does not expose. Every step that names a context-backed command carries
+`--context <name>` for the context `status` read
+([context identity](cli/output.md#context-identity)). A continuation, a
+resolution or a replacement also carries `--authorize <token>` for each token
+its decision requires: the frozen plan's, or, for a failed destroy's
+replacement, those of the blocks it retains. A finalization carries none, and
+neither does `bootwright destroy --context <name>` offered beside an incomplete
+apply, since its presented plan names them.
 
 `status` offers a next step only where that verb's decision would pass over the
 records `status` read, so it never offers a command those records refuse:
@@ -541,7 +597,8 @@ records `status` read, so it never offers a command those records refuse:
 - beside no operation, `bootwright setup` alone while the host's controller
   setup has not completed, because an apply claims the host only after it
   ([host identity](controller.md#host-identity-and-shared-prerequisites)), and
-  otherwise `bootwright plan` and `bootwright apply`; but where it names
+  otherwise `bootwright plan --context <name>` and
+  `bootwright apply --context <name>`; but where it names
   records or evidence no index accounts for, which both verbs refuse, only the
   deletion their refusal names,
   `bootwright context delete --name <name> --purge`, with `--allow-orphans`
@@ -550,12 +607,14 @@ records `status` read, so it never offers a command those records refuse:
 - over an apply that has not completed, its continuation, which only
   [finalizes](state-reconciliation.md#lifecycle-unit) an apply whose blocks are
   all `done`, a `failed` one included, unless a lost block record refuses it,
-  and `bootwright destroy`, unless `status` names a contradiction of the apply's
+  and `bootwright destroy --context <name>`, unless `status` names a
+  contradiction of the apply's
   records, each of which refuses that removal
   ([continuation and removal](state-reconciliation.md#continuation-and-removal));
 - over a destroy that has not completed, the `destroy` that continues,
   resolves, finalizes or replaces it, unless a lost block record refuses a
-  continuation; a replacement reads no such record;
+  continuation; a replacement reads no such record, so `status` names no lost
+  record of a destroy it replaces as a contradiction;
 - over either incomplete operation, `bootwright setup` in place of a
   continuation or resolution that still has a block to run while the host's
   controller setup has not completed, because that continuation re-proves the
@@ -571,7 +630,8 @@ records `status` read, so it never offers a command those records refuse:
   `bootwright context delete --name <name> --purge --allow-orphans`, because
   no verb can reopen that binding and nothing stands in for it
   ([continuation and removal](state-reconciliation.md#continuation-and-removal)),
-  preceded by `bootwright apply` over an apply whose blocks are all `done`,
+  preceded by `bootwright apply --context <name>` over an apply whose blocks
+  are all `done`,
   which that apply finalizes without reopening the binding; a destroy whose
   blocks are all `done` reopens none, because the `destroy` offered above
   finalizes it.
@@ -753,8 +813,19 @@ session's material as open descriptors rather than named files.
 Resolution follows explicit access: an unknown or excluded name fails
 `access.target`, a Machine reached locally fails `access.unavailable` naming
 direct execution on that host, and a Machine declaring no resolvable SSH
-access fails `access.unavailable`. Each is exit `1` with empty standard output,
-no connection attempt and no trust record.
+access fails `access.unavailable`. Each is exit `255` with empty standard
+output, no connection attempt and no trust record. Every refusal Bootwright
+reports before the session opens, `trust.identity` and its refusals at the
+privilege boundary included, exits `255`, the SSH client's own failure status,
+and so does a noninteractive invocation whose sudo exits `1` before the
+child's start line, whatever sudo wrote, a sudoers denial included, which
+reaches standard error as it came; a usage refusal keeps `2` and an interrupt
+before the session keeps `130`. A status from `0` to `254` is therefore the
+remote command's, except at an interactive terminal: sudo writes its own
+refusal there and exits `1`, and the child writes no start line to a terminal,
+so the supervisor cannot tell that refusal from a remote command's `1` and
+keeps it. Once the session
+opened, its status is the result even after an interrupt.
 
 ### Host-key trust
 
@@ -830,6 +901,13 @@ controller is one of that block's own effects: from the moment that block
 completed under the current apply, whatever the Machine's installation reached,
 until a removal proves the block gone. A Machine that authors its own
 controller is reachable whenever that controller answers.
+
+Stopping and restarting ask the
+[ordinary confirmation](#ordinary-confirmation), whose prompt names the
+Machine and its context; a declined or unanswerable one refuses
+`machine.power` naming the command that repeats it with `--yes`. The
+controller identity check against the pin follows the prompt and still
+refuses before any power request.
 
 Every power request crosses [the Machine's management controller](substrates.md#identity-and-power-operations)
 over the one adapter boundary, under the context's shared lock, so a power

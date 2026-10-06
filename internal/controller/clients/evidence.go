@@ -53,7 +53,7 @@ func newEvidence(digest, area string, libvirt bool, tools []prerequisites.ToolDe
 func (e Evidence) encode() (json.RawMessage, error) {
 	data, err := json.Marshal(e)
 	if err != nil {
-		return nil, refuse("lifecycle.state", "the controller prerequisites evidence cannot be encoded", "")
+		return nil, refuse("lifecycle.state", "the controller prerequisites evidence cannot be encoded", "use a compatible executable")
 	}
 	return data, nil
 }

@@ -427,6 +427,13 @@ func TestLifecyclePublicationCheckpointsFireAndFailClosed(t *testing.T) {
 		t.Run(checkpoint, func(t *testing.T) {
 			store, record := lifecycleFixture(t)
 			reserveFixture(t, store, record)
+			// A transaction measures its subtree once, at its first write, so
+			// an earlier operation's record is what that measure reaches.
+			if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+				return tx.Operations().WriteExclusive(ctx, "earlier.json", []byte("{}\n"))
+			}); err != nil {
+				t.Fatal(err)
+			}
 			fired := false
 			store.fail = func(name string) error {
 				if name != checkpoint {

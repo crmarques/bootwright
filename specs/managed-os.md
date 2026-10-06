@@ -75,7 +75,9 @@ or [physical](substrates.md#physical-machine-realization) — the managed
 `ArtifactServer` selected by the profile's `redfishVirtualMedia` endpoint and,
 when present, by its `hostedTree` endpoint, and every managed `DNSServer` and
 `NTPServer` the Machine's effective network and profile select, because the
-guest resolves names and time through them while installing.
+guest resolves names and time through them while installing. An external
+`DNSServer` or `NTPServer` it selects is used at its declared `address` and
+adds no requirement, because no block of this product realizes it.
 
 One installation contract covers every substrate. The
 [realized target](substrates.md#selection-and-refusal) supplies the substrate
@@ -88,7 +90,11 @@ points and fails closed on one it has no entry point for, as the
 **Supported shape.** The profile's `anaconda` arm, with `packageSource` absent
 so the boot media is a DVD installed from `cdrom`, or `hostedTree`, so a boot
 image installs from a package tree the artifact server publishes. `bootMedia`
-and `fromMedia` name entries of the media store. A profile selecting
+and `fromMedia` name entries of the media store as `local-media:<name>`, and
+validate refuses any other source, naming the import that fixes it. The
+profile an installed Machine selects names its `redfishVirtualMedia`
+endpoint, on every substrate, because the installer image is always booted
+through it. A profile selecting
 `initialPassword`, `diskEncryption`, an enabled `fips`, a top-level
 `subscription`, `fromSubscription`, `mirror` or `templateClone` refuses before
 registration. These shapes carry secret bytes or effects this contract does not
@@ -107,8 +113,19 @@ its ejects after the installer's power-off
 ([virtual media](substrates.md#adapter-boundary)). A Machine
 declaring any root-device hint other than `deviceName` refuses before
 registration, naming each such field, because the Kickstart selects its disk
-by name alone and would ignore the others. Publicly served
-content remains secret-free by construction; the one thing an installation
+by name alone and would ignore the others. The installation publishes
+through artifact servers placed on the controller, where the installer image
+is built and the package tree extracted, so an image or tree server placed on
+any other Machine refuses before registration. A virtual Machine whose
+provider host is not the image server's placement Machine refuses too, naming
+both: its emulated controller is reached over plain HTTP with its credential
+and fetches the image without verifying the server, which the
+[security spec](security.md#network-remote-systems-and-privilege) bounds to
+that one host. The network the Kickstart carries is one static IPv4 install
+address on one ethernet interface, its default route and the selected name
+servers; a Machine declaring a network the line cannot carry refuses before
+registration, as the [derived installation](#installation) states. Publicly
+served content remains secret-free by construction; the one thing an installation
 may deliver confidentially is the host key it installs, through the
 [private path](#physical-installation) below, and every other secret-bearing
 arm stays refused until it is separately specified.
@@ -124,7 +141,11 @@ effective state alone: text mode; the accepted license; the install source;
 `localization` and the profile's effective NTP selections; one static
 `network` line from the Machine's selected install address, its interface's
 prefix, the default route and the selected DNS servers, with the Machine's
-effective `fqdn` as hostname; a locked root account; the `bootwright` account
+effective `fqdn` as hostname (the line is static only: a DHCP-only or
+IPv6-only install network, or a Machine with no network configuration, is
+refused at admission, at the Machine's
+[install address](api/machines.md#network-configuration)); a locked root
+account; the `bootwright` account
 with the public half of `remoteMachinesAccessKey` authorized and passwordless
 sudo; the root disk `rootDeviceHints.deviceName` names cleared and partitioned, or
 automatic partitioning when a Machine its substrate created names none; the
@@ -136,6 +157,26 @@ host key its identity channel requires, writes the sudoers and SSH daemon
 drop-ins, and removes every retained copy of the Kickstart. The marker is
 bounded JSON naming the context, Machine, profile, image digest and the
 request digest, and its content is frozen with the plan.
+
+Each selected DNS or NTP address is a managed server's endpoint address, or
+an external server's declared `address`. The `network` line carries nothing
+else of the Machine's network, which the installation reads
+[composed](api/machines.md#nmstate-composition-subset), with its overrides
+merged, as the Machine realizes it. A selected install address that is not an
+interface-assigned IPv4 address with its prefix, an install interface whose
+composed `type` is not `ethernet`, and any other network content refuse before
+registration, naming the Machine: another interface-assigned address, another
+available interface that is not `ethernet`, an `mtu` other than 1500, or a
+route that is not `absent` other than the line's own default route. That route
+is the first IPv4 `0.0.0.0/0` route whose `next-hop-interface` is absent or is
+the install interface and whose `next-hop-address` is the gateway the line
+carries, the next hop of the first default route the network template
+declares. Search domains, a disabled IPv6 family, an `mtu` of 1500 and a
+`table-id` or `metric` on the default route are accepted although the line
+does not carry them, as the lab-rhel example declares them: 1500 is the MTU
+the installed system takes by default, and the installed system applies none
+of the others until post-install network convergence
+([B326](milestones/m4.md#b326)).
 
 What the `%post` does about the host key follows the
 [identity channel](substrates.md#identity-and-power-operations). For the guest
@@ -166,10 +207,12 @@ directory without its `.treeinfo`, which is never a complete tree and which the
 rename cannot replace. An apply therefore clears its work area before its first
 write, and, when it publishes the tree, the staging tree and any such tree
 directory before it extracts.
-The tooling that builds the image and extracts the tree is a prerequisite of
-the artifact server's placement Machine: on the controller it is a
+A Machine and a profile of one name that publish through one server are
+refused at admission, at the profile's hosted-tree `serverRef`, because both
+would own `os/<name>/` there and the Machine's removal would take the tree.
+The tooling that builds the image and extracts the tree is a
 [context prerequisite](controller.md#the-controller-stage) the controller block
-installs, and on an SSH host this block installs it.
+installs on the controller, where every installation publishes.
 
 **Boot.** Immediately before it inserts anything, the block proves the exact
 target through its substrate's own proof: that the machine it is about to
@@ -369,13 +412,24 @@ exists.
 
 Each row is one refusal of the installation capability, and
 `TestManagedOSRefusalTableMatchesUnsupported` holds its `Unsupported` to it.
-The refused object is always the Machine whose installation is refused; a
-target row is checked before a profile row, and only the first a Machine meets
-is reported. Its reason and remedy are the diagnostic's message and
-remediation, in which `<machine>` is that Machine, `<profile>` the
+The refused object is always the Machine whose installation is refused. The
+target rows are checked first, then the network rows, for an `anaconda`
+installation alone because only its Kickstart has a network line, then the
+profile rows, then the publication rows, each group in table order, and only
+the first row a Machine meets is reported. Its reason and remedy are the diagnostic's
+message and remediation, in which `<machine>` is that Machine, `<profile>` the
 `MachineInstallProfile` it selects and `<hints>` every root-device hint it
 declares other than `deviceName`, as `spec.os.install.rootDeviceHints.<hint>`
-in name order, separated by `, `.
+in name order, separated by `, `. `<network>` is the network content the
+[install line](#installation) cannot carry, separated by `, `: `address <name>`
+for each other interface-assigned address in declared order, then
+`interface <name>` for each other available interface that is not `ethernet`,
+then `mtu <value> on <name>` for each available interface whose `mtu` is not
+1500, both in composed order, then `route <destination>` for each route that
+is not `absent`, other than the line's own default route, in declared order.
+`<server>` is the selected `ArtifactServer` and `<server host>` the Machine its
+`spec.machineRef` names; `<provider>` is the Machine's `InfraProvider` and
+`<provider host>` the Machine its `spec.libvirt.machineRef` names.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
@@ -383,6 +437,9 @@ in name order, separated by `, `.
 | A root-device hint other than deviceName | any `spec.os.install.rootDeviceHints` field but `deviceName` | `a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
 | An unverified fetch of private material | `spec.hardware.management.bmc.virtualMedia.tls.trust: disable-verification` on a Machine whose installation delivers private material | `a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server` | `declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on <machine>, or established when its controller already trusts the server` |
 | A delivered host key | a Machine on a `baremetal` provider, whose installation delivers its host key | `a delivered host key would be readable from the publicly served installer image` | `physical managed-OS installation is disabled until private delivery is repaired; remove <machine> from the selected Environment or install its operating system outside Bootwright` |
+| A DHCP-only install | an effective `spec.network.installAddressRef` naming no `spec.network.addresses` entry with an `interface` and an IPv4 address with its prefix; admission refuses it first, so no validated graph reaches this row | `a managed-OS installation configures one static IPv4 install address, and the Machine selects none; DHCP installation is not supported` | `assign an IPv4 address with its prefix to the install interface in spec.network.addresses of <machine> and select it with spec.network.installAddressRef` |
+| A non-ethernet install interface | the install address's `interface` composed with a `type` other than `ethernet`, such as `vlan` or `bond`, on any substrate | `a managed-OS installation configures its install interface as one ethernet device and cannot carry a bonded, VLAN or other logical install interface` | `assign the install address of <machine> to an ethernet interface; a bonded or VLAN install interface is not yet supported` |
+| Network content the Kickstart cannot carry | another interface-assigned address, another available interface that is not `ethernet`, an `mtu` other than 1500 or a route other than the install line's default route, in the composed network | `a managed-OS installation configures only the install address, its default route and the selected name servers, and cannot carry the other network content the Machine declares` | `remove <network> from the network of <machine>, or install its operating system outside Bootwright` |
 | Another installer | a profile's `spec.installer` without `anaconda`, such as `templateClone` | `this executable installs an operating system only through the anaconda installer, which the install profile does not select` | `select spec.installer.anaconda on <profile>` |
 | A package mirror | a profile's `spec.installer.anaconda.packageSource.mirror` | `the install profile selects spec.installer.anaconda.packageSource.mirror, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.mirror from <profile>` |
 | Packages from a subscription | a profile's `spec.installer.anaconda.packageSource.fromSubscription` | `the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.fromSubscription from <profile>` |
@@ -390,12 +447,16 @@ in name order, separated by `, `.
 | An initial password | a profile's `spec.customizations.ssh.initialPassword` | `the install profile selects spec.customizations.ssh.initialPassword, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.ssh.initialPassword from <profile>` |
 | Disk encryption | a profile's `spec.customizations.security.diskEncryption` | `the install profile selects spec.customizations.security.diskEncryption, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.security.diskEncryption from <profile>` |
 | FIPS | a profile's `spec.customizations.security.fips.enabled: true` | `the install profile enables FIPS, which carries effects this executable does not prove` | `disable spec.customizations.security.fips on <profile>` |
+| An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
+| A package tree server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation extracts and publishes its package tree on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint on <profile>` |
+| A Machine off the artifact server's host | a virtual Machine whose provider's `spec.libvirt.machineRef` is not the image server's `spec.machineRef` | `an emulated controller is reached over plain HTTP with its credential and fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on` | `<machine> is booted through a controller on <provider host> and <server> is placed on <server host>; place <provider> on <server host>` |
 
 ## Adapter boundary
 
 Installation crosses the [Go/Ansible
 boundary](architecture.md#go-and-ansible-responsibility-boundary) through one
-fixed entrypoint per operation on the artifact server's placement Machine,
+fixed entrypoint per operation on the controller, where the artifact server it
+publishes through is placed,
 under [the adapter result protocol](architecture.md#the-adapter-result-protocol)
 and the [process](security.md#process-boundary) and
 [Secret-material](security.md#sensitive-material) rules, composing the

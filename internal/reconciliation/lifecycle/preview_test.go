@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"bytes"
 	"context"
+	"errors"
 	"path"
 	"reflect"
 	"slices"
@@ -336,14 +337,15 @@ func killedCase(run killedRun, verb reconciliation.Verb) previewCase {
 }
 
 // previewRow is one state a preview decides over, and what its verb then does:
-// refuses with refusal (and message, where the row names it), settles after
-// only a finalization, or presents the plan of shown. A continuation names the
-// receipt's next action; a fresh plan names none. fails is the code a verb
-// that presented its plan then fails with.
+// refuses with refusal (and message and remedy, where the row names them),
+// settles after only a finalization, or presents the plan of shown. A
+// continuation names the receipt's next action; a fresh plan names none. fails
+// is the code a verb that presented its plan then fails with.
 type previewRow struct {
 	name             string
 	prepare          func(t *testing.T) previewCase
 	refusal, message string
+	remedy           string
 	settles          bool
 	shown            reconciliation.Verb
 	next, fails      string
@@ -370,7 +372,7 @@ func TestEveryPreviewDecidesAsItsVerbDoes(t *testing.T) {
 			case row.refusal != "":
 				reported := diagnostics.Of(previewErr)
 				if firstCode(previewErr) != row.refusal || (row.message != "" && reported[0].Message != row.message) ||
-					!reflect.DeepEqual(reported, diagnostics.Of(verbErr)) {
+					(row.remedy != "" && reported[0].Remediation != row.remedy) || !reflect.DeepEqual(reported, diagnostics.Of(verbErr)) {
 					t.Fatalf("preview = %+v (%v), %s = %+v (%v)", reported, previewErr, c.verb, diagnostics.Of(verbErr), verbErr)
 				}
 			case row.settles:
@@ -480,11 +482,13 @@ func previewRows(ctx context.Context) []previewRow {
 		}},
 		{
 			name: "a continuation whose selection admits nothing", refusal: "lifecycle.stage", message: "the selected stages have nothing to start",
+			remedy:  "repeat bootwright apply --context lab --stage substrates,clusters",
 			prepare: func(t *testing.T) previewCase { return paused(t, "clusters") },
 		},
 		{
 			name: "a continuation whose selection excludes the failed block", refusal: "lifecycle.stage",
 			message: "the block this operation must retry is outside the selected stages",
+			remedy:  "repeat bootwright apply --context lab --stage infra-components,machines",
 			prepare: func(t *testing.T) previewCase {
 				h := newHarness(t, "alpha")
 				failApply(t, h, "alpha")
@@ -542,6 +546,114 @@ func previewRows(ctx context.Context) []previewRow {
 	}
 }
 
+// twoMachines is two Machines and their installations, each installation
+// waiting only for its own Machine, as an Environment of two guests plans them.
+func twoMachines() []reconciliation.BlockDefinition {
+	return []reconciliation.BlockDefinition{
+		stagedDefinition("machine-rhel-01", reconciliation.StageMachines),
+		stagedDefinition("machine-rhel-02", reconciliation.StageMachines),
+		stagedDefinition("os-install-rhel-01", reconciliation.StageMachines, "machine-rhel-01"),
+		stagedDefinition("os-install-rhel-02", reconciliation.StageMachines, "machine-rhel-02"),
+	}
+}
+
+// A stage preview marks what the next apply admits first, as its scheduler
+// decides it: an unproved block it resolves or the failed block it retries
+// holds back every other ready block, which is deferred behind it, and the set
+// the preview marks is the set that apply then works.
+func TestAStagePreviewMarksWhatTheNextApplyAdmits(t *testing.T) {
+	ctx := context.Background()
+	failed := map[string]error{"os-install-rhel-01": errors.New("the installation failed")}
+	cases := []struct {
+		name        string
+		definitions []reconciliation.BlockDefinition
+		stage       string
+		prepare     func(*harness)
+		marks       map[string]string
+		waits       map[string]string
+		startable   int
+		deferred    int
+		// admitted is every attempt and observation the next apply makes,
+		// and completes whether that apply ends done.
+		admitted  []string
+		completes bool
+	}{
+		{
+			name: "a failed installation of one of two Machines", definitions: twoMachines(), stage: "machines",
+			prepare:   func(h *harness) { h.capability.errorFor = failed },
+			marks:     map[string]string{"os-install-rhel-01": StepRetry, "os-install-rhel-02": StepWaiting},
+			waits:     map[string]string{"os-install-rhel-02": "os-install-rhel-01"},
+			startable: 1, deferred: 1, admitted: []string{"apply:os-install-rhel-01"},
+		},
+		{
+			name: "an unknown installation of one of two Machines", definitions: twoMachines(), stage: "machines",
+			prepare: func(h *harness) {
+				h.capability.outcomeFor = map[string]Result{"os-install-rhel-01": {Outcome: reconciliation.OutcomeUnknown}}
+			},
+			marks:     map[string]string{"os-install-rhel-01": StepResolve, "os-install-rhel-02": StepWaiting},
+			waits:     map[string]string{"os-install-rhel-02": "os-install-rhel-01"},
+			startable: 1, deferred: 1, admitted: []string{"observe:os-install-rhel-01"},
+		},
+		{
+			name: "a lone failed block", definitions: []reconciliation.BlockDefinition{definition("alpha")}, stage: "infra-components",
+			prepare: func(h *harness) {
+				h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeFailed}}
+			},
+			marks:     map[string]string{"alpha": StepRetry},
+			startable: 1, admitted: []string{"apply:alpha"}, completes: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newPlannedHarness(t, tc.definitions)
+			tc.prepare(h)
+			if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+				t.Fatal("the first apply reported success")
+			}
+			h.capability.outcomeFor, h.capability.calls = nil, nil
+			preview, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName, Stages: []string{tc.stage}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			marks, waits, marked := map[string]string{}, map[string]string{}, []string{}
+			for _, step := range preview.Steps {
+				if step.Selection != "" {
+					marks[step.ID] = step.Selection
+				}
+				if step.WaitsOn != "" {
+					waits[step.ID] = step.WaitsOn
+				}
+				switch step.Selection {
+				case StepStart, StepRetry:
+					marked = append(marked, "apply:"+step.ID)
+				case StepResolve:
+					marked = append(marked, "observe:"+step.ID)
+				}
+			}
+			if tc.waits == nil {
+				tc.waits = map[string]string{}
+			}
+			if !reflect.DeepEqual(marks, tc.marks) || !reflect.DeepEqual(waits, tc.waits) ||
+				preview.Startable != tc.startable || preview.Deferred != tc.deferred {
+				t.Fatalf("the preview marked %v waiting on %v, starting %d and deferring %d", marks, waits, preview.Startable, preview.Deferred)
+			}
+			// A retry of the installation fails again and a resolution proves
+			// nothing, so the next apply works what it admits first and no more.
+			if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Stages: []string{tc.stage}, SkipConfirmation: true}); (err == nil) != tc.completes {
+				t.Fatalf("the next apply = %v", err)
+			}
+			if !slices.Equal(h.capability.calls, tc.admitted) || !slices.Equal(h.capability.calls, marked) {
+				t.Fatalf("the preview marked %v, the next apply worked %v", marked, h.capability.calls)
+			}
+			shown, previewed := h.presenter.presented[len(h.presenter.presented)-1], *preview
+			shown.Context, shown.Receipt, previewed.Context, previewed.Receipt = ContextIdentity{}, Receipt{}, ContextIdentity{}, Receipt{}
+			if !reflect.DeepEqual(shown, previewed) {
+				t.Fatalf("the apply presented %+v, the preview showed %+v", shown, previewed)
+			}
+		})
+	}
+}
+
 // A destroy accepts no stage selection, so a preview of one refuses any
 // selection, over a completed apply and over a failed destroy alike, and
 // writes nothing.
@@ -562,7 +674,7 @@ func TestADestroyPreviewRefusesAStageSelection(t *testing.T) {
 			records, evidence, mutations := h.workspace.area.clone(), slices.Clone(h.workspace.evidence), h.workspace.mutations
 			_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName, Stages: []string{"infra-components"}})
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != "repeat bootwright plan without --stage" {
+			if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != "repeat bootwright plan --context lab without --stage" {
 				t.Fatalf("preview = %+v (%v)", reported, err)
 			}
 			if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations {

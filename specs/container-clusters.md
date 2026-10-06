@@ -99,8 +99,10 @@ address — the install address of the first master in node-name order — and o
 host record per node: its declared node name, its installer role, every NIC the
 realized target reports by name and hardware address, every root-device hint
 the Machine declares, under its own name and with its declared type, and the
-node's own network configuration with its install address applied. The
-selected NTP servers become additional time sources.
+node's own network configuration with its install address applied and the name
+servers it selects as its resolvers. The selected NTP servers become additional
+time sources. Each selected name or time server is written as a managed
+server's endpoint address or as an external server's declared `address`.
 
 The attempt writes `install-config.yaml`, with the bound material substituted,
 and `agent-config.yaml` in JSON's syntax, which is YAML whose every string is
@@ -203,8 +205,11 @@ does not: it fetches over HTTPS without verifying the server's certificate, so
 on that substrate confidentiality rests on the token and on the fetch never
 leaving the provider host. Selection enforces the second: a virtual node whose
 provider host is not the Machine the artifact server is placed on refuses before
-registration. This is the one exception, it is recorded here rather than
-implied, and it does not extend to any other consumer.
+registration. This is the one exception, and it is recorded here rather than
+implied. The [managed-OS installation](managed-os.md#refusal-table) of a
+virtual Machine shares it, bounded the same way: a virtual Machine whose
+provider host is not its image server's placement Machine refuses before
+registration. It extends to no other consumer.
 
 **Reservations.** `path:` for the work area and `path:` for the private
 publication subtree, so a second context refuses rather than taking either.
@@ -233,7 +238,9 @@ partial realization.
 
 The block `cluster-install-<cluster>` boots the nodes from that image and
 watches the cluster install. It depends on the media block, and requires every
-node `Machine` and the same name and time services.
+node `Machine` and the managed name and time services the cluster and its
+nodes select. An external one is used at its declared `address` and adds no
+requirement, because no block of this product realizes it.
 
 A node whose realized target is
 [physical](substrates.md#physical-machine-realization) makes this block consume

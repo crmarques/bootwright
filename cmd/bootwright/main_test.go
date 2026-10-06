@@ -153,7 +153,11 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 				}
 				return
 			}
-			if code != 1 || stdout.Len() != 0 || !strings.HasPrefix(stderr.String(), prefix) {
+			want := 1
+			if args[0] == "machine" && (args[1] == "rsh" || args[1] == "exec") {
+				want = 255
+			}
+			if code != want || stdout.Len() != 0 || !strings.HasPrefix(stderr.String(), prefix) {
 				t.Fatalf("composition result: exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 			}
 		})

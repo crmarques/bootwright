@@ -653,7 +653,7 @@ func TestMachineQuiescenceAdmitsOnlyAShutOffDomain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	probe := lifecycle.Probe{Block: reconciliation.Block{
+	probe := lifecycle.Probe{Context: "lab-b", Block: reconciliation.Block{
 		BlockDefinition: reconciliation.BlockDefinition{ID: "machine-rhel-01", Request: canonical},
 		RequestDigest:   "digest",
 	}}
@@ -683,7 +683,7 @@ func TestMachineQuiescenceAdmitsOnlyAShutOffDomain(t *testing.T) {
 			if tc.want == lifecycle.Quiescent {
 				return
 			}
-			if state.Stop != "bootwright machine stop --name "+request.Identity.Object {
+			if state.Stop != "bootwright machine stop --context lab-b --name "+request.Identity.Object {
 				t.Fatalf("a machine that is not idle did not name the command that stops it: %q", state.Stop)
 			}
 		})

@@ -12,8 +12,8 @@
       ],
       "contradictions": [],
       "nextSteps": [
-        "bootwright apply",
-        "bootwright destroy"
+        "bootwright apply --context lab",
+        "bootwright destroy --context lab"
       ]
     },
     "plan": {

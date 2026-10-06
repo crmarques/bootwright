@@ -195,9 +195,12 @@ func TestEvidenceRefusesAnUnnamedObject(t *testing.T) {
 	}
 }
 
-func TestWithMaterialOpensExactlyTheRequestedSecretsAndReleasesThem(t *testing.T) {
+// A bounded consumer reads exactly the Secrets it names in one keyring session
+// and binds nothing, and what it was lent is cleared once it returns.
+func TestWithMaterialReadsExactlyTheRequestedSecretsAndClearsThem(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t, "artifact-server-lab")
+	h.binder.material["artifact-server-tls"] = servingMaterial()
 	var seen map[string]secrets.Material
 	err := h.service.WithMaterial(ctx, MaterialRequest{ContextName: "lab", Secrets: []string{"artifact-server-tls"}},
 		func(_ context.Context, material map[string]secrets.Material) error {
@@ -210,34 +213,32 @@ func TestWithMaterialOpensExactlyTheRequestedSecretsAndReleasesThem(t *testing.T
 	if len(seen) != 1 {
 		t.Fatalf("material = %+v", seen)
 	}
-	if len(h.binder.bound) != 1 || h.binder.bound[0] != "artifact-server-tls" {
-		t.Fatalf("bound = %v", h.binder.bound)
-	}
-	if len(h.binder.released) != 1 {
-		t.Fatalf("released = %v", h.binder.released)
-	}
+	requireReadWithoutBinding(t, h, seen["artifact-server-tls"])
 	// A bounded material read is not an operation: it registers none and takes
-	// no store lock, so nothing about the context's records may have moved.
+	// no workspace lock, so nothing about the context's records may have moved.
 	if h.workspace.mutations != 0 || h.workspace.runs != 0 {
 		t.Fatalf("mutations = %d runs = %d", h.workspace.mutations, h.workspace.runs)
 	}
 }
 
-func TestWithMaterialReleasesWhatItOpenedWhenTheConsumerFails(t *testing.T) {
+func TestWithMaterialClearsWhatItReadWhenTheConsumerFails(t *testing.T) {
 	refused := errors.New("refused")
 	h := newHarness(t, "artifact-server-lab")
+	h.binder.material["artifact-server-tls"] = servingMaterial()
+	var lent secrets.Material
 	err := h.service.WithMaterial(context.Background(),
 		MaterialRequest{ContextName: "lab", Secrets: []string{"artifact-server-tls"}},
-		func(context.Context, map[string]secrets.Material) error { return refused })
+		func(_ context.Context, material map[string]secrets.Material) error {
+			lent = material["artifact-server-tls"]
+			return refused
+		})
 	if !errors.Is(err, refused) {
 		t.Fatalf("err = %v", err)
 	}
-	if len(h.binder.released) != 1 {
-		t.Fatalf("released = %v", h.binder.released)
-	}
+	requireReadWithoutBinding(t, h, lent)
 }
 
-func TestWithMaterialNeedsNoBindingWhenNothingIsRequested(t *testing.T) {
+func TestWithMaterialReadsNothingWhenNothingIsRequested(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	called := false
 	err := h.service.WithMaterial(context.Background(), MaterialRequest{ContextName: "lab"},
@@ -251,8 +252,8 @@ func TestWithMaterialNeedsNoBindingWhenNothingIsRequested(t *testing.T) {
 	if err != nil || !called {
 		t.Fatalf("call = %v called=%t", err, called)
 	}
-	if len(h.binder.bound) != 0 || len(h.binder.released) != 0 {
-		t.Fatalf("bound = %v released = %v", h.binder.bound, h.binder.released)
+	if reads := h.binder.reads(); len(reads) != 0 || len(h.binder.bound) != 0 || len(h.binder.released) != 0 {
+		t.Fatalf("read %v, bound %v and released %v", reads, h.binder.bound, h.binder.released)
 	}
 }
 

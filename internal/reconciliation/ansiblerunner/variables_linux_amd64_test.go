@@ -128,6 +128,7 @@ func TestTheAdapterReadsEveryRequestStringAsData(t *testing.T) {
 // Run writes for a request holding every delimiter.
 func TestTheLifecycleRunnerWritesTheCollectionsFixture(t *testing.T) {
 	request := lifecycle.RunRequest{
+		Context: "fixture-context", Block: "fixture-block", Description: "Serve the {{ fixture }}",
 		Variable: "bootwright_fixture", Digest: "sha256:" + strings.Repeat("5f", 32), Canonical: []byte(templatedRequest),
 		Materials:      []lifecycle.MaterialFile{{Name: "tls.crt", Part: secrets.CertificatePart, Secret: "fixture-tls", Variable: "certificate"}},
 		MaterialValues: map[string]string{"fingerprint": "{{ 6*7 }}"},
