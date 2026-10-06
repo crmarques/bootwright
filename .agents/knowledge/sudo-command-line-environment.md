@@ -38,9 +38,25 @@ failure only appears against real sudo.
 
 A command-line assignment needs `setenv` in sudoers, a `SETENV` tag on the
 matching rule, or a rule whose command is `ALL`. The common operator rule
-(`%wheel ALL=(ALL) ALL`) matches `ALL`, so it works untouched. A rule that
-names the Bootwright binary specifically must add `SETENV:`, otherwise sudo
-refuses with `sorry, you are not allowed to set the following environment
+(`%wheel ALL=(ALL) ALL`) matches `ALL`, so it works untouched.
+
+Sudo sees `/proc/<pid>/exe`, never the binary's path, because
+`ReexecutionPath` pins the re-execution there. Sudo rule matching compares the
+command's base name before anything else (`command_matches_normal` in
+[match_command.c](https://github.com/sudo-project/sudo/blob/main/plugins/sudoers/match_command.c)),
+so `exe` against `bootwright` refuses a rule naming the binary outright. The
+1.9.14 NEWS entry "canonicalizes command path names before matching" does not
+change that: `set_cmnd_path` in
+[sudoers.c](https://github.com/sudo-project/sudo/blob/SUDO_1_9_14/plugins/sudoers/sudoers.c)
+canonicalizes only the command's parent directory, and the base name stays
+the basename of the path as run, on 1.9.14 and on the current tree alike. A
+rule must match `/proc/<pid>/exe` itself: `ALL`, or a `/proc/[0-9]*/exe`
+pattern, which `fnmatch` compares against the path as run. B49's 2026-10-05
+run on Fedora's sudo 1.9.17p2 denied the re-execution with a rule that named
+`/proc/*/exe` beside the executable, and the refusal it reported named
+`/proc/<pid>/exe` ([acceptance ledger](../../docs/acceptance.md)). A
+`/proc/[0-9]*/exe` rule still needs `SETENV:` for a forwarded route, otherwise
+sudo refuses with `sorry, you are not allowed to set the following environment
 variables` and the invocation fails before the child starts. Running as root
 avoids the forwarding entirely, because the process reads its own environment.
 

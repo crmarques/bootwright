@@ -772,8 +772,11 @@ Cancellation stops authorization of new effects. Before native installation
 starts, the runner terminates and reaps its process group. Once an authorized
 package transaction is running, it waits for native package hooks to finish
 and retains coordination until the child has exited; a timeout never grants
-lock takeover. Abrupt process death can leave package effects or an incomplete
-bundle. An explicit retry must prove either the exact before-inventory for
+lock takeover. The unprivileged sudo supervisor relays the operator's interrupt
+and waits for the elevated command with no deadline of its own, so a second
+operator signal is the only kill
+([local privilege](cli.md#local-privilege-and-user-identity)). Abrupt process
+death can leave package effects or an incomplete bundle. An explicit retry must prove either the exact before-inventory for
 safe replay, or the complete expected after-inventory and every required tool
 before recording success. Missing
 or contradictory evidence remains unknown and requires operator recovery.

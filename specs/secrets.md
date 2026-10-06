@@ -95,8 +95,23 @@ copies; this does not enlarge logical material limits.
 CA PEM contains CA certificates; TLS validates key agreement and server-auth
 suitability. SSH accepts one unencrypted Ed25519, RSA >=3072 or API-supported
 ECDSA private key, derives/verifies public material, and rejects DSA, trailing
-keys, unsupported curves and mismatches. Whole-version file reads hold verified
-no-follow handles and revalidate stability.
+keys, unsupported curves and mismatches. Short of its final line feeds, the
+whole public key line, its edges and field separators included, holds no
+character a [generated comment](api/secrets.md#generated-source) refuses: its
+fields are separated by spaces, any line ending it carries is a bare line
+feed, and spaces at its edges pass. A tab between or around its fields, or a
+CRLF line ending, therefore refuses at import, naming the line, for every
+`sshKeyPair` Secret whatever consumes it: the fleet key, Machine host keys and
+cluster node keys alike. A key already stored that way must be set again;
+`secret check` names it as invalid.
+Whole-version file reads hold verified no-follow handles and revalidate
+stability. Each file, and every directory
+above it, is opened under the invoking account's credentials, and root
+re-proves type, owner, link count, permissions and stability on each
+descriptor it receives. A permission denial names the authored path and who
+was denied: the invoking account, or root itself when the invoking account is
+root. Root cannot read a file in a root-squashed network home, so that refusal
+says to copy the file to a local directory and name the copy.
 
 Generation uses OS entropy. Tokens use API entropy length; passwords 32 bytes;
 both use unpadded base64url. TLS/CA uses P-256, PKCS#8 PEM, self-signed X.509,

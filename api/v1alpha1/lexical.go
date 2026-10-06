@@ -23,6 +23,24 @@ var packageVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~^:-]{0
 // reaches both verbatim.
 var devicePathPattern = regexp.MustCompile(`^/dev/[A-Za-z0-9._:+/-]+$`)
 
+// systemdUnitPattern is systemd's unit-name alphabet and 255-byte bound
+// without the backslash of its escapes, which a Kickstart line would consume.
+// packageSpecPattern admits a name, a version, a glob, an @group, an
+// @^environment and an @module:stream/profile, and nothing that opens a
+// Kickstart section, excludes a package or ends the line. interfacePattern is
+// a Linux interface name within IFNAMSIZ.
+var systemdUnitPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:_.@-]{0,254}$`)
+var packageSpecPattern = regexp.MustCompile(`^[A-Za-z0-9_@*][A-Za-z0-9_.+*?@:~^/\[\]-]*$`)
+var interfacePattern = regexp.MustCompile(`^[A-Za-z0-9_.+-]{1,15}$`)
+
+// uriExcluded are the printable ASCII characters RFC 3986 admits nowhere in a
+// URI. kickstartSeparators are those a Kickstart line reads as a quote, an
+// escape, a comment or a list separator.
+const (
+	uriExcluded         = "\"<>\\^`{|}"
+	kickstartSeparators = "\"'\\#,"
+)
+
 func ValidLexical(rule, value string) bool {
 	if rule == "checksum" {
 		return digestPattern.MatchString(strings.TrimSpace(value))
@@ -49,8 +67,17 @@ func ValidLexical(rule, value string) bool {
 		}
 		return validHost(value)
 	case "http-url", "https-url":
-		u, err := neturl.Parse(value)
-		return err == nil && u.Opaque == "" && u.User == nil && u.Host != "" && validHost(u.Hostname()) && (u.Scheme == "https" || rule == "http-url" && u.Scheme == "http") && validURLPort(u)
+		return validHTTPURL(value, rule == "https-url")
+	case "repository-url":
+		return validHTTPURL(value, false) && !strings.ContainsAny(value, "#'")
+	case "systemd-unit":
+		return systemdUnitPattern.MatchString(value)
+	case "package-spec":
+		return packageSpecPattern.MatchString(value)
+	case "kickstart-token":
+		return !strings.HasPrefix(value, "%") && printableExcept(value, kickstartSeparators)
+	case "ifname":
+		return interfacePattern.MatchString(value) && value != "." && value != ".."
 	case "registry", "registry-base":
 		return validRegistry(value)
 	case "image":
@@ -100,6 +127,28 @@ func validHost(value string) bool {
 		return ip.Zone() == ""
 	}
 	return validDNS(value)
+}
+
+// validHTTPURL is an absolute http or https URL with a DNS or IP host, an
+// optional port and no userinfo, written only in RFC 3986's own characters so
+// that no whitespace, control or non-ASCII character reaches a consumer.
+func validHTTPURL(value string, secure bool) bool {
+	if !printableExcept(value, uriExcluded) {
+		return false
+	}
+	u, err := neturl.Parse(value)
+	return err == nil && u.Opaque == "" && u.User == nil && u.Host != "" && validHost(u.Hostname()) && (u.Scheme == "https" || !secure && u.Scheme == "http") && validURLPort(u)
+}
+
+// printableExcept holds when every byte is printable ASCII other than space
+// and none is in excluded.
+func printableExcept(value, excluded string) bool {
+	for index := range len(value) {
+		if b := value[index]; b < 0x21 || b > 0x7e || strings.IndexByte(excluded, b) >= 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func validURLPort(u *neturl.URL) bool {

@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
@@ -179,8 +180,13 @@ func writeInvocation(job string, launch prerequisites.PythonLaunch, request capa
 	}
 	inventory := map[string]any{"all": map[string]any{"children": map[string]any{"bootwright_controller": map[string]any{"hosts": map[string]any{"controller": map[string]any{"ansible_connection": "local", "ansible_python_interpreter": interpreter, "ansible_host": "localhost"}}}}}}
 	variables := map[string]any{"bootwright_controller_request": request}
-	for name, value := range map[string]any{"inventory.json": inventory, "request.json": variables} {
-		encoded, err := json.Marshal(value)
+	// ansible-core reads an --extra-vars file as trusted templates, and package
+	// metadata in this request is remote text, so every string is marked data.
+	for name, encode := range map[string]func() ([]byte, error){
+		"inventory.json": func() ([]byte, error) { return json.Marshal(inventory) },
+		"request.json":   func() ([]byte, error) { return ansible.ExtraVariables(variables) },
+	} {
+		encoded, err := encode()
 		if err != nil || len(encoded) > 4<<20 || os.WriteFile(filepath.Join(job, name), encoded, 0600) != nil {
 			return failure("controller.setup", "the frozen Ansible invocation could not be materialized")
 		}

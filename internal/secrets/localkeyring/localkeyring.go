@@ -319,7 +319,7 @@ func areaFailure(ctx context.Context, code, message string, err error) error {
 		return ctx.Err()
 	}
 	var failure *diagnostics.Failure
-	if errors.As(err, &failure) && len(failure.Diagnostics) == 1 && strings.HasPrefix(failure.Diagnostics[0].Code, "secret.store.") {
+	if errors.As(err, &failure) && len(failure.Diagnostics) == 1 && (failure.Diagnostics[0].Code == "secret.store" || strings.HasPrefix(failure.Diagnostics[0].Code, "secret.store.")) {
 		return err
 	}
 	return secretstore.Failure(code, message)

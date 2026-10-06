@@ -433,8 +433,18 @@ func (c Capability) pinValues(execution lifecycle.Execution, request Request) (m
 
 // authorizedKey reads the public half of the bound fleet key. Only that half
 // ever reaches the Kickstart, the image, the tree, the evidence or the logs.
+// The adapter substitutes it after rendering, so the renderer's guard never
+// sees it: it is refused here unless it stays inside its quoted directive.
 func authorizedKey(execution lifecycle.Execution, request Request) (string, error) {
-	return publicHalf(execution, request.FleetKeyRef, "fleet access key")
+	key, err := publicHalf(execution, request.FleetKeyRef, "fleet access key")
+	if err != nil {
+		return "", err
+	}
+	if !kickstartQuoted(key) {
+		return "", refusal("api.value", "the fleet access key's public half holds a character a Kickstart directive cannot carry",
+			"replace Secret "+request.FleetKeyRef+" with a key whose public line, its separators and comment included, has no control character (a tab included), line or paragraph separator, double quote or backslash")
+	}
+	return key, nil
 }
 
 // publicHalf reads the public half of one bound key pair. A private half never

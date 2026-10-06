@@ -409,9 +409,21 @@ domains; compilation phase and diagnostic semantics remain in
 The composition root binds `workspace/contextfs` to the fixed privileged store
 and `workspace/selectionfs` to a lazily verified invoking account. The latter
 accesses the user file with that account's credentials, including a bounded
-credential-dropped subprocess when the caller is root. `controller/privilege`
-owns local account lookup and invocation-scoped sudo process supervision, and
-the elevation decisions: noninteractive mode, stream handoff, the elevated
+credential-dropped subprocess when the caller is root. The composition root
+also binds `workspace/invokerfs` to the same lazily verified account for
+operator-named paths: the input directory and every file and directory beneath
+it, a Context file, a secret file and a media source. `validate -f`,
+`context init` and `context update` therefore read one input directory under
+the same credentials. A process already running as
+that account, direct root included, opens in-process. A root process serving
+another account starts one bounded helper per acquisition: the running binary,
+which the child resolves through procfs once it holds that account's
+credentials, killed with its creating thread. The helper opens each name
+without following a link at it and passes the descriptor back; root never
+hands it a descriptor it did not issue, and the adapter that receives a
+descriptor keeps every type, ownership and stability proof.
+`controller/privilege` owns local account lookup and invocation-scoped sudo
+process supervision, and the elevation decisions: noninteractive mode, stream handoff, the elevated
 child's start announcement, and what each outcome reports. Its `Begin` is the
 one signal subscription, which the supervisor relays and every CLI operation's
 cancellation derives from. `TestAdmissionEffectBoundary` holds every production

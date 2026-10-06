@@ -3,6 +3,7 @@ package privilege
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"strconv"
@@ -45,7 +46,11 @@ type Outcome struct {
 func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 	executable, err := e.Executable()
 	if err != nil {
-		return Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "invocation executable cannot be verified"}}
+		diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "invocation executable cannot be verified"}
+		if reported := diagnostics.Of(err); len(reported) == 1 {
+			diagnostic = reported[0]
+		}
+		return Outcome{ExitCode: 1, Diagnostic: &diagnostic}
 	}
 	sudo, err := e.Sudo()
 	if err != nil {
@@ -141,10 +146,9 @@ const environmentRefusal = "sorry, you are not allowed to set the following envi
 
 // authorizationRefusal reports that sudo refused before the child started. The
 // report replaces the lines the invocation held, so it carries them as its
-// reason, and a rule that refused the forwarded route names the tag it lacks.
+// reason, and names the fix of the refusal they report.
 func authorizationRefusal(held []byte) Outcome {
 	message := "sudo authorization could not be obtained"
-	remediation := "authenticate to sudo, or run Bootwright as root"
 	var reasons []string
 	for _, line := range strings.Split(string(held), "\n") {
 		reason := strings.TrimPrefix(line, sudoLinePrefix)
@@ -152,24 +156,31 @@ func authorizationRefusal(held []byte) Outcome {
 			continue
 		}
 		reasons = append(reasons, reason)
-		if strings.HasPrefix(reason, environmentRefusal) {
-			remediation = "add the SETENV tag to the sudoers rule that runs Bootwright, or run Bootwright as root"
-		}
 	}
 	if len(reasons) != 0 {
 		message += ": " + strings.Join(reasons, "; ")
 	}
-	return Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: message, Remediation: remediation}}
+	return Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: message, Remediation: refusalRemedy(reasons)}}
 }
+
+// accountRemedy names what resolves without the account database: a local
+// account, or a clean root login, whose root context selection is not the
+// operator's, so it names the context.
+const accountRemedy = "run Bootwright as a local account, or from a clean root login (su -, sudo su -, or a root SSH session) naming the context with --context"
 
 // Admit verifies the invoking account before any root state is touched and
 // arms the sudo parent guard. The guard belongs to the calling OS thread, so
 // it runs on the caller's goroutine and the caller defers release after all
-// command work.
+// command work. A refusal names the reason the account could not be verified.
 func Admit(ctx context.Context, accounts AccountResolver, guard func(int) (func(), error)) (release func(), refusal *diagnostics.Diagnostic) {
 	account, err := accounts.Resolve(ctx)
 	if err != nil {
-		return func() {}, &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "invoking account cannot be verified"}
+		message := "invoking account cannot be verified"
+		var reason accountRefusal
+		if errors.As(err, &reason) {
+			message += ": " + reason.reason
+		}
+		return func() {}, &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: message, Remediation: accountRemedy}
 	}
 	if account.SudoParentPID == 0 {
 		return func() {}, nil

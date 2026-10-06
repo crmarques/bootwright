@@ -1,9 +1,13 @@
 package lifecycle
 
 import (
+	"bytes"
+	"cmp"
 	"context"
+	"encoding/json"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -98,6 +102,9 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 	}
 	slices.Sort(binding.secrets)
+	if err := RefuseTemplateDelimiters(view.Identity().Name, definitions); err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
 	if err := refuseOwnSocketConflicts(state.Effective(), controller, binding.reservations, placed); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
@@ -194,6 +201,133 @@ func socketConflict(conflict prerequisites.SocketConflict, host string) error {
 		"this context's "+conflict.First.Kind+" "+conflict.First.Service+" at "+conflict.FirstSocket+" and "+
 			conflict.Second.Kind+" "+conflict.Second.Service+" at "+conflict.SecondSocket+" cannot both listen on "+host,
 		"give one of them another bind address or port")
+}
+
+// templateDelimiters open a Jinja expression, statement and comment. No request
+// Bootwright plans carries one of its own, so one there came from a value.
+var templateDelimiters = []string{"{{", "{%", "{#"}
+
+// ansibleReservedKeys are the keys ansible-core decodes an object holding one
+// of as a typed value, so no runner can hand a request keyed by one as data.
+// They are the keys ansible.ExtraVariables refuses.
+var ansibleReservedKeys = []string{"__ansible_type", "__ansible_unsafe", "__ansible_vault"}
+
+// RefuseTemplateDelimiters refuses every block whose request holds a template
+// delimiter in a string or a mapping key, or a key ansible-core reserves,
+// whatever its stage, with one diagnostic per block naming the first such
+// field and how many more hold one. A runner already hands every string to
+// Ansible as data; this keeps a value that would be code there, or that no
+// runner could encode, out of a plan at all.
+func RefuseTemplateDelimiters(contextName string, definitions []reconciliation.BlockDefinition) error {
+	var refused []diagnostics.Diagnostic
+	for _, definition := range definitions {
+		hits := templateHits(definition.Request)
+		if len(hits) == 0 {
+			continue
+		}
+		object := definition.Kind + "/" + definition.Object
+		message := "the request planned for " + object + " holds " + hits[0].what + " in " + hits[0].where
+		if more := len(hits) - 1; more > 0 {
+			message += ", and " + strconv.Itoa(more) + " more of its fields hold one"
+		}
+		var removed []string
+		if slices.ContainsFunc(hits, func(hit templateHit) bool { return !hit.reserved }) {
+			removed = append(removed, `"{{", "{%" and "{#"`)
+		}
+		if slices.ContainsFunc(hits, func(hit templateHit) bool { return hit.reserved }) {
+			removed = append(removed, `every key named "__ansible_type", "__ansible_unsafe" or "__ansible_vault"`)
+		}
+		// A plan reads the context's imported input, so the repaired values are
+		// imported before the context is planned again.
+		remedy := "remove " + strings.Join(removed, " and ") + " from the desired-state values " + object + " is planned from, " +
+			"import them with bootwright context update --name " + contextName + " --input-dir <dir>, then run bootwright plan --context " + contextName
+		refused = append(refused, diagnostics.Diagnostic{
+			Severity: "error", Code: "api.value", Message: message, Remediation: remedy,
+			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: definition.Kind, Name: definition.Object},
+		})
+	}
+	if len(refused) == 0 {
+		return nil
+	}
+	slices.SortFunc(refused, func(first, second diagnostics.Diagnostic) int {
+		return cmp.Or(strings.Compare(first.Object.Kind, second.Object.Kind), strings.Compare(first.Object.Name, second.Object.Name), strings.Compare(first.Message, second.Message))
+	})
+	return &diagnostics.Failure{Diagnostics: refused}
+}
+
+// templateHit is one field of a request holding a delimiter or a reserved key:
+// what it holds, where the field is, and whether that is a reserved key.
+type templateHit struct {
+	what, where string
+	reserved    bool
+}
+
+// templateHits reads a request depth-first, keys in sorted order and items in
+// index order. A request that does not decode holds none here, because the
+// plan refuses its shape itself.
+func templateHits(request []byte) []templateHit {
+	decoder := json.NewDecoder(bytes.NewReader(request))
+	decoder.UseNumber()
+	var decoded any
+	if decoder.Decode(&decoded) != nil {
+		return nil
+	}
+	var hits []templateHit
+	collectTemplateHits(decoded, "", &hits)
+	return hits
+}
+
+func collectTemplateHits(value any, path string, hits *[]templateHit) {
+	switch typed := value.(type) {
+	case string:
+		if marker, index := firstDelimiter(typed); marker != "" {
+			where := cmp.Or(path, "the request")
+			if strings.Contains(typed, "\n") {
+				where = "line " + strconv.Itoa(strings.Count(typed[:index], "\n")+1) + " of " + where
+			}
+			*hits = append(*hits, templateHit{what: delimiterHeld(marker), where: where})
+		}
+	case []any:
+		for index, item := range typed {
+			collectTemplateHits(item, path+"["+strconv.Itoa(index)+"]", hits)
+		}
+	case map[string]any:
+		for _, key := range slices.Sorted(maps.Keys(typed)) {
+			if marker, _ := firstDelimiter(key); marker != "" {
+				*hits = append(*hits, templateHit{what: delimiterHeld(marker), where: "a key of " + cmp.Or(path, "the request")})
+			} else if slices.Contains(ansibleReservedKeys, key) {
+				*hits = append(*hits, templateHit{what: "the ansible-core reserved key " + strconv.Quote(key), where: cmp.Or(path, "the request"), reserved: true})
+			}
+			collectTemplateHits(typed[key], fieldPath(path, key), hits)
+		}
+	}
+}
+
+// fieldPath names a member as a dotted path does, quoting a key that is not
+// letters, digits, underscores and hyphens.
+func fieldPath(path, key string) string {
+	plain := key != "" && strings.Trim(key, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") == ""
+	switch {
+	case !plain:
+		return path + "[" + strconv.Quote(key) + "]"
+	case path == "":
+		return key
+	}
+	return path + "." + key
+}
+
+func delimiterHeld(marker string) string {
+	return "the template delimiter " + strconv.Quote(marker)
+}
+
+func firstDelimiter(text string) (string, int) {
+	marker, first := "", -1
+	for _, delimiter := range templateDelimiters {
+		if index := strings.Index(text, delimiter); index >= 0 && (first < 0 || index < first) {
+			marker, first = delimiter, index
+		}
+	}
+	return marker, first
 }
 
 // refuseUnsupported refuses every selected object whose realization this

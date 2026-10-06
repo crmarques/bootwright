@@ -9,6 +9,7 @@ import (
 	"io"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -20,12 +21,46 @@ import (
 var _ contexts.Repository = (*Store)(nil)
 
 const (
-	missingRegistryMessage      = "context store is missing registry.json"
 	unsupportedRootStateMessage = "the context store root contains unsupported state"
-	storeRecoveryRemediation    = "restore the whole store from a matching backup or move it aside if disposable, then retry"
+	unsafeRootRemediation       = "nothing repairs it, because Bootwright never changes the owner or mode of an existing state root; " + earlierBuildGuidance
 	pendingRegistryMessage      = "context initialization is incomplete"
 	pendingRegistryRemediation  = "retry context init with the original options"
 )
+
+// unsafeRoot names what the state root is and what it must be.
+func unsafeRoot(stat syscall.Stat_t, uid, gid uint32) error {
+	return contexts.StateErrorWithRemediation(
+		"the state root is "+fileKind(stat.Mode)+" owned by "+ownerText(stat.Uid, stat.Gid)+" with mode "+modeText(stat.Mode)+
+			", but it must be a directory owned by "+ownerText(uid, gid)+" with mode 0700",
+		unsafeRootRemediation)
+}
+
+func fileKind(mode uint32) string {
+	switch mode & syscall.S_IFMT {
+	case syscall.S_IFDIR:
+		return "a directory"
+	case syscall.S_IFREG:
+		return "a regular file"
+	case syscall.S_IFLNK:
+		return "a symbolic link"
+	}
+	return "a special file"
+}
+
+func ownerText(uid, gid uint32) string {
+	if uid == 0 && gid == 0 {
+		return "root:root"
+	}
+	return strconv.FormatUint(uint64(uid), 10) + ":" + strconv.FormatUint(uint64(gid), 10)
+}
+
+func modeText(mode uint32) string {
+	text := strconv.FormatUint(uint64(mode&07777), 8)
+	for len(text) < 4 {
+		text = "0" + text
+	}
+	return text
+}
 
 type missingRegistryError struct {
 	failure     error
@@ -59,7 +94,15 @@ func safeError(err error) error {
 	if errors.As(err, &failure) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	return state("context storage could not be safely accessed")
+	const refused = "context storage could not be safely accessed"
+	errno, found := storeErrno(err)
+	switch {
+	case !found:
+		return state(refused)
+	case capacityErrno(errno):
+		return storeFailure(refused, errno)
+	}
+	return state(refused + ": " + errnoText(errno))
 }
 
 func (s *Store) View(ctx context.Context) (contexts.Registry, error) {
@@ -159,31 +202,18 @@ func pendingInitialRegistryName(name string) bool {
 }
 
 func rootEntryNames(root *directory, maximum int) ([]string, error) {
-	if err := root.verify(); err != nil {
-		return nil, err
+	names, err := heldNames(root, maximum)
+	var failed *listingFailure
+	if !errors.As(err, &failed) {
+		return names, err
 	}
-	file, err := openWithin(root, ".", syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	identity, err := statHandle(file)
-	if err != nil || !sameIdentity(root.identity, identity) {
+	switch failed.kind {
+	case listingReplaced:
 		return nil, state("state root changed during enumeration")
-	}
-	names, readErr := file.Readdirnames(maximum + 1)
-	if readErr != nil && !errors.Is(readErr, io.EOF) {
-		return nil, state("state root cannot be enumerated safely")
-	}
-	if len(names) > maximum {
+	case listingOverLimit:
 		return nil, state("state root entry count exceeds its limit")
 	}
-	if err := root.verify(); err != nil {
-		return nil, err
-	}
-	slices.Sort(names)
-	return names, nil
-
+	return nil, state("state root cannot be enumerated safely")
 }
 
 func soleRootEntry(root *directory) (string, bool, error) {
@@ -388,6 +418,13 @@ func (s *Store) recoverInitialRegistry(ctx context.Context, root *directory) (bo
 }
 
 func verifyMappings(ctx context.Context, root *directory, registry contexts.Registry) error {
+	return verifyMappingsExcept(ctx, root, registry, "")
+}
+
+// verifyMappingsExcept verifies every ready context's mapping except skip's,
+// the one context a scoped deletion admits. Verification stays store-wide, so
+// any other damaged context still refuses, named.
+func verifyMappingsExcept(ctx context.Context, root *directory, registry contexts.Registry, skip string) error {
 	if _, err := readControllerStored(ctx, root, registry); err != nil {
 		return err
 	}
@@ -397,75 +434,156 @@ func verifyMappings(ctx context.Context, root *directory, registry contexts.Regi
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if record.Mode != contexts.Ready {
+		if record.Mode != contexts.Ready || record.Name == skip {
 			continue
 		}
-		container, dir, err := openContext(root, record)
+		size, err := verifyContextMapping(ctx, root, record)
 		if err != nil {
 			return err
 		}
-		err = verifyReservation(ctx, dir, record.Name)
-		var config []byte
-		if err == nil {
-			config, err = readBounded(ctx, dir, "context.yaml", maxRecord, true)
-		}
-		if err == nil {
-			parsed, parseErr := contexts.ParseConfiguration(record.Name, config)
-			if parseErr != nil || !bytes.Equal(config, parsed.Canonical()) || parsed.SecretStore.Type != record.SecretStoreType {
-				err = state("persisted context configuration is inconsistent")
-			}
-		}
-		if err == nil && record.Revision != "" {
-			owned := []*directory{}
-			parent := dir
-			for _, name := range []string{"desired-state", "revisions", record.Revision} {
-				child, openErr := openDirectory(parent, name)
-				if openErr != nil {
-					err = openErr
-					break
-				}
-				owned = append(owned, child)
-				parent = child
-			}
-			if err == nil {
-				file, openErr := openRelative(parent, "manifest.json", pathHandle, 0)
-				if openErr != nil {
-					err = openErr
-				} else {
-					stat, statErr := statHandle(file)
-					file.Close()
-					if statErr != nil || !private(stat, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) || stat.Size < 0 || stat.Size > maxManifest {
-						err = state("manifest handle is unsafe")
-					} else {
-						sizes[index] = int(stat.Size)
-						total += stat.Size
-						if total > maxAllManifests {
-							err = state("aggregate referenced manifest bytes exceed their limit")
-						}
-					}
-				}
-			}
-			for i := len(owned) - 1; i >= 0; i-- {
-				owned[i].file.Close()
-			}
-		}
-		dir.file.Close()
-		container.file.Close()
-		if err != nil {
-			return err
+		sizes[index] = int(size)
+		total += size
+		if total > maxAllManifests {
+			return state("aggregate referenced manifest bytes exceed their limit")
 		}
 	}
 	for index, record := range registry.Contexts {
-		if record.Mode != contexts.Ready || record.Revision == "" {
+		if record.Mode != contexts.Ready || record.Revision == "" || record.Name == skip {
 			continue
 		}
 		_, _, close, err := openManifestBounded(ctx, root, record, sizes[index])
 		if err != nil {
-			return err
+			entry := "contexts/" + record.Name + "/desired-state/revisions/" + record.Revision + "/manifest.json"
+			return contextDamage(ctx, record.Name, entry, err, purgeRemediation(record.Name))
 		}
 		close()
 	}
 	return root.verify()
+}
+
+// restoreStoreRemediation is the exit of damage a context's deletion cannot
+// run over.
+const restoreStoreRemediation = "restore the whole store from a matching backup"
+
+const replacedContextRemediation = restoreStoreRemediation + ": context delete refuses a replaced context directory"
+
+const reservationRemediation = restoreStoreRemediation + ": context delete needs the context's reservation to attribute its directory"
+
+const unsafeEntryRemediation = restoreStoreRemediation + ": context delete refuses an entry it cannot open safely"
+
+func purgeRemediation(name string) string {
+	return "delete it with bootwright context delete --name " + name + " --purge, or " + restoreStoreRemediation
+}
+
+// entryRemediation is the exit of a configuration or revision entry the store
+// could not open: the purge removes a missing one, but one it refuses to open,
+// for its type, owner, permissions, link count or a kernel error, refuses the
+// purge too.
+func entryRemediation(name string, err error) string {
+	if errors.Is(err, syscall.ENOENT) {
+		return purgeRemediation(name)
+	}
+	return unsafeEntryRemediation
+}
+
+func abandonRemediation(name string) string {
+	return "abandon it with bootwright context delete --name " + name + " --purge --allow-orphans: its directory is gone, so what it owned cannot be listed; or " + restoreStoreRemediation
+}
+
+// contextDamage names a ready context whose mapping failed verification: the
+// context, the entry relative to the state root and the kernel's answer or the
+// store's own refusal, never the root's absolute path, with that damage's exit.
+func contextDamage(ctx context.Context, name, entry string, cause error, remediation string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	message := "context " + name + " cannot be verified: " + entry
+	if text := storeCauseText(cause); text != "" {
+		message += ": " + text
+	}
+	return contexts.StateErrorWithRemediation(message, remediation)
+}
+
+// reservationDamage names a context whose reservation failed verification;
+// any other error passes unchanged.
+func reservationDamage(ctx context.Context, name string, err error) error {
+	var damaged *reservationFailure
+	if !errors.As(err, &damaged) {
+		return err
+	}
+	return contextDamage(ctx, name, "contexts/"+name+"/"+damaged.entry, damaged.cause, reservationRemediation)
+}
+
+// verifyContextMapping proves one ready context's directory, reservation,
+// configuration and selected revision, and returns the size of the manifest
+// that revision references.
+func verifyContextMapping(ctx context.Context, root *directory, record contexts.Record) (int64, error) {
+	container, err := openDirectory(root, "contexts")
+	if err != nil {
+		return 0, contextDamage(ctx, record.Name, "contexts", err, restoreStoreRemediation)
+	}
+	defer container.file.Close()
+	entry := "contexts/" + record.Name
+	dir, err := openDirectory(container, record.Name)
+	switch {
+	case errors.Is(err, syscall.ENOENT):
+		return 0, contextDamage(ctx, record.Name, entry, err, abandonRemediation(record.Name))
+	case err != nil:
+		return 0, contextDamage(ctx, record.Name, entry, err, restoreStoreRemediation)
+	}
+	defer dir.file.Close()
+	if record.DirectoryInode != 0 && (uint64(dir.identity.Dev) != record.DirectoryDevice || dir.identity.Ino != record.DirectoryInode) {
+		return 0, contextDamage(ctx, record.Name, entry, state("context directory was replaced"), replacedContextRemediation)
+	}
+	if err := verifyReservation(ctx, dir, record.Name); err != nil {
+		return 0, reservationDamage(ctx, record.Name, err)
+	}
+	config, err := readBounded(ctx, dir, "context.yaml", maxRecord, true)
+	if err != nil {
+		return 0, contextDamage(ctx, record.Name, entry+"/context.yaml", err, entryRemediation(record.Name, err))
+	}
+	parsed, err := contexts.ParseConfiguration(record.Name, config)
+	if err != nil || !bytes.Equal(config, parsed.Canonical()) || parsed.SecretStore.Type != record.SecretStoreType {
+		return 0, contextDamage(ctx, record.Name, entry+"/context.yaml", state("persisted context configuration is inconsistent"), purgeRemediation(record.Name))
+	}
+	if record.Revision == "" {
+		return 0, nil
+	}
+	return verifyRevisionMapping(ctx, dir, record)
+}
+
+func verifyRevisionMapping(ctx context.Context, dir *directory, record contexts.Record) (int64, error) {
+	entry := "contexts/" + record.Name
+	owned := []*directory{}
+	defer func() {
+		for i := len(owned) - 1; i >= 0; i-- {
+			owned[i].file.Close()
+		}
+	}()
+	parent := dir
+	for _, name := range []string{"desired-state", "revisions", record.Revision} {
+		entry += "/" + name
+		child, err := openDirectory(parent, name)
+		if err != nil {
+			return 0, contextDamage(ctx, record.Name, entry, err, entryRemediation(record.Name, err))
+		}
+		owned = append(owned, child)
+		parent = child
+	}
+	entry += "/manifest.json"
+	file, err := openRelative(parent, "manifest.json", pathHandle, 0)
+	if err != nil {
+		return 0, contextDamage(ctx, record.Name, entry, err, entryRemediation(record.Name, err))
+	}
+	stat, err := statHandle(file)
+	file.Close()
+	if err != nil || !private(stat, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) {
+		return 0, contextDamage(ctx, record.Name, entry, state("manifest handle is unsafe"), unsafeEntryRemediation)
+	}
+	if stat.Size < 0 || stat.Size > maxManifest {
+		return 0, contextDamage(ctx, record.Name, entry, state("manifest exceeds its byte limit"), purgeRemediation(record.Name))
+	}
+	return stat.Size, nil
 }
 
 func openContext(root *directory, record contexts.Record) (*directory, *directory, error) {
@@ -486,21 +604,37 @@ func openContext(root *directory, record contexts.Record) (*directory, *director
 	return container, dir, nil
 }
 
+// reservationFailure is a context reservation that failed verification. Its
+// diagnostic is the one every caller reports; a refusal naming the context
+// reads the entry, relative to the context directory, and the cause.
+type reservationFailure struct {
+	failure error
+	entry   string
+	cause   error
+}
+
+func (e *reservationFailure) Error() string { return e.failure.Error() }
+
+func (e *reservationFailure) Unwrap() error { return e.failure }
+
 func verifyReservation(ctx context.Context, dir *directory, name string) error {
 	runtime, err := openDirectory(dir, "state")
 	if err != nil {
-		return state("context reservation directory is missing or unsafe")
+		return &reservationFailure{state("context reservation directory is missing or unsafe"), "state", err}
 	}
 	defer runtime.file.Close()
 	data, err := readBounded(ctx, runtime, "reservation.json", maxRecord, true)
 	if err != nil {
-		return state("context reservation is missing or unsafe")
+		return &reservationFailure{state("context reservation is missing or unsafe"), "state/reservation.json", err}
 	}
 	var record reservation
 	if err := decodeRecord(data, maxRecord, &record); err != nil {
-		return err
+		return &reservationFailure{err, "state/reservation.json", err}
 	}
-	return validateReservation(record, name)
+	if err := validateReservation(record, name); err != nil {
+		return &reservationFailure{err, "state/reservation.json", err}
+	}
+	return nil
 }
 
 func readMutation(ctx context.Context, dir *directory) ([]byte, error) {
@@ -549,6 +683,35 @@ func (s *Store) ReadInputs(ctx context.Context, name string) (desiredstate.Sourc
 }
 
 func (s *Store) Transact(ctx context.Context, create bool, inputs []string, callback func(contexts.Transaction) error) error {
+	if callback == nil {
+		return s.transact(ctx, create, inputs, "", nil)
+	}
+	return s.transact(ctx, create, inputs, "", func(tx *transaction) error { return callback(tx) })
+}
+
+// TransactDeletion is the registry transaction of one context's deletion. It
+// takes the exclusive root lock and verifies and collects exactly as Transact
+// does, except that it leaves the named context's own mapping to that
+// deletion, which may find it damaged. Its transaction serves only the
+// deletion of that context.
+func (s *Store) TransactDeletion(ctx context.Context, name string, callback func(contexts.Transaction) error) error {
+	if !contextName(name) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return state("context name is invalid")
+	}
+	if callback == nil {
+		return s.transact(ctx, false, nil, name, nil)
+	}
+	return s.transact(ctx, false, nil, name, func(tx *transaction) error {
+		return callback(&deletionTransaction{tx: tx, name: name})
+	})
+}
+
+// transact holds the exclusive root lock across one registry transaction.
+// scope names the one context a deletion transaction admits unverified.
+func (s *Store) transact(ctx context.Context, create bool, inputs []string, scope string, callback func(*transaction) error) error {
 	root, err := s.openRoot(ctx, create, inputs)
 	if err != nil {
 		return safeError(err)
@@ -580,7 +743,7 @@ func (s *Store) Transact(ctx context.Context, create bool, inputs []string, call
 			return safeError(err)
 		}
 	}
-	if err := verifyMappings(ctx, root, registry); err != nil {
+	if err := verifyMappingsExcept(ctx, root, registry, scope); err != nil {
 		return safeError(err)
 	}
 	if err := s.collectControllerStages(ctx, root, registry); err != nil {
@@ -612,6 +775,7 @@ type transaction struct {
 	registry           contexts.Registry
 	leases             map[string]*directory
 	evidence           map[string][]byte
+	lost               map[string]bool
 	committed          bool
 	closed             bool
 	expected           *expectedRegistry

@@ -248,6 +248,12 @@ rules; each schema page adds its own:
 - values satisfy the owning IP, CIDR, DNS, URL, port, duration, size,
   checksum, image, device, and relationship rules.
 
+An HTTP(S) URL is absolute: scheme `http` or `https`, a DNS or IP host, an
+optional port `1..65535` and no userinfo. It is written in RFC 3986's own
+characters: printable ASCII other than space, `"`, `<`, `>`, `\`, `^`, the
+backtick, `{`, `|` and `}`, so no whitespace, control or non-ASCII character
+reaches a consumer.
+
 ## Defaults, normalization, and effective state
 
 [Environment kind defaults](api/environment.md#kind-defaults) are applied before

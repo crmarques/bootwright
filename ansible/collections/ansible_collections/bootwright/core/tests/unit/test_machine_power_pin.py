@@ -10,10 +10,12 @@ refusal to its runner, which reports it as the power service's own diagnostic.
 These cases pin that order and evaluate the real `when` and `that`
 expressions over the variables the runner writes.
 
-The runner passes those variables as `--extra-vars @request.json`, which
-ansible-core loads trusted as a template, so a raw value there would be
-evaluated when it is read; the scope here is loaded the same way, and a control
-case proves it. Rendering the role's task files needs Ansible's controller
+The runner passes those variables as `--extra-vars @request.json` with every
+string marked unsafe, so ansible-core reads them as data and never renders them
+(test_request_strings_are_data.py). The scope here is loaded trusted as a
+template on purpose, as ansible-core would read it unmarked, so the pin's
+encoding alone keeps a raw value from being evaluated, and a control case
+proves it. Rendering the role's task files needs Ansible's controller
 (DataLoader and Templar), which ansible-test does not offer to unit tests under
 tests/unit/plugins, so these checks live here.
 """

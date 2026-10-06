@@ -11,6 +11,7 @@ const (
 	checkpointAfterClientAreaDirectory       checkpoint = "after-client-area-directory"
 	checkpointAfterContextDirectory          checkpoint = "after-context-directory"
 	checkpointAfterContextReservation        checkpoint = "after-context-reservation"
+	checkpointAfterControllerBundleCreate    checkpoint = "after-controller-bundle-create"
 	checkpointAfterControllerBundleDirectory checkpoint = "after-controller-bundle-directory"
 	checkpointAfterControllerBundleRetiring  checkpoint = "after-controller-bundle-retiring"
 	checkpointAfterControllerDirectory       checkpoint = "after-controller-directory"
@@ -31,6 +32,7 @@ const (
 	checkpointBeforeContextRmdir             checkpoint = "before-context-rmdir"
 	checkpointBeforeContextSubtree           checkpoint = "before-context-subtree"
 	checkpointBeforeContextUnlink            checkpoint = "before-context-unlink"
+	checkpointBeforeControllerBundleRename   checkpoint = "before-controller-bundle-rename"
 	checkpointBeforeControllerBundleSync     checkpoint = "before-controller-bundle-sync"
 	checkpointBeforeControllerBundleUnlink   checkpoint = "before-controller-bundle-unlink"
 	checkpointBeforeControllerBundleWrite    checkpoint = "before-controller-bundle-write"
@@ -77,6 +79,7 @@ func checkpoints() []checkpoint {
 		checkpointAfterClientAreaDirectory,
 		checkpointAfterContextDirectory,
 		checkpointAfterContextReservation,
+		checkpointAfterControllerBundleCreate,
 		checkpointAfterControllerBundleDirectory,
 		checkpointAfterControllerBundleRetiring,
 		checkpointAfterControllerDirectory,
@@ -97,6 +100,7 @@ func checkpoints() []checkpoint {
 		checkpointBeforeContextRmdir,
 		checkpointBeforeContextSubtree,
 		checkpointBeforeContextUnlink,
+		checkpointBeforeControllerBundleRename,
 		checkpointBeforeControllerBundleSync,
 		checkpointBeforeControllerBundleUnlink,
 		checkpointBeforeControllerBundleWrite,

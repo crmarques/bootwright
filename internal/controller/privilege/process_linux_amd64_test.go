@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 	"unsafe"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestMain(m *testing.M) {
@@ -35,9 +37,16 @@ func TestMain(m *testing.M) {
 			}
 			fmt.Println("verified")
 			os.Exit(0)
-		case "__bootwright_account_parent":
-			child := exec.Command("/usr/bin/sudo", "__bootwright_account_child")
-			child.Env = []string{"SUDO_UID=60001", "SUDO_GID=60002", "SUDO_USER=operator", "HOME=/incorrect"}
+		case "__bootwright_account_parent", "__bootwright_account_root_shell", "__bootwright_account_reexecution":
+			mode, environment := "__bootwright_account_child", []string{"SUDO_UID=60001", "SUDO_GID=60002", "SUDO_USER=operator", "HOME=/incorrect"}
+			switch os.Args[1] {
+			case "__bootwright_account_root_shell":
+				mode, environment = "__bootwright_account_root", append(environment, "SUDO_COMMAND=/bin/bash")
+			case "__bootwright_account_reexecution":
+				mode, environment = "__bootwright_account_root", append(environment, "SUDO_COMMAND=/proc/1/exe status")
+			}
+			child := exec.Command("/usr/bin/sudo", mode)
+			child.Env = environment
 			child.Stdin = os.Stdin
 			child.Stdout, child.Stderr = os.Stdout, os.Stderr
 			if child.Run() != nil {
@@ -85,8 +94,13 @@ func TestMain(m *testing.M) {
 				os.Exit(2)
 			}
 			os.Exit(0)
-		case "__bootwright_relay_success", "__bootwright_relay_interrupted", "__bootwright_relay_orphaned":
+		case "__bootwright_relay_success", "__bootwright_relay_interrupted", "__bootwright_relay_orphaned", "__bootwright_relay_slow_cleanup":
 			relayedChild(os.Args[1])
+		case "__bootwright_relay_stubborn":
+			signal.Ignore(syscall.SIGTERM)
+			fmt.Printf("child %d\nready\n", os.Getpid())
+			time.Sleep(time.Minute)
+			os.Exit(0)
 		case "__bootwright_hold_output":
 			time.Sleep(time.Minute)
 			os.Exit(0)
@@ -96,8 +110,9 @@ func TestMain(m *testing.M) {
 }
 
 // relayedChild waits for the signal its supervisor relays and then ends as its
-// mode says: with its document and 0, with 130, or with its document and 0
-// while a process it started still holds its standard output.
+// mode says: with its document and 0, with 130, with its document and 0 while
+// a process it started still holds its standard output, or with its document
+// and 0 after a cleanup of a second and a half.
 func relayedChild(mode string) {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM)
@@ -115,8 +130,11 @@ func relayedChild(mode string) {
 	}
 	fmt.Println("ready")
 	<-signals
-	if mode == "__bootwright_relay_interrupted" {
+	switch mode {
+	case "__bootwright_relay_interrupted":
 		os.Exit(130)
+	case "__bootwright_relay_slow_cleanup":
+		time.Sleep(1500 * time.Millisecond)
 	}
 	fmt.Println(`{"exitCode":0}`)
 	os.Exit(0)
@@ -140,38 +158,67 @@ func (o *readyOutput) Write(data []byte) (int, error) {
 	return n, err
 }
 
-// relayInterrupt runs one child in mode, relays SIGTERM once it is ready and
-// returns what it wrote and how it ended.
-func relayInterrupt(t *testing.T, mode string, grace time.Duration) (string, int, error) {
+type relayEnding struct {
+	code int
+	err  error
+}
+
+// relayInterrupt runs one child in mode, as the elevated command when elevated
+// says so, with escalated as its escalation channel. Once the child is ready
+// it relays SIGTERM and returns what the child writes, when it relayed and
+// the channel the child's ending arrives on.
+func relayInterrupt(t *testing.T, mode string, elevated bool, grace time.Duration, escalated <-chan struct{}) (*readyOutput, time.Time, <-chan relayEnding) {
 	t.Helper()
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancelCause(context.Background())
-	defer cancel(nil)
+	ctx, cancel := context.WithCancelCause(withEscalation(context.Background(), escalated))
+	t.Cleanup(func() { cancel(nil) })
 	output := &readyOutput{ready: make(chan struct{})}
-	type ending struct {
-		code int
-		err  error
-	}
-	ended := make(chan ending, 1)
+	ended := make(chan relayEnding, 1)
 	go func() {
-		code, err := runProcess(ctx, Command{Executable: self, Arguments: []string{mode}, Environment: []string{"LANG=C"}, Output: output}, grace)
-		ended <- ending{code, err}
+		code, err := runProcess(ctx, Command{Executable: self, Arguments: []string{mode}, Environment: []string{"LANG=C"}, Output: output, Elevated: elevated}, grace)
+		ended <- relayEnding{code, err}
 	}()
 	select {
 	case <-output.ready:
 	case end := <-ended:
 		t.Fatalf("the child ended before it was ready: %d, %v", end.code, end.err)
 	case <-time.After(30 * time.Second):
-		cancel(nil)
-		<-ended
 		t.Fatal("the child never became ready")
 	}
+	relayed := time.Now()
 	cancel(signalCause{signal: syscall.SIGTERM})
-	end := <-ended
-	return output.written.String(), end.code, end.err
+	return output, relayed, ended
+}
+
+// awaitEnding fails rather than hangs when a relayed command outlives within.
+func awaitEnding(t *testing.T, ended <-chan relayEnding, within time.Duration) relayEnding {
+	t.Helper()
+	select {
+	case end := <-ended:
+		return end
+	case <-time.After(within):
+		t.Fatalf("the command did not end within %v", within)
+	}
+	return relayEnding{}
+}
+
+// killStubbornChildOnFailure ends a stubborn child that a failing test left
+// running; a passing test has reaped it already.
+func killStubbornChildOnFailure(t *testing.T, output *readyOutput) {
+	t.Helper()
+	first, _, _ := strings.Cut(output.written.String(), "\n")
+	pid, err := strconv.Atoi(strings.TrimPrefix(first, "child "))
+	if err != nil || pid <= 1 {
+		t.Fatalf("no child in output %q", output.written.String())
+	}
+	t.Cleanup(func() {
+		if t.Failed() {
+			syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
 }
 
 // A child that ends after the supervisor relayed an interrupt chose its status
@@ -186,27 +233,69 @@ func TestARelayedInterruptLeavesTheChildItsOwnStatus(t *testing.T) {
 		{name: "a child that reported the interrupt", mode: "__bootwright_relay_interrupted", output: "ready\n", code: 130},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			output, code, err := relayInterrupt(t, test.mode, relayGrace)
-			if err != nil || code != test.code || output != test.output {
-				t.Fatalf("status %d, error %v, output %q; want status %d, no error, output %q", code, err, output, test.code, test.output)
+			output, _, ended := relayInterrupt(t, test.mode, true, relayGrace, nil)
+			end := awaitEnding(t, ended, 30*time.Second)
+			if end.err != nil || end.code != test.code || output.written.String() != test.output {
+				t.Fatalf("status %d, error %v, output %q; want status %d, no error, output %q", end.code, end.err, output.written.String(), test.code, test.output)
 			}
 		})
 	}
 }
 
+// The elevated child bounds its own cancellation, which can outlast the stream
+// grace, so the supervisor waits for it and keeps the status it chose.
+func TestARelayedChildWhoseCleanupOutlastsTheGraceKeepsItsStatus(t *testing.T) {
+	output, relayed, ended := relayInterrupt(t, "__bootwright_relay_slow_cleanup", true, 300*time.Millisecond, nil)
+	end := awaitEnding(t, ended, 30*time.Second)
+	elapsed := time.Since(relayed)
+	if end.err != nil || end.code != 0 || !strings.Contains(output.written.String(), `{"exitCode":0}`) || elapsed < 1500*time.Millisecond {
+		t.Fatalf("status %d, error %v, output %q after %v; want status 0, no error and the document after the cleanup", end.code, end.err, output.written.String(), elapsed)
+	}
+}
+
+// Only a second operator signal kills the elevated command: the supervisor
+// sets no deadline of its own, however long the child takes after the relay.
+func TestASecondOperatorSignalKillsTheRelayedChild(t *testing.T) {
+	escalate := make(chan struct{})
+	output, _, ended := relayInterrupt(t, "__bootwright_relay_stubborn", true, 300*time.Millisecond, escalate)
+	killStubbornChildOnFailure(t, output)
+	select {
+	case end := <-ended:
+		t.Fatalf("the relayed child ended before a second signal: %d, %v", end.code, end.err)
+	case <-time.After(500 * time.Millisecond):
+	}
+	close(escalate)
+	if end := awaitEnding(t, ended, 10*time.Second); end.err != nil || end.code != 137 {
+		t.Fatalf("status %d, error %v; want 137 after the kill", end.code, end.err)
+	}
+}
+
+// The policy probe and the refreshes keep their kill deadline: a bounded call
+// that ignores the relayed signal is killed once the grace ends.
+func TestABoundedProbeIsStillKilledAfterItsGrace(t *testing.T) {
+	const grace = 300 * time.Millisecond
+	output, relayed, ended := relayInterrupt(t, "__bootwright_relay_stubborn", false, grace, nil)
+	killStubbornChildOnFailure(t, output)
+	end := awaitEnding(t, ended, 10*time.Second)
+	if elapsed := time.Since(relayed); end.err != nil || end.code != 137 || elapsed < grace {
+		t.Fatalf("status %d, error %v after %v; want 137 once the grace ended", end.code, end.err, elapsed)
+	}
+}
+
 // A child that exits 0 after the relay while a process it started still holds
-// its standard output at the end of the grace may have lost output, so it
-// stays a run error.
+// its standard output when the grace after its exit ends may have lost output,
+// so it stays a run error.
 func TestARelayedChildWhoseOutputOutlivesTheGraceFails(t *testing.T) {
-	output, code, err := relayInterrupt(t, "__bootwright_relay_orphaned", 2*time.Second)
-	first, _, _ := strings.Cut(output, "\n")
+	output, _, ended := relayInterrupt(t, "__bootwright_relay_orphaned", true, 2*time.Second, nil)
+	end := awaitEnding(t, ended, 30*time.Second)
+	first, _, _ := strings.Cut(output.written.String(), "\n")
 	if holder, parsed := strconv.Atoi(strings.TrimPrefix(first, "holder ")); parsed == nil && holder > 1 {
 		syscall.Kill(holder, syscall.SIGKILL)
 	} else {
-		t.Errorf("no holder in output %q", output)
+		t.Errorf("no holder in output %q", output.written.String())
 	}
-	if code != 1 || err == nil {
-		t.Fatalf("status %d, error %v; want a run error", code, err)
+	if end.code != 1 || end.err == nil {
+		t.Fatalf("status %d, error %v; want a run error", end.code, end.err)
 	}
 }
 
@@ -324,6 +413,45 @@ func TestReexecutionPathPinsRunningExecutable(t *testing.T) {
 	}
 }
 
+// The unprivileged supervisor resolves the executable's path before it
+// elevates. A directory on that path it cannot search refuses naming the
+// invoking account, never root, and the local copy, and the elevation reports
+// that refusal before it reaches sudo.
+func TestAnUnreadableExecutablePathNamesTheLocalCopyRemedy(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root overrides directory permissions")
+	}
+	directory := filepath.Join(t.TempDir(), "home")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "bootwright")
+	if err := os.WriteFile(path, []byte("binary"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(directory, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(directory, 0o700) })
+	_, err := verifiedExecutable(path)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "runtime.privilege" || !strings.Contains(reported[0].Message, path) ||
+		!strings.HasPrefix(reported[0].Message, "the invoking account cannot resolve the Bootwright executable") ||
+		strings.Contains(reported[0].Message, "root cannot") ||
+		!strings.Contains(reported[0].Remediation, "both the invoking account and root can read") ||
+		!strings.Contains(reported[0].Remediation, "/usr/local/bin") {
+		t.Fatalf("unreadable executable = %v (%+v)", err, reported)
+	}
+	reached := false
+	outcome := Elevator{
+		Executable: func() (string, error) { return verifiedExecutable(path) },
+		Sudo:       func() (string, error) { reached = true; return "/usr/bin/sudo", nil },
+	}.Run(context.Background(), Invocation{Arguments: []string{"status"}, Output: io.Discard, Error: io.Discard})
+	if reached || outcome.ExitCode != 1 || outcome.Diagnostic == nil || *outcome.Diagnostic != reported[0] {
+		t.Fatalf("the elevation reported %#v (sudo reached: %t), want %#v", outcome.Diagnostic, reached, reported[0])
+	}
+}
+
 // Run with a statically linked test binary in a private user/mount namespace
 // and BOOTWRIGHT_PRIVILEGED_ACCOUNT_FIXTURE=1. Ordinary root test runs do not
 // imply the mount capabilities or isolation this fixture requires.
@@ -376,7 +504,8 @@ func TestRootManualSudoAccountProvenanceFixture(t *testing.T) {
 		deny                   bool
 	}{
 		{"manual sudo", "sudo", "__bootwright_account_parent", false, false},
-		{"untrusted parent", "launcher", "__bootwright_account_parent", false, true},
+		{"untrusted parent", "launcher", "__bootwright_account_root_shell", false, false},
+		{"a re-execution whose sudo is gone", "launcher", "__bootwright_account_reexecution", false, true},
 		{"direct root", "sudo", "__bootwright_account_root", false, false},
 		{"nonroot spoofed metadata", "sudo", "__bootwright_account_user", true, false},
 	} {
@@ -391,7 +520,7 @@ func TestRootManualSudoAccountProvenanceFixture(t *testing.T) {
 			output, err := command.CombinedOutput()
 			if test.deny {
 				if err == nil {
-					t.Fatal("untrusted sudo metadata accepted")
+					t.Fatal("the metadata of a re-execution whose sudo is gone was accepted")
 				}
 				return
 			}

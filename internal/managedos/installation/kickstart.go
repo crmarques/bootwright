@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -107,6 +109,9 @@ func RenderKickstart(input Installation) (string, error) {
 		return "", refusal("lifecycle.state", "a physical installation names no root device to erase",
 			"set spec.os.install.rootDeviceHints.deviceName; a wwn-only selection is not yet supported")
 	}
+	if err := guardKickstartValues(input); err != nil {
+		return "", err
+	}
 	network, err := networkLine(input)
 	if err != nil {
 		return "", err
@@ -142,6 +147,123 @@ func RenderKickstart(input Installation) (string, error) {
 	lines = append(lines, "")
 	lines = append(lines, postSection(input)...)
 	return strings.Join(compact(lines), "\n") + "\n", nil
+}
+
+// kickstartShape is how a value is interpolated: as one token, as one element
+// of a comma-joined list, or as the package-source directive.
+type kickstartShape int
+
+const (
+	kickstartToken kickstartShape = iota
+	kickstartListElement
+	kickstartPackageSource
+)
+
+// kickstartFields is every string an Installation carries, the value class a
+// refusal names and where that value comes from. Anaconda splits the file on
+// every line break Python's str.splitlines knows and tokenizes each command
+// line with shlex, so admission's grammars keep each value one token and this
+// guard refuses whatever reaches the renderer otherwise.
+var kickstartFields = []struct {
+	class, source string
+	shape         kickstartShape
+	read          func(Installation) []string
+}{
+	{"the install address", "spec.network.addresses of the Machine", kickstartToken, func(i Installation) []string { return []string{i.Address} }},
+	{"an additional locale", "spec.customizations.localization.additionalLocales of the install profile", kickstartListElement, func(i Installation) []string { return i.AdditionalLocale }},
+	{"the identity channel", "the Machine's substrate", kickstartToken, func(i Installation) []string { return []string{i.Channel} }},
+	{"a declared hardware address", "spec.hardware.nics of the Machine", kickstartToken, func(i Installation) []string { return i.ExpectedMACs }},
+	{"the install interface's hardware address", "spec.hardware.nics of the Machine", kickstartToken, func(i Installation) []string { return []string{i.InterfaceMAC} }},
+	{"a disabled service", "spec.customizations.services.disabled of the install profile", kickstartListElement, func(i Installation) []string { return i.DisabledServices }},
+	{"an enabled service", "spec.customizations.services.enabled of the install profile", kickstartListElement, func(i Installation) []string { return i.EnabledServices }},
+	{"the firewall choice", "spec.customizations.security.firewall.enabled of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Firewall} }},
+	{"the formats locale", "spec.customizations.localization.formats of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Formats} }},
+	{"the default gateway", "the default route's next-hop-address in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return []string{i.Gateway} }},
+	{"the host key path", "the product-owned host key path", kickstartToken, func(i Installation) []string { return []string{i.HostKeyPath} }},
+	{"the host name", "the fqdn address in spec.network.addresses of the Machine", kickstartToken, func(i Installation) []string { return []string{i.Hostname} }},
+	{"the install interface", "the interface of the install address in spec.network.addresses of the Machine", kickstartToken, func(i Installation) []string { return []string{i.Interface} }},
+	{"the keyboard layout", "spec.customizations.localization.keyboard of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Keyboard} }},
+	{"the language", "spec.customizations.localization.language of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Language} }},
+	{"the install marker path", "the product-owned install marker path", kickstartToken, func(i Installation) []string { return []string{i.MarkerPath} }},
+	{"a name server", "the DNS server selections of the Machine's network configuration", kickstartListElement, func(i Installation) []string { return i.Nameservers }},
+	{"a time source", "the NTP server selections of the install profile or of spec.os.install.ntp on the Machine", kickstartListElement, func(i Installation) []string { return i.NTPServers }},
+	{"a package entry", "spec.customizations.packages.install of the install profile", kickstartToken, func(i Installation) []string { return i.Packages }},
+	{"the package source", "spec.installer.anaconda.packageSource of the install profile", kickstartPackageSource, func(i Installation) []string { return []string{i.PackageSource} }},
+	{"the root device", "spec.os.install.rootDeviceHints.deviceName of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootDevice} }},
+	{"the SELinux mode", "spec.customizations.security.selinux.mode of the install profile", kickstartToken, func(i Installation) []string { return []string{i.SELinux} }},
+	{"the time zone", "spec.customizations.localization.timezone of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Timezone} }},
+	{"the install account", "the product-owned install account", kickstartToken, func(i Installation) []string { return []string{i.User} }},
+	{"the weak-dependency choice", "spec.customizations.packages.installWeakDeps of the install profile", kickstartToken, func(i Installation) []string { return []string{i.WeakDeps} }},
+	{"a repository base URL", "spec.customizations.repositories.configure[].baseURL of the install profile", kickstartToken, func(i Installation) []string {
+		return repositoryValues(i, func(r Repository) string { return r.BaseURL })
+	}},
+	{"a repository ID", "spec.customizations.repositories.configure[].id of the install profile", kickstartToken, func(i Installation) []string {
+		return repositoryValues(i, func(r Repository) string { return r.ID })
+	}},
+}
+
+// guardKickstartValues refuses any value that is not what its directive
+// carries. Every rendering function stays untouched, so a valid installation
+// renders the same bytes it always did.
+func guardKickstartValues(input Installation) error {
+	for _, field := range kickstartFields {
+		for _, value := range field.read(input) {
+			if !kickstartCarries(field.shape, value) {
+				return refusal("api.value", field.class+" holds a character a Kickstart directive cannot carry",
+					"correct "+field.source)
+			}
+		}
+	}
+	return nil
+}
+
+func kickstartCarries(shape kickstartShape, value string) bool {
+	if !utf8.ValidString(value) || strings.IndexFunc(value, kickstartLineBreak) >= 0 {
+		return false
+	}
+	if value == "" {
+		return true
+	}
+	switch shape {
+	case kickstartPackageSource:
+		tree, found := strings.CutPrefix(value, "url --url=")
+		return value == "cdrom" || found && tree != "" && oneKickstartToken(tree, false)
+	case kickstartListElement:
+		return oneKickstartToken(value, true)
+	}
+	return oneKickstartToken(value, false)
+}
+
+// kickstartLineBreak is any rune that ends a line or carries no meaning in
+// one: every control character, including NEL, and the Unicode line and
+// paragraph separators str.splitlines also splits on.
+func kickstartLineBreak(r rune) bool {
+	return unicode.IsControl(r) || r == '\u2028' || r == '\u2029'
+}
+
+// kickstartQuoted reports whether value can stand between the double quotes
+// a directive gives it: one line, with no quote that ends it and no
+// backslash that escapes one.
+func kickstartQuoted(value string) bool {
+	return utf8.ValidString(value) && strings.IndexFunc(value, kickstartLineBreak) < 0 && !strings.ContainsAny(value, `"\`)
+}
+
+// oneKickstartToken refuses what shlex reads as a separator, a quote, an
+// escape or a comment, and a leading '%', which opens or closes a section.
+func oneKickstartToken(value string, listed bool) bool {
+	separators := `"'\#`
+	if listed {
+		separators += ","
+	}
+	return !strings.HasPrefix(value, "%") && !strings.ContainsAny(value, separators) && strings.IndexFunc(value, unicode.IsSpace) < 0
+}
+
+func repositoryValues(input Installation, read func(Repository) string) []string {
+	values := make([]string, 0, len(input.Repositories))
+	for _, repository := range input.Repositories {
+		values = append(values, read(repository))
+	}
+	return values
 }
 
 // networkLine is the one static assignment the installer applies, from the

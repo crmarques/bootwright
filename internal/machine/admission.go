@@ -422,7 +422,48 @@ func validateHostKey(o api.Object, c api.Catalog) []api.Issue {
 				"an SSH host key identifies one Machine and cannot be shared")}
 		}
 	}
-	return nil
+	return hostKeyCredentialCollisions(o, c, reference.Text())
+}
+
+// hostKeyCredentialCollisions refuses a host key that is also another
+// credential: the machine would present to every client a key some other
+// party already holds. Each colliding object is named once, here, because the
+// Machine sees the whole catalog. An installed Machine's access key is the
+// derived fleet key, so the Environment comparison already names it.
+func hostKeyCredentialCollisions(o api.Object, c api.Catalog, key string) []api.Issue {
+	if key == "" {
+		return nil
+	}
+	issues := []api.Issue{}
+	collide := func(holder api.Object, field string) {
+		issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.os.install.hostKeyRef",
+			Message:     "the SSH host key Secret " + key + " is also " + holder.Identity() + "'s " + field + "; a host key is this Machine's own and no other credential",
+			Remediation: "name a dedicated sshKeyPair Secret in spec.os.install.hostKeyRef on " + o.Identity()})
+	}
+	for _, environment := range c.OfKind(api.Environment) {
+		if environment.Spec().Get("remoteMachinesAccessKey", "keyRef").Text() == key {
+			collide(environment, "spec.remoteMachinesAccessKey.keyRef")
+		}
+	}
+	for _, machine := range c.OfKind(api.Machine) {
+		if machine.Identity() != o.Identity() && !machine.Spec().Has("os", "installProfileRef") && machine.Spec().Get("access", "ssh", "auth", "privateKeyRef").Text() == key {
+			collide(machine, "spec.access.ssh.auth.privateKeyRef")
+		}
+	}
+	for _, cluster := range c.OfKind(api.StorageCluster) {
+		if cluster.Spec().Get("ceph", "cephadm", "clusterSSH", "keyRef").Text() == key {
+			collide(cluster, "spec.ceph.cephadm.clusterSSH.keyRef")
+		}
+	}
+	for _, cluster := range c.OfKind(api.ContainerCluster) {
+		for _, field := range []string{"keyPairRef", "publicKeyRef", "privateKeyRef"} {
+			if cluster.Spec().Get("install", "nodeSSH", field).Text() == key {
+				collide(cluster, "spec.install.nodeSSH."+field)
+				break
+			}
+		}
+	}
+	return issues
 }
 
 func validateBaremetal(o api.Object) []api.Issue {

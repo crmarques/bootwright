@@ -74,12 +74,7 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 	if err != nil {
 		return err
 	}
-	defer func() {
-		clearMaterial(material)
-		if binding != "" {
-			_, _ = s.binder.Release(ctx, custody.BindingRequest{ContextName: name, BindingID: binding})
-		}
-	}()
+	defer s.giveBack(ctx, name, binding, material)
 	return s.workspace.RunLifecycle(ctx, name, func(view RunView) error {
 		approved, err := approvedBundle(ctx, view)
 		if err != nil {
@@ -184,13 +179,18 @@ func (s Service) WithMaterial(ctx context.Context, request MaterialRequest, use 
 	if err != nil {
 		return err
 	}
-	defer func() {
-		clearMaterial(material)
-		if binding != "" {
-			_, _ = s.binder.Release(ctx, custody.BindingRequest{ContextName: name, BindingID: binding})
-		}
-	}()
+	defer s.giveBack(ctx, name, binding, material)
 	return use(ctx, material)
+}
+
+// giveBack clears what a bounded call was lent and releases its binding. The
+// release outlives a cancellation as a recording does, because a binding a
+// cancelled call kept would pin its Secret versions until the next collection.
+func (s Service) giveBack(ctx context.Context, name, binding string, material map[string]secrets.Material) {
+	clearMaterial(material)
+	if binding != "" {
+		_, _ = s.binder.Release(recordingContext(ctx), custody.BindingRequest{ContextName: name, BindingID: binding})
+	}
 }
 
 // lendAttempts bounds how often one bounded operation binds its Secrets, once
@@ -223,7 +223,7 @@ func (s Service) lend(ctx context.Context, name string, references []string) (st
 			return result.ID, material, nil
 		}
 		listed, listing := s.binder.Bindings(ctx, custody.BindingsRequest{ContextName: name})
-		_, _ = s.binder.Release(ctx, request)
+		_, _ = s.binder.Release(recordingContext(ctx), request)
 		if listing != nil || slices.Contains(listed, result.ID) || attempt == lendAttempts {
 			return "", nil, err
 		}

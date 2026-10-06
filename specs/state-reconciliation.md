@@ -288,7 +288,10 @@ the file its own adapter output is
 [retained](cli/output.md#bounded-run-output) in, once its private runtime is
 admitted and only for a run whose result names it, so a reading creates
 nothing. That file is troubleshooting material, never state, so a run still
-repairs and migrates nothing.
+repairs and migrates nothing. The transient Secret binding a bounded run or a
+bounded consumer makes is released when its call returns, a call ended by
+cancellation included: the release outlives the cancellation as every
+recording does.
 Workspace defines the narrow explicit retry of pending creation/deletion.
 
 State reconciliation owns `<operation-id>`, `<block-id>`, and effect- and
@@ -741,14 +744,32 @@ reasons is two diagnostics. A frozen plan requires a resolved
 implementation for every block; a removal planned from a frozen plan is never
 refused this way.
 
+A fresh `plan` and a fresh `apply` also refuse, before registration, every
+block whose request holds a template delimiter, `{{`, `{%` or `{#`, in a string
+or a mapping key, or a mapping key named exactly `__ansible_unsafe`,
+`__ansible_vault` or `__ansible_type`, whatever the block's stage, the
+controller prerequisites block included. No Bootwright request carries template
+syntax or such a key of its own, so one there came from an authored or remote
+value: a delimiter a runner hands Ansible as [data](security.md#process-boundary),
+and a key no runner can hand it as data, so a request holding one would refuse
+at every run of its block, its removal included. Each such block is one
+`api.value` diagnostic whose object is the block's, naming the first field
+holding a delimiter or such a key, how many more of its fields hold one, and
+the remedy: remove the delimiters and keys from the values the object is
+planned from, import them with `bootwright context update`, then run
+`bootwright plan --context` with the context. A removal or a continuation
+planned from a frozen plan is never refused this way.
+
 Every `plan` previews exactly the decision the verb it previews takes, and one
 path takes both. That verb is a fresh `apply` over no operation or a completed
 destroy, the `destroy` of a completed apply, and an incomplete operation's own
 verb. A fresh apply's decision refuses, over no operation, state no index
 accounts for, and over a completed destroy one holding a block that is not
 `done` ([lifecycle unit](#lifecycle-unit)); it then compiles the frozen input,
-refuses what this executable cannot realize, plans, refusing two of its own
-blocks' conflicting [socket claims](infrastructure-services.md#host-reservations),
+refuses what this executable cannot realize, plans, refusing a block whose
+request holds a template delimiter or a key ansible-core reserves and then two
+of its own blocks' conflicting
+[socket claims](infrastructure-services.md#host-reservations),
 refuses `lifecycle.state` for a plan with no block, and refuses a selection
 that admits no startable block; a continuation's refuses records that
 contradict what its operation started, and a continued apply's then refuses a

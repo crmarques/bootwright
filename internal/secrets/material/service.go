@@ -21,6 +21,9 @@ type Options struct {
 	Clock        func() time.Time
 	Cryptography Cryptography
 	Operator     Operator
+	// Files opens secret files under the invoking account's credentials; with
+	// none, they open with this process's own.
+	Files Files
 }
 
 type FileIdentity struct {
@@ -34,6 +37,7 @@ type Service struct {
 	clock        func() time.Time
 	cryptography Cryptography
 	operator     Operator
+	files        Files
 }
 
 var _ custody.Materializer = (*Service)(nil)
@@ -42,6 +46,7 @@ func New(input InputReader, options ...Options) *Service {
 	service := &Service{input: input, random: cryptorand.Reader, clock: time.Now, cryptography: standardCryptography{}}
 	if len(options) > 0 {
 		service.operator = options[0].Operator
+		service.files = options[0].Files
 		if options[0].Random != nil {
 			service.random = options[0].Random
 		}

@@ -25,6 +25,8 @@ const pristineEvidence = `{"version":1,"operation":"none","ownership":"none"}`
 
 const orphanAction = "delete with orphaned objects and any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)"
 
+const lostAction = "delete with orphaned objects that cannot be listed (its directory is gone)"
+
 const environmentInput = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:
@@ -67,6 +69,8 @@ type repository struct {
 	emptyCallback  bool
 	confirmed      string
 	reservations   map[string][]string
+	deletion       string
+	lost           string
 }
 
 func newRepository(t *testing.T) *repository {
@@ -135,6 +139,23 @@ func (r *repository) Transact(ctx context.Context, create bool, roots []string, 
 	return fn(transaction{r})
 }
 
+// TransactDeletion records the one context its deletion scopes and otherwise
+// behaves as Transact, so a deletion's stages read as every transaction's do.
+func (r *repository) TransactDeletion(ctx context.Context, name string, fn func(contexts.Transaction) error) error {
+	r.deletion = name
+	return r.Transact(ctx, false, nil, fn)
+}
+
+// lostRefusal is a repository's refusal of a ready context whose directory is
+// gone, as the store reports it.
+type lostRefusal struct{ failure error }
+
+func (e lostRefusal) Error() string { return e.failure.Error() }
+
+func (e lostRefusal) Unwrap() error { return e.failure }
+
+func (lostRefusal) Is(target error) bool { return target == contexts.ErrLostContext }
+
 type transaction struct{ r *repository }
 
 func (tx transaction) requireLock() {
@@ -196,6 +217,9 @@ func (tx transaction) MutationState(ctx context.Context, name string) ([]byte, e
 	tx.requireLock()
 	if err := tx.r.step(ctx, "lease"); err != nil {
 		return nil, err
+	}
+	if name == tx.r.lost {
+		return nil, lostRefusal{contexts.LostContext(name, "contexts/"+name, "no such file or directory")}
 	}
 	tx.r.leased = true
 	return slices.Clone(tx.r.evidence[name]), nil
@@ -273,10 +297,11 @@ func (g guard) Check(ctx context.Context, data []byte) (contexts.Disposition, er
 type confirmer struct{ r *repository }
 
 func (c confirmer) Confirm(ctx context.Context, action, name string) error {
-	if !c.r.locked || !c.r.leased || !slices.Contains(c.r.calls, "guard") {
+	lost := action == lostAction && name == c.r.lost
+	if !c.r.locked || !lost && (!c.r.leased || !slices.Contains(c.r.calls, "guard")) {
 		c.r.t.Fatal("confirmation preceded locked mutation safeguards")
 	}
-	if name == "" || action != "update" && action != "delete" && action != orphanAction {
+	if name == "" || action != "update" && action != "delete" && action != orphanAction && !lost {
 		c.r.t.Fatal("unexpected confirmation request", action, name)
 	}
 	c.r.confirmed = action
@@ -1056,5 +1081,44 @@ func TestOrdinaryConfirmationNamesTheObjectsADeletionAbandons(t *testing.T) {
 	got, err = service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true})
 	if err != nil || got == nil || got.OrphansAbandoned || r.confirmed != "delete" {
 		t.Fatalf("a disposable context was confirmed as an abandonment: %#v %v %q", got, err, r.confirmed)
+	}
+}
+
+// A deletion transacts over exactly the context it deletes, so the store
+// verifies every other context and leaves that one to the deletion.
+func TestADeletionTransactsOverExactlyTheNamedContext(t *testing.T) {
+	r := existingRepository(t)
+	got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, SkipConfirmation: true})
+	if err != nil || got == nil || r.deletion != "example" {
+		t.Fatalf("deletion = %#v (%v) scoped %q, want example", got, err, r.deletion)
+	}
+}
+
+// A context whose directory is gone has no evidence a guard can read, so its
+// purge refuses naming the orphan acknowledgement, and only that
+// acknowledgement abandons it, confirming an abandonment whose objects cannot
+// be listed.
+func TestALostContextIsAbandonedOnlyWithTheOrphanAcknowledgement(t *testing.T) {
+	keys := []string{"unit:example"}
+	r := existingRepository(t)
+	r.lost = "example"
+	r.reservations = map[string][]string{"example": slices.Clone(keys)}
+	s := service(t, r, sourceFixture("/synthetic/input"))
+	refused, err := s.Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, SkipConfirmation: true})
+	if refused != nil || !errors.Is(err, contexts.ErrLostContext) || slices.Contains(r.calls, "guard") || slices.Contains(r.calls, "delete") || len(r.registry.Contexts) != 1 {
+		t.Fatalf("a lost context was deleted without acknowledgement: %#v %v %v", refused, err, r.calls)
+	}
+	requireCode(t, err, "context.unsafe-delete")
+	requireRemediation(t, err, "bootwright context delete --name example --purge --allow-orphans")
+	r.calls = nil
+	got, err := s.Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true})
+	if err != nil || got == nil || !got.OrphansAbandoned || !got.CurrentCleared || !slices.Equal(got.ReleasedReservations, keys) || len(r.registry.Contexts) != 0 {
+		t.Fatalf("acknowledged abandonment = %#v (%v), registry %#v", got, err, r.registry.Contexts)
+	}
+	if r.confirmed != lostAction || !strings.Contains(r.confirmed, "cannot be listed") || strings.Contains(r.confirmed, "kubeconfig") {
+		t.Fatalf("the confirmation named %q, want the abandonment of objects that cannot be listed", r.confirmed)
+	}
+	if !slices.Equal(r.calls, []string{"transaction", "registry", "lease", "confirm", "reservations", "delete", "clear"}) {
+		t.Fatalf("abandonment stages = %v", r.calls)
 	}
 }

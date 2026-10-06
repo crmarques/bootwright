@@ -111,28 +111,29 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	return add(issues, validateConsumers(o, c)...)
 }
 
+// kickstartGrammar is the grammar of one class of authored value the Kickstart
+// carries, the message that states it and a value it admits.
+type kickstartGrammar struct {
+	rule, message, example string
+}
+
+var (
+	localeGrammar = kickstartGrammar{"kickstart-token",
+		"a localization value is one Kickstart token: printable ASCII with no whitespace, quote, backslash, '#' or comma, not starting with '%'", "en_US.UTF-8"}
+	packageGrammar = kickstartGrammar{"package-spec",
+		"a package entry is a package name, glob or @group: letters, digits and _.+*?@:~^/[]-, not starting with '%' or '-'", "chrony"}
+	serviceGrammar = kickstartGrammar{"systemd-unit",
+		"a service is a systemd unit name: letters, digits and :_.@-, starting with a letter or digit, at most 255 bytes", "chronyd"}
+	repositoryGrammar = kickstartGrammar{"kickstart-token",
+		"a repository ID is printable ASCII with no whitespace, quote, slash, backslash, '#' or comma, not starting with '%'", "extras"}
+)
+
 func validateCustomizationEntries(custom api.Value) []api.Issue {
-	var issues []api.Issue
-	for _, field := range []string{"language", "formats", "keyboard", "timezone"} {
-		v := custom.Get("localization", field)
-		if v.Present() && hasSpace(v.Text()) {
-			issues = add(issues, issue("$.spec.customizations.localization."+field, "localization values must contain no whitespace"))
-		}
-	}
-	for _, group := range []struct {
-		path   []string
-		prefix string
-	}{{[]string{"localization", "additionalLocales"}, "localization.additionalLocales"}, {[]string{"packages", "install"}, "packages.install"}} {
-		for i, v := range custom.Get(group.path...).Items() {
-			if hasSpace(v.Text()) {
-				issues = add(issues, issue(fmt.Sprintf("$.spec.customizations.%s[%d]", group.prefix, i), "entries must contain no whitespace"))
-			}
-		}
-	}
+	issues := validateKickstartValues(custom)
 	for i, repo := range custom.Get("repositories", "configure").Items() {
 		path := fmt.Sprintf("$.spec.customizations.repositories.configure[%d]", i)
 		if !repositoryID(repo.Get("id").Text()) {
-			issues = add(issues, issue(path+".id", "repository IDs forbid whitespace, quotes, and slash"))
+			issues = add(issues, grammarIssue(path+".id", repositoryGrammar))
 		}
 		gpg := !repo.Has("gpgCheck") || repo.Get("gpgCheck").Bool()
 		if gpg && !repo.Has("gpgKeyURL") {
@@ -143,6 +144,38 @@ func validateCustomizationEntries(custom api.Value) []api.Issue {
 		}
 	}
 	return issues
+}
+
+// validateKickstartValues gives every localization, package and service value
+// its grammar, so each reaches the Kickstart as one token.
+func validateKickstartValues(custom api.Value) []api.Issue {
+	var issues []api.Issue
+	for _, field := range []string{"language", "formats", "keyboard", "timezone"} {
+		if v := custom.Get("localization", field); v.Present() && !api.ValidLexical(localeGrammar.rule, v.Text()) {
+			issues = add(issues, grammarIssue("$.spec.customizations.localization."+field, localeGrammar))
+		}
+	}
+	for _, group := range []struct {
+		path    []string
+		grammar kickstartGrammar
+	}{
+		{[]string{"localization", "additionalLocales"}, localeGrammar},
+		{[]string{"packages", "install"}, packageGrammar},
+		{[]string{"services", "enabled"}, serviceGrammar},
+		{[]string{"services", "disabled"}, serviceGrammar},
+	} {
+		for i, v := range custom.Get(group.path...).Items() {
+			if !api.ValidLexical(group.grammar.rule, v.Text()) {
+				issues = add(issues, grammarIssue(fmt.Sprintf("$.spec.customizations.%s[%d]", strings.Join(group.path, "."), i), group.grammar))
+			}
+		}
+	}
+	return issues
+}
+
+func grammarIssue(field string, grammar kickstartGrammar) api.Issue {
+	return api.Issue{Code: "api.value", Field: field, Message: grammar.message,
+		Remediation: "correct " + strings.TrimPrefix(field, "$.") + " to a value such as " + grammar.example}
 }
 
 func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
@@ -174,7 +207,7 @@ func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
 		}
 		for _, id := range enable {
 			if id == "*" || !repositoryID(id) {
-				issues = add(issues, issue("$.spec.customizations.repositories.subscription.enable", "enabled repository IDs forbid wildcard, whitespace, quotes, and slash"))
+				issues = add(issues, issue("$.spec.customizations.repositories.subscription.enable", "enabled repository IDs are not the wildcard and are printable ASCII with no whitespace, quote, slash, backslash, '#' or comma, not starting with '%'"))
 			}
 			if slices.Contains(disable, id) {
 				issues = add(issues, issue("$.spec.customizations.repositories.subscription", "enabled and disabled repository IDs must be disjoint"))
@@ -416,8 +449,10 @@ func containsReference(value api.Value, key, name string) bool {
 	}
 	return false
 }
-func repositoryID(s string) bool { return s != "" && !hasSpace(s) && !strings.ContainsAny(s, "\"'/") }
-func hasSpace(s string) bool     { return strings.IndexFunc(s, unicode.IsSpace) >= 0 }
+func repositoryID(s string) bool {
+	return api.ValidLexical(repositoryGrammar.rule, s) && !strings.Contains(s, "/")
+}
+func hasSpace(s string) bool { return strings.IndexFunc(s, unicode.IsSpace) >= 0 }
 func digits(s string) bool {
 	if s == "" {
 		return false

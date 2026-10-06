@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"strconv"
@@ -35,9 +36,49 @@ func writeTrustReport(out io.Writer, command string, report *enrollment.Report, 
 		return text.writeTo(out)
 	}
 	text.headline("OK", trustHeadline(report))
+	if !report.Presented {
+		text.section("")
+		writeTrustTable(&text, report.Hosts)
+	}
+	return text.writeTo(out)
+}
+
+// TrustPlanPresenter writes the evaluated host-key plan before confirmation,
+// so an operator compares every fingerprint before authorizing its record.
+type TrustPlanPresenter struct{ out io.Writer }
+
+func NewTrustPlanPresenter(out io.Writer) *TrustPlanPresenter {
+	return &TrustPlanPresenter{out: out}
+}
+
+func (p *TrustPlanPresenter) PresentTrustPlan(ctx context.Context, report enrollment.Report) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if p == nil || p.out == nil {
+		return &trustOutputFailure{}
+	}
+	var text display
+	text.headline("", "Host-key trust plan for context "+report.Context+": "+strconv.Itoa(len(report.Hosts))+
+		" machine(s) checked, "+strconv.Itoa(report.Pending)+" pending")
 	text.section("")
-	rows := make([][]string, 0, len(report.Hosts))
-	for _, host := range report.Hosts {
+	writeTrustTable(&text, report.Hosts)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := text.writeTo(p.out); err != nil {
+		return &trustOutputFailure{}
+	}
+	return nil
+}
+
+type trustOutputFailure struct{}
+
+func (*trustOutputFailure) Error() string { return "host-key trust plan output failed" }
+
+func writeTrustTable(text *display, hosts []enrollment.HostReport) {
+	rows := make([][]string, 0, len(hosts))
+	for _, host := range hosts {
 		rows = append(rows, []string{
 			host.Machine, displayValue(trustEndpoint(host)),
 			host.Action, displayValue(host.KeyType),
@@ -45,7 +86,6 @@ func writeTrustReport(out io.Writer, command string, report *enrollment.Report, 
 		})
 	}
 	text.table([]string{"MACHINE", "ADDRESS", "ACTION", "KEY", "FINGERPRINT"}, rows)
-	return text.writeTo(out)
 }
 
 // trustHeadline reports what was recorded rather than what was examined, so a
@@ -62,22 +102,34 @@ func trustHeadline(report *enrollment.Report) string {
 }
 
 func trustEndpoint(host enrollment.HostReport) string {
-	if host.Address == "" {
+	return endpointToken(host.Address, host.Port)
+}
+
+func endpointToken(address string, port int) string {
+	if address == "" {
 		return ""
 	}
-	if host.Port == 0 || host.Port == 22 {
-		return host.Address
+	if port == 0 || port == 22 {
+		return address
 	}
-	return "[" + host.Address + "]:" + strconv.Itoa(host.Port)
+	return "[" + address + "]:" + strconv.Itoa(port)
 }
 
 // trustDetail shows the fingerprint an operator compares, and for a supersede
-// the one it replaces, so the change is visible in the result itself.
+// the key and the endpoint it replaces, so the change is visible in the result
+// itself.
 func trustDetail(host enrollment.HostReport) string {
 	if host.Action == enrollment.ActionSkip {
 		return host.Reason
 	}
-	if host.PreviousFingerprint != "" && host.PreviousFingerprint != host.Fingerprint {
+	changed := host.PreviousFingerprint != "" && host.PreviousFingerprint != host.Fingerprint
+	previous := endpointToken(host.PreviousAddress, host.PreviousPort)
+	switch {
+	case changed && previous != "":
+		return host.Fingerprint + " (was " + host.PreviousFingerprint + " at " + previous + ")"
+	case previous != "":
+		return host.Fingerprint + " (unchanged; was trusted at " + previous + ")"
+	case changed:
 		return host.Fingerprint + " (was " + host.PreviousFingerprint + ")"
 	}
 	return host.Fingerprint
@@ -103,6 +155,8 @@ type trustHost struct {
 	KeyType             string `json:"keyType,omitempty"`
 	Fingerprint         string `json:"fingerprint,omitempty"`
 	PreviousFingerprint string `json:"previousFingerprint,omitempty"`
+	PreviousAddress     string `json:"previousAddress,omitempty"`
+	PreviousPort        int    `json:"previousPort,omitempty"`
 	Reason              string `json:"reason,omitempty"`
 }
 
@@ -114,6 +168,8 @@ func displayTrustReport(report *enrollment.Report) trustResult {
 			Action: escapeDisplayLine(host.Action), KeyType: escapeDisplayLine(host.KeyType),
 			Fingerprint:         escapeDisplayLine(host.Fingerprint),
 			PreviousFingerprint: escapeDisplayLine(host.PreviousFingerprint),
+			PreviousAddress:     escapeDisplayLine(host.PreviousAddress),
+			PreviousPort:        host.PreviousPort,
 			Reason:              escapeDisplayLine(host.Reason),
 		})
 	}

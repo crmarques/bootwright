@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/containercluster"
@@ -37,5 +39,24 @@ func wireCompiler() compilation.Compiler {
 
 func wireDesiredState(deps serviceDependencies, compiler compilation.Compiler) cli.DesiredStateService {
 	inputs := contexts.Inputs{Repository: deps.Repository, Selection: deps.Selection}
-	return compilation.New(inputfs.Reader{}, compiler, inputs)
+	return compilation.New(inputReader(deps.Files), compiler, inputs)
+}
+
+// inputReader reads operator input through the invoking account's opener, and
+// binds no opener at all when files is nil rather than a wrapper around nil.
+func inputReader(files operatorFiles) inputfs.Reader {
+	if files == nil {
+		return inputfs.Reader{}
+	}
+	return inputfs.Reader{Files: inputFiles{files: files}}
+}
+
+type inputFiles struct{ files operatorFiles }
+
+func (f inputFiles) Begin(ctx context.Context) (inputfs.FileSession, error) {
+	session, err := f.files.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
 }

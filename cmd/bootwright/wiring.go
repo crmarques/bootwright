@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
@@ -39,6 +40,19 @@ type processDependencies struct {
 	AmbientRoute controller.Route
 }
 
+// operatorFiles opens the paths an operator names under the invoking
+// account's credentials, so a root process reads only what that account can.
+type operatorFiles interface {
+	Begin(context.Context) (operatorFileSession, error)
+}
+
+type operatorFileSession interface {
+	Root() (*os.File, error)
+	OpenAt(*os.File, string, int) (*os.File, error)
+	OpenFile(string) (*os.File, error)
+	Close() error
+}
+
 // serviceDependencies names every replaceable implementation the application
 // services consume. Each field is a consumer-owned contract, so a test binds
 // the same graph through its own implementations.
@@ -53,6 +67,7 @@ type serviceDependencies struct {
 	Terminal         func() (bool, error)
 	Home             func() (string, error)
 	Owner            func() (int, error)
+	Files            operatorFiles
 	Trust            trustStore
 	SecretInput      material.InputReader
 	Resolver         secretstore.ImplementationResolver
@@ -69,10 +84,18 @@ type serviceDependencies struct {
 // wireServices also returns the release for every local resource the assembled
 // services retain for the length of one invocation.
 func wireServices(process processDependencies) (cli.Services, func()) {
+	deps, release := localServiceDependencies(process)
+	return assembleServices(deps), release
+}
+
+// localServiceDependencies binds every local adapter to its port, and also
+// returns the release for every local resource those adapters retain.
+func localServiceDependencies(process processDependencies) (serviceDependencies, func()) {
 	repository := contextfs.New(contextfs.Options{})
 	account := invokingAccount{resolver: privilege.Resolver{}}
+	files := openerFiles{opener: account.files()}
 	controllerPorts, release := localControllerDependencies(repository, process)
-	services := assembleServices(serviceDependencies{
+	return serviceDependencies{
 		Repository:       repository,
 		Workspace:        repository,
 		Trust:            repository,
@@ -81,6 +104,7 @@ func wireServices(process processDependencies) (cli.Services, func()) {
 		Terminal:         process.Terminal,
 		Home:             account.home,
 		Owner:            account.uid,
+		Files:            files,
 		Selection:        account,
 		Operator:         account,
 		Confirmer:        process.Confirmer,
@@ -88,15 +112,14 @@ func wireServices(process processDependencies) (cli.Services, func()) {
 		Reporter:         process.LifecycleProgress,
 		Controller:       controllerPorts,
 		AmbientRoute:     process.AmbientRoute,
-		Media:            localMediaDependencies(repository, process.Confirmer, process.AmbientRoute),
+		Media:            localMediaDependencies(repository, process.Confirmer, process.AmbientRoute, files),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: account},
 			Host: hostlinux.New(), Guard: bundlelocal.ExecutionGuard{}, Selection: account,
 			Presenter: process.LifecyclePresenter, Progress: process.LifecycleProgress,
 			Confirmer: process.Confirmer, Executable: process.Executable,
 		},
-	})
-	return services, release
+	}, release
 }
 
 // assembleServices is the complete service graph. Secrets is assembled first

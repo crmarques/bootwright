@@ -23,6 +23,13 @@ const (
 	maxBundleDepth     = 32
 )
 
+// bundleStagePrefix names the private file a bundle write stages its bytes in,
+// beside the final name it renames them to. The name is reserved: no bundle
+// path may use it, and a stage is never bundle content.
+const bundleStagePrefix = "pending-"
+
+func bundleStageName(name string) bool { return identifier(name, bundleStagePrefix) }
+
 func verifyControllerBundleReservations(ctx context.Context, owner *directory, reservations []controllerBundleReservation) error {
 	parent, err := openDirectory(owner, "bundles")
 	if errors.Is(err, syscall.ENOENT) {
@@ -262,7 +269,7 @@ func bundleParts(path string) ([]string, error) {
 		return nil, state("controller bundle path exceeds its depth bound")
 	}
 	for _, part := range parts {
-		if part == "" || part == "." || part == ".." || len(part) > 255 {
+		if part == "" || part == "." || part == ".." || len(part) > 255 || bundleStageName(part) {
 			return nil, state("controller bundle path is invalid")
 		}
 		for _, c := range part {
@@ -494,60 +501,127 @@ func (a *controllerBundleArea) Write(ctx context.Context, path string, data []by
 	if executable {
 		mode = 0700
 	}
-	file, err := openRelative(parent, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, mode)
+	if err := a.writeFile(ctx, parent, name, data, mode); err != nil {
+		return err
+	}
+	// The file's own contents are made durable before its rename, so its final
+	// name only ever holds correct bytes. Its directory entry is not synced per
+	// file: completion syncs the whole tree before sealing, and a rename lost to
+	// a crash leaves the stage, which the area's next writer removes, or
+	// nothing, so the exact replay publishes the file again.
+	a.entries++
+	a.bytes += int64(len(data))
+	a.scanned = true
+	return a.available(ctx, true)
+}
+
+// writeFile stages data under a reserved name beside name, syncs it, and
+// renames it to name without replacing anything, so name only ever holds
+// complete, synchronized bytes. Every failure before the rename, a
+// cancellation included, removes the stage, and a failure proving the renamed
+// file removes exactly that file. A stage a kill leaves is not bundle content:
+// reads skip it and the area's next writer removes it.
+func (a *controllerBundleArea) writeFile(ctx context.Context, parent *directory, name string, data []byte, mode uint32) error {
+	stage, err := a.store.candidate(bundleStagePrefix)
+	if err != nil {
+		return err
+	}
+	file, err := openRelative(parent, stage, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, mode)
 	if err != nil {
 		return safeError(err)
 	}
 	defer file.Close()
 	a.scanned = false
+	held := stage
+	defer func() {
+		if held == "" {
+			return
+		}
+		if created, err := statHandle(file); err == nil {
+			discardCreated(parent, held, created)
+		}
+	}()
 	before, err := statHandle(file)
 	if err != nil || !privateBundleFile(before, parent) || before.Mode&07777 != mode {
 		return state("created controller bundle file is unsafe")
 	}
-	size := len(data)
-	for len(data) > 0 {
+	if err := a.store.checkpoint(ctx, checkpointAfterControllerBundleCreate); err != nil {
+		return err
+	}
+	for remaining := data; len(remaining) > 0; {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		n, err := file.Write(data[:min(32768, len(data))])
+		n, err := file.Write(remaining[:min(32768, len(remaining))])
 		if err != nil || n == 0 {
-			return state("controller bundle file could not be written")
+			return storeFailure("controller bundle file could not be written", err)
 		}
-		data = data[n:]
+		remaining = remaining[n:]
 	}
 	if err := file.Sync(); err != nil {
-		return state("controller bundle file durability is uncertain")
+		return storeFailure("controller bundle file durability is uncertain", err)
 	}
 	after, err := statHandle(file)
-	if err != nil || !sameIdentity(before, after) || after.Size != int64(size) {
+	if err != nil || !sameIdentity(before, after) || after.Size != int64(len(data)) {
 		return state("controller bundle file changed during publication")
 	}
-	// Reopening through the parent proves both the file and the directory that
-	// names it, so no separate directory verification is needed here.
+	if err := a.store.checkpoint(ctx, checkpointBeforeControllerBundleRename); err != nil {
+		return err
+	}
+	if err := renameNoReplaceAt(parent, stage, name); err != nil {
+		return safeError(err)
+	}
+	held = name
+	// The rename moves the file's change time, so the proof compares the
+	// handle's identity after it with what the parent now names.
+	renamed, err := statHandle(file)
+	if err != nil || !sameIdentity(after, renamed) || renamed.Size != after.Size {
+		return state("controller bundle file changed during publication")
+	}
 	current, err := openRelative(parent, name, pathHandle, 0)
 	if err != nil {
 		return state("controller bundle file was replaced")
 	}
 	actual, err := statHandle(current)
 	current.Close()
-	if err != nil || !sameFile(after, actual) {
+	if err != nil || !sameFile(renamed, actual) {
 		return state("controller bundle file was replaced")
 	}
-	// The file's own contents are made durable above so an interrupted
-	// publication always resumes from correct bytes. Its directory entry is not
-	// synced per file: completion syncs the whole tree before sealing, and a
-	// name lost to a crash leaves the file absent, which the exact replay
-	// publishes again, rather than present with content it cannot attribute.
-	a.entries++
-	a.bytes += int64(size)
-	a.scanned = true
-	return a.available(ctx, true)
+	held = ""
+	return nil
 }
 
 func (a *controllerBundleArea) Entries(ctx context.Context) ([]prerequisites.BundleEntry, error) {
+	return a.list(ctx, a.writable())
+}
+
+// writable reports whether the area's write capability is open, which only a
+// mutation holding the exclusive root lock grants, so no stage in it has a
+// live writer.
+func (a *controllerBundleArea) writable() bool {
+	return a.writeAllowed && a.canWrite != nil && a.canWrite()
+}
+
+func (a *controllerBundleArea) isSealed() bool {
+	if a.sealed != nil {
+		return a.sealed()
+	}
+	return a.reservation.Mode == "sealed"
+}
+
+type bundleStage struct {
+	name     string
+	identity syscall.Stat_t
+}
+
+// list walks the bundle tree. A stage a killed write left is never listed: an
+// unsealed area skips it, and with sweep removes it, while a sealed area,
+// which completion swept before sealing, refuses one.
+func (a *controllerBundleArea) list(ctx context.Context, sweep bool) ([]prerequisites.BundleEntry, error) {
 	if err := a.available(ctx, false); err != nil {
 		return nil, err
 	}
+	sealed := a.isSealed()
 	entries, total := 0, int64(0)
 	result := []prerequisites.BundleEntry{}
 	var walk func(*directory, string, int) error
@@ -566,7 +640,16 @@ func (a *controllerBundleArea) Entries(ctx context.Context) ([]prerequisites.Bun
 		if entries > maxBundleEntries {
 			return state("controller bundle tree exceeds its entry bound")
 		}
+		var stages []bundleStage
 		for _, name := range names {
+			if bundleStageName(name) {
+				identity, err := abandonedBundleStage(dir, name, sealed)
+				if err != nil {
+					return err
+				}
+				stages = append(stages, bundleStage{name: name, identity: identity})
+				continue
+			}
 			if _, err := bundleParts(prefix + name); err != nil {
 				return err
 			}
@@ -606,6 +689,12 @@ func (a *controllerBundleArea) Entries(ctx context.Context) ([]prerequisites.Bun
 		if err != nil || !slices.Equal(names, current) {
 			return state("controller bundle entries changed during inspection")
 		}
+		entries -= len(stages)
+		if sweep && len(stages) != 0 {
+			if err := a.sweep(ctx, dir, stages); err != nil {
+				return err
+			}
+		}
 		return dir.verify()
 	}
 	if err := walk(a.dir, "", 0); err != nil {
@@ -619,6 +708,39 @@ func (a *controllerBundleArea) Entries(ctx context.Context) ([]prerequisites.Bun
 	return result, nil
 }
 
+// abandonedBundleStage admits a listed stage only as a private regular file
+// within the file bound on the area's device, and never in a sealed area.
+func abandonedBundleStage(dir *directory, name string, sealed bool) (syscall.Stat_t, error) {
+	if sealed {
+		return syscall.Stat_t{}, state("sealed controller bundle holds an unpublished staging file")
+	}
+	file, err := openRelative(dir, name, pathHandle, 0)
+	if err != nil {
+		return syscall.Stat_t{}, state("controller bundle entry is unsafe")
+	}
+	identity, err := statHandle(file)
+	file.Close()
+	if err != nil || !privateBundleFile(identity, dir) || identity.Size < 0 || identity.Size > maxBundleFileBytes {
+		return syscall.Stat_t{}, state("controller bundle staging file is unsafe")
+	}
+	return identity, nil
+}
+
+// sweep removes the stages a killed write left in dir. Only a holder of the
+// write capability or of completion's seal calls it, under the exclusive root
+// lock, so no stage it removes has a live writer.
+func (a *controllerBundleArea) sweep(ctx context.Context, dir *directory, stages []bundleStage) error {
+	for _, stage := range stages {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := unlinkVerified(dir, stage.name, stage.identity, false); err != nil {
+			return state("abandoned controller bundle staging file could not be removed")
+		}
+	}
+	return a.store.syncDirectory(ctx, dir)
+}
+
 func (a *controllerBundleArea) Verify(ctx context.Context) error {
 	_, err := a.Entries(ctx)
 	return err
@@ -627,7 +749,7 @@ func (a *controllerBundleArea) Verify(ctx context.Context) error {
 // Native assembly may write files outside Write. Completion establishes every
 // bounded payload and directory's durability before the receipt seals the bundle.
 func (a *controllerBundleArea) sync(ctx context.Context) error {
-	entries, err := a.Entries(ctx)
+	entries, err := a.list(ctx, true)
 	if err != nil {
 		return err
 	}
@@ -714,9 +836,5 @@ func (a *controllerBundleArea) Location(ctx context.Context) (prerequisites.Bund
 		return prerequisites.BundleLocation{}, err
 	}
 	a.scanned = false // A native child may change the tree before the next call.
-	sealed := a.reservation.Mode == "sealed"
-	if a.sealed != nil {
-		sealed = a.sealed()
-	}
-	return prerequisites.BundleLocation{Path: a.dir.path, Device: uint64(a.dir.identity.Dev), Inode: a.dir.identity.Ino, Writable: a.writeAllowed && a.canWrite != nil && a.canWrite(), Sealed: sealed}, nil
+	return prerequisites.BundleLocation{Path: a.dir.path, Device: uint64(a.dir.identity.Dev), Inode: a.dir.identity.Ino, Writable: a.writable(), Sealed: a.isSealed()}, nil
 }

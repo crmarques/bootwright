@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,13 +14,17 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type ProcessExecutor struct{}
 
 // GuardParent prevents an elevated command from surviving termination of its
-// verified sudo parent, including the supervisor's final cancellation deadline.
-// It is armed before root state access; process death releases held file locks.
+// verified sudo parent, including the kill a second operator signal makes the
+// supervisor send to sudo; the supervisor itself sets no deadline on the
+// command. It is armed before root state access; process death releases held
+// file locks.
 // The caller must defer release on the same goroutine after all command work;
 // the Linux guard belongs to this OS thread, whose lifetime must span that work.
 func GuardParent(expectedPID int) (release func(), err error) {
@@ -48,16 +53,38 @@ func Executable() (string, error) {
 	if err != nil || !filepath.IsAbs(path) {
 		return "", errors.New("invocation executable is unavailable")
 	}
-	path, err = filepath.EvalSymlinks(path)
+	return verifiedExecutable(path)
+}
+
+// verifiedExecutable proves path names the running binary. Only the
+// unprivileged supervisor resolves it, before it elevates: the elevated child
+// re-executes /proc/self/exe. That account is refused the resolution when it
+// cannot search a directory on the path, as when it runs the executable from
+// a working directory it inherited beneath one, so that refusal names the path
+// and the local copy that avoids it.
+func verifiedExecutable(path string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if errors.Is(err, fs.ErrPermission) {
+		return "", unreadableExecutable(path)
+	}
 	if err != nil {
 		return "", errors.New("invocation executable is unavailable")
 	}
-	info, err := os.Lstat(path)
+	info, err := os.Lstat(resolved)
+	if errors.Is(err, fs.ErrPermission) {
+		return "", unreadableExecutable(resolved)
+	}
 	self, selfErr := os.Stat("/proc/self/exe")
 	if err != nil || selfErr != nil || !info.Mode().IsRegular() || !os.SameFile(info, self) {
 		return "", errors.New("invocation executable changed")
 	}
-	return path, nil
+	return resolved, nil
+}
+
+func unreadableExecutable(path string) error {
+	return diagnostics.NewFailureWithRemediation("runtime.privilege",
+		"the invoking account cannot resolve the Bootwright executable at "+path+" (permission denied)", "",
+		"copy the executable to a local directory both the invoking account and root can read, such as /usr/local/bin, and run it from there")
 }
 
 // ReexecutionPath keeps the verified running executable pinned while sudo may
@@ -92,8 +119,10 @@ func (ProcessExecutor) Run(ctx context.Context, request Command) (int, error) {
 	return runProcess(ctx, request, relayGrace)
 }
 
-// relayGrace is how long a command and its streams have to finish after the
-// relayed signal before the command is killed or its streams are closed.
+// relayGrace is how long the policy probe or a refresh has to finish after
+// the relayed signal before it is killed. For the elevated command it bounds
+// only stream closure after sudo exits: that command bounds its own
+// cancellation, and only a second operator signal kills it.
 const relayGrace = 5 * time.Second
 
 // errRelayed is what cancellation returns once it relayed the signal. It wraps
@@ -103,6 +132,9 @@ const relayGrace = 5 * time.Second
 var errRelayed = fmt.Errorf("signal relayed: %w", os.ErrProcessDone)
 
 func runProcess(ctx context.Context, request Command, grace time.Duration) (int, error) {
+	if request.Elevated {
+		return runRelayed(ctx, request, grace)
+	}
 	command := exec.CommandContext(ctx, request.Executable, request.Arguments...)
 	command.Env = append([]string(nil), request.Environment...)
 	command.Stdin, command.Stdout, command.Stderr = request.Input, request.Output, request.Error
@@ -113,7 +145,43 @@ func runProcess(ctx context.Context, request Command, grace time.Duration) (int,
 		return errRelayed
 	}
 	command.WaitDelay = grace
-	err := command.Run()
+	return processStatus(command.Run())
+}
+
+// runRelayed runs the elevated command without a context, so os/exec sets it
+// no deadline: WaitDelay starts only once Wait observes sudo's exit. The
+// watcher relays the operator's signal once and kills sudo on escalation; a
+// signal after Wait returns meets os.ErrProcessDone.
+func runRelayed(ctx context.Context, request Command, grace time.Duration) (int, error) {
+	command := exec.Command(request.Executable, request.Arguments...)
+	command.Env = append([]string(nil), request.Environment...)
+	command.Stdin, command.Stdout, command.Stderr = request.Input, request.Output, request.Error
+	command.WaitDelay = grace
+	if err := command.Start(); err != nil {
+		return processStatus(err)
+	}
+	waited, watched := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(watched)
+		select {
+		case <-ctx.Done():
+			command.Process.Signal(cancellationSignal(ctx))
+		case <-waited:
+			return
+		}
+		select {
+		case <-escalation(ctx):
+			command.Process.Kill()
+		case <-waited:
+		}
+	}()
+	err := command.Wait()
+	close(waited)
+	<-watched
+	return processStatus(err)
+}
+
+func processStatus(err error) (int, error) {
 	if err == nil {
 		return 0, nil
 	}

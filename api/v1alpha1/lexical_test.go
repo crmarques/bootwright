@@ -1,6 +1,9 @@
 package v1alpha1
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // A device path is rendered into installer directives and shell words, so a
 // line break inside one would start a directive the declaration never made.
@@ -90,4 +93,82 @@ func TestDevicePathAdmitsStableDeviceNames(t *testing.T) {
 			t.Fatalf("%q was refused", value)
 		}
 	}
+}
+
+// lexicalRows checks that rule admits every admitted value and refuses every
+// refused one.
+func lexicalRows(t *testing.T, rule string, admitted, refused []string) {
+	t.Helper()
+	for _, value := range admitted {
+		if !ValidLexical(rule, value) {
+			t.Errorf("%s refused %q", rule, value)
+		}
+	}
+	for _, value := range refused {
+		if ValidLexical(rule, value) {
+			t.Errorf("%s admitted %q", rule, value)
+		}
+	}
+}
+
+// An HTTP(S) URL reaches native configuration verbatim, so it is written only
+// in RFC 3986's own characters: no whitespace, control, non-ASCII or excluded
+// printable character survives admission.
+func TestAnHTTPURLIsWrittenInRFC3986Characters(t *testing.T) {
+	refused := []string{
+		"https://mirror.example.test/rhel 9",
+		"https://mirror.example.test/x?a=b c",
+		"https://mirror.example.test/x\u00a0y",
+		"https://mirror.example.test/x\u0085y",
+		"https://mirror.example.test/x\u2028y",
+		"https://mirror.example.test/x\u2029y",
+		"https://mirror.example.test/x\u200by",
+		"https://mirror.example.test/x\ty",
+		"https://mirror.example.test/x\x7fy",
+		"https://mirror.example.test/m\u00fcnchen",
+	}
+	for _, excluded := range "\"<>\\^`{|}" {
+		refused = append(refused, "https://mirror.example.test/x"+string(excluded)+"y")
+	}
+	admitted := []string{
+		"https://mirror.example.test/rhel9/BaseOS",
+		"https://[2001:db8::1]/x",
+		"https://mirror.example.test/x?a=b&c=d",
+		"https://mirror.example.test/x#frag",
+		"https://mirror.example.test/a%20b",
+	}
+	lexicalRows(t, "http-url", append(admitted, "http://192.0.2.1:8080/os/x/tree"), refused)
+	lexicalRows(t, "https-url", admitted, append(refused, "http://192.0.2.1:8080/os/x/tree"))
+}
+
+// A repository base URL reaches a Kickstart command line, where '#' ends the
+// line and a quote re-tokenizes it.
+func TestARepositoryURLRefusesAFragmentOrAQuote(t *testing.T) {
+	lexicalRows(t, "repository-url",
+		[]string{"https://mirror.example.test/extras", "http://192.0.2.1:8080/extras?arch=x86_64"},
+		[]string{"https://mirror.example.test/x#frag", "https://mirror.example.test/x#", "https://mirror.example.test/it's", `https://mirror.example.test/a"b`})
+}
+
+func TestASystemdUnitNameIsOneToken(t *testing.T) {
+	lexicalRows(t, "systemd-unit",
+		[]string{"chronyd", "sshd", "qemu-guest-agent", "cockpit.socket", "kdump", "getty@tty1.service", "dev-sda1.device", "a:b_c", strings.Repeat("a", 255)},
+		[]string{"sshd\n%post", "my service", "a,b", "a#b", `a\x2db`, "a'b", `a"b`, "-sshd", ".sshd", "%post", "a/b", "a$b", "s\u00fcd", strings.Repeat("a", 256)})
+}
+
+func TestAPackageEntryIsAPackageSpec(t *testing.T) {
+	lexicalRows(t, "package-spec",
+		[]string{"chrony", "kernel-*", "*-devel", "@container-tools", "@^minimal-environment", "@nodejs:18/common", "bash-5.1.8-9.el9.x86_64", "libstdc++", "tar?", "glibc-langpack-[a-z][a-z]", "vim-enhanced-2:8.2~rc1^git", "_x"},
+		[]string{"%end", "%post", "-kernel", "a#b", "touch${IFS}/x", "a,b", "bad package", "a'b", `a"b`, `a\b`, "a{b}", "p\u00e4ck", "a\nb", ".x"})
+}
+
+func TestAKickstartTokenCarriesNoSeparator(t *testing.T) {
+	lexicalRows(t, "kickstart-token",
+		[]string{"en_US.UTF-8", "sr_RS@latin", "us", "de-latin1-nodeadkeys", "Etc/UTC", "America/Port-au-Prince", "a%b"},
+		[]string{"%post", "us#x", "en_US,de_DE", "a b", "a'b", `a"b`, `a\b`, "a\tb", "a\u00a0b", "\u00e9", "a\x7fb", "a\nb", "a\u2028b"})
+}
+
+func TestAnInterfaceNameIsALinuxInterfaceName(t *testing.T) {
+	lexicalRows(t, "ifname",
+		[]string{strings.Repeat("e", 15), "enp1s0", "eno1", "eth0", "bond0.100", "br-ceph-public", "a+b_c"},
+		[]string{strings.Repeat("e", 16), "eth0/1", "eth0:1", ".", "..", "eth0\n%post", "eth 0", "\u00ebth0", "eth0'", `eth0"`})
 }

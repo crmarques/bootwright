@@ -3,7 +3,6 @@ package substrate
 import (
 	"fmt"
 	"net/netip"
-	"net/url"
 	"slices"
 	"strings"
 
@@ -206,16 +205,6 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		host, ok := c.Find(api.Machine, arm.Get("machineRef").Text())
 		if ok && !slices.Contains(host.Spec().Get("capabilities").Strings(), "libvirt") {
 			issues = add(issues, issue("$.spec.libvirt.machineRef", "libvirt host requires libvirt capability"))
-		}
-		if raw := arm.Get("uri").Text(); raw != "" {
-			uri, err := url.Parse(raw)
-			password := false
-			if uri != nil && uri.User != nil {
-				_, password = uri.User.Password()
-			}
-			if err != nil || uri.Scheme == "" || password {
-				issues = add(issues, issue("$.spec.libvirt.uri", "libvirt URI requires a scheme and forbids inline passwords"))
-			}
 		}
 		bmc := arm.Get("bmcEmulationDefaults")
 		if bmc.Has("enabled") && !bmc.Get("enabled").Bool() {

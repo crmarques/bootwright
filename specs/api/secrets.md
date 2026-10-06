@@ -93,13 +93,13 @@ Parameters are flat and type-scoped:
 
 | Field | Type | Secret types | Required | Default | Rule |
 | --- | --- | --- | --- | --- | --- |
-| `username` | string | `usernamePassword` | no | `admin` | No whitespace, colon, or newline. The password itself is randomly generated material. |
+| `username` | string | `usernamePassword` | no | `admin` | UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands); no whitespace, colon, newline or NUL. The password itself is randomly generated material. |
 | `commonName` | string | `tlsCertificate`, `caBundle` | yes | — | Common name for the self-signed certificate. |
 | `dnsNames` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | DNS subject-alternative names. |
 | `ipAddresses` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | IP subject-alternative names. |
 | `validityDays` | integer | `tlsCertificate`, `caBundle` | no | `3650` | Inclusive range `1..36500`. |
 | `keyType` | string | `sshKeyPair` | no | `ed25519` | `ed25519`, `rsa`, `ecdsa-p256`, `ecdsa-p384`, or `ecdsa-p521`. |
-| `comment` | string | `sshKeyPair` | no | omitted | No leading/trailing whitespace or newline. |
+| `comment` | string | `sshKeyPair` | no | omitted | UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands); no leading/trailing whitespace, no control character (newline, tab and NUL included), no Unicode line or paragraph separator, no double quote and no backslash, so the key stays on its quoted Kickstart line. |
 | `bytes` | integer | `token` | no | `32` | Token entropy in bytes; inclusive range `16..1024`. |
 
 `opaque` and `dockerConfigJson` cannot use `generated`. A parameter not

@@ -9,11 +9,39 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos/media"
+	"github.com/crmarques/bootwright/internal/workspace/invokerfs"
 )
+
+// invokerFiles opens through the invoking account's opener as a process that
+// is not root does: in-process, under its own credentials.
+type invokerFiles struct{}
+
+func (invokerFiles) Begin(ctx context.Context) (FileSession, error) {
+	var opener *invokerfs.Opener
+	session, err := opener.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+// virtualFiles serves absolute paths beneath root, so a path it serves exists
+// nowhere this adapter could open on its own.
+type virtualFiles struct{ root string }
+
+func (v virtualFiles) Begin(context.Context) (FileSession, error) { return v, nil }
+
+func (v virtualFiles) OpenFile(path string) (*os.File, error) {
+	return os.Open(filepath.Join(v.root, path))
+}
+
+func (virtualFiles) Close() error { return nil }
 
 func expectRefusal(t *testing.T, err error) {
 	t.Helper()
@@ -29,7 +57,7 @@ func TestFileSourcesOpenOnlyRegularFilesAndRecordTheirAbsoluteOrigin(t *testing.
 	if err := os.WriteFile(path, []byte("installer"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	acquisition, err := New(nil).Open(context.Background(), media.Source{Path: path})
+	acquisition, err := New(nil, invokerFiles{}).Open(context.Background(), media.Source{Path: path})
 	if err != nil {
 		t.Fatalf("open: %#v", diagnostics.Of(err))
 	}
@@ -41,10 +69,33 @@ func TestFileSourcesOpenOnlyRegularFilesAndRecordTheirAbsoluteOrigin(t *testing.
 	if acquisition.Origin != "file://"+path {
 		t.Fatalf("origin = %q", acquisition.Origin)
 	}
-	_, err = New(nil).Open(context.Background(), media.Source{Path: directory})
+	_, err = New(nil, invokerFiles{}).Open(context.Background(), media.Source{Path: directory})
 	expectRefusal(t, err)
-	_, err = New(nil).Open(context.Background(), media.Source{Path: filepath.Join(directory, "absent.iso")})
+	_, err = New(nil, invokerFiles{}).Open(context.Background(), media.Source{Path: filepath.Join(directory, "absent.iso")})
 	expectRefusal(t, err)
+}
+
+func TestFromFileOpensOnlyThroughTheOpener(t *testing.T) {
+	root := t.TempDir()
+	virtual := filepath.Join("/", "bootwright-"+strconv.FormatInt(time.Now().UnixNano(), 36), "image.iso")
+	if err := os.MkdirAll(filepath.Join(root, filepath.Dir(virtual)), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, virtual), []byte("installer"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	acquisition, err := New(nil, virtualFiles{root: root}).Open(context.Background(), media.Source{Path: virtual})
+	if err != nil {
+		t.Fatalf("open: %#v", diagnostics.Of(err))
+	}
+	defer acquisition.Payload.Close()
+	data, err := io.ReadAll(acquisition.Payload)
+	if err != nil || string(data) != "installer" || acquisition.Origin != "file://"+virtual {
+		t.Fatalf("payload %q from %q (%v)", data, acquisition.Origin, err)
+	}
+	if _, err := os.Lstat(virtual); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the virtual source exists on this host, so the test proves nothing: %v", err)
+	}
 }
 
 func TestDownloadsRefuseCredentials(t *testing.T) {
@@ -54,7 +105,7 @@ func TestDownloadsRefuseCredentials(t *testing.T) {
 		"https:///image.iso",
 		"https://example.test/image.iso#fragment",
 	} {
-		_, err := New(nil).Open(context.Background(), media.Source{URL: raw})
+		_, err := New(nil, nil).Open(context.Background(), media.Source{URL: raw})
 		expectRefusal(t, err)
 	}
 }
@@ -73,7 +124,7 @@ func TestDownloadsFollowNoRedirectAndRefuseAnythingButOneServedImage(t *testing.
 		}
 	}))
 	defer served.Close()
-	acquisition, err := New(nil).Open(context.Background(), media.Source{URL: served.URL + "/image.iso"})
+	acquisition, err := New(nil, nil).Open(context.Background(), media.Source{URL: served.URL + "/image.iso"})
 	if err != nil {
 		t.Fatalf("open: %#v", diagnostics.Of(err))
 	}
@@ -85,16 +136,16 @@ func TestDownloadsFollowNoRedirectAndRefuseAnythingButOneServedImage(t *testing.
 	if acquisition.Origin != served.URL+"/image.iso" {
 		t.Fatalf("origin = %q", acquisition.Origin)
 	}
-	_, err = New(nil).Open(context.Background(), media.Source{URL: served.URL + "/moved.iso"})
+	_, err = New(nil, nil).Open(context.Background(), media.Source{URL: served.URL + "/moved.iso"})
 	expectRefusal(t, err)
-	_, err = New(nil).Open(context.Background(), media.Source{URL: served.URL + "/absent.iso"})
+	_, err = New(nil, nil).Open(context.Background(), media.Source{URL: served.URL + "/absent.iso"})
 	expectRefusal(t, err)
 }
 
 func TestCancellationStopsAcquisitionBeforeItOpensAnything(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := New(nil).Open(ctx, media.Source{Path: "/images/demo.iso"}); err == nil {
+	if _, err := New(nil, nil).Open(ctx, media.Source{Path: "/images/demo.iso"}); err == nil {
 		t.Fatal("a canceled acquisition opened a source")
 	}
 }
@@ -112,7 +163,7 @@ func TestDownloadsTakeTheSuppliedRouteAndFailClosedWithoutOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	acquisition, err := New(func(*http.Request) (*url.URL, error) { return endpoint, nil }).
+	acquisition, err := New(func(*http.Request) (*url.URL, error) { return endpoint, nil }, nil).
 		Open(context.Background(), media.Source{URL: "http://images.example/image.iso"})
 	if err != nil {
 		t.Fatalf("open: %#v", diagnostics.Of(err))
@@ -128,7 +179,7 @@ func TestDownloadsTakeTheSuppliedRouteAndFailClosedWithoutOne(t *testing.T) {
 	if acquisition.Origin != "http://images.example/image.iso" {
 		t.Fatalf("origin = %q", acquisition.Origin)
 	}
-	unusable := New(func(*http.Request) (*url.URL, error) { return nil, errors.New("route is not qualified") })
+	unusable := New(func(*http.Request) (*url.URL, error) { return nil, errors.New("route is not qualified") }, nil)
 	if _, err := unusable.Open(context.Background(), media.Source{URL: "http://images.example/image.iso"}); err == nil {
 		t.Fatal("an import proceeded without a usable route")
 	}

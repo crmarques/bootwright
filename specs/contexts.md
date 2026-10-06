@@ -35,8 +35,12 @@ Current selection belongs to the invoking user in `~/.bootwright/context`, a
 bounded canonical JSON record containing `version: 2` and `name` (at most
 4096 bytes). Its parent
 is user-owned `0700`; the regular file is user-owned `0600`. Resolve the account
-through the invocation identity and local account database, never `HOME`.
-Perform its filesystem effects with that user's credentials. Use verified
+through the invocation identity, never `HOME`: an operator whose account comes
+from a directory service resolves through NSS with a pinned, root-owned
+`getent` under the same single-entry and clean-home checks, `/etc/passwd`
+serving only where `getent` is absent, and a `sudo -i` root shell resolves as
+direct root, as [local privilege and user identity](cli.md#local-privilege-and-user-identity)
+states. Perform its filesystem effects with that user's credentials. Use verified
 no-follow handles, exclusive temporary files and atomic replacement. A refusal
 raised under that account reports that account's own bounded diagnosis.
 
@@ -159,9 +163,10 @@ configured secret-store type and reserved directory device/inode. The
 Controller descriptor is an optional trailing member that confirmed setup adds.
 The 4096-name bound applies to active or reserved contexts, not past creations.
 
-A registry written in an earlier format is refused rather than converted, with
-the complete-store guidance below. There is no fallback from corrupt state to
-older metadata.
+A `registry.json` of any other format version, such as the versions 2, 3 and 4
+that earlier builds wrote, is refused rather than converted, as state this
+build cannot read, with the earlier-build guidance below. There is no fallback
+from corrupt state to older metadata.
 
 The production root is `/var/lib/bootwright`. Its Controller subtree follows
 the [controller record](contexts/controller-record.md) and exists only after
@@ -219,7 +224,20 @@ by `root:root` with mode `0600`, except the catalogued controller executables
 the [controller record](contexts/controller-record.md#location-and-file-modes)
 allows. All store access runs as root. No environment variable selects another
 production root. Isolated test storage is injected at
-composition. Reject unsafe existing objects without chmod/chown repair.
+composition. Reject unsafe existing objects without chmod/chown repair. A root
+of another type, owner or mode refuses naming the type, the `uid:gid` owner and
+the octal mode it holds and the `root:root` `0700` directory it must be, and
+says that nothing repairs it, with the guidance below for a root another build
+created.
+
+A host whose `/var/lib/bootwright` holds a store an earlier Bootwright build
+created is not a supported controller for this build until that build's
+environments are retired and its root archived. This build refuses that root,
+by what it lacks rather than by recognizing another build's files, and never
+adopts or converts it. The refusal says that another Bootwright build may
+manage live environments there, to run this build on another controller host
+or to retire that build's environments before archiving its root, and that the
+root is never moved aside while that build's services run.
 
 A context's name is its durable identity, so nothing is allocated for it:
 reserve the name durably before creating its directory. Revision IDs use `rev-`
@@ -277,6 +295,25 @@ takes no lease and collects no stage in a context's `state/` subtree.
 Revalidate target, identity and evidence under those locks. Read-only
 operations perform no repair, initialization or publication.
 
+Every read and every registry transaction verifies the mapping of every ready
+context: its directory and recorded identity, its reservation, its
+configuration and the manifest of its selected revision. A failure refuses
+`context.state` naming the context, the entry relative to the state root and
+the kernel's answer or the store's own refusal, with that damage's exit: a
+context directory that is gone is abandoned with `bootwright context delete
+--name <name> --purge --allow-orphans`; a missing or inconsistent
+configuration or revision entry in a present directory is purged with
+`bootwright context delete --name <name> --purge`; and a replaced directory, a
+damaged reservation, a missing `contexts` container or an entry the store
+refuses to open, for its type, owner, permissions or link count or a kernel
+error, is resolved only by restoring the whole store from a matching backup,
+because the purge refuses each of them too. The purge of a context
+verifies every other ready context and admits exactly that one: its
+transaction serves only the registry, that context's mutation state and host
+reservations, and the deletion of its record, so another damaged context still
+refuses, named. Isolating a damaged context from the rest of the store is
+[B325](milestones/backlog.md#b325).
+
 A lifecycle operation holds the exclusive root lock and the selected context's
 lease for its entire execution, because its host reservations, controller
 evidence and operation records must stay coherent while its effects run. Every
@@ -319,7 +356,17 @@ a complete old or new input; interrupted unpublished revisions are never
 adopted by scanning. Small temporary files for atomic record replacement stay
 inside existing directories; they do not introduce a staging tree. A write
 that fails after creating its file removes exactly that file, unless its retry
-relies on what it leaves, as below. Every record publication except the
+relies on what it leaves, as below; a controller bundle file is staged and
+renamed into place, and a failed or cancelled write removes its stage. A
+write, sync or create the kernel
+refuses for capacity (`ENOSPC`, `EDQUOT` or `EFBIG`) refuses as capacity,
+naming only the kernel's answer, never a path, and the remedy of freeing space
+or raising the quota on the filesystem that holds `/var/lib/bootwright`; any
+other answer the kernel gives a write or sync is named the same way, with the
+remedy of inspecting that filesystem. Only a failed integrity proof of the
+store's own state reads as corruption: the secret area reports capacity and
+I/O failures as `secret.store` with that cause and remedy, never as
+`secret.store.corrupt`. Every record publication except the
 initial registry's and the secret store's exclusive writes stages its bytes
 beside its target, proves right before one rename that the destination still
 holds what it replaces or renames without replacing anything, and removes its
@@ -359,7 +406,8 @@ retry attribute that directory and record the identity that deletion
 requires. The initial registry's stage is the recovery artifact the
 missing-registry rule below names; a replacement registry stage is removed on
 failure like any other, and after a kill by the next registry transaction.
-Media stages follow [Media acquisition](#media-acquisition).
+Media stages follow [Media acquisition](#media-acquisition), and controller
+bundle stages follow the [controller record](contexts/controller-record.md#bounds).
 
 After durable registry publication, a pristine context may collect verified
 unselected revisions while holding the root lock and context lease. Pristine
@@ -377,7 +425,9 @@ become collectible.
 
 All traversal uses held no-follow handles. Inside the root reject mount
 crossings, links, hardlinks, special files, wrong ownership/modes and path
-substitution. Every publication revalidates location. Supported local
+substitution. A listing reads the directory through the handle it holds, never
+a fresh resolution of its name, and refuses a directory that was replaced or
+moved while it was held. Every publication revalidates location. Supported local
 filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide
 `openat2`. Unsupported containment or durability primitives fail closed.
 
@@ -488,8 +538,13 @@ the exclusive root lock, revalidates the file and sole-entry layout, publishes
 with a no-replace rename, verifies the result, and syncs the root before
 proceeding. Inspection never performs this recovery; it directs the user to
 repeat context init with the original options. Every other missing-registry
-shape is left unchanged and reports that the complete store must be restored
-from a matching backup or moved aside only after it is verified disposable.
+shape is left unchanged and refuses as state this build did not publish, with
+the earlier-build guidance [above](#storage-locking-and-publication): another
+Bootwright build may manage live environments from that root, so this build
+runs on another controller host or that build's environments are retired
+before its root is archived, and the root is never moved aside while that
+build's services run; a store this build created is restored whole from a
+matching backup.
 
 The root admits only the store's own published objects: `registry.json`, the
 `contexts` container, the `controller` subtree once the registry declares it,
@@ -497,8 +552,8 @@ the `media` container once a `media add` has created it,
 and verified private, bounded `pending-<32 lowercase hexadecimal digits>.json`
 files left by an interrupted registry replacement; reads ignore them, nothing
 adopts them, and the next command that opens a registry transaction removes
-them. Any other entry refuses with the same complete-store guidance,
-whether or not the registry holds contexts. Bounds never authorize evidence
+them. Any other entry refuses with the same earlier-build and whole-store
+guidance, whether or not the registry holds contexts. Bounds never authorize evidence
 deletion to make room.
 
 ### Media acquisition
@@ -560,7 +615,11 @@ that image with another digest or none removes the pair before it claims, and
 the stage's lock, and a frozen image's pair stays until its freeze ends.
 
 A failed, refused or cancelled acquisition removes its own stage while it still
-holds the stage's lock. A stage whose lock no process holds and that is not
+holds the stage's lock. A stage write or sync the filesystem refuses reads as
+the media store's failure, never as the source's: a capacity answer names only
+the kernel's answer and the remedy of freeing space or raising the quota on
+the filesystem that holds `/var/lib/bootwright/media`, while a source that
+fails mid-stream is still reported as the source's. A stage whose lock no process holds and that is not
 retained, such as one a killed `media add` left, is abandoned: it is never
 listed or adopted, and the next `media add` or `media delete` removes it, after
 the record beside it if any, under the exclusive root lock before it claims
@@ -597,8 +656,17 @@ evidence, or any required recovery material. A default refusal reports what the
 context still owns and directs the operator to `destroy` before deletion.
 
 Only the explicit orphan acknowledgement defined by that guard waives the
-disposal verdict, and only over recognized evidence; unreadable evidence and a
-live lease refuse under it exactly as they do without it. An acknowledged
+disposal verdict, and only over recognized evidence; unreadable evidence in a
+present context directory and a live lease refuse under it exactly as they do
+without it. A ready context whose directory is gone from a `contexts`
+container that still verifies is lost: what it owned cannot be listed, so its
+`--purge` refuses with `context.unsafe-delete`, naming the context, the entry
+`contexts/<name>` and the kernel's answer, and the exit `bootwright context
+delete --name <name> --purge --allow-orphans`. That acknowledgement abandons
+it: its confirmation says that its objects cannot be listed, the deletion
+proves the directory still absent, durably marks the context deleting, syncs
+the container, drops its binding and host reservations and removes its
+registry entry, and the result reports the abandonment. An acknowledged
 deletion abandons the objects rather than removing them: it is otherwise the
 same permanent local deletion, it needs `--purge` and ordinary confirmation
 like any other, its confirmation names the abandonment, its result reports it,
@@ -631,7 +699,11 @@ An explicit delete retry resumes the recorded deletion, accepting verified
 missing children as completed removal and refusing replacement or unknown
 objects. A partially deleted context is never reactivated or reported rolled
 back, and its name cannot be recreated until the deletion completes. Recovery
-guidance names `context delete --name <name> --purge`.
+guidance names `context delete --name <name> --purge`. A deletion runs in a
+transaction scoped to its context, which verifies every other ready context as
+any transaction does and leaves the named one to the deletion, so a context
+whose damage leaves its evidence readable is purged with `--purge` alone when
+the guard reads that evidence as pristine.
 
 ## Command results and confirmation
 
@@ -639,7 +711,9 @@ Context commands are text-only. Details include name, initialization and
 input readiness, and the invoking user's current marker. List sorts by name;
 `current --short` emits only the name and LF. Input admission reports counts
 and copied files; default creation does not invent compilation counts.
-Warnings appear once on stderr. No private paths, payloads or digests appear.
+Warnings appear once on stderr. No private paths, payloads or digests appear:
+a refusal naming damaged store state names its entry relative to the state
+root.
 
 Fresh init and use need no confirmation. Init refuses an already-ready name
 and directs the user to update. Input update and deletion require

@@ -9,12 +9,93 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"unsafe"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
+
+const (
+	storeCapacityRemediation = "free space, or raise the quota, on the filesystem that holds /var/lib/bootwright, then repeat the command"
+	storeDeviceRemediation   = "inspect the filesystem that holds /var/lib/bootwright (its kernel log names the device error), then repeat the command"
+)
+
+// storeErrno finds the kernel's answer inside a store failure. Only the errno
+// is ever rendered: the text of an *os.PathError carries a private path.
+func storeErrno(err error) (syscall.Errno, bool) {
+	var errno syscall.Errno
+	if errors.As(err, &errno) && errno != 0 {
+		return errno, true
+	}
+	return 0, false
+}
+
+// capacityErrno reports the answers that mean the filesystem could not hold a
+// write: no space, no quota left, or a file past its size limit.
+func capacityErrno(errno syscall.Errno) bool {
+	return errno == syscall.ENOSPC || errno == syscall.EDQUOT || errno == syscall.EFBIG
+}
+
+// errnoText is the kernel's own name for an answer, with the symbol an
+// operator searches for when it is a capacity answer.
+func errnoText(errno syscall.Errno) string {
+	switch errno {
+	case syscall.ENOSPC:
+		return errno.Error() + " (ENOSPC)"
+	case syscall.EDQUOT:
+		return errno.Error() + " (EDQUOT)"
+	case syscall.EFBIG:
+		return errno.Error() + " (EFBIG)"
+	}
+	return errno.Error()
+}
+
+// storeCauseText renders why the store refused an entry: the errno it
+// answered, or the message of a refusal the store raised itself, and never the
+// text of any other error.
+func storeCauseText(cause error) string {
+	if errno, found := storeErrno(cause); found {
+		return errnoText(errno)
+	}
+	messages := []string{}
+	for _, diagnostic := range diagnostics.Of(cause) {
+		messages = append(messages, diagnostic.Message)
+	}
+	return strings.Join(messages, "; ")
+}
+
+// ioDiagnosis names a write the kernel refused: a capacity answer as the room
+// the state root's filesystem lacks, any other answer as a device error.
+func ioDiagnosis(message string, errno syscall.Errno) (string, string) {
+	if capacityErrno(errno) {
+		return message + ": the filesystem holding the state root has no room: " + errnoText(errno), storeCapacityRemediation
+	}
+	return message + ": " + errnoText(errno), storeDeviceRemediation
+}
+
+// ioFailure is a store write or sync the kernel refused. Its diagnostic is
+// context.state for every caller; its type lets the secret area report the
+// same cause and remedy under its own code.
+type ioFailure struct{ failure error }
+
+func (e *ioFailure) Error() string { return e.failure.Error() }
+
+func (e *ioFailure) Unwrap() error { return e.failure }
+
+// storeFailure names the errno a failed write or sync returned. A capacity
+// answer is never read as damage: it names the room the filesystem lacks and
+// the free-space remedy. A failure without an errno keeps its message alone.
+func storeFailure(message string, cause error) error {
+	errno, found := storeErrno(cause)
+	if !found {
+		return state(message)
+	}
+	text, remediation := ioDiagnosis(message, errno)
+	return &ioFailure{failure: contexts.StateErrorWithRemediation(text, remediation)}
+}
 
 const (
 	openat2Trap                   = 437
@@ -141,6 +222,67 @@ func (d *directory) verify() error {
 		return state("state directory location was replaced")
 	}
 	return nil
+}
+
+// listingKind is why heldNames refused a listing it read itself, so each
+// caller can report it under its own code.
+type listingKind uint8
+
+const (
+	listingReplaced listingKind = iota
+	listingUnreadable
+	listingOverLimit
+)
+
+type listingFailure struct {
+	kind    listingKind
+	failure error
+}
+
+func (e *listingFailure) Error() string { return e.failure.Error() }
+
+func (e *listingFailure) Unwrap() error { return e.failure }
+
+// heldNames lists, sorted, the directory dir holds, through a fresh handle on
+// that very directory rather than a resolution of its name, so a directory
+// renamed over it is never what is listed. It verifies dir's location before
+// and after, so a directory moved away during the listing refuses as replaced.
+func heldNames(dir *directory, maximum int) ([]string, error) {
+	if err := dir.verify(); err != nil {
+		return nil, err
+	}
+	file, err := openWithin(dir, ".", syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	identity, err := statHandle(file)
+	if err != nil || !sameIdentity(dir.identity, identity) {
+		return nil, &listingFailure{listingReplaced, state("held state directory was replaced")}
+	}
+	names := make([]string, 0, min(maximum, 1024))
+	for len(names) <= maximum {
+		part, readErr := file.Readdirnames(min(1024, maximum+1-len(names)))
+		names = append(names, part...)
+		if len(names) > maximum {
+			return nil, &listingFailure{listingOverLimit, state("state directory entry count exceeds its limit")}
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil || len(part) == 0 {
+			return nil, &listingFailure{listingUnreadable, state("state directory cannot be enumerated")}
+		}
+	}
+	if err := dir.verify(); err != nil {
+		return nil, err
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
+func directoryNames(dir *directory, maximum int) ([]string, error) {
+	return heldNames(dir, maximum)
 }
 
 // Existing ancestors may be system directories; all missing suffixes are
@@ -311,9 +453,13 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 		return nil, err
 	}
 	stat, err := statHandle(file)
-	if err != nil || !private(stat, syscall.S_IFDIR, uid, gid) {
+	if err != nil {
 		file.Close()
 		return nil, state("state root type, owner or permissions is unsafe")
+	}
+	if !private(stat, syscall.S_IFDIR, uid, gid) {
+		file.Close()
+		return nil, unsafeRoot(stat, uid, gid)
 	}
 	var fs syscall.Statfs_t
 	if err = syscall.Fstatfs(int(file.Fd()), &fs); err != nil || !localFilesystem(fs.Type) {
@@ -453,7 +599,7 @@ func (s *Store) syncDirectory(ctx context.Context, dir *directory) error {
 		return err
 	}
 	if err := dir.file.Sync(); err != nil {
-		return state("state directory durability could not be established")
+		return storeFailure("state directory durability could not be established", err)
 	}
 	return nil
 }
@@ -503,7 +649,7 @@ func (s *Store) writeExclusiveIdentity(ctx context.Context, parent *directory, n
 		}
 		n, err := file.Write(data[:min(len(data), 32768)])
 		if err != nil || n == 0 {
-			return syscall.Stat_t{}, state("state file could not be written")
+			return syscall.Stat_t{}, storeFailure("state file could not be written", err)
 		}
 		data = data[n:]
 	}
@@ -511,7 +657,7 @@ func (s *Store) writeExclusiveIdentity(ctx context.Context, parent *directory, n
 		return syscall.Stat_t{}, err
 	}
 	if err := file.Sync(); err != nil {
-		return syscall.Stat_t{}, state("state file durability could not be established")
+		return syscall.Stat_t{}, storeFailure("state file durability could not be established", err)
 	}
 	held, err := statHandle(file)
 	if err != nil || !sameIdentity(before, held) || !private(held, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) || held.Size != int64(size) {

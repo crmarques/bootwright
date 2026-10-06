@@ -123,7 +123,7 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := writeJSON(job, inventoryName, inventory(request.Placement, interpreter, paths)); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	if err := writeJSON(job, requestName, values); err != nil {
+	if err := writeVariables(job, values); err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	result, err := r.execute(ctx, job, scratch, lock, playbook, request)
@@ -222,6 +222,17 @@ func (r Runner) materialize(job string, request lifecycle.RunRequest) (map[strin
 
 func writeJSON(job, name string, value any) error {
 	encoded, err := json.Marshal(value)
+	return writeEncoded(job, name, encoded, err)
+}
+
+// writeVariables writes the adapter's variables with every string marked as
+// data, because ansible-core reads an --extra-vars file as trusted templates.
+func writeVariables(job string, values map[string]any) error {
+	encoded, err := ansible.ExtraVariables(values)
+	return writeEncoded(job, requestName, encoded, err)
+}
+
+func writeEncoded(job, name string, encoded []byte, err error) error {
 	if err != nil || len(encoded) > maxVariableBytes {
 		return failure("lifecycle.state", "the frozen adapter invocation could not be materialized", "")
 	}

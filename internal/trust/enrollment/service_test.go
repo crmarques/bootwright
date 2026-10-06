@@ -3,6 +3,8 @@ package enrollment
 import (
 	"context"
 	"errors"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -99,28 +101,52 @@ func (o *observer) Observe(_ context.Context, address string, _ int) (trust.Host
 	return trust.HostKey{Type: "ssh-ed25519", PublicKey: publicKey}, nil
 }
 
+// events is the one ordered log the presenter and the prompt share, so a test
+// sees which of them an operator met first.
+type events struct{ log []string }
+
 type prompt struct {
 	asked   int
 	decline error
+	events  *events
 }
 
 func (p *prompt) Confirm(context.Context, string, string) error {
 	p.asked++
+	p.events.log = append(p.events.log, "confirm")
 	return p.decline
 }
 
+type presenter struct {
+	shown  []Report
+	fail   error
+	events *events
+}
+
+func (p *presenter) PresentTrustPlan(_ context.Context, report Report) error {
+	p.shown = append(p.shown, report)
+	p.events.log = append(p.events.log, "present")
+	return p.fail
+}
+
 type harness struct {
-	service  Service
-	trust    *store
-	observer *observer
-	prompt   *prompt
+	service   Service
+	trust     *store
+	observer  *observer
+	prompt    *prompt
+	presenter *presenter
+	events    *events
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	h := &harness{trust: &store{}, observer: &observer{keys: map[string]trust.HostKey{}, fail: map[string]error{}}, prompt: &prompt{}}
+	log := &events{}
+	h := &harness{
+		trust: &store{}, observer: &observer{keys: map[string]trust.HostKey{}, fail: map[string]error{}},
+		prompt: &prompt{events: log}, presenter: &presenter{events: log}, events: log,
+	}
 	h.service = New(stateSource{}, h.trust, func(context.Context) (string, error) { return "lab", nil }, Options{
-		Observer: h.observer, Confirmer: h.prompt,
+		Observer: h.observer, Confirmer: h.prompt, Presenter: h.presenter,
 		Clock: func() time.Time { return time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC) },
 	})
 	return h
@@ -274,6 +300,149 @@ func TestPendingWritesAreConfirmedUnlessAnswered(t *testing.T) {
 	}
 	if skipped.prompt.asked != 0 {
 		t.Fatal("--yes still asked")
+	}
+}
+
+// What an operator confirms is the one evaluated report this enrollment
+// records: every key it adds, and the key a replacement supersedes.
+func TestThePlanIsPresentedBeforeItIsConfirmed(t *testing.T) {
+	h := newHarness(t)
+	if _, err := enroll(t, h, EnrollRequest{Machines: []string{"node-a"}, SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.observer.keys["192.0.2.10"] = trust.HostKey{Type: "ssh-ed25519", PublicKey: otherKey}
+	report, err := enroll(t, h, EnrollRequest{Replace: []string{"node-a"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(h.events.log, []string{"present", "confirm"}) {
+		t.Fatalf("events = %v, want the plan before its confirmation", h.events.log)
+	}
+	if len(h.presenter.shown) != 1 || !report.Presented {
+		t.Fatalf("presented %d plans, report presented = %t", len(h.presenter.shown), report.Presented)
+	}
+	shown := h.presenter.shown[0]
+	replaced := trust.HostKey{Type: "ssh-ed25519", PublicKey: otherKey}.Fingerprint()
+	original := trust.HostKey{Type: "ssh-ed25519", PublicKey: publicKey}.Fingerprint()
+	if shown.Pending != 2 || !reflect.DeepEqual(shown.Hosts, report.Hosts) {
+		t.Fatalf("presented %+v, recorded %+v", shown, report)
+	}
+	if host := action(&shown, "node-a"); host.Action != ActionReplace || host.Fingerprint != replaced || host.PreviousFingerprint != original ||
+		host.PreviousAddress != "" || host.PreviousPort != 0 {
+		t.Fatalf("replacement = %+v", host)
+	}
+	if host := action(&shown, "node-b"); host.Action != ActionAdd || host.Fingerprint != original {
+		t.Fatalf("addition = %+v", host)
+	}
+	if len(h.trust.written) != 2 {
+		t.Fatalf("writes = %d", len(h.trust.written))
+	}
+}
+
+func TestADeclinedPlanRecordsNothing(t *testing.T) {
+	h := newHarness(t)
+	h.prompt.decline = errors.New("declined")
+	if _, err := enroll(t, h, EnrollRequest{}); err == nil {
+		t.Fatal("a declined plan was recorded")
+	}
+	if len(h.presenter.shown) != 1 || len(h.trust.written) != 0 {
+		t.Fatalf("presented %d plans, wrote %d", len(h.presenter.shown), len(h.trust.written))
+	}
+}
+
+// A plan that cannot be shown is never confirmed, so an operator never
+// accepts a fingerprint they did not see.
+func TestAPlanThatCannotBeShownIsNeverConfirmed(t *testing.T) {
+	h := newHarness(t)
+	closed := errors.New("closed")
+	h.presenter.fail = closed
+	if _, err := enroll(t, h, EnrollRequest{}); !errors.Is(err, closed) {
+		t.Fatalf("err = %v", err)
+	}
+	if !slices.Equal(h.events.log, []string{"present"}) || h.prompt.asked != 0 || len(h.trust.written) != 0 {
+		t.Fatalf("events = %v, asked %d, wrote %d", h.events.log, h.prompt.asked, len(h.trust.written))
+	}
+}
+
+func TestNothingIsPresentedWithoutAPrompt(t *testing.T) {
+	recorded := newHarness(t)
+	if _, err := enroll(t, recorded, EnrollRequest{SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name    string
+		data    []byte
+		request EnrollRequest
+	}{
+		{"--yes", nil, EnrollRequest{SkipConfirmation: true}},
+		{"--dry-run", nil, EnrollRequest{DryRun: true}},
+		{"nothing pending", recorded.trust.data, EnrollRequest{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.trust.data = test.data
+			report, err := enroll(t, h, test.request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(h.presenter.shown) != 0 || report.Presented || h.prompt.asked != 0 {
+				t.Fatalf("presented %d plans, report presented = %t, asked %d", len(h.presenter.shown), report.Presented, h.prompt.asked)
+			}
+		})
+	}
+}
+
+// A prompt the operator could answer without seeing the plan is refused
+// rather than asked blind.
+func TestAPromptWithoutAPresenterRefuses(t *testing.T) {
+	h := newHarness(t)
+	h.service.options.Presenter = nil
+	_, err := enroll(t, h, EnrollRequest{})
+	if err == nil || code(t, err) != "trust.identity" {
+		t.Fatalf("err = %v", err)
+	}
+	if h.prompt.asked != 0 || len(h.trust.written) != 0 {
+		t.Fatalf("asked %d, wrote %d", h.prompt.asked, len(h.trust.written))
+	}
+}
+
+func TestAnUnchangedKeyAtAMovedEndpointNamesWhereItIsTrusted(t *testing.T) {
+	h := newHarness(t)
+	key := trust.HostKey{Type: "ssh-ed25519", PublicKey: publicKey}
+	records := trust.Store{FormatVersion: trust.FormatVersion}
+	records.Upsert(trust.Record{
+		Machine: "node-a", Address: "192.0.2.99", Port: 22, KeyType: key.Type, PublicKey: key.PublicKey,
+		Fingerprint: key.Fingerprint(), Source: trust.SourceEnrollment,
+	})
+	data, err := records.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.trust.data = data
+	_, err = enroll(t, h, EnrollRequest{Machines: []string{"node-a"}, SkipConfirmation: true})
+	if err == nil || code(t, err) != "trust.identity" {
+		t.Fatalf("err = %v", err)
+	}
+	reported := diagnostics.Of(err)[0]
+	for _, want := range []string{"unchanged", key.Fingerprint(), "192.0.2.99", "192.0.2.10"} {
+		if !strings.Contains(reported.Message, want) {
+			t.Fatalf("message %q does not name %q", reported.Message, want)
+		}
+	}
+	if strings.Contains(reported.Message, "changed from") || !strings.Contains(reported.Remediation, "--context lab --replace node-a") {
+		t.Fatalf("diagnostic = %q, remediation %q", reported.Message, reported.Remediation)
+	}
+	if len(h.trust.written) != 0 {
+		t.Fatal("a moved endpoint was recorded without a re-trust")
+	}
+
+	report, err := enroll(t, h, EnrollRequest{Machines: []string{"node-a"}, Replace: []string{"node-a"}, SkipConfirmation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := action(report, "node-a")
+	if host.Action != ActionReplace || host.PreviousAddress != "192.0.2.99" || host.PreviousPort != 22 || host.PreviousFingerprint != host.Fingerprint {
+		t.Fatalf("host = %+v", host)
 	}
 }
 

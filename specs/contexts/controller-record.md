@@ -139,11 +139,17 @@ first. A bundle is bounded to 8 GiB total, 1 GiB per file, 32768 entries and
 depth 32. Symlinks, hard links, nested
 mounts, unsafe modes, unexpected entries and replacement refuse. Completion
 verifies and syncs the complete tree before sealing; sealed contents cannot be
-rewritten. Each published file's own contents are made durable as it is written,
-so an interrupted publication always resumes from bytes it can attribute, while
-the directory entries naming them are synced with that tree at completion: a
-name lost to a crash leaves the file absent for the replay to publish again,
-never present with content the replay cannot attribute.
+rewritten. Each published file is written to a private stage named
+`pending-<32 lowercase hexadecimal digits>` in its final directory, made
+durable, and renamed to its final name without replacing anything, so a final
+name only ever holds complete, durable bytes; no bundle path may use a stage's
+name. The directory entries are synced with that tree at completion: a rename
+lost to a crash leaves the stage, or nothing, for the replay to publish the
+file again. A write that fails or is cancelled before its rename removes its
+stage. A stage a killed write or a crash leaves in an unsealed area is not
+bundle content: reads skip it and leave it, and the area's next writer, such
+as the exact replay, removes it before it writes, as completion does before it
+seals; a sealed area holding one refuses.
 
 ## Bundles and client areas
 

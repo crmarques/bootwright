@@ -15,13 +15,17 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 )
 
-// Command is one bounded invocation of an already selected executable.
+// Command is one invocation of an already selected executable. Elevated marks
+// the elevated child, which bounds its own cancellation, so its executor relays
+// the operator's signal and sets no deadline of its own; every other command
+// is killed once it outlives its context by the relay grace.
 type Command struct {
 	Executable    string
 	Arguments     []string
 	Environment   []string
 	Input         io.Reader
 	Output, Error io.Writer
+	Elevated      bool
 }
 
 type Timer struct{}
@@ -129,15 +133,12 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 			}
 		}
 	}()
-	code, err := options.Executor.Run(ctx, Command{Executable: options.Sudo, Arguments: childArgs, Environment: environment, Input: options.Input, Output: options.Output, Error: options.Error})
+	code, err := options.Executor.Run(ctx, Command{Executable: options.Sudo, Arguments: childArgs, Environment: environment, Input: options.Input, Output: options.Output, Error: options.Error, Elevated: true})
 	stopRefresh()
 	<-finished
 	return code, err
 }
 
-// A plain -ll report is not an effective-policy API. Only an explicit matching
-// value without bound or backend ambiguity is usable. Unknown policy receives
-// the documented best-effort cadence, while sudo remains the authority.
 // safeAssignment admits only the fixed acquisition-route names, so no authored
 // value can introduce another variable into the elevated child.
 func safeAssignment(value string) bool {
@@ -168,6 +169,9 @@ func safeTerminalName(value string) bool {
 	return value != ""
 }
 
+// A plain -ll report is not an effective-policy API. Only an explicit matching
+// value without bound or backend ambiguity is usable. Unknown policy receives
+// the documented best-effort cadence, while sudo remains the authority.
 func refreshInterval(report []byte) time.Duration {
 	const unknown = 30 * time.Second
 	text := string(report)

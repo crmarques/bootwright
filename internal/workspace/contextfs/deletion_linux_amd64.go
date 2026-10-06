@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -311,69 +312,18 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 		}
 	}
 	dir, err := t.contextDirectory(ctx, record.Name)
-	if errors.Is(err, syscall.ENOENT) && (record.Mode == contexts.Deleting || record.Mode == contexts.Initializing && record.DirectoryInode == 0) {
-		if t.container == nil {
-			if record.Mode != contexts.Initializing || record.DirectoryInode != 0 {
-				return state("deleting context parent is missing")
-			}
-			if err := t.store.syncDirectory(ctx, t.root); err != nil {
-				return err
-			}
-		} else if err := t.store.syncDirectory(ctx, t.container); err != nil {
-			return err
-		}
-	} else {
-		if err != nil {
-			return err
-		}
-		defer dir.file.Close()
-		if record.Mode == contexts.Ready || record.Mode == contexts.Initializing {
-			if record.DirectoryInode == 0 {
-				return state("initializing directory identity is not attributable")
-			}
-			if record.Mode == contexts.Ready {
-				if _, held := t.leases[record.Name]; !held {
-					return state("context deletion requires its mutation lease")
-				}
-				current, err := readMutation(ctx, dir)
-				if err != nil || !bytes.Equal(current, t.evidence[record.Name]) {
-					return state("context deletion evidence changed after the disposal check")
-				}
-			}
-			remaining := maxContextEntries
-			if err := t.store.walkContextTree(ctx, dir, "", inspectContextTree, &remaining); err != nil {
-				return err
-			}
-			record.Mode = contexts.Deleting
-			registry := cloneRegistry(t.registry)
-			for i := range registry.Contexts {
-				if registry.Contexts[i].Name == record.Name {
-					registry.Contexts[i] = record
-				}
-			}
-			if err := t.save(ctx, registry); err != nil {
-				return err
-			}
-		}
-		if err := t.dropContextClaims(ctx, record.Name); err != nil {
-			return err
-		}
-		remaining := maxContextEntries
-		if err := t.store.walkContextTreeWithRemovalGuard(ctx, dir, "", removeContextTree, &remaining, func(ctx context.Context) error { return t.checkControllerRecovery(ctx, record.Name) }); err != nil {
-			return err
-		}
-		if err := t.store.checkpoint(ctx, checkpointBeforeContextRmdir); err != nil {
-			return err
-		}
-		if err := t.checkControllerRecovery(ctx, record.Name); err != nil {
-			return err
-		}
-		if err := unlinkVerified(t.container, record.Name, dir.identity, true); err != nil {
-			return err
-		}
-		if err := t.store.syncDirectory(ctx, t.container); err != nil {
-			return err
-		}
+	absent := errors.Is(err, syscall.ENOENT)
+	switch {
+	case absent && record.Mode == contexts.Ready && t.lost[record.Name]:
+		err = t.abandonLostDirectory(ctx, record)
+	case absent && (record.Mode == contexts.Deleting || record.Mode == contexts.Initializing && record.DirectoryInode == 0):
+		err = t.syncAbsentDirectory(ctx, record)
+	case err == nil:
+		err = t.removeContextDirectory(ctx, record, dir)
+		dir.file.Close()
+	}
+	if err != nil {
+		return err
 	}
 	registry := cloneRegistry(t.registry)
 	if err := t.dropContextClaims(ctx, record.Name); err != nil {
@@ -386,3 +336,218 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 	t.committed = true
 	return nil
 }
+
+// markDeleting durably records the deletion of a context before anything it
+// holds is removed or dropped.
+func (t *transaction) markDeleting(ctx context.Context, record contexts.Record) error {
+	record.Mode = contexts.Deleting
+	registry := cloneRegistry(t.registry)
+	for i := range registry.Contexts {
+		if registry.Contexts[i].Name == record.Name {
+			registry.Contexts[i] = record
+		}
+	}
+	return t.save(ctx, registry)
+}
+
+// syncAbsentDirectory accepts the directory of a recorded deletion, or of an
+// initialization that never attributed one, as already removed, once the
+// parent that no longer names it is durable.
+func (t *transaction) syncAbsentDirectory(ctx context.Context, record contexts.Record) error {
+	if t.container != nil {
+		return t.store.syncDirectory(ctx, t.container)
+	}
+	if record.Mode != contexts.Initializing || record.DirectoryInode != 0 {
+		return state("deleting context parent is missing")
+	}
+	return t.store.syncDirectory(ctx, t.root)
+}
+
+// abandonLostDirectory admits a ready context whose directory its deletion's
+// MutationState found gone from the verified container, which only the orphan
+// acknowledgement may delete. It proves the directory still absent under the
+// container, records the deletion durably, and then accepts the directory as
+// removed, as the retry of a recorded deletion whose directory is gone does.
+func (t *transaction) abandonLostDirectory(ctx context.Context, record contexts.Record) error {
+	if t.container == nil {
+		return state("lost context parent is missing")
+	}
+	if err := t.container.verify(); err != nil {
+		return err
+	}
+	if !absentWithin(t.container, record.Name) {
+		return state("lost context directory is no longer absent")
+	}
+	if err := t.markDeleting(ctx, record); err != nil {
+		return err
+	}
+	return t.syncAbsentDirectory(ctx, record)
+}
+
+// removeContextDirectory removes a present context directory: it proves a
+// ready context's lease and evidence, inspects the whole tree, records the
+// deletion durably, drops what the controller record holds for the context,
+// and removes the tree and then the directory.
+func (t *transaction) removeContextDirectory(ctx context.Context, record contexts.Record, dir *directory) error {
+	if record.Mode == contexts.Ready || record.Mode == contexts.Initializing {
+		if record.DirectoryInode == 0 {
+			return state("initializing directory identity is not attributable")
+		}
+		if record.Mode == contexts.Ready {
+			if _, held := t.leases[record.Name]; !held {
+				return state("context deletion requires its mutation lease")
+			}
+			current, err := readMutation(ctx, dir)
+			if err != nil || !bytes.Equal(current, t.evidence[record.Name]) {
+				return state("context deletion evidence changed after the disposal check")
+			}
+		}
+		remaining := maxContextEntries
+		if err := t.store.walkContextTree(ctx, dir, "", inspectContextTree, &remaining); err != nil {
+			return err
+		}
+		if err := t.markDeleting(ctx, record); err != nil {
+			return err
+		}
+	}
+	if err := t.dropContextClaims(ctx, record.Name); err != nil {
+		return err
+	}
+	remaining := maxContextEntries
+	if err := t.store.walkContextTreeWithRemovalGuard(ctx, dir, "", removeContextTree, &remaining, func(ctx context.Context) error { return t.checkControllerRecovery(ctx, record.Name) }); err != nil {
+		return err
+	}
+	if err := t.store.checkpoint(ctx, checkpointBeforeContextRmdir); err != nil {
+		return err
+	}
+	if err := t.checkControllerRecovery(ctx, record.Name); err != nil {
+		return err
+	}
+	if err := unlinkVerified(t.container, record.Name, dir.identity, true); err != nil {
+		return err
+	}
+	return t.store.syncDirectory(ctx, t.container)
+}
+
+func absentWithin(parent *directory, name string) bool {
+	file, err := openRelative(parent, name, pathHandle, 0)
+	if file != nil {
+		file.Close()
+	}
+	return errors.Is(err, syscall.ENOENT)
+}
+
+// deletionTransaction is the transaction of one context's deletion: it serves
+// the registry, that context's mutation state and host reservations, and the
+// deletion of its record. Every other capability, and any other context,
+// refuses.
+type deletionTransaction struct {
+	tx   *transaction
+	name string
+}
+
+var _ contexts.Transaction = (*deletionTransaction)(nil)
+
+func (d *deletionTransaction) scoped(name string) error {
+	if name != d.name {
+		return state("this deletion transaction admits only context " + d.name)
+	}
+	return nil
+}
+
+func outsideDeletion() error {
+	return state("a deletion transaction serves only the deletion of its context")
+}
+
+func (d *deletionTransaction) Registry() contexts.Registry { return d.tx.Registry() }
+
+func (d *deletionTransaction) Reserve(context.Context, string, string, []byte) (contexts.Record, error) {
+	return contexts.Record{}, outsideDeletion()
+}
+
+func (d *deletionTransaction) Configuration(context.Context, string) ([]byte, error) {
+	return nil, outsideDeletion()
+}
+
+func (d *deletionTransaction) InitializeSecrets(context.Context, string, func(secretstore.Area) error) error {
+	return outsideDeletion()
+}
+
+func (d *deletionTransaction) Publish(context.Context, string, string, desiredstate.Sources) (string, error) {
+	return "", outsideDeletion()
+}
+
+func (d *deletionTransaction) Commit(context.Context, contexts.Registry) error {
+	return outsideDeletion()
+}
+
+func (d *deletionTransaction) HostReservations(ctx context.Context, name string) ([]string, error) {
+	if err := d.scoped(name); err != nil {
+		return nil, err
+	}
+	return d.tx.HostReservations(ctx, name)
+}
+
+func (d *deletionTransaction) Delete(ctx context.Context, record contexts.Record) error {
+	if err := d.scoped(record.Name); err != nil {
+		return err
+	}
+	return d.tx.Delete(ctx, record)
+}
+
+// MutationState takes the context's lease and reads its evidence. A context
+// whose directory is gone from the verified container is lost: what it owned
+// cannot be listed, so the refusal names the orphan acknowledgement, and Delete
+// then admits it without a lease. A damaged reservation is named by context
+// and entry.
+func (d *deletionTransaction) MutationState(ctx context.Context, name string) ([]byte, error) {
+	if err := d.scoped(name); err != nil {
+		return nil, err
+	}
+	data, err := d.tx.MutationState(ctx, name)
+	if err == nil {
+		return data, nil
+	}
+	if canceled := ctx.Err(); canceled != nil {
+		return nil, canceled
+	}
+	if !errors.Is(err, syscall.ENOENT) {
+		return nil, reservationDamage(ctx, name, err)
+	}
+	return nil, d.tx.lostRefusal(ctx, name, err)
+}
+
+// lostRefusal classifies a lease that found nothing: the contexts container
+// gone, which only a restore resolves, or the context's own directory gone
+// from a container that still verifies, which is recorded as lost.
+func (t *transaction) lostRefusal(ctx context.Context, name string, err error) error {
+	record, recordErr := t.record(name)
+	if recordErr != nil || record.Mode != contexts.Ready {
+		return err
+	}
+	if t.container == nil {
+		if absentWithin(t.root, "contexts") {
+			return contextDamage(ctx, name, "contexts", err, restoreStoreRemediation)
+		}
+		return err
+	}
+	if t.container.verify() != nil || !absentWithin(t.container, name) {
+		return err
+	}
+	if t.lost == nil {
+		t.lost = map[string]bool{}
+	}
+	t.lost[name] = true
+	return &lostContext{contexts.LostContext(name, "contexts/"+name, syscall.ENOENT.Error())}
+}
+
+// lostContext is the refusal of a ready context whose directory is gone,
+// which the context service tells from every other refusal by
+// contexts.ErrLostContext; it reports the context.unsafe-delete diagnostic.
+type lostContext struct{ failure error }
+
+func (e *lostContext) Error() string { return e.failure.Error() }
+
+func (e *lostContext) Unwrap() error { return e.failure }
+
+func (e *lostContext) Is(target error) bool { return target == contexts.ErrLostContext }

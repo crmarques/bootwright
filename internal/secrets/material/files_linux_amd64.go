@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"unicode/utf8"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -36,6 +37,7 @@ type heldPart struct {
 
 type secureFiles struct {
 	ctx         context.Context
+	session     FileSession
 	root        *os.File
 	directories map[string]heldDirectory
 	failureCode string
@@ -76,7 +78,12 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest) (ma
 		return nil, err
 	}
 
-	reader, err := newSecureFiles(ctx, code)
+	session, err := s.begin(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	defer session.Close()
+	reader, err := secureFilesThrough(ctx, code, session)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +111,7 @@ func (s *Service) readFileParts(ctx context.Context, requests []fileRequest) (ma
 		}
 	}
 
-	parts, err := readHeldParts(ctx, held, code)
+	parts, err := readHeldParts(ctx, held, code, os.Geteuid() == 0)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +145,9 @@ func resolveFileRequests(ctx context.Context, requests []fileRequest, code, home
 	return resolved, nil
 }
 
-func readHeldParts(ctx context.Context, held []heldPart, code string) (map[secrets.Part][]byte, error) {
+// readHeldParts reads each received descriptor with this process's
+// credentials, so a denial is root's when this process is root.
+func readHeldParts(ctx context.Context, held []heldPart, code string, rootReads bool) (map[secrets.Part][]byte, error) {
 	parts := make(map[secrets.Part][]byte, len(held))
 	fail := func(err error) (map[secrets.Part][]byte, error) {
 		clearParts(parts)
@@ -149,6 +158,9 @@ func readHeldParts(ctx context.Context, held []heldPart, code string) (map[secre
 		if err != nil {
 			if canceled := ctx.Err(); canceled != nil {
 				return fail(canceled)
+			}
+			if denied(err) {
+				return fail(deniedFailure(code, rootReads, part.request.Path))
 			}
 			return fail(failure(code, "secret file bytes could not be read safely", part.request.Path))
 		}
@@ -267,8 +279,30 @@ func accountHome(ctx context.Context, code string) (string, error) {
 	return home, nil
 }
 
+// begin starts the one session that opens every part and every directory
+// above one, and that verify's fresh walk still needs.
+func (s *Service) begin(ctx context.Context, code string) (FileSession, error) {
+	if s.files == nil {
+		return processFiles{}, nil
+	}
+	session, err := s.files.Begin(ctx)
+	if err != nil || session == nil {
+		if canceled := ctx.Err(); canceled != nil {
+			return nil, canceled
+		}
+		return nil, failure(code, "secret files cannot be opened under the invoking account", "")
+	}
+	return session, nil
+}
+
+// newSecureFiles opens with this process's own credentials, as a Service bound
+// to no Files does.
 func newSecureFiles(ctx context.Context, code string) (*secureFiles, error) {
-	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	return secureFilesThrough(ctx, code, processFiles{})
+}
+
+func secureFilesThrough(ctx context.Context, code string, session FileSession) (*secureFiles, error) {
+	root, err := session.Root()
 	if err != nil {
 		if canceled := ctx.Err(); canceled != nil {
 			return nil, canceled
@@ -276,7 +310,7 @@ func newSecureFiles(ctx context.Context, code string) (*secureFiles, error) {
 		return nil, failure(code, "secret file root could not be opened safely", "")
 	}
 	return &secureFiles{
-		ctx: ctx, root: os.NewFile(uintptr(fd), "/"),
+		ctx: ctx, session: session, root: root,
 		directories: make(map[string]heldDirectory), failureCode: code, ownerUID: uint32(os.Getuid()),
 	}, nil
 }
@@ -300,10 +334,13 @@ func (s *secureFiles) openPart(request fileRequest, path string) (heldPart, erro
 		}
 		current = filepath.Join(current, "/", name)
 		if index == len(parts)-1 {
-			file, stat, err := openSecretChild(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK)
+			file, stat, err := openSecretChild(s.session, parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK)
 			if err != nil {
 				if canceled := s.ctx.Err(); canceled != nil {
 					return heldPart{}, canceled
+				}
+				if denied(err) {
+					return heldPart{}, openDenied(s.failureCode, err, request.Path)
 				}
 				return heldPart{}, failure(s.failureCode, "secret file could not be opened safely", request.Path)
 			}
@@ -317,13 +354,16 @@ func (s *secureFiles) openPart(request fileRequest, path string) (heldPart, erro
 			parent = directory.file
 			continue
 		}
-		file, stat, err := openSecretChild(parent, name, pathHandle|syscall.O_DIRECTORY)
+		file, stat, err := openSecretChild(s.session, parent, name, pathHandle|syscall.O_DIRECTORY)
 		if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR {
 			if file != nil {
 				file.Close()
 			}
 			if canceled := s.ctx.Err(); canceled != nil {
 				return heldPart{}, canceled
+			}
+			if denied(err) {
+				return heldPart{}, openDenied(s.failureCode, err, request.Path)
 			}
 			return heldPart{}, failure(s.failureCode, "secret file ancestor is not a safe directory", request.Path)
 		}
@@ -366,11 +406,10 @@ func (s *secureFiles) verify(parts []heldPart) error {
 }
 
 func (s *secureFiles) freshStat(path string) (syscall.Stat_t, error) {
-	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	parent, err := s.session.Root()
 	if err != nil {
 		return syscall.Stat_t{}, err
 	}
-	parent := os.NewFile(uintptr(fd), "/")
 	defer func() { parent.Close() }()
 	current := ""
 	parts := pathParts(path)
@@ -380,7 +419,7 @@ func (s *secureFiles) freshStat(path string) (syscall.Stat_t, error) {
 		if index == len(parts)-1 {
 			flags = pathHandle
 		}
-		file, stat, err := openSecretChild(parent, name, flags)
+		file, stat, err := openSecretChild(s.session, parent, name, flags)
 		if err != nil {
 			return syscall.Stat_t{}, err
 		}
@@ -402,15 +441,14 @@ func pathParts(path string) []string {
 	return strings.Split(strings.TrimPrefix(path, "/"), "/")
 }
 
-func openSecretChild(parent *os.File, name string, flags int) (*os.File, syscall.Stat_t, error) {
+func openSecretChild(session FileSession, parent *os.File, name string, flags int) (*os.File, syscall.Stat_t, error) {
 	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\x00") {
 		return nil, syscall.Stat_t{}, syscall.EINVAL
 	}
-	fd, err := syscall.Openat(int(parent.Fd()), name, flags|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	file, err := session.OpenAt(parent, name, flags)
 	if err != nil {
 		return nil, syscall.Stat_t{}, err
 	}
-	file := os.NewFile(uintptr(fd), name)
 	stat, err := statSecretFile(file)
 	if err != nil {
 		file.Close()
@@ -418,6 +456,52 @@ func openSecretChild(parent *os.File, name string, flags int) (*os.File, syscall
 	}
 	return file, stat, nil
 }
+
+// deniedToRoot is what a session's failure reports when the denied open ran
+// with root's credentials.
+type deniedToRoot interface{ DeniedToRoot() bool }
+
+func denied(err error) bool {
+	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
+}
+
+// openDenied names who the session's open was denied to: root only when the
+// open ran as root, which a root invoking account alone does.
+func openDenied(code string, err error, path string) error {
+	var root deniedToRoot
+	return deniedFailure(code, errors.As(err, &root) && root.DeniedToRoot(), path)
+}
+
+func deniedFailure(code string, root bool, path string) error {
+	if root {
+		return diagnostics.NewFailureWithRemediation("secret."+code, "root cannot read this secret file or a directory above it (a network home with root squash?)", path,
+			"copy it to a local directory and name the copy")
+	}
+	return diagnostics.NewFailureWithRemediation("secret."+code, "the invoking account cannot read this secret file or a directory above it (permission denied)", path,
+		"give the invoking account read access to it, or copy it to a directory that account can read")
+}
+
+// processFiles opens with this process's own credentials, for a Service bound
+// to no Files.
+type processFiles struct{}
+
+func (processFiles) Root() (*os.File, error) {
+	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), "/"), nil
+}
+
+func (processFiles) OpenAt(parent *os.File, name string, flags int) (*os.File, error) {
+	fd, err := syscall.Openat(int(parent.Fd()), name, flags|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), name), nil
+}
+
+func (processFiles) Close() error { return nil }
 
 func safeOperatorFile(stat syscall.Stat_t) bool {
 	return safeOperatorFileFor(stat, uint32(os.Getuid()))
@@ -474,7 +558,11 @@ func readWithLimit(ctx context.Context, file *os.File, maximum int) ([]byte, err
 		if errors.Is(err, io.EOF) {
 			return data, nil
 		}
-		if err != nil || n == 0 {
+		if err != nil {
+			clear(data)
+			return nil, err
+		}
+		if n == 0 {
 			clear(data)
 			return nil, errors.New("file read failed")
 		}

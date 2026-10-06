@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/secrets"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -245,9 +246,13 @@ func validateSSH(privateKey, publicKey []byte) error {
 		return err
 	}
 	defer clearPrivateKey(private)
+	quoted := bytes.TrimRight(publicKey, "\n")
 	publicKey = bytes.Trim(publicKey, " \t\r\n")
 	if len(publicKey) == 0 || bytes.ContainsAny(publicKey, "\r\n") {
 		return failure("input", "SSH public key must contain exactly one key without options", "")
+	}
+	if !secrets.SSHComment(string(quoted)) {
+		return failure("input", "SSH public key line must not contain a control character (a tab, or the carriage return of a CRLF line ending, included), a line or paragraph separator, a double quote or a backslash; separate its fields with spaces and end it with a bare line feed", "")
 	}
 	provided, _, options, rest, err := ssh.ParseAuthorizedKey(publicKey)
 	if err != nil || len(options) != 0 || len(bytes.TrimSpace(rest)) != 0 {

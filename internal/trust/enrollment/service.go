@@ -19,6 +19,7 @@ const observers = 8
 type Options struct {
 	Observer  Observer
 	Confirmer Confirmer
+	Presenter PlanPresenter
 	Clock     func() time.Time
 }
 
@@ -70,7 +71,7 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 	report := &Report{Context: selected, DryRun: request.DryRun, Hosts: make([]HostReport, 0, len(chosen))}
 	pending := trust.Store{FormatVersion: trust.FormatVersion, Hosts: slices.Clone(records.Hosts)}
 	for index, entry := range chosen {
-		host, record, err := evaluate(entry, observed[index], records, slices.Contains(request.Replace, entry.name), s.now())
+		host, record, err := evaluate(entry, observed[index], records, slices.Contains(request.Replace, entry.name), selected, s.now())
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +84,7 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 	if request.DryRun || report.Pending == 0 {
 		return report, nil
 	}
-	if err := s.confirm(ctx, selected, request); err != nil {
+	if err := s.confirm(ctx, selected, request, report); err != nil {
 		return nil, err
 	}
 	encoded, err := pending.Encode()
@@ -99,9 +100,11 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 
 // evaluate decides what one Machine's observation means against what this
 // context already trusts. A changed key is never recorded without an explicit
-// re-trust: an operator verifies the new fingerprint out of band first.
+// re-trust: an operator verifies the new fingerprint out of band first. An
+// unchanged key at another endpoint is refused too, since the store trusts a
+// key at one address, but named as a move rather than a changed key.
 func evaluate(entry candidate, observed observation, records trust.Store, replace bool,
-	now string) (HostReport, trust.Record, error) {
+	contextName, now string) (HostReport, trust.Record, error) {
 	host := HostReport{Machine: entry.name, Address: entry.address, Port: entry.port}
 	if !entry.eligible() {
 		host.Action, host.Reason = ActionSkip, entry.skip
@@ -123,9 +126,18 @@ func evaluate(entry candidate, observed observation, records trust.Store, replac
 		return host, record, nil
 	}
 	host.PreviousFingerprint = previous.Fingerprint
-	if previous.HostKey() == observed.key && previous.Address == entry.address && previous.Port == entry.port {
+	unchanged := previous.HostKey() == observed.key
+	moved := previous.Address != entry.address || previous.Port != entry.port
+	if unchanged && !moved {
 		host.Action = ActionReuse
 		return host, trust.Record{}, nil
+	}
+	if !replace && unchanged {
+		return HostReport{}, trust.Record{}, failure("trust.identity",
+			"the SSH host key for "+entry.name+" is unchanged ("+host.Fingerprint+"), but this context trusts it at "+
+				token(previous.Address, previous.Port)+", not at "+token(entry.address, entry.port),
+			"if "+entry.name+" moved, rerun bootwright machine trust --context "+contextName+" --replace "+entry.name+
+				" to trust its key at the new address")
 	}
 	if !replace {
 		return HostReport{}, trust.Record{}, failure("trust.identity",
@@ -134,6 +146,9 @@ func evaluate(entry candidate, observed observation, records trust.Store, replac
 			"verify the new fingerprint out of band, then rerun with --replace "+entry.name)
 	}
 	host.Action = ActionReplace
+	if moved {
+		host.PreviousAddress, host.PreviousPort = previous.Address, previous.Port
+	}
 	return host, record, nil
 }
 
@@ -180,13 +195,22 @@ func (s Service) observe(ctx context.Context, chosen []candidate) ([]observation
 	return out, ctx.Err()
 }
 
-func (s Service) confirm(ctx context.Context, selected string, request EnrollRequest) error {
+// confirm shows the operator the one evaluated report it then records, and
+// never asks without showing it first.
+func (s Service) confirm(ctx context.Context, selected string, request EnrollRequest, report *Report) error {
 	if request.SkipConfirmation {
 		return nil
 	}
 	if s.options.Confirmer == nil {
 		return failure("trust.identity", "this operation requires confirmation", "repeat the command with --yes")
 	}
+	if s.options.Presenter == nil {
+		return failure("trust.identity", "host-key trust plan presentation is not configured", "")
+	}
+	if err := s.options.Presenter.PresentTrustPlan(ctx, *report); err != nil {
+		return err
+	}
+	report.Presented = true
 	return s.options.Confirmer.Confirm(ctx, "trust", selected)
 }
 

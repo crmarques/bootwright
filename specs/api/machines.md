@@ -69,7 +69,7 @@ certificate that is not a CA cannot be anchored by one and keeps
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `spec.libvirt.machineRef` | string | yes | — | Global `Machine` reference; the machine has capability `libvirt`. |
-| `spec.libvirt.uri` | string | yes | — | Non-empty libvirt connection URI. |
+| `spec.libvirt.uri` | string | yes | — | `qemu:///system`. Effects run on `machineRef` and the emulated BMC mounts only that host's libvirt socket, so no other URI, remote or command transport is admitted. |
 | `spec.libvirt.bmcEmulationDefaults.enabled` | boolean | no | `true` | Current contract accepts only the enabled form. |
 | `spec.libvirt.bmcEmulationDefaults.protocol` | string | no | `redfish` | `redfish`. |
 | `spec.libvirt.bmcEmulationDefaults.emulator` | string | no | `sushy-tools` | `sushy-tools`. |
@@ -147,7 +147,7 @@ downstream installer supplies.
 | `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
 | `spec.os.install.rootDeviceHints` | object | conditional | — | Exact root-device fields below; bare-metal install requires `deviceName` or `wwn`. |
-| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` whose pair the installation delivers as this machine's SSH host key; required for a bare-metal Bootwright-installed Machine and forbidden on every other Machine. Unique across Machines. |
+| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` whose pair the installation delivers as this machine's SSH host key; required for a bare-metal Bootwright-installed Machine and forbidden on every other Machine. Unique across Machines and no other credential. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments, attachments, and bindings below. |
 | `spec.access` | object | lifecycle-dependent | normalized as below | Local or SSH access plus optional root-login posture. |
@@ -185,8 +185,15 @@ holds, so the key it will answer with is declared in advance and
 [delivered by the installation](../substrates.md#identity-and-power-operations)
 rather than discovered. Two Machines never name one key: a host key identifies
 exactly one machine, and sharing it would make either of them satisfy the
-other's proof. An installer-provisioned or provided machine declares none,
-having no Bootwright-performed installation to deliver it.
+other's proof. The key is also no other credential: not the fleet
+`Environment.spec.remoteMachinesAccessKey.keyRef`, any Machine's access
+`privateKeyRef`, any `StorageCluster` `ceph.cephadm.clusterSSH.keyRef` or any
+`ContainerCluster` `install.nodeSSH` `keyPairRef`, `publicKeyRef` or
+`privateKeyRef`, since whoever holds that credential could answer as this
+machine, and whoever reads this machine's host key could log in wherever its
+public half is authorized. Each collision is refused on the Machine, naming
+the Secret and the other object. An installer-provisioned or provided machine
+declares none, having no Bootwright-performed installation to deliver it.
 
 NIC names and canonical MACs are unique in a machine, and authored MACs are
 unique across the complete graph. Effective normalization writes MACs as
@@ -261,7 +268,7 @@ and which it refuses, is the rule of the consumer that installs the Machine:
 | `attachmentRef` | string | conditional | `configRef` name | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. |
 | `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
 | `addresses` | array | no | `[]`, plus derived `fqdn` contact | Set keyed by `name`; exact entry shape below. |
-| `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. |
+| `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. `interfaceName` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 | `overrides` | arbitrary map | no | `{}` | Valid only with `configRef`; merged into the selected native NMState template. |
 
 A configured network selects exactly one of `configRef` and `inline`.
@@ -287,7 +294,7 @@ address inside that attachment's prefix.
 | --- | --- | --- | --- |
 | `name` | string | yes | Non-empty Machine-local name, unique across contacts and assignments. |
 | `address` | string | yes | DNS contact, IP contact, or host IP with a prefix. An assignment requires IP/prefix notation. |
-| `interface` | string | no | Static assignment to an interface in the effective NMState map; omission declares only a contact. |
+| `interface` | string | no | Static assignment to an interface in the effective NMState map; omission declares only a contact. A Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 
 An assigned interface may be physical or logical, including a VLAN, bond, or
 OVS internal interface. DNS names cannot be assigned. IPv4 prefixes are
@@ -424,10 +431,12 @@ here; its placement refuses before planning under the
 Machines that are only cluster nodes, storage nodes or session targets keep
 any account.
 
-The `knownHostsRef` Secret's resolved material is UTF-8 text containing exactly
-one data line and one host key. Its host token is the effective SSH address for
-port `22`, or `[<address>]:<port>` otherwise. Markers, patterns, hashed hosts,
-comma-separated hosts, and blank or additional lines are invalid. The key is
+The `knownHostsRef` Secret's resolved material is UTF-8 text. Blank lines and
+lines starting with `#` are ignored; exactly one data line remains,
+`<host> <type> <key>` optionally followed by a comment, and a second data line
+is invalid. Its host token is the effective SSH address for port `22`, or
+`[<address>]:<port>` otherwise. Markers, patterns, hashed hosts and
+comma-separated hosts are invalid. The key is
 boundedly decoded, its type matches the algorithm token, and the consumer
 accepts only its qualified algorithm allow-list; one declared target, port,
 and key is therefore bound before observation.
@@ -489,7 +498,8 @@ metal.
 The optional package-source arms are exact:
 
 - `mirror` has required HTTP(S) `baseURL` and optional `repositories[]`, each
-  with required `id` and HTTP(S) `baseURL`.
+  with required `id` and HTTP(S) `baseURL`. Each `baseURL` holds no fragment
+  and no quote.
 - `fromSubscription` has required `entitlementRef` to a `redhat-rhel`
   `Entitlement`. It cannot be combined with top-level `subscription` because it
   already registers during installation.
@@ -528,32 +538,40 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `hostname.source` | string | no | — | `machineName`; permitted only when the machine is not cluster-bound. |
-| `localization.language` | string | no | `en_US.UTF-8` | No whitespace. |
-| `localization.formats` | string | no | effective language | No whitespace. |
-| `localization.keyboard` | string | no | `us` | No whitespace. |
-| `localization.timezone` | string | no | `UTC` | No whitespace. |
-| `localization.additionalLocales` | array of strings | no | `[]` | Unique, non-empty, no whitespace. |
+| `localization.language` | string | no | `en_US.UTF-8` | Kickstart token. |
+| `localization.formats` | string | no | effective language | Kickstart token. |
+| `localization.keyboard` | string | no | `us` | Kickstart token. |
+| `localization.timezone` | string | no | `UTC` | Kickstart token. |
+| `localization.additionalLocales` | array of strings | no | `[]` | Unique Kickstart tokens. |
 | `ssh.passwordAuthentication` | boolean | no | `false` | Enables SSH password authentication. |
 | `ssh.initialPassword.secretRef` | string | no | — | `usernamePassword` `Secret`. |
 | `storage.rootDevice.source` | string | no | — | `machineRootDeviceHints`. |
 | `packages.environment` | string | no | — | `minimal` when set. |
-| `packages.install` | array of strings | no | `[]` | Unique non-empty package names without whitespace. |
+| `packages.install` | array of strings | no | `[]` | Unique entries, each a package name, glob or `@group`; no whitespace, quote or `#`, and no leading `%` or `-`. |
 | `packages.excludeDocs` | boolean | no | `false` | Exclude package documentation. |
 | `packages.installWeakDeps` | boolean | no | OS/package-manager default | Absence is distinct from `false`. |
 | `repositories.configure` | array | no | `[]` | Set keyed by `id`; exact entry shape below. |
 | `repositories.subscription.enable` | array of strings | no | `[]` | Unique repository IDs; `*` is not accepted. |
 | `repositories.subscription.disable` | array of strings | no | `[]` | Unique repository IDs, disjoint from `enable`; `*` is also accepted and, with a non-empty `enable`, requests purge-before-enable semantics. |
-| `services.enabled` | array of strings | no | `[]` | Unique non-empty service names. |
-| `services.disabled` | array of strings | no | `[]` | Unique and disjoint from `enabled`. |
+| `services.enabled` | array of strings | no | `[]` | Unique systemd unit names (letters, digits, `:_.@-`, starting with a letter or digit, at most 255 bytes). |
+| `services.disabled` | array of strings | no | `[]` | Unique systemd unit names (letters, digits, `:_.@-`, starting with a letter or digit, at most 255 bytes), disjoint from `enabled`. |
 | `security.selinux.mode` | string | no | OS default | `enforcing`, `permissive`, or `disabled`. |
 | `security.firewall.enabled` | boolean | no | OS default | `true` requires `firewalld` in packages and enabled services. |
 | `security.fips.enabled` | boolean | no | `false` | RHEL-only. |
 | `security.diskEncryption` | object | no | — | TPM2 unlock plus recovery passphrase below. |
 
-Each `repositories.configure[]` entry has required `id` and HTTP(S) `baseURL`,
-optional `displayName` defaulting to `id`, `enabled` defaulting `true`,
-`gpgCheck` defaulting `true`, and optional `gpgKeyURL`. IDs are unique and
-contain no whitespace, quotes, or slash. `gpgKeyURL` accepts HTTP(S) or
+A Kickstart token is printable ASCII with no whitespace, quote, backslash, `#`
+or comma, and does not start with `%`. These grammars keep every authored value
+the installation carries one Kickstart token, so none can end its line, open a
+section or add an option; the Kickstart renderer refuses any value that is not,
+as a backstop.
+
+Each `repositories.configure[]` entry has required `id` and HTTP(S) `baseURL`
+with no fragment and no quote, optional `displayName` defaulting to `id`,
+`enabled` defaulting `true`, `gpgCheck` defaulting `true`, and optional
+`gpgKeyURL`. IDs are unique, printable ASCII with no whitespace, quote, slash,
+backslash, `#` or comma, and do not start with `%`; subscription repository
+IDs follow the same rule. `gpgKeyURL` accepts HTTP(S) or
 `file:///`; it is required while GPG checking is enabled. A subscription
 repository block sets at least one of `enable` and `disable` and requires a
 registration entitlement from either top-level `subscription` or Anaconda
@@ -607,7 +625,7 @@ This subset is not a claim of full NMState or installer-schema compatibility.
 
 | Native path | Interpreted shape and meaning |
 | --- | --- |
-| `interfaces` | Array of interface mappings with unique, non-empty string `name` and explicit, non-empty string `type`. |
+| `interfaces` | Array of interface mappings with unique, non-empty string `name` and explicit, non-empty string `type`; `name` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 | `interfaces[].state` | Optional non-empty string; `absent` and `ignore` exclude the interface from assignment and binding. |
 | `interfaces[].mac-address` | Optional MAC address; normalize before comparison with a bound hardware NIC. |
 | `interfaces[].ipv4`, `interfaces[].ipv6` | Optional family mappings. |
@@ -617,7 +635,8 @@ This subset is not a claim of full NMState or installer-schema compatibility.
 | `interfaces[].ipv4.address`, `interfaces[].ipv6.address` | Arrays; every authored non-empty array is rejected because `network.addresses` owns static assignments. |
 | `routes.config` | Array of route mappings. |
 | `routes.config[].destination` | Optional CIDR; a valid zero-prefix destination denotes its family's default route. |
-| `routes.config[].next-hop-interface` | Optional non-empty string identifying the interface used for default-route selection. |
+| `routes.config[].next-hop-interface` | Optional Linux interface name, as for `interfaces[].name`, identifying the interface used for default-route selection. |
+| `routes.config[].next-hop-address` | Optional IP literal without a zone, of its destination's family. |
 | `routes.config[].state` | Optional non-empty string; `absent` excludes the route from default-route selection. |
 
 Validate templates and supplied override fields before merging so an override

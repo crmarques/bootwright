@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"slices"
 	"strings"
 	"syscall"
@@ -47,18 +46,40 @@ func secretLockFailure(ctx context.Context, message string, err error) error {
 	return secretConflict(ctx, message, err)
 }
 
+// secretEffectFailure reports a failed secret write. A full or failing
+// filesystem is secret.store with the kernel's cause and its remedy; only a
+// failed integrity proof of the store's own state reads as corruption.
 func secretEffectFailure(ctx context.Context, message string, err error) error {
 	if err != nil && ctx.Err() != nil {
 		return ctx.Err()
 	}
 	var failure *diagnostics.Failure
-	if errors.As(err, &failure) {
-		if len(failure.Diagnostics) == 1 && strings.HasPrefix(failure.Diagnostics[0].Code, "secret.store.") {
-			return err
-		}
+	if errors.As(err, &failure) && len(failure.Diagnostics) == 1 && strings.HasPrefix(failure.Diagnostics[0].Code, "secret.store.") {
+		return err
+	}
+	if refused, found := secretIOFailure(message, err); found {
+		return refused
+	}
+	if failure != nil {
 		return secretCorrupt(message)
 	}
 	return secretstore.Failure("store.conflict", message)
+}
+
+// secretIOFailure reports a write the kernel refused, whether the store named
+// it already or its errno arrives raw, as secret.store with the kernel's
+// answer and its remedy.
+func secretIOFailure(message string, err error) (error, bool) {
+	var refused *ioFailure
+	if errors.As(err, &refused) {
+		reported := diagnostics.Of(refused)
+		return diagnostics.NewFailureWithRemediation("secret.store", reported[0].Message, "", reported[0].Remediation), true
+	}
+	if errno, found := storeErrno(err); found && (capacityErrno(errno) || errno == syscall.EIO) {
+		text, remediation := ioDiagnosis(message, errno)
+		return diagnostics.NewFailureWithRemediation("secret.store", text, "", remediation), true
+	}
+	return nil, false
 }
 
 func (s *Store) SecretContext(ctx context.Context, name string) (secretstore.ContextSnapshot, error) {
@@ -311,31 +332,6 @@ func verifySecretContextLayout(ctx context.Context, dir *directory) error {
 		return secretCorruption(ctx, "secret storage directory is unsafe", err)
 	}
 	return verifyContextLayout(ctx, dir)
-}
-
-func directoryNames(dir *directory, maximum int) ([]string, error) {
-	copy, err := openDirectory(dir.parent, dir.name)
-	if err != nil {
-		return nil, err
-	}
-	defer copy.file.Close()
-	names := make([]string, 0, min(maximum, 1024))
-	for len(names) <= maximum {
-		want := min(1024, maximum+1-len(names))
-		part, readErr := copy.file.Readdirnames(want)
-		names = append(names, part...)
-		if len(names) > maximum {
-			return nil, state("state directory entry count exceeds its limit")
-		}
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil || len(part) == 0 {
-			return nil, state("state directory cannot be enumerated")
-		}
-	}
-	slices.Sort(names)
-	return names, copy.verify()
 }
 
 type secretExpectation struct {
@@ -652,34 +648,19 @@ func secretDirectoryNames(ctx context.Context, dir *directory, maximum int) ([]s
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	copy, err := openDirectory(dir.parent, dir.name)
-	if err != nil {
+	names, err := heldNames(dir, maximum)
+	var failed *listingFailure
+	switch {
+	case err == nil:
+		return names, nil
+	case !errors.As(err, &failed):
+		return nil, secretCorruption(ctx, "secret storage directory changed during enumeration", err)
+	case failed.kind == listingOverLimit:
+		return nil, secretLimit("secret storage directory entry count exceeds its limit")
+	case failed.kind == listingUnreadable:
 		return nil, secretCorruption(ctx, "secret storage directory cannot be enumerated", err)
 	}
-	defer copy.file.Close()
-	names := make([]string, 0, min(maximum, 1024))
-	for len(names) <= maximum {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		want := min(1024, maximum+1-len(names))
-		part, readErr := copy.file.Readdirnames(want)
-		names = append(names, part...)
-		if len(names) > maximum {
-			return nil, secretLimit("secret storage directory entry count exceeds its limit")
-		}
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil || len(part) == 0 {
-			return nil, secretCorruption(ctx, "secret storage directory cannot be enumerated", readErr)
-		}
-	}
-	slices.Sort(names)
-	if err := copy.verify(); err != nil {
-		return nil, secretCorruption(ctx, "secret storage directory changed during enumeration", err)
-	}
-	return names, nil
+	return nil, secretCorruption(ctx, "secret storage directory changed during enumeration", err)
 }
 
 func (a *secretArea) scan(ctx context.Context) (int, int64, error) {
@@ -868,6 +849,9 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 	}, checkpointBeforeSecretRename, checkpointAfterSecretRename)
 	switch outcome {
 	case publicationNotCommitted:
+		if refused, found := secretIOFailure("secret state could not be published", err); found && ctx.Err() == nil {
+			return secretstore.NotCommitted, refused
+		}
 		return secretstore.NotCommitted, err
 	case publicationUnknown:
 		a.forgetExpectation(path)

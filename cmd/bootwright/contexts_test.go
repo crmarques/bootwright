@@ -171,7 +171,7 @@ func TestMissingContextRegistryExplainsSafeRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := stateFingerprint(t, root)
-	want := "[FAIL] context.state: context store is missing registry.json; next: restore the whole store from a matching backup or move it aside if disposable, then retry\n"
+	want := "[FAIL] context.state: the state root holds state but no registry.json this build can read; next: another Bootwright build may have created this root and may manage live environments there: run this build on another controller host, or retire that build's environments before archiving its root, and never move it aside while its services run; a store this build created is restored whole from a matching backup\n"
 	for _, args := range [][]string{
 		{"context", "list"},
 		{"context", "delete", "--name", "test", "--purge"},
@@ -184,6 +184,33 @@ func TestMissingContextRegistryExplainsSafeRecovery(t *testing.T) {
 		if !sameFingerprints(before, stateFingerprint(t, root)) {
 			t.Fatalf("%v changed unrecognized state", args)
 		}
+	}
+}
+
+// A context directory removed by hand refuses every store command naming the
+// context, its entry and the kernel's answer; its purge refuses naming the
+// orphan acknowledgement, which then abandons exactly that context.
+func TestAHandRemovedContextIsNamedAndAbandonedByItsPurge(t *testing.T) {
+	services, _, input, root := contextFixture(t)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "context", "init", "--name", "beta", "--input-dir", input)
+	if err := os.RemoveAll(filepath.Join(root, "contexts", "beta")); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr := contextRun(t, services, 1, "context", "list")
+	if !strings.Contains(stderr, "context.state: context beta cannot be verified: contexts/beta: no such file or directory") ||
+		!strings.Contains(stderr, "--allow-orphans") || strings.Contains(stderr, root) {
+		t.Fatalf("list refused with %q", stderr)
+	}
+	_, stderr = contextRun(t, services, 1, "context", "delete", "--name", "beta", "--purge", "--yes")
+	if !strings.Contains(stderr, "context.unsafe-delete: context beta has lost its directory") ||
+		!strings.Contains(stderr, "bootwright context delete --name beta --purge --allow-orphans") {
+		t.Fatalf("the purge refused with %q", stderr)
+	}
+	contextRun(t, services, 0, "context", "delete", "--name", "beta", "--purge", "--allow-orphans", "--yes")
+	list, _ := contextRun(t, services, 0, "context", "list")
+	if !strings.Contains(list, "alpha") || strings.Contains(list, "beta") {
+		t.Fatalf("after the abandonment the list is %q", list)
 	}
 }
 

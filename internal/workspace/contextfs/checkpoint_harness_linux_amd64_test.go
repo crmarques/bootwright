@@ -408,9 +408,10 @@ func checkpointPermitted(t *testing.T, ctx context.Context, scenario checkpointS
 
 // checkpointRestoreRefused asserts the refusal specs/contexts.md, Storage,
 // locking and publication, requires of a missing registry that init may not
-// recover: a read and the retry each refuse with the one diagnostic that
-// directs the operator to restore the complete store from a matching backup or
-// move it aside, and neither changes an entry of the root.
+// recover: a read and the retry each refuse with the one diagnostic that names
+// another build's root, never to be moved aside while its services run, and
+// the whole-store restore of a store this build created, and neither changes
+// an entry of the root.
 func checkpointRestoreRefused(t *testing.T, ctx context.Context, scenario checkpointScenario, store *Store) error {
 	t.Helper()
 	before := snapshotRootEntries(t, store.options.Root)
@@ -471,12 +472,14 @@ func checkpointUsable(t *testing.T, ctx context.Context, scenario checkpointScen
 
 // checkpointStaleEntries lists every pending or staging entry beneath the root
 // that no component may keep. Once the retry has settled, nothing may remain.
-// Before it, specs/contexts.md lets four things wait for that retry: init's
+// Before it, specs/contexts.md lets five things wait for that retry: init's
 // recovery artifact, the root's only entry holding exactly the canonical empty
 // registry; what the secret store's exclusive writes keep under
 // secrets/identities/; after a kill, any stage beneath a context's secrets/,
-// which Local keyring v4 resolves; and a media stage a pinned add retained
-// beside its record, which the repeated add publishes.
+// which Local keyring v4 resolves; a media stage a pinned add retained beside
+// its record, which the repeated add publishes; and, after a kill, a stage
+// beneath a controller bundle area, which the area's next writer removes
+// (specs/contexts/controller-record.md, Bounds).
 func checkpointStaleEntries(root string, mode checkpointMode, retried bool) ([]string, error) {
 	recovery, err := checkpointInitialRegistryRecovery(root)
 	if err != nil {
@@ -500,12 +503,14 @@ func checkpointStaleEntries(root string, mode checkpointMode, retried bool) ([]s
 		}
 		parts := strings.Split(relative, string(filepath.Separator))
 		secrets := len(parts) > 3 && parts[0] == "contexts" && parts[2] == "secrets"
+		bundle := len(parts) > 3 && parts[0] == "controller" && parts[1] == "bundles"
 		switch {
 		case retried:
 			stale = append(stale, relative)
 		case len(parts) == 1 && relative == recovery:
 		case secrets && len(parts) == 5 && parts[3] == "identities":
 		case secrets && mode == checkpointKilled:
+		case bundle && mode == checkpointKilled:
 		case len(parts) == 2 && parts[0] == mediaContainer && checkpointRetainedMediaPair(root, parts[1]):
 		default:
 			stale = append(stale, relative)
@@ -937,6 +942,7 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointSyncDirectory: 13, checkpointBeforeControllerRename: 4,
 			checkpointAfterControllerRename: 4, checkpointMkdir: 3,
 			checkpointAfterControllerBundleDirectory: 1, checkpointBeforeControllerBundleWrite: 1,
+			checkpointAfterControllerBundleCreate: 1, checkpointBeforeControllerBundleRename: 1,
 			checkpointBeforeControllerBundleSync: 1,
 		},
 		"retirement": {
@@ -950,6 +956,7 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointSyncFile: 3, checkpointSyncDirectory: 12, checkpointBeforeControllerRename: 3,
 			checkpointAfterControllerRename: 3, checkpointMkdir: 3, checkpointAfterClientAreaDirectory: 1,
 			checkpointBeforeClientAreaAttribution: 1, checkpointBeforeControllerBundleWrite: 1,
+			checkpointAfterControllerBundleCreate: 1, checkpointBeforeControllerBundleRename: 1,
 			checkpointBeforeControllerBundleSync: 1, checkpointBeforeClientAreaSealing: 1,
 		},
 		"retained-dependencies": {
@@ -1295,7 +1302,7 @@ func checkpointUpdateScenario() checkpointScenario {
 }
 
 func checkpointDelete(ctx context.Context, store *Store) error {
-	return store.Transact(ctx, false, nil, func(tx contexts.Transaction) error {
+	return store.TransactDeletion(ctx, checkpointContext, func(tx contexts.Transaction) error {
 		registry := tx.Registry()
 		index := slices.IndexFunc(registry.Contexts, func(record contexts.Record) bool { return record.Name == checkpointContext })
 		if index < 0 {

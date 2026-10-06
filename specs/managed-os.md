@@ -18,9 +18,16 @@ what publishes derived content to consumers. `media add`, `media list` and
 privilege, and change nothing about any context.
 
 `media add --name <filename.iso>` acquires exactly one source. `--from-file`
-copies a regular file through a verified handle; `--from-url` performs one
-bounded download with TLS verified, redirects disabled, no `userinfo`, and a
-size ceiling, and requires `--sha256`. The store is host-wide and precedes
+opens the file under the
+[invoking account's credentials](cli.md#local-privilege-and-user-identity),
+never following a link at its name and never opening anything but a regular
+file for reading, then copies it through that descriptor. A link, FIFO,
+device, directory or socket at the name, and a file the invoking account
+cannot read, are refused naming the path; under a root login, a file root
+cannot read, such as one in a root-squashed network home, is refused with the
+remedy of naming a local copy. `--from-url` performs one bounded download
+with TLS verified, redirects disabled, no `userinfo`, and a size ceiling, and
+requires `--sha256`. The store is host-wide and precedes
 every context, so that download takes the
 [context-free acquisition route](controller.md#the-context-free-acquisition-route)
 and is direct when the invoking environment names none. The digest is computed while the bytes
@@ -401,7 +408,10 @@ dispatching task file refuses it again with a terminal fail after its
 dispatch. The
 adapter renders the frozen Kickstart, invokes `mkksiso` and the archive tooling
 with exact argument vectors, and returns bounded structured evidence. The fleet
-key's public half reaches it as a value; no private key, password or other
-secret enters the Kickstart, the image, the package tree, the evidence or the
-logs, and the delivered host key reaches the machine only through the private
-subtree.
+key's public half reaches it as a value, substituted between the double
+quotes of the `sshkey` directive after the renderer's guard; one that holds a
+control character, a Unicode line or paragraph separator, a double quote or a
+backslash refuses `api.value` before the adapter runs. No private key, password
+or other secret enters the Kickstart, the image, the package tree, the evidence
+or the logs, and the delivered host key reaches the machine only through the
+private subtree.

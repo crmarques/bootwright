@@ -12,8 +12,11 @@ that budget has left (specs/container-clusters.md, Boot and Budgets).
 
 These cases find each include by its role and the tasks_from stem pre_boot, and
 render its variables through the loop that includes boot.yml (apply.yml), over
-material written as the runner writes it (--extra-vars @request.json, which
-ansible-core loads trusted as a template). Rendering needs Ansible's controller
+material the runner passes as --extra-vars @request.json. The runner marks
+every string there unsafe, so ansible-core reads it as data
+(test_request_strings_are_data.py); these cases load it trusted as a template
+on purpose, as ansible-core would read it unmarked, so the pin's encoding alone
+keeps a raw value from being evaluated. Rendering needs Ansible's controller
 (DataLoader and Templar), which ansible-test does not offer to unit tests under
 tests/unit/plugins, so these checks live here.
 """

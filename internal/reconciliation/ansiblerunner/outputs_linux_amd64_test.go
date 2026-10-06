@@ -76,7 +76,8 @@ func TestAnOutputFileReachesTheResultAndLeavesWithTheJob(t *testing.T) {
 		t.Fatalf("the output read back %q", value)
 	}
 	paths, _ := requested["bootwright_artifact_server_output"].(map[string]any)
-	if path, _ := paths["kubeconfig"].(string); !strings.HasSuffix(path, "/outputs/kubeconfig") || !strings.HasPrefix(path, runner.jobParent) {
+	marked, _ := paths["kubeconfig"].(map[string]any)
+	if path, _ := marked["__ansible_unsafe"].(string); len(marked) != 1 || !strings.HasSuffix(path, "/outputs/kubeconfig") || !strings.HasPrefix(path, runner.jobParent) {
 		t.Fatalf("the adapter was told to write its output at %v", paths)
 	}
 	if names := runNames(t, runner.jobParent); len(names) != 0 {

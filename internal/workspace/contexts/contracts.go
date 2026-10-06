@@ -2,6 +2,7 @@ package contexts
 
 import (
 	"context"
+	"errors"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -75,6 +76,12 @@ type Repository interface {
 	// exclude the state directory from every admitted input directory. Create is
 	// reserved for context init and permits exact initial-registry recovery.
 	Transact(context.Context, bool, []string, func(Transaction) error) error
+	// TransactDeletion is the registry transaction of deleting one named
+	// context. It verifies every other context as Transact does and leaves
+	// the named one to its deletion, so a damaged context can be purged; its
+	// transaction serves only the registry, that context's mutation state and
+	// host reservations, and the deletion of its record.
+	TransactDeletion(context.Context, string, func(Transaction) error) error
 }
 
 type Transaction interface {
@@ -173,6 +180,20 @@ func UnsafeDelete(message string) error {
 
 func UnsafeDeleteWithRemediation(message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation("context.unsafe-delete", message, "", remediation)
+}
+
+// ErrLostContext marks a deletion's refusal of a ready context whose directory
+// is gone: what it owned cannot be listed, so only the explicit orphan
+// acknowledgement abandons it. A repository's refusal matches it with
+// errors.Is and reports the LostContext diagnostic.
+var ErrLostContext = errors.New("the context's directory is gone")
+
+// LostContext is the diagnostic of that refusal; entry is the directory
+// relative to the state root, and cause the kernel's answer.
+func LostContext(name, entry, cause string) error {
+	return UnsafeDeleteWithRemediation(
+		"context "+name+" has lost its directory ("+entry+": "+cause+"), so what it owned cannot be listed",
+		"abandon whatever it owned with bootwright context delete --name "+name+" --purge --allow-orphans, or restore the whole store from a matching backup")
 }
 
 // Configuration is controller configuration, separate from Environment input.

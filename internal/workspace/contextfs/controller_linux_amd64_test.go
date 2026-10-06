@@ -383,7 +383,7 @@ func TestControllerBundleCapabilityBoundsModesSealAndLifetime(t *testing.T) {
 		if err := area.Write(context.Background(), "manifest.json", []byte("{}\n"), false); err != nil {
 			return err
 		}
-		for _, path := range []string{"../outside", "/absolute", "python/../escape", "python/../../escape", "python//bad", "python/\x00bad"} {
+		for _, path := range []string{"../outside", "/absolute", "python/../escape", "python/../../escape", "python//bad", "python/\x00bad", "python/" + bundleStagePrefix + strings.Repeat("0", 32)} {
 			if err := area.Write(context.Background(), path, []byte("unsafe"), false); err == nil {
 				t.Fatal("unsafe bundle path was accepted")
 			}

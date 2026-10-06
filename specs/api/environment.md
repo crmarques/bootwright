@@ -221,7 +221,9 @@ an already provided machine keeps its own `Machine.spec.access`.
 The fleet key must differ from every Machine access key and every
 `StorageCluster.spec.ceph.cephadm.clusterSSH.keyRef`. Each cluster SSH key must
 also differ from every Machine-authored private key. Validation checks
-reference identity and type, preventing Ceph key reuse for fleet access.
+reference identity and type, preventing Ceph key reuse for fleet access. The
+fleet key must also differ from every Machine's `os.install.hostKeyRef`; the
+Machine [refuses the collision](machines.md#os-lifecycle-and-substrate-invariants).
 
 ## Kind defaults
 

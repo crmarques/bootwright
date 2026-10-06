@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -65,34 +64,17 @@ func (s *Store) perform(ctx context.Context, action string, selection contexts.S
 	if os.Geteuid() != 0 || s.options.UID <= 0 || s.options.GID < 0 {
 		return contexts.Selection{}, state("selection account identity is unavailable")
 	}
-	executable := s.options.Executable
-	if !filepath.IsAbs(executable) || filepath.Clean(executable) != executable {
-		return contexts.Selection{}, state("selection helper executable is unavailable")
-	}
-	// This is the already-running program, never an executable supplied by a
-	// selection record. Keeping the same file identity also rejects replacement.
-	self, err := os.Stat("/proc/self/exe")
-	info, infoErr := os.Lstat(executable)
-	if err != nil || infoErr != nil || !info.Mode().IsRegular() || !os.SameFile(self, info) {
-		return contexts.Selection{}, state("selection helper executable changed")
-	}
 	options := s.options
-	options.Executable = ""
 	data, err := json.Marshal(helperRequest{Account: options, Action: action, Selection: selection})
 	if err != nil || len(data) > maximumRecord {
 		return contexts.Selection{}, state("selection helper request exceeds its limit")
 	}
 	operation, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	command := exec.CommandContext(operation, executable, HelperMode)
-	command.Env = []string{"LANG=C", "LC_ALL=C"}
-	command.Dir = "/"
-	command.Stdin = bytes.NewReader(data)
-	command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(options.UID), Gid: uint32(options.GID), Groups: append([]uint32(nil), options.Groups...)}, Pdeathsig: syscall.SIGKILL}
+	command := helperCommand(operation, data, options)
 	var output boundedBuffer
 	command.Stdout = &output
 	command.Stderr = io.Discard
-	command.WaitDelay = time.Second
 	if err := command.Run(); err != nil {
 		if ctx.Err() != nil {
 			return contexts.Selection{}, ctx.Err()
@@ -107,6 +89,25 @@ func (s *Store) perform(ctx context.Context, action string, selection contexts.S
 		return contexts.Selection{}, state(refusal(response.Message))
 	}
 	return response.Selection, nil
+}
+
+// helperExecutable is the running program's own image. The forked child
+// resolves it to the image it was forked from after its credential drop,
+// because a process may always read its own /proc/self/exe, so a file renamed
+// over the program's path can never run as the selection account. The
+// parent's /proc/<pid>/exe is not readable after that drop.
+const helperExecutable = "/proc/self/exe"
+
+// helperCommand runs this same program in helper mode under the selection
+// account, with a fixed environment and directory, killed with its parent.
+func helperCommand(ctx context.Context, data []byte, options Options) *exec.Cmd {
+	command := exec.CommandContext(ctx, helperExecutable, HelperMode)
+	command.Env = []string{"LANG=C", "LC_ALL=C"}
+	command.Dir = "/"
+	command.Stdin = bytes.NewReader(data)
+	command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(options.UID), Gid: uint32(options.GID), Groups: append([]uint32(nil), options.Groups...)}, Pdeathsig: syscall.SIGKILL}
+	command.WaitDelay = time.Second
+	return command
 }
 
 type boundedBuffer struct {
@@ -141,7 +142,7 @@ func ServeHelper(ctx context.Context, args []string, input io.Reader, output io.
 	var request helperRequest
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF || request.Account.UID != os.Getuid() || request.Account.GID != os.Getegid() || request.Account.Executable != "" {
+	if decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF || request.Account.UID != os.Getuid() || request.Account.GID != os.Getegid() {
 		return true, 1
 	}
 	if request.Action != "read" && request.Action != "write" && request.Action != "clear" {

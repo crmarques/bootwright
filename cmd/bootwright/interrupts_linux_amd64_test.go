@@ -275,6 +275,74 @@ func TestIgnoredHangupHelper(t *testing.T) {
 	os.Exit(0)
 }
 
+// sudo can hand the elevated child one terminal interrupt twice, the kernel's
+// and the supervisor's relay, so an operation this process runs never acts on
+// a second signal itself: its bounded cancellation runs to its own end, and
+// only the supervisor's second signal kills sudo.
+func TestASecondInterruptLeavesTheCancellationRunning(t *testing.T) {
+	for _, received := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
+		t.Run(received.String(), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSecondInterruptHelper$")
+			command.Env = append(os.Environ(), "BOOTWRIGHT_SECOND_INTERRUPT_HELPER=1")
+			input, err := command.StdinPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			output, err := command.StdoutPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := command.Start(); err != nil {
+				t.Fatal(err)
+			}
+			reader := bufio.NewReader(output)
+			expect := func(want string) {
+				t.Helper()
+				if line, err := reader.ReadString('\n'); err != nil || line != want {
+					cancel()
+					_ = command.Wait()
+					t.Fatalf("the helper wrote %q (%v), want %q", line, err, want)
+				}
+			}
+			expect("ready\n")
+			if err := command.Process.Signal(received); err != nil {
+				t.Fatal(err)
+			}
+			expect("canceled\n")
+			if err := command.Process.Signal(received); err != nil {
+				t.Fatal(err)
+			}
+			// The second signal is pending or handled before the helper reads this line.
+			if _, err := io.WriteString(input, "sent\n"); err != nil {
+				t.Fatal(err)
+			}
+			rest, _ := io.ReadAll(reader)
+			if err := command.Wait(); err != nil || string(rest) != "cleaned\n" {
+				t.Fatalf("a second %s cut the cancellation short: %q (%v)", received, rest, err)
+			}
+		})
+	}
+}
+
+func TestSecondInterruptHelper(t *testing.T) {
+	if os.Getenv("BOOTWRIGHT_SECOND_INTERRUPT_HELPER") != "1" {
+		return
+	}
+	ctx, finish := beginSignalOperation(context.Background())
+	defer finish()
+	fmt.Println("ready")
+	<-ctx.Done()
+	fmt.Println("canceled")
+	if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
+		os.Exit(20)
+	}
+	time.Sleep(500 * time.Millisecond)
+	fmt.Println("cleaned")
+	os.Exit(0)
+}
+
 // Most operations end without a signal. Finishing one must still return, since
 // every invocation finishes its operation before it exits, and must not report
 // the operation as interrupted.

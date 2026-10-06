@@ -41,6 +41,10 @@ func (*Store) Transact(ctx context.Context, _ bool, _ []string, _ func(contexts.
 	return unsupported(ctx)
 }
 
+func (*Store) TransactDeletion(ctx context.Context, _ string, _ func(contexts.Transaction) error) error {
+	return unsupported(ctx)
+}
+
 func (*Store) SecretContext(ctx context.Context, _ string) (secretstore.ContextSnapshot, error) {
 	return secretstore.ContextSnapshot{}, unsupported(ctx)
 }

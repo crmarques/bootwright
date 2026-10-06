@@ -33,6 +33,12 @@ type Confirmer interface {
 	Confirm(ctx context.Context, action, name string) error
 }
 
+// PlanPresenter shows the exact evaluated plan before the confirmation that
+// authorizes it, so no operator confirms a fingerprint they were not shown.
+type PlanPresenter interface {
+	PresentTrustPlan(context.Context, Report) error
+}
+
 func failure(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }

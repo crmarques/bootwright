@@ -154,3 +154,43 @@ func TestMachineImageMediaAndPinning(t *testing.T) {
 		t.Fatal("rescue media pin omitted")
 	}
 }
+
+// Every customization the Kickstart carries is one token of its own grammar,
+// so none can end its line, open a section or add an option. Each refusal
+// names the exact entry and the grammar it breaks.
+func TestKickstartBoundCustomizationsHaveAGrammar(t *testing.T) {
+	cases := map[string]struct {
+		custom api.Value
+		field  string
+	}{
+		"service opening a section":  {m("services", m("enabled", api.StringList("sshd\n%post\nPROBE\n%end"))), "$.spec.customizations.services.enabled[0]"},
+		"service holding a space":    {m("services", m("disabled", api.StringList("my service"))), "$.spec.customizations.services.disabled[0]"},
+		"package closing a section":  {m("packages", m("install", api.StringList("chrony", "%end"))), "$.spec.customizations.packages.install[1]"},
+		"package opening a section":  {m("packages", m("install", api.StringList("%post"))), "$.spec.customizations.packages.install[0]"},
+		"package exclusion":          {m("packages", m("install", api.StringList("-kernel"))), "$.spec.customizations.packages.install[0]"},
+		"keyboard opening a section": {m("localization", m("keyboard", "%post")), "$.spec.customizations.localization.keyboard"},
+		"keyboard holding a comment": {m("localization", m("keyboard", "us#x")), "$.spec.customizations.localization.keyboard"},
+		"locale list separator":      {m("localization", m("additionalLocales", api.StringList("en_US,de_DE"))), "$.spec.customizations.localization.additionalLocales[0]"},
+		"repository ID comment":      {m("repositories", m("configure", list(m("id", "a#b", "baseURL", "https://mirror.example.test/extras", "gpgCheck", false)))), "$.spec.customizations.repositories.configure[0].id"},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			o := anaconda()
+			o = o.WithSpec(o.Spec().With("customizations", test.custom))
+			issues := Validate(o, api.Catalog{})
+			if len(issues) != 1 || issues[0].Code != "api.value" || issues[0].Field != test.field || issues[0].Message == "" ||
+				!strings.Contains(issues[0].Remediation, strings.TrimPrefix(test.field, "$.")) {
+				t.Fatalf("refusal = %#v, want one api.value at %s naming its field", issues, test.field)
+			}
+		})
+	}
+	o := anaconda()
+	o = o.WithSpec(o.Spec().With("customizations", m(
+		"localization", m("language", "en_US.UTF-8", "formats", "en_US.UTF-8", "keyboard", "us", "timezone", "Etc/UTC", "additionalLocales", api.StringList("sr_RS@latin")),
+		"packages", m("install", api.StringList("chrony", "qemu-guest-agent", "@container-tools", "kernel-*")),
+		"services", m("enabled", api.StringList("chronyd", "sshd", "cockpit.socket", "getty@tty1.service")),
+	)))
+	if issues := Validate(o, api.Catalog{}); len(issues) != 0 {
+		t.Fatalf("valid Kickstart-bound customizations were refused: %v", issues)
+	}
+}

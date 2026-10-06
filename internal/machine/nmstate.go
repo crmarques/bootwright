@@ -258,53 +258,73 @@ func validateNative(native api.Value, path string, partial bool) []api.Issue {
 	}
 	seen := map[string]bool{}
 	for index, iface := range interfaces.Items() {
-		field := fmt.Sprintf("%s.interfaces[%d]", path, index)
-		if iface.Type() != api.Mapping {
-			issues = appendIssues(issues, typeIssue(field, "native interfaces must be mappings"))
-			continue
-		}
-		for _, key := range []string{"name", "type", "state", "mac-address"} {
-			value := iface.Get(key)
-			must := key == "name" || key == "type" && !partial
-			if must && !value.Present() || value.Present() && (value.Type() != api.String || value.Text() == "") {
-				issues = appendIssues(issues, typeIssue(field+"."+key, "native interface identity and state fields require nonempty strings"))
-			}
-		}
-		if name := iface.Get("name").Text(); name != "" {
-			if seen[name] {
-				issues = appendIssues(issues, invariant(field+".name", "native interface names must be unique"))
-			}
-			seen[name] = true
-		}
-		if mac := iface.Get("mac-address"); mac.Present() {
-			if _, ok := canonicalMAC(mac.Text()); !ok {
-				issues = appendIssues(issues, invariant(field+".mac-address", "native interface MAC must be EUI-48"))
-			}
-		}
-		for _, family := range []string{"ipv4", "ipv6"} {
-			mode := iface.Get(family)
-			if mode.Present() && mode.Type() != api.Mapping {
-				issues = appendIssues(issues, typeIssue(field+"."+family, "native IP-family configuration must be a mapping"))
-				continue
-			}
-			keys := []string{"enabled", "dhcp"}
-			if family == "ipv6" {
-				keys = append(keys, "autoconf")
-			}
-			for _, key := range keys {
-				if value := mode.Get(key); value.Present() && value.Type() != api.Boolean {
-					issues = appendIssues(issues, typeIssue(field+"."+family+"."+key, "native IP-mode switches must be booleans"))
-				}
-			}
-			if addresses := mode.Get("address"); addresses.Present() {
-				if addresses.Type() != api.Sequence {
-					issues = appendIssues(issues, typeIssue(field+"."+family+".address", "native static addresses must be an array"))
-				} else if addresses.Len() != 0 {
-					issues = appendIssues(issues, invariant(field+"."+family+".address", "static addresses must be authored only in Machine network.addresses"))
-				}
-			}
+		issues = appendIssues(issues, validateNativeInterface(iface, fmt.Sprintf("%s.interfaces[%d]", path, index), partial, seen)...)
+	}
+	return appendIssues(issues, validateNativeRoutes(native, path)...)
+}
+
+// interfaceNameRule is the message every interface-name refusal states: the
+// name reaches installer directives and kernel interfaces verbatim.
+const interfaceNameRule = "an interface name is a Linux interface name: 1 to 15 bytes of letters, digits, '_', '.', '+' or '-'"
+
+func validateNativeInterface(iface api.Value, field string, partial bool, seen map[string]bool) []api.Issue {
+	if iface.Type() != api.Mapping {
+		return []api.Issue{typeIssue(field, "native interfaces must be mappings")}
+	}
+	issues := []api.Issue{}
+	for _, key := range []string{"name", "type", "state", "mac-address"} {
+		value := iface.Get(key)
+		must := key == "name" || key == "type" && !partial
+		if must && !value.Present() || value.Present() && (value.Type() != api.String || value.Text() == "") {
+			issues = appendIssues(issues, typeIssue(field+"."+key, "native interface identity and state fields require nonempty strings"))
 		}
 	}
+	if name := iface.Get("name").Text(); name != "" {
+		if !api.ValidLexical("ifname", name) {
+			issues = appendIssues(issues, valueIssue(field+".name", interfaceNameRule, "correct "+strings.TrimPrefix(field, "$.")+".name to a name such as enp1s0"))
+		}
+		if seen[name] {
+			issues = appendIssues(issues, invariant(field+".name", "native interface names must be unique"))
+		}
+		seen[name] = true
+	}
+	if mac := iface.Get("mac-address"); mac.Present() {
+		if _, ok := canonicalMAC(mac.Text()); !ok {
+			issues = appendIssues(issues, invariant(field+".mac-address", "native interface MAC must be EUI-48"))
+		}
+	}
+	for _, family := range []string{"ipv4", "ipv6"} {
+		issues = appendIssues(issues, validateNativeFamily(iface.Get(family), field+"."+family, family)...)
+	}
+	return issues
+}
+
+func validateNativeFamily(mode api.Value, field, family string) []api.Issue {
+	if mode.Present() && mode.Type() != api.Mapping {
+		return []api.Issue{typeIssue(field, "native IP-family configuration must be a mapping")}
+	}
+	issues := []api.Issue{}
+	keys := []string{"enabled", "dhcp"}
+	if family == "ipv6" {
+		keys = append(keys, "autoconf")
+	}
+	for _, key := range keys {
+		if value := mode.Get(key); value.Present() && value.Type() != api.Boolean {
+			issues = appendIssues(issues, typeIssue(field+"."+key, "native IP-mode switches must be booleans"))
+		}
+	}
+	if addresses := mode.Get("address"); addresses.Present() {
+		if addresses.Type() != api.Sequence {
+			issues = appendIssues(issues, typeIssue(field+".address", "native static addresses must be an array"))
+		} else if addresses.Len() != 0 {
+			issues = appendIssues(issues, invariant(field+".address", "static addresses must be authored only in Machine network.addresses"))
+		}
+	}
+	return issues
+}
+
+func validateNativeRoutes(native api.Value, path string) []api.Issue {
+	issues := []api.Issue{}
 	if routes := native.Get("routes"); routes.Present() && routes.Type() != api.Mapping {
 		issues = appendIssues(issues, typeIssue(path+".routes", "native routes must be a mapping"))
 	}
@@ -313,20 +333,33 @@ func validateNative(native api.Value, path string, partial bool) []api.Issue {
 		issues = appendIssues(issues, typeIssue(path+".routes.config", "native configured routes must be an array"))
 	}
 	for index, route := range routes.Items() {
-		field := fmt.Sprintf("%s.routes.config[%d]", path, index)
-		if route.Type() != api.Mapping {
-			issues = appendIssues(issues, typeIssue(field, "native routes must be mappings"))
-			continue
+		issues = appendIssues(issues, validateNativeRoute(route, fmt.Sprintf("%s.routes.config[%d]", path, index))...)
+	}
+	return issues
+}
+
+func validateNativeRoute(route api.Value, field string) []api.Issue {
+	if route.Type() != api.Mapping {
+		return []api.Issue{typeIssue(field, "native routes must be mappings")}
+	}
+	issues := []api.Issue{}
+	for _, key := range []string{"destination", "next-hop-interface", "state"} {
+		if value := route.Get(key); value.Present() && (value.Type() != api.String || value.Text() == "") {
+			issues = appendIssues(issues, typeIssue(field+"."+key, "native route fields require nonempty strings"))
 		}
-		for _, key := range []string{"destination", "next-hop-interface", "state"} {
-			if value := route.Get(key); value.Present() && (value.Type() != api.String || value.Text() == "") {
-				issues = appendIssues(issues, typeIssue(field+"."+key, "native route fields require nonempty strings"))
-			}
-		}
-		if destination := route.Get("destination"); destination.Present() {
-			if _, err := netip.ParsePrefix(destination.Text()); err != nil {
-				issues = appendIssues(issues, invariant(field+".destination", "native route destination must be a CIDR"))
-			}
+	}
+	destination, destinationErr := netip.ParsePrefix(route.Get("destination").Text())
+	if route.Has("destination") && destinationErr != nil {
+		issues = appendIssues(issues, invariant(field+".destination", "native route destination must be a CIDR"))
+	}
+	if name := route.Get("next-hop-interface"); name.Type() == api.String && name.Text() != "" && !api.ValidLexical("ifname", name.Text()) {
+		issues = appendIssues(issues, valueIssue(field+".next-hop-interface", interfaceNameRule, "correct "+strings.TrimPrefix(field, "$.")+".next-hop-interface to a name such as enp1s0"))
+	}
+	if hop := route.Get("next-hop-address"); hop.Present() {
+		address, err := netip.ParseAddr(hop.Text())
+		if hop.Type() != api.String || !api.ValidLexical("ip", hop.Text()) || err != nil || destinationErr == nil && address.Is4() != destination.Addr().Is4() {
+			issues = appendIssues(issues, valueIssue(field+".next-hop-address", "a route next hop is an IP literal without a zone, of its destination's family",
+				"correct "+strings.TrimPrefix(field, "$.")+".next-hop-address to an address such as 192.0.2.1 for an IPv4 destination"))
 		}
 	}
 	return issues
@@ -424,6 +457,10 @@ func reference(field, message string) api.Issue {
 	i := invariant(field, message)
 	i.Code = "api.reference"
 	return i
+}
+
+func valueIssue(field, message, remediation string) api.Issue {
+	return api.Issue{Code: "api.value", Field: field, Message: message, Remediation: remediation}
 }
 
 func typeIssue(field, message string) api.Issue {

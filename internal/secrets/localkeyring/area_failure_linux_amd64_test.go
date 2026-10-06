@@ -20,6 +20,22 @@ func TestAreaFailurePreservesWorkspaceLimit(t *testing.T) {
 	}
 }
 
+// The Workspace reports a full or failing filesystem as bare secret.store with
+// the kernel's cause and its remedy, which the keyring passes on unchanged
+// rather than hiding it behind a conflict of its own.
+func TestAreaFailurePassesTheWorkspaceStoreCause(t *testing.T) {
+	original := diagnostics.NewFailureWithRemediation("secret.store", "state file could not be written: the filesystem holding the state root has no room: no space left on device (ENOSPC)", "",
+		"free space, or raise the quota, on the filesystem that holds /var/lib/bootwright, then repeat the command")
+	actual := areaFailure(context.Background(), "store.conflict", "secret publication failed", original)
+	if actual != original || failureCode(actual) != "secret.store" {
+		t.Fatalf("area failure = %#v (%q), want the original secret.store", actual, failureCode(actual))
+	}
+	other := diagnostics.NewFailure("secret.storage", "a code that only shares the prefix", "")
+	if failureCode(areaFailure(context.Background(), "store.conflict", "secret publication failed", other)) != "secret.store.conflict" {
+		t.Fatal("a failure that only shares the secret.store prefix passed as the Workspace's cause")
+	}
+}
+
 func TestPublicationFailurePreservesOnlyPrecommitTypedFailures(t *testing.T) {
 	limit := secretstore.Failure("store.limit", "bounded secret storage is full")
 	for _, test := range []struct {

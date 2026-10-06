@@ -2,6 +2,7 @@ package contexts
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -441,8 +442,11 @@ func (s Service) Current(ctx context.Context, _ CurrentRequest) (*CurrentResult,
 	return &CurrentResult{Context: summary(record, selected)}, ctx.Err()
 }
 
-func deleteAction(orphans bool, name string) string {
-	if orphans {
+func deleteAction(orphans, lost bool, name string) string {
+	switch {
+	case lost:
+		return "delete with orphaned objects that cannot be listed (its directory is gone)"
+	case orphans:
 		return "delete with orphaned objects and any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context " + name + " --name <cluster>)"
 	}
 	return "delete"
@@ -468,27 +472,32 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResu
 		return nil, err
 	}
 	var result *DeleteResult
-	err = s.repository.Transact(ctx, false, nil, func(tx Transaction) error {
+	err = s.repository.TransactDeletion(ctx, request.Name, func(tx Transaction) error {
 		reg := tx.Registry()
 		index := findRecord(reg, request.Name)
 		if index < 0 {
 			return StateError("named context does not exist")
 		}
 		record := reg.Contexts[index]
-		orphans := false
+		orphans, lost := false, false
 		if record.Mode == Ready {
 			disposition, err := s.disposition(ctx, tx, record.Name)
-			if err != nil {
+			switch {
+			case errors.Is(err, ErrLostContext):
+				if !request.AllowOrphans {
+					return err
+				}
+				orphans, lost = true, true
+			case err != nil:
 				return err
-			}
-			if !disposition.Dispose {
+			case !disposition.Dispose:
 				if !request.AllowOrphans {
 					return orphanRefusal(record.Name)
 				}
 				orphans = true
 			}
 		}
-		if err := s.confirm(ctx, request.SkipConfirmation, deleteAction(orphans, record.Name), request.Name); err != nil {
+		if err := s.confirm(ctx, request.SkipConfirmation, deleteAction(orphans, lost, record.Name), request.Name); err != nil {
 			return err
 		}
 		released, err := tx.HostReservations(ctx, record.Name)

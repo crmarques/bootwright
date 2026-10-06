@@ -579,8 +579,8 @@ func validateGeneratedSSHComment(comment string) error {
 	if len(comment) > secrets.MaxPartBytes {
 		return failure("store.limit", "generated SSH public key comment exceeds the part byte limit", "")
 	}
-	if !utf8.ValidString(comment) || strings.TrimSpace(comment) != comment || strings.ContainsAny(comment, "\r\n\x00") {
-		return failure("source", "SSH key comment must be one line without surrounding whitespace", "")
+	if strings.TrimSpace(comment) != comment || !secrets.SSHComment(comment) {
+		return failure("source", "SSH key comment must be one line without surrounding whitespace, a control character, a line or paragraph separator, a double quote or a backslash", "")
 	}
 	return nil
 }

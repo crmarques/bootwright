@@ -438,11 +438,7 @@ func TestRootSelectionAdapterFixture(t *testing.T) {
 	if os.Geteuid() != 0 || !strings.HasPrefix(home, "/tmp/bootwright-selection-test-") {
 		t.Fatal("invalid isolated fixture")
 	}
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	store := New(Options{UID: 60001, GID: 60002, Home: home, Groups: []uint32{60002}, Executable: executable})
+	store := New(Options{UID: 60001, GID: 60002, Home: home, Groups: []uint32{60002}})
 	ctx := context.Background()
 	first := contexts.Selection{Version: contexts.SelectionVersion, Name: "test"}
 	second := contexts.Selection{Version: contexts.SelectionVersion, Name: "other"}

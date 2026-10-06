@@ -11,10 +11,13 @@ case or surrounding space, the serial other than in surrounding space, a value
 the proof recorded empty not at all, and no pin nothing.
 
 Each consumer receives the pin base64-encoded in its material, which the runner
-passes as --extra-vars @request.json and ansible-core loads trusted as a
-template, so a raw value there would be evaluated when it is read. These cases
-load the material the same way, render the proof's variables through each
-consumer's own include, and evaluate the proof's real `that` expressions.
+passes as --extra-vars @request.json with every string marked unsafe, so
+ansible-core reads it as data and never renders it
+(test_request_strings_are_data.py). These cases load the material trusted as a
+template on purpose, as ansible-core would read it unmarked, so the encoding
+alone keeps a raw value from being evaluated; they render the proof's variables
+through each consumer's own include and evaluate the proof's real `that`
+expressions.
 Rendering needs Ansible's controller (DataLoader and Templar), which ansible-test
 does not offer to unit tests under tests/unit/plugins, so these checks live here.
 """

@@ -1730,3 +1730,180 @@ under D48 until D56 attached them to M1. Lifecycle concurrency may now rise
 above one through [B303](m3.md#b303), and the adapter protocol, roles and
 codecs may collapse through [B19](m1.md#b19), [B20](m1.md#b20) and
 [B22](m1.md#b22), each with the real-host evidence its own item names.
+
+### X39 — untrusted input, trust and privilege boundaries
+
+**Owner:** Architecture, State reconciliation, Desired state, Controller,
+Trust and Workspace, with Managed OS, Machine, Substrate and Secrets.
+Integrated on local `main` on 2026-10-05 as one commit, the first slice of
+D56's full bar. **Items:** B244, B278, B279, B280, B281, B282.
+**Decisions:** D56, D61, D62, D63, D66, D109, D111.
+
+**Outcome, B244:** both Ansible runners write every string of the document
+they hand ansible-core, the frozen request, its digest and the material and
+output paths alike, as an `__ansible_unsafe` object, so an authored value
+holding `{{ 7*6 }}` or a `lookup('pipe', 'id')` expression reaches the module
+verbatim instead of running as root on the controller, while the frozen
+request bytes stay as they were. A fresh plan refuses before registration any
+block whose request holds `{{`, `{%` or `{#`, or a key ansible-core decodes as
+a typed value, with one `api.value` per block naming its object and first
+field and a remedy that imports the repaired input with `context update`
+before planning again (D66). Destroy, continuations and bounded runs are not
+scanned.
+
+**Outcome, B278:** a bounded run or consumer, such as a `machine` power
+command, `rsh` or `exec`, whose runtime or material call is cancelled inside
+the call or while reopening releases its transient Secret binding under a
+context cancellation cannot refuse, so a Ctrl-C no longer keeps it.
+
+**Outcome, B279:** authored strings that reach native configuration have a
+grammar at validate. HTTP(S) URLs are written in RFC 3986's own characters
+and the install profile's `baseURL` fields refuse a fragment or a quote;
+services, packages, localization values and repository IDs are Kickstart
+tokens; NMState interface names are Linux interface names and next hops are
+IPs of their destination's family; and `spec.libvirt.uri` is the enumeration
+`qemu:///system` (D61). The Kickstart renderer refuses a line break, a
+Unicode line or paragraph separator or invalid UTF-8 in any value, and
+whitespace, a quote, a backslash, `#` or a leading `%` in a single-token one,
+so valid inputs render the same bytes. A bare-metal `hostKeyRef` that is also
+the fleet key, another Machine's access `privateKeyRef`, a StorageCluster's
+`clusterSSH` key or any of a ContainerCluster's three `nodeSSH` references
+refuses naming both objects. One SSH comment grammar (no control character,
+tab included, no Unicode line or paragraph separator, double quote or
+backslash) holds at admission, at generation and over an imported public key
+line, and the installation refuses `api.value` naming the Secret before the
+adapter runs when the fleet key's public line is not one quoted Kickstart
+value. A generated username or comment refuses at validate what generation
+refuses, NUL included, and the machines spec says blank and comment lines of
+`knownHostsRef` material are ignored.
+
+**Outcome, B280:** `machine trust` shows every fingerprint it will record,
+and the one `--replace` supersedes, on standard output before it asks,
+records nothing on decline, and names where an unchanged key is trusted when
+only its endpoint moved. The relay no longer kills the elevated child five
+seconds after the operator's signal: the child finishes its bounded
+cancellation and keeps its status, and a second SIGINT or SIGTERM the
+supervisor receives kills sudo; a hangup never escalates, because one
+terminal hangup delivers SIGHUP twice. Directory accounts resolve through the
+pinned, root-owned `getent` under the single-entry and clean-home checks, and
+a `sudo -i` root shell resolves as direct root (D62); an account that cannot
+be verified names a local account or a clean root login. Held sudo lines map
+to their own remedies: a required password to `sudo -v`, a policy denial to a
+rule that permits the procfs re-execution, and `unable to execute` to a local
+copy of the binary. The exit evidence's unreadable checkout path named with
+the local-copy remedy is met by that mapping and by the reworded
+`runtime.privilege` refusal the unprivileged supervisor gives, before sudo
+runs, when the invoking account cannot resolve the executable's path; the
+root child never resolves that path, because the selection and invoker-file
+helpers re-execute themselves through procfs. The CLI and controller specs and
+the operator guide state the sudo rule, where a rule naming the binary does
+not match, contrary to the brief's reading of sudo 1.9.14; directory
+accounts; a network home with root squash; a FIPS-mode controller's key
+types; a host an earlier build manages; and what a second Ctrl-C does. The
+real-hardware test runs on a separate RHEL 9.8 controller (D109).
+
+**Outcome, B281:** a write, sync or create the kernel refuses for capacity
+names only its errno with the free-space remedy, any other errno names the
+filesystem to inspect, the secret area reports both as `secret.store`, never
+`secret.store.corrupt`, and a media stage the filesystem refuses no longer
+blames the source. One damaged context's refusal names the context, the
+store-relative entry and the errno with the exit that runs for that damage
+(D63): a lost directory is abandoned with
+`bootwright context delete --name <name> --purge --allow-orphans`; a missing
+or inconsistent configuration or revision entry is purged with `--purge`,
+which runs over exactly that context; and an entry the store refuses to open,
+a damaged reservation or a replaced directory names the whole-store restore.
+The exit evidence's purge of a hand-removed directory is met with
+`--allow-orphans`, keeping the orphan acknowledgement the contexts spec
+requires when objects cannot be listed, as D89 does for unreadable evidence;
+`--purge` alone refuses naming that exit. Listings read through the held
+handle and refuse a substituted directory. A root an earlier build created,
+holding no registry.json this build can read or one of format version 2, 3
+or 4, refuses saying another build may manage live environments there and
+never to move it aside while its services run; a root that is not
+`root:root` 0700 names what it is. Controller bundle files are staged under a
+reserved name, synced and renamed into place, and the next setup sweeps a
+stage a killed write left, so no failed, cancelled or killed write wedges
+setup.
+
+**Outcome, B282:** the elevated child opens no operator-named path itself. A
+bounded helper, the running binary under the invoking account's credentials,
+opens the input directory and everything beneath it, a Context file, secret
+files and a `media add --from-file` source without following a link at the
+name and passes each descriptor to root, which re-proves its type, ownership
+and stability (D111); a process already running as that account, direct root
+included, opens in-process. A denial names the path and whose credentials
+were refused, and root's own, under a root login on a root-squashed home,
+gives the local-copy remedy. `--from-file` refuses a FIFO, a final link, a
+device and a file the invoking account cannot read, and `validate -f` and
+`context init` read one directory alike. `--ssh-id-file` stays root's until
+[B283](m1.md#b283).
+
+**Operator-visible effects:** refusals only. A public key line of any
+`sshKeyPair` Secret, whatever consumes it (the fleet key, Machine host keys,
+cluster node keys), that holds a tab, a CRLF ending or another character a
+generated comment refuses now refuses at import; a key already stored that
+way refuses at its next binding, `secret check` names it, and it must be set
+again. A live context whose imported input a new grammar refuses keeps its
+destroy, but its next fresh apply and its `status` refuse until the input is
+corrected and imported. A sudoers rule must permit the procfs re-execution, a
+binary in a root-squashed home runs from a local copy, and under sudo's
+`use_pty` a second Ctrl-C does not hurry the command, while `SIGTERM` sent
+twice to `bootwright` kills it. **Digest effects:** none. No frozen request,
+request or record version, plan digest or automation digest moves: the
+runners mark strings only in the document they write at run time,
+`ansible/variables.go` is outside the embedded automation, the collection's
+new tests and goldens sit under its `tests` directory, and every golden is
+byte-identical. One live context is stranded: a context an earlier build
+registered whose frozen request holds a mapping key named exactly
+`__ansible_type`, `__ansible_unsafe` or `__ansible_vault`, reachable only
+through an open document such as NMState, is refused by this build's runners
+at every run, its removal included, so destroy it with the earlier build
+first; any other key, `__ansible_note` included, runs as before.
+
+**Review:** ten findings, seven confirmed. The first fix round fixed five: a
+fleet-key comment holding a Unicode line separator injected a root `%post`
+section into the Kickstart; a host key named as a ContainerCluster's
+`nodeSSH.publicKeyRef` was not refused; the damage refusal named a purge that
+then refused for an entry the store could not open; a selection read on a
+root-squashed home failed on a dead executable check with no remedy; and the
+guide promised that a second Ctrl-C kills the command under sudo's `use_pty`,
+a promise now narrowed to signals the supervisor receives. A fourth round
+fixed the two confirmed outside the slice's scope: an earlier build's
+registry of version 2, 3 or 4 refused with no guidance, and a killed bundle
+write wedged setup. Three were not confirmed: two were rejected as wording
+or as unchanged behavior the CLI spec requires, and parked, and one repeated
+the registry finding. Four checks followed. The first three found, in turn,
+a tab-separated key line refused as a comment, a CRLF or outer-tab line
+accepted at import and refused at apply, and that the line rule reaches
+every `sshKeyPair` consumer, with a wording slip; each was fixed in the next
+round, so the secrets spec now states the type-wide rule. The fourth round
+also reworded the unprivileged supervisor's unreadable-executable refusal,
+and its check found no gap.
+
+**Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
+race` and `./scripts/ansible-check --suite units`, `sanity`, `integration`
+and `lint` pass on the integrated slice, after one integration fix of a test
+type two lanes both declared, after each of the first three fix rounds and
+on the squashed commit; after the fourth round `make check-offline
+tidy-check modules-check docs-check race` passed. `./scripts/check-commits`
+and `git diff --check` pass. The tests that need euid 0, the opt-in
+privileged fixtures and the native Ansible targets are unrun. No real-host
+run.
+
+**Constraints left behind:** the helper path as root, directory accounts and
+a root-squashed home are proved only unprivileged
+([B352](backlog.md#b352)), and a second Ctrl-C under a foreground `use_pty`
+leaves the cancellation running ([B339](backlog.md#b339)). A host an
+earlier build already left with a partial bundle file under its final name
+still refuses that replay ([B356](backlog.md#b356)); X39 prevents new
+ones. Tracked elsewhere:
+`--ssh-id-file` ([B283](m1.md#b283)); `status` over a revision a new rule
+refuses ([B226](backlog.md#b226)); a bind-time refusal naming its Secret
+([B285](m1.md#b285)); the emulator's URI rendered as data
+([B295](m1.md#b295)); the FIPS key types of the bare-metal README
+([B73](m4.md#b73)); a cancellation inside a binding's publication, which
+bounded runs lose with [B337](m1.md#b337); and a context whose reservation
+is damaged or that owns live objects, now clauses of
+[B325](backlog.md#b325). Under D48 every other follow-up was parked: B339
+to B356.

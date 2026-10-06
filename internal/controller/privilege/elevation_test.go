@@ -114,6 +114,11 @@ func (c elevationCase) check(t *testing.T, ctx context.Context) {
 const (
 	authorization  = "sudo authorization could not be obtained"
 	authenticate   = "authenticate to sudo, or run Bootwright as root"
+	reauthenticate = "run sudo -v in this terminal, then repeat the command; or run Bootwright as root"
+	permitRule     = "the sudo policy must permit Bootwright's re-execution through /proc/<pid>/exe: grant ALL or a /proc/[0-9]*/exe rule " +
+		"(a rule naming the Bootwright binary does not match it); ask the policy's administrator, or run Bootwright as root"
+	copyLocally = "root cannot execute the Bootwright executable where it is (a network home with root squash?); " +
+		"copy it to a local directory such as /usr/local/bin and run it from there"
 	passwordNeeded = "sudo: a password is required\n"
 	hostWarning    = "sudo: unable to resolve host lab-01: Name or service not known\n"
 	stateFailure   = "[FAIL] lifecycle.state: the context holds no applied revision\n"
@@ -123,6 +128,13 @@ const (
 	// plugins/sudoers/env.c), as .agents/knowledge/sudo-command-line-environment.md
 	// records it observed with sudo 1.9.17p2.
 	setenvRefusal = "sudo: sorry, you are not allowed to set the following environment variables: HTTPS_PROXY\n"
+	// executeRefusal is sudo's warning when it cannot execute the command it
+	// authorized (sudo_warn "unable to execute %s" in policy_close, src/sudo.c),
+	// here with the EACCES root meets on a root-squashed home.
+	executeRefusal = "sudo: unable to execute /proc/4242/exe: Permission denied\n"
+	// unlisted is the sudoers policy's denial of an account no rule names, as
+	// log_denial in plugins/sudoers/logging.c of sudo 1.9.5p2 prints it.
+	unlisted = "operator is not in the sudoers file.  This incident will be reported.\n"
 )
 
 // Sudo exits 1 for its own refusals and writes them on the child's standard
@@ -140,15 +152,27 @@ func TestElevationOutcomes(t *testing.T) {
 		{name: "an interactive failure stands", terminal: true, child: scriptedChild{stderr: []string{startAnnouncement, stateFailure}, code: 1}, exit: 1, stderr: stateFailure},
 		{name: "a JSON child that started and was killed", json: true, child: scriptedChild{stderr: []string{startAnnouncement}, code: 137}, exit: 1, code: "runtime.internal", message: "the elevated command exited with status 137 without a result"},
 		{name: "a JSON child that started and panicked", json: true, child: scriptedChild{stderr: []string{startAnnouncement, "panic: boom\n"}, code: 2}, exit: 1, code: "runtime.internal", message: "the elevated command exited with status 2 without a result", stderr: "panic: boom\n"},
-		{name: "a JSON refusal carries the line it withheld", json: true, child: scriptedChild{stderr: []string{passwordNeeded}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization + ": a password is required", remediation: authenticate},
+		{name: "a JSON refusal carries the line it withheld", json: true, child: scriptedChild{stderr: []string{passwordNeeded}, code: 1}, exit: 1, code: "runtime.privilege", message: authorization + ": a password is required", remediation: reauthenticate},
 		{
 			name: "a JSON policy denial is its reason and leaves standard error empty", json: true, child: scriptedChild{stderr: []string{hostWarning, denial}, code: 1}, exit: 1, code: "runtime.privilege",
-			message: authorization + ": unable to resolve host lab-01: Name or service not known; Sorry, user operator is not allowed to execute '/proc/4242/exe status' as root on lab-01.", remediation: authenticate,
+			message: authorization + ": unable to resolve host lab-01: Name or service not known; Sorry, user operator is not allowed to execute '/proc/4242/exe status' as root on lab-01.", remediation: permitRule,
 		},
 		{
 			name: "a JSON refusal of the forwarded route names the tag its rule lacks", json: true, child: scriptedChild{stderr: []string{setenvRefusal}, code: 1}, exit: 1, code: "runtime.privilege",
 			message:     authorization + ": sorry, you are not allowed to set the following environment variables: HTTPS_PROXY",
 			remediation: "add the SETENV tag to the sudoers rule that runs Bootwright, or run Bootwright as root",
+		},
+		{
+			name: "a JSON refusal to execute names the local copy", json: true, child: scriptedChild{stderr: []string{executeRefusal}, code: 1}, exit: 1, code: "runtime.privilege",
+			message: authorization + ": unable to execute /proc/4242/exe: Permission denied", remediation: copyLocally,
+		},
+		{
+			name: "a JSON account no rule names is a policy refusal", json: true, child: scriptedChild{stderr: []string{unlisted}, code: 1}, exit: 1, code: "runtime.privilege",
+			message: authorization + ": operator is not in the sudoers file.  This incident will be reported.", remediation: permitRule,
+		},
+		{
+			name: "a JSON warning alone keeps the default remedy", json: true, child: scriptedChild{stderr: []string{hostWarning}, code: 1}, exit: 1, code: "runtime.privilege",
+			message: authorization + ": unable to resolve host lab-01: Name or service not known", remediation: authenticate,
 		},
 		{name: "a JSON child that started discards the lines withheld before it", json: true, child: scriptedChild{stdout: "{}\n", stderr: []string{hostWarning, startAnnouncement}}, stderr: ""},
 		{name: "a JSON result without a start discards the lines withheld", json: true, child: scriptedChild{stdout: "{}\n", stderr: []string{hostWarning}, code: 1}, exit: 1, stderr: ""},
@@ -157,7 +181,7 @@ func TestElevationOutcomes(t *testing.T) {
 		{name: "a relayed remote refusal", child: scriptedChild{stderr: []string{startAnnouncement, passwordNeeded}, code: 1}, exit: 1, stderr: passwordNeeded},
 		{
 			name: "a human refusal carries the lines it replaces", child: scriptedChild{stderr: []string{hostWarning, passwordNeeded}, code: 1}, exit: 1, code: "runtime.privilege",
-			message: authorization + ": unable to resolve host lab-01: Name or service not known; a password is required", remediation: authenticate,
+			message: authorization + ": unable to resolve host lab-01: Name or service not known; a password is required", remediation: reauthenticate,
 		},
 		{
 			name: "a human refusal of the forwarded route names the tag its rule lacks", child: scriptedChild{stderr: []string{setenvRefusal}, code: 1}, exit: 1, code: "runtime.privilege",
@@ -166,7 +190,11 @@ func TestElevationOutcomes(t *testing.T) {
 		},
 		{
 			name: "an unterminated refusal line is its reason", child: scriptedChild{stderr: []string{"sudo: a password is required"}, code: 1}, exit: 1, code: "runtime.privilege",
-			message: authorization + ": a password is required", remediation: authenticate,
+			message: authorization + ": a password is required", remediation: reauthenticate,
+		},
+		{
+			name: "a human refusal to execute names the local copy", child: scriptedChild{stderr: []string{executeRefusal}, code: 1}, exit: 1, code: "runtime.privilege",
+			message: authorization + ": unable to execute /proc/4242/exe: Permission denied", remediation: copyLocally,
 		},
 		{name: "a policy denial speaks for itself", child: scriptedChild{stderr: []string{denial}, code: 1}, exit: 1, stderr: denial},
 		{name: "held lines reach an unexpected status", child: scriptedChild{stderr: []string{passwordNeeded}, code: 2}, exit: 2, stderr: passwordNeeded},
@@ -339,6 +367,7 @@ type accountFunc func(context.Context) (Account, error)
 func (f accountFunc) Resolve(ctx context.Context) (Account, error) { return f(ctx) }
 
 func TestAdmissionRefusesAnUnverifiableAccountOrSudoParent(t *testing.T) {
+	const remedy = "run Bootwright as a local account, or from a clean root login (su -, sudo su -, or a root SSH session) naming the context with --context"
 	for _, test := range []struct {
 		name     string
 		account  Account
@@ -347,8 +376,17 @@ func TestAdmissionRefusesAnUnverifiableAccountOrSudoParent(t *testing.T) {
 		guarded  bool
 		released bool
 		message  string
+		remedy   string
 	}{
-		{name: "unverifiable account", resolve: errAccount, message: "invoking account cannot be verified"},
+		{name: "unverifiable account", resolve: errAccount, message: "invoking account cannot be verified", remedy: remedy},
+		{
+			name: "an account the name service cannot answer", resolve: accountRefusal{"the account database did not answer"},
+			message: "invoking account cannot be verified: the account database did not answer", remedy: remedy,
+		},
+		{
+			name: "a re-execution whose sudo is gone", resolve: accountRefusal{"the sudo parent of this re-execution is gone"},
+			message: "invoking account cannot be verified: the sudo parent of this re-execution is gone", remedy: remedy,
+		},
 		{name: "direct invocation", account: Account{UID: 1000}},
 		{name: "unguardable sudo parent", account: Account{SudoParentPID: 4242}, guard: errors.New("parent changed"), guarded: true, message: "sudo parent lifetime cannot be guarded"},
 		{name: "guarded sudo parent", account: Account{SudoParentPID: 4242}, guarded: true, released: true},
@@ -370,15 +408,20 @@ func TestAdmissionRefusesAnUnverifiableAccountOrSudoParent(t *testing.T) {
 			if guarded != test.guarded {
 				t.Fatalf("guarded = %v, want %v", guarded, test.guarded)
 			}
-			var message string
+			var message, remediation string
 			if refusal != nil {
 				if refusal.Code != "runtime.privilege" || refusal.Severity != "error" {
 					t.Fatalf("refusal = %+v", *refusal)
 				}
-				message = refusal.Message
+				message, remediation = refusal.Message, refusal.Remediation
 			}
-			if message != test.message {
-				t.Fatalf("refusal %q, want %q", message, test.message)
+			if message != test.message || remediation != test.remedy {
+				t.Fatalf("refusal %q (%q), want %q (%q)", message, remediation, test.message, test.remedy)
+			}
+			for _, named := range []string{"su -", "local account", "--context"} {
+				if test.remedy != "" && !strings.Contains(remediation, named) {
+					t.Fatalf("the remedy %q does not name %q", remediation, named)
+				}
 			}
 			release()
 			if released != test.released {

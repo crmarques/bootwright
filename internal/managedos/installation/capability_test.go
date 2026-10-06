@@ -239,6 +239,41 @@ func TestOnlyThePublicHalfOfTheFleetKeyReachesTheAdapter(t *testing.T) {
 	}
 }
 
+// The adapter substitutes the fleet key's public half into the rendered
+// Kickstart, past the renderer's guard, so a half the store already holds that
+// would end its quoted sshkey line, or that quoting, refuses before the
+// adapter runs. A tab between or around the line's fields, or the carriage
+// return of a CRLF line ending, refuses as well, as it does at import, and
+// the remedy names the whole line, not only its comment.
+func TestAFleetKeyThatWouldLeaveItsKickstartLineRefuses(t *testing.T) {
+	lines := []string{
+		"ssh-ed25519\tAAAAPUBLIC", "ssh-ed25519 AAAAPUBLIC\tfleet",
+		"\tssh-ed25519 AAAAPUBLIC fleet\t", "ssh-ed25519 AAAAPUBLIC fleet\r",
+	}
+	for _, comment := range []string{
+		"fleet\" \u2028%post --nochroot #\u2028touch /mnt/sysroot/root/pwned #\u2028%end #\u2028#",
+		"a\u2028b", "a\u2029b", "a\u0085b", "a\x0bb", "a\rb", `a"b`, `a\b`,
+	} {
+		lines = append(lines, "ssh-ed25519 AAAAPUBLIC "+comment)
+	}
+	for _, line := range lines {
+		call, _ := execution(t, "digest")
+		call.Material["bootwright-machine-key"] = secrets.NewMaterial(map[secrets.Part][]byte{
+			secrets.PublicKeyPart:  []byte(line + "\n"),
+			secrets.PrivateKeyPart: []byte("PRIVATE"),
+		})
+		runner := &fakeRunner{}
+		_, err := New(runner).Apply(context.Background(), call)
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Code != "api.value" || !strings.Contains(reported[0].Remediation, "bootwright-machine-key") || !strings.Contains(reported[0].Remediation, "public line") {
+			t.Fatalf("line %+q: apply = %v %#v, want one api.value naming the Secret and its public line", line, err, reported)
+		}
+		if len(runner.requests) != 0 {
+			t.Fatalf("line %+q reached the adapter", line)
+		}
+	}
+}
+
 // A controller that declares a trust bundle is reached through it on every
 // operation: the request binds the bundle and the adapter receives it as its
 // own file. One that declares none is reached through the system trust store,

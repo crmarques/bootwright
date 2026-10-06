@@ -5,11 +5,11 @@ func machineImageSchema() *Shape {
 }
 
 func machineInstallSchema() *Shape {
-	repositories := &Shape{Type: Sequence, Atomic: true, NameKey: "id", Element: record(required("id", nonempty()), required("baseURL", url()))}
-	packageSource := choice(field("mirror", record(required("baseURL", url()), field("repositories", repositories))), field("fromSubscription", record(required("entitlementRef", ref(Entitlement)))), field("hostedTree", record(required("fromMedia", nonempty()), required("artifactServerEndpoint", artifactEndpoint()))))
+	repositories := &Shape{Type: Sequence, Atomic: true, NameKey: "id", Element: record(required("id", nonempty()), required("baseURL", lexical("repository-url")))}
+	packageSource := choice(field("mirror", record(required("baseURL", lexical("repository-url")), field("repositories", repositories))), field("fromSubscription", record(required("entitlementRef", ref(Entitlement)))), field("hostedTree", record(required("fromMedia", nonempty()), required("artifactServerEndpoint", artifactEndpoint()))))
 	anaconda := record(required("imageRef", ref(MachineImage)), field("redfishVirtualMedia", record(field("artifactServerEndpoint", artifactEndpoint()))), field("packageSource", packageSource))
 	clone := record(required("seed", choice(field("cloudInit", record(defaulted("growRootFilesystem", boolean(), BoolValue(true)))))))
-	configure := &Shape{Type: Sequence, Atomic: true, NameKey: "id", Element: record(required("id", nonempty()), required("baseURL", url()), field("displayName", nonempty()), defaulted("enabled", boolean(), BoolValue(true)), defaulted("gpgCheck", boolean(), BoolValue(true)), field("gpgKeyURL", nonempty()))}
+	configure := &Shape{Type: Sequence, Atomic: true, NameKey: "id", Element: record(required("id", nonempty()), required("baseURL", lexical("repository-url")), field("displayName", nonempty()), defaulted("enabled", boolean(), BoolValue(true)), defaulted("gpgCheck", boolean(), BoolValue(true)), field("gpgKeyURL", nonempty()))}
 	customizations := record(
 		field("hostname", record(field("source", enumeration("machineName")))),
 		field("localization", record(defaulted("language", nonempty(), StringValue("en_US.UTF-8")), field("formats", nonempty()), defaulted("keyboard", nonempty(), StringValue("us")), defaulted("timezone", nonempty(), StringValue("UTC")), field("additionalLocales", set(nonempty())))),

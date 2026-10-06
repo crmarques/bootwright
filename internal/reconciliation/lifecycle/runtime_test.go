@@ -418,3 +418,79 @@ func TestOwnershipReportsARemovalBlockThatStillNeedsAnOperator(t *testing.T) {
 		t.Fatalf("removal states = %v", states)
 	}
 }
+
+// requireNoBindingHeld fails unless the one binding a bounded call made was
+// released and the store holds none, because a binding a cancelled call kept
+// pins its Secret versions until the next collection.
+func requireNoBindingHeld(t *testing.T, h *harness) {
+	t.Helper()
+	held, err := h.binder.Bindings(context.Background(), custody.BindingsRequest{ContextName: testContextName})
+	if err != nil || len(held) != 0 || h.binder.issued != 1 || !slices.Equal(h.binder.released, []string{"bind-1"}) {
+		t.Fatalf("after %d bindings the store holds %v (%v) and released %v", h.binder.issued, held, err, h.binder.released)
+	}
+}
+
+// An interrupt that lands while a bounded run's call is running, as a Ctrl-C
+// during a machine power command does, still gives its binding back: the
+// release outlives the cancellation as every recording does.
+func TestABoundedRunCancelledInsideItsCallReleasesItsBinding(t *testing.T) {
+	h := newHarness(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := h.service.WithRuntime(ctx, RuntimeRequest{ContextName: testContextName, Secrets: []string{"artifact-server-tls"}},
+		func(ctx context.Context, _ Runtime) error {
+			cancel()
+			return ctx.Err()
+		})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("the cancelled run reported %v", err)
+	}
+	requireNoBindingHeld(t, h)
+}
+
+// The same holds for a bounded consumer, such as rsh or exec, which reads its
+// material without a runtime.
+func TestABoundedConsumerCancelledInsideItsCallReleasesItsBinding(t *testing.T) {
+	h := newHarness(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := h.service.WithMaterial(ctx, MaterialRequest{ContextName: testContextName, Secrets: []string{"artifact-server-tls"}},
+		func(ctx context.Context, _ map[string]secrets.Material) error {
+			cancel()
+			return ctx.Err()
+		})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("the cancelled consumer reported %v", err)
+	}
+	requireNoBindingHeld(t, h)
+}
+
+// cancelledReopen is a store whose reopen an interrupt ends.
+type cancelledReopen struct {
+	*testBinder
+	cancel context.CancelFunc
+}
+
+func (b cancelledReopen) Reopen(context.Context, custody.BindingRequest) ([]secretstore.BoundMaterial, error) {
+	b.cancel()
+	return nil, context.Canceled
+}
+
+// An interrupt that ends the reopen of a fresh binding leaves that binding
+// still listed, so the consumer reports the cancellation, binds nothing again
+// and gives back what it bound.
+func TestABoundedConsumerCancelledWhileReopeningReleasesItsBinding(t *testing.T) {
+	h := newHarness(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h.service.binder = cancelledReopen{testBinder: h.binder, cancel: cancel}
+	err := h.service.WithMaterial(ctx, MaterialRequest{ContextName: testContextName, Secrets: []string{"artifact-server-tls"}},
+		func(context.Context, map[string]secrets.Material) error {
+			t.Fatal("a consumer whose reopen was cancelled ran")
+			return nil
+		})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("the cancelled consumer reported %v", err)
+	}
+	requireNoBindingHeld(t, h)
+}

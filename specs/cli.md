@@ -232,7 +232,9 @@ non-root invocation keeps an unprivileged supervisor and launches one exact
 Bootwright child as UID 0 through the qualified absolute sudo executable. Pin
 reexecution to the supervisor's verified executable through procfs so a pathname
 replacement during authentication cannot substitute code. Sudo policies that
-refuse that executable path fail closed. Sudo owns
+refuse that executable path fail closed. A sudoers rule must therefore match
+`/proc/<pid>/exe`: sudo compares a command's base name before its path, so a
+rule naming the Bootwright binary does not match the re-execution. Sudo owns
 terminal password handling; Bootwright never captures the password. JSON or
 noninteractive invocation uses noninteractive sudo and fails without cached or
 passwordless authorization. Preserve argv, stdin payloads, outputs and status.
@@ -269,18 +271,35 @@ and nothing but held lines reached standard error, the supervisor reports
 `runtime.interrupted` after an interrupt, and `runtime.privilege` only when sudo
 exited 1 having held a line. That `runtime.privilege` report, and a JSON
 invocation's, carries the held lines, each without sudo's prefix, as the reason
-sudo refused. Its remedy is to authenticate to sudo or run as root, except
-when a held line is the sudoers policy refusing to set the forwarded
+sudo refused. The first held line that names a cause decides its remedy: a
+required password points to `sudo -v` in that terminal, or running as root; a
+sudoers policy refusal points to the rule that permits `/proc/<pid>/exe`; a
+failure to execute points to a local copy of the executable that root can
+execute; and the sudoers policy refusing to set the forwarded
 [acquisition route](controller.md#the-context-free-acquisition-route)'s
-variables, whose remedy is the `SETENV` tag on the sudoers rule that runs
-Bootwright, or running as root. A report the supervisor writes replaces the held
+variables points to the `SETENV` tag on the sudoers rule that runs Bootwright,
+or running as root. Held lines that name none of these keep the remedy to
+authenticate to sudo or run as root. A report the supervisor writes replaces the held
 lines and exits `130` after an interrupt and `1` otherwise, as
 [streams and exit status](cli/output.md#streams-and-exit-status) requires;
 every other ending forwards a human invocation's held lines and exits with the
 child's status, never `0` when sudo could not be waited for. A child that
 ends after the supervisor relayed an interrupt to it chose that status, so it
-stands, `0` included, unless its output is still open when the relay's grace
-ends, which counts as sudo not being waited for.
+stands, `0` included; output still open five seconds after sudo exits counts
+as sudo not being waited for. After relaying, the supervisor waits for the
+child with no deadline of its own, because the child bounds its own
+cancellation. A second `SIGINT` or `SIGTERM` the supervisor receives kills
+sudo, which ends the child through its parent-death guard and can leave its
+operation for the next command to resolve. A hangup never does: one terminal
+hangup reaches the foreground job twice, from the shell that resends it to its
+jobs and from the kernel when that shell exits. The child never escalates on
+its own, because sudo can hand it one terminal interrupt twice: without a
+pseudo-terminal the child receives the kernel's signal beside the relay, and
+with one in the background sudo forwards both. Where sudo runs the child in
+the foreground of a pseudo-terminal of its own, as `use_pty`, its default
+since sudo 1.9.14, does for an interactive invocation, the terminal's Ctrl-C
+reaches only the child, so a second Ctrl-C leaves its bounded cancellation
+running; a second `SIGTERM` sent to the supervisor still kills sudo.
 
 The supervisor owns bounded `sudo -n -v` refresh subprocesses during that child.
 Keep the same parent and terminal identity. An unambiguous positive effective
@@ -292,12 +311,37 @@ stays empty, and stops refresh without terminating the elevated command.
 Completion/cancellation stops and reaps every refresh process. Never leave a
 daemon or invalidate the user's wider sudo cache.
 
-Capture the real invoking account before elevation. Validate sudo-provided
-UID/GID/name against the local account database on manual sudo; direct root
-uses root. Ignore spoofed sudo metadata on non-root launch. Resolve account
-homes without `HOME`. Access selection files with the invoking user's actual
-credentials; retain invoking-user home/ownership semantics for authored secret
-file references. Root identity governs only root-owned runtime storage.
+Capture the real invoking account before elevation. Resolve it through the
+name service with the pinned, root-owned `/usr/bin/getent`: `passwd` by UID and
+by name, and `initgroups` by name, each with a fixed environment, within ten
+seconds and 64 KiB of output. The answers must name exactly one account, agree
+on its name, UID, GID and home, give a clean absolute home, and list at most
+1024 groups, its primary group included. `/etc/passwd` and `/etc/group` serve
+only where `/usr/bin/getent` does not exist; one that exists but is not a
+root-owned system executable refuses. Validate sudo-provided UID, GID and name
+against that answer on manual sudo. Direct root uses root. So does a root
+process whose sudo metadata no verified sudo parent supplied, such as a
+`sudo -i` or `sudo -s` shell: it is root already, so this grants nothing and
+only selects root's own context selection and files. Its `SUDO_COMMAND`
+running `/proc/<pid>/exe` instead marks an elevated child whose sudo is gone,
+which refuses. Ignore spoofed sudo metadata on a non-root launch. Resolve
+account homes without `HOME`. An unverifiable account refuses
+`runtime.privilege`, naming why, and names a local account or a clean root
+login (`su -`, `sudo su -` or a root SSH session) with `--context` as the
+remedy. The input directory and Context file, a media source file, secret
+files and the selection files are opened with the invoking account's
+credentials: a bounded helper passes each descriptor to root, which keeps every
+type, stability and ownership proof. Root identity governs only root-owned
+runtime storage and the Bootwright executable, which root must be able to
+execute; the elevated child re-executes it through `/proc/self/exe` and never
+resolves its path, which a root-squashed home would refuse. Only the
+unprivileged supervisor resolves that path, before it elevates: an invoking
+account that cannot search a directory on it refuses `runtime.privilege`
+naming the path and that account, with the remedy of a local copy both that
+account and root can read, such as one in `/usr/local/bin`.
+
+Not yet met: `--ssh-id-file` is still opened by root; tracked as
+[B283](milestones/m1.md#b283).
 
 For a usage failure, JSON mode is established only after an exact
 JSON-capable command is resolved and its final scalar `--output` occurrence
@@ -684,6 +728,34 @@ Resolution follows explicit access: an unknown or excluded name fails
 direct execution on that host, and a Machine declaring no resolvable SSH
 access fails `access.unavailable`. Each is exit `1` with empty standard output,
 no connection attempt and no trust record.
+
+### Host-key trust
+
+`machine trust` records in the
+[context trust store](contexts.md#storage-locking-and-publication) the host key
+each selected Machine that uses context trust presents: one reached over SSH
+that declares no `access.ssh.knownHostsRef` and that Bootwright did not install.
+It observes each such endpoint exactly once, offering no credential, and
+reports one action for every selected Machine: `add` for a key the context
+does not trust yet, `reuse` for the key it already trusts at that endpoint,
+`replace` for a supersede, and `skip`, with its reason, for every other
+Machine, which it never contacts. One endpoint that cannot be read fails the
+whole enrollment, which records nothing.
+
+A changed key fails `trust.identity` naming both fingerprints. An unchanged key
+observed at another endpoint fails `trust.identity` naming the endpoint the
+context trusts it at, since the store trusts a key at one address. Either is
+superseded only by `--replace` naming that Machine.
+
+With pending writes and no `--yes`, the plan is written to standard output
+before the one [ordinary confirmation](#ordinary-confirmation): every Machine's
+action, key and fingerprint, and what a replacement supersedes, the earlier
+fingerprint and, when it moved, the earlier endpoint. The plan is the same
+observation the command records. After recording, the result repeats only its
+headline; a declined, non-interactive or canceled confirmation records nothing.
+Under `--yes` or `--dry-run`, and in JSON, which
+[requires one of them](cli/commands.md#flag-relationships-and-safeguards),
+nothing precedes the result, which carries every Machine's row once.
 
 ### Machine power operations
 

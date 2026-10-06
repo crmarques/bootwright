@@ -21,6 +21,25 @@ type contextSecretHooks struct {
 	Initialize func(context.Context, contexts.Record, secretstore.Area) error
 }
 
+// secretFiles opens secret files through the invoking account's opener, and
+// binds no opener at all when files is nil rather than a wrapper around nil.
+func secretFiles(files operatorFiles) material.Files {
+	if files == nil {
+		return nil
+	}
+	return materialFiles{files: files}
+}
+
+type materialFiles struct{ files operatorFiles }
+
+func (f materialFiles) Begin(ctx context.Context) (material.FileSession, error) {
+	session, err := f.files.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
 type secretServices struct {
 	custody    cli.SecretService
 	encryption cli.EncryptionService
@@ -35,7 +54,7 @@ func wireSecrets(deps serviceDependencies, compiler compilation.Compiler) secret
 	}
 	selected := contexts.SelectionWorkspace{Workspace: deps.Workspace, Selection: deps.Selection}
 	access := secretstore.NewAccess(selected, resolver, deps.SessionMaterial)
-	acquisition := material.New(deps.SecretInput, material.Options{Operator: deps.Operator})
+	acquisition := material.New(deps.SecretInput, material.Options{Operator: deps.Operator, Files: secretFiles(deps.Files)})
 	secrets := custody.New(access, compiler, acquisition, deps.Confirmer)
 	return secretServices{
 		custody:    secrets,

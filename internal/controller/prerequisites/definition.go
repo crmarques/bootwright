@@ -12,12 +12,11 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 )
 
-// NewResolvedDefinition binds the complete approved resolution separately from
-// bundle content. A native transaction's before-state changes after success;
-// that alone must not create another private execution bundle on the next run.
-// NewResolvedDefinition freezes one context-independent setup resolution. It
-// carries no target tool: those are selected by a context and resolved by its
-// own controller stage.
+// NewResolvedDefinition freezes one context-independent setup resolution,
+// bound separately from bundle content: a native transaction's before-state
+// changes after success, and that alone must not create another private
+// execution bundle on the next run. It carries no target tool: those are
+// selected by a context and resolved by its own controller stage.
 func NewResolvedDefinition(bootstrap BootstrapDefinition, native NativeResolvedPlan) (Definition, error) {
 	if err := ValidateBootstrap(bootstrap); err != nil {
 		return Definition{}, err

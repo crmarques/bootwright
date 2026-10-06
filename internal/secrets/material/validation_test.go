@@ -1,6 +1,7 @@
 package material
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -10,6 +11,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,6 +173,85 @@ func TestSSHValidationRejectsWeakEncryptedTrailingOptionsAndMismatch(t *testing.
 	defer clear(weakAuthorized)
 	assertFailureCode(t, validateSSH(weakPEM, weakAuthorized), "secret.input")
 
+}
+
+// An imported public half reaches the fleet key's quoted Kickstart line as it
+// was given, so a comment that would end that line or its quoting refuses,
+// as it does on a generated key.
+func TestAnImportedSSHPublicKeyCommentStaysOnOneQuotedLine(t *testing.T) {
+	service := New(nil, Options{Random: cryptorand.Reader, Clock: func() time.Time { return generationTime }})
+	generated, err := service.Generate(context.Background(), secrets.Declaration{Type: "sshKeyPair", Source: "generated"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer generated.Clear()
+	privateKey := requiredPart(t, generated, secrets.PrivateKeyPart)
+	publicKey := requiredPart(t, generated, secrets.PublicKeyPart)
+	defer clear(privateKey)
+	defer clear(publicKey)
+	bare := bytes.TrimSuffix(publicKey, []byte("\n"))
+	for _, comment := range []string{
+		"fleet\" \u2028%post --nochroot #\u2028touch /mnt/sysroot/root/pwned #\u2028%end #\u2028#",
+		"a\u2028b", "a\u2029b", "a\u0085b", "a\x0bb", "a\x1cb", `a"b`, `a\b`, "a \u2028",
+	} {
+		commented := append(append(slices.Clone(bare), ' '), comment...)
+		assertFailureCode(t, validateSSH(privateKey, commented), "secret.input")
+		clear(commented)
+	}
+	commented := append(slices.Clone(bare), " operator key for the lab\n"...)
+	defer clear(commented)
+	if err := validateSSH(privateKey, commented); err != nil {
+		t.Fatalf("a plain comment was refused: %v", err)
+	}
+}
+
+// The whole imported line, short of its final line feeds, reaches the quoted
+// Kickstart line, so a tab between its fields or at its edges, or the
+// carriage return of a CRLF line ending, refuses even with no comment, and the
+// refusal names the line rather than a comment the key may not have. Spaces at
+// its edges and extra final line feeds reach that line as harmlessly as they
+// did, so they still pass.
+func TestAnImportedSSHPublicKeyLineHoldingATabOrACarriageReturnRefusesNamingTheLine(t *testing.T) {
+	service := New(nil, Options{Random: cryptorand.Reader, Clock: func() time.Time { return generationTime }})
+	generated, err := service.Generate(context.Background(), secrets.Declaration{Type: "sshKeyPair", Source: "generated"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer generated.Clear()
+	privateKey := requiredPart(t, generated, secrets.PrivateKeyPart)
+	publicKey := requiredPart(t, generated, secrets.PublicKeyPart)
+	defer clear(privateKey)
+	defer clear(publicKey)
+	keyType, encoded, found := strings.Cut(strings.TrimSuffix(string(publicKey), "\n"), " ")
+	if !found {
+		t.Fatalf("generated public key %q has no field separator", publicKey)
+	}
+	for _, line := range []string{
+		keyType + "\t" + encoded,
+		keyType + "\t" + encoded + " operator",
+		keyType + " " + encoded + "\toperator",
+		"\t" + keyType + " " + encoded + " operator\t\n",
+		keyType + " " + encoded + " operator\t",
+		keyType + " " + encoded + " operator\r\n",
+		keyType + " " + encoded + "\r\n",
+		"\n" + keyType + " " + encoded + "\n",
+	} {
+		err := validateSSH(privateKey, []byte(line))
+		assertFailureCode(t, err, "secret.input")
+		message := diagnosticMessage(err)
+		if !strings.Contains(message, "public key line") || !strings.Contains(message, "tab") || !strings.Contains(message, "CRLF") || strings.Contains(message, "comment") {
+			t.Fatalf("line %q: refusal %q does not name the line, its tab and its CRLF ending", line, message)
+		}
+	}
+	for _, line := range []string{
+		keyType + " " + encoded,
+		keyType + " " + encoded + " operator\n",
+		" " + keyType + " " + encoded + " operator \n\n",
+	} {
+		if err := validateSSH(privateKey, []byte(line)); err != nil {
+			t.Fatalf("space-separated line %q was refused: %v", line, err)
+		}
+	}
 }
 
 func customCertificate(t *testing.T, usage x509.ExtKeyUsage, isCA bool) ([]byte, []byte) {

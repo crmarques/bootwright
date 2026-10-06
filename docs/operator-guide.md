@@ -16,6 +16,13 @@ other. Each example's host prerequisites add what its journey needs, such as
 `sudo`: Bootwright asks for authorization when a command needs it, and keeps its
 state under `/var/lib/bootwright`
 ([contexts](../specs/contexts.md#storage-locking-and-publication)).
+[The sudo rule](#the-sudo-rule) says what that account's policy must permit,
+[directory accounts](#directory-accounts) how an SSSD, LDAP or AD account runs
+it, [a network home with root squash](#a-network-home-with-root-squash) where
+the executable must live, [a FIPS-mode controller](#a-fips-mode-controller)
+which SSH keys it can use, and
+[a host an earlier build manages](#a-host-an-earlier-bootwright-build-manages)
+when a host is not yet a controller for this build.
 
 Prepare the host once, from the repository root:
 
@@ -54,6 +61,69 @@ grants neither `ALL` nor `SETENV` refuses that, and running as root avoids it.
 `bootwright setup --dry-run` prints the resolved route under `Route` in its
 scope block, which is the cheapest way to confirm the variables took effect.
 
+### The sudo rule
+
+Bootwright re-executes itself as root through
+`sudo -u '#0' -- /proc/<pid>/exe`, so the sudoers rule that admits the account
+must match that path
+([local privilege](../specs/cli.md#local-privilege-and-user-identity)). `ALL`
+matches it, as `%wheel ALL=(ALL) ALL` grants, and so does a `/proc/[0-9]*/exe`
+rule. Every running program has such a path, so that rule is `ALL` in effect
+unless a `sha256:<digest>` before the command pins it to one build's
+executable, the `Digest_Spec` of sudoers(5), which every new build must update.
+A rule naming the Bootwright binary does not match the re-execution: sudo
+compares a command's base name, `exe`, before its path. A policy a directory
+service holds, such as SSSD or LDAP sudo rules, is changed by its
+administrator. A forwarded proxy route also needs `SETENV`
+([on a proxied network](#on-a-proxied-network)). A JSON invocation, or one
+whose standard input is not a terminal, cannot prompt for a password, so run
+`sudo -v` in the same terminal first. Each refusal names which of these
+applies.
+
+### Directory accounts
+
+An SSSD, LDAP or AD account resolves through the name service, as
+`getent passwd` answers for it, and runs Bootwright like a local account. A
+`sudo -i` or `sudo -s` shell runs it as root, with root's own context
+selection, so name the context with `--context`. When the name service cannot
+answer, the refusal says why, and a local account or a clean root login
+(`su -`, `sudo su -` or a root SSH session) works
+([local privilege](../specs/cli.md#local-privilege-and-user-identity)).
+
+### A network home with root squash
+
+Bootwright reads the input directory, the Context file, a media source and the
+secret files you name with your own credentials, so they may stay in a network
+home that squashes root. Root must still execute Bootwright itself, so copy
+`bin/bootwright` to a local directory such as `/usr/local/bin` and run it from
+there. Where root cannot, sudo refuses with `unable to execute` and the
+refusal names that local copy as the remedy.
+`--ssh-id-file` is still opened by root until
+[B283](../specs/milestones/m1.md#b283), so keep a key you offer there on local
+disk.
+
+### A FIPS-mode controller
+
+Under the FIPS crypto policy (`update-crypto-policies --show` prints `FIPS`),
+OpenSSH accepts no Ed25519 key. Declare `remoteMachinesAccessKey` and every SSH
+access `privateKeyRef` with an `sshKeyPair` Secret of `keyType` `rsa`
+(generated at 3072 bits), `ecdsa-p256`, `ecdsa-p384` or `ecdsa-p521`, never the
+default `ed25519` ([generated source](../specs/api/secrets.md#generated-source)).
+A delivered `hostKeyRef`'s type follows the controller's policy only with
+[B73](../specs/milestones/m4.md#b73), and physical installation refuses until
+then anyway.
+
+### A host an earlier Bootwright build manages
+
+A host whose `/var/lib/bootwright` holds a store an earlier Bootwright build
+created is not a supported controller for this build until that build's
+environments are retired and its store removed. Store commands refuse there
+([contexts](../specs/contexts.md#storage-locking-and-publication)). Never move
+that store aside while the services it manages run. The real-hardware test
+runs this build on a separate RHEL 9.8 controller, in a subnet the BMC network
+reaches on the artifact ports
+([D109](../specs/milestones/backlog.md#decisions)).
+
 ## Run a lab journey
 
 Each lab makes the host the controller and the host of the managed services it
@@ -75,11 +145,20 @@ An apply that installs a cluster or an operating system can run for most of an
 hour, and it lives only as long as the command that started it. Closing its
 terminal or losing the SSH session it runs in interrupts it as Ctrl-C does, and
 a command killed outright takes its running lifecycle adapter with it
-([process boundary](../specs/security.md#process-boundary)). Run a long apply
-where it outlives your connection: inside a `tmux` session, or as a transient
-systemd unit whose output `journalctl` follows. A unit runs as root rather than
-through `sudo`, so it reads root's context selection, not yours; name the
-context:
+([process boundary](../specs/security.md#process-boundary)). Ctrl-C asks the
+elevated command to stop and waits while it releases what it holds, up to a
+minute inside a package transaction. Where sudo gives the command a terminal
+of its own, as it does under `use_pty`, its default since sudo 1.9.14, a
+second Ctrl-C reaches only that command and does not hurry it; elsewhere it
+kills the command. Sending
+`SIGTERM` twice, from another terminal, to the `bootwright` process you
+started kills it either way. A killed command can leave its operation for the
+next command to resolve
+([local privilege](../specs/cli.md#local-privilege-and-user-identity)). Run a
+long apply where it outlives your connection: inside a `tmux` session, or as a
+transient systemd unit whose output `journalctl` follows. A unit runs as root
+rather than through `sudo`, so it reads root's context selection, not yours;
+name the context:
 
 ```sh
 sudo systemd-run --unit=bootwright-apply --collect "$PWD/bin/bootwright" apply --context lab-sno --yes

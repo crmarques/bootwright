@@ -2,7 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -120,6 +123,101 @@ func TestTrustReportTextEscapesOnce(t *testing.T) {
 	skipped := []string{shown("skipped"), "-", "skip", "-", shown("reason")}
 	if len(lines) != 5 || !slices.Equal(strings.Fields(lines[3]), replaced) || !slices.Equal(strings.Fields(lines[4]), skipped) {
 		t.Fatalf("trust text = %q, want the rows %q and %q", out.String(), replaced, skipped)
+	}
+}
+
+func TestTheTrustPlanNamesEveryPendingFingerprint(t *testing.T) {
+	var out bytes.Buffer
+	if err := NewTrustPlanPresenter(&out).PresentTrustPlan(context.Background(), *trustReport()); err != nil {
+		t.Fatal(err)
+	}
+	want := "Host-key trust plan for context lab: 3 machine(s) checked, 2 pending\n" +
+		"\n" +
+		"MACHINE    ADDRESS            ACTION   KEY          FINGERPRINT\n" +
+		"node-a     192.0.2.10         add      ssh-ed25519  SHA256:aaa\n" +
+		"node-b     [192.0.2.11]:2222  replace  ssh-ed25519  SHA256:bbb (was SHA256:ccc)\n" +
+		"installed  -                  skip     -            host key comes from its installation evidence\n"
+	if out.String() != want {
+		t.Fatalf("plan = %q, want %q", out.String(), want)
+	}
+}
+
+// The operator saw the table before confirming, so the result after recording
+// repeats only what was recorded.
+func TestAPresentedTrustResultRepeatsOnlyItsHeadline(t *testing.T) {
+	var out bytes.Buffer
+	report := trustReport()
+	report.Presented = true
+	if err := writeTrustReport(&out, "machine trust", report, false); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "[OK] 3 machine(s) checked, 2 recorded\n" {
+		t.Fatalf("result = %q", out.String())
+	}
+}
+
+type failingWriter struct{ short bool }
+
+func (w failingWriter) Write(data []byte) (int, error) {
+	if w.short {
+		return len(data) / 2, nil
+	}
+	return 0, errors.New("closed")
+}
+
+// A plan that did not reach the operator must not be followed by its prompt.
+func TestTheTrustPlanRefusesWhenItCannotBeWritten(t *testing.T) {
+	for name, out := range map[string]io.Writer{
+		"a failed write": failingWriter{}, "a short write": failingWriter{short: true}, "no output": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := NewTrustPlanPresenter(out).PresentTrustPlan(context.Background(), *trustReport()); err == nil {
+				t.Fatal("an unwritten plan was reported as presented")
+			}
+		})
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out bytes.Buffer
+	if err := NewTrustPlanPresenter(&out).PresentTrustPlan(canceled, *trustReport()); !errors.Is(err, context.Canceled) || out.Len() != 0 {
+		t.Fatalf("canceled plan = %v, wrote %q", err, out.String())
+	}
+}
+
+func TestAReplacementShowsTheEndpointItSupersedes(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		host enrollment.HostReport
+		want string
+	}{
+		{"a changed key", enrollment.HostReport{Fingerprint: "SHA256:bbb", PreviousFingerprint: "SHA256:ccc"}, "SHA256:bbb (was SHA256:ccc)"},
+		{
+			"a moved endpoint", enrollment.HostReport{Fingerprint: "SHA256:aaa", PreviousFingerprint: "SHA256:aaa", PreviousAddress: "192.0.2.99", PreviousPort: 22},
+			"SHA256:aaa (unchanged; was trusted at 192.0.2.99)",
+		},
+		{
+			"both", enrollment.HostReport{Fingerprint: "SHA256:bbb", PreviousFingerprint: "SHA256:ccc", PreviousAddress: "192.0.2.99", PreviousPort: 2200},
+			"SHA256:bbb (was SHA256:ccc at [192.0.2.99]:2200)",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			host := test.host
+			host.Machine, host.Address, host.Port, host.Action = "node-a", "192.0.2.10", 22, enrollment.ActionReplace
+			if got := trustDetail(host); got != test.want {
+				t.Fatalf("detail = %q, want %q", got, test.want)
+			}
+		})
+	}
+	var out bytes.Buffer
+	report := &enrollment.Report{Context: "lab", Pending: 1, Recorded: 1, Hosts: []enrollment.HostReport{{
+		Machine: "node-a", Address: "192.0.2.10", Port: 22, Action: enrollment.ActionReplace, KeyType: "ssh-ed25519",
+		Fingerprint: "SHA256:aaa", PreviousFingerprint: "SHA256:aaa", PreviousAddress: "192.0.2.99", PreviousPort: 22,
+	}}}
+	if err := writeTrustReport(&out, "machine trust", report, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"previousAddress":"192.0.2.99","previousPort":22`) {
+		t.Fatalf("JSON = %s", out.String())
 	}
 }
 

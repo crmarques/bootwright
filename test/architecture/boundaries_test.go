@@ -40,6 +40,7 @@ func packageRoles() map[string]packageRole {
 		"internal/desiredstate/encoding":         adapterRole,
 		"internal/workspace/contextfs":           adapterRole,
 		"internal/workspace/selectionfs":         adapterRole,
+		"internal/workspace/invokerfs":           adapterRole,
 		"internal/controller/privilege":          adapterRole,
 		"internal/controller/hostlinux":          adapterRole,
 		"internal/controller/bundlelocal":        adapterRole,
@@ -348,8 +349,10 @@ func TestAdmissionEffectBoundary(t *testing.T) {
 	for _, violation := range violations {
 		t.Error(violation)
 	}
-	if !owners[readOnlyInput] {
-		t.Errorf("the effect boundary restricts %s, which has no production source; remove the restriction", readOnlyInput)
+	for _, owner := range readOnlyAdapters() {
+		if !owners[owner] {
+			t.Errorf("the effect boundary restricts %s, which has no production source; remove the restriction", owner)
+		}
 	}
 	for _, owner := range sortedKeys(grants) {
 		if owner != everyPackage && !owners[owner] {
@@ -414,6 +417,14 @@ const everyPackage = ""
 // opens a file for writing or mutates one.
 const readOnlyInput = "internal/desiredstate/inputfs"
 
+// invokerFiles holds syscall only to open operator-named paths under the
+// invoking account and pass their descriptors on; like the input adapter, it
+// never opens a file for writing or mutates one.
+const invokerFiles = "internal/workspace/invokerfs"
+
+// readOnlyAdapters are the packages the input-mutation clause holds.
+func readOnlyAdapters() []string { return []string{readOnlyInput, invokerFiles} }
+
 // effectGrants is every exception to the effect boundary, keyed by the package
 // that holds it. A capability is an import path, which grants the whole
 // package, or an import path and one member, such as net.IP, which grants
@@ -447,8 +458,15 @@ func effectGrants() map[string][]string {
 		"internal/machine/sshlocal": {"golang.org/x/sys/unix", "io", "os", "os/exec", "syscall"},
 		// Machine access names those streams to hand them on; it opens nothing.
 		"internal/machine/access": {"io"},
-		// Media acquisition is the one adapter that opens an operator-named file
-		// or one authorized endpoint; it runs no process and holds no state.
+		// The invoking account's opener opens only through the descriptors it
+		// issues, names no other os member, and starts at most one helper,
+		// this running binary under that account, whose descriptors it passes
+		// on.
+		invokerFiles: {"os.ErrClosed", "os.File", "os.Geteuid", "os.NewFile", "os/exec", "syscall"},
+		// Media acquisition receives an operator-named file as a descriptor
+		// from the invoking account's opener and opens no path itself, or
+		// downloads from one authorized endpoint; it runs no process and holds
+		// no state.
 		"internal/managedos/medialocal": {"net.Dialer", "net/http", "os"},
 		// The composition root is the process boundary: it reads the process's
 		// arguments, environment and terminal and lists completion's paths. It
@@ -492,7 +510,7 @@ func effectViolations(source sourceFile, held []string) []string {
 			return true
 		}
 		member := selector.Sel.Name
-		if name == "syscall" && source.owner == readOnlyInput && (member == "O_WRONLY" || member == "O_RDWR" || member == "O_CREAT" || member == "O_TRUNC" || member == "Write" || member == "Unlink" || member == "Rename") {
+		if name == "syscall" && slices.Contains(readOnlyAdapters(), source.owner) && (member == "O_WRONLY" || member == "O_RDWR" || member == "O_CREAT" || member == "O_TRUNC" || member == "Write" || member == "Unlink" || member == "Rename") {
 			violations = append(violations, fmt.Sprintf("%s grants input mutation through syscall.%s", source.path, member))
 		}
 		if holds(name) || holds(name+"."+member) {
@@ -519,9 +537,9 @@ func effectImport(name string) bool {
 
 // TestEveryEffectClauseRefusesWhatItGuards proves each clause of
 // effectViolations by a fixture it refuses: (a) math/rand, (b) an effect
-// import, (c) a presentation or unrestricted I/O import, (d) input mutation,
-// (e) networking, (f) presentation outside the CLI and (g) a member beyond
-// those held. A whole-import grant exempts its import under (b) or (c) and
+// import, (c) a presentation or unrestricted I/O import, (d) mutation by a
+// read-only adapter, (e) networking, (f) presentation outside the CLI and (g)
+// a member beyond those held. A whole-import grant exempts its import under (b) or (c) and
 // every member; a member grant exempts only that member under (e), (f) or (g)
 // and admits its import under (b), never (c). Nothing exempts (a) or (d).
 func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
@@ -538,12 +556,17 @@ func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
 		members      = "package fixture\nimport \"os\"\nvar _ = []any{os.Getpid, os.Remove}\n"
 	)
 	source := fixture + "/fixture.go"
-	input := readOnlyInput + "/fixture.go"
 	mutating := []string{"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "Write", "Unlink", "Rename"}
-	var mutations, mutationGrants []string
+	var mutationGrants []string
 	for _, member := range mutating {
-		mutations = append(mutations, input+" grants input mutation through syscall."+member)
 		mutationGrants = append(mutationGrants, "syscall."+member)
+	}
+	mutations := func(owner string) []string {
+		var found []string
+		for _, member := range mutating {
+			found = append(found, owner+"/fixture.go grants input mutation through syscall."+member)
+		}
+		return found
 	}
 	unauthorized := func(path string, imports ...string) []string {
 		var found []string
@@ -577,8 +600,9 @@ func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
 		{"(c) presentation or unrestricted I/O", fixture, presentation, nil, presentationImports},
 		{"(c) exempt by its whole import", fixture, presentation, []string{"io", "github.com/spf13/cobra", cli}, nil},
 		{"(c) exempt by no member", fixture, presentation, []string{"io.Reader", "github.com/spf13/cobra.Command", cli + ".Output"}, presentationImports},
-		{"(d) input mutation", readOnlyInput, mutation, append([]string{"syscall"}, mutationGrants...), mutations},
-		{"(d) guards the input adapter alone", fixture, mutation, []string{"syscall"}, nil},
+		{"(d) input mutation", readOnlyInput, mutation, append([]string{"syscall"}, mutationGrants...), mutations(readOnlyInput)},
+		{"(d) mutation by the invoking account's opener", invokerFiles, mutation, append([]string{"syscall"}, mutationGrants...), mutations(invokerFiles)},
+		{"(d) guards the read-only adapters alone", fixture, mutation, []string{"syscall"}, nil},
 		{"(e) networking", fixture, networking, nil, []string{source + " accesses networking through net.Dial", source + " accesses networking through net.ParseIP"}},
 		{"(e) exempt by its member alone", fixture, networking, []string{"net.ParseIP"}, []string{source + " accesses networking through net.Dial"}},
 		{"(f) presentation outside the CLI", fixture, printing, nil, printed("Println", "Fprintln", "Scanln", "Fscanf")},

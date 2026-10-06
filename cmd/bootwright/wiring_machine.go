@@ -56,10 +56,19 @@ func wireMachine(deps machineDependencies) cli.Services {
 			Streams: deps.Streams, Terminal: deps.Terminal,
 		}),
 		MachinePower: powered,
-		MachineTrust: enrollment.New(deps.State, deps.Trust, selection, enrollment.Options{
-			Observer: client, Confirmer: deps.Confirmer, Clock: time.Now,
-		}),
+		MachineTrust: enrollment.New(deps.State, deps.Trust, selection, trustOptions(deps, client)),
 	}
+}
+
+// trustOptions shows the trust plan on the process's standard output, ahead of
+// the prompt on standard error. A process with no output binds no presenter,
+// so enrollment refuses to ask rather than ask blind.
+func trustOptions(deps machineDependencies, observer enrollment.Observer) enrollment.Options {
+	options := enrollment.Options{Observer: observer, Confirmer: deps.Confirmer, Clock: time.Now}
+	if deps.Streams.Out != nil {
+		options.Presenter = cli.NewTrustPlanPresenter(deps.Streams.Out)
+	}
+	return options
 }
 
 // trustStore is the one host-key area both a session and enrollment reach. The

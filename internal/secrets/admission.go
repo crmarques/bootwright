@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -87,18 +88,36 @@ func validate(object api.Object, partial, kindDefault bool) []api.Issue {
 				add("source.generated."+field.Name, "generation parameter is not accepted by the declared Secret type")
 			}
 		}
-		if value := generated.Get("username"); value.Present() {
-			if strings.ContainsRune(value.Text(), ':') || strings.IndexFunc(value.Text(), unicode.IsSpace) >= 0 {
-				add("source.generated.username", "generated username must not contain whitespace or colon")
-			}
+		if value := generated.Get("username"); value.Present() && !generableUsername(value.Text()) {
+			add("source.generated.username", "generated username must be UTF-8 within the part byte limit and must not contain whitespace, colon or NUL")
 		}
-		if value := generated.Get("comment"); value.Present() {
-			if strings.TrimSpace(value.Text()) != value.Text() || strings.ContainsAny(value.Text(), "\r\n") {
-				add("source.generated.comment", "SSH comment must be one line without surrounding whitespace")
-			}
+		if value := generated.Get("comment"); value.Present() && !generableComment(value.Text()) {
+			add("source.generated.comment", "SSH comment must be one UTF-8 line within the part byte limit, without surrounding whitespace, NUL or another control character, a Unicode line or paragraph separator, a double quote or a backslash")
 		}
 	}
 	return issues
+}
+
+// generableUsername and generableComment repeat what generation refuses, so a
+// declaration it cannot honour is refused at validate instead. Material
+// imports this package and pins the agreement.
+func generableUsername(value string) bool {
+	return len(value) <= MaxPartBytes && utf8.ValidString(value) && !strings.ContainsAny(value, ":\x00") && strings.IndexFunc(value, unicode.IsSpace) < 0
+}
+
+func generableComment(value string) bool {
+	return len(value) <= MaxPartBytes && strings.TrimSpace(value) == value && SSHComment(value)
+}
+
+// SSHComment reports whether value can be an SSH public key's comment. The
+// fleet key's public half is written inside a double-quoted Kickstart value,
+// which Anaconda splits on every line break str.splitlines knows, so a
+// control character, a Unicode line or paragraph separator, a double quote
+// or a backslash would end that line or its quoting.
+func SSHComment(value string) bool {
+	return utf8.ValidString(value) && !strings.ContainsAny(value, `"\`) && strings.IndexFunc(value, func(r rune) bool {
+		return unicode.IsControl(r) || r == '\u2028' || r == '\u2029'
+	}) < 0
 }
 
 func fileSourceRemedy(name, kind string, kindDefault bool) string {

@@ -743,14 +743,21 @@ func (s *mediaStage) Fill(ctx context.Context, source media.Payload, limit int64
 		return media.Staged{}, state("media staging bounds are invalid")
 	}
 	s.filling = true
-	digest, size, err := hashStream(ctx, io.TeeReader(source, s.file), limit)
+	stage := &stageWriter{file: s.file}
+	digest, size, err := hashStream(ctx, io.TeeReader(source, stage), limit)
 	if err != nil {
+		if stage.err != nil && ctx.Err() == nil {
+			return media.Staged{}, mediaWriteFailure(stage.err)
+		}
 		return media.Staged{}, err
 	}
 	if err := s.store.checkpoint(ctx, checkpointBeforeMediaStagingSync); err != nil {
 		return media.Staged{}, err
 	}
 	if err := s.file.Sync(); err != nil {
+		if _, found := storeErrno(err); found {
+			return media.Staged{}, mediaWriteFailure(err)
+		}
 		return media.Staged{}, state("media staging durability could not be established")
 	}
 	after, err := statHandle(s.file)
@@ -1021,4 +1028,34 @@ func (a *mediaArea) remove(ctx context.Context, name string) error {
 
 func mediaFailure(message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation("media.store", message, "", remediation)
+}
+
+// stageWriter records the error the stage's own write returned, so a store
+// that cannot hold the image is never reported as a source that failed.
+type stageWriter struct {
+	file *os.File
+	err  error
+}
+
+func (w *stageWriter) Write(data []byte) (int, error) {
+	n, err := w.file.Write(data)
+	if err != nil && w.err == nil {
+		w.err = err
+	}
+	return n, err
+}
+
+// mediaWriteFailure names what the filesystem answered a stage write or sync:
+// a capacity answer as the room the media store lacks.
+func mediaWriteFailure(cause error) error {
+	const device = "inspect the filesystem that holds /var/lib/bootwright/media (its kernel log names the device error), then repeat the command"
+	errno, found := storeErrno(cause)
+	switch {
+	case !found:
+		return mediaFailure("the image could not be written to the media store", device)
+	case capacityErrno(errno):
+		return mediaFailure("the media store could not hold the image: "+errnoText(errno),
+			"free space, or raise the quota, on the filesystem that holds /var/lib/bootwright/media, then repeat the command")
+	}
+	return mediaFailure("the image could not be written to the media store: "+errnoText(errno), device)
 }

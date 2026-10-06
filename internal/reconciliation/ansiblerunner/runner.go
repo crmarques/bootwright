@@ -110,10 +110,13 @@ func inventory(placement machineref.Placement, interpreter string, paths map[str
 
 // variables carries the frozen request and the paths its material was written
 // to. Material values themselves never enter this file, and neither does an
-// escalation password: a placement connects as root and never escalates.
+// escalation password: a placement connects as root and never escalates. Each
+// number keeps its canonical text, which a float64 rounds above 2^53.
 func variables(request lifecycle.RunRequest, paths map[string]string) (map[string]any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(request.Canonical))
+	decoder.UseNumber()
 	decoded := map[string]any{}
-	if err := json.Unmarshal(request.Canonical, &decoded); err != nil {
+	if decoder.Decode(&decoded) != nil || decoded == nil || decoder.Decode(new(any)) != io.EOF {
 		return nil, failure("lifecycle.state", "the frozen adapter request could not be prepared", "")
 	}
 	material := map[string]any{}

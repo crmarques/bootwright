@@ -24,7 +24,9 @@ type discoveredFile struct {
 
 type discovery struct {
 	ctx         context.Context
+	session     FileSession
 	root        *os.File
+	rootReads   bool
 	identities  map[string]syscall.Stat_t
 	directories map[string]syscall.Stat_t
 	files       map[string]discoveredFile
@@ -34,19 +36,19 @@ type discovery struct {
 	markerPaths int
 }
 
-func (Reader) Read(ctx context.Context, paths []string) (desiredstate.Sources, error) {
-	return read(ctx, paths, false)
+func (r Reader) Read(ctx context.Context, paths []string) (desiredstate.Sources, error) {
+	return r.read(ctx, paths, false)
 }
 
 // ReadDirectory acquires exactly one directory through verified opened handles.
 // It rejects other root types before reading candidate bytes.
-func (Reader) ReadDirectory(ctx context.Context, path string) (desiredstate.Sources, error) {
-	return read(ctx, []string{path}, true)
+func (r Reader) ReadDirectory(ctx context.Context, path string) (desiredstate.Sources, error) {
+	return r.read(ctx, []string{path}, true)
 }
 
 // ReadFile acquires a single bounded regular input through the same verified
 // handles as graph discovery, without scanning directories or companion files.
-func (Reader) ReadFile(ctx context.Context, path string, maximum int) ([]byte, error) {
+func (r Reader) ReadFile(ctx context.Context, path string, maximum int) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -57,7 +59,12 @@ func (Reader) ReadFile(ctx context.Context, path string, maximum int) ([]byte, e
 	if err != nil {
 		return nil, failure("input.read", "input file path cannot be resolved", path)
 	}
-	scan, err := newDiscovery(ctx)
+	session, err := r.begin(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer session.Close()
+	scan, err := discoverThrough(ctx, session)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +93,7 @@ func (Reader) ReadFile(ctx context.Context, path string, maximum int) ([]byte, e
 	return files[0].Bytes(), nil
 }
 
-func read(ctx context.Context, paths []string, directoryOnly bool) (desiredstate.Sources, error) {
+func (r Reader) read(ctx context.Context, paths []string, directoryOnly bool) (desiredstate.Sources, error) {
 	if err := ctx.Err(); err != nil {
 		return desiredstate.Sources{}, err
 	}
@@ -109,7 +116,16 @@ func read(ctx context.Context, paths []string, directoryOnly bool) (desiredstate
 	if len(roots) == 0 {
 		return desiredstate.Sources{Roots: roots, Files: []desiredstate.SourceFile{}, Markers: []desiredstate.SourceFile{}}, nil
 	}
-	scan, err := newDiscovery(ctx)
+	named := ""
+	if len(roots) == 1 {
+		named = roots[0]
+	}
+	session, err := r.begin(ctx, named)
+	if err != nil {
+		return desiredstate.Sources{}, err
+	}
+	defer session.Close()
+	scan, err := discoverThrough(ctx, session)
 	if err != nil {
 		return desiredstate.Sources{}, err
 	}
@@ -133,13 +149,44 @@ func read(ctx context.Context, paths []string, directoryOnly bool) (desiredstate
 	return desiredstate.Sources{Roots: roots, Files: files, Markers: markers}, nil
 }
 
+// begin starts the one session every open of an acquisition goes through;
+// the caller closes it only after the final re-walk.
+func (r Reader) begin(ctx context.Context, path string) (FileSession, error) {
+	if r.Files == nil {
+		return processFiles{}, nil
+	}
+	session, err := r.Files.Begin(ctx)
+	if err != nil || session == nil {
+		if canceled := ctx.Err(); canceled != nil {
+			return nil, canceled
+		}
+		return nil, failure("input.read", "the input cannot be opened under the invoking account", path)
+	}
+	return session, nil
+}
+
+// newDiscovery opens with this process's own credentials, as a Reader bound to
+// no opener does.
 func newDiscovery(ctx context.Context) (*discovery, error) {
-	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	return discoverThrough(ctx, processFiles{})
+}
+
+// discoverThrough takes "/" from the session and records whether this process
+// reads as root: the session opens each descriptor, but every read through one
+// runs with this process's credentials.
+func discoverThrough(ctx context.Context, session FileSession) (*discovery, error) {
+	root, err := session.Root()
 	if err != nil {
+		if canceled := ctx.Err(); canceled != nil {
+			return nil, canceled
+		}
+		if denied(err) {
+			return nil, openDenied(err, "/")
+		}
 		return nil, failure("input.read", "input root cannot be opened safely", "")
 	}
 	return &discovery{
-		ctx: ctx, root: os.NewFile(uintptr(fd), "/"),
+		ctx: ctx, session: session, root: root, rootReads: syscall.Geteuid() == 0,
 		identities: make(map[string]syscall.Stat_t), directories: make(map[string]syscall.Stat_t),
 		files: make(map[string]discoveredFile), markers: make(map[string]discoveredFile),
 	}, nil
@@ -218,7 +265,7 @@ func (s *discovery) directory(path string, depth int) error {
 		if !entry.IsDir() && !yamlPath(child) && !marker {
 			continue
 		}
-		handle, stat, err := openChild(file, entry.Name(), pathHandle, child)
+		handle, stat, err := s.openChild(file, entry.Name(), pathHandle, child)
 		if err != nil {
 			return err
 		}
@@ -332,6 +379,9 @@ func (s *discovery) readFile(candidate discoveredFile, maximum, remaining int, s
 		if s.ctx.Err() != nil {
 			return nil, s.ctx.Err()
 		}
+		if denied(err) {
+			return nil, readDenied(s.rootReads, candidate.path)
+		}
 		return nil, failure("input.read", "input bytes cannot be read safely", candidate.path)
 	}
 	if len(data) > maximum {
@@ -387,7 +437,7 @@ func (s *discovery) openPath(path string, flags int) (*os.File, syscall.Stat_t, 
 	}()
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	if path == "/" {
-		return openChild(s.root, ".", flags, path)
+		return s.openChild(s.root, ".", flags, path)
 	}
 	current := ""
 	for index, name := range parts {
@@ -399,7 +449,7 @@ func (s *discovery) openPath(path string, flags int) (*os.File, syscall.Stat_t, 
 		if index != len(parts)-1 {
 			openFlags = pathHandle
 		}
-		file, stat, err := openChild(parent, name, openFlags, current)
+		file, stat, err := s.openChild(parent, name, openFlags, current)
 		if err != nil {
 			return nil, syscall.Stat_t{}, err
 		}
@@ -431,9 +481,14 @@ func (s *discovery) openPath(path string, flags int) (*os.File, syscall.Stat_t, 
 	return nil, syscall.Stat_t{}, failure("input.read", "input path cannot be opened safely", path)
 }
 
-func openChild(parent *os.File, name string, flags int, path string) (*os.File, syscall.Stat_t, error) {
-	fd, err := syscall.Openat(int(parent.Fd()), name, flags|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+// openChild asks the session for one name; the session never follows a link
+// at it, and the reader proves the descriptor it receives.
+func (s *discovery) openChild(parent *os.File, name string, flags int, path string) (*os.File, syscall.Stat_t, error) {
+	file, err := s.session.OpenAt(parent, name, flags)
 	if err != nil {
+		if canceled := s.ctx.Err(); canceled != nil {
+			return nil, syscall.Stat_t{}, canceled
+		}
 		code := "input.read"
 		if errors.Is(err, syscall.ENOENT) {
 			code = "input.not-found"
@@ -441,10 +496,11 @@ func openChild(parent *os.File, name string, flags int, path string) (*os.File, 
 			code = "input.symlink"
 		} else if errors.Is(err, syscall.ENOTDIR) {
 			code = "input.not-directory"
+		} else if denied(err) {
+			return nil, syscall.Stat_t{}, openDenied(err, path)
 		}
 		return nil, syscall.Stat_t{}, failure(code, "input path cannot be opened safely", path)
 	}
-	file := os.NewFile(uintptr(fd), path)
 	stat, err := statFile(file)
 	if err != nil {
 		file.Close()
@@ -489,6 +545,52 @@ func (s *discovery) verifyDirectories() error {
 	}
 	return s.ctx.Err()
 }
+
+// deniedToRoot is what a session's failure reports when the denied open ran
+// with root's credentials.
+type deniedToRoot interface{ DeniedToRoot() bool }
+
+func denied(err error) bool {
+	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
+}
+
+// openDenied names who the session's open was denied to: root only when the
+// open ran as root, which a root invoking account alone does.
+func openDenied(err error, path string) error {
+	var root deniedToRoot
+	return readDenied(errors.As(err, &root) && root.DeniedToRoot(), path)
+}
+
+func readDenied(root bool, path string) error {
+	if root {
+		return diagnostics.NewFailureWithRemediation("input.read", "root cannot read this input path (a network home with root squash?)", path,
+			"copy it to a local directory and name the copy")
+	}
+	return diagnostics.NewFailureWithRemediation("input.read", "the invoking account cannot read this input path (permission denied)", path,
+		"give the invoking account read access to it, or copy it to a directory that account can read")
+}
+
+// processFiles opens with this process's own credentials, for a Reader bound
+// to no opener.
+type processFiles struct{}
+
+func (processFiles) Root() (*os.File, error) {
+	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), "/"), nil
+}
+
+func (processFiles) OpenAt(parent *os.File, name string, flags int) (*os.File, error) {
+	fd, err := syscall.Openat(int(parent.Fd()), name, flags|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), name), nil
+}
+
+func (processFiles) Close() error { return nil }
 
 func statFile(file *os.File) (syscall.Stat_t, error) {
 	var stat syscall.Stat_t

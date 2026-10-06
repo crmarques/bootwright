@@ -28,8 +28,12 @@ type Report struct {
 	Pending  int          `json:"pending"`
 	Recorded int          `json:"recorded"`
 	Hosts    []HostReport `json:"hosts"`
+	// Presented marks a plan the operator was shown before confirming it, so
+	// the result need not repeat it.
+	Presented bool `json:"-"`
 }
 
+// HostReport names a replacement's superseded endpoint only when it moved.
 type HostReport struct {
 	Machine             string `json:"machine"`
 	Address             string `json:"address,omitempty"`
@@ -38,5 +42,7 @@ type HostReport struct {
 	KeyType             string `json:"keyType,omitempty"`
 	Fingerprint         string `json:"fingerprint,omitempty"`
 	PreviousFingerprint string `json:"previousFingerprint,omitempty"`
+	PreviousAddress     string `json:"previousAddress,omitempty"`
+	PreviousPort        int    `json:"previousPort,omitempty"`
 	Reason              string `json:"reason,omitempty"`
 }

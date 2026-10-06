@@ -9,10 +9,9 @@ import (
 
 // Options must come from the verified local account, never HOME or XDG variables.
 type Options struct {
-	UID, GID   int
-	Home       string
-	Groups     []uint32
-	Executable string
+	UID, GID int
+	Home     string
+	Groups   []uint32
 }
 
 type Store struct{ options Options }

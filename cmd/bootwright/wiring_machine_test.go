@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,10 +10,12 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/machine"
+	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/trust/enrollment"
 )
 
 // provedEvidence is the bare-metal proof the capability's own golden freezes,
@@ -71,5 +74,29 @@ func TestTheInstallationsReadTheBareMetalPinOfTheirOwnMachine(t *testing.T) {
 		done("metal-04", baremetal.Implementation, []byte(strings.Replace(string(proof), `"postcondition":true`, `"postcondition":false`, 1))),
 	}); err == nil {
 		t.Fatal("a proof that proves nothing was read as a pin")
+	}
+}
+
+// An interactive process shows the host-key plan on its own standard output
+// before the prompt; one without an output binds no presenter, and enrollment
+// then refuses to ask.
+func TestTrustEnrollmentPresentsOnTheProcessStandardOutput(t *testing.T) {
+	var out bytes.Buffer
+	options := trustOptions(machineDependencies{Streams: machineaccess.Streams{Out: &out}}, nil)
+	if options.Presenter == nil {
+		t.Fatal("an interactive process binds no trust plan presenter")
+	}
+	report := enrollment.Report{Context: "lab", Pending: 1, Hosts: []enrollment.HostReport{
+		{Machine: "node-a", Address: "192.0.2.10", Port: 22, Action: enrollment.ActionAdd, KeyType: "ssh-ed25519", Fingerprint: "SHA256:aaa"},
+	}}
+	if err := options.Presenter.PresentTrustPlan(context.Background(), report); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out.String(), "Host-key trust plan for context lab: 1 machine(s) checked, 1 pending\n") ||
+		!strings.Contains(out.String(), "SHA256:aaa") {
+		t.Fatalf("standard output = %q", out.String())
+	}
+	if trustOptions(machineDependencies{}, nil).Presenter != nil {
+		t.Fatal("a process without standard output bound a presenter")
 	}
 }
