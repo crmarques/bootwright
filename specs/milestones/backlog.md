@@ -81,24 +81,14 @@ Alias cell.
 | [B333](#b333) | new, 2026-10-05 | enabling | Infrastructure services | A DNSServer binds its endpoint address by default | D114: M1 keeps the wildcard default and names a colliding socket |
 | [B334](#b334) | new, 2026-10-05 | safety | Substrate | The emulated BMC serves TLS, binds loopback and runs confined | D115: M1 binds the examples' emulated BMCs to loopback |
 | [B335](#b335) | new, 2026-10-05 | enabling | Controller setup | An operator-run RHEL 9.8 resolution harness | Optional beside the RHEL 9.8 controller run D60 plans |
-| [B339](#b339) | new, 2026-10-05 (X39) | safety | Controller (privilege) | A second Ctrl-C ends an interactive elevated command under sudo's own terminal | Found in X39 after D56; parked under D48 |
-| [B340](#b340) | new, 2026-10-05 (X39) | safety | State reconciliation, with Machine | A bounded run refuses a request holding a template delimiter | Found in X39 after D56; parked under D48 |
 | [B341](#b341) | new, 2026-10-05 (X39) | enabling | State reconciliation | The template-delimiter refusal names the authored field and scopes native content | Found in X39 after D56; parked under D48; the scope needs an owner decision |
-| [B342](#b342) | new, 2026-10-05 (X39) | safety | Substrate and Machine | Libvirt bridge and interface-attachment names have the interface-name grammar | Found in X39 after D56; parked under D48 |
-| [B343](#b343) | new, 2026-10-05 (X39) | safety | Managed OS | The Kickstart guard refuses what admission refuses, and mirror repository IDs are tokens | Found in X39 after D56; parked under D48 |
-| [B344](#b344) | new, 2026-10-05 (X39) | defect | Secrets | A generated certificate's common name refuses at validate what generation refuses | Found in X39 after D56; parked under D48 |
 | [B345](#b345) | new, 2026-10-05 (X39) | enabling | Controller, with CLI | A sudoers denial in a human invocation names its remedy | Found in X39 after D56; parked under D48 |
 | [B346](#b346) | new, 2026-10-05 (X39) | enabling | Machine, with Trust | A FIPS-mode controller verifies the host key types it pins | Found in X39 after D56; parked under D48 |
-| [B347](#b347) | new, 2026-10-05 (X39) | defect | Trust, with CLI | A trust plan that cannot be written refuses naming why | Found in X39 after D56; parked under D48 |
 | [B348](#b348) | new, 2026-10-05 (X39) | enabling | Controller (privilege) | The invoking account resolves once per process, and directory data the passwd grammar refuses is named | Found in X39 after D56; parked under D48 |
-| [B349](#b349) | new, 2026-10-05 (X39) | defect | Controller setup | `setup --dry-run` reports a state root this build cannot use | Found in X39 after D56; parked under D48 |
-| [B350](#b350) | new, 2026-10-05 (X39) | defect | Workspace | Lifecycle store refusals name store-relative entries | Found in X39 after D56; parked under D48 |
-| [B351](#b351) | new, 2026-10-05 (X39) | defect | Desired state | Input reads over automounted and network filesystems name their cause | Found in X39 after D56; parked under D48 |
 | [B352](#b352) | new, 2026-10-05 (X39) | enabling | Workspace, with Controller | The invoking-account helper and real controller accounts proved as root | Found in X39 after D56; parked under D48 |
 | [B353](#b353) | new, 2026-10-05 (X39) | enabling | Each test's owner | Tests X39 left narrower than they read | Found in X39 after D56; parked under D48 |
 | [B354](#b354) | new, 2026-10-05 (X39) | enabling | Each spec's owner | Wording X39 left | Found in X39 after D56; parked under D48 |
 | [B355](#b355) | new, 2026-10-05 (X39) | enabling | Architecture | Knowledge lessons X39 left | Found in X39 after D56; parked under D48 |
-| [B356](#b356) | new, 2026-10-05 (X39) | defect | Workspace, with Controller setup | A partial controller bundle file an earlier build left under its final name has an exit | Found in X39 after D56; parked under D48 |
 
 ### B96
 
@@ -442,29 +432,9 @@ The emulated BMC runs as root, unconfined, with the libvirt socket, and serves p
 
 No harness exercises RHEL 9.8's dnf 4.14, rpm 4.16, Python 3.9 and keyring import, so setup's dnf4 path has never run on RHEL (found by the 2026-10-05 audit); [B288](m1.md#b288) marks RHEL 9.8 admitted but not yet run, and a run on a disposable RHEL 9.8 controller qualifies it (D60). An operator-run harness in a ubi9 container could exercise resolution, inspection and signatures. **Exit evidence:** the harness and a recorded run of it.
 
-### B339
-
-Under sudo's `use_pty`, its default since 1.9.14, an interactive invocation hands sudo the terminal and sudo runs the elevated child in the foreground of a pseudo-terminal of its own, so a second Ctrl-C reaches only the child, which finishes its bounded cancellation instead of being killed: the supervisor, which kills sudo on a second signal it receives, never sees it (found in X39, which narrowed the operator guide and the CLI spec to say so). The child would escalate on its own second signal only when it proves it is the foreground process group of a pseudo-terminal other than the supervisor's terminal, where each Ctrl-C reaches it once, never without a pty or in a background pty, where sudo hands it one interrupt twice. **Exit evidence:** a real-sudo run on Fedora 43 (`use_pty`) and on RHEL 9.8 in which a second Ctrl-C ends the command at once and a single Ctrl-C never does.
-
-### B340
-
-Bounded runs, the `machine` power commands and the power read of `machine list`, are never planned, so only the runners' data marking guards the authored strings their requests carry, such as BMC endpoint values, and the plan's refusal of a template delimiter or a key ansible-core reserves never reaches them (found in X39). The same refusal over a bounded run's frozen request, before its runtime is lent, would name such a value. **Exit evidence:** a power command and a power read whose request holds a delimiter or a reserved key refused before any binding, naming the Machine and the field.
-
 ### B341
 
 The plan's template-delimiter refusal also scans native passthrough content, such as a composed NMState document, overrides and a StorageCluster's service specification, so legitimate native syntax holding `{#`, such as a shell's `${#var}`, cannot be planned; and the refusal names the block's object and request path, for example every service a controller `noProxy` entry reaches or a line of a Machine's Kickstart, rather than the authored object and field the operator edits (found in X39). B244 accepted the trade-off; a reviewed escape or a per-field scope for native content is the owner's decision. **Exit evidence:** that decision with its tests, and refusals naming the authored object and field.
-
-### B342
-
-An InfraProvider's `networkAttachments[].libvirt.bridge` admits any non-empty string and is rendered unescaped into an XML attribute of the libvirt network and domain definitions, and a Machine's `spec.network.interfaceAttachments[].interface` has no interface-name rule and no row in the machines spec's network table (found in X39); [B294](m1.md#b294) corrects the kind tables but gives neither a grammar. Both would take the Linux interface-name rule X39 added, and the two templates would escape the attribute, which moves the automation digest. **Exit evidence:** admission refusing a bridge or attachment interface name that is not a Linux interface name, template goldens escaping the attribute, and the table row.
-
-### B343
-
-The Kickstart renderer's guard admits an empty package source, which renders no line, and a package entry starting with `-`, which only admission refuses; and an Anaconda installation's `packageSource.mirror.repositories[].id` has no grammar beyond being non-empty, while the mirror arm is still refused as unsupported (found in X39). **Exit evidence:** renderer refusals of an empty package source and of a leading `-`, and an admission refusal of a mirror repository ID that is not a Kickstart token, before the mirror arm is supported.
-
-### B344
-
-A generated certificate's `source.generated.commonName` is only required at admission, so a value holding NUL, invalid UTF-8 or more bytes than the part limit passes validate and plan and is refused by certificate generation (found in X39, the rule X39 gave generated usernames and comments). **Exit evidence:** admission refusals agreeing with generation, pinned by an agreement test.
 
 ### B345
 
@@ -474,25 +444,9 @@ In a human invocation sudo's sudoers denial, such as `Sorry, user ... is not all
 
 The libvirt guest-agent identity proof and `machine rsh` and `exec` pin `ssh-ed25519` host keys, and it is unverified whether a FIPS-mode RHEL 9.8 controller's OpenSSH verifies an explicitly pinned Ed25519 key; if it refuses, lab-rhel cannot complete on such a controller and the identity path needs the key-type work [B73](m4.md#b73) does for physical installation (found in X39). **Exit evidence:** a recorded check on the D109 controller in FIPS mode before the real-hardware run, and, if it refuses, a pinned type the controller's policy admits on that path.
 
-### B347
-
-A failed or short write of the `machine trust` plan stops before the prompt but reaches the runner as an error with no diagnostic, so it ends as `runtime.internal` naming an unsupported result, as a failed lifecycle plan write does until [B287](m1.md#b287) (found in X39). **Exit evidence:** a failed trust plan write refusing with its own diagnostic and remedy.
-
 ### B348
 
 Each resolution of the invoking account runs `getent` three times, and the composition resolves lazily for selection, home, UID and each opener session, although the invoking identity cannot change within one invocation; and a directory account whose GECOS field holds `:` or a line break is refused as ambiguous with no remedy that names the field (found in X39). **Exit evidence:** one resolution per process, counted by a test, and a refusal naming the passwd field the name service returned.
-
-### B349
-
-`setup --dry-run` reads no store, so it previews success over a state root this build cannot use: one that is not `root:root` 0700, or one an earlier build created (found in X39). An unprivileged inspection of the state root reported as a not-ready row would close it. **Exit evidence:** dry runs over a wrong mode and over an earlier build's root reporting the row with the store refusal's remedy.
-
-### B350
-
-The lifecycle operation area's unsafe-entry refusal names the absolute path under the state root, against the contexts spec's rule that refusals name store-relative entries; and reading the registry lists the held root handle's entries through that handle, which consumes its directory offset, harmless while the handle serves only as a directory descriptor (found in X39). **Exit evidence:** the refusal naming a store-relative entry, and a listing that leaves the held handle's offset alone.
-
-### B351
-
-The input reader opens every ancestor with `O_PATH` and no `O_DIRECTORY`, which does not trigger an autofs browse-mode mount point whose mount expired, so a later lookup beneath it fails; and directory enumeration falls back to `fstatat` with this process's own credentials when the filesystem reports no entry type, so on an NFSv3 mount without READDIRPLUS under root squash the elevated child refuses that the input directory cannot be enumerated, naming no cause (found in X39). **Exit evidence:** a probe on an automounted path, and an enumeration whose fallback is denied refusing with the cause and the remedy.
 
 ### B352
 
@@ -509,10 +463,6 @@ The architecture spec says `validate -f`, `context init` and `context update` re
 ### B355
 
 Two lessons have no knowledge page: pykickstart splits a file as Python's `str.splitlines` does, so vertical tab, form feed, the file, group and record separators, NEL and U+2028 and U+2029 start lines, tokenizes command lines with `shlex` comments enabled and cuts `%packages` lines at `#`; and one terminal hangup delivers SIGHUP twice to a foreground job, once from the shell and once from the kernel (found in X39). **Exit evidence:** the pages, indexed by symptom.
-
-### B356
-
-A controller bundle write by a build before X39 that was killed between creating its file and syncing it left a truncated file under its final name in an unsealed bundle area; X39 stages each write and renames it into place, so no new one appears, but the exact setup replay over such an area refuses the file as unsafe or as changed during inspection, with no remedy (found in X39). **Exit evidence:** a setup replay over such an area that refuses with a named exit, or that removes the file under the area's write capability, after which the next setup proceeds.
 
 ## Retired
 
@@ -690,3 +640,4 @@ Requires cell as `owner decision: <question>`.
 - **D113** (2026-10-05, accepted by the owner from the session's recommendations): B305: generated serving certificates stay P-256; B305 records the iBMC's RSA premise with its check and, as the workaround, a `contextStore` RSA-2048 certificate set with `secret set`; a `keyType` for generation follows only if that check fails.
 - **D114** (2026-10-05, accepted by the owner from the session's recommendations): B299: a DNSServer keeps its wildcard bind default, the new pre-start check names a colliding socket, and the examples and docs declare explicit binds; a derived default is parked as B333.
 - **D115** (2026-10-05, accepted by the owner from the session's recommendations): B301: the examples bind their emulated BMCs to loopback, and the docs state that a privileged or cleartext-credential listener binds loopback or a host-only address unless its network is trusted; emulator TLS, a refusal of a non-loopback bind address and a confined SELinux type are parked as B334.
+- **D116** (2026-10-06, the owner): every safety or defect follow-up a slice finds in M1's journeys joins M1, folded into the next fitting slice or a final sweep slice before the closing run (D59); enabling and wording follow-ups stay parked. This amends D56 and D48 for follow-ups found from X39 on: a safety or defect follow-up found in M1's journeys joins M1 on the planned sweep slice X46, or on an earlier planned slice whose lane already owns its files, with the Alias `new, <date> (<slice>); attached to M1 on <date> (D116)`; an enabling, wording, test-depth or knowledge follow-up stays parked under D48. M1 takes X39's parked safety and defect follow-ups B339, B340, B342 to B344, B347, B349 to B351 and B356 on X46.

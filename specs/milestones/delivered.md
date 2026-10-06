@@ -1894,9 +1894,9 @@ run.
 **Constraints left behind:** the helper path as root, directory accounts and
 a root-squashed home are proved only unprivileged
 ([B352](backlog.md#b352)), and a second Ctrl-C under a foreground `use_pty`
-leaves the cancellation running ([B339](backlog.md#b339)). A host an
+leaves the cancellation running ([B339](m1.md#b339)). A host an
 earlier build already left with a partial bundle file under its final name
-still refuses that replay ([B356](backlog.md#b356)); X39 prevents new
+still refuses that replay ([B356](m1.md#b356)); X39 prevents new
 ones. Tracked elsewhere:
 `--ssh-id-file` ([B283](m1.md#b283)); `status` over a revision a new rule
 refuses ([B226](backlog.md#b226)); a bind-time refusal naming its Secret
