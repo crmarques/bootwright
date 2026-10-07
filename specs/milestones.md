@@ -28,7 +28,7 @@ every other command `bootwright --help` lists returns the
 No slice is active; X42 is delivered, and X43 is next under D56.
 
 - **Next for agents:** open and deliver X43; X24, M4's X45 (D60),
-  X46, whose B357 and B372 await owner decisions, and X44 follow in that
+  X46 and X44 follow in that
   order.
 - **Next for operator:** for [lab-sno](../examples/lab-sno/README.md) and
   [B61](milestones/m3.md#b61), on a clean build that contains X21, first destroy
