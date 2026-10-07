@@ -1,11 +1,11 @@
 package secretstore
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"slices"
+
+	"github.com/crmarques/bootwright/internal/canonicaljson"
 )
 
 type Access struct {
@@ -243,21 +243,17 @@ func readSelectorRecord(ctx context.Context, area Area, contextName string) (Sel
 }
 
 func EncodeCanonical(value any) ([]byte, error) {
-	b, err := json.Marshal(value)
+	data, err := canonicaljson.Encode(value, canonicaljson.Line)
 	if err != nil {
 		return nil, Failure("store.corrupt", "secret store record could not be encoded")
 	}
-	return append(b, '\n'), nil
+	return data, nil
 }
 
 func DecodeCanonical(data []byte, value any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(value); err != nil {
+	if err := canonicaljson.Decode(data, value, canonicaljson.Line); errors.Is(err, canonicaljson.ErrMalformed) {
 		return errors.New("invalid private record")
-	}
-	canonical, err := EncodeCanonical(value)
-	if err != nil || !bytes.Equal(canonical, data) {
+	} else if err != nil {
 		return errors.New("noncanonical private record")
 	}
 	return nil

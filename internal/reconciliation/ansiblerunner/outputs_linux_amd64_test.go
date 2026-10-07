@@ -39,7 +39,7 @@ func outputRunner(t *testing.T, script string, requested *map[string]any) Runner
 			}
 		}
 		return exec.Command("/bin/sh", "-c", `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+script+`
-printf '{"phase":"completed","outcome":"changed","evidence":{}}\n' >&3`, "adapter", job)
+printf '{"evidence":{"absent":false},"outcome":"changed","phase":"completed"}\n' >&3`, "adapter", job)
 	}
 	return runner
 }

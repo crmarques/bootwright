@@ -5,11 +5,11 @@
       "id": "server-lab",
       "description": "serve artifacts for lab",
       "stage": "infra-components",
-      "dependencies": null,
+      "dependencies": [],
       "impacts": [
         "create-container-unit lab"
       ],
-      "consumes": null,
+      "consumes": [],
       "groups": [
         {
           "id": "start-service",

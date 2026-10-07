@@ -24,6 +24,18 @@ options:
     description: The status a progress phase reports for its group.
     type: str
     required: false
+  reason:
+    description:
+      - The refusal a refused phase names to the runner before the run fails,
+        which the runner reports as the server's own diagnostic for the port it
+        names. Only C(foreign-listener), a socket something other than this
+        server holds where it binds.
+    type: str
+    required: false
+  port:
+    description: The port, one the frozen request binds, a refused phase names.
+    type: int
+    required: false
   outcome:
     description: The terminal outcome a completion phase publishes.
     type: str

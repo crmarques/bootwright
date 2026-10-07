@@ -53,12 +53,6 @@ func refusedProfile(profile api.Object) (reason, remediation string) {
 	return "", ""
 }
 
-// Unsupported lists every installation this contract cannot realize, through
-// the Machine that selects it.
-func Unsupported(catalog api.Catalog) []string {
-	return lifecycle.Identities(Refusals(catalog))
-}
-
 // Refusals refuses every installation this contract cannot realize. A target,
 // its network, a profile arm or the servers it publishes through are refused
 // in that order, and only the first refusal a Machine meets is named, through

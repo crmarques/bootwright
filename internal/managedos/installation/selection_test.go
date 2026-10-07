@@ -208,7 +208,7 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 		}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			unsupported := Unsupported(labCatalog(test.profile))
+			unsupported := lifecycle.Identities(Refusals(labCatalog(test.profile)))
 			if !slices.Equal(unsupported, []string{"Machine/rhel-01"}) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
@@ -218,7 +218,7 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 			}
 		})
 	}
-	if unsupported := Unsupported(labCatalog()); len(unsupported) != 0 {
+	if unsupported := lifecycle.Identities(Refusals(labCatalog())); len(unsupported) != 0 {
 		t.Fatalf("the supported shape reported %v", unsupported)
 	}
 	// A profile that declares FIPS disabled has selected nothing, so it
@@ -226,7 +226,7 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 	disabled := installProfile(field("customizations", customizations.With("security", api.MapValue(
 		field("fips", api.MapValue(field("enabled", api.BoolValue(false)))),
 	))))
-	if unsupported := Unsupported(labCatalog(disabled)); len(unsupported) != 0 {
+	if unsupported := lifecycle.Identities(Refusals(labCatalog(disabled))); len(unsupported) != 0 {
 		t.Fatalf("a disabled FIPS declaration reported %v", unsupported)
 	}
 }
@@ -242,7 +242,7 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := labCatalog(metalProvider(), server(hints))
-			if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, err := Requests(catalog, "controller", testContext)
@@ -265,7 +265,7 @@ func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
 	metal = metal.WithSpec(metal.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
 		"hardware", "management", "bmc", "virtualMedia", "tls", "trust"))
 	catalog := labCatalog(metalProvider(), metal)
-	if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
+	if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
 	_, _, err := Requests(catalog, "controller", testContext)
@@ -327,7 +327,7 @@ func TestImportCertificateNeedsAnHttpsImageAndItsCertificate(t *testing.T) {
 // installation refuses before registration, even one naming its root device.
 func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) {
 	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))))
-	if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
+	if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
 	_, _, err := Requests(catalog, "controller", testContext)
@@ -381,7 +381,7 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := labCatalog(test.overrides...)
-			if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{test.machine}) {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{test.machine}) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, err := Requests(catalog, "controller", testContext)
@@ -521,13 +521,13 @@ func TestPasswordAuthenticationTrueRefuses(t *testing.T) {
 	if refused := Refusals(labCatalog(profile)); !slices.Equal(refused, want) {
 		t.Fatalf("refusals = %+v, want %+v", refused, want)
 	}
-	if unsupported := Unsupported(labCatalog(profile)); !slices.Equal(unsupported, []string{"Machine/rhel-01"}) {
+	if unsupported := lifecycle.Identities(Refusals(labCatalog(profile))); !slices.Equal(unsupported, []string{"Machine/rhel-01"}) {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
 	disabled := installProfile(field("customizations", installProfile().Spec().Get("customizations").With("ssh", api.MapValue(
 		field("passwordAuthentication", api.BoolValue(false)),
 	))))
-	if unsupported := Unsupported(labCatalog(disabled)); len(unsupported) != 0 {
+	if unsupported := lifecycle.Identities(Refusals(labCatalog(disabled))); len(unsupported) != 0 {
 		t.Fatalf("passwordAuthentication false reported %v", unsupported)
 	}
 }

@@ -8,20 +8,11 @@ invoking Bootwright process.
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
+from ansible_collections.bootwright.core.plugins.module_utils.adapter_protocol import publishes, unreached
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
     emit,
 )
-
-PHASES = ("loaded", "group", "completed")
-GROUP_STATUSES = ("running", "ok", "failed", "skipped")
-OUTCOMES = ("changed", "unchanged")
-HEX = set("0123456789abcdef")
-
-
-def digest(value):
-    if not isinstance(value, str) or len(value) != 64 or set(value) - HEX:
-        raise ValueError("digest")
-    return value
 
 
 def recorded(value):
@@ -40,7 +31,7 @@ def presence(arguments, request_digest):
         "inputs": recorded(observation.get("inputs")),
         "installer": recorded(observation.get("installer")),
         "postcondition": False,
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "work": bool(observation.get("work")),
     }
     evidence["postcondition"] = bool(
@@ -58,7 +49,7 @@ def absence(arguments, request_digest):
         "inputs": "",
         "installer": "",
         "postcondition": bool(gone),
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "work": False,
     }
 
@@ -85,14 +76,25 @@ def unproved(evidence):
     return names
 
 
-def publishes(evidence, observed):
-    """Whether this phase may publish evidence proving no postcondition.
+def completion(arguments):
+    """The evidence one completion publishes, or what it names when unmet."""
+    request_digest = arguments.get("digest")
+    if arguments.get("removed"):
+        evidence = absence(arguments, request_digest)
+        unmet, verb = remaining(arguments), "still present"
+    else:
+        evidence = presence(arguments, request_digest)
+        unmet, verb = unproved(evidence), "not proved"
+    if publishes(evidence, arguments.get("observed")):
+        return evidence, None
+    return evidence, unreached("the boot media", verb, unmet)
 
-    A read-only observation reports what it found, including a target that is
-    part way realized, because the engine resolves an unproved effect from that
-    evidence. A mutation has to reach its postcondition or fail.
-    """
-    return bool(evidence["postcondition"]) or bool(observed)
+
+CAPABILITY = adapter_protocol.Capability(
+    "boot-media",
+    "the boot-media capability result could not be published",
+    completion,
+)
 
 
 class ActionModule(ActionBase):
@@ -101,36 +103,4 @@ class ActionModule(ActionBase):
 
     def run(self, tmp=None, task_vars=None):
         del tmp
-        arguments = self._task.args
-        phase = arguments.get("phase")
-        if phase not in PHASES:
-            return {"failed": True, "msg": "unsupported boot-media protocol phase"}
-        try:
-            if phase == "loaded":
-                emit({"phase": "loaded"}, acknowledge=True)
-                return {"changed": False}
-            if phase == "group":
-                status = arguments.get("status")
-                if status not in GROUP_STATUSES:
-                    raise ValueError("group status")
-                emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
-                return {"changed": False}
-            outcome = arguments.get("outcome")
-            if outcome not in OUTCOMES:
-                raise ValueError("outcome")
-            request_digest = arguments.get("digest")
-            if arguments.get("removed"):
-                evidence = absence(arguments, request_digest)
-                unmet, verb = remaining(arguments), "still present"
-            else:
-                evidence = presence(arguments, request_digest)
-                unmet, verb = unproved(evidence), "not proved"
-            if not publishes(evidence, arguments.get("observed")):
-                return {
-                    "failed": True,
-                    "msg": "the boot media did not reach its postcondition; %s: %s" % (verb, ", ".join(unmet) or "unknown"),
-                }
-            emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
-            return {"changed": False}
-        except (ValueError, TypeError, OSError):
-            return {"failed": True, "msg": "the boot-media capability result could not be published"}
+        return adapter_protocol.publish(self._task.args, CAPABILITY, emit)

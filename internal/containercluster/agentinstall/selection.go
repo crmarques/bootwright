@@ -33,12 +33,6 @@ type Requirements struct {
 	NTPServers      []string
 }
 
-// Unsupported lists every selected cluster this contract cannot install, in
-// canonical order, so an operation refuses before it registers anything.
-func Unsupported(catalog api.Catalog) []string {
-	return lifecycle.Identities(Refusals(catalog))
-}
-
 // Refusals refuses every selected cluster this contract cannot install, with
 // the reason and remedy its request derivation would give, so an operation
 // refuses before registration saying why and what to change.

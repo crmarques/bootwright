@@ -1635,3 +1635,27 @@ func (b *listedThen) Bindings(ctx context.Context, request custody.BindingsReque
 	}
 	return listed, err
 }
+
+// A removal that replaces a failed removal names the one it replaces, which
+// status reads for what that attempt did, while a fresh removal over an apply
+// replaces no removal and names none.
+func TestAReplacementRecordsTheRemovalItReplaces(t *testing.T) {
+	h := newHarness(t, "alpha", "beta")
+	applied := completeApply(t, h)
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	if _, err := destroy(h); err == nil {
+		t.Fatal("a removal whose block failed reported success")
+	}
+	first, _ := durableOperation(t, h)
+	if first.Verb != reconciliation.Destroy || first.State != reconciliation.OperationFailed || first.Source != applied || first.Replaces != "" {
+		t.Fatalf("the fresh removal = %s %s of %s replacing %q, want a failed removal of %s replacing none", first.State, first.Verb, first.Source, first.Replaces, applied)
+	}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	if _, err := destroy(h); err == nil {
+		t.Fatal("a removal whose block failed reported success")
+	}
+	second, _ := durableOperation(t, h)
+	if second.ID == first.ID || second.Source != applied || second.Replaces != first.ID {
+		t.Fatalf("the replacement %s of %s replaces %q, want a new removal of %s replacing %s", second.ID, second.Source, second.Replaces, applied, first.ID)
+	}
+}

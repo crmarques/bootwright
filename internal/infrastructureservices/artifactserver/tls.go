@@ -38,7 +38,30 @@ type ServingCertificate struct {
 // material, a material digest of the private key, or the reason in terms a
 // caller could use to probe the bytes.
 func ValidateServingCertificate(material secrets.Material, secret, contextName string, addresses []string, now time.Time) (ServingCertificate, error) {
-	remedy := servingRemedies{secret: secret, context: contextName}
+	return validateServing(material, secret, contextName, addresses, now, true)
+}
+
+// ProveServingCertificate proves the material a fresh apply just bound by the
+// same checks, before the operation registers. Nothing registered, and the
+// fresh binding is released, so each remedy ends by applying again.
+func ProveServingCertificate(material secrets.Material, secret, contextName string, addresses []string, now time.Time) error {
+	_, err := validateServing(material, secret, contextName, addresses, now, false)
+	return err
+}
+
+// BoundServingMaterial is the material of Secret secret the operation bound,
+// or a refusal naming that Secret when this attempt cannot read it.
+func BoundServingMaterial(material map[string]secrets.Material, secret, contextName string) (secrets.Material, error) {
+	value, found := material[secret]
+	if !found {
+		return secrets.Material{}, secrets.Refusal("store", "the serving certificate Secret "+secret+" this operation bound is not available to this attempt", contextName, secret,
+			"run bootwright status --context "+contextName+" and repeat the command it names, which reopens this operation's Secret bindings")
+	}
+	return value, nil
+}
+
+func validateServing(material secrets.Material, secret, contextName string, addresses []string, now time.Time, registered bool) (ServingCertificate, error) {
+	remedy := servingRemedies{secret: secret, context: contextName, registered: registered}
 	certificatePEM, ok := material.Part(secrets.CertificatePart)
 	if !ok {
 		return ServingCertificate{}, remedy.refuse("the serving certificate Secret has no certificate part", remedy.replace("store the certificate and its private key"))
@@ -88,8 +111,9 @@ func ValidateServingCertificate(material secrets.Material, secret, contextName s
 // commands that store usable material in its context, and the exit that makes
 // an apply use it.
 type servingRemedies struct {
-	secret  string
-	context string
+	secret     string
+	context    string
+	registered bool
 }
 
 func (r servingRemedies) refuse(message, remedy string) error {
@@ -111,9 +135,13 @@ func (r servingRemedies) renew() string {
 	return "bootwright secret generate --name " + r.secret + " --renew" + r.contextFlag()
 }
 
-// exit is the way out of an apply whose bound material refused: the operation
-// keeps the Secret version it bound, so it is destroyed and applied again.
+// exit is the way out of an apply whose bound material refused: a registered
+// operation keeps the Secret version it bound, so it is destroyed and applied
+// again, while a refusal before registration released its binding.
 func (r servingRemedies) exit() string {
+	if !r.registered {
+		return "then apply again with bootwright apply" + r.contextFlag()
+	}
 	return "then destroy this apply with bootwright destroy" + r.contextFlag() + " and apply again"
 }
 

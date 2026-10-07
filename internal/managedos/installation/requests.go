@@ -175,15 +175,7 @@ func (r Request) Canonical() ([]byte, error) {
 }
 
 func DecodeRequest(data []byte) (Request, error) {
-	request, err := reconciliation.Thaw[Request](data, "installation")
-	if err != nil {
-		return Request{}, err
-	}
-	if request.Version != requestVersion {
-		return Request{}, refusal("lifecycle.state",
-			"the frozen installation request has an unsupported version: "+request.Version, "")
-	}
-	return request, reconciliation.ProveCanonical(data, request, "installation")
+	return reconciliation.ThawVersion[Request](data, "installation", requestVersion)
 }
 
 // Marker is the proof a completed installation leaves on the guest. Go builds

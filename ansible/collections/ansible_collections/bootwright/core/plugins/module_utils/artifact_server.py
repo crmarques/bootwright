@@ -7,6 +7,8 @@ import os
 import socket
 import ssl
 
+from ansible_collections.bootwright.core.plugins.module_utils import host_sockets
+
 SYSTEMCTL = "/usr/bin/systemctl"
 PODMAN = "/usr/bin/podman"
 
@@ -109,6 +111,19 @@ def probe(target):
             fingerprint = hashlib.sha256(presented).hexdigest() if presented else ""
             return {"address": address, "fingerprint": fingerprint, "name": target["name"], "port": port,
                     "protocol": protocol, "status": status_line(secured, address)}
+
+
+def foreign(request, observation, read=None):
+    """Every socket another daemon holds on a port this server binds.
+
+    A unit that is active, or a container that exists, may hold the socket
+    itself: Quadlet runs its containers with --rm, so a present container is a
+    running one. Only a server with neither proves the socket foreign.
+    """
+    if observation.get("unit") == "active" or observation.get("containerPresent"):
+        return []
+    ports = sorted({int(listener["port"]) for listener in request["listeners"]})
+    return host_sockets.foreign_sockets(request["bindAddress"], ports, ("tcp",), read or host_sockets.table_lines)
 
 
 def probe_targets(request):

@@ -145,46 +145,6 @@ func validateController(environment api.Object, catalog api.Catalog) []api.Issue
 			}
 		}
 	}
-	for _, issue := range controllerRouteIssues(controller, catalog) {
-		if len(issues) < 999 {
-			issues = append(issues, issue)
-		}
-	}
-	return issues
-}
-
-// controllerRouteIssues holds the controller Machine's route to the one
-// grammar every acquisition route shares: each bypass entry the Machine
-// declares and each endpoint of the external Proxy it selects. A value the
-// schema already refuses is left to it, and the executable's own limits on
-// the route are the controller's to refuse, never the API's.
-func controllerRouteIssues(controller api.Object, catalog api.Catalog) []api.Issue {
-	issues := []api.Issue{}
-	add := func(message, remediation string) {
-		issues = append(issues, api.Issue{Code: "api.value", Field: "$.spec.controller.machineRef", Message: message, Remediation: remediation})
-	}
-	choice := controller.Spec().Get("proxy")
-	for index, entry := range choice.Get("noProxy").Items() {
-		if entry.Type() != api.String || entry.Text() == "" || api.ValidLexical("proxy-bypass", entry.Text()) {
-			continue
-		}
-		field := "spec.proxy.noProxy[" + strconv.Itoa(index) + "]"
-		add("the controller route requires "+field+" of "+controller.Identity()+" to be a proxy bypass entry",
-			"write "+field+" on "+controller.Identity()+" as *, a host name, a .domain or *.domain suffix, an IP address or a CIDR block, each name or address optionally with :port, in at most 1024 bytes")
-	}
-	ref := choice.Get("proxyRef")
-	proxy, found := catalog.Find(api.Proxy, ref.Text())
-	if ref.Type() != api.String || !found || proxy.Spec().Get("management").Text() != "external" {
-		return issues
-	}
-	for _, name := range []string{"httpProxy", "httpsProxy"} {
-		value := proxy.Spec().Get("connection", name)
-		if value.Type() != api.String || !api.ValidLexical("http-url", value.Text()) || api.ValidLexical("proxy-endpoint", value.Text()) {
-			continue
-		}
-		add("the controller route requires spec.connection."+name+" of "+proxy.Identity()+", which "+controller.Identity()+" selects, to be a bare HTTP or HTTPS proxy endpoint",
-			"set spec.connection."+name+" on "+proxy.Identity()+" to a bare http or https endpoint such as http://proxy.example.test:3128, with no userinfo, path, query or fragment")
-	}
 	return issues
 }
 

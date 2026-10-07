@@ -1,0 +1,138 @@
+[
+  {
+    "case": "loaded",
+    "records": [
+      [
+        {
+          "phase": "loaded"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "changed": false,
+      "_ansible_no_log": true
+    }
+  },
+  {
+    "case": "continue",
+    "records": [
+      [
+        {
+          "phase": "continue"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "changed": false,
+      "_ansible_no_log": true
+    }
+  },
+  {
+    "case": "unknown phase",
+    "records": [],
+    "result": {
+      "changed": false,
+      "_ansible_no_log": true,
+      "failed": true,
+      "msg": "Controller dependency protocol or evidence was refused: request"
+    }
+  },
+  {
+    "case": "loaded with arguments",
+    "records": [],
+    "result": {
+      "changed": false,
+      "_ansible_no_log": true,
+      "failed": true,
+      "msg": "Controller dependency protocol or evidence was refused: request"
+    }
+  },
+  {
+    "case": "prepared",
+    "records": [
+      [
+        {
+          "phase": "prepared",
+          "preparation": {
+            "inventorySHA256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "addedSources": []
+          }
+        },
+        true
+      ]
+    ],
+    "result": {
+      "changed": false,
+      "_ansible_no_log": true,
+      "preparation": {
+        "inventorySHA256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "addedSources": []
+      },
+      "apply_native": false
+    }
+  },
+  {
+    "case": "completed",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "unchanged",
+          "evidence": {
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "before": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "after": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "planDigest": "",
+            "added": [],
+            "tools": [],
+            "postcondition": true
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false,
+      "_ansible_no_log": true
+    }
+  },
+  {
+    "case": "completed unproving",
+    "records": [],
+    "result": {
+      "changed": false,
+      "_ansible_no_log": true,
+      "failed": true,
+      "msg": "Controller dependency protocol or evidence was refused: native postcondition"
+    }
+  },
+  {
+    "case": "malformed",
+    "records": [],
+    "result": {
+      "changed": false,
+      "_ansible_no_log": true,
+      "failed": true,
+      "msg": "Controller dependency protocol or evidence was refused: request"
+    }
+  },
+  {
+    "case": "channel refused",
+    "records": [
+      [
+        {
+          "phase": "loaded"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "changed": false,
+      "_ansible_no_log": true,
+      "failed": true,
+      "msg": "Controller dependency protocol or evidence was refused: OSError"
+    }
+  }
+]

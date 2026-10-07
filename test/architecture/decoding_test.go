@@ -88,7 +88,7 @@ func directJSONReadings(syntax *ast.File) int {
 // TestNoLifecycleConsumerReadsJSONItself holds every application package that
 // consumes the lifecycle port vocabulary to the one strict reading each format
 // has: a frozen request is frozen through reconciliation.Freeze and read back
-// through Thaw and ProveCanonical, and an adapter's evidence is read through
+// through ThawVersion, and an adapter's evidence is read through
 // reconciliation.DecodeEvidence. What a request selects and what its evidence
 // proves stay the capability's own.
 func TestNoLifecycleConsumerReadsJSONItself(t *testing.T) {
@@ -110,7 +110,7 @@ func TestNoLifecycleConsumerReadsJSONItself(t *testing.T) {
 	}
 	for _, source := range sources {
 		if count := directJSONReadings(source.syntax); consumers[source.owner] && count != 0 {
-			t.Errorf("%s: %d direct JSON readings; thaw a frozen request through reconciliation.Thaw and ProveCanonical, and decode evidence through reconciliation.DecodeEvidence", source.path, count)
+			t.Errorf("%s: %d direct JSON readings; thaw a frozen request through reconciliation.ThawVersion, and decode evidence through reconciliation.DecodeEvidence", source.path, count)
 		}
 	}
 }

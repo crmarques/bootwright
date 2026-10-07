@@ -1,0 +1,27 @@
+{#
+  The records are the retained Machines of the selected graph and the container
+  clusters they install. With no authored forwarder the resolver answers only
+  those records rather than silently reaching an ambient upstream. A subtree
+  record answers for every name beneath it as well, which is what a cluster's
+  applications name means; every other record answers its exact name alone.
+#}
+listen-address={{ bootwright_managed_service_request.bindAddress }}
+port={{ bootwright_managed_service_request.port }}
+bind-interfaces
+no-resolv
+no-hosts
+domain-needed
+bogus-priv
+
+{% for record in bootwright_managed_service_request.records | default([]) %}
+{% if record.subtree | default(false) %}
+{% for address in record.addresses %}
+address=/{{ record.name }}/{{ address }}
+{% endfor %}
+{% else %}
+host-record={{ record.name }},{{ record.addresses | join(',') }}
+{% endif %}
+{% endfor %}
+{% for forwarder in bootwright_managed_service_request.forwarders | default([]) %}
+server={{ forwarder }}
+{% endfor %}

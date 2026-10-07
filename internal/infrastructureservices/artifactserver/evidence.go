@@ -29,6 +29,17 @@ type ListenerEvidence struct {
 	Status      string `json:"status"`
 }
 
+// listenerPorts are the ports the server binds, each once and in order, which
+// the adapter names a foreign listener by.
+func listenerPorts(request Request) []int {
+	ports := []int{}
+	for _, listener := range request.Listeners {
+		ports = append(ports, listener.Port)
+	}
+	slices.Sort(ports)
+	return slices.Compact(ports)
+}
+
 // ProbeTarget is one socket readiness must positively answer on. A wildcard
 // bind is proved through every endpoint address it serves, because that is
 // what a consumer will actually connect to.

@@ -207,15 +207,8 @@ func (r InstallRequest) Canonical() ([]byte, error) {
 }
 
 func DecodeMediaRequest(data []byte) (MediaRequest, error) {
-	request, err := reconciliation.Thaw[MediaRequest](data, "cluster media")
+	request, err := reconciliation.ThawVersion[MediaRequest](data, "cluster media", mediaRequestVersion)
 	if err != nil {
-		return MediaRequest{}, err
-	}
-	if request.Version != mediaRequestVersion {
-		return MediaRequest{}, refusal("lifecycle.state",
-			"the frozen cluster media request has an unsupported version: "+request.Version, "")
-	}
-	if err := reconciliation.ProveCanonical(data, request, "cluster media"); err != nil {
 		return MediaRequest{}, err
 	}
 	if err := onTheController(request.Placement, "cluster media"); err != nil {
@@ -225,15 +218,8 @@ func DecodeMediaRequest(data []byte) (MediaRequest, error) {
 }
 
 func DecodeInstallRequest(data []byte) (InstallRequest, error) {
-	request, err := reconciliation.Thaw[InstallRequest](data, "cluster install")
+	request, err := reconciliation.ThawVersion[InstallRequest](data, "cluster install", installRequestVersion)
 	if err != nil {
-		return InstallRequest{}, err
-	}
-	if request.Version != installRequestVersion {
-		return InstallRequest{}, refusal("lifecycle.state",
-			"the frozen cluster install request has an unsupported version: "+request.Version, "")
-	}
-	if err := reconciliation.ProveCanonical(data, request, "cluster install"); err != nil {
 		return InstallRequest{}, err
 	}
 	if err := onTheController(request.Placement, "cluster install"); err != nil {

@@ -29,29 +29,31 @@ DIGEST = "d" * 64
 IMAGE = "registry.example/service@sha256:" + "0" * 64
 SERVER = "infra_artifact_server_nginx"
 
-# Each role with the variables it takes, the configuration it templates and the
-# files it runs from. The content root and unit are the ones the planners name:
-# managedservice.ContentRoot and UnitName with each catalog's slug, and
-# artifactserver.ContentRoot with the artifact server's unit prefix.
+MANAGED = "infra_managed_service"
+
+# The one managed-service role selects its templates by the frozen kind.
+MANAGED_SOURCES = {
+    "configuration": "{{ infra_managed_service_kind.configuration_template }}",
+    "unitSource": "{{ infra_managed_service_kind.unit_template }}",
+    "request": "bootwright_managed_service_request", "digest": "bootwright_managed_service_digest",
+}
+
+# Each service, by managed-service kind or by the artifact server's role, with
+# the role that realizes it, the variables it takes, the sources it templates
+# and the files it runs from. The content root and unit are the ones the
+# planners name: managedservice.ContentRoot and UnitName with each catalog's
+# slug, and artifactserver.ContentRoot with the artifact server's unit prefix.
 SERVICES = {
-    "infra_ntp_server_chrony": {
-        "request": "bootwright_ntp_server_request", "digest": "bootwright_ntp_server_digest",
-        "configuration": "chrony.conf.j2", "service": "time",
-        "contentRoot": "/var/lib/bootwright-services/lab/ntp/time", "unit": "bootwright-lab-ntp-time",
-    },
-    "infra_dns_server_dnsmasq": {
-        "request": "bootwright_dns_server_request", "digest": "bootwright_dns_server_digest",
-        "configuration": "dnsmasq.conf.j2", "service": "resolver",
-        "contentRoot": "/var/lib/bootwright-services/lab/dns/resolver", "unit": "bootwright-lab-dns-resolver",
-    },
-    "infra_proxy_squid": {
-        "request": "bootwright_proxy_request", "digest": "bootwright_proxy_digest",
-        "configuration": "squid.conf.j2", "service": "egress",
-        "contentRoot": "/var/lib/bootwright-services/lab/proxy/egress", "unit": "bootwright-lab-proxy-egress",
-    },
+    "NTPServer": dict(MANAGED_SOURCES, role=MANAGED, kind="NTPServer", service="time",
+                      contentRoot="/var/lib/bootwright-services/lab/ntp/time", unit="bootwright-lab-ntp-time"),
+    "DNSServer": dict(MANAGED_SOURCES, role=MANAGED, kind="DNSServer", service="resolver",
+                      contentRoot="/var/lib/bootwright-services/lab/dns/resolver", unit="bootwright-lab-dns-resolver"),
+    "Proxy": dict(MANAGED_SOURCES, role=MANAGED, kind="Proxy", service="egress",
+                  contentRoot="/var/lib/bootwright-services/lab/proxy/egress", unit="bootwright-lab-proxy-egress"),
     SERVER: {
+        "role": SERVER,
         "request": "bootwright_artifact_server_request", "digest": "bootwright_artifact_server_digest",
-        "configuration": "nginx.conf.j2", "service": "lab-artifacts",
+        "configuration": "nginx.conf.j2", "unitSource": "unit.container.j2", "service": "lab-artifacts",
         "contentRoot": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts",
         "unit": "bootwright-lab-artifacts-lab-artifacts",
     },
@@ -81,7 +83,7 @@ SKIPPED = {"changed": False, "skipped": True}
 
 
 def load(role):
-    loaded = LOADER.load_from_file(str(ROLES / role / "tasks" / "apply.yml"), trusted_as_template=True)
+    loaded = LOADER.load_from_file(str(ROLES / SERVICES[role]["role"] / "tasks" / "apply.yml"), trusted_as_template=True)
     return [task for task in loaded if isinstance(task, dict)]
 
 
@@ -122,11 +124,16 @@ def in_order(tasks, *steps):
 
 
 def scope(role, tls):
-    """The role's defaults and the frozen request, with serving material when `tls`."""
+    """The role's defaults and fixed vars and the frozen request, with serving material when `tls`."""
     service = SERVICES[role]
-    variables = dict(LOADER.load_from_file(str(ROLES / role / "defaults" / "main.yml"), trusted_as_template=True))
+    directory = ROLES / service["role"]
+    variables = dict(LOADER.load_from_file(str(directory / "defaults" / "main.yml"), trusted_as_template=True))
+    if (directory / "vars" / "main.yml").is_file():
+        variables.update(LOADER.load_from_file(str(directory / "vars" / "main.yml"), trusted_as_template=True))
     request = {"bindAddress": "192.0.2.10", "contentRoot": service["contentRoot"], "image": IMAGE, "unit": service["unit"],
                "identity": {"context": "lab", "service": service["service"]}}
+    if "kind" in service:
+        request["kind"] = service["kind"]
     if role == SERVER:
         request["tls"] = {"minVersion": "TLSv1.2"} if tls else {}
         variables["bootwright_artifact_server_material"] = MATERIAL if tls else {}
@@ -142,7 +149,7 @@ def publishers(tasks, role):
     def copying(leaf):
         return lambda task: str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith(leaf)
 
-    predicates = {"configuration": templating(SERVICES[role]["configuration"]), "unit": templating("unit.container.j2"),
+    predicates = {"configuration": templating(SERVICES[role]["configuration"]), "unit": templating(SERVICES[role]["unitSource"]),
                   "certificate": copying("/server.crt"), "key": copying("/server.key")}
     return {file: only(tasks, predicates[file], "publishes the " + file) for file in RUNS_FROM[role]}
 
@@ -182,7 +189,8 @@ def attempt(role, newer=(), changed=(), start=None, unit="active", tls=True):
     variables[before["register"]] = {"observation": {"unit": unit}}
     templar = Templar(loader=LOADER, variables=variables)
     paths = {templar.template(destination(task)): file for file, task in published.items() if runs(variables, task)}
-    unit_file = templar.template(trust_as_template((ROLES / role / "templates" / "unit.container.j2").read_text()))
+    unit_template = templar.template(published["unit"]["ansible.builtin.template"]["src"])
+    unit_file = templar.template(trust_as_template((ROLES / SERVICES[role]["role"] / "templates" / unit_template).read_text()))
     assert "ContainerName=%s" % SERVICES[role]["unit"] in unit_file.splitlines()
     assert templar.template(started["ansible.builtin.command"]["argv"]) == [
         "/usr/bin/podman", "inspect", "--type", "container", "--format", "{{.State.StartedAt.UnixNano}}", SERVICES[role]["unit"],
@@ -243,7 +251,8 @@ def published_inspections(role):
     """The inspection whose observation each completion publishes, in the apply and in the observation."""
     found = []
     for tasks in ("apply.yml", "observe.yml"):
-        loaded = [task for task in LOADER.load_from_file(str(ROLES / role / "tasks" / tasks), trusted_as_template=True)
+        loaded = [task for task in LOADER.load_from_file(str(ROLES / SERVICES[role]["role"] / "tasks" / tasks),
+                                                         trusted_as_template=True)
                   if isinstance(task, dict)]
         completion = only(loaded, lambda task: (action(task, "_protocol") or {}).get("phase") == "completed",
                           "publishes the completion")

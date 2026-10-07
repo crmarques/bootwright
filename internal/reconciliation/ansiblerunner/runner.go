@@ -1,10 +1,8 @@
 package ansiblerunner
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"io"
 	"slices"
@@ -14,11 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const (
-	maxProtocolLine    = 65536
-	maxProtocolRecords = 64
-	maxMaterialBytes   = 1 << 20
-)
+const maxMaterialBytes = 1 << 20
 
 // playbookFor answers the entrypoint composition bound to one implementation
 // identity and operation. Implementation, not kind, is the key, so two
@@ -27,55 +21,6 @@ const (
 func (r Runner) playbookFor(request lifecycle.RunRequest) (string, bool) {
 	playbook, ok := r.playbooks[request.Implementation+"/"+request.Operation]
 	return playbook, ok
-}
-
-type protocolMessage struct {
-	Phase    string          `json:"phase"`
-	Group    string          `json:"group,omitempty"`
-	Status   string          `json:"status,omitempty"`
-	Outcome  string          `json:"outcome,omitempty"`
-	Evidence json.RawMessage `json:"evidence,omitempty"`
-	Reason   string          `json:"reason,omitempty"`
-}
-
-// readProtocol decodes the adapter's result channel. Every record is bounded
-// and strictly shaped; adapter prose is never a product result.
-func readProtocol(reader io.Reader, messages chan<- protocolMessage) error {
-	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, 4096), maxProtocolLine)
-	for count := 0; scanner.Scan(); count++ {
-		if count >= maxProtocolRecords {
-			return errors.New("protocol limit")
-		}
-		var message protocolMessage
-		decoder := json.NewDecoder(bytes.NewReader(scanner.Bytes()))
-		decoder.DisallowUnknownFields()
-		if decoder.Decode(&message) != nil || decoder.Decode(new(any)) != io.EOF {
-			return errors.New("protocol record")
-		}
-		switch message.Phase {
-		case "loaded":
-			if message.Group != "" || message.Status != "" || message.Outcome != "" || len(message.Evidence) != 0 || message.Reason != "" {
-				return errors.New("protocol record")
-			}
-		case "group":
-			if message.Group == "" || message.Status == "" || message.Outcome != "" || len(message.Evidence) != 0 || message.Reason != "" {
-				return errors.New("protocol record")
-			}
-		case "completed":
-			if message.Outcome != "changed" && message.Outcome != "unchanged" || len(message.Evidence) == 0 || message.Reason != "" {
-				return errors.New("protocol record")
-			}
-		case "refused":
-			if message.Reason == "" || message.Group != "" || message.Status != "" || message.Outcome != "" || len(message.Evidence) != 0 {
-				return errors.New("protocol record")
-			}
-		default:
-			return errors.New("protocol phase")
-		}
-		messages <- message
-	}
-	return scanner.Err()
 }
 
 // inventory targets exactly one host. The SSH arm reads only the job's own

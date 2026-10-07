@@ -85,11 +85,7 @@ func finalState(frozen reconciliation.Plan, states map[string]reconciliation.Blo
 // no reservation. A removal publishes pristine evidence only once its Secret
 // bindings are released, so its pristine evidence proves those released too.
 func finalized(view View, operation operationstore.Operation) (bool, error) {
-	evidence, err := reconciliation.EvidenceFor(operation.Verb, reconciliation.OperationDone)
-	if err != nil {
-		return false, err
-	}
-	projected, err := evidence.Bytes()
+	projected, err := projection(operation.Verb, reconciliation.OperationDone)
 	if err != nil {
 		return false, err
 	}

@@ -155,6 +155,7 @@ sudo systemctl reboot
 ./bin/bootwright machine start --name rhel-01
 ./bin/bootwright machine stop --name rhel-01
 ./bin/bootwright destroy --authorize data-loss
+systemctl list-units --state=failed 'bootwright-*'
 ```
 
 Every block depends on the controller block, so the first apply selects the
@@ -210,7 +211,8 @@ provider host carries its guest network and storage pool across a reboot: once
 the host is back, return to the repository root and `machine start` powers
 `rhel-01` on through its emulated BMC. Only then do the final `machine stop`
 and `destroy` take the environment back, which leaves it ready for the undo
-below.
+below. The last line lists no unit, because every managed unit stops within its
+stop timeout and a destroy leaves none failed.
 
 ## Undo
 

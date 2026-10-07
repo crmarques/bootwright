@@ -6,10 +6,8 @@ import (
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -172,15 +170,28 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 	}
 	result, err := c.run(ctx, execution, "observe", request)
 	if err != nil {
-		recordObservationFailure(ctx, execution, err)
-		return unknown, nil
+		return unknown, err
 	}
-	if ValidatePresence(result.Evidence, request, execution.Block.RequestDigest) == nil {
+	if effect, _ := machineEffect(reconciliation.Apply, result.Evidence, request, execution.Block.RequestDigest); effect == reconciliation.EffectCompleted {
 		return lifecycle.Observation{
 			Effect: reconciliation.EffectCompleted, Outcome: reconciliation.Outcome(result.Outcome), Evidence: result.Evidence,
 		}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
+}
+
+// machineEffect is the one reading of a machine observation for the verb the
+// block was frozen for. An apply's only check is the presence proof, so
+// evidence it refuses is unknown and comes back with that refusal. A removal
+// takes back only the claim and reads nothing, so it is always complete.
+func machineEffect(verb reconciliation.Verb, evidence []byte, request Request, digest string) (reconciliation.EffectState, error) {
+	if verb == reconciliation.Destroy {
+		return reconciliation.EffectCompleted, nil
+	}
+	if err := ValidatePresence(evidence, request, digest); err != nil {
+		return reconciliation.EffectUnknown, err
+	}
+	return reconciliation.EffectCompleted, nil
 }
 
 // ObserveRemoval runs nothing. The removal releases only the claim and never
@@ -232,15 +243,4 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 		Implementation: Implementation, Operation: operation, Variable: machineVariable,
 		Canonical: canonical, Placement: request.Placement, Materials: materials,
 	}))
-}
-
-func recordObservationFailure(ctx context.Context, execution lifecycle.Execution, err error) {
-	if execution.Log == nil {
-		return
-	}
-	for _, reported := range diagnostics.Of(err) {
-		_ = execution.Log(ctx, operationstore.LogRecord{
-			Event: "observation-failed", Block: execution.Block.ID, Detail: reported.Code + ": " + reported.Message,
-		})
-	}
 }

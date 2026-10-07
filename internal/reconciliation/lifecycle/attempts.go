@@ -156,24 +156,30 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	for _, reported := range diagnostics.Of(runErr) {
 		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
 	}
+	recorded := observationFailure(runErr)
 	// A resolution that proves an apply's block done places what it produced
-	// in custody first; one that cannot leaves the block unknown.
-	if captured := s.capture(ctx, tx, boundary, log, operation.Verb, block, state, observation.Produced); captured != nil {
-		resolvedEffect, state, runErr = reconciliation.EffectUnknown, reconciliation.BlockUnknown, captured
+	// in custody first; one that cannot leaves the block unknown. Its failure
+	// is custody's, never the observation's, so it records no failure.
+	captured := s.capture(ctx, tx, boundary, log, operation.Verb, block, state, observation.Produced)
+	if captured != nil {
+		resolvedEffect, state = reconciliation.EffectUnknown, reconciliation.BlockUnknown
 	}
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "resolution", Block: block.ID, Detail: string(resolvedEffect)})
 	outcome := reconciliation.ResolutionOutcome(resolvedEffect, observation.Outcome)
-	if err := store.CompleteResolution(recording, operation.ID, block.ID, attemptNumber, number, outcome, resolvedEffect, state, observation.Evidence); err != nil {
+	if err := store.CompleteResolution(recording, operation.ID, block.ID, attemptNumber, number, outcome, resolvedEffect, state, observation.Evidence, recorded); err != nil {
 		return reconciliation.BlockUnknown, err
 	}
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
 	switch {
 	case state == reconciliation.BlockDone:
 		return state, nil
+	case captured != nil:
+		return state, captured
 	// An observation that never ran carries the reason it could not, and that
 	// reason is actionable where the unresolved diagnosis is not: it names a
-	// target the operator can restore rather than one already reachable.
-	case runErr != nil:
+	// target the operator can restore rather than one already reachable. An
+	// undiagnosed failure says nothing more than the unresolved diagnosis.
+	case runErr != nil && (recorded != nil || ctx.Err() != nil):
 		return state, runErr
 	case resolvedEffect == reconciliation.EffectNoEffect:
 		return state, failure("lifecycle.state",
@@ -184,7 +190,9 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 			"the frozen effect is partly realized and owned by this context",
 			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, true))
 	}
-	return state, unresolvedFailure(block.ID, s.explain(block, observation.Evidence))
+	explanation := s.explain(operation.Verb, block, observation.Evidence)
+	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "unresolved", Block: block.ID, Detail: explanation.Reason})
+	return state, unresolvedFailure(block.ID, explanation)
 }
 
 // invoke runs the capability inside the private Python execution boundary,
@@ -325,11 +333,7 @@ func declaresGroup(block reconciliation.Block, id string) bool {
 // project publishes the context mutation evidence the operation state implies.
 // The operation record is authoritative; the evidence is its projection.
 func (s Service) project(ctx context.Context, tx Transaction, verb reconciliation.Verb, state reconciliation.OperationState) error {
-	evidence, err := reconciliation.EvidenceFor(verb, state)
-	if err != nil {
-		return err
-	}
-	data, err := evidence.Bytes()
+	data, err := projection(verb, state)
 	if err != nil {
 		return err
 	}

@@ -1,7 +1,6 @@
 package ansiblelocal
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -9,17 +8,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/adapterprotocol"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
-
-type protocolMessage struct {
-	Phase       string                           `json:"phase"`
-	Preparation *prerequisites.NativePreparation `json:"preparation,omitempty"`
-	Outcome     string                           `json:"outcome,omitempty"`
-	Evidence    json.RawMessage                  `json:"evidence,omitempty"`
-	Reason      string                           `json:"reason,omitempty"`
-	Source      string                           `json:"source,omitempty"`
-}
 
 func strictJSON(data []byte, target any, fields ...string) bool {
 	if len(data) == 0 || len(data) > 65536 {
@@ -94,58 +85,22 @@ func uniqueJSON(decoder *json.Decoder, depth int) error {
 	return nil
 }
 
-func readProtocol(reader io.Reader, messages chan<- protocolMessage) error {
-	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, 4096), 65536)
-	for count := 0; scanner.Scan(); count++ {
-		if count >= 132 {
-			return errors.New("protocol limit")
-		}
-		data := scanner.Bytes()
-		var phase struct {
-			Phase string `json:"phase"`
-		}
-		if json.Unmarshal(data, &phase) != nil {
-			return errors.New("protocol phase")
-		}
-		fields := []string{"phase"}
-		switch phase.Phase {
-		case "loaded", "continue", "native":
-		case "prepared":
-			fields = append(fields, "preparation")
-		case "completed":
-			fields = append(fields, "outcome", "evidence")
-		case "refused":
-			fields = append(fields, "reason")
-			// An acquisition refusal names the source it was acquiring.
-			var raw map[string]json.RawMessage
-			if json.Unmarshal(data, &raw) == nil {
-				if _, named := raw["source"]; named {
-					fields = append(fields, "source")
-				}
-			}
-		default:
-			return errors.New("protocol phase")
-		}
-		var message protocolMessage
-		if !strictJSON(data, &message, fields...) {
-			return errors.New("protocol record")
-		}
-		if message.Phase == "prepared" {
-			var raw map[string]json.RawMessage
-			_ = json.Unmarshal(data, &raw)
-			var preparation prerequisites.NativePreparation
-			fields := []string{"inventorySHA256", "addedSources"}
-			if bytes.Contains(raw["preparation"], []byte(`"planDigest"`)) {
-				fields = append(fields, "afterInventorySHA256", "planDigest", "transitionsSHA256")
-			}
-			if !strictJSON(raw["preparation"], &preparation, fields...) {
-				return errors.New("protocol preparation")
-			}
-		}
-		messages <- message
+// preparationShape holds a prepared record's preparation to its exact
+// members: the before-state and added sources, and for a native plan the
+// after-state and the plan's digests. Its error ends the read.
+func preparationShape(record adapterprotocol.Record) error {
+	if record.Phase != "prepared" {
+		return nil
 	}
-	return scanner.Err()
+	fields := []string{"inventorySHA256", "addedSources"}
+	if bytes.Contains(record.Preparation, []byte(`"planDigest"`)) {
+		fields = append(fields, "afterInventorySHA256", "planDigest", "transitionsSHA256")
+	}
+	var preparation prerequisites.NativePreparation
+	if !strictJSON(record.Preparation, &preparation, fields...) {
+		return errors.New("protocol preparation")
+	}
+	return nil
 }
 
 func validSHA(value string) bool {

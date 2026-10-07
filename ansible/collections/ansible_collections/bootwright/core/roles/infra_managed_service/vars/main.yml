@@ -1,0 +1,17 @@
+---
+# Fixed by the role, never authored. Each managed network service kind selects
+# only its daemon configuration and unit templates; every task is shared.
+infra_managed_service_kinds:
+  DNSServer:
+    configuration: dnsmasq.conf
+    configuration_template: dnsmasq.conf.j2
+    unit_template: dnsmasq.container.j2
+  NTPServer:
+    configuration: chrony.conf
+    configuration_template: chrony.conf.j2
+    unit_template: chrony.container.j2
+  Proxy:
+    configuration: squid.conf
+    configuration_template: squid.conf.j2
+    unit_template: squid.container.j2
+infra_managed_service_kind: '{{ infra_managed_service_kinds[bootwright_managed_service_request.kind] }}'

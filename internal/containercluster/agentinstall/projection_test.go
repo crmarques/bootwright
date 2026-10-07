@@ -262,7 +262,7 @@ func siteServicesCatalog() api.Catalog {
 // its plan waits for either.
 func TestExternalServicesAreNoRequirement(t *testing.T) {
 	catalog := siteServicesCatalog()
-	if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+	if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
 	media, _, needs := onlyRequests(t, catalog)
@@ -333,7 +333,7 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))
 			objects = append(objects, declared.WithSpec(mutate(declared.Spec())))
 			catalog := api.NewCatalog(objects)
-			if unsupported := Unsupported(catalog); len(unsupported) != 1 || unsupported[0] != "ContainerCluster/sno" {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 1 || unsupported[0] != "ContainerCluster/sno" {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			if _, _, _, err := Requests(catalog, "controller", testContext); err == nil {
@@ -386,7 +386,7 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if unsupported := Unsupported(test.catalog); len(unsupported) != 1 || unsupported[0] != test.cluster {
+			if unsupported := lifecycle.Identities(Refusals(test.catalog)); len(unsupported) != 1 || unsupported[0] != test.cluster {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, _, err := Requests(test.catalog, "controller", testContext)
@@ -439,7 +439,7 @@ func TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration(t *testing.
 				node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
 				node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")))
 			catalog := api.NewCatalog(objects)
-			if unsupported := Unsupported(catalog); len(unsupported) != 1 || unsupported[0] != "ContainerCluster/ocp" {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 1 || unsupported[0] != "ContainerCluster/ocp" {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, _, err := Requests(catalog, "controller", testContext)
@@ -455,7 +455,7 @@ func TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration(t *testing.
 					field("platform", api.MapValue(text("type", platform))),
 				),
 				node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))
-			if unsupported := Unsupported(api.NewCatalog(single)); len(unsupported) != 0 {
+			if unsupported := lifecycle.Identities(Refusals(api.NewCatalog(single))); len(unsupported) != 0 {
 				t.Fatalf("a single node on %s is refused: %v", platform, unsupported)
 			}
 			media, _, _ := onlyRequests(t, api.NewCatalog(single))
@@ -485,7 +485,7 @@ func TestAMultiNodeClusterOnNoPlatformInstallsOnNone(t *testing.T) {
 				node("master-1", "master", "ocp-02", "master-1.ocp.lab.example.test"),
 				node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test")))
 			catalog := api.NewCatalog(objects)
-			if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			media, _, _ := onlyRequests(t, catalog)
@@ -577,7 +577,7 @@ func TestANodeOffTheArtifactServersHostRefusesBeforeRegistration(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := api.NewCatalog(append(append(base(), hypervisor()...), test.objects...))
-			if unsupported := Unsupported(catalog); len(unsupported) != 1 || unsupported[0] != test.cluster {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 1 || unsupported[0] != test.cluster {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, _, err := Requests(catalog, "controller", testContext)
@@ -604,7 +604,7 @@ func TestANodeOnTheArtifactServersHostIsNotRefusedForItsFetch(t *testing.T) {
 			installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 			node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))))
 	catalog := api.NewCatalog(objects)
-	if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+	if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
 	_, _, _, err := Requests(catalog, "controller", testContext)
@@ -635,7 +635,7 @@ func TestAnUnresolvedServerIsRefusedAsTheSelection(t *testing.T) {
 		installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 		node("master-0", "master", "sno-01", "master-0.sno.lab.example.test")))
 	catalog := api.NewCatalog(objects)
-	if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+	if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
 	_, _, _, err := Requests(catalog, "controller", testContext)
@@ -653,7 +653,7 @@ func TestASupportedClusterIsNotRefused(t *testing.T) {
 		"single node": singleNodeCatalog(), "compact": compactCatalog(),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 		})
@@ -757,7 +757,7 @@ func TestARootDeviceTheAgentInstallerCannotCarryRefuses(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := singleNodeWith(test.hints...)
-			if unsupported := Unsupported(catalog); !slices.Equal(unsupported, []string{"ContainerCluster/sno"}) {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"ContainerCluster/sno"}) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			// The refusal plan and apply report before registration carries
@@ -781,7 +781,7 @@ func TestARootDeviceTheAgentInstallerCanNameIsNotRefused(t *testing.T) {
 	for _, device := range []string{"/dev/sda", "/dev/disk/by-path/pci-0000:00:1f.2-ata-1"} {
 		t.Run(device, func(t *testing.T) {
 			catalog := singleNodeWith(text("deviceName", device))
-			if unsupported := Unsupported(catalog); len(unsupported) != 0 {
+			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			media, _, _ := onlyRequests(t, catalog)

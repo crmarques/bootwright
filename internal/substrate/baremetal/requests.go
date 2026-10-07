@@ -52,17 +52,7 @@ func (r Request) Canonical() ([]byte, error) {
 }
 
 func DecodeRequest(data []byte) (Request, error) {
-	request, err := reconciliation.Thaw[Request](data, "machine")
-	if err != nil {
-		return Request{}, err
-	}
-	if request.Version != requestVersion {
-		return Request{}, refusal("lifecycle.state", "the frozen machine request has an unsupported version", "")
-	}
-	if err := reconciliation.ProveCanonical(data, request, "machine"); err != nil {
-		return Request{}, err
-	}
-	return request, nil
+	return reconciliation.ThawVersion[Request](data, "machine", requestVersion)
 }
 
 // ReservationKeys claim the one exclusive thing this block takes: the machine

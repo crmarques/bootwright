@@ -503,7 +503,7 @@ func TestAClusterWhoseDeadlinePassesTheCeilingRefusesBeforeRegistration(t *testi
 		t.Fatalf("a cluster of %d nodes was planned with a deadline of %s, past the %s ceiling", largest, deadline, lifecycle.MaxDeadline)
 	}
 	refused := largeCatalog(largest + 1)
-	if unsupported := Unsupported(refused); len(unsupported) != 1 || unsupported[0] != "ContainerCluster/ocp" {
+	if unsupported := lifecycle.Identities(Refusals(refused)); len(unsupported) != 1 || unsupported[0] != "ContainerCluster/ocp" {
 		t.Fatalf("unsupported = %v, want the cluster whose deadline passes the ceiling", unsupported)
 	}
 	_, _, _, err := Requests(refused, "controller", testContext)

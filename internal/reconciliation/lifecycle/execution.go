@@ -838,6 +838,9 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 		return nil, s.unregistered(ctx, name, decided, binding, record, err)
 	}
 	defer clearMaterial(material)
+	if err := s.proveBindings(ctx, name, decided, material); err != nil {
+		return nil, s.unregistered(ctx, name, decided, binding, record, err)
+	}
 	var result *OperationResult
 	var completion removalCompletion
 	var unreleased error
@@ -1404,6 +1407,10 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		Source:     decided.source, Bindings: bindings, State: reconciliation.OperationRunning,
 		Created: stamp, Updated: stamp,
 	}
+	if decided.verb == reconciliation.Destroy && decided.basis.record.Verb == reconciliation.Destroy &&
+		decided.basis.operation != "" && decided.basis.operation != decided.source {
+		operation.Replaces = decided.basis.operation
+	}
 	if decided.verb == reconciliation.Destroy {
 		if err := s.raise(ctx, tx, reconciliation.Destroy, record); err != nil {
 			return fail(err)
@@ -1512,17 +1519,35 @@ func (s Service) establishBinding(ctx context.Context, tx Transaction, machine s
 // verifyContinuation re-proves everything a continuation depends on before it
 // does work. Drift refuses; it never re-resolves to another implementation.
 func (s Service) verifyContinuation(ctx context.Context, tx Transaction, operation operationstore.Operation) error {
-	identity := tx.Identity()
+	if err := s.recordedRefusal(tx, operation); err != nil {
+		return err
+	}
+	host, err := s.host.Identity(ctx)
+	if err != nil {
+		return err
+	}
+	if err := verifyHostBinding(tx.Controller(), tx.Identity(), host, unboundExit(tx, operation)); err != nil {
+		return err
+	}
+	return closureRefusal(tx, operation)
+}
+
+// recordedRefusal is the part of a continuation's re-proof that reads only
+// what the context and this executable record: the input the operation froze,
+// the closure an earlier build may have left unfrozen, and the automation.
+// status reads it without probing the host.
+func (s Service) recordedRefusal(view View, operation operationstore.Operation) error {
+	identity := view.Identity()
 	if operation.Context != identity.Name || operation.Revision != identity.Revision {
 		return failure("lifecycle.state", "the context input changed after this operation registered", "restore the exact input revision this operation froze")
 	}
-	if operation.InputDigest != inputDigest(tx) {
+	if operation.InputDigest != inputDigest(view) {
 		return failure("lifecycle.state", "the frozen input no longer matches this operation", "restore the exact input revision this operation froze")
 	}
 	registered := registeredWith(operation.Executable)
-	if operation.Closure == nil && tx.Controller().SetupRuns {
+	if operation.Closure == nil && view.Controller().SetupRuns {
 		return failure("lifecycle.state", "this operation was registered by an earlier build that froze no Python and Ansible closure, and "+
-			registered+" cannot read this host's controller directory, which now keeps setup runs", earlierBuildGone(tx, operation))
+			registered+" cannot read this host's controller directory, which now keeps setup runs", earlierBuildGone(view, operation))
 	}
 	takeBack := takeBackUnder(identity.Name, "this executable")
 	if operation.AutomationDigest != s.automation.CatalogDigest() {
@@ -1539,23 +1564,23 @@ func (s Service) verifyContinuation(ctx context.Context, tx Transaction, operati
 		}
 		return failure("lifecycle.state", "this operation was registered by an earlier build that froze no Python and Ansible closure", remediation)
 	}
-	host, err := s.host.Identity(ctx)
-	if err != nil {
-		return err
-	}
-	if err := verifyHostBinding(tx.Controller(), identity, host, unboundExit(tx, operation)); err != nil {
-		return err
-	}
-	current, err := executionClosure(tx.Controller())
+	return nil
+}
+
+// closureRefusal refuses a continuation whose frozen Python and Ansible
+// closure differs from the one the approved execution bundle holds.
+func closureRefusal(view View, operation operationstore.Operation) error {
+	current, err := executionClosure(view.Controller())
 	if err != nil {
 		return err
 	}
 	if current != *operation.Closure {
 		frozen := *operation.Closure
+		registered := registeredWith(operation.Executable)
 		remediation := "restore the execution bundle of Python " + frozen.Python + " and ansible-core " + frozen.Ansible +
 			" that " + registered + " registered this operation with"
 		if supersedable(operation) {
-			remediation = takeBackUnder(identity.Name, "the approved bundle") + ", or " + remediation
+			remediation = takeBackUnder(view.Identity().Name, "the approved bundle") + ", or " + remediation
 		}
 		return failure("lifecycle.state", "the approved execution bundle holds another Python and Ansible closure (Python "+
 			current.Python+", ansible-core "+current.Ansible+") than the one this operation registered with", remediation)

@@ -63,7 +63,7 @@ func TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling(t *testing.T) {
 				drain: 200 * time.Millisecond,
 				command: func(string, ...string) *exec.Cmd {
 					return exec.Command("/bin/sh", "-c", `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
-						`printf '{"phase":"group","group":"wait","status":"running"}\n' >&3; read -r reply <&4`)
+						`printf '{"group":"wait","phase":"group","status":"running"}\n' >&3; read -r reply <&4`)
 				},
 			}
 			// A deadline of the test's own would be the earlier one the run

@@ -202,3 +202,39 @@ func TestTheInstallRequestNamesItsMachinesInBootOrder(t *testing.T) {
 		t.Fatal("a cluster of virtual machines reported operator-owned hardware")
 	}
 }
+
+// withARemovedField gives canonical bytes a member this build does not
+// declare, as a field an earlier version carried. It sorts first, so the bytes
+// stay canonical and only the shape refuses them.
+func withARemovedField(t *testing.T, encode func() ([]byte, error)) []byte {
+	t.Helper()
+	canonical, err := encode()
+	if err != nil || !strings.HasPrefix(string(canonical), `{"`) {
+		t.Fatalf("not a canonical object: %s (%v)", canonical, err)
+	}
+	return []byte(`{"aRemovedField":true,` + string(canonical[1:]))
+}
+
+func expectVersionRefusal(t *testing.T, err error, subject, version string) {
+	t.Helper()
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Source != nil ||
+		reported[0].Message != "the frozen "+subject+" request has an unsupported version: "+version ||
+		reported[0].Remediation != "destroy it with the build that applied it" {
+		t.Fatalf("an earlier %s request refused as %+v", subject, reported)
+	}
+}
+
+func TestAnEarlierMediaRequestWithARemovedFieldRefusesByItsVersion(t *testing.T) {
+	media, _, _ := onlyRequests(t, singleNodeCatalog())
+	media.Version = "cluster-media-agent-v4"
+	_, err := DecodeMediaRequest(withARemovedField(t, media.Canonical))
+	expectVersionRefusal(t, err, "cluster media", "cluster-media-agent-v4")
+}
+
+func TestAnEarlierInstallRequestWithARemovedFieldRefusesByItsVersion(t *testing.T) {
+	_, install, _ := onlyRequests(t, singleNodeCatalog())
+	install.Version = "cluster-install-agent-v2"
+	_, err := DecodeInstallRequest(withARemovedField(t, install.Canonical))
+	expectVersionRefusal(t, err, "cluster install", "cluster-install-agent-v2")
+}

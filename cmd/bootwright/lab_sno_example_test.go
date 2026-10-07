@@ -117,7 +117,7 @@ func TestLabSNOExampleResolvesEveryEndpointFromItsOneNode(t *testing.T) {
 // request is what an operator's apply would freeze.
 func TestLabSNOExampleDerivesItsInstallerInputs(t *testing.T) {
 	state, _ := compileAcceptance(t, snoExampleSources(t))
-	if unsupported := agentinstall.Unsupported(state.Effective()); len(unsupported) != 0 {
+	if unsupported := lifecycle.Identities(agentinstall.Refusals(state.Effective())); len(unsupported) != 0 {
 		t.Fatalf("the example declares a cluster this contract cannot install: %v", unsupported)
 	}
 	media, installs, needs, err := agentinstall.Requests(state.Effective(), "controller", "lab-sno")
@@ -178,7 +178,7 @@ func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
 		"        minSizeGigabytes: 0\n"+
 		"        rotational: false\n")
 	state, _ := compileAcceptance(t, sources)
-	if unsupported := agentinstall.Unsupported(state.Effective()); len(unsupported) != 0 {
+	if unsupported := lifecycle.Identities(agentinstall.Refusals(state.Effective())); len(unsupported) != 0 {
 		t.Fatalf("the example declares a cluster this contract cannot install: %v", unsupported)
 	}
 	media, _, _, err := agentinstall.Requests(state.Effective(), "controller", "lab-sno")

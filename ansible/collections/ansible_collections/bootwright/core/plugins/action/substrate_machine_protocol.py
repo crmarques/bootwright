@@ -7,13 +7,12 @@ result and authorization descriptors belong to the invoking Bootwright process.
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
+from ansible_collections.bootwright.core.plugins.module_utils.adapter_protocol import publishes, unreached
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
     emit,
 )
 
-PHASES = ("loaded", "group", "completed")
-GROUP_STATUSES = ("running", "ok", "failed", "skipped")
-OUTCOMES = ("changed", "unchanged")
 POWER_STATES = ("", "On", "Off")
 # The domain's own state, in libvirt's vocabulary. It is what a removal reads
 # to prove the machine is not in use; the controller's power state is the
@@ -21,13 +20,6 @@ POWER_STATES = ("", "On", "Off")
 # reports, because an empty domain from a silent hypervisor proves nothing.
 DOMAIN_STATES = ("", "running", "idle", "paused", "in shutdown", "shut off", "crashed", "pmsuspended")
 MAX_DISKS = 32
-HEX = set("0123456789abcdef")
-
-
-def digest(value):
-    if not isinstance(value, str) or len(value) != 64 or set(value) - HEX:
-        raise ValueError("digest")
-    return value
 
 
 def state(value):
@@ -78,7 +70,7 @@ def presence(observation, power, system, request_digest):
         "owned": bool(observation.get("owned")),
         "postcondition": False,
         "power": str(power),
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "state": state(observation.get("state")),
         "system": str(system or ""),
         "unit": str(observation.get("unit", "")),
@@ -154,23 +146,13 @@ def absence(observation, power, system, request_digest):
         "owned": bool(observation.get("owned")),
         "postcondition": False,
         "power": power,
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "state": state(observation.get("state")),
         "system": system,
         "unit": str(observation.get("unit", "")),
     }
     evidence["postcondition"] = gone(evidence)
     return evidence
-
-
-def publishes(evidence, observed):
-    """Whether this phase may publish evidence proving no postcondition.
-
-    A read-only observation reports what it found, including a target that is
-    part way realized, because the engine resolves an unproved effect from that
-    evidence. A mutation has to reach its postcondition or fail.
-    """
-    return bool(evidence["postcondition"]) or bool(observed)
 
 
 def completion(arguments):
@@ -199,36 +181,25 @@ def completion(arguments):
     return evidence, unproved(evidence), "not proved"
 
 
+def concluded(arguments):
+    """The evidence one completion publishes, or the refusal naming what is unmet."""
+    evidence, unmet, verb = completion(arguments)
+    if publishes(evidence, arguments.get("observed")):
+        return evidence, None
+    return evidence, unreached("the machine", verb, unmet)
+
+
+CAPABILITY = adapter_protocol.Capability(
+    "machine",
+    "the machine capability result could not be published",
+    concluded,
+)
+
+
 class ActionModule(ActionBase):
     TRANSFERS_FILES = False
     _requires_connection = False
 
     def run(self, tmp=None, task_vars=None):
         del tmp
-        arguments = self._task.args
-        phase = arguments.get("phase")
-        if phase not in PHASES:
-            return {"failed": True, "msg": "unsupported machine protocol phase"}
-        try:
-            if phase == "loaded":
-                emit({"phase": "loaded"}, acknowledge=True)
-                return {"changed": False}
-            if phase == "group":
-                status = arguments.get("status")
-                if status not in GROUP_STATUSES:
-                    raise ValueError("group status")
-                emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
-                return {"changed": False}
-            outcome = arguments.get("outcome")
-            if outcome not in OUTCOMES:
-                raise ValueError("outcome")
-            evidence, unmet, verb = completion(arguments)
-            if not publishes(evidence, arguments.get("observed")):
-                return {
-                    "failed": True,
-                    "msg": "the machine did not reach its postcondition; %s: %s" % (verb, ", ".join(unmet) or "unknown"),
-                }
-            emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
-            return {"changed": False}
-        except (ValueError, TypeError, OSError):
-            return {"failed": True, "msg": "the machine capability result could not be published"}
+        return adapter_protocol.publish(self._task.args, CAPABILITY, emit)

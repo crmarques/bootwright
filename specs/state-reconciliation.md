@@ -358,7 +358,8 @@ contexts/<name>/state/operations/
 operation directory is kept for audit and never named by the index: a
 completed operation, one a removal superseded, and the unreferenced directory
 an interrupted registration leaves once its plan landed. A later command reads
-one again only as the current operation's `source`, and each counts toward the
+one again only as the current operation's `source` or, for `status`, as the
+removal the current one replaces, and that one's own, and each counts toward the
 [retained-operation bound](contexts.md#storage-locking-and-publication). A
 fresh apply's `<operation-id>/` exists, holding only its empty `blocks/` and
 `logs/`, from the transaction that raises its
@@ -371,14 +372,24 @@ destroy that settles beside it [reclaims](#context-mutation-evidence) it.
 identity, input revision and digest, plan digest, selected implementation and
 automation identities, executable identity, the Python and Ansible
 [execution closure](#dependency-safety-during-recovery) it registered with,
-secret bindings, durable state and log-fault flag. `plan.json` is the
+secret bindings, durable state and log-fault flag. The `operation.json` of a
+removal that replaces a failed removal also names that removal (`replaces`),
+an optional field that moves no record version. `plan.json` is the
 immutable frozen plan: every block with its
 description, dependencies, impacts, presentation groups, resolved
 implementation identity, content digest and canonical secret-free request.
+A block's dependencies, impacts, consumed authorizations and groups are always
+lists, `[]` when empty and never `null`; a plan an earlier build froze with
+`null` there is not a plan this executable could have produced, and it refuses
+with the remedy to destroy the context with the build that registered the
+operation.
 Block records carry the block state and the number of attempts started, one
 less than the next attempt's number; attempt and
 resolution records carry their block, attempt and resolution numbers, phase,
-outcome, effect, bounded evidence and timestamps, and never restate the
+outcome, effect, bounded evidence and timestamps, and a resolution whose
+observation could not run also carries `failure`, the first diagnostic that
+observation reported, its code, message and remediation, each bounded; no
+other record carries it, and the record keeps its version. They never restate the
 request: the request an attempt or resolution acted on is its block's in
 `plan.json`, which the operation's plan digest names and nothing replaces. A
 running attempt may additionally publish one bounded `preparation` object: the
@@ -396,7 +407,10 @@ verified handles, with the directory and file modes of
 or plan record is at most 1 MiB, an attempt or resolution record at most
 64 KiB, and an index at most 256 KiB. Unknown fields, duplicate keys,
 noncanonical encodings and unsupported versions refuse; there is no repair,
-migration or scan-based adoption of an unpublished record. An operation record
+migration or scan-based adoption of an unpublished record. Every record and
+frozen request is encoded, read closed and proved canonical by one
+canonical-JSON implementation; each format keeps its own byte bound,
+pre-decode bounds, trailing line feed and failure words. An operation record
 is version 2, and a registration writes no other. A version 1 record, which a
 build before the execution closure was frozen wrote, names no closure; it
 still reads, updates as itself and serves a fresh verb and `status`, and only
@@ -753,7 +767,10 @@ carries the reason its capability gives, or that no capability claims its kind,
 and the remedy, so `plan` says why as `apply` does; an object refused for two
 reasons is two diagnostics. A frozen plan requires a resolved
 implementation for every block; a removal planned from a frozen plan is never
-refused this way.
+refused this way. A fresh `apply` also refuses, once it has bound the Secrets
+its plan names and before registration, any bound material a capability proves
+unusable, naming the Secret, and it releases the binding it created
+(`TestAFreshApplyRefusesMaterialItsCapabilityRefusesBeforeRegistration`).
 
 A fresh `plan` and a fresh `apply` also refuse, before registration, every
 block whose request holds a template delimiter, `{{`, `{%` or `{#`, in a string
@@ -997,16 +1014,32 @@ evidence that observation recorded, or its absence when it returned none, and
 names the foreign object at the target with its identity and host, the target
 it could not read with its host or endpoint, or the listener with nothing of
 the target behind it, together with the remedy an operator applies before
-repeating the verb. Evidence the capability cannot explain gets the general
+repeating the verb. Evidence it reads as this request's, which none of the
+verb's checks accept, names the check that decided: for an apply the realized
+target's first difference from the frozen request, for a removal what keeps the
+target from reading as this context's own, and either way the remedy is to
+restore the target. A removal that supersedes an apply resolves the apply's
+blocks by the apply's reading, so it refuses the same way until the target is
+restored. Evidence the capability cannot explain gets the general
 reason that the observation proved neither the effect nor its absence, and an
 unproved block no resolution has observed yet says that no observation has
-read it. A resolution that leaves its block unknown reports that reason and
-remedy in a `lifecycle.unknown` diagnostic naming the block, unless its
+read it. A resolution that leaves its block unknown records that reason in its
+resolution log as `unresolved` and reports it with its remedy in a
+`lifecycle.unknown` diagnostic naming the block, unless its
 observation could not run at all, which reports why it did not, so the refusal
-of a removal names every block it could not prove with why. `status` reports
-the same reason and remedy for each `unknown` or `running` block of the current
-operation, read from the last resolution of that block's last attempt, so a
-refusal and a later `status` agree. The reason changes no state: an explained
+of a removal names every block it could not prove with why. A capability
+returns an observation it could not make as its failure; the engine logs each
+diagnostic of it as `observation-failed` and records the first on the
+resolution record. `status` reports the same reason and remedy for each
+`unknown` or `running` block of the current operation, read from the last
+resolution of that block's last attempt: one whose observation could not run
+reports its recorded failure, with the reason
+`its observation could not run: <message>` and its remediation as the remedy,
+before any capability reads its evidence, so a refusal and a later `status` agree. An undiagnosed failure
+records none and keeps the capability's or the general reason. A resolution
+that proves completion but cannot place what the block produced in custody
+records no failure, since its observation ran: it refuses with custody's
+failure and its block stays `unknown`. The reason changes no state: an explained
 block stays `unknown` and admits no effect, no capability proves an outcome
 outside the [resolution outcomes](#resolution-outcomes), and a removal is never
 admitted over it. Once the operator removes the foreign object or restores the
@@ -1187,7 +1220,9 @@ identifies the bytes that were frozen. Any change to what a request encodes is
 a new version, including adding or renaming one field, because the bytes a
 version froze are proved canonical against the shape that wrote them: a shape
 that changed without its version refuses its own frozen bytes. No conversion
-exists. A request of any other version, or one whose implementation this
+exists. A decoder reads the version a request holds before its shape, so a
+request whose version removed or renamed a field still refuses by naming that
+version, with the remedy to destroy it with the build that applied it. A request of any other version, or one whose implementation this
 executable no longer provides, refuses before anything is registered and names
 the block, the version it holds and the executable identity its operation
 recorded, so the remedy is the command to run rather than the obstacle that

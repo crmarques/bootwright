@@ -264,7 +264,7 @@ func TestOperationRecordsMatchTheirGoldens(t *testing.T) {
 		t.Fatalf("starting the resolution: %d (%v)", resolution, err)
 	}
 	if err := store.CompleteResolution(ctx, applied.ID, "install-node-01", 1, 1, reconciliation.OutcomeChanged, reconciliation.EffectCompleted,
-		reconciliation.BlockDone, json.RawMessage(`{"installed":true}`)); err != nil {
+		reconciliation.BlockDone, json.RawMessage(`{"installed":true}`), nil); err != nil {
 		t.Fatalf("completing the resolution: %v", diagnostics.Of(err))
 	}
 	// No public reader returns a resolution record, so it reads back through

@@ -7,11 +7,9 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -189,17 +187,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 // could not be made, stays unknown. A fresh destroy over an incomplete apply
 // resolves the apply's block through this reading too.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request Request, digest, fingerprint string) reconciliation.EffectState {
-		switch {
-		case ValidatePresence(evidence, request, digest, fingerprint) == nil:
-			return reconciliation.EffectCompleted
-		case ValidateAbsence(evidence, digest) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidatePartial(evidence, request, digest, fingerprint) == nil:
-			return reconciliation.EffectPartial
-		}
-		return reconciliation.EffectUnknown
-	})
+	return c.observe(ctx, execution, reconciliation.Apply)
 }
 
 // ObserveRemoval reads the same observation for what a removal takes back, not
@@ -209,22 +197,44 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 // positive partial removal the next attempt converges. Only an observation
 // that cannot be made or read as this request's stays unknown.
 func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request Request, digest, _ string) reconciliation.EffectState {
+	return c.observe(ctx, execution, reconciliation.Destroy)
+}
+
+// serverEffect is the one reading of an artifact-server observation for the
+// verb the block was frozen for: an apply's checks are its presence, absence
+// and partial forms, a removal's its absence, unremoved and unfinished forms,
+// each in that order. When none accepts the evidence the effect is unknown,
+// and the refusal that decided it comes back with it: the presence check's for
+// an apply, the unfinished removal's for a removal. Only an apply reads the
+// fingerprint of the bound certificate.
+func serverEffect(verb reconciliation.Verb, evidence []byte, request Request, digest, fingerprint string) (reconciliation.EffectState, error) {
+	if verb == reconciliation.Destroy {
 		switch {
 		case ValidateAbsence(evidence, digest) == nil:
-			return reconciliation.EffectCompleted
+			return reconciliation.EffectCompleted, nil
 		case ValidateUnremoved(evidence, request, digest) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidateRemovalUnfinished(evidence, request, digest) == nil:
-			return reconciliation.EffectPartial
+			return reconciliation.EffectNoEffect, nil
 		}
-		return reconciliation.EffectUnknown
-	})
+		if err := ValidateRemovalUnfinished(evidence, request, digest); err != nil {
+			return reconciliation.EffectUnknown, err
+		}
+		return reconciliation.EffectPartial, nil
+	}
+	presence := ValidatePresence(evidence, request, digest, fingerprint)
+	switch {
+	case presence == nil:
+		return reconciliation.EffectCompleted, nil
+	case ValidateAbsence(evidence, digest) == nil:
+		return reconciliation.EffectNoEffect, nil
+	case ValidatePartial(evidence, request, digest, fingerprint) == nil:
+		return reconciliation.EffectPartial, nil
+	}
+	return reconciliation.EffectUnknown, presence
 }
 
 // observe runs the one read-only observation both resolutions share and reads
 // its evidence for the verb the block was frozen for.
-func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, Request, string, string) reconciliation.EffectState) (lifecycle.Observation, error) {
+func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, fingerprint, err := c.prepare(ctx, execution, false)
 	if err != nil {
@@ -232,24 +242,10 @@ func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, 
 	}
 	result, err := c.run(ctx, execution, "observe", request, fingerprint)
 	if err != nil {
-		// An observation that failed proves nothing either way, so the effect
-		// stays unknown. The reason still belongs in the attempt log: without
-		// it a resolution loop reports only that it could not resolve.
-		recordObservationFailure(ctx, execution, err)
-		return unknown, nil
+		return unknown, err
 	}
-	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest, fingerprint), Evidence: result.Evidence}, nil
-}
-
-func recordObservationFailure(ctx context.Context, execution lifecycle.Execution, err error) {
-	if execution.Log == nil {
-		return
-	}
-	for _, reported := range diagnostics.Of(err) {
-		_ = execution.Log(ctx, operationstore.LogRecord{
-			Event: "observation-failed", Block: execution.Block.ID, Detail: reported.Code + ": " + reported.Message,
-		})
-	}
+	effect, _ := serverEffect(verb, result.Evidence, request, execution.Block.RequestDigest, fingerprint)
+	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
 // prepare decodes the frozen request and, when the operation serves content,
@@ -268,9 +264,9 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, 
 	if request.TLS == nil {
 		return request, "", nil
 	}
-	material, ok := execution.Material[request.TLS.Secret]
-	if !ok {
-		return Request{}, "", refusal("secret.store", "the bound serving certificate is not available to this attempt", "repeat the operation so its Secret bindings are reopened")
+	material, err := BoundServingMaterial(execution.Material, request.TLS.Secret, execution.Context)
+	if err != nil {
+		return Request{}, "", err
 	}
 	certificate, err := ValidateServingCertificate(material, request.TLS.Secret, execution.Context, request.servedAddresses("https"), c.now())
 	if err != nil && verifyCertificate {
@@ -294,6 +290,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials(request), Values: values,
+		Refusals: managedservice.ForeignListenerRefusals(Kind, request.Identity.Service, request.BindAddress, listenerPorts(request)),
 	}))
 }
 

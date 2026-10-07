@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"regexp"
 	"slices"
 	"time"
 	"unicode/utf8"
 
+	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -141,6 +143,7 @@ type Operation struct {
 	Executable       Executable                    `json:"executable"`
 	Closure          *Closure                      `json:"closure,omitempty"`
 	Source           string                        `json:"source"`
+	Replaces         string                        `json:"replaces,omitempty"`
 	Bindings         []string                      `json:"bindings"`
 	State            reconciliation.OperationState `json:"state"`
 	LogFault         bool                          `json:"logFault"`
@@ -171,16 +174,31 @@ type Attempt struct {
 	Effect      reconciliation.EffectState `json:"effect"`
 	Evidence    json.RawMessage            `json:"evidence"`
 	Preparation json.RawMessage            `json:"preparation,omitempty"`
+	Failure     *ObservationFailure        `json:"failure,omitempty"`
 	Started     string                     `json:"started"`
 	Updated     string                     `json:"updated"`
 }
 
+// ObservationFailure is the first diagnostic a resolution's observation
+// reported when it could not run. Only an unknown resolution carries one.
+type ObservationFailure struct {
+	Code        string `json:"code"`
+	Message     string `json:"message"`
+	Remediation string `json:"remediation,omitempty"`
+}
+
+// Bounds of an ObservationFailure's fields, in bytes.
+const (
+	MaxFailureCode = 64
+	MaxFailureText = 1024
+)
+
 func encode(value any, maximum int) ([]byte, error) {
-	data, err := json.Marshal(value)
-	if err != nil || len(data) >= maximum {
+	data, err := canonicaljson.Encode(value, canonicaljson.Line)
+	if err != nil || len(data)-1 >= maximum {
 		return nil, recordError("lifecycle record exceeds its encoding limit")
 	}
-	return append(data, '\n'), nil
+	return data, nil
 }
 
 // decode accepts only the exact canonical encoding of the record type, so a
@@ -189,13 +207,11 @@ func decode(data []byte, maximum int, target any) error {
 	if len(data) == 0 || len(data) > maximum || !utf8.Valid(data) {
 		return recordError("lifecycle record exceeds its bounds or encoding")
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return recordError("lifecycle record is malformed or unsupported")
-	}
-	if len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
+	switch err := canonicaljson.DecodeClosed(data, target); {
+	case errors.Is(err, canonicaljson.ErrTrailing):
 		return recordError("lifecycle record contains trailing data")
+	case err != nil:
+		return recordError("lifecycle record is malformed or unsupported")
 	}
 	canonical, err := encode(target, maximum)
 	if err != nil {
@@ -244,6 +260,9 @@ func validateOperation(operation Operation) error {
 	}
 	if operation.Verb == reconciliation.Destroy && operation.Source == "" {
 		return recordError("a destroy operation requires the applied operation it removes")
+	}
+	if operation.Replaces != "" && (operation.Verb != reconciliation.Destroy || !reconciliation.ValidOperationID(operation.Replaces) || operation.Replaces == operation.ID || operation.Replaces == operation.Source) {
+		return recordError("lifecycle operation replacement is invalid")
 	}
 	for _, value := range []string{operation.Context, operation.Revision, operation.InputDigest, operation.PlanDigest, operation.AutomationDigest} {
 		if value == "" || len(value) > maxIdentifier {
@@ -338,7 +357,18 @@ func validateAttempt(record Attempt) error {
 			return recordError("lifecycle attempt evidence exceeds its bound")
 		}
 	}
+	if record.Failure != nil && !validFailure(record) {
+		return recordError("lifecycle attempt failure is invalid")
+	}
 	return validateTimestamps(record.Started, record.Updated)
+}
+
+func validFailure(record Attempt) bool {
+	failure := record.Failure
+	return record.Resolution != 0 && record.Phase == "observed" && record.Effect == reconciliation.EffectUnknown &&
+		failure.Code != "" && len(failure.Code) <= MaxFailureCode &&
+		failure.Message != "" && len(failure.Message) <= MaxFailureText && len(failure.Remediation) <= MaxFailureText &&
+		utf8.ValidString(failure.Code) && utf8.ValidString(failure.Message) && utf8.ValidString(failure.Remediation)
 }
 
 func validateTimestamps(values ...string) error {

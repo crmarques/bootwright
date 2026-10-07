@@ -43,8 +43,10 @@ func spelled(field string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(field, "$"), ".")
 }
 
-// ValidateProxyChoice checks local contradictions without completing partial
-// defaults or resolving references outside the selected graph.
+// ValidateProxyChoice checks local contradictions and holds every bypass entry
+// to the grammar each acquisition route reads, without completing partial
+// defaults or resolving references outside the selected graph. No refusal
+// carries the entry it refuses.
 func ValidateProxyChoice(selection api.Value, field string) []api.Issue {
 	if selection.Has("proxyRef") && selection.Has("direct") {
 		return []api.Issue{issue(field, "proxy choice requires exactly one proxyRef or direct block", "keep exactly one of proxyRef or direct")}
@@ -52,7 +54,16 @@ func ValidateProxyChoice(selection api.Value, field string) []api.Issue {
 	if selection.Has("direct") && (selection.Has("endpointRef") || selection.Has("noProxy")) {
 		return []api.Issue{issue(field, "direct proxy choice forbids endpointRef and noProxy", "remove endpointRef and noProxy, or select a proxyRef")}
 	}
-	return nil
+	var issues []api.Issue
+	for index, entry := range selection.Get("noProxy").Items() {
+		if entry.Type() != api.String || entry.Text() == "" || api.ValidLexical("proxy-bypass", entry.Text()) {
+			continue
+		}
+		path := fmt.Sprintf("%s.noProxy[%d]", field, index)
+		issues = add(issues, api.Issue{Code: "api.value", Field: path, Message: "a proxy bypass entry must be one of the forms every acquisition route reads",
+			Remediation: "write the entry as " + api.ProxyBypassForms})
+	}
+	return issues
 }
 
 func NormalizeServerSelections(selections api.Value, c api.Catalog, kind api.Kind) api.Value {

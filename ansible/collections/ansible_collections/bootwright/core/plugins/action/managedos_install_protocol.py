@@ -8,11 +8,12 @@ invoking Bootwright process.
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
+from ansible_collections.bootwright.core.plugins.module_utils.adapter_protocol import publishes, unreached
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
     emit,
 )
 
-PHASES = ("loaded", "group", "refused", "completed")
 # The refusals this installation names to its runner before the run fails,
 # each one the runner reports as the installation's own diagnostic for its
 # Machine: those of the target's pre-boot proof (internal/substrate,
@@ -20,8 +21,6 @@ PHASES = ("loaded", "group", "refused", "completed")
 # SHA-256 the operation froze (internal/managedos/installation, selection.go).
 REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
 MEDIA_REFUSALS = ("media-changed-boot", "media-changed-tree")
-GROUP_STATUSES = ("running", "ok", "failed", "skipped")
-OUTCOMES = ("changed", "unchanged")
 POWER_STATES = ("", "On", "Off")
 MAX_MARKER = 4096
 MAX_HOST_KEY = 4096
@@ -31,19 +30,12 @@ MAX_HOST_KEY = 4096
 # treeStaging and work are what an attempt killed part way leaves: the tree it
 # was extracting beneath the served root and the area it built the image in.
 CONTENT = ("image", "private", "tree", "treeContent", "treeStaging", "work")
-HEX = set("0123456789abcdef")
-
-
-def digest(value):
-    if not isinstance(value, str) or len(value) != 64 or set(value) - HEX:
-        raise ValueError("digest")
-    return value
 
 
 def tree_identity(value):
     """The digest of the image the published tree was extracted from, or ''."""
     value = value or ""
-    if value != "" and (not isinstance(value, str) or len(value) != 64 or set(value) - HEX):
+    if value != "" and (not isinstance(value, str) or len(value) != 64 or set(value) - adapter_protocol.HEX):
         raise ValueError("tree identity")
     return value
 
@@ -71,7 +63,7 @@ def presence(arguments, request_digest):
         "power": str(power),
         "private": bool(observation.get("private")),
         "reachable": bool(arguments.get("reachable")),
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "tree": bool(observation.get("tree")),
         "treeContent": bool(observation.get("treeContent")),
         "treeIdentity": tree_identity(observation.get("treeIdentity")),
@@ -126,7 +118,7 @@ def absence(arguments, request_digest):
         "power": "",
         "private": False,
         "reachable": False,
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "tree": False,
         "treeContent": False,
         "treeIdentity": "",
@@ -135,14 +127,28 @@ def absence(arguments, request_digest):
     }
 
 
-def publishes(evidence, observed):
-    """Whether this phase may publish evidence proving no postcondition.
+def completion(arguments):
+    """The evidence one completion publishes, or what it names when unmet."""
+    request_digest = arguments.get("digest")
+    if arguments.get("removed"):
+        evidence = absence(arguments, request_digest)
+        unmet, verb = remaining(arguments), "still present"
+    else:
+        evidence = presence(arguments, request_digest)
+        unmet, verb = unproved(evidence), "not proved"
+    if publishes(evidence, arguments.get("observed")):
+        return evidence, None
+    return evidence, unreached("the installation", verb, unmet)
 
-    A read-only observation reports what it found, including a target that is
-    part way realized, because the engine resolves an unproved effect from that
-    evidence. A mutation has to reach its postcondition or fail.
-    """
-    return bool(evidence["postcondition"]) or bool(observed)
+
+CAPABILITY = adapter_protocol.Capability(
+    "installation",
+    "the installation capability result could not be published",
+    completion,
+    phases=adapter_protocol.REFUSING_PHASES,
+    refusals=REFUSALS + MEDIA_REFUSALS,
+)
+PHASES = CAPABILITY.phases
 
 
 class ActionModule(ActionBase):
@@ -151,42 +157,4 @@ class ActionModule(ActionBase):
 
     def run(self, tmp=None, task_vars=None):
         del tmp
-        arguments = self._task.args
-        phase = arguments.get("phase")
-        if phase not in PHASES:
-            return {"failed": True, "msg": "unsupported installation protocol phase"}
-        try:
-            if phase == "loaded":
-                emit({"phase": "loaded"}, acknowledge=True)
-                return {"changed": False}
-            if phase == "group":
-                status = arguments.get("status")
-                if status not in GROUP_STATUSES:
-                    raise ValueError("group status")
-                emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
-                return {"changed": False}
-            if phase == "refused":
-                reason = arguments.get("reason")
-                if reason not in REFUSALS + MEDIA_REFUSALS:
-                    raise ValueError("refusal reason")
-                emit({"phase": "refused", "reason": reason})
-                return {"changed": False}
-            outcome = arguments.get("outcome")
-            if outcome not in OUTCOMES:
-                raise ValueError("outcome")
-            request_digest = arguments.get("digest")
-            if arguments.get("removed"):
-                evidence = absence(arguments, request_digest)
-                unmet, verb = remaining(arguments), "still present"
-            else:
-                evidence = presence(arguments, request_digest)
-                unmet, verb = unproved(evidence), "not proved"
-            if not publishes(evidence, arguments.get("observed")):
-                return {
-                    "failed": True,
-                    "msg": "the installation did not reach its postcondition; %s: %s" % (verb, ", ".join(unmet) or "unknown"),
-                }
-            emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
-            return {"changed": False}
-        except (ValueError, TypeError, OSError):
-            return {"failed": True, "msg": "the installation capability result could not be published"}
+        return adapter_protocol.publish(self._task.args, CAPABILITY, emit)

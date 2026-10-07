@@ -4,7 +4,6 @@ package ansiblelocal
 
 import (
 	"context"
-	"encoding/json"
 	"os/exec"
 	"strings"
 	"testing"
@@ -59,7 +58,7 @@ func newRefusalFixture(t *testing.T) refusalFixture {
 		t.Fatal(err)
 	}
 	record := func(value any) string {
-		data, err := json.Marshal(value)
+		data, err := canonicalRecord(value)
 		if err != nil {
 			t.Fatal(err)
 		}

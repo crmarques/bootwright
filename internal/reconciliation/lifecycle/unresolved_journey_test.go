@@ -54,9 +54,11 @@ type hypervisor struct {
 	// frozen name without this context's ownership; listener is something
 	// listening on the controller's socket with nothing of the machine behind
 	// it; partial is this context's own domain defined, with its disk, while
-	// its controller never started.
-	silent, foreign, listener, partial bool
-	calls                              []string
+	// its controller never started; drifted is this context's own machine
+	// whole, its adapter's postcondition proved, while its controller runs
+	// another image than the frozen one.
+	silent, foreign, listener, partial, drifted bool
+	calls                                       []string
 }
 
 func (h *hypervisor) Run(_ context.Context, run lifecycle.RunRequest) (lifecycle.RunResult, error) {
@@ -72,7 +74,7 @@ func (h *hypervisor) Run(_ context.Context, run lifecycle.RunRequest) (lifecycle
 	case "apply":
 		return lifecycle.RunResult{}, errors.New("the adapter's result was lost")
 	case "destroy":
-		h.partial = false
+		h.partial, h.drifted = false, false
 		return lifecycle.RunResult{Outcome: "changed", Evidence: evidenceOf(absent)}, nil
 	}
 	switch {
@@ -84,6 +86,13 @@ func (h *hypervisor) Run(_ context.Context, run lifecycle.RunRequest) (lifecycle
 	case h.listener:
 		return lifecycle.RunResult{Outcome: "unchanged", Evidence: evidenceOf(libvirt.MachineEvidence{
 			Answered: true, Disks: gone, Listener: held(true), Request: run.Digest,
+		})}, nil
+	case h.drifted:
+		return lifecycle.RunResult{Outcome: "unchanged", Evidence: evidenceOf(libvirt.MachineEvidence{
+			Answered: true, Controller: "quay.io/metal3-io/sushy-tools@sha256:" + strings.Repeat("f", 64),
+			Disks: []libvirt.DiskEvidence{{Name: "root", Present: true, SizeGiB: 60}}, Domain: h.request.Domain,
+			Listener: held(true), Owned: true, Postcondition: true, Power: "On", Request: run.Digest, State: "running",
+			System: h.request.UUID, Unit: "active",
 		})}, nil
 	case h.partial:
 		return lifecycle.RunResult{Outcome: "unchanged", Evidence: evidenceOf(libvirt.MachineEvidence{
@@ -270,4 +279,37 @@ func TestALostLibvirtMachineIsRecoveredOnlyOnceItsObservationProvesIt(t *testing
 		adapter.set(func(h *hypervisor) { h.partial = true })
 		requireRemoved(t, journey, adapter)
 	})
+}
+
+// A libvirt machine this context owns whole, whose adapter proves its
+// postcondition while its controller runs another image than the frozen one,
+// is not what the apply froze. The apply's resolution refuses naming that
+// comparison, records the same reason in its resolution log as `unresolved`,
+// and status names it with its remedy. A removal that supersedes the apply
+// resolves the apply's block by the apply's reading, so it refuses the same way
+// until the machine is restored, and then removes it.
+func TestADriftedLibvirtMachineResolutionLogsItsRefusal(t *testing.T) {
+	host := "Machine hypervisor at 192.0.2.5"
+	reason := "domain bootwright-lab-rhel-01 on " + host + " is not what its apply froze: the running management controller is not the frozen image"
+	remedy := "restore domain bootwright-lab-rhel-01 on " + host + " to what its frozen request names"
+	journey, adapter := lostMachineJourney(t)
+	adapter.set(func(h *hypervisor) { h.drifted = true })
+	_, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
+	reported := diagnostics.Of(err)
+	if len(reported) == 0 || reported[0].Code != "lifecycle.unknown" || !strings.HasSuffix(reported[0].Message, "the running management controller is not the frozen image") {
+		t.Fatalf("the apply's resolution reported %+v (%v)", reported, err)
+	}
+	if calls := adapter.took(); !slices.Equal(calls, []string{"observe"}) {
+		t.Fatalf("the apply's resolution ran %v", calls)
+	}
+	if logged := journey.ResolutionLog(t, lostMachine, "unresolved"); len(logged) != 1 || logged[0].Block != lostMachine || logged[0].Detail != reason {
+		t.Fatalf("the resolution log holds %+v, want one unresolved record naming %q", logged, reason)
+	}
+	operation, block, unresolved := unresolvedOf(t, journey)
+	if operation != "apply unknown" || block != "unknown" || unresolved == nil || unresolved.Reason != reason || unresolved.Remedy != remedy {
+		t.Fatalf("status reports %s with %s block, unresolved %+v", operation, block, unresolved)
+	}
+	requireRefusal(t, journey, adapter, reason, remedy)
+	adapter.set(func(h *hypervisor) { h.drifted = false })
+	requireRemoved(t, journey, adapter)
 }

@@ -10,6 +10,8 @@ import os
 import socket
 import struct
 
+from ansible_collections.bootwright.core.plugins.module_utils import host_sockets
+
 SYSTEMCTL = "/usr/bin/systemctl"
 PODMAN = "/usr/bin/podman"
 UNIT_DIRECTORY = "/etc/containers/systemd/"
@@ -20,6 +22,7 @@ PROBE_REASON = 120
 PROBE_TIMEOUT = 5
 UNIT_STATES = ("active", "activating", "deactivating", "inactive", "failed")
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
+TRANSPORTS = {"DNSServer": ("tcp", "udp"), "NTPServer": ("udp",), "Proxy": ("tcp",)}
 
 
 def probe_failure(error):
@@ -119,6 +122,21 @@ def observe(runner, request, runs_from=()):
         "contentRoot": os.path.isdir(request["contentRoot"]),
         "startedAfterFiles": started_after(runner, request["unit"], [unit_path] + list(runs_from)),
     }
+
+
+def foreign(request, observation, read=None):
+    """Every socket another daemon holds where this service binds.
+
+    A unit that is active, or a container that exists, may hold the socket
+    itself: Quadlet runs its containers with --rm, so a present container is a
+    running one. Only a service with neither proves the socket foreign.
+    """
+    if observation.get("unit") == "active" or observation.get("containerPresent"):
+        return []
+    return host_sockets.foreign_sockets(
+        request["bindAddress"], [int(request["port"])], TRANSPORTS[request["kind"]],
+        read or host_sockets.table_lines,
+    )
 
 
 def probe_targets(request):

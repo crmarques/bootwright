@@ -4,22 +4,42 @@ package ansiblelocal
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
+
+// canonicalRecord encodes a record as the collection's canonical writer does:
+// a struct's members in declaration order are re-encoded as a map's, sorted.
+// No fixture holds a character Go escapes and Python does not.
+func canonicalRecord(value any) ([]byte, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var generic any
+	if err := decoder.Decode(&generic); err != nil {
+		return nil, err
+	}
+	return json.Marshal(generic)
+}
 
 func TestRunnerProtocolChild(t *testing.T) {
 	if len(os.Args) < 2 || !strings.HasPrefix(os.Args[len(os.Args)-1], "controller-child-") {
@@ -28,7 +48,7 @@ func TestRunnerProtocolChild(t *testing.T) {
 	mode := strings.TrimPrefix(os.Args[len(os.Args)-1], "controller-child-")
 	output, input := os.NewFile(3, "result"), bufio.NewReader(os.NewFile(4, "authorization"))
 	emit := func(value any, acknowledge bool) {
-		data, _ := json.Marshal(value)
+		data, _ := canonicalRecord(value)
 		_, _ = output.Write(append(data, '\n'))
 		if acknowledge {
 			line, _ := input.ReadString('\n')
@@ -38,6 +58,9 @@ func TestRunnerProtocolChild(t *testing.T) {
 		}
 	}
 	sha := strings.Repeat("a", 64)
+	if mode == "isolated" || mode == "authorized" || mode == "retaining" {
+		stoppedChild(mode, emit, output)
+	}
 	if mode == "hang" {
 		// Completes the load handshake, then waits. Nothing but a reaped
 		// process group ends this child.
@@ -356,7 +379,7 @@ func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
 	}
 	readAfter := func(records string) string { return handoff + afterTheExit(records) }
 	record := func(value any) string {
-		data, err := json.Marshal(value)
+		data, err := canonicalRecord(value)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -440,6 +463,67 @@ func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
 				t.Fatalf("the run released %d times and reported %q, want %d and %q", released, details, releases, progress)
 			}
 		})
+	}
+}
+
+// A record the collection's canonical writer never emits, such as one spaced
+// after its colon, breaks the protocol: the run fails controller.unknown and
+// nothing is released for it.
+func TestAControllerRunEndsUnknownOnANonCanonicalRecord(t *testing.T) {
+	result, found := scriptedRun(t, `printf '{"phase": "loaded"}\n' >&3; read -r reply <&4; exit 2`, nil)
+	if len(found) != 1 || found[0].Code != "controller.unknown" || found[0].Message != "the Ansible structured result was incomplete" {
+		t.Fatalf("a non-canonical record reported %+v", found)
+	}
+	if result.Outcome != "failed" {
+		t.Fatalf("a non-canonical record left the run %s", result.Outcome)
+	}
+}
+
+// A run canceled while Go judges loaded never acknowledges it: the adapter
+// reads its closed channel instead of proceed, the run ends canceled with an
+// unknown outcome, and, since nothing native was authorized, the adapter's
+// group is killed. The reader writes the record from a session of its own, so
+// the group kill cannot end it before it records what it read.
+func TestACanceledControllerRunNeverAcknowledges(t *testing.T) {
+	directory := t.TempDir()
+	reply, descendant := filepath.Join(directory, "reply"), filepath.Join(directory, "descendant")
+	script := `sleep 30 </dev/null >/dev/null 2>&1 3>&- 4<&- & printf '%s' "$!" > '` + descendant + `'; ` +
+		`setsid sh -c 'printf "{\"phase\":\"loaded\"}\n" >&3; exec 3>&-; ` +
+		`if read -r line <&4; then printf "%s" "$line"; else printf EOF; fi > "$0.partial"; mv "$0.partial" "$0"' '` + reply + `' </dev/null >/dev/null 2>&1 & ` +
+		`exec 3>&- 4<&-; wait`
+	launch, request, boundary := runnerFixture(t, "unused")
+	boundary.completedDrain, boundary.authorizedDrain = 2*time.Second, 2*time.Second
+	boundary.command = func(string, ...string) *exec.Cmd { return exec.Command("/bin/sh", "-c", script) }
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	result, err := runProcess(ctx, launch, request, func() error { cancel(); return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+	if !errors.Is(err, context.Canceled) || result.Outcome != "unknown" {
+		t.Fatalf("the canceled run left %s (%v), want unknown and canceled", result.Outcome, err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		read, err := os.ReadFile(reply)
+		if err == nil {
+			if string(read) != "EOF" {
+				t.Fatalf("the adapter read %q after the run was canceled, want its channel closed", read)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the adapter's reader recorded nothing: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	recorded, err := os.ReadFile(descendant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(string(recorded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("the adapter's descendant %d outlived the canceled run: %v", pid, err)
 	}
 }
 
@@ -621,5 +705,232 @@ func TestRunnerRetainsWhatAnsiblePrintsWhenGivenSomewhereToPutIt(t *testing.T) {
 	}
 	if !strings.Contains(retained.String(), "private-child-diagnostic") {
 		t.Fatalf("retained = %q, want what the run printed", retained.String())
+	}
+}
+
+// nativeFixture is a native plan of one action and the preparation and
+// completion an adapter writes for it.
+func nativeFixture() (*prerequisites.NativeResolvedPlan, prerequisites.NativePreparation) {
+	sha := strings.Repeat("a", 64)
+	plan := &prerequisites.NativeResolvedPlan{Digest: strings.Repeat("c", 64), BeforeSHA256: sha, AfterSHA256: strings.Repeat("b", 64), Actions: []prerequisites.NativeAction{{SourceID: "native-one"}}}
+	transitions, _ := prerequisites.NativeTransitionsDigest(plan.Actions)
+	return plan, prerequisites.NativePreparation{InventorySHA256: sha, AfterInventorySHA256: plan.AfterSHA256, PlanDigest: plan.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
+}
+
+// stoppedChild is an adapter that cancellation or its own descendants stop.
+// isolated starts a worker in a session of its own after its loaded record,
+// as an Ansible worker is, and on termination ends it as the supervisor's
+// handler does. authorized records termination if it ever gets it and finishes
+// its native transaction 500 ms after the native acknowledgement. retaining
+// completes, closes its result channel and leaves a descendant in a session of
+// its own holding its output.
+func stoppedChild(mode string, emit func(any, bool), output *os.File) {
+	terminated := make(chan os.Signal, 1)
+	signal.Notify(terminated, syscall.SIGTERM)
+	marker, sha := os.Getenv("BOOTWRIGHT_TEST_TRANSACTION"), strings.Repeat("a", 64)
+	emit(map[string]any{"phase": "loaded"}, true)
+	switch mode {
+	case "isolated":
+		worker := exec.Command("/bin/sh", "-c", `sleep 1.5; echo alive > "$BOOTWRIGHT_TEST_TRANSACTION"`)
+		worker.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		if worker.Start() != nil {
+			os.Exit(20)
+		}
+		_ = os.WriteFile(os.Getenv("BOOTWRIGHT_TEST_WORKER"), []byte(strconv.Itoa(worker.Process.Pid)), 0600)
+		<-terminated
+		_ = worker.Process.Kill()
+		_ = worker.Wait()
+		os.Exit(143)
+	case "authorized":
+		_, preparation := nativeFixture()
+		emit(map[string]any{"phase": "prepared", "preparation": preparation}, true)
+		emit(map[string]any{"phase": "native"}, true)
+		select {
+		case <-terminated:
+			_ = os.WriteFile(marker+".signalled", []byte("signalled\n"), 0600)
+			os.Exit(143)
+		case <-time.After(500 * time.Millisecond):
+			_ = os.WriteFile(marker, []byte("done\n"), 0600)
+			os.Exit(0)
+		}
+	}
+	emit(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AddedSources: []string{}}}, true)
+	emit(map[string]any{"phase": "completed", "outcome": "unchanged", "evidence": map[string]any{"request": sha, "before": sha, "after": sha, "planDigest": "", "added": []string{}, "tools": []string{}, "postcondition": true}}, false)
+	_ = output.Close()
+	holder := exec.Command("/bin/sleep", "5")
+	holder.Stdout = os.Stdout
+	holder.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if holder.Start() != nil {
+		os.Exit(20)
+	}
+	_ = os.WriteFile(os.Getenv("BOOTWRIGHT_TEST_WORKER"), []byte(strconv.Itoa(holder.Process.Pid)), 0600)
+	os.Exit(0)
+}
+
+// recordedProcess is the process ID a fixture recorded in path, or zero.
+func recordedProcess(path string) int {
+	recorded, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	pid, _ := strconv.Atoi(string(recorded))
+	return pid
+}
+
+// An adapter that answers the acknowledgement channel by closing it lets no
+// acknowledgement through, so nothing was authorized, and the outcome is its
+// exit's whichever of the two the runner reads first: a failed exit stays the
+// failed exit. Read first, the record meets a channel no process holds; read
+// after, a descendant that holds only the result channel writes it once the
+// adapter has exited.
+func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
+	for _, check := range []struct{ name, script string }{
+		{"record first", `exec 4<&-; printf '{"phase":"loaded"}\n' >&3; sleep 0.3; exit 3`},
+		{"exit first", `exec 4<&-; /bin/sh -c 'sleep 0.3; printf "%s\n" "$0" >&3' '{"phase":"loaded"}' </dev/null >/dev/null 2>&1 & exit 3`},
+	} {
+		t.Run(check.name, func(t *testing.T) {
+			result, found := scriptedRun(t, check.script, nil)
+			if len(found) != 1 || found[0].Code != "controller.setup" || found[0].Message != "Ansible did not complete the authorized dependency operation" {
+				t.Fatalf("an acknowledgement nothing could receive reported %+v", found)
+			}
+			if result.Outcome != "failed" {
+				t.Fatalf("an acknowledgement nothing could receive left the run %s", result.Outcome)
+			}
+		})
+	}
+}
+
+// A native record whose acknowledgement no adapter process could receive
+// authorizes no transaction: setup's own run, whose preparation was already
+// published, records failed rather than an unknown installation, whichever of
+// the record and the failed exit the runner reads first.
+func TestAnUndeliveredNativeAcknowledgementAuthorizesNoTransaction(t *testing.T) {
+	plan, preparation := nativeFixture()
+	prepared, err := canonicalRecord(map[string]any{"phase": "prepared", "preparation": preparation})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handoff := `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; printf '%s\n' '` + string(prepared) + `' >&3; read -r reply <&4; exec 4<&-; `
+	for _, check := range []struct{ name, script string }{
+		{"record first", handoff + `printf '{"phase":"native"}\n' >&3; sleep 0.3; exit 3`},
+		{"exit first", handoff + `/bin/sh -c 'sleep 0.3; printf "%s\n" "$0" >&3' '{"phase":"native"}' </dev/null >/dev/null 2>&1 & exit 3`},
+	} {
+		t.Run(check.name, func(t *testing.T) {
+			result, found := scriptedRun(t, check.script, func(request *capabilityRequest) { request.Native = plan })
+			if len(found) != 1 || found[0].Code != "controller.setup" || found[0].Message != "Ansible did not complete the authorized dependency operation" {
+				t.Fatalf("an undelivered native acknowledgement reported %+v", found)
+			}
+			if result.Outcome != "failed" {
+				t.Fatalf("an undelivered native acknowledgement left the run %s, want failed", result.Outcome)
+			}
+		})
+	}
+}
+
+// Cancellation before a native transaction is authorized signals the
+// supervisor, which ends every descendant, including a worker in a session of
+// its own that a group kill never reaches.
+func TestCancellingAControllerRunEndsItsSessionIsolatedWorker(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "isolated")
+	boundary.completedDrain, boundary.authorizedDrain = 200*time.Millisecond, 200*time.Millisecond
+	directory := t.TempDir()
+	marker, worker := filepath.Join(directory, "transaction"), filepath.Join(directory, "worker")
+	launch.Environment = append(launch.Environment, "BOOTWRIGHT_TEST_TRANSACTION="+marker, "BOOTWRIGHT_TEST_WORKER="+worker)
+	t.Cleanup(func() {
+		if pid := recordedProcess(worker); pid > 0 {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var canceled time.Time
+	// Cancel 300 ms in, and never before the worker runs.
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		for deadline := time.Now().Add(5 * time.Second); recordedProcess(worker) == 0 && time.Now().Before(deadline); {
+			time.Sleep(10 * time.Millisecond)
+		}
+		canceled = time.Now()
+		cancel()
+	}()
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+	if elapsed := time.Since(canceled); elapsed > 2*time.Second {
+		t.Fatalf("the canceled run returned after %s", elapsed)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("the canceled run reported %s (%v)", result.Outcome, err)
+	}
+	pid := recordedProcess(worker)
+	if pid == 0 {
+		t.Fatal("the adapter started no worker")
+	}
+	time.Sleep(2 * time.Second)
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the session-isolated worker outlived the canceled run")
+	}
+	if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("the session-isolated worker %d still runs: %v", pid, err)
+	}
+}
+
+// Once a native acknowledgement is delivered, cancellation signals and kills
+// nothing: the authorized transaction runs to its end.
+func TestCancellationSparesADeliveredNativeAuthorization(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "authorized")
+	boundary.completedDrain, boundary.authorizedDrain = 2*time.Second, 2*time.Second
+	plan, _ := nativeFixture()
+	request.Native = plan
+	marker := filepath.Join(t.TempDir(), "transaction")
+	launch.Environment = append(launch.Environment, "BOOTWRIGHT_TEST_TRANSACTION="+marker)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	progress := func(event prerequisites.ProgressEvent) {
+		if strings.HasPrefix(event.Detail, "installing ") {
+			cancel()
+		}
+	}
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, progress, nil, boundary)
+	if !errors.Is(err, context.Canceled) || result.Outcome != "unknown" {
+		t.Fatalf("the canceled authorized run reported %s (%v)", result.Outcome, err)
+	}
+	if _, err := os.Stat(marker + ".signalled"); err == nil {
+		t.Fatal("cancellation signaled an authorized native transaction")
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("the authorized native transaction did not finish: %v", err)
+	}
+}
+
+// A descendant in a session of its own that still holds Ansible's output after
+// it exits is cut at the drain: the run returns at its bound, and the
+// completed record it read is no result.
+func TestARunReturnsAtItsDrainWhenADescendantHoldsItsOutput(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "retaining")
+	boundary.completedDrain, boundary.authorizedDrain = 200*time.Millisecond, 200*time.Millisecond
+	holder := filepath.Join(t.TempDir(), "holder")
+	launch.Environment = append(launch.Environment, "BOOTWRIGHT_TEST_WORKER="+holder)
+	t.Cleanup(func() {
+		if pid := recordedProcess(holder); pid > 0 {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	started := time.Now()
+	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("the run waited %s on a descendant holding its output", elapsed)
+	}
+	found := diagnostics.Of(err)
+	if len(found) != 1 || found[0].Code != "controller.unknown" || found[0].Message != "Ansible descendants retained its output after it exited" {
+		t.Fatalf("retained output reported %+v (%v)", found, err)
+	}
+	// Setup's own run acknowledged no native record, so its published
+	// preparation records failed.
+	if result.Outcome != "failed" {
+		t.Fatalf("retained output left the run %s", result.Outcome)
+	}
+	if recordedProcess(holder) == 0 {
+		t.Fatal("the adapter left no descendant holding its output")
 	}
 }

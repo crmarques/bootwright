@@ -526,7 +526,7 @@ func TestAnInstallRemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 				Outcome: "unchanged", Evidence: installEvidence(t, testDigest, expectation.mutate),
 			}, err: expectation.err}
 			observation, err := NewInstall(runner).ObserveRemoval(context.Background(), execution)
-			if err != nil || observation.Effect != expectation.effect {
+			if !errors.Is(err, expectation.err) || observation.Effect != expectation.effect {
 				t.Fatalf("removal observation = %+v (%v), want %q", observation, err, expectation.effect)
 			}
 			if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" {

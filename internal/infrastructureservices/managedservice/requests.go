@@ -1,6 +1,7 @@
 package managedservice
 
 import (
+	"fmt"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
@@ -49,6 +50,15 @@ func (r Request) Canonical() ([]byte, error) {
 }
 
 func DecodeRequest(data []byte, version string) (Request, error) {
+	if members, err := reconciliation.Thaw[map[string]any](data, "managed service"); err == nil {
+		frozen, ok := members["version"].(string)
+		if !ok {
+			return Request{}, Refusal("lifecycle.state", "the frozen managed service request is malformed", "")
+		}
+		if frozen != version {
+			return Request{}, Refusal("lifecycle.state", fmt.Sprintf("the frozen managed service request has version %q, and this build reads only %q", frozen, version), "destroy the context with the Bootwright build that applied it")
+		}
+	}
 	request, err := reconciliation.Thaw[Request](data, "managed service")
 	if err != nil {
 		return Request{}, err

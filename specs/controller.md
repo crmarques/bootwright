@@ -982,7 +982,9 @@ Another pending attempt refuses, naming the executable that recorded it and the
 `bootwright setup`.
 
 Cancellation stops authorization of new effects. Before native installation
-starts, the runner terminates and reaps its process group. Once an authorized
+starts, the runner signals Ansible's supervisor, which ends every descendant,
+including Ansible workers in sessions of their own, then kills the process
+group. Once an authorized
 package transaction is running, it waits for native package hooks to finish
 and retains coordination until the child has exited; a timeout never grants
 lock takeover. The unprivileged sudo supervisor relays the operator's interrupt

@@ -109,19 +109,7 @@ func (r Request) Canonical() ([]byte, error) {
 }
 
 func DecodeRequest(data []byte) (Request, error) {
-	request, err := reconciliation.Thaw[Request](data, "controller prerequisites")
-	if err != nil {
-		return Request{}, err
-	}
-	if request.Version != Version {
-		return Request{}, refuse("lifecycle.state",
-			"the frozen controller prerequisites request has an unsupported version: "+request.Version,
-			"install the executable that registered this operation")
-	}
-	if err := reconciliation.ProveCanonical(data, request, "controller prerequisites"); err != nil {
-		return Request{}, err
-	}
-	return request, nil
+	return reconciliation.ThawVersion[Request](data, "controller prerequisites", Version)
 }
 
 // ContentDigest binds the plan to the exact behavior this build implements, so

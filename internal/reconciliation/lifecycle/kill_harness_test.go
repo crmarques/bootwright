@@ -278,7 +278,7 @@ func (h *killHost) unproved(block string) (Observation, bool) {
 }
 
 // Unresolved explains the two observations the host proves nothing from.
-func (h *killHost) Unresolved(block reconciliation.Block, evidence json.RawMessage) (Unresolved, bool) {
+func (h *killHost) Unresolved(_ reconciliation.Verb, block reconciliation.Block, evidence json.RawMessage) (Unresolved, bool) {
 	if len(evidence) == 0 {
 		return killSilent(block.ID), true
 	}

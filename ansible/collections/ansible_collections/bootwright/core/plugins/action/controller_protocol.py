@@ -3,19 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 
 from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
+    canonical,
     emit,
 )
-
-
-def canonical(value):
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode()
 
 
 def digest(value):

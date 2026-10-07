@@ -28,6 +28,14 @@ options:
     description: Whether to prove the service answers.
     type: bool
     default: false
+  foreign:
+    description:
+      - Whether to report every socket something other than this service holds
+        on a port it binds, at an address its bind address overlaps. Read
+        from the host's socket tables only while its unit is not active and
+        no container of it exists, since otherwise the socket may be its own.
+    type: bool
+    default: false
   attempts:
     description: Bounded readiness retries before the service is unproved.
     type: int
@@ -39,7 +47,7 @@ author:
 EXAMPLES = r"""
 - name: Observe the managed proxy
   bootwright.core.infra_service_inspect:
-    request: '{{ bootwright_proxy_request }}'
+    request: '{{ bootwright_managed_service_request }}'
 """
 
 RETURN = r"""
@@ -50,6 +58,13 @@ observation:
 answers:
   description: One entry per declared address when readiness was requested.
   returned: when readiness is requested
+  type: list
+  elements: dict
+foreign:
+  description:
+    - One entry per socket another daemon holds where this service binds, each
+      with its transport, address and port, sorted and bounded.
+  returned: when foreign is requested
   type: list
   elements: dict
 unproved:
@@ -63,6 +78,7 @@ import time
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils.infra_service import (
+    foreign,
     observe,
     probe_dns,
     probe_failure,
@@ -96,6 +112,7 @@ def main():
             "request": {"type": "dict", "required": True},
             "runs_from": {"type": "list", "elements": "str", "default": []},
             "readiness": {"type": "bool", "default": False},
+            "foreign": {"type": "bool", "default": False},
             "attempts": {"type": "int", "default": 30},
         },
         supports_check_mode=True,
@@ -108,6 +125,12 @@ def main():
         module.fail_json(msg="the managed service could not be observed: %s" % type(failure).__name__)
         return
     result = {"changed": False, "observation": observation, "unproved": []}
+    if module.params["foreign"]:
+        try:
+            result["foreign"] = foreign(request, observation)
+        except (OSError, ValueError) as failure:
+            module.fail_json(msg="the host's socket tables could not be read: %s" % type(failure).__name__)
+            return
     if not module.params["readiness"]:
         module.exit_json(**result)
         return

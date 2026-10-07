@@ -5,7 +5,7 @@
       "id": "install-node-01",
       "description": "install the operating system on node-01",
       "stage": "machines",
-      "dependencies": null,
+      "dependencies": [],
       "exclusive": [
         "path:/srv/lab/rhel"
       ],
@@ -54,7 +54,7 @@
       "impacts": [
         "create-container-unit lab"
       ],
-      "consumes": null,
+      "consumes": [],
       "groups": [
         {
           "id": "start-service",

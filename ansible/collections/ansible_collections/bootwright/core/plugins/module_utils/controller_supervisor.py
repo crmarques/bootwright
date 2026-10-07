@@ -13,11 +13,14 @@ PR_SET_CHILD_SUBREAPER = 36
 
 # Only the lifecycle runner passes this marker, ahead of the playbook
 # arguments. A controller run never does: its authorized native transaction
-# outlives the invocation and the adapter stops at its next acknowledgement.
+# outlives the invocation, so nothing ties its supervisor to the invocation's
+# death. Its supervisor still ends its whole tree on PARENT_DEATH, which the
+# controller runner sends only before a native transaction is authorized.
 LIFECYCLE = "--lifecycle"
 
-# The signal a lifecycle supervisor receives when its invocation dies. The Go
-# runner arms the same signal before exec, which covers this process's startup.
+# The signal a lifecycle supervisor receives when its invocation dies, and the
+# one either runner sends to stop a supervisor's tree. The Go lifecycle runner
+# arms the same signal before exec, which covers this process's startup.
 PARENT_DEATH = signal.SIGTERM
 
 # How long termination keeps finding descendants that a kill has not ended yet,
@@ -129,10 +132,15 @@ def terminate(system):
     system.end(128 + signal.SIGKILL)
 
 
+def guard_termination(system, install):
+    """End the supervisor's whole tree when it receives PARENT_DEATH."""
+    install(PARENT_DEATH, lambda *_: terminate(system))
+
+
 def guard_parent(prctl, system, install):
     """Tie a lifecycle supervisor to the invocation that started it."""
     parent = system.getppid()
-    install(PARENT_DEATH, lambda *_: terminate(system))
+    guard_termination(system, install)
     if not parent_guarded(prctl, system.getppid, parent, PARENT_DEATH):
         terminate(system)
 
@@ -153,9 +161,13 @@ def enter_child(lifecycle, prctl, getppid, supervisor, install, end):
 
     A lifecycle child is bound to its supervisor and ends at once if the
     supervisor is already gone. A controller child is left unbound, so an
-    authorized native transaction it runs can finish.
+    authorized native transaction it runs can finish, but it still drops the
+    supervisor's termination handler, which would end the supervisor's tree
+    from the child.
     """
-    if lifecycle and not bind_child(prctl, getppid, supervisor, install):
+    if not lifecycle:
+        install(PARENT_DEATH, signal.SIG_DFL)
+    elif not bind_child(prctl, getppid, supervisor, install):
         end(125)
 
 
@@ -185,6 +197,8 @@ def main():
         os._exit(125)
     if lifecycle:
         guard_parent(libc.prctl, System(), signal.signal)
+    else:
+        guard_termination(System(), signal.signal)
     supervisor = os.getpid()
     child = os.fork()
     if child == 0:

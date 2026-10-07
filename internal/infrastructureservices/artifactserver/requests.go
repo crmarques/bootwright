@@ -67,17 +67,7 @@ func (r Request) Canonical() ([]byte, error) {
 }
 
 func DecodeRequest(data []byte) (Request, error) {
-	request, err := reconciliation.Thaw[Request](data, "artifact-server")
-	if err != nil {
-		return Request{}, err
-	}
-	if request.Version != requestVersion {
-		return Request{}, refusal("lifecycle.state", "the frozen artifact-server request has an unsupported version", "")
-	}
-	if err := reconciliation.ProveCanonical(data, request, "artifact-server"); err != nil {
-		return Request{}, err
-	}
-	return request, nil
+	return reconciliation.ThawVersion[Request](data, "artifact-server", requestVersion)
 }
 
 func (r Request) listener(name string) (Listener, bool) {

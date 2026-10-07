@@ -7,27 +7,19 @@ result and authorization descriptors belong to the invoking Bootwright process.
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
+from ansible_collections.bootwright.core.plugins.module_utils.adapter_protocol import publishes
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
     emit,
 )
 
-PHASES = ("loaded", "group", "refused", "completed")
 # The refusals of a node's pre-boot proof this installation names to its runner
 # before the run fails, under the node's position in the frozen request, each
 # one the runner reports as the installation's own diagnostic for that node's
 # Machine (internal/substrate, preboot.go).
 REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
 MAX_NODE = 999
-GROUP_STATUSES = ("running", "ok", "failed", "skipped")
-OUTCOMES = ("changed", "unchanged")
-HEX = set("0123456789abcdef")
 MAX_NAMES = 128
-
-
-def digest(value):
-    if not isinstance(value, str) or len(value) != 64 or set(value) - HEX:
-        raise ValueError("digest")
-    return value
 
 
 def bounded(value, limit=128):
@@ -72,7 +64,7 @@ def evidence(arguments, request_digest, removed):
         "postcondition": False,
         "powered": names(state.get("powered")),
         "release": bounded(state.get("release")),
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "restored": not removed and arguments.get("restored") is True,
     }
     if removed:
@@ -120,9 +112,27 @@ def refused(arguments):
     return "%s-node-%d" % (reason, node)
 
 
-def publishes(found, observed):
-    """Whether this phase may publish evidence proving no postcondition."""
-    return bool(found["postcondition"]) or bool(observed)
+def completion(arguments):
+    """The evidence one completion publishes, or what it names when unmet.
+
+    Its refusal joins whole clauses, each naming nodes, with semicolons.
+    """
+    removed = bool(arguments.get("removed"))
+    found = evidence(arguments, arguments.get("digest"), removed)
+    if publishes(found, arguments.get("observed")):
+        return found, None
+    unmet = ["media still inserted on: " + ", ".join(found["media"])] if removed else unproved(found)
+    return found, "the installation did not reach its postcondition; %s" % ("; ".join(unmet) or "unknown")
+
+
+CAPABILITY = adapter_protocol.Capability(
+    "installation",
+    "the installation capability result could not be published",
+    completion,
+    phases=adapter_protocol.REFUSING_PHASES,
+    refusals=refused,
+)
+PHASES = CAPABILITY.phases
 
 
 class ActionModule(ActionBase):
@@ -131,35 +141,4 @@ class ActionModule(ActionBase):
 
     def run(self, tmp=None, task_vars=None):
         del tmp
-        arguments = self._task.args
-        phase = arguments.get("phase")
-        if phase not in PHASES:
-            return {"failed": True, "msg": "unsupported installation protocol phase"}
-        try:
-            if phase == "loaded":
-                emit({"phase": "loaded"}, acknowledge=True)
-                return {"changed": False}
-            if phase == "group":
-                status = arguments.get("status")
-                if status not in GROUP_STATUSES:
-                    raise ValueError("group status")
-                emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
-                return {"changed": False}
-            if phase == "refused":
-                emit({"phase": "refused", "reason": refused(arguments)})
-                return {"changed": False}
-            outcome = arguments.get("outcome")
-            if outcome not in OUTCOMES:
-                raise ValueError("outcome")
-            removed = bool(arguments.get("removed"))
-            found = evidence(arguments, arguments.get("digest"), removed)
-            if not publishes(found, arguments.get("observed")):
-                unmet = ["media still inserted on: " + ", ".join(found["media"])] if removed else unproved(found)
-                return {
-                    "failed": True,
-                    "msg": "the installation did not reach its postcondition; %s" % ("; ".join(unmet) or "unknown"),
-                }
-            emit({"phase": "completed", "outcome": outcome, "evidence": found})
-            return {"changed": False}
-        except (ValueError, TypeError, OSError):
-            return {"failed": True, "msg": "the installation capability result could not be published"}
+        return adapter_protocol.publish(self._task.args, CAPABILITY, emit)

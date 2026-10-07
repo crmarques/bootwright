@@ -263,13 +263,17 @@ type UnsupportedReporter interface {
 
 // UnresolvedReporter lets a capability say why an observation of one of its
 // frozen blocks proved nothing, from the evidence that observation recorded,
-// which is empty when it read none. It reads what was recorded and nothing
-// else, so the refusal that follows the observation and a later status say the
-// same thing. It reports false for evidence it cannot explain, and the engine
-// then gives its own general reason. Only the words are the capability's: an
-// explained block stays unknown exactly as an unexplained one does.
+// which is empty when it read none, for the verb the operation froze: an
+// apply's and a removal's resolutions read the same evidence differently. It
+// reads what was recorded and nothing else, so the refusal that follows the
+// observation and a later status say the same thing. It reports false for
+// evidence it cannot explain, and the engine then gives its own general reason.
+// Only the words are the capability's: an explained block stays unknown
+// exactly as an unexplained one does. A resolution whose observation could not
+// run is explained by the failure it recorded, before any capability reads its
+// evidence.
 type UnresolvedReporter interface {
-	Unresolved(reconciliation.Block, json.RawMessage) (Unresolved, bool)
+	Unresolved(reconciliation.Verb, reconciliation.Block, json.RawMessage) (Unresolved, bool)
 }
 
 // ToolLocator is the controller stage capability's answer to every other block
@@ -325,7 +329,7 @@ type OperationStore interface {
 	LastAttempt(context.Context, string, string) (int, error)
 	StartResolution(context.Context, string, string, int) (int, error)
 	LastResolution(context.Context, string, string, int) (operationstore.Attempt, bool, error)
-	CompleteResolution(context.Context, string, string, int, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error
+	CompleteResolution(context.Context, string, string, int, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage, *operationstore.ObservationFailure) error
 	OpenLog(context.Context, string) (*operationstore.Log, error)
 	OpenAdapterOutput(context.Context, string) *operationstore.AdapterOutput
 	LogPaths(context.Context, string, reconciliation.Plan) ([]string, error)

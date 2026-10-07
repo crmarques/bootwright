@@ -5,27 +5,34 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/adapterprotocol"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-func TestProtocolRejectsDuplicateUnknownAndMixedPhaseFields(t *testing.T) {
-	for _, input := range []string{
-		`{"phase":"loaded","phase":"continue"}`,
-		`{"phase":"loaded","Phase":"continue"}`,
-		`{"Phase":"loaded"}`,
-		`{"phase":"continue","evidence":{}}`,
-		`{"phase":"prepared","preparation":{"inventorySHA256":"x","inventorySHA256":"y","addedSources":[]}}`,
-		`{"phase":"prepared","preparation":{"inventorySHA256":"x","addedSources":null},"outcome":"changed"}`,
-		`{"phase":"loaded"} {"phase":"continue"}`,
-		`{"phase":"refused"}`,
-		`{"phase":"refused","reason":"release-stamp","outcome":"changed"}`,
-		strings.Repeat("x", 65536),
-		strings.Repeat("{\"phase\":\"loaded\"}\n", 133),
+// A prepared record carries exactly the preparation its plan admits: the
+// before-state and added sources, and for a native plan the after-state and
+// both digests. Anything else ends the read.
+func TestAPreparationCarriesExactlyItsPlansMembers(t *testing.T) {
+	sha := strings.Repeat("a", 64)
+	for name, check := range map[string]struct {
+		preparation string
+		valid       bool
+	}{
+		"tools only":          {`{"addedSources":[],"inventorySHA256":"` + sha + `"}`, true},
+		"a native plan":       {`{"addedSources":["native-one"],"afterInventorySHA256":"` + sha + `","inventorySHA256":"` + sha + `","planDigest":"` + sha + `","transitionsSHA256":"` + sha + `"}`, true},
+		"no added sources":    {`{"inventorySHA256":"` + sha + `"}`, false},
+		"an extra member":     {`{"addedSources":[],"extra":1,"inventorySHA256":"` + sha + `"}`, false},
+		"a partial plan":      {`{"addedSources":[],"inventorySHA256":"` + sha + `","planDigest":"` + sha + `"}`, false},
+		"a non-string digest": {`{"addedSources":[],"inventorySHA256":1}`, false},
+		"sources not a list":  {`{"addedSources":"native-one","inventorySHA256":"` + sha + `"}`, false},
 	} {
-		messages := make(chan protocolMessage, 134)
-		if err := readProtocol(strings.NewReader(input), messages); err == nil {
-			t.Errorf("accepted invalid protocol %q", input[:min(len(input), 80)])
+		record := adapterprotocol.Record{Phase: "prepared", Preparation: json.RawMessage(check.preparation)}
+		if err := preparationShape(record); (err == nil) != check.valid {
+			t.Errorf("%s: the preparation shape returned %v, want valid %v", name, err, check.valid)
 		}
+	}
+	if err := preparationShape(adapterprotocol.Record{Phase: "continue"}); err != nil {
+		t.Fatalf("a record that is not prepared was refused: %v", err)
 	}
 }
 

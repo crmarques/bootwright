@@ -232,17 +232,7 @@ func offered(produced []lifecycle.Produced, proved bool) []lifecycle.Produced {
 // effect; that same cluster answering with the completion not yet true is a
 // positive partial realization the next attempt converges.
 func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, "", kubeconfigOutputs(), func(evidence []byte, request InstallRequest, digest string) reconciliation.EffectState {
-		switch {
-		case ValidateInstallPresence(evidence, request, digest) == nil:
-			return reconciliation.EffectCompleted
-		case ValidateInstallNoEffect(evidence, digest) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidateInstallPartial(evidence, digest) == nil:
-			return reconciliation.EffectPartial
-		}
-		return reconciliation.EffectUnknown
-	})
+	return c.observe(ctx, execution, reconciliation.Apply)
 }
 
 // observesRemoval scopes an observation to what a removal takes back: the
@@ -258,34 +248,57 @@ const observesRemoval = "removal"
 // attempt converges; and a node that cannot be read fails the observation,
 // which stays unknown.
 func (c InstallCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, observesRemoval, nil, func(evidence []byte, request InstallRequest, digest string) reconciliation.EffectState {
-		switch {
-		case ValidateInstallReleased(evidence, digest) == nil:
-			return reconciliation.EffectCompleted
-		case ValidateInstallReleasePartial(evidence, request, digest) == nil:
-			return reconciliation.EffectPartial
-		}
-		return reconciliation.EffectUnknown
-	})
+	return c.observe(ctx, execution, reconciliation.Destroy)
 }
 
-// observe runs the read-only observation operation, scoped by observes, and
-// reads its evidence for the verb the block was frozen for. Only the apply's
-// observation declares the administrator access, and offers it only when it
-// reads the installation complete.
-func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Execution, observes string, outputs []lifecycle.OutputFile, read func([]byte, InstallRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
+// installEffect is the one reading of an installation observation for the
+// verb the block was frozen for: an apply's checks are its presence, no effect
+// and partial forms, a removal's its released and partial release forms, each
+// in that order. When none accepts the evidence the effect is unknown, and the
+// refusal that decided it comes back with it: the presence check's for an
+// apply, the partial release's for a removal.
+func installEffect(verb reconciliation.Verb, evidence []byte, request InstallRequest, digest string) (reconciliation.EffectState, error) {
+	if verb == reconciliation.Destroy {
+		if ValidateInstallReleased(evidence, digest) == nil {
+			return reconciliation.EffectCompleted, nil
+		}
+		if err := ValidateInstallReleasePartial(evidence, request, digest); err != nil {
+			return reconciliation.EffectUnknown, err
+		}
+		return reconciliation.EffectPartial, nil
+	}
+	presence := ValidateInstallPresence(evidence, request, digest)
+	switch {
+	case presence == nil:
+		return reconciliation.EffectCompleted, nil
+	case ValidateInstallNoEffect(evidence, digest) == nil:
+		return reconciliation.EffectNoEffect, nil
+	case ValidateInstallPartial(evidence, digest) == nil:
+		return reconciliation.EffectPartial, nil
+	}
+	return reconciliation.EffectUnknown, presence
+}
+
+// observe runs the read-only observation operation, scoped to what the verb
+// proves, and reads its evidence for the verb the block was frozen for. Only
+// the apply's observation declares the administrator access, and offers it
+// only when it reads the installation complete.
+func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution, "observe")
 	if err != nil {
 		return unknown, err
 	}
+	observes, outputs := "", kubeconfigOutputs()
+	if verb == reconciliation.Destroy {
+		observes, outputs = observesRemoval, nil
+	}
 	result, err := c.runWithOutputs(ctx, execution, "observe", request, outputs, observes)
 	if err != nil {
 		lifecycle.ClearProduced(result.Produced)
-		recordObservationFailure(ctx, execution, err)
-		return unknown, nil
+		return unknown, err
 	}
-	effect := read(result.Evidence, request, execution.Block.RequestDigest)
+	effect, _ := installEffect(verb, result.Evidence, request, execution.Block.RequestDigest)
 	produced := offered(result.Produced, len(outputs) != 0 && effect == reconciliation.EffectCompleted)
 	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence, Produced: produced}, nil
 }

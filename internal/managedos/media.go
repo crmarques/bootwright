@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -126,10 +127,10 @@ func EncodeMediaRecord(entry MediaEntry) ([]byte, error) {
 	if !ValidMediaEntry(entry) {
 		return nil, mediaError("media record values are not within their contract")
 	}
-	data, err := json.Marshal(struct {
+	data, err := canonicaljson.Encode(struct {
 		Version int `json:"version"`
 		MediaEntry
-	}{MediaRecordVersion, entry})
+	}{MediaRecordVersion, entry}, canonicaljson.Bare)
 	if err != nil || len(data) > MaxMediaRecord-1 {
 		return nil, mediaError("media record could not be canonically encoded")
 	}
@@ -146,9 +147,7 @@ func DecodeMediaRecord(data []byte, name string) (MediaEntry, error) {
 		Version int `json:"version"`
 		MediaEntry
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data[:len(data)-1]))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&record); err != nil || len(bytes.Trim(data[decoder.InputOffset():], " \t\r\n")) != 0 {
+	if canonicaljson.DecodeClosed(data[:len(data)-1], &record) != nil {
 		return MediaEntry{}, mediaError("media record is malformed")
 	}
 	if record.Version != MediaRecordVersion || record.Name != name {

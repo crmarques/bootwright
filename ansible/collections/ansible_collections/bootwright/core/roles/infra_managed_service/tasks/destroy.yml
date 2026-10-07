@@ -1,0 +1,145 @@
+---
+- name: Validate the frozen managed service request
+  ansible.builtin.assert:
+    that:
+      - bootwright_managed_service_request.version == 'managed-service-v3'
+      - bootwright_managed_service_request.kind in infra_managed_service_kinds
+      - bootwright_managed_service_request.contentRoot.startswith('/var/lib/bootwright-services/')
+      - >-
+        (bootwright_managed_service_request.contentRoot | dirname | dirname)
+        == '/var/lib/bootwright-services/' ~ bootwright_managed_service_request.identity.context
+      - bootwright_managed_service_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.infra_service_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report service stop
+  bootwright.core.infra_service_protocol:
+    phase: group
+    group: stop-service
+    status: running
+  no_log: true
+
+- name: Observe the managed service before removal
+  bootwright.core.infra_service_inspect:
+    request: '{{ bootwright_managed_service_request }}'
+  register: infra_managed_service_before
+
+- name: Stop the managed service
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - stop
+      - '{{ infra_managed_service_service }}'
+  when: infra_managed_service_before.observation.unit | length > 0
+  changed_when: infra_managed_service_before.observation.unit | length > 0
+
+- name: Report service stop completion
+  bootwright.core.infra_service_protocol:
+    phase: group
+    group: stop-service
+    status: ok
+  no_log: true
+
+- name: Report configuration removal
+  bootwright.core.infra_service_protocol:
+    phase: group
+    group: remove-configuration
+    status: running
+  no_log: true
+
+- name: Remove the container unit definition
+  ansible.builtin.file:
+    path: '{{ infra_managed_service_unit_path }}'
+    state: absent
+  register: infra_managed_service_unit_removed
+
+- name: Reload the host service manager so the unit generator runs
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - daemon-reload
+  changed_when: false
+
+- name: Remove a container the stopped unit left behind
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - rm
+      - --force
+      - --ignore
+      - '{{ bootwright_managed_service_request.unit }}'
+  when: infra_managed_service_before.observation.containerPresent
+  changed_when: infra_managed_service_before.observation.containerPresent
+
+- name: Remove the owned content root
+  ansible.builtin.file:
+    path: '{{ bootwright_managed_service_request.contentRoot }}'
+    state: absent
+  register: infra_managed_service_root_removed
+
+# The content root is <prefix>/<context>/<kind>/<name>, as the validation above
+# requires, so these are the kind's and the context's directories, each removed
+# only once empty and never recursively; the retained prefix itself is never
+# reached.
+- name: Remove the service's and the context's directories once empty
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - '{{ item }}'
+  loop:
+    - '{{ bootwright_managed_service_request.contentRoot | dirname }}'
+    - '{{ bootwright_managed_service_request.contentRoot | dirname | dirname }}'
+  environment:
+    LC_ALL: C
+  register: infra_managed_service_parents
+  failed_when:
+    - infra_managed_service_parents.rc != 0
+    - '"Directory not empty" not in infra_managed_service_parents.stderr'
+    - '"No such file or directory" not in infra_managed_service_parents.stderr'
+  changed_when: infra_managed_service_parents.rc == 0
+
+- name: Report configuration removal completion
+  bootwright.core.infra_service_protocol:
+    phase: group
+    group: remove-configuration
+    status: ok
+  no_log: true
+
+- name: Report absence verification
+  bootwright.core.infra_service_protocol:
+    phase: group
+    group: verify-absence
+    status: running
+  no_log: true
+
+- name: Prove every owned resource is gone
+  bootwright.core.infra_service_inspect:
+    request: '{{ bootwright_managed_service_request }}'
+  register: infra_managed_service_after
+
+- name: Report absence verification completion
+  bootwright.core.infra_service_protocol:
+    phase: group
+    group: verify-absence
+    status: ok
+  no_log: true
+
+- name: Publish bounded managed service removal evidence
+  bootwright.core.infra_service_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'changed'
+         if (infra_managed_service_unit_removed is changed
+             or infra_managed_service_root_removed is changed
+             or infra_managed_service_parents is changed
+             or infra_managed_service_before.observation.unit | length > 0)
+         else 'unchanged' }}
+    digest: '{{ bootwright_managed_service_digest }}'
+    observation: '{{ infra_managed_service_after.observation }}'
+    removed: true
+  no_log: true

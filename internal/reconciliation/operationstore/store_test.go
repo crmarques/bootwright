@@ -196,6 +196,82 @@ func TestDestroyOperationRequiresItsSource(t *testing.T) {
 	}
 }
 
+// A removal that replaces a failed removal names it, and only a removal names
+// one: never itself, nor the apply it removes. The field is optional, so a
+// record that replaces nothing encodes exactly as before it existed.
+func TestAReplacingRemovalNamesWhatItReplaces(t *testing.T) {
+	ctx := context.Background()
+	plan := testPlan(t, "alpha")
+	inverse, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal := func() (Operation, reconciliation.Plan) {
+		operation := testOperation(t, plan)
+		operation.Verb, operation.Source = reconciliation.Destroy, "op-"+strings.Repeat("11", 16)
+		operation.PlanDigest, _ = inverse.Digest()
+		return operation, inverse
+	}
+	replaced := "op-" + strings.Repeat("22", 16)
+	for name, arrange := range map[string]func() (Operation, reconciliation.Plan){
+		"an apply": func() (Operation, reconciliation.Plan) {
+			operation := testOperation(t, plan)
+			operation.Replaces = replaced
+			return operation, plan
+		},
+		"itself": func() (Operation, reconciliation.Plan) {
+			operation, frozen := removal()
+			operation.Replaces = operation.ID
+			return operation, frozen
+		},
+		"its source": func() (Operation, reconciliation.Plan) {
+			operation, frozen := removal()
+			operation.Replaces = operation.Source
+			return operation, frozen
+		},
+		"a malformed identity": func() (Operation, reconciliation.Plan) {
+			operation, frozen := removal()
+			operation.Replaces = "operation-1"
+			return operation, frozen
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, _ := newStore(t)
+			if _, err := store.Index(ctx); err != nil {
+				t.Fatal(err)
+			}
+			operation, frozen := arrange()
+			err := store.Register(ctx, operation, frozen)
+			if !slices.Equal(diagnostics.Of(err), diagnostics.Of(recordError("lifecycle operation replacement is invalid"))) {
+				t.Fatalf("a removal replacing %s registered: %v", name, diagnostics.Of(err))
+			}
+		})
+	}
+	for _, replaces := range []string{"", replaced} {
+		store, area := newStore(t)
+		if _, err := store.Index(ctx); err != nil {
+			t.Fatal(err)
+		}
+		operation, frozen := removal()
+		operation.Replaces = replaces
+		if err := store.Register(ctx, operation, frozen); err != nil {
+			t.Fatal(err)
+		}
+		encoded := string(area.files[operation.ID+"/operation.json"])
+		want := `"source":"` + operation.Source + `","bindings":`
+		if replaces != "" {
+			want = `"source":"` + operation.Source + `","replaces":"` + replaces + `","bindings":`
+		}
+		if !strings.Contains(encoded, want) {
+			t.Fatalf("operation.json = %s, want it to carry %s", encoded, want)
+		}
+		read, err := New(area, fixedClock()).ReadOperation(ctx, operation.ID)
+		if err != nil || read.Replaces != replaces {
+			t.Fatalf("the record reads back replacing %q (%v), want %q", read.Replaces, err, replaces)
+		}
+	}
+}
+
 func TestStoredRecordsMustBeCanonical(t *testing.T) {
 	ctx := context.Background()
 	plan := testPlan(t, "alpha")
@@ -738,7 +814,7 @@ func TestResolutionNumbersNeverReuseAPath(t *testing.T) {
 		if err != nil || got != want {
 			t.Fatalf("resolution = %d (%v), want %d", got, err, want)
 		}
-		if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, got, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
+		if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, got, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -748,8 +824,72 @@ func TestResolutionNumbersNeverReuseAPath(t *testing.T) {
 			t.Fatalf("resolution %d lost its record", number)
 		}
 	}
-	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 4, reconciliation.OutcomeChanged, reconciliation.EffectCompleted, reconciliation.BlockDone, nil); err == nil {
+	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 4, reconciliation.OutcomeChanged, reconciliation.EffectCompleted, reconciliation.BlockDone, nil, nil); err == nil {
 		t.Fatal("a resolution completed without a durable start")
+	}
+}
+
+// A resolution whose observation could not run records that failure, bounded,
+// and only an unknown resolution carries one. A resolution completed without
+// one encodes no failure member at all, so its bytes are what they always were.
+func TestAResolutionRecordCarriesABoundedObservationFailureOnly(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1); err != nil {
+		t.Fatal(err)
+	}
+	valid := ObservationFailure{Code: "lifecycle.state", Message: "the adapter could not reach the host", Remediation: "restore it"}
+	for name, refused := range map[string]struct {
+		failure ObservationFailure
+		effect  reconciliation.EffectState
+	}{
+		"a completed effect":       {valid, reconciliation.EffectCompleted},
+		"an empty code":            {ObservationFailure{Message: valid.Message}, reconciliation.EffectUnknown},
+		"an oversized message":     {ObservationFailure{Code: valid.Code, Message: strings.Repeat("m", MaxFailureText+1)}, reconciliation.EffectUnknown},
+		"an invalid remediation":   {ObservationFailure{Code: valid.Code, Message: valid.Message, Remediation: "\xff"}, reconciliation.EffectUnknown},
+		"an empty message":         {ObservationFailure{Code: valid.Code}, reconciliation.EffectUnknown},
+		"an oversized code":        {ObservationFailure{Code: strings.Repeat("c", MaxFailureCode+1), Message: valid.Message}, reconciliation.EffectUnknown},
+		"an oversized remediation": {ObservationFailure{Code: valid.Code, Message: valid.Message, Remediation: strings.Repeat("r", MaxFailureText+1)}, reconciliation.EffectUnknown},
+	} {
+		failure := refused.failure
+		state := reconciliation.BlockUnknown
+		if refused.effect == reconciliation.EffectCompleted {
+			state = reconciliation.BlockDone
+		}
+		err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 1, reconciliation.OutcomeUnknown, refused.effect, state, nil, &failure)
+		if !slices.Equal(diagnostics.Of(err), diagnostics.Of(recordError("lifecycle attempt failure is invalid"))) {
+			t.Fatalf("%s: completion = %v", name, diagnostics.Of(err))
+		}
+	}
+	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 1, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil, &valid); err != nil {
+		t.Fatal(err)
+	}
+	settled, found, err := store.LastResolution(ctx, operation.ID, "alpha", 1)
+	if err != nil || !found || settled.Failure == nil || *settled.Failure != valid {
+		t.Fatalf("the resolution read back as %+v, %t (%v)", settled, found, err)
+	}
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 2, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if record := area.files[operation.ID+"/blocks/alpha/attempt-000001-resolution-000002.json"]; bytes.Contains(record, []byte("failure")) {
+		t.Fatalf("a resolution without a failure encodes %s", record)
 	}
 }
 
@@ -787,7 +927,7 @@ func TestLastResolutionReadsTheRecordThatSettledTheBlock(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, number, step.outcome, step.effect, step.state, json.RawMessage(step.evidence)); err != nil {
+		if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, number, step.outcome, step.effect, step.state, json.RawMessage(step.evidence), nil); err != nil {
 			t.Fatal(err)
 		}
 	}

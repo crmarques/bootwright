@@ -5,18 +5,16 @@ package ansiblerunner
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/internal/adapterprotocol"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
@@ -275,55 +273,22 @@ func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File,
 	if grace <= 0 {
 		grace = resultDrain
 	}
-	automation := filepath.Join(request.Bundle.Path, "automation")
-	collection := filepath.Join(automation, "collections/ansible_collections/bootwright/core")
-	// -u is what makes the retained output readable while the run is still
-	// going. Ansible writes its callback output and lets the system flush it,
-	// so a child whose stdout is a pipe holds roughly eight kilobytes back
-	// until it exits. -E is implied by -I, so PYTHONUNBUFFERED cannot do this.
-	// The supervisor consumes the lifecycle marker, which ties it to this
-	// invocation; a controller run never passes it.
-	arguments := append(slices.Clone(request.Launch.Arguments), "-u", "-I", "-B", "-S", "-c", entrypoint,
-		filepath.Join(collection, "plugins/module_utils/controller_supervisor.py"), "--lifecycle",
-		"-i", filepath.Join(job, inventoryName), "--extra-vars", "@"+filepath.Join(job, requestName),
-		filepath.Join(collection, "playbooks", playbook))
-	command := r.command(request.Launch.Loader, arguments...)
-	command.Dir = automation
-	command.Env = append(slices.Clone(request.Launch.Environment),
-		"ANSIBLE_CONFIG="+filepath.Join(automation, "ansible.cfg"),
-		"ANSIBLE_COLLECTIONS_PATH="+filepath.Join(automation, "collections"),
-		"ANSIBLE_LOCAL_TEMP="+filepath.Join(job, localTemp), "ANSIBLE_REMOTE_TEMP="+filepath.Join(job, remoteTemp),
-		"ANSIBLE_NOCOLOR=1", "ANSIBLE_FORCE_COLOR=0", "ANSIBLE_LOAD_CALLBACK_PLUGINS=0",
-		"TMPDIR="+scratch, "PATH=/usr/bin:/usr/sbin")
-	output, childOutput, err := os.Pipe()
-	if err != nil {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter result channel could not be opened", "")
-	}
-	defer output.Close()
-	defer childOutput.Close()
-	childInput, input, err := os.Pipe()
-	if err != nil {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter authorization channel could not be opened", "")
-	}
-	defer childInput.Close()
-	defer input.Close()
+	judge := &lifecycleJudge{request: request, grace: grace}
 	// The adapter inherits the job lock, and so does every process its
 	// supervisor forks: the ansible-playbook child and each Ansible worker.
-	// The lock is free only once none of them runs.
-	command.ExtraFiles = []*os.File{childOutput, childInput, lock}
-	// The adapter's own streams are retained as they are produced, so a run
-	// that completes is as readable afterwards as one that failed.
-	command.Stdout, command.Stderr = request.Output, request.Output
-	// The adapter dies with this invocation: its supervisor ends the whole tree
-	// it owns on the parent-death signal.
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: parentDeath}
-	started, waited := start(command)
-	if err := <-started; err != nil {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the qualified adapter process could not start", setupRemediation)
-	}
-	childOutput.Close()
-	childInput.Close()
-	return r.consume(ctx, command, waited, output, input, grace, request)
+	// Its own streams are retained as they are produced, so a run that
+	// completes is as readable afterwards as one that failed, and it dies with
+	// this invocation: its supervisor ends the whole tree it owns on the
+	// parent-death signal. No adapter effect outlives cancellation.
+	ending := adapterprotocol.Run(ctx, adapterprotocol.Invocation{
+		Loader: request.Launch.Loader, Arguments: request.Launch.Arguments, Environment: request.Launch.Environment,
+		Automation: filepath.Join(request.Bundle.Path, "automation"), Playbook: playbook,
+		Inventory: filepath.Join(job, inventoryName), Variables: filepath.Join(job, requestName),
+		LocalTemp: filepath.Join(job, localTemp), RemoteTemp: filepath.Join(job, remoteTemp), Scratch: scratch,
+		Lifecycle: true, Lock: lock, Output: request.Output, StopOnBreach: true,
+		Admission: adapterprotocol.Lifecycle, Command: r.command,
+	}, judge)
+	return judge.result(ctx, ending)
 }
 
 // runDeadline is how long one run may take: the deadline its request states,
@@ -337,260 +302,93 @@ func runDeadline(requested time.Duration) time.Duration {
 	return min(requested, lifecycle.MaxDeadline)
 }
 
-// parentDeath is the signal the kernel sends the adapter when the thread that
-// started it dies. The supervisor arms the same signal for itself and ends its
-// whole process tree on it.
-const parentDeath = syscall.SIGTERM
-
-// start forks the adapter from a goroutine locked to its OS thread until the
-// adapter is reaped. The kernel sends Pdeathsig when the creating thread dies,
-// not the process (syscall.SysProcAttr, https://go.dev/issue/27505), and the
-// runtime ends a thread whose locked goroutine exits, so an adapter forked from
-// a shared thread could be signaled while its invocation still runs.
-func start(command *exec.Cmd) (<-chan error, <-chan error) {
-	started, waited := make(chan error, 1), make(chan error, 1)
-	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		if err := command.Start(); err != nil {
-			started <- err
-			return
-		}
-		started <- nil
-		waited <- command.Wait()
-	}()
-	return started, waited
+// lifecycleJudge is the lifecycle runner's reading of the protocol: what the
+// adapter reported so far.
+type lifecycleJudge struct {
+	request   lifecycle.RunRequest
+	grace     time.Duration
+	loaded    bool
+	completed bool
 }
 
-// adapterProtocol is one invocation's progress through the adapter protocol:
-// what the adapter reported and how far ending its process tree has gone.
-type adapterProtocol struct {
-	command      *exec.Cmd
-	input        *os.File
-	output       *os.File
-	grace        time.Duration
-	request      lifecycle.RunRequest
-	waited       <-chan error
-	drain        <-chan time.Time
-	timer        *time.Timer
-	result       lifecycle.RunResult
-	operationErr error
-	loaded       bool
-	completed    bool
-	canceled     bool
-	// exited marks an operationErr that is only the adapter's failed exit. A
-	// record the adapter wrote before it exited can be read after that exit,
-	// and is judged as if it had been read first: the refusal it names, or a
-	// record the runner refuses, then replaces the failure.
-	exited      bool
-	stopping    bool
-	groupKilled bool
-}
-
-// consume drives the protocol. No adapter effect is ever authorized to outlive
-// cancellation, so cancellation always terminates the owned process tree.
-func (r Runner) consume(ctx context.Context, command *exec.Cmd, waited <-chan error, output, input *os.File, grace time.Duration, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
-	messages := make(chan protocolMessage, 8)
-	readResult := make(chan error, 1)
-	go func() {
-		readResult <- readProtocol(output, messages)
-		close(messages)
-	}()
-	protocol := &adapterProtocol{command: command, input: input, output: output, grace: grace, request: request, waited: waited}
-	defer protocol.release()
-	cancelled := ctx.Done()
-	for messages != nil || protocol.waited != nil {
-		select {
-		case <-cancelled:
-			cancelled = nil
-			protocol.canceled = true
-			protocol.stop()
-		case <-protocol.drain:
-			protocol.drained()
-		case waitErr := <-protocol.waited:
-			protocol.reaped(waitErr)
-		case message, open := <-messages:
-			if open {
-				protocol.receive(ctx, message)
-			} else {
-				messages = nil
-				protocol.readEnded(<-readResult)
-			}
-		}
-	}
-	return protocol.outcome(ctx)
-}
-
-func (p *adapterProtocol) release() {
-	if p.timer != nil {
-		p.timer.Stop()
-	}
-}
-
-func (p *adapterProtocol) arm() {
-	if p.timer == nil {
-		p.timer = time.NewTimer(p.grace)
-		p.drain = p.timer.C
-	}
-}
-
-// Cancellation and a refused or unreadable record end the protocol at once.
-// Closing the authorization channel releases whatever waits on it, and no
-// lifecycle effect outlives the protocol, so the whole tree goes too. The
-// adapter is signaled first: its supervisor ends every descendant on the
-// parent-death signal, including an Ansible worker in a session of its own
-// that a group kill never reaches, and a group kill first would end the
-// supervisor before it could. The group is killed once the adapter is reaped
-// or the drain passes, whichever comes first, which ends what the adapter left
-// in it or an adapter that ignored the signal.
-func (p *adapterProtocol) stop() {
-	p.input.Close()
-	if p.stopping {
-		return
-	}
-	p.stopping = true
-	// A reaped adapter refuses the signal, so it never reaches a reused
-	// process ID.
-	_ = p.command.Process.Signal(parentDeath)
-	p.arm()
-	if p.waited == nil {
-		p.killGroup()
-	}
-}
-
-func (p *adapterProtocol) killGroup() {
-	if p.stopping && !p.groupKilled {
-		p.groupKilled = true
-		_ = syscall.Kill(-p.command.Process.Pid, syscall.SIGKILL)
-	}
-}
-
-func (p *adapterProtocol) drained() {
-	p.drain = nil
-	p.killGroup()
-	p.output.Close()
-	if p.operationErr == nil {
-		p.operationErr = failure("lifecycle.unknown", "adapter descendants retained the result channel after completion", p.request.OutputRemediation)
-	}
-}
-
-func (p *adapterProtocol) reaped(waitErr error) {
-	p.waited = nil
-	p.killGroup()
-	p.arm()
-	if waitErr != nil && p.operationErr == nil {
-		p.operationErr = failure("lifecycle.state", "the adapter operation did not complete", p.request.OutputRemediation)
-		p.exited = true
-	}
-}
-
-func (p *adapterProtocol) readEnded(err error) {
-	if err == nil {
-		return
-	}
-	// A read the drain's close ends is the runner's own and no record the
-	// adapter wrote, so it leaves the failed exit. A record the reader took
-	// before that close is still judged as if it had been read first.
-	if p.operationErr == nil || p.exited && !errors.Is(err, os.ErrClosed) {
-		p.operationErr, p.exited = failure("lifecycle.unknown", "the adapter structured result was incomplete", p.request.OutputRemediation), false
-	}
-	p.stop()
-}
-
-func (p *adapterProtocol) receive(ctx context.Context, message protocolMessage) {
-	valid := p.accept(ctx, message)
-	if !valid {
-		// A record the runner refuses breaks the protocol whichever of it and
-		// the failed exit is read first, so it replaces that failure, and the
-		// outcome is unknown in either order.
-		if p.operationErr == nil || p.exited {
-			p.operationErr = failure("lifecycle.unknown", "the adapter capability protocol was invalid", p.request.OutputRemediation)
-		}
-		p.exited = false
-	}
-	if valid && message.Phase == "refused" {
-		// The adapter prints what it refused into its retained output as it
-		// fails, so it is left to end on its own.
-		return
-	}
-	if p.operationErr != nil || p.canceled {
-		p.stop()
-		return
-	}
-	if message.Phase == "loaded" {
-		if _, err := p.input.Write([]byte("proceed\n")); err != nil {
-			p.operationErr = failure("lifecycle.unknown", "adapter authorization delivery was uncertain", p.request.OutputRemediation)
-		}
-	}
-}
-
-// accept judges one record and applies what a valid one reports. A record read
-// after the failed exit is judged as if it had been read first. A valid one
-// leaves that failure, except the named refusal, which replaces it.
-func (p *adapterProtocol) accept(ctx context.Context, message protocolMessage) bool {
-	valid := !p.completed && (p.operationErr == nil || p.exited) && !p.canceled
-	switch message.Phase {
+// Judge judges one record and applies what a valid one reports. A record read
+// after the failed exit is judged as if it had been read first, but reports
+// nothing. A valid one leaves that failure, except the named refusal, which
+// replaces it.
+func (j *lifecycleJudge) Judge(ctx context.Context, record adapterprotocol.Record, moment adapterprotocol.Moment) adapterprotocol.Verdict {
+	valid := !j.completed && moment.Open
+	verdict := adapterprotocol.Verdict{}
+	switch record.Phase {
 	case "loaded":
-		valid = valid && !p.loaded
-		p.loaded = valid
+		valid = valid && !j.loaded
+		j.loaded = valid
+		verdict.Acknowledge = true
 	case "group":
-		valid = valid && p.loaded
-		if valid && !p.exited && p.request.Progress != nil {
-			p.request.Progress(ctx, message.Group, message.Status)
+		valid = valid && j.loaded
+		if valid && !moment.Exited && j.request.Progress != nil {
+			j.request.Progress(ctx, record.Group, record.Status)
 		}
 		// A record the log could not keep is the engine's log fault: its
-		// callback latches it and cancels this run, which ends below.
-		if valid && !p.exited && p.request.Log != nil {
-			_ = p.request.Log(ctx, operationstore.LogRecord{Event: "group", Group: message.Group, Detail: message.Status})
+		// callback latches it and cancels this run, which then ends.
+		if valid && !moment.Exited && j.request.Log != nil {
+			_ = j.request.Log(ctx, operationstore.LogRecord{Event: "group", Group: record.Group, Detail: record.Status})
 		}
 	case "completed":
-		valid = valid && p.loaded
-		if valid {
-			p.completed = true
-		}
-		if valid && !p.exited {
-			p.result = lifecycle.RunResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
-		}
+		valid = valid && j.loaded
+		j.completed = j.completed || valid
 	case "refused":
 		// The adapter names a refusal its caller remedies by name, then fails.
 		// The caller's own failure for it replaces the adapter's.
-		named := p.request.Refusals[message.Reason]
-		valid = valid && p.loaded && named != nil
+		named := j.request.Refusals[record.Reason]
+		valid = valid && j.loaded && named != nil
 		if valid {
-			p.operationErr, p.exited = named, false
+			verdict.Failure = named
 		}
 	default:
 		valid = false
 	}
-	return valid
+	verdict.Valid = valid
+	return verdict
 }
 
-func (p *adapterProtocol) outcome(ctx context.Context) (lifecycle.RunResult, error) {
-	if p.canceled {
+func (j *lifecycleJudge) Spare() bool { return false }
+
+// Acknowledged records nothing: a lifecycle acknowledgement authorizes no
+// effect the runner tracks.
+func (j *lifecycleJudge) Acknowledged(adapterprotocol.Record) {}
+
+func (j *lifecycleJudge) Drain(bool) time.Duration { return j.grace }
+
+func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Ending) (lifecycle.RunResult, error) {
+	remediation := j.request.OutputRemediation
+	switch ending.Kind {
+	case adapterprotocol.Completed:
+		return lifecycle.RunResult{Outcome: ending.Outcome, Evidence: slices.Clone(ending.Evidence)}, nil
+	case adapterprotocol.Canceled:
 		return lifecycle.RunResult{}, ctx.Err()
+	case adapterprotocol.Named:
+		return lifecycle.RunResult{}, ending.Failure
+	case adapterprotocol.ResultChannel:
+		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter result channel could not be opened", "")
+	case adapterprotocol.AuthorizationChannel:
+		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter authorization channel could not be opened", "")
+	case adapterprotocol.NotStarted:
+		return lifecycle.RunResult{}, failure("lifecycle.state", "the qualified adapter process could not start", setupRemediation)
+	case adapterprotocol.Retained:
+		return lifecycle.RunResult{}, failure("lifecycle.unknown", "adapter descendants retained the result channel after completion", remediation)
+	case adapterprotocol.RetainedOutput:
+		return lifecycle.RunResult{}, failure("lifecycle.unknown", "adapter descendants retained the adapter's output after it exited", remediation)
+	case adapterprotocol.FailedExit:
+		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter operation did not complete", remediation)
+	case adapterprotocol.Incomplete:
+		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter structured result was incomplete", remediation)
+	case adapterprotocol.Invalid:
+		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter capability protocol was invalid", remediation)
+	case adapterprotocol.Uncertain:
+		return lifecycle.RunResult{}, failure("lifecycle.unknown", "adapter authorization delivery was uncertain", remediation)
 	}
-	if p.operationErr != nil {
-		return lifecycle.RunResult{}, p.operationErr
-	}
-	if !p.completed {
-		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter operation has no complete result", p.request.OutputRemediation)
-	}
-	return p.result, nil
+	return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter operation has no complete result", remediation)
 }
-
-// entrypoint pins the private interpreter's import roots before any Ansible
-// code loads, exactly as the controller runtime does.
-const entrypoint = `import sys, os
-root = os.path.dirname(os.path.dirname(sys.executable))
-version = str(sys.version_info.major) + '.' + str(sys.version_info.minor)
-stdlib = root + '/lib/python' + version
-sys.path[:] = [root + '/lib/python' + version.replace('.', '') + '.zip', stdlib, stdlib + '/lib-dynload', stdlib + '/site-packages']
-assert sys.flags.isolated and sys.flags.no_site and sys.flags.dont_write_bytecode
-path = sys.argv.pop(1)
-with open(path, 'rb') as stream:
-    code = compile(stream.read(), path, 'exec')
-exec(code, {'__name__': '__main__', '__file__': path})
-`
 
 // verifyAutomation proves the approved bundle carries exactly the automation
 // this executable's digest names before any of it runs. Documentation runs

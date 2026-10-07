@@ -13,18 +13,10 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// Unsupported lists every selected object this contract cannot realize: an
-// arm no capability implements, which the substrate root owns so that adding
-// one narrows the refusal in a single place, and a libvirt provider whose
-// controllers would listen on an address their endpoints cannot name.
-// Admission refuses the same provider; this keeps the refusal for state that
-// did not pass through it.
-func Unsupported(catalog api.Catalog) []string {
-	return lifecycle.Identities(Refusals(catalog))
-}
-
-// Refusals refuses what Unsupported lists, with each object's reason and
-// remedy.
+// Refusals refuses every selected object this contract cannot realize, an arm
+// no capability implements or a libvirt provider whose controllers would
+// listen on an address their endpoints cannot name, with each object's reason
+// and remedy.
 func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	var found []lifecycle.Refusal
 	for _, unrealized := range substrate.Unrealizable(catalog) {

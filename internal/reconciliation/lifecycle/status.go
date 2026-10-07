@@ -2,11 +2,13 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -233,7 +235,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	for index := range blocks {
 		blocks[index].Attempts = attempts[blocks[index].ID]
 	}
-	if err := s.explainUnproved(ctx, store, operation.ID, plan, blocks); err != nil {
+	if err := s.explainUnproved(ctx, store, operation, plan, blocks); err != nil {
 		return nil, err
 	}
 	summary := &LifecycleSummary{
@@ -256,7 +258,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	result.Clusters = realizedClusters(result.Clusters, realized)
 	result.StorageClusters = realizedClusters(result.StorageClusters, realized)
 	result.Shared = realizedServices(result.Shared, realized)
-	if result.NextSteps, err = offered(ctx, view, store, operation, plan, states, summary.Next, result.Contradictions); err != nil {
+	if result.NextSteps, err = s.offered(ctx, view, store, operation, plan, states, summary.Next, result.Contradictions); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -305,7 +307,7 @@ func idleSteps(view View, unindexed []string) []string {
 // block that is not done is refused by both verbs, which name the deletion
 // the context guard admits, so that deletion is offered instead, the orphan
 // acknowledgement over evidence the guard cannot read.
-func offered(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string, contradicted []string) ([]string, error) {
+func (s Service) offered(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string, contradicted []string) ([]string, error) {
 	steps := []string{}
 	if operation.State == reconciliation.OperationDone {
 		if operation.Verb != reconciliation.Destroy || len(unfinishedBlocks(frozen, states)) == 0 {
@@ -319,7 +321,7 @@ func offered(ctx context.Context, view View, store OperationStore, operation ope
 		return nil, err
 	}
 	if len(refused) == 0 || next == string(reconciliation.Destroy) {
-		steps = append(steps, continuation(view, operation, frozen, states, next))
+		steps = append(steps, s.continuation(view, operation, frozen, states, next)...)
 	}
 	if operation.Verb == reconciliation.Apply && len(contradicted) == 0 {
 		steps = append(steps, contextCommand(view.Identity().Name, string(reconciliation.Destroy)))
@@ -328,15 +330,54 @@ func offered(ctx context.Context, view View, store OperationStore, operation ope
 }
 
 // continuation is the command that takes an incomplete operation on. A
-// continuation or resolution that still has a block to run re-proves the
-// controller setup and refuses an incomplete one, so setup takes its place;
-// a finalization runs no block and a replacement is a fresh removal, and
-// neither is held to that re-proof.
-func continuation(view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string) string {
-	if next != string(reconciliation.Destroy) && pendingRemains(frozen, states) && !setupComplete(view.Controller()) {
-		return "bootwright setup"
+// continuation or resolution that still has a block to run re-proves what the
+// records hold before it runs one, so status offers it only where that
+// re-proof passes over what status reads: the frozen input, automation and
+// closure, the controller setup, which setup completes in its place, and the
+// context's binding. Where it refuses, status offers the exit that refusal
+// names and that status may run: the deletion over a removal, while the
+// removal that supersedes an apply is offered beside it anyway. Status probes
+// no host, so a binding recorded for another host is the continuation's own
+// refusal. A finalization runs no block and a replacement is a fresh removal,
+// and neither is held to that re-proof.
+func (s Service) continuation(view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string) []string {
+	command := continuationCommand(view.Identity().Name, operation, frozen, states)
+	if next == string(reconciliation.Destroy) || !pendingRemains(frozen, states) {
+		return []string{command}
 	}
-	return continuationCommand(view.Identity().Name, operation, frozen, states)
+	if err := s.recordedRefusal(view, operation); err != nil {
+		return refusalExit(view, err)
+	}
+	if !setupComplete(view.Controller()) {
+		return []string{"bootwright setup"}
+	}
+	if !slices.ContainsFunc(view.Controller().State.Bindings, func(item prerequisites.ControllerBinding) bool {
+		return item.Context == view.Identity().Name
+	}) {
+		return refusalExit(view, failure("controller.identity", "this context is not bound to a controller host", unboundExit(view, operation)))
+	}
+	if err := closureRefusal(view, operation); err != nil {
+		return refusalExit(view, err)
+	}
+	return []string{command}
+}
+
+// refusalExit is the step status offers in place of a refused continuation:
+// the context's deletion when the refusal's remedy names it, and otherwise
+// none, because every other remedy names no command status runs.
+func refusalExit(view View, refusal error) []string {
+	var failed *diagnostics.Failure
+	if !errors.As(refusal, &failed) {
+		return nil
+	}
+	exit := deletionExit(view)
+	for _, diagnostic := range failed.Diagnostics {
+		if strings.Contains(diagnostic.Remediation, exit) {
+			command, _ := deletionCommand(view)
+			return []string{command}
+		}
+	}
+	return nil
 }
 
 // setupComplete is the controller setup an apply needs before it claims this
@@ -429,13 +470,14 @@ func refusedServices(services []ServiceSummary, refused []string) []ServiceSumma
 // about each object its frozen plan names, whatever its declaration now says.
 // An apply reports what its blocks of the object reached. A removal reports an
 // object whose removal started by what that removal reached, and one whose
-// removal has not started by what the apply it removes proved. An object that
-// apply owned and the removal no longer names, wholly or in part, was taken
-// back by an earlier attempt, so it is pending again. A removal naming fewer
-// blocks than that apply owned replaced an earlier attempt whose outcome for
-// the objects it has not started no record keeps, so those read unknown, as
-// does an object of a completed removal whose block record does not read done.
-// An object neither names has no entry.
+// removal has not started by what the nearest removal it replaces did to it,
+// or else by what the apply it removes proved. An object that apply owned and
+// the removal no longer names, wholly or in part, was taken back by an earlier
+// attempt, so it is pending again. A replacement an earlier build recorded
+// names no removal it replaces, so one naming fewer blocks than that apply
+// owned leaves the objects it has not started unknown, as does an object of a
+// completed removal whose block record does not read done. An object neither
+// names has no entry.
 func realizations(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (map[string]RealizationStatus, error) {
 	reached := reachedByObject(frozen, states)
 	realized := make(map[string]RealizationStatus, len(reached))
@@ -447,27 +489,94 @@ func realizations(ctx context.Context, store OperationStore, operation operation
 	}
 	var applied map[string][]reconciliation.BlockState
 	owned := map[string]int{}
-	replacing := false
+	ownedBlocks := 0
 	if operation.Source != "" {
 		source, sourceStates, err := removedApply(ctx, store, operation.Source)
 		if err != nil {
 			return nil, err
 		}
 		applied = reachedByObject(source, sourceStates)
-		ownedBlocks := reconciliation.OwnedSubset(source, sourceStates).Blocks
-		for _, block := range ownedBlocks {
+		subset := reconciliation.OwnedSubset(source, sourceStates).Blocks
+		for _, block := range subset {
 			realized[block.Kind+"/"+block.Object] = RealizationPending
 			owned[block.Kind+"/"+block.Object]++
 		}
-		replacing = len(frozen.Blocks) < len(ownedBlocks)
+		ownedBlocks = len(subset)
+	}
+	replaced, replacing, err := replacedRemovals(ctx, store, operation, len(frozen.Blocks) < ownedBlocks, ownedBlocks)
+	if err != nil {
+		return nil, err
 	}
 	for identity, blocks := range reached {
-		realized[identity] = removedStatus(blocks, applied[identity], owned[identity], replacing)
+		realized[identity] = removedStatus(blocks, applied[identity], owned[identity], replaced[identity], replacing)
 		if operation.State == reconciliation.OperationDone && slices.ContainsFunc(blocks, notDone) {
 			realized[identity] = RealizationUnknown
 		}
 	}
 	return realized, nil
+}
+
+// replacedRemovals walks the removals a removal replaces, nearest first, and
+// reports for each object what the nearest one that left it not all pending
+// did to it. It also reports whether an object none of them decides is
+// unknown: the earliest removal, which replaces none, may itself have replaced
+// an attempt an earlier build recorded, which shows as naming fewer blocks
+// than the apply owned. A removal that replaces none keeps the same reading
+// over its own plan, which fewer carries.
+func replacedRemovals(ctx context.Context, store OperationStore, operation operationstore.Operation, fewer bool, owned int) (map[string]RealizationStatus, bool, error) {
+	if operation.Replaces == "" {
+		return nil, fewer, nil
+	}
+	decided := map[string]RealizationStatus{}
+	seen := map[string]bool{operation.ID: true}
+	for id := operation.Replaces; ; {
+		switch {
+		case seen[id]:
+			return nil, false, failure("lifecycle.state", "the removals this operation replaces name one another in a cycle", "restore the context store")
+		case len(seen) > operationstore.MaxOperations:
+			return nil, false, failure("lifecycle.state", "the removals this operation replaces exceed the operations a context retains", "restore the context store")
+		}
+		seen[id] = true
+		record, err := store.ReadOperation(ctx, id)
+		if err != nil {
+			return nil, false, err
+		}
+		if record.Verb != reconciliation.Destroy {
+			return nil, false, failure("lifecycle.state", "the operation this removal replaces is no removal", "restore the context store")
+		}
+		plan, states, err := removedApply(ctx, store, id)
+		if err != nil {
+			return nil, false, err
+		}
+		for identity, blocks := range reachedByObject(plan, states) {
+			if _, known := decided[identity]; !known {
+				if status, decides := replacedStatus(blocks); decides {
+					decided[identity] = status
+				}
+			}
+		}
+		if record.Replaces == "" {
+			return decided, len(plan.Blocks) < owned, nil
+		}
+		id = record.Replaces
+	}
+}
+
+// replacedStatus is what a replaced removal's blocks of one object did to it,
+// once any of them is no longer pending: an unproved block leaves it unknown,
+// a failed one failed, and one proved gone took it back.
+func replacedStatus(reached []reconciliation.BlockState) (RealizationStatus, bool) {
+	switch {
+	case !slices.ContainsFunc(reached, func(state reconciliation.BlockState) bool { return state != reconciliation.BlockPending }):
+		return "", false
+	case slices.ContainsFunc(reached, unproved):
+		return RealizationUnknown, true
+	case slices.Contains(reached, reconciliation.BlockFailed):
+		return RealizationFailed, true
+	case slices.Contains(reached, reconciliation.BlockDone):
+		return RealizationPending, true
+	}
+	return RealizationUnknown, true
 }
 
 func notDone(state reconciliation.BlockState) bool { return state != reconciliation.BlockDone }
@@ -505,17 +614,23 @@ func appliedStatus(reached []reconciliation.BlockState) RealizationStatus {
 }
 
 // removedStatus is what a removal's blocks of one object prove: an unproved or
-// failed removal block reads so, and a removal that proved any block of it
-// gone, or names fewer of its blocks than the removed apply owned, took it
-// back. Until its removal starts it reads what the removed apply proved about
-// it, unless the removal replaced an earlier attempt.
-func removedStatus(reached, applied []reconciliation.BlockState, owned int, replacing bool) RealizationStatus {
+// failed removal block reads so, and a removal block proved gone took it back.
+// Until its removal starts it reads what the nearest removal it replaces did
+// to it, then pending when the removed apply owns none of it or the removal
+// names fewer of its blocks than that apply owned, and otherwise what the
+// removed apply proved about it, unless the removal replaced an attempt whose
+// outcome for it no record keeps.
+func removedStatus(reached, applied []reconciliation.BlockState, owned int, replaced RealizationStatus, replacing bool) RealizationStatus {
 	switch {
 	case slices.ContainsFunc(reached, unproved):
 		return RealizationUnknown
 	case slices.Contains(reached, reconciliation.BlockFailed):
 		return RealizationFailed
-	case slices.Contains(reached, reconciliation.BlockDone), len(applied) == 0, len(reached) < owned:
+	case slices.Contains(reached, reconciliation.BlockDone):
+		return RealizationPending
+	case replaced != "":
+		return replaced
+	case len(applied) == 0, len(reached) < owned:
 		return RealizationPending
 	case replacing:
 		return RealizationUnknown

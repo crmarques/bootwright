@@ -1,7 +1,8 @@
 """A lifecycle supervisor dies with its invocation and takes its whole tree.
 
-The seams stand in for prctl, /proc and signal delivery, so the decisions hold
-without privilege; real runs prove main() wires them in lifecycle mode only.
+Either supervisor ends its whole tree when it is terminated. The seams stand in
+for prctl, /proc and signal delivery, so the decisions hold without privilege;
+real runs prove main() arms the parent-death signal in lifecycle mode only.
 """
 
 from __future__ import annotations
@@ -222,10 +223,13 @@ def test_only_a_lifecycle_playbook_child_is_bound_and_an_orphan_never_loads_ansi
     # Its supervisor died before the binding: the child ends before Ansible.
     supervisor.enter_child(True, Prctl(), lambda: 1, 100, Installer(), ended.append)
     assert ended == [125]
-    # A controller child is never bound, whatever became of its supervisor.
+    # A controller child is never bound, whatever became of its supervisor,
+    # but it drops the supervisor's termination handler.
     ended, prctl, installer = [], Prctl(), Installer()
     supervisor.enter_child(False, prctl, lambda: 1, 100, installer, ended.append)
-    assert prctl.calls == [] and installer.handlers == {} and ended == []
+    assert prctl.calls == []
+    assert installer.handlers == {signal.SIGTERM: signal.SIG_DFL}
+    assert ended == []
 
 
 PLAYBOOK = r"""
@@ -344,6 +348,14 @@ def test_a_controller_supervisor_outlives_its_invocation(tmp_path):
     # Acknowledgement gating, not parent death, stops a controller run: its
     # authorized native transaction must be able to finish.
     assert stopped_tree_runs(tmp_path, [], kill_invocation, ALL, 1) == [True] * 4
+
+
+@LINUX
+def test_a_terminated_controller_supervisor_ends_its_tree(tmp_path):
+    # The controller runner cancels this way before a native transaction is
+    # authorized, so a worker in its own session ends with the tree.
+    stop = signal_supervisor(signal.SIGTERM)
+    assert stopped_tree_runs(tmp_path, [], stop, ALL, 5) == [False] * 4
 
 
 @LINUX

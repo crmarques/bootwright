@@ -5,11 +5,14 @@ import (
 	"errors"
 	"maps"
 	"path"
+	"strings"
 	"testing"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 const clusterImplementation = "agent-install-v1"
@@ -337,10 +340,13 @@ func TestStatusRowsReadTheOperationsVerb(t *testing.T) {
 	}
 }
 
-// A removal that replaced a failed one never reads done an object the earlier
-// attempt took part of back or may have failed on. One it names fewer blocks
-// of than the apply owned reads pending, and one it has not started reads
-// unknown, because no record keeps what the earlier attempt did to it.
+// A removal that replaced a failed one never reads done an object an earlier
+// attempt took part of back or failed on. One it names fewer blocks of than
+// the apply owned reads pending, and one it has not started reads what the
+// nearest removal it replaces did to it, or what the apply proved when none of
+// them touched it. A replacement an earlier build recorded names no removal it
+// replaces, so an object it has not started reads unknown when it names fewer
+// blocks than the apply owned.
 func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 	failRemoval := func(t *testing.T, h *rowsHarness, outcomes ...reconciliation.Outcome) {
 		t.Helper()
@@ -353,11 +359,26 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 		}
 		h.capability.outcomes = nil
 	}
+	firstFailedOther := map[string]reconciliation.BlockState{
+		"install-sno": reconciliation.BlockDone, "other": reconciliation.BlockFailed,
+		"media-sno": reconciliation.BlockPending, "artifacts": reconciliation.BlockPending,
+	}
+	twoAttempts := func(second map[string]reconciliation.BlockState) func(*testing.T, *rowsHarness) {
+		return func(t *testing.T, h *rowsHarness) {
+			failRemoval(t, h, reconciliation.OutcomeChanged, reconciliation.OutcomeFailed)
+			requireReached(t, h.harness, reconciliation.OperationFailed, firstFailedOther)
+			failRemoval(t, h, reconciliation.OutcomeFailed)
+			requireReached(t, h.harness, reconciliation.OperationFailed, second)
+		}
+	}
+	secondFailedMedia := map[string]reconciliation.BlockState{
+		"media-sno": reconciliation.BlockFailed, "other": reconciliation.BlockPending, "artifacts": reconciliation.BlockPending,
+	}
 	for _, row := range []struct {
-		name          string
-		definitions   []reconciliation.BlockDefinition
-		first, second map[string]reconciliation.BlockState
-		want          map[string]RealizationStatus
+		name        string
+		definitions []reconciliation.BlockDefinition
+		arrange     func(*testing.T, *rowsHarness)
+		want        map[string]RealizationStatus
 	}{
 		{
 			name: "the first attempt took the cluster install back",
@@ -367,26 +388,63 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 				stagedDefinition("other", reconciliation.StageMachines, "media-sno"),
 				clusterBlock("install-sno", reconciliation.StageClusters, "other"),
 			},
-			first: map[string]reconciliation.BlockState{
-				"install-sno": reconciliation.BlockDone, "other": reconciliation.BlockFailed,
-				"media-sno": reconciliation.BlockPending, "artifacts": reconciliation.BlockPending,
-			},
-			second: map[string]reconciliation.BlockState{
+			arrange: twoAttempts(map[string]reconciliation.BlockState{
 				"other": reconciliation.BlockFailed, "media-sno": reconciliation.BlockPending, "artifacts": reconciliation.BlockPending,
-			},
+			}),
 			want: map[string]RealizationStatus{
-				"ContainerCluster/sno": RealizationPending, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationUnknown,
+				"ContainerCluster/sno": RealizationPending, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
 			},
 		},
 		{
 			name:        "the first attempt failed on a service the second has not started",
 			definitions: append(rowsDefinitions(), definition("other")),
-			first: map[string]reconciliation.BlockState{
-				"install-sno": reconciliation.BlockDone, "other": reconciliation.BlockFailed,
-				"media-sno": reconciliation.BlockPending, "artifacts": reconciliation.BlockPending,
+			arrange:     twoAttempts(secondFailedMedia),
+			want: map[string]RealizationStatus{
+				"ContainerCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
 			},
-			second: map[string]reconciliation.BlockState{
-				"media-sno": reconciliation.BlockFailed, "other": reconciliation.BlockPending, "artifacts": reconciliation.BlockPending,
+		},
+		{
+			name:        "a replacement not yet started reads what the replaced attempt failed on",
+			definitions: append(rowsDefinitions(), stagedDefinition("other", reconciliation.StageClusters, "install-sno")),
+			arrange: func(t *testing.T, h *rowsHarness) {
+				failRemoval(t, h, reconciliation.OutcomeFailed)
+				requireReached(t, h.harness, reconciliation.OperationFailed, map[string]reconciliation.BlockState{
+					"other": reconciliation.BlockFailed, "install-sno": reconciliation.BlockPending,
+					"media-sno": reconciliation.BlockPending, "artifacts": reconciliation.BlockPending,
+				})
+				registerReplacement(t, h.harness, replacementID)
+			},
+			want: map[string]RealizationStatus{
+				"ContainerCluster/sno": RealizationDone, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
+			},
+		},
+		{
+			name:        "a chain",
+			definitions: append(rowsDefinitions(), definition("other")),
+			arrange: func(t *testing.T, h *rowsHarness) {
+				twoAttempts(secondFailedMedia)(t, h)
+				registerReplacement(t, h.harness, replacementID)
+			},
+			want: map[string]RealizationStatus{
+				"ContainerCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
+			},
+		},
+		{
+			name:        "a replacement an earlier build recorded",
+			definitions: append(rowsDefinitions(), definition("other")),
+			arrange: func(t *testing.T, h *rowsHarness) {
+				twoAttempts(secondFailedMedia)(t, h)
+				ctx := context.Background()
+				store := operationstore.New(h.workspace.area, func() time.Time { return time.Unix(0, 0) })
+				current, _ := durableOperation(t, h.harness)
+				recorded, err := store.ReadOperation(ctx, current.ID)
+				if err != nil || recorded.Replaces == "" {
+					t.Fatalf("the replacement records it replaces %q (%v), want the failed removal", recorded.Replaces, err)
+				}
+				recorded.Replaces = ""
+				if err := store.UpdateOperation(ctx, recorded); err != nil {
+					t.Fatal(err)
+				}
 			},
 			want: map[string]RealizationStatus{
 				"ContainerCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationUnknown, "ArtifactServer/artifacts": RealizationUnknown,
@@ -396,10 +454,7 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 		t.Run(row.name, func(t *testing.T) {
 			h := newRowsHarness(t, row.definitions)
 			completeApply(t, h.harness)
-			failRemoval(t, h, reconciliation.OutcomeChanged, reconciliation.OutcomeFailed)
-			requireReached(t, h.harness, reconciliation.OperationFailed, row.first)
-			failRemoval(t, h, reconciliation.OutcomeFailed)
-			requireReached(t, h.harness, reconciliation.OperationFailed, row.second)
+			row.arrange(t, h)
 			want := maps.Clone(row.want)
 			maps.Copy(want, map[string]RealizationStatus{
 				"ContainerCluster/edge": RealizationUnsupported, "StorageCluster/ceph": RealizationUnsupported, "ArtifactServer/mirror": RealizationUnsupported,
@@ -409,6 +464,34 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 			}
 		})
 	}
+}
+
+var replacementID = "op-" + strings.Repeat("e7", 16)
+
+// registerReplacement registers, as the context's current operation, a removal
+// replacing the failed one that is current, over the same plan and with no
+// block started, as a replacement interrupted right after it registered is.
+func registerReplacement(t *testing.T, h *harness, id string) {
+	t.Helper()
+	ctx := context.Background()
+	store := operationstore.New(h.workspace.area, func() time.Time { return time.Unix(0, 0) })
+	failed, _ := durableOperation(t, h)
+	if failed.Verb != reconciliation.Destroy || failed.State != reconciliation.OperationFailed {
+		t.Fatalf("the current operation is a %s %s, want a failed removal", failed.State, failed.Verb)
+	}
+	if index, err := store.Index(ctx); err != nil || index.Current != failed.ID {
+		t.Fatalf("the index names %q (%v), want the failed removal", index.Current, err)
+	}
+	plan, err := store.ReadPlan(ctx, failed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement := failed
+	replacement.ID, replacement.Replaces, replacement.State = id, failed.ID, reconciliation.OperationRunning
+	if err := store.Register(ctx, replacement, plan); err != nil {
+		t.Fatal(err)
+	}
+	requireReached(t, h, reconciliation.OperationRunning, map[string]reconciliation.BlockState{})
 }
 
 // requireReached holds the current operation to the state it records and each

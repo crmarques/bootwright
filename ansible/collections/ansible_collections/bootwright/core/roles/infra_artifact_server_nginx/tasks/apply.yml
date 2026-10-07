@@ -16,6 +16,35 @@
     phase: loaded
   no_log: true
 
+# A host reservation compares only the contexts Bootwright coordinates, so a
+# socket another daemon holds is proved here, before anything is pulled,
+# published or started. The runner reports the refusal named first as the
+# service's own diagnostic; the failure that follows names every socket in the
+# retained run output.
+- name: Observe the sockets the service binds before any effect
+  bootwright.core.artifact_server_inspect:
+    request: '{{ bootwright_artifact_server_request }}'
+    foreign: true
+  register: infra_artifact_server_nginx_sockets
+
+- name: Name a listener the service does not own to the runner
+  bootwright.core.artifact_server_protocol:
+    phase: refused
+    reason: foreign-listener
+    port: '{{ infra_artifact_server_nginx_sockets.foreign[0].port }}'
+  when: infra_artifact_server_nginx_sockets.foreign | length > 0
+  no_log: true
+
+- name: Refuse a listener the service does not own
+  ansible.builtin.fail:
+    msg: >-
+      something other than this service already listens where it binds;
+      nothing was pulled, published or started:
+      {% for socket in infra_artifact_server_nginx_sockets.foreign %}{{ socket.transport }}
+      {{ ('[' ~ socket.address ~ ']') if ':' in socket.address else socket.address }}:{{ socket.port
+      }}{{ '' if loop.last else '; ' }}{% endfor %}
+  when: infra_artifact_server_nginx_sockets.foreign | length > 0
+
 - name: Report image acquisition
   bootwright.core.artifact_server_protocol:
     phase: group

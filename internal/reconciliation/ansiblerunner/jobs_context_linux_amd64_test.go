@@ -28,7 +28,7 @@ import (
 // its authorization channel, so it runs until its invocation is cancelled.
 func blocking() *exec.Cmd {
 	return exec.Command("/bin/sh", "-c", `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
-		`printf '{"phase":"group","group":"wait","status":"running"}\n' >&3; read -r reply <&4`)
+		`printf '{"group":"wait","phase":"group","status":"running"}\n' >&3; read -r reply <&4`)
 }
 
 // runHeld starts a run of request whose adapter blocks, and returns once that

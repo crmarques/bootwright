@@ -11,23 +11,14 @@ never completed into one that was.
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
     emit,
 )
 
-PHASES = ("loaded", "group", "completed")
-GROUP_STATUSES = ("running", "ok", "failed", "skipped")
-OUTCOMES = ("changed", "unchanged")
 POWER_STATES = ("", "On", "Off")
 MAX_ADDRESSES = 64
 IDENTITY_LIMIT = 128
-HEX = set("0123456789abcdef")
-
-
-def digest(value):
-    if not isinstance(value, str) or len(value) != 64 or set(value) - HEX:
-        raise ValueError("digest")
-    return value
 
 
 def bounded(value, limit=128):
@@ -81,7 +72,7 @@ def presence(arguments, request_digest):
         "model": bounded(observation.get("model")),
         "postcondition": False,
         "power": str(power),
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "serial": serial,
         "uuid": uuid,
     }
@@ -132,10 +123,35 @@ def absence(request_digest):
         "model": "",
         "postcondition": True,
         "power": "",
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "serial": "",
         "uuid": "",
     }
+
+
+def completion(arguments):
+    """The evidence one completion publishes, or what it names when unmet.
+
+    A release publishes its claim taken back. A proof publishes only when it
+    holds: an observation is no exception, because a machine not proved to be
+    the declared one is never reported as it.
+    """
+    request_digest = arguments.get("digest")
+    if arguments.get("released"):
+        return absence(request_digest), None
+    evidence = presence(arguments, request_digest)
+    if evidence["postcondition"]:
+        return evidence, None
+    return evidence, ("the machine was not proved to be the one this Machine declares; missing: %s"
+                      % (", ".join(unproved(evidence, arguments)) or "unknown"))
+
+
+CAPABILITY = adapter_protocol.Capability(
+    "physical machine",
+    "the physical machine result could not be published",
+    completion,
+    passthrough=(UnprovableIdentity,),
+)
 
 
 class ActionModule(ActionBase):
@@ -144,37 +160,4 @@ class ActionModule(ActionBase):
 
     def run(self, tmp=None, task_vars=None):
         del tmp
-        arguments = self._task.args
-        phase = arguments.get("phase")
-        if phase not in PHASES:
-            return {"failed": True, "msg": "unsupported physical machine protocol phase"}
-        try:
-            if phase == "loaded":
-                emit({"phase": "loaded"}, acknowledge=True)
-                return {"changed": False}
-            if phase == "group":
-                status = arguments.get("status")
-                if status not in GROUP_STATUSES:
-                    raise ValueError("group status")
-                emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
-                return {"changed": False}
-            outcome = arguments.get("outcome")
-            if outcome not in OUTCOMES:
-                raise ValueError("outcome")
-            request_digest = arguments.get("digest")
-            if arguments.get("released"):
-                emit({"phase": "completed", "outcome": outcome, "evidence": absence(request_digest)})
-                return {"changed": False}
-            evidence = presence(arguments, request_digest)
-            if not evidence["postcondition"]:
-                return {
-                    "failed": True,
-                    "msg": "the machine was not proved to be the one this Machine declares; missing: %s"
-                           % (", ".join(unproved(evidence, arguments)) or "unknown"),
-                }
-            emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
-            return {"changed": False}
-        except UnprovableIdentity as refused:
-            return {"failed": True, "msg": str(refused)}
-        except (ValueError, TypeError, OSError):
-            return {"failed": True, "msg": "the physical machine result could not be published"}
+        return adapter_protocol.publish(self._task.args, CAPABILITY, emit)

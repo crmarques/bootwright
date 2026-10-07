@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -496,7 +497,9 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 	}
 	rebuiltDigest, err := rebuilt.Digest()
 	if err != nil || stored != rebuiltDigest {
-		return reconciliation.Plan{}, recordError("the frozen plan is not a plan this executable could have produced")
+		return reconciliation.Plan{}, diagnostics.NewFailureWithRemediation("lifecycle.state",
+			"the frozen plan is not a plan this executable could have produced", "",
+			"destroy this context with the build that registered the operation, which its operation.json records")
 	}
 	operation, _, err := s.readOperation(ctx, id)
 	if err != nil {
@@ -845,7 +848,7 @@ func (s *Store) CompleteAttempt(ctx context.Context, id, block string, number in
 	if err != nil {
 		return err
 	}
-	return s.completeRecord(ctx, id, block, path.Join(id, "blocks", block, "attempt-"+name+".json"), number, 0, outcome, effect, state, evidence)
+	return s.completeRecord(ctx, id, block, path.Join(id, "blocks", block, "attempt-"+name+".json"), number, 0, outcome, effect, state, evidence, nil)
 }
 
 // StartResolution allocates and durably records the resolution identity and its
@@ -895,8 +898,9 @@ func (s *Store) StartResolution(ctx context.Context, id, block string, attempt i
 
 // CompleteResolution records the outcome it is given, as CompleteAttempt does,
 // so a resolution reads back what its capability proved rather than an
-// outcome the store derived from the effect.
-func (s *Store) CompleteResolution(ctx context.Context, id, block string, attempt, resolution int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage) error {
+// outcome the store derived from the effect. A resolution whose observation
+// could not run also records the failure it reported.
+func (s *Store) CompleteResolution(ctx context.Context, id, block string, attempt, resolution int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage, failure *ObservationFailure) error {
 	attemptName, err := reconciliation.FormatNumber(attempt)
 	if err != nil {
 		return err
@@ -906,7 +910,7 @@ func (s *Store) CompleteResolution(ctx context.Context, id, block string, attemp
 		return err
 	}
 	target := path.Join(id, "blocks", block, "attempt-"+attemptName+"-resolution-"+name+".json")
-	return s.completeRecord(ctx, id, block, target, attempt, resolution, outcome, effect, state, evidence)
+	return s.completeRecord(ctx, id, block, target, attempt, resolution, outcome, effect, state, evidence, failure)
 }
 
 // LastResolution reads the last resolution allocated against one attempt and
@@ -967,7 +971,7 @@ func (s *Store) LastResolution(ctx context.Context, id, block string, attempt in
 	return record, true, nil
 }
 
-func (s *Store) completeRecord(ctx context.Context, id, block, target string, number, resolution int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage) error {
+func (s *Store) completeRecord(ctx context.Context, id, block, target string, number, resolution int, outcome reconciliation.Outcome, effect reconciliation.EffectState, state reconciliation.BlockState, evidence json.RawMessage, failure *ObservationFailure) error {
 	data, found, err := s.area.Read(ctx, target, MaxAttemptBytes)
 	if err != nil {
 		return err
@@ -987,7 +991,7 @@ func (s *Store) completeRecord(ctx context.Context, id, block, target string, nu
 		return recordError("the lifecycle attempt record contradicts its completion")
 	}
 	record.Phase, record.Outcome, record.Effect, record.Updated = "observed", outcome, effect, updated
-	record.Evidence = evidence
+	record.Evidence, record.Failure = evidence, failure
 	if err := validateAttempt(record); err != nil {
 		return err
 	}

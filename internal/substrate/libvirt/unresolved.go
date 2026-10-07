@@ -3,7 +3,6 @@ package libvirt
 import (
 	"encoding/json"
 
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -15,14 +14,17 @@ import (
 // domain without this context's ownership is named with its host, a
 // hypervisor that did not answer is named by its connection, and a listener
 // on the controller's socket with nothing of the machine behind it is named by
-// that socket. Evidence it cannot read, or that proves none of these, is left
-// to the engine's general reason.
-func (MachineCapability) Unresolved(block reconciliation.Block, evidence json.RawMessage) (lifecycle.Unresolved, bool) {
+// that socket. An owned domain the hypervisor answered for, which none of the
+// verb's checks accept, is named by the check that decided: for an apply the
+// first difference from the frozen request, such as the controller's image,
+// the system it exposes, a power state or a disk's size. Evidence it cannot
+// read, or for another request, is left to the engine's general reason.
+func (MachineCapability) Unresolved(verb reconciliation.Verb, block reconciliation.Block, evidence json.RawMessage) (lifecycle.Unresolved, bool) {
 	request, err := DecodeMachineRequest(block.Request)
 	if err != nil {
 		return lifecycle.Unresolved{}, false
 	}
-	host := placedOn(request.Placement)
+	host := lifecycle.PlacedOn(request.Placement)
 	if len(evidence) == 0 {
 		return lifecycle.Unresolved{
 			Reason: "its observation returned no evidence from " + host,
@@ -51,7 +53,31 @@ func (MachineCapability) Unresolved(block reconciliation.Block, evidence json.Ra
 			Remedy: "stop what listens on " + socket + " on " + host,
 		}, true
 	}
-	return lifecycle.Unresolved{}, false
+	effect, refused := machineEffect(verb, evidence, request, block.RequestDigest)
+	if effect != reconciliation.EffectUnknown {
+		return lifecycle.Unresolved{}, false
+	}
+	return lifecycle.Drifted(verb, "domain "+request.Domain, host, refused)
+}
+
+// Unresolved says why an observation of this provider host proved nothing,
+// from the evidence it recorded: evidence this request's own that none of the
+// verb's checks accept is named by the check that decided. Empty evidence,
+// evidence for another request and evidence that does not decode are left to
+// the engine's general reason.
+func (HostCapability) Unresolved(verb reconciliation.Verb, block reconciliation.Block, evidence json.RawMessage) (lifecycle.Unresolved, bool) {
+	request, err := DecodeHostRequest(block.Request)
+	if err != nil || len(evidence) == 0 {
+		return lifecycle.Unresolved{}, false
+	}
+	if _, err := decodeHostEvidence(evidence, block.RequestDigest); err != nil {
+		return lifecycle.Unresolved{}, false
+	}
+	effect, refused := hostEffect(verb, evidence, request, block.RequestDigest)
+	if effect != reconciliation.EffectUnknown {
+		return lifecycle.Unresolved{}, false
+	}
+	return lifecycle.Drifted(verb, "the networks and pool of InfraProvider "+block.Object, lifecycle.PlacedOn(request.Placement), refused)
 }
 
 // machineRemains reports whether any part of the machine an observation reads
@@ -66,13 +92,4 @@ func machineRemains(observed MachineEvidence) bool {
 		}
 	}
 	return false
-}
-
-// placedOn names the host a block's placement runs its adapter against, with
-// the address it is reached at when that is not this controller.
-func placedOn(placement machineref.Placement) string {
-	if placement.Local() || placement.Address == "" {
-		return "Machine " + placement.Machine
-	}
-	return "Machine " + placement.Machine + " at " + placement.Address
 }

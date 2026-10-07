@@ -108,7 +108,7 @@ func TestUnresolvedMachineObservationsMatchTheirGoldensAndNameWhy(t *testing.T) 
 		"malformed evidence":                 {json.RawMessage(`{"domain":`), lifecycle.Unresolved{}, false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, explains := NewMachine(nil).Unresolved(block, test.evidence)
+			got, explains := NewMachine(nil).Unresolved(reconciliation.Apply, block, test.evidence)
 			if explains != test.explains || got != test.want {
 				t.Fatalf("unresolved = %+v (%t), want %+v (%t)", got, explains, test.want, test.explains)
 			}
@@ -123,6 +123,111 @@ func TestUnresolvedMachineObservationsMatchTheirGoldensAndNameWhy(t *testing.T) 
 				if err != nil || observation.Effect != reconciliation.EffectUnknown {
 					t.Fatalf("the %s resolution read %s (%v), want unknown", verb, observation.Effect, err)
 				}
+			}
+		})
+	}
+}
+
+// An owned domain the hypervisor answered for, whose observation proves the
+// adapter's postcondition but not the frozen request, names the first
+// difference under an apply, and its remedy is to restore it. A removal's own
+// resolution reads that same evidence as no effect: drift is never unknown for
+// a removal.
+func TestADriftedMachineNamesItsFirstDifference(t *testing.T) {
+	request, block := remoteMachine(t)
+	host := "Machine hypervisor at 192.0.2.5"
+	remedy := "restore domain " + request.Domain + " on " + host + " to what its frozen request names"
+	for name, test := range map[string]struct {
+		drift   func(*MachineEvidence)
+		refusal string
+	}{
+		"a controller on another image":        {func(e *MachineEvidence) { e.Controller = "docker.io/other@sha256:0" }, "the running management controller is not the frozen image"},
+		"a controller exposing another system": {func(e *MachineEvidence) { e.System = "00000000-0000-0000-0000-000000000000" }, "the management controller does not expose this machine's system"},
+		"a resized disk":                       {func(e *MachineEvidence) { e.Disks[0].SizeGiB++ }, "a machine disk is not the size the profile froze"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var evidence MachineEvidence
+			if err := json.Unmarshal(machineEvidence(request, evidenceDigest), &evidence); err != nil {
+				t.Fatal(err)
+			}
+			test.drift(&evidence)
+			data := encode(t, evidence)
+			got, explains := NewMachine(nil).Unresolved(reconciliation.Apply, block, data)
+			want := lifecycle.Unresolved{Reason: "domain " + request.Domain + " on " + host + " is not what its apply froze: " + test.refusal, Remedy: remedy}
+			if !explains || got != want {
+				t.Fatalf("unresolved = %+v (%t), want %+v", got, explains, want)
+			}
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: data}}
+			observation, err := NewMachine(runner).ObserveRemoval(context.Background(), lifecycle.Execution{Block: block})
+			if err != nil || observation.Effect != reconciliation.EffectNoEffect {
+				t.Fatalf("the removal read the drifted machine as %s (%v), want no effect", observation.Effect, err)
+			}
+			if _, explains := NewMachine(nil).Unresolved(reconciliation.Destroy, block, data); explains {
+				t.Fatal("a removal explained evidence it reads as no effect")
+			}
+		})
+	}
+}
+
+// A provider host this request's own that none of the verb's checks accept is
+// named by the check that decided: under an apply the presence check, under a
+// removal the unfinished removal's. Evidence for another request or none at
+// all is left to the general reason.
+func TestUnresolvedHostNamesTheRefusingCheck(t *testing.T) {
+	request := hostRequest(t)
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := reconciliation.Block{
+		BlockDefinition: reconciliation.BlockDefinition{ID: "substrate-host-lab", Kind: HostKind, Implementation: HostImplementation, Object: "lab", Request: canonical},
+		RequestDigest:   evidenceDigest,
+	}
+	decoded := func() HostEvidence {
+		var evidence HostEvidence
+		if err := json.Unmarshal(hostEvidence(request, evidenceDigest), &evidence); err != nil {
+			t.Fatal(err)
+		}
+		return evidence
+	}
+	subject := "the networks and pool of InfraProvider lab on Machine controller"
+	noAutostart := decoded()
+	noAutostart.PoolAutostart = false
+	foreign := decoded()
+	foreign.Postcondition, foreign.Pool, foreign.PoolOwned = false, "", false
+	managed := false
+	for index := range foreign.Networks {
+		if foreign.Networks[index].Managed {
+			foreign.Networks[index].Owned, managed = false, true
+		}
+	}
+	if !managed {
+		t.Fatal("the lab provider declares no managed network")
+	}
+	other := decoded()
+	other.Request = "other"
+	for name, test := range map[string]struct {
+		verb     reconciliation.Verb
+		evidence []byte
+		want     lifecycle.Unresolved
+		explains bool
+	}{
+		"an apply over a pool that does not autostart": {reconciliation.Apply, encode(t, noAutostart), lifecycle.Unresolved{
+			Reason: subject + " is not what its apply froze: the provider's virtual-media pool does not start with the host",
+			Remedy: "restore " + subject + " to what its frozen request names",
+		}, true},
+		"a removal over a foreign managed network": {reconciliation.Destroy, encode(t, foreign), lifecycle.Unresolved{
+			Reason: subject + " is not what its destroy froze: a managed libvirt network exists without this context's ownership",
+			Remedy: "restore " + subject + " so its observation reads it as this context's own",
+		}, true},
+		"a removal over a pool that does not autostart": {reconciliation.Destroy, encode(t, noAutostart), lifecycle.Unresolved{}, false},
+		"evidence for another request":                  {reconciliation.Apply, encode(t, other), lifecycle.Unresolved{}, false},
+		"no evidence":                                   {reconciliation.Apply, nil, lifecycle.Unresolved{}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, explains := NewHost(nil).Unresolved(test.verb, block, test.evidence)
+			if explains != test.explains || got != test.want {
+				t.Fatalf("unresolved = %+v (%t), want %+v (%t)", got, explains, test.want, test.explains)
 			}
 		})
 	}

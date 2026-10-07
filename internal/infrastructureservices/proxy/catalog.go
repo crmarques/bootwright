@@ -9,9 +9,6 @@ import (
 // and a continuation refuses when the executable no longer offers it.
 const Implementation = "proxy-squid-v1"
 
-// requestVersion is the frozen request shape this build writes and reads.
-const requestVersion = "proxy-squid-v2"
-
 // Kind is the API kind this capability realizes.
 const Kind = string(api.Proxy)
 
@@ -26,9 +23,9 @@ func Definition() managedservice.Definition {
 	return managedservice.Definition{
 		Kind:           api.Proxy,
 		Implementation: Implementation,
-		Version:        requestVersion,
+		Version:        managedservice.RequestVersion,
 		Slug:           "proxy",
-		Variable:       "bootwright_proxy",
+		Variable:       managedservice.Variable,
 		Purpose:        "proxy egress",
 		Subject:        "proxy",
 		Image:          defaultImage,

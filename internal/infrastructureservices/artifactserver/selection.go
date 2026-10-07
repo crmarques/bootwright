@@ -24,11 +24,15 @@ func Unsupported(catalog api.Catalog) []string {
 func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	var found []lifecycle.Refusal
 	for _, server := range catalog.OfKind(api.ArtifactServer) {
-		if server.Spec().Get("management").Text() == "managed" && server.Spec().Get("retention").Text() == "install-only" {
+		if server.Spec().Get("management").Text() != "managed" {
+			continue
+		}
+		if server.Spec().Get("retention").Text() == "install-only" {
 			found = append(found, lifecycle.RefusalOf(server,
 				"this executable serves no managed artifact server with install-only retention",
 				"declare spec.retention: persistent on "+server.Identity()+", or omit it"))
 		}
+		found = append(found, managedservice.PlacementRefusals(catalog, server)...)
 	}
 	return lifecycle.SortRefusals(found)
 }

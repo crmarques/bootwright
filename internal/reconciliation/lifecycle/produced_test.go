@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -160,27 +161,48 @@ func TestACancelledPublicationLeavesItUnknown(t *testing.T) {
 // A resolution that proves an apply's block complete captures what its
 // observation offers before it records the block done; one whose publication
 // fails leaves the block unknown, so the next invocation observes it again.
+// The observation ran, so the failure is custody's: the resolution records no
+// observation failure, status never says the observation could not run, and
+// the refusal is custody's own, diagnosed or not.
 func TestAResolutionProvingCompletionPublishesAndAFailedPublicationStaysUnknown(t *testing.T) {
-	for _, failing := range []bool{false, true} {
+	diagnosed := secretstore.Failure("store.conflict", "secret publication was not committed")
+	undiagnosed := errors.New("secret publication was lost")
+	for _, refusal := range []error{nil, diagnosed, undiagnosed} {
 		h := newHarness(t, "install")
 		h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 		if _, err := apply(h); err == nil {
 			t.Fatal("an unknown outcome completed")
 		}
-		refusal := secretstore.Failure("store.conflict", "secret publication was not committed")
-		if failing {
-			h.binder.produceErr = refusal
-		}
+		h.binder.produceErr = refusal
 		h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`), Produced: producedKubeconfig()}}
 		result, err := apply(h)
-		if !failing {
+		if refusal == nil {
 			if err != nil || blockState(t, h, "install") != reconciliation.BlockDone || len(kept(h)) != 1 {
 				t.Fatalf("resolution = %+v, %v with custody %v", result, err, kept(h))
 			}
 			continue
 		}
-		if !reports(err, refusal) || blockState(t, h, "install") != reconciliation.BlockUnknown || len(kept(h)) != 0 || result.Receipt.State != string(reconciliation.OperationUnknown) {
-			t.Fatalf("a failed publication resolved %+v, %v with custody %v", result, err, kept(h))
+		// An undiagnosed custody failure escapes as the internal failure it
+		// was, never as the unresolved diagnosis an observation would give.
+		refused := reports(err, diagnosed)
+		if refusal == undiagnosed {
+			got := diagnostics.Of(err)
+			refused = len(got) > 0 && got[0].Code == "runtime.internal"
+		}
+		if !refused || blockState(t, h, "install") != reconciliation.BlockUnknown || len(kept(h)) != 0 || result.Receipt.State != string(reconciliation.OperationUnknown) {
+			t.Fatalf("a failed publication resolved %+v, %+v with custody %v", result, diagnostics.Of(err), kept(h))
+		}
+		if recorded := settlingResolution(t, h, "install").Failure; recorded != nil {
+			t.Fatalf("a failed publication recorded the observation failure %+v", recorded)
+		}
+		status, err := h.service.Status(context.Background(), StatusRequest{ContextName: testContextName})
+		if err != nil || status.Lifecycle == nil {
+			t.Fatalf("status = %+v (%v)", status, err)
+		}
+		for _, reported := range status.Lifecycle.Blocks {
+			if reported.Unresolved != nil && strings.HasPrefix(reported.Unresolved.Reason, "its observation could not run") {
+				t.Fatalf("status says %+v after a failed publication", reported.Unresolved)
+			}
 		}
 	}
 }

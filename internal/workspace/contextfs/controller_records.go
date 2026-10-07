@@ -3,12 +3,12 @@ package contextfs
 import (
 	"bytes"
 	"encoding/hex"
-	"encoding/json"
-	"io"
+	"errors"
 	"net/url"
 	"slices"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -170,20 +170,16 @@ func validateControllerObject(data []byte) error {
 	if err := boundedJSON(data, maxContexts); err != nil {
 		return err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	var value map[string]any
-	if err := decoder.Decode(&value); err != nil {
+	switch err := canonicaljson.ProveObject(data); {
+	case err == nil:
+		return nil
+	case errors.Is(err, canonicaljson.ErrMalformed):
 		return state("controller action payload is malformed")
-	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
+	case errors.Is(err, canonicaljson.ErrTrailing):
 		return state("controller action payload contains trailing data")
-	}
-	canonical, err := json.Marshal(value)
-	if err != nil || !bytes.Equal(data, canonical) {
+	default:
 		return state("controller action payload is not canonical")
 	}
-	return nil
 }
 
 func validateControllerSources(values []prerequisites.DependencySource, maximum int) error {

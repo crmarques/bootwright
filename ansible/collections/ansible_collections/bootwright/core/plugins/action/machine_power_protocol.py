@@ -9,26 +9,17 @@ is the state the controller reported once the operation settled.
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
     emit,
 )
 
-PHASES = ("loaded", "group", "refused", "completed")
-GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 # The refusals a power run names to its runner before it fails, each one the
 # runner reports as its caller's own diagnostic (internal/machine/power).
 REFUSALS = ("identity-mismatch",)
-OUTCOMES = ("changed", "unchanged")
 REPORTED = {"On": "on", "Off": "off", "": ""}
 READINGS = {"On": "on", "Off": "off"}
 VERBS = {"start": "on", "stop": "off", "restart": "on"}
-HEX = set("0123456789abcdef")
-
-
-def digest(value):
-    if not isinstance(value, str) or len(value) != 64 or set(value) - HEX:
-        raise ValueError("digest")
-    return value
 
 
 def state(value):
@@ -52,7 +43,7 @@ def evidence_for(arguments):
         "postcondition": power == VERBS[verb],
         "power": power,
         "previous": previous,
-        "request": digest(arguments.get("digest")),
+        "request": adapter_protocol.request_digest(arguments.get("digest")),
     }
     return evidence
 
@@ -92,7 +83,31 @@ def reading_evidence_for(arguments):
         if not machine:
             raise ValueError("machine")
         machines.append({"machine": machine, "power": power})
-    return {"machines": machines, "request": digest(arguments.get("digest"))}
+    return {"machines": machines, "request": adapter_protocol.request_digest(arguments.get("digest"))}
+
+
+def completion(arguments):
+    """The evidence one completion publishes, or what it names when unmet.
+
+    A reading publishes whatever each controller answered. A power verb
+    publishes only the state it asked for, observed or not, because a request
+    is not evidence.
+    """
+    if "readings" in arguments:
+        return reading_evidence_for(arguments), None
+    evidence = evidence_for(arguments)
+    if evidence["postcondition"]:
+        return evidence, None
+    return evidence, "the machine did not reach the power state this operation asked for"
+
+
+CAPABILITY = adapter_protocol.Capability(
+    "power",
+    "the machine power result could not be published",
+    completion,
+    phases=adapter_protocol.REFUSING_PHASES,
+    refusals=REFUSALS,
+)
 
 
 class ActionModule(ActionBase):
@@ -101,39 +116,4 @@ class ActionModule(ActionBase):
 
     def run(self, tmp=None, task_vars=None):
         del tmp
-        arguments = self._task.args
-        phase = arguments.get("phase")
-        if phase not in PHASES:
-            return {"failed": True, "msg": "unsupported power protocol phase"}
-        try:
-            if phase == "loaded":
-                emit({"phase": "loaded"}, acknowledge=True)
-                return {"changed": False}
-            if phase == "group":
-                status = arguments.get("status")
-                if status not in GROUP_STATUSES:
-                    raise ValueError("group status")
-                emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
-                return {"changed": False}
-            if phase == "refused":
-                reason = arguments.get("reason")
-                if reason not in REFUSALS:
-                    raise ValueError("refusal reason")
-                emit({"phase": "refused", "reason": reason})
-                return {"changed": False}
-            outcome = arguments.get("outcome")
-            if outcome not in OUTCOMES:
-                raise ValueError("outcome")
-            if "readings" in arguments:
-                emit({"phase": "completed", "outcome": outcome, "evidence": reading_evidence_for(arguments)})
-                return {"changed": False}
-            evidence = evidence_for(arguments)
-            if not evidence["postcondition"]:
-                return {
-                    "failed": True,
-                    "msg": "the machine did not reach the power state this operation asked for",
-                }
-            emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
-            return {"changed": False}
-        except (ValueError, TypeError, OSError):
-            return {"failed": True, "msg": "the machine power result could not be published"}
+        return adapter_protocol.publish(self._task.args, CAPABILITY, emit)

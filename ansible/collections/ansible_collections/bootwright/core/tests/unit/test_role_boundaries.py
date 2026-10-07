@@ -112,9 +112,9 @@ DEBUG = re.compile(r"(?<![\w-])--debug\b")
 # seeing them, which would pass the container rule vacuously.
 UNITS = {
     "infra_artifact_server_nginx/templates/unit.container.j2",
-    "infra_dns_server_dnsmasq/templates/unit.container.j2",
-    "infra_ntp_server_chrony/templates/unit.container.j2",
-    "infra_proxy_squid/templates/unit.container.j2",
+    "infra_managed_service/templates/chrony.container.j2",
+    "infra_managed_service/templates/dnsmasq.container.j2",
+    "infra_managed_service/templates/squid.container.j2",
     "substrate_libvirt_machine/templates/unit.container.j2",
 }
 
@@ -350,7 +350,9 @@ def test_no_material_or_completion_reaches_the_adapters_own_output():
         problems.extend(material_problems(label(path), tasks, derived))
         received += sum(receives_material(task, derived) for task in walk(tasks))
         completions += sum(phase(task) in COMPLETIONS for task in walk(tasks))
-    assert received and completions >= ENTRY_POINTS, "the walk no longer sees material or completions"
+    entries = entry_points()
+    assert len(entries) >= ENTRY_POINTS, "the walk no longer sees every playbook's entry point"
+    assert received and completions >= len(set(entries.values())), "the walk no longer sees material or completions"
     assert not problems, "\n".join(problems)
 
 

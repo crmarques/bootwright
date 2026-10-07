@@ -310,7 +310,7 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			observation, err := NewMachine(test.runner).Observe(context.Background(), execution)
-			if err != nil || observation.Effect != test.want {
+			if !errors.Is(err, test.runner.err) || observation.Effect != test.want {
 				t.Fatalf("observation = %+v (%v)", observation, err)
 			}
 		})
@@ -407,7 +407,7 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		} {
 			t.Run(target.name+"/"+name, func(t *testing.T) {
 				observation, err := target.observe(test.runner)(context.Background(), target.execution)
-				if err != nil || observation.Effect != test.want {
+				if !errors.Is(err, test.runner.err) || observation.Effect != test.want {
 					t.Fatalf("removal observation = %+v (%v), want %s", observation, err, test.want)
 				}
 				if len(test.runner.requests) != 1 || test.runner.requests[0].Operation != "observe" {

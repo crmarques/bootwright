@@ -115,26 +115,11 @@ func (r MachineRequest) Canonical() ([]byte, error) {
 }
 
 func DecodeHostRequest(data []byte) (HostRequest, error) {
-	request, err := reconciliation.Thaw[HostRequest](data, "provider host")
-	if err != nil {
-		return HostRequest{}, err
-	}
-	if request.Version != hostRequestVersion {
-		return HostRequest{}, refusal("lifecycle.state",
-			"the frozen provider host request has an unsupported version: "+request.Version, "")
-	}
-	return request, reconciliation.ProveCanonical(data, request, "provider host")
+	return reconciliation.ThawVersion[HostRequest](data, "provider host", hostRequestVersion)
 }
 
 func DecodeMachineRequest(data []byte) (MachineRequest, error) {
-	request, err := reconciliation.Thaw[MachineRequest](data, "machine")
-	if err != nil {
-		return MachineRequest{}, err
-	}
-	if request.Version != machineRequestVersion {
-		return MachineRequest{}, refusal("lifecycle.state", "the frozen machine request has an unsupported version", "")
-	}
-	return request, reconciliation.ProveCanonical(data, request, "machine")
+	return reconciliation.ThawVersion[MachineRequest](data, "machine", machineRequestVersion)
 }
 
 // ReservationKeys are the exclusive host resources each request claims before

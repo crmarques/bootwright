@@ -1,0 +1,299 @@
+[
+  {
+    "case": "loaded",
+    "records": [
+      [
+        {
+          "phase": "loaded"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group running",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "running"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group ok",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "ok"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group failed",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "failed"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group skipped",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "skipped"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "unknown phase",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "unsupported installation protocol phase"
+    }
+  },
+  {
+    "case": "bad status",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the installation capability result could not be published"
+    }
+  },
+  {
+    "case": "bad outcome",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the installation capability result could not be published"
+    }
+  },
+  {
+    "case": "refused hardware-mismatch 0",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "hardware-mismatch-node-0"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused identity-mismatch 2",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "identity-mismatch-node-2"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused machine-running 999",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "machine-running-node-999"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused machine-running 1000",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the installation capability result could not be published"
+    }
+  },
+  {
+    "case": "refused unnamed",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the installation capability result could not be published"
+    }
+  },
+  {
+    "case": "completed proving",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "cluster": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "completed": true,
+            "identity": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "media": [],
+            "missing": [],
+            "ownMedia": [],
+            "postcondition": true,
+            "powered": [
+              "sno-01"
+            ],
+            "release": "4.21.15",
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "restored": false
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "completed unproving",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the installation did not reach its postcondition; the cluster answering is not the one this operation installed; the cluster does not report its installation completed at the declared release; nodes missing: sno-01; media still inserted on: sno-01"
+    }
+  },
+  {
+    "case": "completed unproving observed",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "cluster": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "completed": false,
+            "identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "media": [
+              "sno-01"
+            ],
+            "missing": [
+              "sno-01"
+            ],
+            "ownMedia": [],
+            "postcondition": false,
+            "powered": [
+              "sno-01"
+            ],
+            "release": "4.21.15",
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "restored": false
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "removal",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": true,
+            "cluster": "",
+            "completed": false,
+            "identity": "",
+            "media": [],
+            "missing": [],
+            "ownMedia": [],
+            "postcondition": true,
+            "powered": [],
+            "release": "",
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "restored": false
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "removal still present",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the installation did not reach its postcondition; media still inserted on: sno-01, sno-02"
+    }
+  },
+  {
+    "case": "malformed",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the installation capability result could not be published"
+    }
+  },
+  {
+    "case": "channel refused",
+    "records": [
+      [
+        {
+          "phase": "loaded"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "failed": true,
+      "msg": "the installation capability result could not be published"
+    }
+  }
+]

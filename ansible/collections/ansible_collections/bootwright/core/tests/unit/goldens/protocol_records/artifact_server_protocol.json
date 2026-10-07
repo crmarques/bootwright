@@ -1,0 +1,256 @@
+[
+  {
+    "case": "loaded",
+    "records": [
+      [
+        {
+          "phase": "loaded"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group running",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "running"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group ok",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "ok"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group failed",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "failed"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group skipped",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "skipped"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "unknown phase",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "unsupported artifact-server protocol phase"
+    }
+  },
+  {
+    "case": "bad status",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact-server capability result could not be published"
+    }
+  },
+  {
+    "case": "bad outcome",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact-server capability result could not be published"
+    }
+  },
+  {
+    "case": "refused foreign-listener 8443",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "foreign-listener-8443"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused unnamed",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact-server capability result could not be published"
+    }
+  },
+  {
+    "case": "completed proving",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "container": "quay.io/x",
+            "contentRoot": true,
+            "listeners": [
+              {
+                "address": "192.0.2.1",
+                "fingerprint": "",
+                "name": "http",
+                "port": 80,
+                "protocol": "http",
+                "status": "200"
+              }
+            ],
+            "postcondition": true,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "unit": "active"
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "completed unproving",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact server did not reach its postcondition; not proved: contentRoot"
+    }
+  },
+  {
+    "case": "completed unproving observed",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "container": "quay.io/x",
+            "contentRoot": false,
+            "listeners": [
+              {
+                "address": "192.0.2.1",
+                "fingerprint": "",
+                "name": "http",
+                "port": 80,
+                "protocol": "http",
+                "status": "200"
+              }
+            ],
+            "postcondition": false,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "unit": "active"
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "removal",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": true,
+            "container": "",
+            "contentRoot": false,
+            "listeners": [],
+            "postcondition": true,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "unit": ""
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "removal still present",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact server did not reach its postcondition; still present: container"
+    }
+  },
+  {
+    "case": "malformed",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact-server capability result could not be published"
+    }
+  },
+  {
+    "case": "channel refused",
+    "records": [
+      [
+        {
+          "phase": "loaded"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "failed": true,
+      "msg": "the artifact-server capability result could not be published"
+    }
+  }
+]

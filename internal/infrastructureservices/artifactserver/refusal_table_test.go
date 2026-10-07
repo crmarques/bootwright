@@ -35,6 +35,10 @@ func TestArtifactServerRefusalTableMatchesUnsupported(t *testing.T) {
 		"Install-only retention": {catalogOf(controller(), artifactServer(text("retention", "install-only"))),
 			"ArtifactServer/lab-artifacts", map[string]string{"<server>": "ArtifactServer/lab-artifacts"}},
 	}
+	for _, row := range []string{"Managed Proxy egress", "Proxy authentication", "Private trust", "Operator SSH identity", "Password SSH authentication", "No bound host key"} {
+		catalog, values, _ := placementRowGraph(row, placedArtifactServer)
+		cases[row] = refusalCase{catalog, "ArtifactServer/lab-artifacts", values}
+	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]
 		if !found {

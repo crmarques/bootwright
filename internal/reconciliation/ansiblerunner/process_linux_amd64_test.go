@@ -57,6 +57,8 @@ func TestLifecycleAdapterChild(t *testing.T) {
 		superviseLikeTheCollection(mode, result)
 	case "orphaning":
 		leaveAnOrphan(result, authorization)
+	case "retaining":
+		retainTheOutput(result, authorization)
 	}
 	// One descendant shares the adapter's process group. The other waits on
 	// the authorization channel in a session of its own, beyond a group kill,
@@ -597,7 +599,7 @@ func TestThreadChurnNeverSignalsARunningAdapter(t *testing.T) {
 		// acknowledgement, one result.
 		command: func(string, ...string) *exec.Cmd {
 			return exec.Command("/bin/sh", "-c", `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
-				`printf '{"phase":"completed","outcome":"changed","evidence":[{}]}\n' >&3`)
+				`printf '{"evidence":{"absent":false},"outcome":"changed","phase":"completed"}\n' >&3`)
 		},
 	}
 	request := lifecycle.RunRequest{
@@ -628,6 +630,71 @@ func TestThreadChurnNeverSignalsARunningAdapter(t *testing.T) {
 		if _, err := runner.execute(context.Background(), job, scratch, nil, "apply.yml", request); err != nil {
 			t.Fatalf("a thread ending elsewhere in the invocation signaled its adapter: %v", err)
 		}
+	}
+}
+
+// lifecycleRunOf runs one shell script as the adapter and returns the run's
+// result and error.
+func lifecycleRunOf(t *testing.T, script string) (lifecycle.RunResult, error) {
+	t.Helper()
+	runner := sweepingRunner(t, func() *exec.Cmd { return exec.Command("/bin/sh", "-c", script) })
+	var output bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	result, err := runner.Run(ctx, adapterRequest(t, &output))
+	if ctx.Err() != nil {
+		t.Fatalf("the adapter ran until the deadline (%v)", err)
+	}
+	return result, err
+}
+
+// A record the collection's canonical writer never emits, such as one spaced
+// after its colon, breaks the protocol: the attempt is unknown, never failed.
+func TestALifecycleRunEndsUnknownOnANonCanonicalRecord(t *testing.T) {
+	_, err := lifecycleRunOf(t, `printf '{"phase": "loaded"}\n' >&3; read -r reply <&4; exit 2`)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "the adapter structured result was incomplete" {
+		t.Fatalf("a non-canonical record reported %+v (%v)", reported, err)
+	}
+	if outcome := lifecycle.AttemptOutcome(err); outcome != reconciliation.OutcomeUnknown {
+		t.Fatalf("a non-canonical record left the attempt %s", outcome)
+	}
+}
+
+// A completion proves its postcondition through evidence, so one whose
+// evidence is null is no result, even when the adapter exits cleanly.
+func TestALifecycleCompletionWithNullEvidenceEndsUnknown(t *testing.T) {
+	result, err := lifecycleRunOf(t, `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
+		`printf '{"evidence":null,"outcome":"changed","phase":"completed"}\n' >&3; exit 0`)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "the adapter structured result was incomplete" {
+		t.Fatalf("a completion with null evidence reported %+v (%v)", reported, err)
+	}
+	if result.Outcome != "" || result.Evidence != nil {
+		t.Fatalf("a completion with null evidence completed the run: %+v", result)
+	}
+}
+
+// A named refusal is the adapter's last record, so the runner closes the
+// acknowledgement channel: an adapter still waiting on it is released instead
+// of holding the run to its deadline, and nothing is killed for it.
+func TestANamedRefusalClosesTheAcknowledgementChannel(t *testing.T) {
+	named := diagnostics.NewFailureWithRemediation("lifecycle.state", "the machine answers as another system", "", "correct its address")
+	runner := sweepingRunner(t, func() *exec.Cmd {
+		return exec.Command("/bin/sh", "-c", `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
+			`printf '{"phase":"refused","reason":"identity-mismatch"}\n' >&3; read -r reply <&4; echo released; exit 2`)
+	})
+	var output bytes.Buffer
+	request := adapterRequest(t, &output)
+	request.Refusals = map[string]error{"identity-mismatch": named}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := runner.Run(ctx, request)
+	if ctx.Err() != nil {
+		t.Fatalf("the refusing adapter waited on its acknowledgement channel until the deadline (%v)", err)
+	}
+	if !reflect.DeepEqual(diagnostics.Of(err), diagnostics.Of(named)) || output.String() != "released\n" {
+		t.Fatalf("the run reported %+v and the adapter printed %q", diagnostics.Of(err), output.String())
 	}
 }
 
@@ -676,7 +743,7 @@ func TestARunOnAnSSHPlacementHandsItsAdapterTheGeneratedConfiguration(t *testing
 		}
 		return exec.Command("/bin/sh", "-c", `cp -p "$1/ssh_config" "$1/inventory.json" "$2/" || exit 9; `+
 			`printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
-			`printf '{"phase":"completed","outcome":"changed","evidence":{}}\n' >&3`, "sh", job, capture)
+			`printf '{"evidence":{"absent":false},"outcome":"changed","phase":"completed"}\n' >&3`, "sh", job, capture)
 	}
 	var output bytes.Buffer
 	request := adapterRequest(t, &output)
@@ -714,5 +781,105 @@ func TestARunOnAnSSHPlacementHandsItsAdapterTheGeneratedConfiguration(t *testing
 	fields := strings.Fields(arguments)
 	if len(fields) < 2 || fields[0] != "-F" || filepath.Base(fields[1]) != "ssh_config" || !strings.HasPrefix(filepath.Base(filepath.Dir(fields[1])), jobPrefix) {
 		t.Fatalf("the SSH arm's arguments do not start with the job's configuration: %q", arguments)
+	}
+}
+
+// retainTheOutput completes the protocol, closes its result channel and leaves
+// a descendant in a session of its own holding the adapter's own output, then
+// exits zero. It records the descendant's process ID for the test to end.
+func retainTheOutput(result, authorization *os.File) {
+	_, _ = result.Write([]byte(`{"phase":"loaded"}` + "\n"))
+	if line, _ := bufio.NewReader(authorization).ReadString('\n'); line != "proceed\n" {
+		os.Exit(19)
+	}
+	_, _ = result.Write([]byte(`{"evidence":{"absent":false},"outcome":"changed","phase":"completed"}` + "\n"))
+	_ = result.Close()
+	_ = authorization.Close()
+	holder := exec.Command("/bin/sleep", "5")
+	holder.Stdout = os.Stdout
+	holder.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if holder.Start() != nil {
+		os.Exit(20)
+	}
+	_ = os.WriteFile(os.Getenv("BOOTWRIGHT_TEST_HOLDER"), []byte(strconv.Itoa(holder.Process.Pid)), 0600)
+	os.Exit(0)
+}
+
+// endHolder kills the descendant whose process ID the adapter recorded.
+func endHolder(t *testing.T, path string) {
+	recorded, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	if pid, err := strconv.Atoi(string(recorded)); err == nil {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+	}
+}
+
+// An adapter that answers the acknowledgement channel by closing it lets no
+// acknowledgement through, so nothing was authorized, and the outcome is its
+// exit's whichever of the two the runner reads first: a failed exit stays the
+// failed exit. Read first, the record meets a channel no process holds; read
+// after, a descendant that holds only the result channel writes it once the
+// adapter has exited. An adapter that lingers after closing the channel is
+// signaled at once, and like a supervisor ends its descendant and exits, well
+// inside both its own sleep and the drain.
+func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
+	for _, check := range []struct{ name, script string }{
+		{"record first", `exec 4<&-; printf '{"phase":"loaded"}\n' >&3; sleep 0.3; exit 3`},
+		{"exit first", `exec 4<&-; /bin/sh -c 'sleep 0.3; printf "%s\n" "$0" >&3' '{"phase":"loaded"}' </dev/null >/dev/null 2>&1 & exit 3`},
+		{"record first, adapter lingers", `exec 4<&-; trap 'kill $!; exit 3' TERM; printf '{"phase":"loaded"}\n' >&3; sleep 3 & wait; exit 3`},
+	} {
+		t.Run(check.name, func(t *testing.T) {
+			runner := sweepingRunner(t, func() *exec.Cmd { return exec.Command("/bin/sh", "-c", check.script) })
+			runner.drain = 2 * time.Second
+			var output bytes.Buffer
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			started := time.Now()
+			_, err := runner.Run(ctx, adapterRequest(t, &output))
+			if ctx.Err() != nil {
+				t.Fatalf("the adapter ran until the deadline (%v)", err)
+			}
+			if elapsed := time.Since(started); elapsed > 1500*time.Millisecond {
+				t.Fatalf("an undelivered acknowledgement left the adapter running for %s", elapsed)
+			}
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != "the adapter operation did not complete" {
+				t.Fatalf("an acknowledgement nothing could receive reported %+v (%v)", reported, err)
+			}
+		})
+	}
+}
+
+// A descendant in a session of its own that still holds the adapter's output
+// after the adapter exits is cut at the drain: the run returns at its bound,
+// and the completed record it read is no result.
+func TestARunReturnsAtItsDrainWhenADescendantHoldsItsOutput(t *testing.T) {
+	holder := filepath.Join(t.TempDir(), "holder")
+	t.Cleanup(func() { endHolder(t, holder) })
+	runner := sweepingRunner(t, func() *exec.Cmd {
+		return exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-retaining")
+	})
+	var output bytes.Buffer
+	request := adapterRequest(t, &output)
+	request.Launch.Environment = []string{"BOOTWRIGHT_TEST_HOLDER=" + holder}
+	request.OutputRemediation = "read the adapter output retained beside this attempt's log"
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	started := time.Now()
+	result, err := runner.Run(ctx, request)
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("the run waited %s on a descendant holding its output", elapsed)
+	}
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "adapter descendants retained the adapter's output after it exited" || reported[0].Remediation != request.OutputRemediation {
+		t.Fatalf("retained output reported %+v (%v)", reported, err)
+	}
+	if result.Outcome != "" {
+		t.Fatalf("retained output completed the run: %+v", result)
+	}
+	if _, err := os.Stat(holder); err != nil {
+		t.Fatalf("the adapter left no descendant holding its output: %v", err)
 	}
 }

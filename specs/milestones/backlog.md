@@ -130,6 +130,14 @@ Alias cell.
 | [B432](#b432) | new, 2026-10-07 (X43) | enabling | Each spec's owner | Wording X43 left | Found in X43; parked under D48 (D116) |
 | [B433](#b433) | new, 2026-10-07 (X43) | enabling | State reconciliation, with Controller setup and Managed OS | Host observations of what X43 proved only in-tree | Found in X43; parked under D48 (D116); each needs a host run, which M1's closing run (D59) and the native opt-in targets provide |
 | [B434](#b434) | new, 2026-10-07 (X43) | enabling | State reconciliation and Container cluster | One rule for a request version and the content derived within one shape | Found in X43; parked under D48 (D116); it needs a decision and moves a digest, so a digest window |
+| [B438](#b438) | new, 2026-10-07 (X24) | enabling | Infrastructure services, with State reconciliation | A wildcard bind's foreign-listener refusal names the colliding address | Found in X24; parked under D48 (D116); the refused record carries no address, and D114 accepted a refusal that names the port and the bind |
+| [B439](#b439) | new, 2026-10-07 (X24) | enabling | Infrastructure services | A realized Registry and the managed examples hold the foreign-listener rule | Found in X24; parked under D48 (D116); no Registry is realized and no example binds a managed service to a wildcard |
+| [B440](#b440) | new, 2026-10-07 (X24) | enabling | State reconciliation | A destroy over an unknown apply resolves a drifted block by what a removal needs | Found in X24; parked under D48 (D116); it changes what a resolution proves, so it needs an owner decision first |
+| [B441](#b441) | new, 2026-10-07 (X24) | enabling | Architecture | The last canonical-JSON proofs and wrappers | Found in X24; parked under D48 (D116); no behavior changes |
+| [B442](#b442) | new, 2026-10-07 (X24) | enabling | State reconciliation, with Controller and Infrastructure services | Host observations of what X24 proved only in-tree | Found in X24; parked under D48 (D116); each needs a host run, which M1's closing run (D59) provides |
+| [B443](#b443) | new, 2026-10-07 (X24) | enabling | Each test's owner | Tests X24 left narrower than they read | Found in X24; parked under D48 (D116) |
+| [B444](#b444) | new, 2026-10-07 (X24) | enabling | Architecture, with each capability's owner | Copies and dead code X24 left | Found in X24; parked under D48 (D116) |
+| [B445](#b445) | new, 2026-10-07 (X24) | enabling | Controller, with Architecture | The cancellation's group-kill order and its knowledge page | Found in X24; parked under D48 (D116); the order is bounded by the drain and was older than X24 |
 
 ### B96
 
@@ -463,7 +471,7 @@ On a FIPS-mode controller host, Bootwright's Go binary and its private CPython u
 
 ### B333
 
-A DNSServer's bind address defaults to the wildcard address, which collides with any other resolver on the host; since [B299](m1.md#b299) the pre-start check names the colliding socket. Deriving the default from the single endpoint address moves the effective state and request digests of live contexts, so it waits for a later window (found by the 2026-10-05 audit). **Exit evidence:** a normalization test deriving the bind address, and the effective-state and request goldens.
+A DNSServer's bind address defaults to the wildcard address, which collides with any other resolver on the host; since [B299](delivered.md#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json) the pre-start check names the colliding socket. Deriving the default from the single endpoint address moves the effective state and request digests of live contexts, so it waits for a later window (found by the 2026-10-05 audit). **Exit evidence:** a normalization test deriving the bind address, and the effective-state and request goldens.
 
 ### B334
 
@@ -737,6 +745,105 @@ decision in the state-reconciliation spec's request-versions rule on whether a
 version must also move for derived-content changes within one shape and, if it
 must, `cluster-media-agent-v6` with its golden in a digest-window slice, and a
 test that pins an override-added interface in the AgentConfig.
+
+### B438
+
+A refused record carries a phase, a reason and one port, so for a wildcard
+bind, the DNSServer default (D114), Go names the port and the bind that covers
+it and points to the retained run output, which lists every socket found,
+instead of the colliding address itself (found in X24's review). **Exit
+evidence:** one bounded address member in the refused record, or one refusal
+key per address and port, so the refusal names the socket without the run
+output, with the infrastructure-services spec and the foreign-listener refusal
+test updated.
+
+### B439
+
+The pre-start foreign-listener check covers a Proxy, a DNSServer, an NTPServer
+and an ArtifactServer, but the API page's wildcard-default note also names a
+Registry's `0.0.0.0` default, which no capability realizes yet, and the
+multidc-platform example holds its DNS, NTP and proxy components external, so
+none declares the explicit `bindAddress` D114 asks of a managed one (found in
+X24). **Exit evidence:** the check in a realized Registry's role, or the note
+narrowed to the kinds that have it, and a `bindAddress` in any example that
+makes one of those components managed, each with a test or a doc check.
+
+### B440
+
+A destroy over an unknown apply resolves each block with the apply's own check,
+so a machine that drifted from its frozen request (a controller on another
+image, another system UUID, a resized disk) stays unknown and the destroy
+refuses until the operator restores it by hand, although the removal's own
+check reads it as no effect. X24's reason and remedy say to restore the
+subject; they cannot say to destroy (found in X24). **Exit evidence:** the
+owner's decision on whether the resolution of a removal's blocks uses the
+removal's check and what that proves, recorded in the state-reconciliation
+spec and, if yes, a journey test in which a drifted machine's apply is unknown
+and its destroy removes it.
+
+### B441
+
+Two canonical-JSON proofs stay allowlisted in the controller's prerequisites
+(the action match and the native preparation read), the local keyring still
+sizes through its own `boundedSize` and the context store through its own
+`fitsJSON` wrapper over the package's `Size` (found in X24). **Exit
+evidence:** each moved onto the canonical-JSON package, the allowlist and both
+wrappers deleted, the format goldens unchanged, and the fitness test's
+allowlist empty of them.
+
+### B442
+
+X24 proved these only in-tree: Squid's `shutdown_lifetime` and its denial of
+the manager and of loopback, unspecified and link-local destinations on the
+pinned image; the controller supervisor's termination path through a live
+`ansible-playbook` and `dnf` tree; the foreign-listener refusal from a live
+ansible-core run through to the runner's named refusal, for each kind; and
+every capability plugin's real evidence under the decoder's strict rules (no
+case-variant members, nesting of at most 16) (found in X24). The adapter
+protocol, the managed-service apply and destroy and the no-failed-unit
+postcondition are [B19](m1.md#b19)'s, [B20](m1.md#b20)'s and
+[B270](m1.md#b270)'s own host gates. **Exit evidence:** each observed on a
+host, recorded in the [acceptance ledger](../../docs/acceptance.md) with the
+build commit, or withdrawn by the owner.
+
+### B443
+
+Tests X24 left narrower than they read: nothing runs each capability plugin's
+evidence goldens through the Go decoder's strict rules; the over-4096-byte proxy URL
+case cannot isolate that bound, since a host is at most 253 bytes and a longer
+URL also fails on its path; no `status` row covers
+the closure-mismatch refusal; the observation-failure recorder's refusal of an
+empty, over-long or non-UTF-8 diagnostic code has no test, and no capability
+produces one; and the canonical-JSON fitness test refuses a marshal-and-compare
+inside one function but not one split across an encode helper and a compare
+(found in X24). **Exit evidence:** each covered by a test that fails when its
+guard is removed, or the guard removed where nothing can reach it.
+
+### B444
+
+Copies and dead code X24 left: the managed-service decoder's check after its
+version probe is reached only by a member spelled `Version`; the lifecycle
+deletion drops a context's claims although the directory removal already does on
+the path where the directory exists; the controller route selection's own
+bypass-grammar branch is unreachable since the shared proxy choice runs first,
+and that choice's refusal names no Machine in its remedy; and the binding-proof
+port still sits in its own file instead of the lifecycle contracts, which
+[B302](m1.md#b302) tracks (found in X24). **Exit evidence:** each removed or
+made reachable, with a test that fails when its guard is removed; the port
+stays B302's.
+
+### B445
+
+Both runners wait for descendants that hold the adapter's standard output
+before the stop path kills the process group, so such a descendant delays the
+group kill by the drain, five seconds for a lifecycle run and sixty for a
+controller run, which `WaitDelay` bounds. The knowledge page on worker session
+isolation still says only the lifecycle supervisor signals descendants on
+cancellation, although the controller supervisor now carries the same
+termination handler and is signaled before a native transaction is authorized
+(found in X24). **Exit evidence:** the group kill no later than the supervisor's
+exit, or the bound stated in the architecture spec, and the knowledge page
+corrected.
 
 ## Retired
 

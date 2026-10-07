@@ -3,11 +3,9 @@
 package selectionfs
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -16,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -89,8 +88,7 @@ func (s *Store) local(ctx context.Context, action string, value contexts.Selecti
 }
 
 func (s *Store) publishRecord(ctx context.Context, dir *os.File, current selectionRecord, value contexts.Selection) (contexts.Selection, error) {
-	data, _ := json.Marshal(value)
-	data = append(data, '\n')
+	data, _ := canonicaljson.Encode(value, canonicaljson.Line)
 	var token [16]byte
 	if _, err := rand.Read(token[:]); err != nil {
 		return contexts.Selection{}, state("selection staging identity is unavailable")
@@ -328,38 +326,14 @@ func (s *Store) readRecord(dir *os.File) (selectionRecord, error) {
 
 func decodeSelection(data []byte) (contexts.Selection, error) {
 	var result contexts.Selection
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	start, err := decoder.Token()
-	if err != nil || start != json.Delim('{') {
+	if canonicaljson.DecodeClosed(data, &result) != nil || !validSelection(result) {
 		return result, state("selection record is invalid")
 	}
-	seen := map[string]bool{}
-	for decoder.More() {
-		token, err := decoder.Token()
-		key, ok := token.(string)
-		if err != nil || !ok || seen[key] {
-			return result, state("selection record is invalid")
-		}
-		seen[key] = true
-		switch key {
-		case "version":
-			err = decoder.Decode(&result.Version)
-		case "name":
-			err = decoder.Decode(&result.Name)
-		default:
-			return result, state("selection record is invalid")
-		}
-		if err != nil {
-			return result, state("selection record is invalid")
-		}
-	}
-	end, err := decoder.Token()
-	if err != nil || end != json.Delim('}') || decoder.Decode(new(any)) != io.EOF || !validSelection(result) {
-		return result, state("selection record is invalid")
-	}
-	canonical, err := json.Marshal(result)
-	if err != nil || !bytes.Equal(data, append(canonical, '\n')) {
+	switch err := canonicaljson.Prove(data, result, canonicaljson.Line); {
+	case errors.Is(err, canonicaljson.ErrNotCanonical):
 		return result, state("selection record is not canonical")
+	case err != nil:
+		return result, state("selection record is invalid")
 	}
 	return result, nil
 }

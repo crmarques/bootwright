@@ -7,16 +7,14 @@ result and authorization descriptors belong to the invoking Bootwright process.
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
+from ansible_collections.bootwright.core.plugins.module_utils.adapter_protocol import publishes, unreached
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
     emit,
 )
 
-PHASES = ("loaded", "group", "completed")
-GROUP_STATUSES = ("running", "ok", "failed", "skipped")
-OUTCOMES = ("changed", "unchanged")
 MAX_NETWORKS = 64
 MAX_SERVICES = 16
-HEX = set("0123456789abcdef")
 # The observation carries each network's UUID so a definition can be offered
 # back to libvirt under the identity it already holds. Evidence stays narrower:
 # Go validates exactly the facts below, and rejects any field it does not know.
@@ -24,10 +22,7 @@ OBSERVED_NETWORK = {"answered", "autostart", "bridge", "definition", "managed", 
 OBSERVED_SERVICE = {"enabled", "name", "state"}
 
 
-def digest(value):
-    if not isinstance(value, str) or len(value) != 64 or set(value) - HEX:
-        raise ValueError("digest")
-    return value
+digest = adapter_protocol.request_digest
 
 
 def network_evidence(entry):
@@ -102,7 +97,7 @@ def presence(observation, request_digest):
         "poolAutostart": bool(observation.get("poolAutostart")),
         "poolOwned": bool(observation.get("poolOwned")),
         "postcondition": False,
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "services": services_of(observation),
         "uri": bool(observation.get("uri")),
     }
@@ -199,22 +194,12 @@ def absence(observation, request_digest):
         "poolAutostart": bool(observation.get("poolAutostart")),
         "poolOwned": bool(observation.get("poolOwned")),
         "postcondition": False,
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "services": services_of(observation),
         "uri": bool(observation.get("uri")),
     }
     evidence["postcondition"] = gone(evidence)
     return evidence
-
-
-def publishes(evidence, observed):
-    """Whether this phase may publish evidence proving no postcondition.
-
-    A read-only observation reports what it found, including a target that is
-    part way realized, because the engine resolves an unproved effect from that
-    evidence. A mutation has to reach its postcondition or fail.
-    """
-    return bool(evidence["postcondition"]) or bool(observed)
 
 
 def completion(arguments):
@@ -244,36 +229,25 @@ def completion(arguments):
     return evidence, unproved(evidence), "not proved"
 
 
+def concluded(arguments):
+    """The evidence one completion publishes, or the refusal naming what is unmet."""
+    evidence, unmet, verb = completion(arguments)
+    if publishes(evidence, arguments.get("observed")):
+        return evidence, None
+    return evidence, unreached("the provider host", verb, unmet)
+
+
+CAPABILITY = adapter_protocol.Capability(
+    "provider host",
+    "the provider host capability result could not be published",
+    concluded,
+)
+
+
 class ActionModule(ActionBase):
     TRANSFERS_FILES = False
     _requires_connection = False
 
     def run(self, tmp=None, task_vars=None):
         del tmp
-        arguments = self._task.args
-        phase = arguments.get("phase")
-        if phase not in PHASES:
-            return {"failed": True, "msg": "unsupported provider host protocol phase"}
-        try:
-            if phase == "loaded":
-                emit({"phase": "loaded"}, acknowledge=True)
-                return {"changed": False}
-            if phase == "group":
-                status = arguments.get("status")
-                if status not in GROUP_STATUSES:
-                    raise ValueError("group status")
-                emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
-                return {"changed": False}
-            outcome = arguments.get("outcome")
-            if outcome not in OUTCOMES:
-                raise ValueError("outcome")
-            evidence, unmet, verb = completion(arguments)
-            if not publishes(evidence, arguments.get("observed")):
-                return {
-                    "failed": True,
-                    "msg": "the provider host did not reach its postcondition; %s: %s" % (verb, ", ".join(unmet) or "unknown"),
-                }
-            emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
-            return {"changed": False}
-        except (ValueError, TypeError, OSError):
-            return {"failed": True, "msg": "the provider host capability result could not be published"}
+        return adapter_protocol.publish(self._task.args, CAPABILITY, emit)

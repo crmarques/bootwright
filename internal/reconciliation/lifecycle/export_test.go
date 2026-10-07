@@ -63,9 +63,9 @@ func (p plannedCapability) Plan(context.Context, PlanInput) (CapabilityPlan, err
 	return p.plan, nil
 }
 
-func (p plannedCapability) Unresolved(block reconciliation.Block, evidence json.RawMessage) (Unresolved, bool) {
+func (p plannedCapability) Unresolved(verb reconciliation.Verb, block reconciliation.Block, evidence json.RawMessage) (Unresolved, bool) {
 	if reporter, ok := p.Capability.(UnresolvedReporter); ok {
-		return reporter.Unresolved(block, evidence)
+		return reporter.Unresolved(verb, block, evidence)
 	}
 	return Unresolved{}, false
 }

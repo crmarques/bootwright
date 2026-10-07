@@ -263,6 +263,8 @@ has one kind, and its role in `packageRoles`
 | Driven adapter | `internal/<context>/<implementation>`, named by what it binds | One effect behind another package's contract, within what `TestAdmissionEffectBoundary` allows it. `secrets/material` and `controller/privilege` keep their consumed interfaces in `contracts.go`. | adapter |
 | Diagnostics | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. | technical |
 | Availability | `internal/availability` | The single unavailable-capability sentinel, `ErrNotImplemented`. | technical |
+| Adapter protocol | `internal/adapterprotocol` | The adapter result protocol's one decoder and the one runner core that starts, supervises, cancels and drains every adapter process; each runner adapter supplies its invocation and judges its records. It imports nothing first-party. | technical |
+| Canonical JSON | `internal/canonicaljson` | The one closed decode, trailing-data rule, re-encode proof, sorted-object proof and encoded-size predictor every record and frozen request uses; each format keeps its bounds, line feed and words; it imports nothing first-party. | technical |
 
 In an application package no file but `contracts.go` declares an exported
 interface. `api/v1alpha1` is a domain package; `internal/cli`, `cmd/bootwright`
@@ -273,14 +275,18 @@ substrate arm package.
 
 A lifecycle capability, like every application package that consumes the
 lifecycle port vocabulary, reads no JSON itself. It freezes its request through
-`reconciliation.Freeze`, reads it back through `reconciliation.Thaw` and, once
-the version it holds is its own, `reconciliation.ProveCanonical`, and reads an
+`reconciliation.Freeze`, reads it back through `reconciliation.ThawVersion`,
+which reads the version before the shape and then proves the bytes canonical,
+and reads an
 adapter's evidence, or a proof another block left, through
 `reconciliation.DecodeEvidence` at its own byte bound. These are functions over
 one shape each, not a framework: they refuse a member the shape does not
 declare and anything after the document, in the capability's own words, while
 what a request selects and what its evidence proves stay the capability's
-(`TestNoLifecycleConsumerReadsJSONItself`).
+(`TestNoLifecycleConsumerReadsJSONItself`). No function outside
+`internal/canonicaljson` both encodes or decodes JSON and compares bytes,
+except a closed list that only shrinks
+(`TestCanonicalJSONProofsLiveInOnePackage`).
 
 A command service exposes a concrete `Service`, a lifecycle capability concrete
 capability types. Dependencies are private fields; add constructors when
@@ -711,19 +717,22 @@ canonical JSON object (sorted keys, no insignificant whitespace, ASCII) on one
 line of at most 64 KiB with its newline, carrying exactly its phase's fields;
 an acknowledgement is the line `proceed`. The lifecycle runner
 (`reconciliation/ansiblerunner`) and the controller runner
-(`controller/ansiblelocal`, for `setup` and the controller stage) accept these
-phases:
+(`controller/ansiblelocal`, for `setup` and the controller stage) both go
+through `internal/adapterprotocol`: its one decoder reads every record, and
+its one runner core starts, supervises, cancels and drains every adapter
+process, while each runner supplies its invocation and judges its records.
+They accept these phases:
 
 | Phase | Runner | Direction | Fields | Acknowledgement | Bounds | Failure effect |
 | --- | --- | --- | --- | --- | --- | --- |
 | `loaded` | both | adapter → runner | `phase` | before any effect | first, once | Acknowledgement EOF or another reply fails the adapter before its first effect. |
 | `prepared` | controller | adapter → runner | `phase`, `preparation`: `inventorySHA256`, `addedSources`, and for a native plan `afterInventorySHA256`, `planDigest`, `transitionsSHA256` | after the runner matches this before-state to the frozen request and publishes it durably | once, after `loaded`, except on recovery; at most 512 sources | Unmatched or unpublished, it is never acknowledged, so no host-wide effect runs. |
-| `native` | controller | adapter → runner | `phase` | before the native package transaction | once, after `prepared`, only for native actions | Once authorized, the transaction is not killed on a deadline or cancellation. |
+| `native` | controller | adapter → runner | `phase` | before the native package transaction | once, after `prepared`, only for native actions | Once its acknowledgement is delivered, the transaction is neither signaled nor killed on a deadline or cancellation. |
 | `continue` | controller | adapter → runner | `phase` | before each tool installation | one per frozen tool, in order, after `prepared`; at most 128 | Acknowledgement EOF fails the adapter before that tool. |
 | `group` | lifecycle | adapter → runner | `phase`, `group`, `status` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
-| `completed` | both | adapter → runner | `phase`, `outcome`, non-empty `evidence` | none | last, once | Absent when the channel closes, the run has no result. |
+| `completed` | both | adapter → runner | `phase`, `outcome`, `evidence`: an object of at least one member | none | last, once | Absent when the channel closes, the run has no result. |
 | `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp`, an acquisition class with `source`, or a native class | none | last, once, in place of `completed`: `release-stamp` while an `openshift-clients` tool is being installed; an acquisition class (`dns`, `certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`, `integrity`, `trust`, `storage`) naming the native package being staged, between `prepared` and `native`, or the tool being installed; a native class (`solver-conflict`, `missing-candidate`, `signature`, `database`, `transaction`, `postcondition`, `foundation`, `timeout`, `internal`) after `loaded` | The run fails with the [release-stamp refusal](controller.md#selection-and-command-journeys), or the diagnostic Go gives the [class](controller.md#selection-and-command-journeys), naming the source's host, instead of the generic adapter failure, even when the adapter's failed exit is read first; `internal` keeps the generic failure, and a native class after an authorized `native` is `controller.unknown`. |
-| `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason instead of the generic adapter failure, even when the adapter's failed exit is read first; the adapter is left to end on its own. |
+| `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason instead of the generic adapter failure, even when the adapter's failed exit is read first; the runner closes the acknowledgement channel and kills nothing, so the adapter is left to end on its own. |
 
 `outcome` is `changed` or `unchanged`, and the controller runner refuses
 `unchanged` after an authorized `native`. `status` is `running`, `ok`, `failed`
@@ -733,10 +742,16 @@ names an adapter refusal Go remedies by name; the outcome is still Go's, and
 the diagnostic is the one Go gives that reason, carrying the object, what was
 refused and the remedy.
 
-Both runners refuse a malformed or oversized record, an unknown, repeated or
-out-of-order phase, a record after `completed`, and more records than their
-bound: 64 for the lifecycle runner, 132 for the controller runner (`loaded`,
-`prepared`, `native`, `completed` or `refused`, and a `continue` per tool). The
+The one decoder refuses a malformed or oversized record and one that is not
+canonical: a byte outside printable ASCII, whitespace outside a string, or an
+object, at any depth, whose members are out of order or two of them equal
+under case folding. It also refuses a phase carrying any member but its own, a
+`completed` whose evidence is not an object with at least one member, a
+`group` whose status is not one of the four, and a phase its runner does not
+admit. Both runners refuse an unknown, repeated or out-of-order phase, a record
+after `completed`, and more records than their bound: 64 for the lifecycle
+runner, 132 for the controller runner (`loaded`, `prepared`, `native`,
+`completed` or `refused`, and a `continue` per tool). The
 controller runner also refuses a `refused` record with a reason outside its
 classes, `release-stamp` for another tool kind, an acquisition class without a
 source or naming a source the run is not then acquiring, and any record after
@@ -750,15 +765,26 @@ still set by `prepared` as below. A record they accept after the exit leaves
 that failure and moves the protocol on, so a later record is judged in its
 place, but nothing is released, published, authorized, acknowledged or
 reported for it, since its adapter is gone. A read that the drain's close ends
-is the runner's own and no record, so it leaves the failed exit. A record the
+is the runner's own and no record, so it leaves the failed exit. An
+acknowledgement the runner cannot write because no adapter process holds the
+channel authorizes nothing: nothing was delivered and nothing can be, so the
+runner closes the channel, the lifecycle runner also stops the adapter's tree,
+and the outcome is the adapter's exit judged as if it had been read first. A
+failed exit stays the failed exit, a zero exit has no result, and a later
+record is judged as one read after the exit. Any other failed write leaves
+the delivery uncertain, and the result is `unknown`. A record the
 runner refuses, or a channel that cannot be read, ends the protocol at once:
 the runner closes the acknowledgement channel, so an adapter waiting for one
 fails instead of waiting out the deadline, and the lifecycle runner kills the
 adapter's process group.
 The controller runner kills nothing on a refusal: the adapter fails at its next
 acknowledgement, and an authorized native transaction first runs to its end. A
-deadline or a cancellation kills the adapter's process group, sparing only an
-authorized native transaction. A controller run's deadline is 10 minutes
+deadline or a cancellation signals the adapter's supervisor first, which ends
+every descendant, including an Ansible worker in a session of its own that a
+group kill never reaches, then kills the adapter's process group once the
+adapter is reaped or the drain passes. It spares only a controller run whose
+`native` acknowledgement was delivered: that run loses its acknowledgement
+channel and is drained, and nothing is signaled or killed. A controller run's deadline is 10 minutes
 plus its native staging bound and each tool source's
 [acquisition deadline](controller.md#the-controller-stage), held to a ceiling of
 2 hours, and a closure with tools past that ceiling is refused before Ansible
@@ -769,7 +795,11 @@ hours, and the
 [bounds table](contexts.md#storage-locking-and-publication) names each
 constant. A descendant still holding the channel after the adapter exits is
 drained for 5 seconds, or 60 once a controller run is prepared or cancelled,
-and the result is lost.
+and the result is lost. A descendant still holding the adapter's own output
+after it exits is cut at the drain bound, 5 seconds for a lifecycle run and 60
+for a controller run. After a zero exit the result is lost too: the run fails
+`lifecycle.unknown` or `controller.unknown`, never with a completed result. A
+failed exit stays the failed exit.
 
 A lifecycle attempt is then `unknown` after a refusal, a deadline, a lost result
 or a zero exit without `completed`; `failed` after a non-zero exit that broke no
@@ -797,11 +827,16 @@ refusal names the fields and objects still unproved, never their values, so the
 message stays safe where the evidence itself is censored.
 
 The protocol, its phases and these rules are one shared implementation, and one
-runner carries every adapter run. What the evidence contains, and what proves
-it, belong to each capability. Go decides what an outcome and its evidence
-mean; a plugin neither schedules work nor authorizes it.
-
-Not yet met: `controller/ansiblelocal` and `reconciliation/ansiblerunner` each decode the protocol, with bounds of 132 and 64 records; the lifecycle decoder admits duplicate and case-variant duplicate keys, null or non-object evidence, non-canonical spacing, a `group` on `completed` and any non-empty `status`; and each capability's action plugin copies the phase dispatch, enums and postcondition rule; tracked as [B19](milestones/m1.md#b19).
+runner carries every adapter run. Every capability's action plugin publishes
+through
+`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/adapter_protocol.py`,
+which owns the phase dispatch, the group statuses and outcomes, the digest
+check, the observation rule above and the shape of a refusal, and Go reads
+every record through `internal/adapterprotocol`. What the evidence contains,
+which refusals a capability names, and what proves its postcondition belong to
+each capability's plugin; progress groups stay in its role. Go decides what an
+outcome and its evidence mean; a plugin neither schedules work nor authorizes
+it.
 
 ## Implementations and version variation
 

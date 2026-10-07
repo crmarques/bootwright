@@ -1,0 +1,29 @@
+{#
+  The client set is derived from the selected graph, never authored, so a
+  managed proxy is never planned open to the world. Those derived clients may
+  reach only remote destinations: loopback, unspecified and link-local
+  destinations are refused before any client is admitted, because they reach
+  the host's own services and metadata, and the cache manager is never served.
+  Caching is disabled: this proxy exists to reach a publisher, not to store
+  what it fetched. The shutdown lifetime ends a stop inside podman's stop
+  timeout, so a stop never kills the daemon and leaves its unit failed.
+#}
+http_port {{ infra_managed_service_listen }}:{{ bootwright_managed_service_request.port }}
+
+acl bootwright_local_destinations dst 127.0.0.0/8 0.0.0.0/32 ::1/128 ::/128
+acl bootwright_link_local_destinations dst 169.254.0.0/16 fe80::/10
+{% for client in bootwright_managed_service_request.clients | default([]) %}
+acl bootwright_clients src {{ client }}
+{% endfor %}
+http_access deny manager
+http_access deny bootwright_local_destinations
+http_access deny bootwright_link_local_destinations
+http_access allow bootwright_clients
+http_access deny all
+
+cache deny all
+access_log none
+pid_filename none
+via off
+forwarded_for delete
+shutdown_lifetime 2 seconds

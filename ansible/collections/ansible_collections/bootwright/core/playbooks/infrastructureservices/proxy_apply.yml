@@ -9,5 +9,5 @@
   tasks:
     - name: Execute the proxy apply capability
       ansible.builtin.import_role:
-        name: bootwright.core.infra_proxy_squid
+        name: bootwright.core.infra_managed_service
         tasks_from: apply

@@ -1,0 +1,25 @@
+{#
+  Quadlet definition for one managed time service. The container runs as root so
+  the declared port is served exactly as authored, and the image entrypoint is
+  never used: the frozen request alone decides what runs.
+#}
+[Unit]
+Description=Bootwright managed time service {{ bootwright_managed_service_request.identity.service }}
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image={{ bootwright_managed_service_request.image }}
+ContainerName={{ bootwright_managed_service_request.unit }}
+Network=host
+User=0
+Entrypoint=/usr/sbin/chronyd
+Exec=-d -x -f /etc/chrony/chrony.conf
+Volume={{ infra_managed_service_config_dir }}/chrony.conf:/etc/chrony/chrony.conf:ro,Z
+
+[Service]
+Restart=always
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

@@ -8,11 +8,9 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -274,17 +272,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 // anything else stays unknown, including a guest that answers with a different
 // marker and one powered on without any.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, "", func(evidence []byte, request Request, digest, marker string) reconciliation.EffectState {
-		switch {
-		case ValidatePresence(evidence, request, digest, marker) == nil:
-			return reconciliation.EffectCompleted
-		case ValidateNoEffect(evidence, digest) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidatePartial(evidence, digest, marker) == nil:
-			return reconciliation.EffectPartial
-		}
-		return reconciliation.EffectUnknown
-	})
+	return c.observe(ctx, execution, reconciliation.Apply)
 }
 
 // observesRemoval scopes an observation to what a removal takes back: the
@@ -299,33 +287,58 @@ const observesRemoval = "removal"
 // positive no effect; and any content left, a package tree without its
 // marker included, is a positive partial removal the next attempt converges.
 func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, observesRemoval, func(evidence []byte, request Request, digest, marker string) reconciliation.EffectState {
-		switch {
-		case ValidateWithdrawn(evidence, digest) == nil:
-			return reconciliation.EffectCompleted
-		case ValidatePresence(evidence, request, digest, marker) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidateWithdrawalUnfinished(evidence, digest) == nil:
-			return reconciliation.EffectPartial
-		}
-		return reconciliation.EffectUnknown
-	})
+	return c.observe(ctx, execution, reconciliation.Destroy)
 }
 
-// observe runs the read-only observation operation, scoped by observes, and
-// reads its evidence for the verb the block was frozen for.
-func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, observes string, read func([]byte, Request, string, string) reconciliation.EffectState) (lifecycle.Observation, error) {
+// installationEffect is the one reading of an installation observation for
+// the verb the block was frozen for: an apply's checks are its presence, no
+// effect and partial forms, a removal's its withdrawn, presence and unfinished
+// withdrawal forms, each in that order. When none accepts the evidence the
+// effect is unknown, and the refusal that decided it comes back with it: the
+// presence check's for an apply, the unfinished withdrawal's for a removal.
+func installationEffect(verb reconciliation.Verb, evidence []byte, request Request, digest, marker string) (reconciliation.EffectState, error) {
+	if verb == reconciliation.Destroy {
+		switch {
+		case ValidateWithdrawn(evidence, digest) == nil:
+			return reconciliation.EffectCompleted, nil
+		case ValidatePresence(evidence, request, digest, marker) == nil:
+			return reconciliation.EffectNoEffect, nil
+		}
+		if err := ValidateWithdrawalUnfinished(evidence, digest); err != nil {
+			return reconciliation.EffectUnknown, err
+		}
+		return reconciliation.EffectPartial, nil
+	}
+	presence := ValidatePresence(evidence, request, digest, marker)
+	switch {
+	case presence == nil:
+		return reconciliation.EffectCompleted, nil
+	case ValidateNoEffect(evidence, digest) == nil:
+		return reconciliation.EffectNoEffect, nil
+	case ValidatePartial(evidence, digest, marker) == nil:
+		return reconciliation.EffectPartial, nil
+	}
+	return reconciliation.EffectUnknown, presence
+}
+
+// observe runs the read-only observation operation, scoped to what the verb
+// proves, and reads its evidence for the verb the block was frozen for.
+func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, marker, err := c.prepare(ctx, execution, "observe")
 	if err != nil {
 		return unknown, err
 	}
+	observes := ""
+	if verb == reconciliation.Destroy {
+		observes = observesRemoval
+	}
 	result, err := c.run(ctx, execution, "observe", request, marker, observes)
 	if err != nil {
-		recordObservationFailure(ctx, execution, err)
-		return unknown, nil
+		return unknown, err
 	}
-	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest, string(marker)), Evidence: result.Evidence}, nil
+	effect, _ := installationEffect(verb, result.Evidence, request, execution.Block.RequestDigest, string(marker))
+	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
 // prepare decodes the frozen request and derives the exact marker bytes this
@@ -508,17 +521,6 @@ func publicHalf(execution lifecycle.Execution, reference, subject string) (strin
 		return "", refusal("secret.part", "the bound "+subject+" carries no public half", "repeat the operation so its Secret bindings are reopened")
 	}
 	return strings.TrimRight(string(value), "\n"), nil
-}
-
-func recordObservationFailure(ctx context.Context, execution lifecycle.Execution, err error) {
-	if execution.Log == nil {
-		return
-	}
-	for _, reported := range diagnostics.Of(err) {
-		_ = execution.Log(ctx, operationstore.LogRecord{
-			Event: "observation-failed", Block: execution.Block.ID, Detail: reported.Code + ": " + reported.Message,
-		})
-	}
 }
 
 // Unsupported refuses every selected installation this capability cannot

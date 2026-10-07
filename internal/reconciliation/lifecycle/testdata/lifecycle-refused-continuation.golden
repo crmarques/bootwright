@@ -1,0 +1,115 @@
+{
+  "a failed apply under a moved automation digest": {
+    "status": {
+      "operation": "operation-1",
+      "verb": "apply",
+      "state": "failed",
+      "next": "continue-apply",
+      "blocks": [
+        "alpha (failed, 1 attempts)"
+      ],
+      "contradictions": [],
+      "nextSteps": [
+        "bootwright destroy --context lab"
+      ]
+    },
+    "plan": {
+      "presented": "apply",
+      "continuation": true,
+      "steps": [
+        "alpha (failed)"
+      ],
+      "operation": "operation-1",
+      "state": "preview",
+      "next": "continue-apply"
+    },
+    "apply": {
+      "code": "lifecycle.state",
+      "message": "this executable's automation differs from the one this operation froze",
+      "remediation": "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"
+    },
+    "destroy": {
+      "presented": "destroy",
+      "steps": [
+        "alpha (pending)"
+      ],
+      "operation": "operation-2",
+      "state": "done",
+      "next": "none"
+    }
+  },
+  "an unbound failed apply": {
+    "status": {
+      "operation": "operation-1",
+      "verb": "apply",
+      "state": "failed",
+      "next": "continue-apply",
+      "blocks": [
+        "alpha (failed, 1 attempts)"
+      ],
+      "contradictions": [],
+      "nextSteps": [
+        "bootwright destroy --context lab"
+      ]
+    },
+    "plan": {
+      "presented": "apply",
+      "continuation": true,
+      "steps": [
+        "alpha (failed)"
+      ],
+      "operation": "operation-1",
+      "state": "preview",
+      "next": "continue-apply"
+    },
+    "apply": {
+      "code": "controller.identity",
+      "message": "this context is not bound to a controller host",
+      "remediation": "take back what this operation owns with bootwright destroy --context lab, after which bootwright apply --context lab binds the context again, or restore the controller state that recorded this context's binding from a matching backup"
+    },
+    "destroy": {
+      "presented": "destroy",
+      "steps": [
+        "alpha (pending)"
+      ],
+      "operation": "operation-2",
+      "state": "done",
+      "next": "none"
+    }
+  },
+  "an unbound unknown removal": {
+    "status": {
+      "operation": "operation-2",
+      "verb": "destroy",
+      "state": "unknown",
+      "next": "resolve",
+      "blocks": [
+        "alpha (unknown, 1 attempts)"
+      ],
+      "contradictions": [],
+      "nextSteps": [
+        "bootwright context delete --name lab --purge --allow-orphans"
+      ]
+    },
+    "plan": {
+      "presented": "destroy",
+      "continuation": true,
+      "steps": [
+        "alpha (unknown)"
+      ],
+      "operation": "operation-2",
+      "state": "preview",
+      "next": "resolve"
+    },
+    "apply": {
+      "code": "lifecycle.state",
+      "message": "an incomplete destroy must be continued before another operation",
+      "remediation": "continue it with bootwright destroy --context lab"
+    },
+    "destroy": {
+      "code": "controller.identity",
+      "message": "this context is not bound to a controller host",
+      "remediation": "restore the controller state that recorded this context's binding from a matching backup, or delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
+    }
+  }
+}

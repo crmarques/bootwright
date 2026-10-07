@@ -527,10 +527,12 @@ does not read done, which only a lost record leaves, reads `unknown`, as the
 contradiction status lists for that block says. Otherwise any removal block
 proved gone makes the object `pending`, and so does a removal that names fewer
 of its blocks than the apply it removes owned, because an earlier attempt took
-the rest back. An object whose removal has not started reads what that apply
-proved about it, except under a removal that names fewer blocks in all than
-that apply owned: such a removal replaced a failed one, whose outcome for the
-object no record keeps, so the object reads `unknown`. An object that apply
+the rest back. An object whose removal has not started reads what the nearest
+removal it replaces did to it: `unknown` when that removal left a block of it
+unproved, `failed` when one failed, `pending` when one was proved gone; and
+otherwise what the apply proved. A replacement an earlier build recorded, which
+names no removal it replaces, reads `unknown` for such an object when it names
+fewer blocks than the apply owned, as before. An object that apply
 owned and the removal no longer names was released by an earlier attempt and
 reads `pending`. An object no operation names keeps what its declaration gives
 it: `unsupported` for the reasons above, else `pending`. Human `status`

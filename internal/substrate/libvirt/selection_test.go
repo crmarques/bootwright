@@ -350,7 +350,7 @@ func TestUnsupportedNamesEveryObjectThisContractCannotRealize(t *testing.T) {
 		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
 	))
 	metal := api.NewObject(api.InfraProvider, "rack", api.Value{}, api.MapValue(field("baremetal", api.MapValue())))
-	unsupported := Unsupported(catalogOf(controller(), provider(), networkConfig(), guest("rhel-01"), vsphere, hosted, metal))
+	unsupported := lifecycle.Identities(Refusals(catalogOf(controller(), provider(), networkConfig(), guest("rhel-01"), vsphere, hosted, metal)))
 	if !slices.Equal(unsupported, []string{"InfraProvider/vc", "Machine/node-01"}) {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
@@ -384,7 +384,7 @@ func TestAWildcardControllerAddressRefuses(t *testing.T) {
 	} {
 		defaults := provider().Spec().Get("libvirt", "bmcEmulationDefaults").With("bindAddress", api.StringValue(address))
 		listener := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulationDefaults", defaults)))
-		if unsupported := Unsupported(catalogOf(controller(), listener)); slices.Contains(unsupported, "InfraProvider/lab-libvirt") == nameable {
+		if unsupported := lifecycle.Identities(Refusals(catalogOf(controller(), listener))); slices.Contains(unsupported, "InfraProvider/lab-libvirt") == nameable {
 			t.Fatalf("%q: nameable = %v, unsupported = %v", address, nameable, unsupported)
 		}
 	}

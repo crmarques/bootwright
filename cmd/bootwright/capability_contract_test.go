@@ -118,6 +118,14 @@ type contractRow struct {
 	// it as partial in place of the partial fixture. A row names it exactly
 	// when it names readiness.
 	removalPartial map[string]any
+	// drift is what, over the binding's presence evidence, leaves this
+	// request's own evidence that its apply's resolution reads as unknown, so
+	// its capability names why (specs/state-reconciliation.md, Attempts and
+	// unknown outcomes). driftUnreachable says, by its spec section, why no
+	// evidence for this request that decodes reads as unknown. Every
+	// runner-driven row names exactly one of the two.
+	drift            map[string]any
+	driftUnreachable string
 }
 
 // contractStoppedService leaves a managed service's unit stopped and its
@@ -144,29 +152,40 @@ func contractRows() []contractRow {
 		{kind: clients.Kind, implementation: clients.Implementation, example: "lab-rhel"},
 		{kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation, example: "lab-rhel", probes: true,
 			absence: map[string]any{"answered": true, "listener": false}, presence: contractMachinePresence,
-			readiness: "power", removalPartial: contractStoppedController},
+			readiness: "power", removalPartial: contractStoppedController, drift: map[string]any{"controller": contractDriftedImage}},
 		{kind: baremetal.Kind, implementation: baremetal.Implementation, example: "lab-baremetal", presence: contractBareMetalPresence,
 			retains: true, indivisible: true,
 			noEffectUnreported:     "specs/substrates.md proves no effect only from a claim never published, which the controller's reservations hold, not the adapter's evidence",
-			removalObservesNothing: "specs/substrates.md, Physical machine realization, releases only the claim and never contacts the machine"},
+			removalObservesNothing: "specs/substrates.md, Physical machine realization, releases only the claim and never contacts the machine",
+			drift:                  map[string]any{"power": ""}},
 		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true,
-			noEffect: map[string]any{"power": "Off"}},
+			noEffect: map[string]any{"power": "Off"}, drift: map[string]any{"reachable": false}},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
 			absence:   map[string]any{"uri": true, "poolAnswered": true, "directory": false},
-			readiness: "services", removalPartial: contractStoppedPool},
-		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence},
+			readiness: "services", removalPartial: contractStoppedPool, drift: map[string]any{"poolAutostart": false}},
+		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence,
+			drift: map[string]any{"installer": "0.0.0"}},
 		{kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, example: "lab-sno", presence: contractClusterPresence,
-			removalKeepsPresence: true},
+			removalKeepsPresence: true, drift: map[string]any{"release": "0.0.0"}},
 		{kind: string(proxy.Definition().Kind), implementation: proxy.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
-			readiness: "answers", removalPartial: contractStoppedService},
+			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
 		{kind: string(dnsserver.Definition().Kind), implementation: dnsserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
-			readiness: "answers", removalPartial: contractStoppedService},
+			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
 		{kind: string(ntpserver.Definition().Kind), implementation: ntpserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
-			readiness: "answers", removalPartial: contractStoppedService},
+			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
 		{kind: artifactserver.Kind, implementation: artifactserver.Implementation, example: "lab-rhel", presence: contractArtifactServerPresence,
-			readiness: "listeners", removalPartial: contractStoppedService},
+			readiness: "listeners", removalPartial: contractStoppedService, drift: contractFailedUnit},
 	}
 }
+
+// contractDriftedImage is a controller image other than the one any example
+// freezes.
+const contractDriftedImage = "registry.example.test/other@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+// contractFailedUnit leaves a service whose postcondition its adapter claims
+// with its unit failed, which neither its presence nor its partial
+// realization accepts.
+var contractFailedUnit = map[string]any{"unit": "failed"}
 
 // contractPlanningOnly is the one exemption from the effect checks: the
 // controller stage runs no adapter, exactly as
@@ -194,10 +213,11 @@ var contractProperties = []string{
 	"apply-evidence-proves-request", "destroy-evidence-proves-request", "observe-evidence-proves-request",
 	"apply-evidence-proves-presence", "destroy-evidence-proves-absence",
 	"observe-absence-proves-no-effect", "observe-no-effect-proves-no-effect", "observe-partial-proves-partial",
-	"observe-unproved", "quiescence-unproved",
+	"observe-unproved", "observe-returns-runner-failure", "quiescence-unproved",
 	"observe-removal-request", "observe-removal-unproved", "observe-removal-evidence-proves-request",
 	"observe-removal-proves-absence", "observe-removal-reads-presence", "observe-removal-reads-partial",
 	"observe-removal-ignores-readiness", "produced-only-on-proved-completion", "role-admits-request",
+	"observe-unknown-explained",
 }
 
 // contractRunner is a scripted runner: it records every request and answers
@@ -352,6 +372,9 @@ func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 		if (row.readiness == "") != (row.removalPartial == nil) {
 			t.Fatalf("%s reads its removal from what it takes back, so its row names both the readiness it ignores and its partial removal", row.implementation)
 		}
+		if !contractPlanningOnly(row) && (row.drift == nil) == (row.driftUnreachable == "") {
+			t.Fatalf("%s drives the runner, so its row names exactly one of the drift its apply reads as unknown and why none exists", row.implementation)
+		}
 		if !contractPlanningOnly(row) {
 			contractEffects(t, row, example, capability, runner, findings)
 		}
@@ -492,6 +515,8 @@ func contractEffects(t *testing.T, row contractRow, example contractExample, cap
 		contractRunnerFailures(row, block, capability, execution, runner, findings)
 		contractEvidence(t, row, example, block, capability, execution, runner, findings)
 		contractObservations(row, block, capability, execution, runner, findings)
+		contractObservationFailures(row, block, capability, execution, runner, findings)
+		contractUnresolved(t, row, block, capability, execution, runner, findings)
 		contractProduced(t, row, execution, capability, runner, findings)
 	}
 }
@@ -1147,6 +1172,51 @@ func contractObservations(row contractRow, block reconciliation.Block, capabilit
 		if err == nil && quiescence.Settled() {
 			findings.record(row, "quiescence-unproved", fmt.Sprintf("%s: a probe %s reads quiescent", block.ID, script.name))
 		}
+	}
+}
+
+// contractObservationFailures proves an observation that could not run returns
+// the runner's failure with the effect unknown, so the engine records why
+// (specs/state-reconciliation.md, Attempts and unknown outcomes).
+func contractObservationFailures(row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
+	failed := diagnostics.NewFailureWithRemediation("lifecycle.state", "the observation could not reach its target", "", "restore its target")
+	operations := []string{"observe"}
+	if row.removalObservesNothing == "" {
+		operations = append(operations, "observe-removal")
+	}
+	for _, operation := range operations {
+		runner.script(lifecycle.RunResult{}, failed)
+		_, observation, err := contractCall(capability, operation, execution)
+		if !slices.Equal(diagnostics.Of(err), diagnostics.Of(failed)) || observation.Effect != reconciliation.EffectUnknown {
+			findings.record(row, "observe-returns-runner-failure", fmt.Sprintf("%s: %s after a runner failure returned %q (%v)", block.ID, operation, observation.Effect, diagnostics.Of(err)))
+		}
+	}
+}
+
+// contractUnresolved proves a binding names why its apply's resolution left a
+// block unknown from evidence this request's own (specs/state-reconciliation.md,
+// Attempts and unknown outcomes): it reports unresolved blocks, and over its
+// row's drift, which its apply's observation reads as unknown, it explains
+// that evidence with a reason and a remedy.
+func contractUnresolved(t *testing.T, row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
+	t.Helper()
+	reporter, ok := capability.(lifecycle.UnresolvedReporter)
+	if !ok {
+		findings.record(row, "observe-unknown-explained", block.ID+": the capability names no reason for an unknown block")
+		return
+	}
+	if row.drift == nil {
+		return
+	}
+	evidence := contractPresenceOver(t, row, execution, block.RequestDigest, row.drift)
+	runner.script(lifecycle.RunResult{Outcome: "unchanged", Evidence: evidence}, nil)
+	if _, observation, _ := contractCall(capability, "observe", execution); observation.Effect != reconciliation.EffectUnknown {
+		findings.record(row, "observe-unknown-explained", fmt.Sprintf("%s: its drift reads as %q, not unknown", block.ID, observation.Effect))
+		return
+	}
+	unresolved, explains := reporter.Unresolved(reconciliation.Apply, block, evidence)
+	if !explains || unresolved.Reason == "" || unresolved.Remedy == "" {
+		findings.record(row, "observe-unknown-explained", fmt.Sprintf("%s: its drift is explained as %+v (%t)", block.ID, unresolved, explains))
 	}
 }
 

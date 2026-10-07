@@ -4,6 +4,9 @@
     that:
       - bootwright_artifact_server_request.version == 'artifact-server-nginx-v2'
       - bootwright_artifact_server_request.contentRoot.startswith('/var/lib/bootwright-services/')
+      - >-
+        (bootwright_artifact_server_request.contentRoot | dirname | dirname)
+        == '/var/lib/bootwright-services/' ~ bootwright_artifact_server_request.identity.context
       - bootwright_artifact_server_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -78,6 +81,27 @@
     state: absent
   register: infra_artifact_server_nginx_root_removed
 
+# The content root is <prefix>/<context>/<kind>/<name>, as the validation above
+# requires, so these are the kind's and the context's directories, each removed
+# only once empty and never recursively; the retained prefix itself is never
+# reached.
+- name: Remove the service's and the context's directories once empty
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - '{{ item }}'
+  loop:
+    - '{{ bootwright_artifact_server_request.contentRoot | dirname }}'
+    - '{{ bootwright_artifact_server_request.contentRoot | dirname | dirname }}'
+  environment:
+    LC_ALL: C
+  register: infra_artifact_server_nginx_parents
+  failed_when:
+    - infra_artifact_server_nginx_parents.rc != 0
+    - '"Directory not empty" not in infra_artifact_server_nginx_parents.stderr'
+    - '"No such file or directory" not in infra_artifact_server_nginx_parents.stderr'
+  changed_when: infra_artifact_server_nginx_parents.rc == 0
+
 - name: Report configuration removal completion
   bootwright.core.artifact_server_protocol:
     phase: group
@@ -111,6 +135,7 @@
       {{ 'changed'
          if (infra_artifact_server_nginx_unit_removed is changed
              or infra_artifact_server_nginx_root_removed is changed
+             or infra_artifact_server_nginx_parents is changed
              or infra_artifact_server_nginx_before.observation.unit | length > 0)
          else 'unchanged' }}
     digest: '{{ bootwright_artifact_server_digest }}'

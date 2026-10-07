@@ -358,8 +358,15 @@ rename it. A hypervisor that did not answer is named by the frozen libvirt URI
 on that host, and its remedy is to restore that connection. A listener on the
 controller socket with none of the domain, its controller unit and its disks
 present is named by that socket, and its remedy is to stop what listens there.
-Evidence that names another request or does not decode is left to the general
-reason.
+A domain this context owns, through a hypervisor that answered, whose
+observation proves the adapter's postcondition but not the frozen request is
+named by the first difference: the controller image, the system the controller
+exposes, a power state or a disk's size. Its remedy is to restore the machine
+to what its frozen request names. A removal's own resolution reads such a
+machine as no effect, but a removal that supersedes the apply resolves the
+apply's block by the apply's reading and refuses the same way until it is
+restored. Evidence that names another request or does not decode is left to the
+general reason.
 
 **Hypervisor answer.** The observation and its evidence report whether the
 hypervisor answered for the domain, because a hypervisor that does not answer

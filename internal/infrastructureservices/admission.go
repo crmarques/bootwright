@@ -82,6 +82,41 @@ func canonicalIP(value api.Value) api.Value {
 	return value
 }
 
+// blockIdentityBytes bounds the lifecycle block identity a managed service
+// plans, which the plan admits only as a safe segment of at most 63 bytes.
+const blockIdentityBytes = 63
+
+// serviceBlockPrefixes is the prefix each managed service capability writes
+// before the service name to form its block identity. This package cannot
+// import those capabilities, so a test holds this copy to their own.
+var serviceBlockPrefixes = map[api.Kind]string{api.ArtifactServer: "artifact-server-", api.Proxy: "proxy-", api.DNSServer: "dns-", api.NTPServer: "ntp-"}
+
+// NameLimit is the longest name a managed service of kind may carry, so its
+// block identity stays within the plan's bound, and whether a capability
+// plans a block for that kind at all.
+func NameLimit(kind api.Kind) (int, bool) {
+	prefix, found := serviceBlockPrefixes[kind]
+	if !found {
+		return 0, false
+	}
+	return blockIdentityBytes - len(prefix), true
+}
+
+// validateNameLimit refuses a managed service name whose block identity the
+// plan would refuse later as an object-less state failure. A name the API
+// grammar already refuses is that grammar's refusal alone.
+func validateNameLimit(o api.Object) []api.Issue {
+	limit, found := NameLimit(o.Kind())
+	if !found || !api.ValidLexical("name", o.Name()) || len(o.Name()) <= limit {
+		return nil
+	}
+	return []api.Issue{{
+		Code: "api.value", Field: "$.metadata.name",
+		Message:     fmt.Sprintf("a managed %s name is at most %d bytes, because its block %s<name> is a 63-byte identity", o.Kind(), limit, serviceBlockPrefixes[o.Kind()]),
+		Remediation: fmt.Sprintf("rename %s to at most %d bytes, with every reference to it", o.Identity(), limit),
+	}}
+}
+
 func ValidateAuthored(o api.Object, _ api.Catalog) []api.Issue {
 	return validateIntrinsic(o, true)
 }
@@ -95,6 +130,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if value.Get("management").Text() != "managed" {
 		return issues
 	}
+	issues = add(issues, validateNameLimit(o)...)
 	issues = add(issues, validateWildcardProbes(o.Kind(), value)...)
 	machine, placed := c.Find(api.Machine, value.Get("machineRef").Text())
 	if placed {
@@ -116,13 +152,13 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 
 // validateCertificateCoverage holds a generated serving certificate to every
 // address an HTTPS endpoint answers on, which the server's own validation
-// proves at apply only after the operation registered: an IP must be one of
+// proves only once a fresh apply has bound the material: an IP must be one of
 // the certificate's IP addresses, compared as Go's hostname verification
 // compares them, so an IPv4-mapped IPv6 address names its IPv4 one, and a name
 // must be one of its DNS names, compared without case. The common name is no
 // subject alternative name, and a DNS name holds no wildcard, so neither
 // covers anything else. Admission reads no material, so a contextStore
-// certificate is proved at apply alone.
+// certificate is proved when a fresh apply binds it, before registration.
 func validateCertificateCoverage(value api.Value, machine api.Object, c api.Catalog) []api.Issue {
 	name := value.Get("tls", "secretRef").Text()
 	secret, found := c.Find(api.Secret, name)
@@ -321,6 +357,7 @@ func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 			if !partial && connection.Present() && !connection.Has("httpProxy") && !connection.Has("httpsProxy") {
 				issues = add(issues, issue("$.spec.connection", "external Proxy requires at least one proxy URL", "set spec.connection.httpProxy or spec.connection.httpsProxy"))
 			}
+			issues = add(issues, validateProxyEndpoints(connection)...)
 		case api.DNSServer, api.NTPServer:
 			require("address")
 		case api.Registry:
@@ -340,6 +377,26 @@ func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 	if o.Kind() == api.ArtifactServer {
 		issues = add(issues, validateArtifactEndpoints(value, partial)...)
 		issues = add(issues, validateTransport(value, partial)...)
+	}
+	return issues
+}
+
+// validateProxyEndpoints holds each endpoint of an external Proxy to the one
+// grammar every acquisition route reads. A value the schema refuses is that
+// schema's refusal alone, and no refusal carries the value, which may hold a
+// credential.
+func validateProxyEndpoints(connection api.Value) []api.Issue {
+	issues := []api.Issue{}
+	for _, name := range []string{"httpProxy", "httpsProxy"} {
+		value := connection.Get(name)
+		if !value.Present() || value.Type() != api.String || !api.ValidLexical("http-url", value.Text()) || api.ValidLexical("proxy-endpoint", value.Text()) {
+			continue
+		}
+		issues = append(issues, api.Issue{
+			Code: "api.value", Field: "$.spec.connection." + name,
+			Message:     "a proxy endpoint is a bare http or https URL of at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment",
+			Remediation: "set spec.connection." + name + " to " + api.ProxyEndpointForm,
+		})
 	}
 	return issues
 }

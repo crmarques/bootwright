@@ -21,6 +21,7 @@ from __future__ import annotations
 import copy
 import os
 import pathlib
+import re
 
 import pytest
 from ansible.parsing.dataloader import DataLoader
@@ -50,7 +51,7 @@ def service(kind, slug, name, port, **fields):
         "placement": LOCAL,
         "port": port,
         "unit": "bootwright-%s-%s-%s" % (CONTEXT, slug, name),
-        "version": "%s-v2" % slug,
+        "version": "managed-service-v3",
     }
     request.update(fields)
     return request
@@ -117,19 +118,19 @@ MACHINE = {
 SCOPES = {
     ("infra_artifact_server_nginx", "nginx.conf.j2"): {"bootwright_artifact_server_request": ARTIFACT_SERVER},
     ("infra_artifact_server_nginx", "unit.container.j2"): {"bootwright_artifact_server_request": ARTIFACT_SERVER},
-    ("infra_dns_server_dnsmasq", "dnsmasq.conf.j2"): {"bootwright_dns_server_request": service(
+    ("infra_managed_service", "dnsmasq.conf.j2"): {"bootwright_managed_service_request": service(
         "DNSServer", "dns-server-dnsmasq", "dns", 53, forwarders=["198.51.100.53"], records=[
             {"addresses": ["192.0.2.11"], "name": "rhel-01.lab.example.test"},
             {"addresses": ["192.0.2.21", "192.0.2.22"], "name": "apps.sno.lab.example.test", "subtree": True}])},
-    ("infra_dns_server_dnsmasq", "unit.container.j2"): {"bootwright_dns_server_request": service(
+    ("infra_managed_service", "dnsmasq.container.j2"): {"bootwright_managed_service_request": service(
         "DNSServer", "dns-server-dnsmasq", "dns", 53)},
-    ("infra_ntp_server_chrony", "chrony.conf.j2"): {"bootwright_ntp_server_request": service(
+    ("infra_managed_service", "chrony.conf.j2"): {"bootwright_managed_service_request": service(
         "NTPServer", "ntp-server-chrony", "time", 123, clients=["192.0.2.0/24"], sources=["198.51.100.123"])},
-    ("infra_ntp_server_chrony", "unit.container.j2"): {"bootwright_ntp_server_request": service(
+    ("infra_managed_service", "chrony.container.j2"): {"bootwright_managed_service_request": service(
         "NTPServer", "ntp-server-chrony", "time", 123)},
-    ("infra_proxy_squid", "squid.conf.j2"): {"bootwright_proxy_request": service(
+    ("infra_managed_service", "squid.conf.j2"): {"bootwright_managed_service_request": service(
         "Proxy", "proxy-squid", "egress", 3128, clients=["192.0.2.0/24", "2001:db8::/64"])},
-    ("infra_proxy_squid", "unit.container.j2"): {"bootwright_proxy_request": service(
+    ("infra_managed_service", "squid.container.j2"): {"bootwright_managed_service_request": service(
         "Proxy", "proxy-squid", "egress", 3128)},
     ("substrate_libvirt_host", "network.xml.j2"): {
         "bootwright_substrate_host_request": HOST, "item": NETWORK,
@@ -140,20 +141,39 @@ SCOPES = {
 }
 
 
+def role_vars(role):
+    """The fixed variables a role carries in vars/main.yml, or none."""
+    path = ROLES / role / "vars" / "main.yml"
+    return dict(LOADER.load_from_file(str(path), trusted_as_template=True) or {}) if path.is_file() else {}
+
+
 def rendered_templates():
-    """Every (role, template) a task renders through ansible.builtin.template."""
+    """Every (role, template) a task renders through ansible.builtin.template.
+
+    A source selected from the managed-service kind table names every template
+    of that field the table holds.
+    """
     found = set()
     for path in sorted(ROLES.glob("*/tasks/*.yml")):
+        role = path.parent.parent.name
         for task in LOADER.load_from_file(str(path)) or []:
             source = (task.get("ansible.builtin.template") or {}).get("src") if isinstance(task, dict) else None
-            if source:
-                found.add((path.parent.parent.name, source))
+            if not source:
+                continue
+            if "{{" not in source:
+                found.add((role, source))
+                continue
+            selected = re.fullmatch(r"\{\{ infra_managed_service_kind\.(\w+) \}\}", source)
+            assert selected, "%s renders an unrecognized templated source %r" % (path, source)
+            for kind in role_vars(role)["infra_managed_service_kinds"].values():
+                found.add((role, kind[selected.group(1)]))
     return found
 
 
 def scope(role, variables):
-    """What one template task sees: the role's defaults, then its own variables."""
+    """What one template task sees: the role's defaults and fixed vars, then its own variables."""
     found = dict(LOADER.load_from_file(str(ROLES / role / "defaults" / "main.yml"), trusted_as_template=True) or {})
+    found.update(role_vars(role))
     found.update(copy.deepcopy(variables))
     return found
 
@@ -190,7 +210,28 @@ def test_a_template_writes_the_same_bytes_twice_and_its_goldens_bytes(role, temp
 
 
 def test_the_golden_comparison_sees_a_change_in_what_a_template_writes():
-    variables = scope("infra_proxy_squid", SCOPES["infra_proxy_squid", "squid.conf.j2"])
-    written = render("infra_proxy_squid", "squid.conf.j2", variables)
-    variables["bootwright_proxy_request"]["clients"] = ["198.51.100.0/24"]
-    assert render("infra_proxy_squid", "squid.conf.j2", variables) != written
+    variables = scope("infra_managed_service", SCOPES["infra_managed_service", "squid.conf.j2"])
+    written = render("infra_managed_service", "squid.conf.j2", variables)
+    variables["bootwright_managed_service_request"]["clients"] = ["198.51.100.0/24"]
+    assert render("infra_managed_service", "squid.conf.j2", variables) != written
+
+
+MANAGED_SERVICE = "infra_managed_service"
+
+
+@pytest.mark.parametrize("template", sorted(template for role, template in SCOPES if role == MANAGED_SERVICE))
+def test_a_managed_service_kind_selects_the_templates_its_daemon_writes(template):
+    variables = scope(MANAGED_SERVICE, SCOPES[MANAGED_SERVICE, template])
+    templar = Templar(loader=LOADER, variables=variables)
+    kind = templar.template(variables["infra_managed_service_kind"])
+    configuration = templar.template(variables["infra_managed_service_configuration_path"])
+    assert template in (kind["configuration_template"], kind["unit_template"]), (
+        "the %s kind selects %s and %s, not %s" % (
+            variables["bootwright_managed_service_request"]["kind"], kind["configuration_template"],
+            kind["unit_template"], template))
+    assert configuration == "%s/%s" % (templar.template(variables["infra_managed_service_config_dir"]),
+                                       kind["configuration"])
+    unit = render(MANAGED_SERVICE, kind["unit_template"], variables)
+    volumes = [line[len("Volume="):].split(":", 1)[0] for line in unit.splitlines() if line.startswith("Volume=")]
+    assert volumes == [configuration], "the %s unit mounts %s, not the published %s" % (
+        variables["bootwright_managed_service_request"]["kind"], volumes, configuration)

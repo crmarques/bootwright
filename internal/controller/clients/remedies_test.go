@@ -74,7 +74,7 @@ func TestAFoundationRefusalCarriesItsRemedy(t *testing.T) {
 		err                error
 	}{
 		{"unprepared host", "controller.identity", "run bootwright setup", err},
-		{"another request version", "lifecycle.state", "install the executable that registered this operation", decoded},
+		{"another request version", "lifecycle.state", "destroy it with the build that applied it", decoded},
 	} {
 		reported := diagnostics.Of(test.err)
 		if len(reported) != 1 || reported[0].Code != test.code || reported[0].Remediation != test.remedy || reported[0].Source != nil {

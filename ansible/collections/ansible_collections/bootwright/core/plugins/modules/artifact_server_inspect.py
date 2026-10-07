@@ -20,6 +20,14 @@ options:
     description: Whether to prove every declared listener answers.
     type: bool
     default: false
+  foreign:
+    description:
+      - Whether to report every socket something other than this server holds
+        on a port it binds, at an address its bind address overlaps. Read
+        from the host's socket tables only while its unit is not active and
+        no container of it exists, since otherwise the socket may be its own.
+    type: bool
+    default: false
   attempts:
     description: Bounded readiness retries before the listener is unproved.
     type: int
@@ -44,6 +52,13 @@ listeners:
   returned: when readiness is requested
   type: list
   elements: dict
+foreign:
+  description:
+    - One entry per socket another daemon holds where this server binds, each
+      with its transport, address and port, sorted and bounded.
+  returned: when foreign is requested
+  type: list
+  elements: dict
 unproved:
   description: Listener sockets that did not answer within the bounded window.
   returned: always
@@ -55,6 +70,7 @@ import time
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils.artifact_server import (
+    foreign,
     observe,
     probe,
     probe_failure,
@@ -70,6 +86,7 @@ def main():
         argument_spec={
             "request": {"type": "dict", "required": True},
             "readiness": {"type": "bool", "default": False},
+            "foreign": {"type": "bool", "default": False},
             "attempts": {"type": "int", "default": 30},
         },
         supports_check_mode=True,
@@ -82,6 +99,12 @@ def main():
         module.fail_json(msg="the artifact server could not be observed: %s" % type(failure).__name__)
         return
     result = {"changed": False, "observation": observation, "unproved": []}
+    if module.params["foreign"]:
+        try:
+            result["foreign"] = foreign(request, observation)
+        except (OSError, ValueError) as failure:
+            module.fail_json(msg="the host's socket tables could not be read: %s" % type(failure).__name__)
+            return
     if not module.params["readiness"]:
         module.exit_json(**result)
         return

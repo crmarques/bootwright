@@ -33,15 +33,26 @@ or creates a log.
 
 ### Refusal table
 
-Each row is one refusal of the artifact server capability, and
-`TestArtifactServerRefusalTableMatchesUnsupported` holds its `Unsupported` to
-it; the managed network service capabilities report no shape unsupported. Its
-reason and remedy are the diagnostic's message and remediation, in which
-`<server>` is the refused server.
+Each row is one refusal of a managed service capability.
+`TestArtifactServerRefusalTableMatchesUnsupported` holds the artifact server's
+`Unsupported` to every row, and `TestManagedServiceRefusalTableMatchesUnsupported`
+holds the Proxy, DNSServer and NTPServer capabilities' to every row except
+install-only retention, which only an ArtifactServer declares. Reason and
+remedy are the diagnostic's message and remediation (`lifecycle.unsupported` on
+the refused service), in which `<server>` is the refused service, `<machine>`
+its placement Machine and `<proxy>` the Proxy that Machine selects. A placement
+Machine that is the Environment's controller is reached locally, so the SSH
+rows never refuse a service placed there.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
 | Install-only retention | `spec.retention: install-only` on a managed `ArtifactServer` | `this executable serves no managed artifact server with install-only retention` | `declare spec.retention: persistent on <server>, or omit it` |
+| Managed Proxy egress | `spec.proxy.proxyRef` of the placement `Machine` names a managed `Proxy` | `this executable acquires a managed service's image only directly or through an external Proxy that is already ready, and <machine>, where <server> runs, selects the managed <proxy> in spec.proxy.proxyRef` | `select direct: {} or an external Proxy in spec.proxy on <machine>, or place <server> on another Machine` |
+| Proxy authentication | `spec.connection.auth.proxyAuthRef` on the external `Proxy` the placement `Machine` selects | `this executable acquires a managed service's image through no authenticated proxy, and <proxy>, which <machine> selects for <server>, sets spec.connection.auth.proxyAuthRef` | `select direct: {} or an external Proxy that needs no authentication in spec.proxy on <machine>` |
+| Private trust | `spec.connection.trustBundleRef` on the external `Proxy` the placement `Machine` selects | `this executable acquires a managed service's image with the host's system trust store alone, and <proxy>, which <machine> selects for <server>, sets spec.connection.trustBundleRef` | `select direct: {} or an external Proxy without spec.connection.trustBundleRef in spec.proxy on <machine>` |
+| Operator SSH identity | `spec.access.ssh.auth.operatorIdentity` on a placement `Machine` other than the controller, the default of a provided Machine without authored access included | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.operatorIdentity` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
+| Password SSH authentication | `spec.access.ssh.auth.passwordRef` on a placement `Machine` other than the controller | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.passwordRef` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
+| No bound host key | `spec.access.ssh` without `knownHostsRef` on a placement `Machine` other than the controller | `this executable connects to a placement host other than the controller only against a bound SSH host key, and <machine>, where <server> runs, declares no spec.access.ssh.knownHostsRef` | `author spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
 
 ## Placement arms and credentials
 
@@ -62,7 +73,9 @@ binds user `root` and only those two Secret versions with the plan. A
 placement host with another account or an escalation Secret refuses at
 admission under [addresses and access](api/machines.md#addresses-and-access),
 and the placement derivation refuses the same host before planning.
-`passwordRef`, `auth.operatorIdentity` and the global borrowed-SSH flags are
+`passwordRef` and `auth.operatorIdentity`, and a placement host with no
+`knownHostsRef`, refuse before registration as the
+[refusal table](#refusal-table) states; the global borrowed-SSH flags are
 unsupported and refuse before planning. The bound `knownHostsRef` material is parsed before
 connection under [the Machine host-key rules](api/machines.md#addresses-and-access);
 a changed, missing, corrupt or unparseable entry refuses before the connection,
@@ -147,6 +160,22 @@ no other key class is compared within a context, because one context's claims
 may share a key by design, such as the `path:` of a package tree two
 installations of one profile publish.
 
+A socket held outside the contexts this host coordinates is no reservation, so
+the apply proves it before its first effect. A managed network service or
+artifact server whose unit is not active and of which no container exists
+reads its host's TCP and UDP socket tables (TCP for a proxy and an artifact
+server, UDP for a time service, both for a resolver) and refuses when a
+listener holds one of its ports at an address the wildcard rule above makes
+overlap its bind address. Nothing is pulled, published or started. The refusal
+is `lifecycle.state` on the service, names the socket it binds, and its remedy
+is to stop what listens there, or choose another bindAddress, or another port
+for a service whose port is declared; a DNSServer and an NTPServer keep the one
+port validation permits, so theirs offers only the bindAddress. For a wildcard
+bind, whose colliding address the refusal record does not carry, the remedy
+points to the retained run output, which lists every socket found
+(`TestAForeignListenerRefusalNamesTheSocketAndTheRemedy`,
+`TestAForeignListenerRemedyOffersOnlyWhatValidationAdmits`).
+
 Dependency readiness never establishes service ownership, and
 [controller setup](controller.md#host-identity-and-shared-prerequisites)
 reserves nothing.
@@ -166,7 +195,9 @@ else the executable's compiled default. An authored reference is pinned by
 content digest at [admission](api/infrastructure-services.md#management-and-placement)
 and the compiled default is one, so a tag never reaches a plan.
 Image acquisition uses the placement Machine's normalized
-[proxy choice](api/machines.md#machine-proxy) and no ambient proxy variable.
+[proxy choice](api/machines.md#machine-proxy) and no ambient proxy variable;
+a managed, authenticated or private-trust Proxy refuses before registration, as
+the [refusal table](#refusal-table) states.
 `retention: install-only` is unsupported and refuses, as the
 [refusal table](#refusal-table) states.
 
@@ -175,7 +206,12 @@ one server configuration, one unit definition and, when any listener is HTTPS,
 one certificate and private key beneath that root. Directories are `0755`
 except the private key's directory, which is `0700`; the private key is `0600`.
 The content root is outside the Bootwright state root, so serving never exposes
-context storage. Nothing else on the host is created, modified or removed.
+context storage. The apply creates the context's and the kind's directories
+beneath `/var/lib/bootwright-services` that hold the content root; the destroy
+removes each once it is empty, never recursively, and retains
+`/var/lib/bootwright-services` itself
+(`test_a_destroy_removes_each_empty_parent_never_recursively`). Nothing else on
+the host is created, modified or removed.
 
 **TLS.** The [schema](api/infrastructure-services.md#artifactserver) requires a
 serving certificate exactly when an effective listener uses HTTPS. A
@@ -190,20 +226,26 @@ revision rather than the edited input: an IP address must be one of
 them, so an IPv4-mapped IPv6 address names its IPv4 one, and a DNS name one of
 `dnsNames`, compared without case; the common name names nothing
 (`TestAGeneratedServingCertificateCoversEveryHTTPSEndpoint`). Admission reads
-no material, so a `contextStore` certificate is proved at apply alone. Its
-bound material is validated before effects: bounded PEM parsing, certificate
-and key agreement, an RSA serving key of at least 2048 bits, validity at the
-injected clock, server-authentication suitability, not a certificate
-authority, and subject-alternative-name coverage of every address an HTTPS
-endpoint serves. A failure refuses before connection or installation as
+no material, so every bound serving certificate, a `contextStore` one
+included, is proved when a fresh apply binds it, before registration, by these
+checks: bounded PEM parsing, certificate and key agreement, an RSA serving key
+of at least 2048 bits, validity at the injected clock, server-authentication
+suitability, not a certificate authority, and subject-alternative-name
+coverage of every address an HTTPS endpoint serves. A failure there refuses as
 `secret.part` on `Secret/<name>`, and names the unmet condition and what stores
 usable material in the context: `secret set` with the certificate and key
 files, or, for a generated Secret, the declaration field to extend and
-`secret generate`, each with `--context`. It never names material or its
-digest. The operation keeps the Secret version it
-[bound](secrets.md#immutable-binding-and-contexts), and its continuation
-reopens that version, so the remedy ends by destroying the apply and applying
-again (`TestServingCertificateRefusalsNameTheSecretAndTheirRemedy`).
+`secret generate`, each with `--context`. Nothing registered and the binding
+is released, so the remedy ends by applying again
+(`TestAContextStoreServingCertificateIsProvedWhenItsBindingIsAcquired`). It
+never names material or its digest. A continuation proves the version its
+operation [bound](secrets.md#immutable-binding-and-contexts) again, before
+connection or installation; the operation keeps that version, so a failure
+then ends by destroying the apply and applying again
+(`TestServingCertificateRefusalsNameTheSecretAndTheirRemedy`). Material an
+attempt cannot reopen refuses as `secret.store` on `Secret/<name>`, with the
+remedy to run `status --context <context>` and repeat the command it names
+(`TestMissingBoundServingMaterialNamesItsSecret`).
 `tls.minVersion` selects the exact protocol floor the server enforces.
 
 **Readiness.** Completion requires positive evidence for every listener: the
@@ -365,23 +407,35 @@ run, the configuration derived for it, and the answer readiness proves. Their
 plan blocks belong to the
 [`infra-components` stage](state-reconciliation.md#stages-and-the-pause-boundary).
 
+One role realizes all three kinds, keyed by the request's frozen kind: it
+selects the daemon configuration and unit templates for that kind from a fixed
+table, and every task is shared. The three kinds freeze one request version, so
+a request an earlier build froze for one kind refuses by naming its version,
+and its remedy is to destroy the context with the build that applied it.
+
 **Implementation.** One container image per kind, selected, pinned and acquired
 exactly as the [artifact server's](#managed-artifact-serving) is. The unit
 never uses the image's own entrypoint: the frozen request alone decides what
-runs.
+runs. Each daemon ends within its unit's stop timeout when stopped: the
+proxy's shutdown lifetime is two seconds, below podman's ten-second stop
+timeout, so a stop or removal never leaves the unit failed
+(`test_the_proxy_stops_within_podmans_stop_timeout`).
 
 **Owned host state.** Each service owns one content root, one daemon
 configuration inside it and one unit definition. Directories are `0755`. The
-content root is outside the Bootwright state root. Nothing else on the host is
-created, modified or removed, and no managed service writes to the host's own
-resolver, proxy or time configuration.
+content root is outside the Bootwright state root. The apply creates the
+context's and the kind's directories beneath `/var/lib/bootwright-services`
+that hold the content root; the destroy removes each once it is empty, never
+recursively, and retains `/var/lib/bootwright-services` itself. Nothing else on
+the host is created, modified or removed, and no managed service writes to the
+host's own resolver, proxy or time configuration.
 
 **Derived configuration.** A managed service is configured from the selected
 graph, never from authored daemon syntax:
 
 | Kind | Derived from the graph | Authored |
 | --- | --- | --- |
-| `Proxy` | The client set below, as the only addresses it serves. Caching and authentication are disabled. | `bindAddress`, `port` |
+| `Proxy` | The client set below, as the only addresses it serves. Before it admits a client it refuses every request whose destination is a loopback or unspecified address (`127.0.0.0/8`, `0.0.0.0/32`, `::1/128`, `::/128`) or a link-local one (`169.254.0.0/16`, `fe80::/10`), and every request for its cache manager; `CONNECT` is not restricted further (`test_the_proxy_refuses_local_link_local_and_manager_destinations_before_it_admits_a_client`). Caching and authentication are disabled. | `bindAddress`, `port` |
 | `DNSServer` | One address record per retained Machine, from its effective `fqdn` contact and its declared IP addresses, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]` |
 | `NTPServer` | The client set below, as the only addresses it answers. | `bindAddress`, `port`, `upstreamSources[]` |
 

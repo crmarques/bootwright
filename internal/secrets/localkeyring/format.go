@@ -14,10 +14,10 @@ import (
 	"io"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -161,177 +161,22 @@ func encodeCanonical(value any, maximum int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := json.Marshal(value)
-	if err != nil || len(data)+1 != size {
+	data, err := canonicaljson.Encode(value, canonicaljson.Line)
+	if err != nil || len(data) != size {
 		return nil, secretstore.Failure("store.limit", "secret store record exceeds its encoding limit")
 	}
-	return append(data, '\n'), nil
+	return data, nil
 }
 
 func canonicalEncodedSize(value any, maximum int) (int, error) {
 	if maximum <= 0 {
 		return 0, secretstore.Failure("store.limit", "secret store record exceeds its encoding limit")
 	}
-	size, valid := canonicalValueSize(reflect.ValueOf(value), maximum-1, 0)
+	size, valid := canonicaljson.Size(value, maximum-1, 16)
 	if !valid || size >= maximum {
 		return 0, secretstore.Failure("store.limit", "secret store record exceeds its encoding limit")
 	}
 	return size + 1, nil
-}
-
-func canonicalValueSize(value reflect.Value, maximum, depth int) (int, bool) {
-	if depth > 16 || maximum < 0 {
-		return 0, false
-	}
-	if !value.IsValid() {
-		return boundedSize(0, 4, maximum)
-	}
-	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
-		if value.IsNil() {
-			return boundedSize(0, 4, maximum)
-		}
-		value = value.Elem()
-	}
-	switch value.Kind() {
-	case reflect.Bool:
-		if value.Bool() {
-			return boundedSize(0, 4, maximum)
-		}
-		return boundedSize(0, 5, maximum)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		var scratch [32]byte
-		return boundedSize(0, len(strconv.AppendInt(scratch[:0], value.Int(), 10)), maximum)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		var scratch [32]byte
-		return boundedSize(0, len(strconv.AppendUint(scratch[:0], value.Uint(), 10)), maximum)
-	case reflect.String:
-		return canonicalStringSize(value.String(), maximum)
-	case reflect.Slice:
-		if value.IsNil() {
-			return boundedSize(0, 4, maximum)
-		}
-		if value.Type().Elem().Kind() == reflect.Uint8 {
-			return 0, false
-		}
-		return canonicalSequenceSize(value, maximum, depth)
-	case reflect.Array:
-		return canonicalSequenceSize(value, maximum, depth)
-	case reflect.Struct:
-		return canonicalStructSize(value, maximum, depth)
-	default:
-		return 0, false
-	}
-}
-
-func canonicalSequenceSize(value reflect.Value, maximum, depth int) (int, bool) {
-	size, valid := boundedSize(0, 2, maximum)
-	for index := 0; valid && index < value.Len(); index++ {
-		if index != 0 {
-			size, valid = boundedSize(size, 1, maximum)
-			if !valid {
-				return 0, false
-			}
-		}
-		var item int
-		item, valid = canonicalValueSize(value.Index(index), maximum-size, depth+1)
-		if valid {
-			size, valid = boundedSize(size, item, maximum)
-		}
-	}
-	return size, valid
-}
-
-func canonicalStructSize(value reflect.Value, maximum, depth int) (int, bool) {
-	typeOf := value.Type()
-	size, valid := boundedSize(0, 2, maximum)
-	fields := 0
-	for index := 0; valid && index < value.NumField(); index++ {
-		field := typeOf.Field(index)
-		if field.PkgPath != "" || field.Anonymous {
-			return 0, false
-		}
-		tag := field.Tag.Get("json")
-		name, options, _ := strings.Cut(tag, ",")
-		if name == "-" {
-			continue
-		}
-		// Only omissions this size calculation can predict exactly are
-		// supported, because the predicted size must equal the encoding.
-		// An omitted zero also lets a record written before a counted
-		// field existed still round-trip byte for byte.
-		if options == "omitempty" {
-			fieldValue := value.Field(index)
-			switch fieldValue.Kind() {
-			case reflect.Bool:
-				if !fieldValue.Bool() {
-					continue
-				}
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				if fieldValue.Int() == 0 {
-					continue
-				}
-			default:
-				return 0, false
-			}
-		} else if options != "" {
-			return 0, false
-		}
-		if name == "" {
-			name = field.Name
-		}
-		if fields != 0 {
-			size, valid = boundedSize(size, 1, maximum)
-			if !valid {
-				return 0, false
-			}
-		}
-		var nameSize int
-		nameSize, valid = canonicalStringSize(name, maximum-size)
-		if valid {
-			size, valid = boundedSize(size, nameSize, maximum)
-		}
-		if valid {
-			size, valid = boundedSize(size, 1, maximum)
-		}
-		var fieldSize int
-		if valid {
-			fieldSize, valid = canonicalValueSize(value.Field(index), maximum-size, depth+1)
-		}
-		if valid {
-			size, valid = boundedSize(size, fieldSize, maximum)
-		}
-		fields++
-	}
-	return size, valid
-}
-
-func canonicalStringSize(value string, maximum int) (int, bool) {
-	size, valid := boundedSize(0, 2, maximum)
-	for index := 0; valid && index < len(value); {
-		c := value[index]
-		if c < utf8.RuneSelf {
-			width := 1
-			switch c {
-			case '\\', '"', '\b', '\f', '\n', '\r', '\t':
-				width = 2
-			default:
-				if c < 0x20 || c == '<' || c == '>' || c == '&' {
-					width = 6
-				}
-			}
-			size, valid = boundedSize(size, width, maximum)
-			index++
-			continue
-		}
-		r, consumed := utf8.DecodeRuneInString(value[index:])
-		width := consumed
-		if (r == utf8.RuneError && consumed == 1) || r == '\u2028' || r == '\u2029' {
-			width = 6
-		}
-		size, valid = boundedSize(size, width, maximum)
-		index += consumed
-	}
-	return size, valid
 }
 
 func boundedSize(current, additional, maximum int) (int, bool) {
@@ -345,16 +190,13 @@ func decodeCanonical(data []byte, maximum, items int, target any) error {
 	if len(data) == 0 || len(data) > maximum || !utf8.Valid(data) || !boundedJSON(data, items, maximum) || isIndexTarget(target) && !boundedIndexJSON(data) {
 		return errors.New("invalid private record")
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
+	switch err := canonicaljson.Decode(data, target, canonicaljson.Line); {
+	case errors.Is(err, canonicaljson.ErrMalformed), errors.Is(err, canonicaljson.ErrTrailing):
 		return errors.New("invalid private record")
+	case err != nil:
+		return errors.New("noncanonical private record")
 	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		return errors.New("invalid private record")
-	}
-	canonical, err := encodeCanonical(target, maximum)
-	if err != nil || !bytes.Equal(canonical, data) {
+	if _, err := canonicalEncodedSize(target, maximum); err != nil {
 		return errors.New("noncanonical private record")
 	}
 	return nil

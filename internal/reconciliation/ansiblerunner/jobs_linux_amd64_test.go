@@ -42,14 +42,14 @@ func leaveAnOrphan(result, authorization *os.File) {
 	fmt.Printf("orphan %d\n", orphan.Process.Pid)
 	_, _ = result.Write([]byte(`{"phase":"loaded"}` + "\n"))
 	_, _ = authorization.Read(make([]byte, 16))
-	_, _ = result.Write([]byte(`{"phase":"completed","outcome":"changed","evidence":{}}` + "\n"))
+	_, _ = result.Write([]byte(`{"evidence":{"absent":false},"outcome":"changed","phase":"completed"}` + "\n"))
 	os.Exit(0)
 }
 
 // completing speaks the protocol and completes, holding nothing afterwards.
 func completing() *exec.Cmd {
 	return exec.Command("/bin/sh", "-c", `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
-		`printf '{"phase":"completed","outcome":"changed","evidence":{}}\n' >&3`)
+		`printf '{"evidence":{"absent":false},"outcome":"changed","phase":"completed"}\n' >&3`)
 }
 
 // sweepingRunner owns the run directories it creates, in parents of its own.
@@ -427,7 +427,7 @@ func TestAnInvocationKeepsAJobWhoseLockWasReplaced(t *testing.T) {
 		job := filepath.Dir(arguments[slices.Index(arguments, "-i")+1])
 		return exec.Command("/bin/sh", "-c", `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
 			`rm "$1/lock" && (umask 077 && : >"$1/lock") && `+
-			`printf '{"phase":"completed","outcome":"changed","evidence":{}}\n' >&3`, "adapter", job)
+			`printf '{"evidence":{"absent":false},"outcome":"changed","phase":"completed"}\n' >&3`, "adapter", job)
 	}
 	var output bytes.Buffer
 	if _, err := runner.Run(context.Background(), adapterRequest(t, &output)); err != nil {

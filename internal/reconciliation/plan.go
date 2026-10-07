@@ -1,13 +1,15 @@
 package reconciliation
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/crmarques/bootwright/internal/canonicaljson"
 )
 
 const (
@@ -105,9 +107,27 @@ func NewPlan(verb Verb, definitions []BlockDefinition) (Plan, error) {
 		if err != nil {
 			return Plan{}, err
 		}
-		blocks = append(blocks, Block{BlockDefinition: clone(definition), RequestDigest: digest})
+		blocks = append(blocks, Block{BlockDefinition: deliberate(clone(definition)), RequestDigest: digest})
 	}
 	return Plan{Verb: verb, Blocks: blocks}, nil
+}
+
+// deliberate gives every list a block always carries one encoding when it is
+// empty, so a frozen plan reads [] there and never null.
+func deliberate(definition BlockDefinition) BlockDefinition {
+	if definition.Dependencies == nil {
+		definition.Dependencies = []string{}
+	}
+	if definition.Impacts == nil {
+		definition.Impacts = []string{}
+	}
+	if definition.Consumes == nil {
+		definition.Consumes = []string{}
+	}
+	if definition.Groups == nil {
+		definition.Groups = []Group{}
+	}
+	return definition
 }
 
 // Inverse plans removal from an apply: every edge turns around, so a block
@@ -400,20 +420,16 @@ func canonicalRequest(request json.RawMessage) error {
 	if len(request) == 0 || len(request) > MaxRequestBytes || request[0] != '{' {
 		return planError("lifecycle block request must be a bounded JSON object")
 	}
-	decoder := json.NewDecoder(bytes.NewReader(request))
-	decoder.UseNumber()
-	var value map[string]any
-	if err := decoder.Decode(&value); err != nil {
+	switch err := canonicaljson.ProveObject(request); {
+	case err == nil:
+		return nil
+	case errors.Is(err, canonicaljson.ErrMalformed):
 		return planError("lifecycle block request is malformed")
-	}
-	if len(bytes.Trim(request[decoder.InputOffset():], " \t\r\n")) != 0 {
+	case errors.Is(err, canonicaljson.ErrTrailing):
 		return planError("lifecycle block request contains trailing data")
-	}
-	canonical, err := json.Marshal(value)
-	if err != nil || !bytes.Equal(request, canonical) {
+	default:
 		return planError("lifecycle block request is not canonical")
 	}
-	return nil
 }
 
 func ValidSegment(value string) bool {

@@ -7,21 +7,17 @@ result and authorization descriptors belong to the invoking Bootwright process.
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
+from ansible_collections.bootwright.core.plugins.module_utils.adapter_protocol import publishes, unreached
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
     emit,
 )
 
-PHASES = ("loaded", "group", "completed")
-GROUP_STATUSES = ("running", "ok", "failed", "skipped")
-OUTCOMES = ("changed", "unchanged")
+# The refusal the artifact server names to its runner before the run fails, the
+# runner reporting it as the server's own diagnostic for a port: a socket
+# something else already listens on, checked before the unit starts.
+REFUSALS = ("foreign-listener",)
 MAX_LISTENERS = 64
-HEX = set("0123456789abcdef")
-
-
-def digest(value):
-    if not isinstance(value, str) or len(value) != 64 or set(value) - HEX:
-        raise ValueError("digest")
-    return value
 
 
 def listener_evidence(entry):
@@ -30,7 +26,7 @@ def listener_evidence(entry):
     if entry["protocol"] not in ("http", "https"):
         raise ValueError("listener protocol")
     if entry["fingerprint"]:
-        digest(entry["fingerprint"])
+        adapter_protocol.request_digest(entry["fingerprint"])
     if not isinstance(entry["port"], int) or isinstance(entry["port"], bool):
         raise ValueError("listener port")
     return {
@@ -52,7 +48,7 @@ def presence(request, observation, listeners, request_digest):
         "contentRoot": bool(observation.get("contentRoot", False)),
         "listeners": [listener_evidence(entry) for entry in listeners],
         "postcondition": observation.get("unit") == "active" and bool(observation.get("contentRoot")),
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "unit": str(observation.get("unit", "")),
     }
 
@@ -88,19 +84,54 @@ def absence(observation, request_digest):
         "contentRoot": False,
         "listeners": [],
         "postcondition": bool(gone),
-        "request": digest(request_digest),
+        "request": adapter_protocol.request_digest(request_digest),
         "unit": "",
     }
 
 
-def publishes(evidence, observed):
-    """Whether this phase may publish evidence proving no postcondition.
+def completion(arguments):
+    """The evidence one completion publishes, or what it names when unmet."""
+    request_digest = arguments.get("digest")
+    observation = arguments.get("observation") or {}
+    if arguments.get("removed"):
+        evidence = absence(observation, request_digest)
+    else:
+        evidence = presence(
+            arguments.get("request") or {},
+            observation,
+            arguments.get("listeners") or [],
+            request_digest,
+        )
+    if publishes(evidence, arguments.get("observed")):
+        return evidence, None
+    if arguments.get("removed"):
+        return evidence, unreached("the artifact server", "still present", remaining(observation))
+    return evidence, unreached("the artifact server", "not proved", unproved(observation))
 
-    A read-only observation reports what it found, including a target that is
-    part way realized, because the engine resolves an unproved effect from that
-    evidence. A mutation has to reach its postcondition or fail.
+
+def refused(arguments):
+    """The reason a refusal is named by: the refusal and the port it is about.
+
+    Go gave a diagnostic for each port the request binds, so a reason or a port
+    outside that set would break the runner's protocol and is never published.
     """
-    return bool(evidence["postcondition"]) or bool(observed)
+    reason, port = arguments.get("reason"), arguments.get("port")
+    if reason not in REFUSALS:
+        raise ValueError("refusal reason")
+    if isinstance(port, str) and port.isdigit() and port == str(int(port)):
+        port = int(port)
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError("refused port")
+    return "%s-%d" % (reason, port)
+
+
+CAPABILITY = adapter_protocol.Capability(
+    "artifact-server",
+    "the artifact-server capability result could not be published",
+    completion,
+    phases=adapter_protocol.REFUSING_PHASES,
+    refusals=refused,
+)
 
 
 class ActionModule(ActionBase):
@@ -109,42 +140,4 @@ class ActionModule(ActionBase):
 
     def run(self, tmp=None, task_vars=None):
         del tmp
-        arguments = self._task.args
-        phase = arguments.get("phase")
-        if phase not in PHASES:
-            return {"failed": True, "msg": "unsupported artifact-server protocol phase"}
-        try:
-            if phase == "loaded":
-                emit({"phase": "loaded"}, acknowledge=True)
-                return {"changed": False}
-            if phase == "group":
-                status = arguments.get("status")
-                if status not in GROUP_STATUSES:
-                    raise ValueError("group status")
-                emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
-                return {"changed": False}
-            outcome = arguments.get("outcome")
-            if outcome not in OUTCOMES:
-                raise ValueError("outcome")
-            request_digest = arguments.get("digest")
-            observation = arguments.get("observation") or {}
-            if arguments.get("removed"):
-                evidence = absence(observation, request_digest)
-            else:
-                evidence = presence(
-                    arguments.get("request") or {},
-                    observation,
-                    arguments.get("listeners") or [],
-                    request_digest,
-                )
-            if not publishes(evidence, arguments.get("observed")):
-                unmet = remaining(observation) if arguments.get("removed") else unproved(observation)
-                verb = "still present" if arguments.get("removed") else "not proved"
-                return {
-                    "failed": True,
-                    "msg": "the artifact server did not reach its postcondition; %s: %s" % (verb, ", ".join(unmet) or "unknown"),
-                }
-            emit({"phase": "completed", "outcome": outcome, "evidence": evidence})
-            return {"changed": False}
-        except (ValueError, TypeError, OSError):
-            return {"failed": True, "msg": "the artifact-server capability result could not be published"}
+        return adapter_protocol.publish(self._task.args, CAPABILITY, emit)

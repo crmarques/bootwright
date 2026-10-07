@@ -606,15 +606,26 @@ records `status` read, so it never offers a command those records refuse:
   read abandons what it cannot list;
 - over an apply that has not completed, its continuation, which only
   [finalizes](state-reconciliation.md#lifecycle-unit) an apply whose blocks are
-  all `done`, a `failed` one included, unless a lost block record refuses it,
+  all `done`, a `failed` one included, unless a lost block record refuses it
+  or its re-proof refuses on what `status` reads,
   and `bootwright destroy --context <name>`, unless `status` names a
   contradiction of the apply's
   records, each of which refuses that removal
   ([continuation and removal](state-reconciliation.md#continuation-and-removal));
 - over a destroy that has not completed, the `destroy` that continues,
   resolves, finalizes or replaces it, unless a lost block record refuses a
-  continuation; a replacement reads no such record, so `status` names no lost
-  record of a destroy it replaces as a contradiction;
+  continuation or its re-proof refuses on what `status` reads; a replacement
+  reads no such record, so `status` names no lost record of a destroy it
+  replaces as a contradiction;
+- over either incomplete operation whose continuation or resolution still has
+  a block to run, no continuation when the input revision or digest, the
+  automation digest or the frozen execution closure differs from what the
+  operation registered with, or when the controller state records no binding
+  for the context; the destroy that supersedes an incomplete apply stays
+  offered, and over a running, paused or unknown removal the deletion that
+  refusal names is offered where it names one, and otherwise no step. `status`
+  probes no host, so a binding recorded for another host is left to the
+  continuation's own refusal;
 - over either incomplete operation, `bootwright setup` in place of a
   continuation or resolution that still has a block to run while the host's
   controller setup has not completed, because that continuation re-proves the

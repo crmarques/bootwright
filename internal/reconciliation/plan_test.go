@@ -354,3 +354,40 @@ func TestExclusiveResourcesAreFrozenAndBounded(t *testing.T) {
 		t.Fatal("an unbounded exclusive set was frozen")
 	}
 }
+
+// A list a block always carries has one encoding when it is empty, so a
+// frozen plan never reads null for it, however the plan was built.
+func TestAPlanEncodesEveryUnsetListAsEmpty(t *testing.T) {
+	bare := definition("bare")
+	bare.Dependencies, bare.Impacts, bare.Consumes, bare.Groups = nil, nil, nil, nil
+	plan, err := NewPlan(Apply, []BlockDefinition{bare})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inverse, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	retained, err := plan.Retain([]string{"bare"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, built := range map[string]Plan{"the plan": plan, "its inverse": inverse, "its retained part": retained} {
+		data, err := json.Marshal(built)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, member := range []string{`"dependencies":[]`, `"impacts":[]`, `"consumes":[]`, `"groups":[]`} {
+			if !strings.Contains(string(data), member) {
+				t.Errorf("%s does not encode %s: %s", name, member, data)
+			}
+		}
+		if strings.Contains(string(data), "null") {
+			t.Errorf("%s encodes null: %s", name, data)
+		}
+		block, found := built.Block("bare")
+		if !found || block.Dependencies == nil || block.Impacts == nil || block.Consumes == nil || block.Groups == nil {
+			t.Errorf("%s hands out a nil list: %+v", name, block)
+		}
+	}
+}

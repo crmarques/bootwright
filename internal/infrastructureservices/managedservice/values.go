@@ -1,5 +1,11 @@
 package managedservice
 
+// RequestVersion is the one frozen request shape every managed network service writes and reads.
+const RequestVersion = "managed-service-v3"
+
+// Variable names the one role's request, digest and material variables.
+const Variable = "bootwright_managed_service"
+
 // Identity names the block, context and service one request belongs to.
 type Identity struct {
 	Block   string `json:"block"`

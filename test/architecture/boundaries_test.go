@@ -34,6 +34,8 @@ func packageRoles() map[string]packageRole {
 		"internal/reconciliation":                domainRole,
 		"internal/infrastructureservices":        domainRole,
 		"internal/diagnostics":                   technicalRole,
+		"internal/adapterprotocol":               technicalRole,
+		"internal/canonicaljson":                 technicalRole,
 		"internal/desiredstate/customplaybooks":  domainRole,
 		"internal/desiredstate/inputfs":          adapterRole,
 		"internal/desiredstate/yamlstream":       adapterRole,
@@ -109,13 +111,12 @@ func applicationDependencies() map[string][]string {
 		},
 		// A lifecycle capability consumes the engine's own port vocabulary and
 		// the controller evidence its host was prepared with, and most also the
-		// compiler that produced their input and the operation store's log
-		// record.
+		// compiler that produced their input.
 		"internal/controller/clients": {"internal/controller/prerequisites", "internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
 		// The emulated BMC's image acquisition uses the host Machine's egress
 		// exactly as a managed service's does.
 		"internal/substrate/libvirt":                     append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
-		"internal/substrate/baremetal":                   {"internal/controller/prerequisites", "internal/reconciliation/lifecycle", "internal/reconciliation/operationstore"},
+		"internal/substrate/baremetal":                   {"internal/controller/prerequisites", "internal/reconciliation/lifecycle"},
 		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/containercluster/agentinstall":         append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/artifactserver": append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
@@ -161,7 +162,7 @@ func applicationDependencies() map[string][]string {
 func capabilityDependencies() []string {
 	return []string{
 		"internal/controller/prerequisites", "internal/desiredstate/compilation",
-		"internal/reconciliation/lifecycle", "internal/reconciliation/operationstore",
+		"internal/reconciliation/lifecycle",
 	}
 }
 
@@ -446,6 +447,7 @@ func effectGrants() map[string][]string {
 		"internal/secrets/material":             {"crypto/rand", "io", "net.IP", "os", "syscall"},
 		"internal/secrets/localkeyring":         {"crypto/rand", "io"},
 		"internal/reconciliation/ansiblerunner": {"io", "os", "os/exec", "syscall"},
+		"internal/adapterprotocol":              {"io", "os", "os/exec", "syscall"},
 		"internal/controller/privilege":         {"io", "os", "os/exec", "os/signal", "syscall"},
 		"internal/controller/hostlinux":         {"golang.org/x/sys/unix", "io", "os"},
 		"internal/controller/bundlelocal": {

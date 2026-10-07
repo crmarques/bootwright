@@ -1730,7 +1730,7 @@ which B49 also named ([B277](m1.md#b277)). It found [B275](#x40--machine-command
 under D48 until D56 attached them to M1. Lifecycle concurrency may now rise
 above one through [B303](m3.md#b303), and the adapter protocol, roles and
 codecs may collapse through [B19](m1.md#b19), [B20](m1.md#b20) and
-[B22](m1.md#b22), each with the real-host evidence its own item names.
+[B22](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json), each with the real-host evidence its own item names.
 
 ### X39 — untrusted input, trust and privilege boundaries
 
@@ -2086,7 +2086,7 @@ exit inside a bound context; widening D65 is the owner's decision
 ([B357](m1.md#b357)). Add-on and Machine checks still repeat a refusal for a
 target that failed decoding ([B358](m1.md#b358)); until a replacing removal
 starts its first block, the object the replaced attempt failed on reads done
-([B359](m1.md#b359)); a YAML parser error can name the line before its own
+([B359](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); a YAML parser error can name the line before its own
 ([B360](m1.md#b360)); the uninitialized-store refusals and the retired
 file-source remedy name no `--context` ([B361](m1.md#b361));
 `machine list --power-status` reads controllers with no progress row
@@ -2325,7 +2325,7 @@ mid-claim or mid-removal refused a run; and the CLI spec promised that a
 session status from 0 to 254 is always the remote command's, which now holds
 except for an interactive sudo refusal, which the spec states. The tenth,
 `status` offering an apply over an unbound incomplete apply, predates X41 and
-became [B378](m1.md#b378); the one not confirmed, a remedy that could also
+became [B378](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json); the one not confirmed, a remedy that could also
 name the declaring NetworkConfig, is wording in [B395](backlog.md#b395). Three
 checks followed. The first found the job-race fix partial, since a sweep
 removing another context's ended job held its lock as the job's own processes
@@ -2358,15 +2358,15 @@ only under a verified binding, and the unbound continuation's remedy relies on
 it ([B377](m1.md#b377)); `status` still offers a continuation that the
 binding, automation-digest or other continuation proofs refuse, among them an
 apply over an unbound incomplete apply and a destroy over an unbound running,
-paused or unknown removal ([B378](m1.md#b378)); an apply's or a deletion's
+paused or unknown removal ([B378](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); an apply's or a deletion's
 uncertain controller-record publication and an execution-foundation failure
 the stage reaches still name setup's retry ([B379](m1.md#b379)); lifecycle
 resolution, controller-client, pre-boot, agent-install and one context-store
 remedy still lack an exact command, its context or the plan's tokens
 ([B380](m1.md#b380)); two Machine network admission refusals keep a slogan
 remedy ([B381](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); managed-service shape refusals still come at
-plan with no object or table row ([B382](m1.md#b382)); the proxy grammar
-holds only the controller's route ([B383](m1.md#b383)); and the libvirt roles'
+plan with no object or table row ([B382](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); the proxy grammar
+holds only the controller's route ([B383](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); and the libvirt roles'
 running-guest refusals and the substrates spec name `machine stop` without
 `--context` ([B384](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)). Under D116 these eight join M1 on X46. An
 interactive sudo refusal before a session still exits 1
@@ -2631,7 +2631,7 @@ the uncomposed template, so an override that adds the only ethernet interface
 passes validate and refuses at plan ([B338](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); overlapping managed
 prefixes across contexts ([B295](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); a managed service's egress
 through a managed or authenticated Proxy, refused only at plan
-([B382](m1.md#b382)); the RHEL 9.8 foundation record, for the RHEL 9.8
+([B382](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); the RHEL 9.8 foundation record, for the RHEL 9.8
 controller run D60 plans to confirm ([B335](backlog.md#b335) beside it); and a
 guard port that lists the owned blocks ([B324](backlog.md#b324)). Under D116
 these join M1 on X46: an elevated selection refusal drops its remedy
@@ -2645,9 +2645,9 @@ symbolic-link ancestor the store refuses ([B402](m1.md#b402)); a setup action
 whose adapter failed before any native record stays unknown
 ([B403](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); a `contextStore` serving certificate is proved only
 after registration, and missing material names no Secret
-([B404](m1.md#b404)); the `metadata.name` grammar refusal names no object or
+([B404](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); the `metadata.name` grammar refusal names no object or
 remedy ([B405](m1.md#b405)); a managed service's name can outgrow its block
-identity ([B406](m1.md#b406)); overlapping managed prefixes on one host in one
+identity ([B406](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); overlapping managed prefixes on one host in one
 context are admitted ([B407](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); a mid-body media cancellation is
 misnamed, and one unreadable media entry hides the listing
 ([B408](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); `media list --checksums` holds the root lock while it
@@ -2903,3 +2903,209 @@ working remedy ([B426](m1.md#b426)). The installation request's SSH placement ar
 whose material the role writes only on the controller, is unreachable since D82
 and is [B387](backlog.md#b387)'s removal. Under D116 those seven join M1 on X46; the rest,
 B427 to B434, were parked under D48.
+
+### X24 — Adapter protocol, managed-service role, observation reasons and canonical JSON
+
+**Owner:** Architecture, with State reconciliation, Controller, Infrastructure
+services and Substrate. Integrated on local `main` on 2026-10-07 as one commit,
+the second slice to move the automation digest and request versions, in the
+window X43 opened. **Items:** B242, B298, B299, B21, B223, B246, B22, B252,
+B382, B383, B404, B406, B359, B378. **Decisions:** D11, D56, D57, D66, D77,
+D99, D114, D116. **In-tree gates passed, host gate awaiting operator
+acceptance:** [B19](m1.md#b19), [B20](m1.md#b20) and [B270](m1.md#b270); their
+rows stay on M1 with Delivery `awaiting operator acceptance`. **Partly
+delivered:** [B233](m1.md#b233), its dead reporters.
+
+**Outcome, B19, B242 and B298:** the lifecycle runner and the controller
+runner decode the adapter result protocol with one decoder and supervise their
+adapter with one runner core, in the technical package `internal/adapterprotocol`,
+which imports nothing first-party; one table says which phases each runner
+admits and each runner keeps its own requests, deadlines and diagnostics. The
+decoder is strict for both: it refuses a non-ASCII byte, whitespace outside a
+string, members out of order or equal under case folding at any depth, nesting
+past 16, data after the object, a member outside the phase's exact set and a
+completion whose evidence is not a non-empty object, so a lifecycle run fed such
+a record ends `unknown` where it could end `failed`. A named refusal closes the
+acknowledgement channel in the lifecycle run too. An acknowledgement whose write
+fails with `EPIPE` proves no adapter holds the channel, so the adapter's exit
+decides as if it had been read first and a failed exit stays failed in both
+runners (B242). The controller's cancellation and deadline take the lifecycle's
+stop path unless a native acknowledgement was delivered: the channel closes, the
+supervisor is signaled first, and the group is killed once the adapter is
+reaped or the drain passes, with the controller supervisor carrying the same
+termination handler, so ansible-core 2.21's session-isolated workers end with
+the run; both runners bound the wait for descendants that hold the output and
+end `unknown` naming them (B298). On the Ansible side the nine capability
+action plugins share one `adapter_protocol` module for phase dispatch, group
+statuses, outcomes, the digest check and the publish rule, keeping their
+evidence functions and documentation stubs; a goldens test recorded every
+plugin's records before the change and passes after it. Progress emission
+stays in roles and postcondition decisions in Go (D99, D11).
+
+**Outcome, B20, B270, B299 and B252 for managed services:** one role,
+`infra_managed_service`, realizes the DNS server, the NTP server and the proxy:
+a fixed table keyed by the validated frozen kind selects only the daemon
+configuration and unit templates, the nine playbooks keep their names, and every
+rendered configuration and unit is byte-identical to its golden. The frozen
+request version is `managed-service-v3` for all three. Its decoder reads the
+version first and names an older one with the remedy to destroy the context
+with the build that applied it, instead of calling a request with a
+since-removed member malformed (B252). Squid sets a two-second shutdown
+lifetime, so its stop ends within podman's timeout instead of ending in SIGKILL
+and leaving the unit failed (B270, B20); the proxy also denies the cache
+manager, loopback, unspecified and link-local destinations, IPv4 and IPv6,
+before it admits a client (B299). A managed-service or artifact-server destroy
+removes the kind's and the context's directories with `rmdir` once empty, never
+recursively and never the prefix, and the roles prove the content root sits
+exactly at its depth. Before any effect, while the unit is not active and no
+container exists, the two roles read PID 1's TCP and UDP socket tables and
+refuse when something else listens on a port at an address the service's bind
+covers, through the protocol's refused record with the reason
+`foreign-listener-<port>`; Go turns it into a `lifecycle.state` refusal on the
+service that names the socket it binds, and for a wildcard bind, the DNSServer
+default D114 keeps, the port and the bind that covers it and a pointer to the
+retained run output, which lists every socket found, not the colliding address
+([B438](backlog.md#b438)). The remedy is to stop what listens there or choose
+another bindAddress, and another port only for a Proxy and an ArtifactServer,
+because validation pins a DNSServer to 53 and an NTPServer to 123. The base
+token `foreign-listener` is spelled identically in the roles' refused task, the
+plugins' refusals and Go's constant, and the port-suffixed form is the wire
+contract on both sides.
+
+**Outcome, B21, B223 and B246:** an observation that cannot run is recorded once,
+by the engine, on the attempt's resolution record, and `status` names it before
+any capability reads its evidence; the five private recorders are gone and
+capabilities return the run's failure. Every capability that can return evidence
+and still leave a block unknown now names why, for the verb the operation
+froze: the libvirt host and machine, the bare-metal machine, managed services,
+the artifact server, managed-OS installation and the agent media and install
+blocks, through one projection of the deciding refusal ("<subject> on <host> is
+not what its <verb> froze: <refusal>"), and the resolution log records an
+`unresolved` line. A drifted libvirt machine's apply resolution therefore names
+its first difference. The remedy for a drifted subject is to restore it to what
+its frozen request names; destroying cannot help, because a destroy over an
+unknown apply resolves its blocks with the apply's own check ([B440](backlog.md#b440)).
+
+**Outcome, B359 and B378:** a destroy that replaces a failed removal records the
+removal it replaces in an optional `replaces` member, and `status` reads the
+chain, so an object the replacement has not started reads what the replaced
+removal did to it (unproved gives unknown, failed gives failed, gone gives
+pending) and never the apply's done; a replacement an earlier build recorded
+keeps its earlier reading. `status` offers a continuation that still runs a
+block only when the recorded refusals pass, setup is complete, the controller
+state records a binding and the frozen closure passes; where one refuses it
+offers the destroy that supersedes an incomplete apply, or the context's
+deletion when the refusal's remedy names it, and otherwise no step.
+
+**Outcome, B22 and B252 for every decoder:** nine closed-decode and re-encode
+proofs in seven packages share the technical package `internal/canonicaljson`
+(encode with a bare or line ending, closed decode with one trailing-data rule,
+prove, size). Each format keeps its own byte bound, pre-scan, line feed, error
+codes and words, and every golden is byte-identical; a fitness test refuses a
+marshal-and-compare outside the package against a closed, shrinking allowlist.
+A plan encodes every unset list of its blocks as `[]`, not `null`, which moves
+every plan digest, and a plan an earlier build froze with `null` refuses on read
+with the remedy to destroy the context with the build that registered it. Every
+frozen-request decoder, the libvirt host and machine, bare-metal, installation,
+artifact-server, cluster media and install and controller prerequisites among
+them, reads the request version first through one call, names it and gives that
+remedy.
+
+**Outcome, B382, B383, B404 and B406:** `validate` and `plan` refuse earlier and
+name their object. A managed ArtifactServer, Proxy, DNSServer or NTPServer name
+longer than 63 bytes minus its block prefix, 47, 57, 59 and 59, refuses at
+`metadata.name` naming the limit, and the API page states them (B406). Managed
+services refuse before registration, as refusal-table rows, a managed,
+authenticated or private-trust Proxy on the placement Machine and, for a
+placement Machine other than the controller, an `operatorIdentity`, a
+`passwordRef` or a missing `knownHostsRef` (B382). Every Proxy consumer holds
+the proxy grammar: an external Proxy's endpoint that is a URL but not a bare
+endpoint and each `noProxy` entry outside the bypass grammar refuses at its own
+field on a Machine, an install profile, a cluster installation or an
+Environment default, and the remedy names no field path of another object
+(B383). An ArtifactServer's `contextStore` serving certificate is proved for
+coverage, expiry and usage when a fresh apply binds it, before registration,
+and missing bound material refuses on its Secret with a remedy carrying
+`--context` (B404, D66).
+
+**Outcome, B233 in part:** the managed service's list of unsupported names and
+the test-only reporters of the libvirt, managed-OS and agent-install
+capabilities are removed. [B233](m1.md#b233) stays on M1 for the unreachable
+agent-install checks, the refusal-table tests in `make docs-check` and the
+engine's table, and for the artifact server's `Unsupported`, which now also
+lists placement-row refusals.
+
+**Review:** eleven sub-items in five lanes integrated with three textual
+conflicts, resolved keeping both sides, and one integration fix: the observation
+lane removed the managed-service package's edge to compilation from the
+architecture table and the admission lane then used it again, which the
+dependency-direction test caught. Each sub-item had its own two-lens
+verification; six needed a fix folded into their commit. The slice review, by
+reviewers that did not write the diff, raised four findings: two confirmed in
+scope, none blocking, and fixed with a test that fails with the fix reverted
+(a bypass remedy that named `spec.install.proxy` on an Environment default, and
+a foreign-listener remedy that offered a DNSServer or an NTPServer a port
+validation pins), and two not confirmed, which are kept as [B436](m1.md#b436) and
+[B443](backlog.md#b443): a destroy after a failed apply may leave an
+unreachable unit listed failed, and the canonical-JSON fitness test misses a
+marshal-and-compare split across two functions. The second round changed no
+code; its check found that M1's B299 exit evidence quoted the old remedy, which
+this record replaces with what the code does, and that the refusal names no
+colliding address for a wildcard bind ([B438](backlog.md#b438)).
+
+**Digest effects:** the second slice to move them, in X43's window. The
+automation digest moves through the shared plugins, `module_utils`, the merged
+role and the controller supervisor, so every plan digest moves with it. The
+managed-service request versions `dns-server-dnsmasq-v2`, `ntp-server-chrony-v2`
+and `proxy-squid-v2` become `managed-service-v3`, and the roles
+`infra_dns_server_dnsmasq`, `infra_ntp_server_chrony` and `infra_proxy_squid`
+become `infra_managed_service`, so every managed-service request digest, each
+definition's content digest and every plan digest of a context holding a
+managed service move; an old block still resolves to its capability and refuses
+by naming its version. Every plan digest moves again through the canonical
+encoding of unset lists as `[]`. The attempt record gains an omitted-when-unset
+`failure` and the operation record an omitted-when-unset `replaces`, with no
+record version moving; an earlier build cannot read a record that carries
+either. The controller request stays `controller-prerequisites-v5`, the
+artifact-server request, the evidence shapes, the setup record formats and every
+other golden are unchanged. **Before a build that contains X43 or X24 touches a
+host, destroy every live context with the build that applied it, then run
+`setup` once, with `--purge-old-bundles` when the host is at its bundle bound;**
+one such destroy and setup serve both slices, and the next window opens with
+[X46](m1.md#planned-slices).
+
+**Operator-visible effects:** an apply refuses a socket another daemon holds
+before it pulls, publishes or starts anything, and names it. `status` reads a replaced removal's blocks, says why a block stayed
+unknown and never offers a continuation its proofs refuse. A Squid stop ends cleanly, a destroy
+leaves no empty service directory beneath the services prefix, and the lab-rhel
+README ends its journey by listing failed units, which must be none. A
+cancelled setup or controller stage no longer leaves session-isolated workers
+running. `validate` refuses the shapes above before registration. The adapter's
+real behavior on a host is the closing run's.
+
+**Gates:** on the integrated lanes at their integration head, `make
+check-offline tidy-check modules-check vulncheck docs-check race` passed after
+one integration fix, and so did the four `./scripts/ansible-check` suites,
+units, sanity, integration and lint (no failures or warnings under the
+production profile), `./scripts/check-commits` and `git diff --check`; the fix
+rounds' heads passed the same commands. On the squashed commit, whose code is
+the fix rounds' and which differs from them only under `specs/`, the same
+`make` targets passed, and so did the four `./scripts/ansible-check` suites
+(units 227 passed, integration the controller supervisor test), `make
+docs-check`, `./scripts/check-commits` and `git diff --check`. The adversarial
+review, by reviewers that did not write the diff, is the independent review the
+safety-class items name. `make race` ran over the reconciliation, privilege and
+command packages as the Makefile defines it. Every effect on a host is unrun:
+the adapter on a live ansible-core, Squid on its pinned image and the
+cancellation of a live dnf tree are in-tree only ([B442](backlog.md#b442)). No
+real-host run.
+
+**Constraints left behind:** [B19](m1.md#b19), [B20](m1.md#b20) and
+[B270](m1.md#b270) complete on an owner-accepted ledger row of D59's closing
+run, which carries their real-host apply, destroy and no-failed-unit proofs; the
+other host observations are [B442](backlog.md#b442). The binding-proof port
+stays [B302](m1.md#b302)'s and the artifact server's `Unsupported`
+[B233](m1.md#b233)'s. Under D116 three follow-ups join M1 on X46: a destroy that
+refuses a content root with a `..` component ([B435](m1.md#b435)), the reset of
+a failed unit after a failed apply ([B436](m1.md#b436)) and three continuation
+edges ([B437](m1.md#b437)). Under D48 eight were parked: B438 to B445.

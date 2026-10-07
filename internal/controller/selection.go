@@ -268,7 +268,7 @@ func selectRoute(machine api.Object, catalog api.Catalog) (Route, error) {
 		if value.Type() != api.String || !api.ValidLexical("http-url", value.Text()) || !api.ValidLexical("proxy-endpoint", value.Text()) {
 			return Route{}, refuseSelection(proxy, "api.value", "$.spec.connection."+entry.field,
 				"the controller route requires spec.connection."+entry.field+" to be a bare HTTP or HTTPS proxy endpoint",
-				"set spec.connection."+entry.field+" on "+proxy.Identity()+" to a bare http or https endpoint such as http://proxy.example.test:3128, with no userinfo, path, query or fragment")
+				"set spec.connection."+entry.field+" on "+proxy.Identity()+" to "+api.ProxyEndpointForm)
 		}
 		*entry.target = value.Text()
 	}
@@ -290,7 +290,7 @@ func selectRoute(machine api.Object, catalog api.Catalog) (Route, error) {
 			}
 			if !api.ValidLexical("proxy-bypass", value.Text()) {
 				return Route{}, refuseSelection(machine, "api.value", field, "the controller route requires each spec.proxy.noProxy entry to be a proxy bypass entry",
-					"write "+strings.TrimPrefix(field, "$.")+" on "+machine.Identity()+" as "+bypassForms)
+					"write "+strings.TrimPrefix(field, "$.")+" on "+machine.Identity()+" as "+api.ProxyBypassForms)
 			}
 			seen[value.Text()] = true
 			route.noProxy = append(route.noProxy, value.Text())
@@ -304,9 +304,6 @@ func selectRoute(machine api.Object, catalog api.Catalog) (Route, error) {
 	}
 	return route, nil
 }
-
-// bypassForms names every accepted form of a proxy bypass entry.
-const bypassForms = "*, a host name, a .domain or *.domain suffix, an IP address or a CIDR block, each name or address optionally with :port, in at most 1024 bytes"
 
 // UnsupportedShape is one controller shape the API admits but this executable
 // cannot realize: the object and field that declare it, why, and what the

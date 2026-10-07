@@ -5,7 +5,6 @@ package ansiblelocal
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/url"
 	"os"
@@ -17,21 +16,10 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/internal/adapterprotocol"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
-
-const entrypoint = `import sys, os
-root = os.path.dirname(os.path.dirname(sys.executable))
-version = str(sys.version_info.major) + '.' + str(sys.version_info.minor)
-stdlib = root + '/lib/python' + version
-sys.path[:] = [root + '/lib/python' + version.replace('.', '') + '.zip', stdlib, stdlib + '/lib-dynload', stdlib + '/site-packages']
-assert sys.flags.isolated and sys.flags.no_site and sys.flags.dont_write_bytecode
-path = sys.argv.pop(1)
-with open(path, 'rb') as stream:
-    code = compile(stream.read(), path, 'exec')
-exec(code, {'__name__': '__main__', '__file__': path})
-`
 
 // Bounded drains for the structured result channel. A completed run only has
 // to flush what Ansible already wrote; a run whose authorized native
@@ -136,43 +124,35 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	if err := writeInvocation(job, launch, request); err != nil {
 		return result, err
 	}
-	output, childOutput, err := os.Pipe()
-	if err != nil {
-		return result, failure("controller.setup", "the Ansible result channel could not be opened")
-	}
-	defer output.Close()
-	defer childOutput.Close()
-	childInput, input, err := os.Pipe()
-	if err != nil {
-		return result, failure("controller.setup", "the Ansible authorization channel could not be opened")
-	}
-	defer childInput.Close()
-	defer input.Close()
-	command := ansibleCommand(boundary, launch, request, job, scratch)
-	command.ExtraFiles = []*os.File{childOutput, childInput}
 	// A run that retains its output is readable afterwards; one that does not
 	// discards it rather than letting it reach the operator's terminal.
-	command.Stdout, command.Stderr = io.Discard, io.Discard
+	var output io.Writer = io.Discard
 	if retain != nil {
-		command.Stdout, command.Stderr = retain, retain
+		output = retain
 	}
-	// No parent-death signal, unlike a lifecycle adapter: an authorized native
-	// transaction must outlive this invocation. The adapter stops at its next
-	// acknowledgement instead, which fails once this process's ends of both
-	// channels have closed.
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := ctx.Err(); err != nil {
-		return result, err
-	}
-	report("starting the private Ansible runtime")
-	if err := command.Start(); err != nil {
-		return result, failure("controller.setup", "the qualified Ansible process could not start")
-	}
-	childOutput.Close()
-	childInput.Close()
-	run := &protocolRun{request: request, scratch: boundary.scratchParent, release: release, publish: publish, report: report, result: result, prepared: request.Operation == "recover", preparation: request.Preparation}
+	run := &protocolRun{request: request, scratch: boundary.scratchParent, release: release, publish: publish, report: report, result: result, prepared: request.Operation == "recover", preparation: request.Preparation, completedDrain: boundary.completedDrain, authorizedDrain: boundary.authorizedDrain}
 	run.published = run.prepared
-	return run.supervise(ctx, command, output, input, boundary)
+	// No parent-death signal, unlike a lifecycle adapter: an authorized native
+	// transaction must outlive this invocation. Cancellation and the deadline
+	// signal the supervisor, which ends its whole tree, until a native
+	// acknowledgement is delivered; after it the adapter stops at its next
+	// acknowledgement, which fails once this process's ends of both channels
+	// have closed.
+	ending := adapterprotocol.Run(ctx, adapterprotocol.Invocation{
+		Loader: launch.Loader, Arguments: launch.Arguments, Environment: launch.Environment,
+		Automation: filepath.Join(request.Bundle.Path, "automation"), Playbook: "controller/setup.yml",
+		Inventory: filepath.Join(job, "inventory.json"), Variables: filepath.Join(job, "request.json"),
+		LocalTemp: filepath.Join(job, "local"), RemoteTemp: filepath.Join(job, "remote"), Scratch: scratch,
+		Output: output, Admission: adapterprotocol.Controller, Shape: preparationShape, Command: boundary.command,
+		Starting: func() error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			report("starting the private Ansible runtime")
+			return nil
+		},
+	}, run)
+	return run.outcome(ctx, ending)
 }
 
 func writeInvocation(job string, launch prerequisites.PythonLaunch, request capabilityRequest) error {
@@ -196,27 +176,6 @@ func writeInvocation(job string, launch prerequisites.PythonLaunch, request capa
 	return nil
 }
 
-func ansibleCommand(boundary processBoundary, launch prerequisites.PythonLaunch, request capabilityRequest, job, scratch string) *exec.Cmd {
-	automation := filepath.Join(request.Bundle.Path, "automation")
-	// -u is what makes the retained output readable while the run is still
-	// going. Ansible writes its callback output and lets the system flush it,
-	// so a child whose stdout is a pipe holds roughly eight kilobytes back
-	// until it exits. -E is implied by -I, so PYTHONUNBUFFERED cannot do this.
-	arguments := append(slices.Clone(launch.Arguments), "-u", "-I", "-B", "-S", "-c", entrypoint, filepath.Join(automation, "collections/ansible_collections/bootwright/core/plugins/module_utils/controller_supervisor.py"),
-		"-i", filepath.Join(job, "inventory.json"), "--extra-vars", "@"+filepath.Join(job, "request.json"),
-		filepath.Join(automation, "collections/ansible_collections/bootwright/core/playbooks/controller/setup.yml"))
-	command := boundary.command(launch.Loader, arguments...)
-	command.Dir = automation
-	command.Env = append(slices.Clone(launch.Environment),
-		"ANSIBLE_CONFIG="+filepath.Join(automation, "ansible.cfg"),
-		"ANSIBLE_COLLECTIONS_PATH="+filepath.Join(automation, "collections"),
-		"ANSIBLE_LOCAL_TEMP="+filepath.Join(job, "local"), "ANSIBLE_REMOTE_TEMP="+filepath.Join(job, "remote"),
-		"ANSIBLE_NOCOLOR=1", "ANSIBLE_FORCE_COLOR=0", "ANSIBLE_LOAD_CALLBACK_PLUGINS=0",
-		"TMPDIR="+scratch,
-		"PATH=/usr/bin:/usr/sbin")
-	return command
-}
-
 type protocolRun struct {
 	request capabilityRequest
 	// scratch is the directory a package source stages under, which a
@@ -227,7 +186,9 @@ type protocolRun struct {
 	report  func(string)
 	result  prerequisites.ActionResult
 
-	loaded, prepared, completed, canceled bool
+	completedDrain, authorizedDrain time.Duration
+
+	loaded, prepared, completed bool
 	// refused marks an internal refusal, which keeps the generic failure but
 	// is still the last record the adapter may write.
 	refused bool
@@ -239,206 +200,106 @@ type protocolRun struct {
 	preparation              *prerequisites.NativePreparation
 	continuations            int
 	native, nativeAuthorized bool
-	operationErr             error
-	// exited marks an operationErr that is only the adapter's failed exit. A
-	// record the adapter wrote before it exited can be read after that exit,
-	// and is judged as if it had been read first: the refusal it names, or a
-	// record the runner refuses, then replaces the failure.
-	exited bool
 }
 
-func (run *protocolRun) supervise(ctx context.Context, command *exec.Cmd, output, input *os.File, boundary processBoundary) (prerequisites.ActionResult, error) {
-	waited := make(chan error, 1)
-	go func() { waited <- command.Wait() }()
-	messages := make(chan protocolMessage, 8)
-	readResult := make(chan error, 1)
-	go func() {
-		readResult <- readProtocol(output, messages)
-		close(messages)
-	}()
-	var drain <-chan time.Time
-	var drainTimer *time.Timer
-	defer func() {
-		if drainTimer != nil {
-			drainTimer.Stop()
-		}
-	}()
-	// A descendant that inherited the result channel keeps it open after the
-	// Ansible process itself is gone, so every path that ends the operation
-	// arms a bounded drain. Without one this loop waits on that descendant
-	// forever, outliving even the operation deadline.
-	armDrain := func(grace time.Duration) {
-		if drainTimer != nil {
-			return
-		}
-		drainTimer = time.NewTimer(grace)
-		drain = drainTimer.C
+// Spare reports that only an authorized native transaction may outlive
+// cancellation. Durable intent alone is not installation, and a recovery run
+// starts already prepared.
+func (run *protocolRun) Spare() bool { return run.nativeAuthorized }
+
+// Drain is the grace a descendant holding the result channel gets: a prepared
+// or cancelled run may still have an authorized native transaction holding it,
+// so it drains on the longer grace period.
+func (run *protocolRun) Drain(canceled bool) time.Duration {
+	if canceled || run.published {
+		return run.authorizedDrain
 	}
-	cancelled := ctx.Done()
-	for messages != nil || waited != nil {
-		select {
-		case <-cancelled:
-			cancelled = nil
-			run.cancel(input, command.Process)
-			// An authorized native transaction is left running, so its channel
-			// is drained on a grace period rather than closed immediately.
-			armDrain(boundary.authorizedDrain)
-		case <-drain:
-			drain = nil
-			output.Close()
-			if run.operationErr == nil {
-				run.operationErr = failure("controller.unknown", "Ansible descendants retained the result channel after completion")
-			}
-		case waitErr := <-waited:
-			waited = nil
-			// A prepared run may still have an authorized native transaction
-			// holding the channel, so it drains on the longer grace period.
-			if run.published {
-				armDrain(boundary.authorizedDrain)
-			} else {
-				armDrain(boundary.completedDrain)
-			}
-			if waitErr != nil && run.operationErr == nil {
-				run.operationErr = failure("controller.setup", "Ansible did not complete the authorized dependency operation")
-				run.exited = true
-			}
-		case message, open := <-messages:
-			if !open {
-				messages = nil
-				run.channelClosed(<-readResult, input)
-				continue
-			}
-			run.judge(ctx, message)
-			run.acknowledge(ctx, message, input)
-			if run.canceled {
-				cancelled = nil
-			}
-		}
-	}
-	return run.outcome(ctx)
+	return run.completedDrain
 }
 
-func (run *protocolRun) cancel(input *os.File, process *os.Process) {
-	if run.canceled {
-		return
-	}
-	run.canceled = true
-	input.Close()
-	// Only an authorized native transaction may outlive
-	// cancellation. Durable intent alone is not installation, and a
-	// recovery run starts already prepared.
-	if !run.nativeAuthorized {
-		_ = syscall.Kill(-process.Pid, syscall.SIGKILL)
-	}
-}
-
-func (run *protocolRun) channelClosed(err error, input *os.File) {
-	if err == nil {
-		return
-	}
-	// A read the drain's close ends is the runner's own and no
-	// record the adapter wrote, so it leaves the failed exit.
-	if run.operationErr == nil || run.exited && !errors.Is(err, os.ErrClosed) {
-		run.operationErr, run.exited = failure("controller.unknown", "the Ansible structured result was incomplete"), false
-	}
-	// A refused or unreadable record ends the protocol at once:
-	// the closed authorization channel fails a waiting adapter.
-	// Nothing is killed, so an authorized native transaction
-	// runs to its end and its channel is drained as usual.
-	input.Close()
-}
-
-func (run *protocolRun) judge(ctx context.Context, message protocolMessage) {
-	request := run.request
-	// A record read after the failed exit is judged as if it had been
-	// read first, but its adapter is gone, so nothing is released,
-	// published, authorized, reported or acknowledged for it. A valid
-	// one leaves that failure, except the named refusal, which
-	// replaces it.
-	valid := !run.completed && !run.refused && (run.operationErr == nil || run.exited) && !run.canceled
-	switch message.Phase {
+// Judge judges one record. A record read after the failed exit is judged as if
+// it had been read first, but its adapter is gone, so nothing is released,
+// published, authorized, reported or acknowledged for it. A valid one leaves
+// that failure, except the named refusal, which replaces it.
+func (run *protocolRun) Judge(ctx context.Context, record adapterprotocol.Record, moment adapterprotocol.Moment) adapterprotocol.Verdict {
+	request, exited := run.request, moment.Exited
+	valid := !run.completed && !run.refused && moment.Open
+	verdict := adapterprotocol.Verdict{Acknowledge: record.Phase != "completed" && record.Phase != "refused"}
+	switch record.Phase {
 	case "loaded":
-		valid = valid && !run.loaded && message.Preparation == nil && message.Outcome == "" && len(message.Evidence) == 0
-		if valid && run.exited {
+		valid = valid && !run.loaded
+		if valid && exited {
 			run.loaded = true
 		} else if valid {
-			run.operationErr = run.release()
-			run.loaded = run.operationErr == nil
+			verdict.Failure = run.release()
+			run.loaded = verdict.Failure == nil
 		}
-		if run.loaded && !run.exited && request.Operation == "recover" {
+		if run.loaded && !exited && request.Operation == "recover" {
 			run.report("verifying the recorded native transaction")
-		} else if run.loaded && !run.exited {
+		} else if run.loaded && !exited {
 			run.report("reading the native package inventory")
 		}
 	case "prepared":
-		valid = valid && run.loaded && !run.prepared && message.Preparation != nil && run.publish != nil && validPreparation(*message.Preparation, request)
-		if valid && !run.exited {
-			run.operationErr = run.publish(ctx, *message.Preparation)
-			run.published = run.operationErr == nil
+		var preparation prerequisites.NativePreparation
+		valid = valid && run.loaded && !run.prepared && json.Unmarshal(record.Preparation, &preparation) == nil && run.publish != nil && validPreparation(preparation, request)
+		if valid && !exited {
+			verdict.Failure = run.publish(ctx, preparation)
+			run.published = verdict.Failure == nil
 		}
-		if valid && (run.exited || run.published) {
+		if valid && (exited || run.published) {
 			run.prepared = true
-			copy := *message.Preparation
-			copy.AddedSources = slices.Clone(copy.AddedSources)
-			run.preparation = &copy
+			preparation.AddedSources = slices.Clone(preparation.AddedSources)
+			run.preparation = &preparation
 		}
 	case "native":
 		valid = valid && run.loaded && run.prepared && !run.native && run.preparation != nil && nativeChanges(request) > 0
 		run.native = run.native || valid
-		if valid && !run.exited {
-			run.nativeAuthorized = true
-			run.report("installing " + countNoun(nativeChanges(request), "native package"))
-		}
 	case "continue":
 		valid = valid && run.loaded && run.prepared && run.continuations < len(request.Tools)
 		if valid {
 			run.continuations++
 		}
-		if valid && !run.exited {
+		if valid && !exited {
 			tool := request.Tools[run.continuations-1]
 			run.report("installing " + tool.Kind + " " + tool.Version + ", tool " + strconv.Itoa(run.continuations) + " of " + strconv.Itoa(len(request.Tools)))
 		}
 	case "completed":
-		valid = valid && run.loaded && run.prepared && (message.Outcome == "changed" || message.Outcome == "unchanged" && !run.native) && run.continuations == len(request.Tools) && (request.Operation == "recover" || run.native == (run.preparation != nil && nativeChanges(request) > 0)) && validEvidence(message.Evidence, request, run.preparation, run.native)
+		valid = valid && run.loaded && run.prepared && (record.Outcome == "changed" || record.Outcome == "unchanged" && !run.native) && run.continuations == len(request.Tools) && (request.Operation == "recover" || run.native == (run.preparation != nil && nativeChanges(request) > 0)) && validEvidence(record.Evidence, request, run.preparation, run.native)
 		run.completed = run.completed || valid
-		if valid && !run.exited {
-			run.result = prerequisites.ActionResult{Outcome: message.Outcome, Evidence: slices.Clone(message.Evidence)}
-		}
 	case "refused":
 		// The adapter names the one refusal with a remedy of its own
 		// before it fails, for the tool it is installing.
-		if message.Reason == "release-stamp" {
-			valid = valid && run.loaded && run.prepared && run.continuations > 0 &&
-				message.Reason == "release-stamp" && request.Tools[run.continuations-1].Kind == "openshift-clients"
+		if record.Reason == "release-stamp" {
+			valid = valid && run.loaded && run.prepared && run.continuations > 0 && request.Tools[run.continuations-1].Kind == "openshift-clients"
 			if valid {
-				run.operationErr, run.exited = prerequisites.UnreleasedClient(request.Tools[run.continuations-1]), false
+				verdict.Failure = prerequisites.UnreleasedClient(request.Tools[run.continuations-1])
 			}
 			break
 		}
 		// Any other refusal names its class, and an acquisition the
 		// source it was acquiring. An internal native refusal has no
 		// remedy of its own, so it leaves the generic failure.
-		host, area, acquiring := run.refusedSource(message.Source)
+		host, area, acquiring := run.refusedSource(record.Source)
 		valid = valid && run.loaded && acquiring
-		if valid && message.Reason == "internal" && message.Source == "" {
+		if valid && record.Reason == "internal" && record.Source == "" {
 			run.refused = true
 		} else if valid {
-			var refusal error
-			if refusal, valid = prerequisites.AdapterRefusal(message.Reason, host, area, run.nativeAuthorized); valid {
-				run.operationErr, run.exited = refusal, false
-			}
+			verdict.Failure, valid = prerequisites.AdapterRefusal(record.Reason, host, area, run.nativeAuthorized)
 		}
 	default:
 		valid = false
 	}
-	if !valid {
-		// A record the runner refuses breaks the protocol whichever of
-		// it and the failed exit is read first, so it replaces that
-		// failure, and the failure is unknown in either order.
-		if run.operationErr == nil || run.exited {
-			run.operationErr = failure("controller.unknown", "the Ansible capability protocol was invalid")
-		}
-		run.exited = false
+	verdict.Valid = valid
+	return verdict
+}
+
+// Acknowledged records what a delivered acknowledgement authorizes: only a
+// native record's, which lets the adapter start its transaction. One whose
+// delivery failed authorizes nothing.
+func (run *protocolRun) Acknowledged(record adapterprotocol.Record) {
+	if record.Phase == "native" {
+		run.nativeAuthorized = true
+		run.report("installing " + countNoun(nativeChanges(run.request), "native package"))
 	}
 }
 
@@ -470,42 +331,49 @@ func (run *protocolRun) refusedSource(source string) (string, string, bool) {
 	return parsed.Hostname(), area, true
 }
 
-func (run *protocolRun) acknowledge(ctx context.Context, message protocolMessage, input *os.File) {
-	if ctx.Err() != nil {
-		run.canceled = true
-	}
-	// A refused record is the adapter's last and waits for nothing, so it is
-	// never acknowledged: the closed channel ends the protocol.
-	if run.operationErr != nil || run.canceled || message.Phase == "refused" {
-		input.Close()
-	} else if message.Phase != "completed" {
-		if _, err := input.Write([]byte("proceed\n")); err != nil {
-			run.operationErr = failure("controller.unknown", "Ansible authorization delivery was uncertain")
-		}
-	}
-}
-
-func (run *protocolRun) outcome(ctx context.Context) (prerequisites.ActionResult, error) {
-	if run.canceled {
+func (run *protocolRun) outcome(ctx context.Context, ending adapterprotocol.Ending) (prerequisites.ActionResult, error) {
+	var err error
+	switch ending.Kind {
+	case adapterprotocol.Aborted:
+		return run.result, ending.Failure
+	case adapterprotocol.ResultChannel:
+		return run.result, failure("controller.setup", "the Ansible result channel could not be opened")
+	case adapterprotocol.AuthorizationChannel:
+		return run.result, failure("controller.setup", "the Ansible authorization channel could not be opened")
+	case adapterprotocol.NotStarted:
+		return run.result, failure("controller.setup", "the qualified Ansible process could not start")
+	case adapterprotocol.Canceled:
 		return actionResult("unknown", run.published), ctx.Err()
+	case adapterprotocol.Completed:
+		return prerequisites.ActionResult{Outcome: ending.Outcome, Evidence: slices.Clone(ending.Evidence)}, nil
+	case adapterprotocol.Named:
+		err = ending.Failure
+	case adapterprotocol.Retained:
+		err = failure("controller.unknown", "Ansible descendants retained the result channel after completion")
+	case adapterprotocol.RetainedOutput:
+		err = failure("controller.unknown", "Ansible descendants retained its output after it exited")
+	case adapterprotocol.FailedExit:
+		err = failure("controller.setup", "Ansible did not complete the authorized dependency operation")
+	case adapterprotocol.Incomplete:
+		err = failure("controller.unknown", "the Ansible structured result was incomplete")
+	case adapterprotocol.Invalid:
+		err = failure("controller.unknown", "the Ansible capability protocol was invalid")
+	case adapterprotocol.Uncertain:
+		err = failure("controller.unknown", "Ansible authorization delivery was uncertain")
+	default:
+		err = failure("controller.unknown", "the Ansible operation has no complete result")
 	}
-	if run.operationErr != nil || !run.completed {
-		if run.operationErr == nil {
-			run.operationErr = failure("controller.unknown", "the Ansible operation has no complete result")
-		}
-		// Setup's own run that failed before Go acknowledged a native record
-		// authorized nothing: the adapter cannot start its transaction before
-		// that acknowledgement, so the preparation it published records a
-		// failure the next setup replaces.
-		if run.published && !run.nativeAuthorized && ownSetup(run.request) {
-			return actionResult("failed", true), run.operationErr
-		}
-		if run.published {
-			return actionResult("unknown", true), run.operationErr
-		}
-		return run.result, run.operationErr
+	// Setup's own run that failed before Go acknowledged a native record
+	// authorized nothing: the adapter cannot start its transaction before
+	// that acknowledgement, so the preparation it published records a
+	// failure the next setup replaces.
+	if run.published && !run.nativeAuthorized && ownSetup(run.request) {
+		return actionResult("failed", true), err
 	}
-	return run.result, nil
+	if run.published {
+		return actionResult("unknown", true), err
+	}
+	return run.result, err
 }
 
 // ownSetup is setup's own run: it publishes into the bundle it executes and

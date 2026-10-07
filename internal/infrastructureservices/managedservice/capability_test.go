@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 const testContext = "lab"
@@ -50,8 +51,8 @@ func catalogOf(objects ...api.Object) api.Catalog { return api.NewCatalog(object
 
 func testDefinition() Definition {
 	return Definition{
-		Kind: api.Proxy, Implementation: "proxy-squid-v1", Version: "proxy-squid-v1",
-		Slug: "proxy", Variable: "bootwright_proxy", Purpose: "proxy egress",
+		Kind: api.Proxy, Implementation: "proxy-squid-v1", Version: RequestVersion,
+		Slug: "proxy", Variable: Variable, Purpose: "proxy egress",
 		Image: "registry.example.test/squid@sha256:" + strings.Repeat("a", 64),
 		Extend: func(catalog api.Catalog, _ api.Value, request *Request) error {
 			request.Clients = Clients(catalog)
@@ -104,7 +105,7 @@ func TestRequestCanonicalFormIsStableAndOrdered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoded, err := DecodeRequest(canonical, "proxy-squid-v1")
+	decoded, err := DecodeRequest(canonical, RequestVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +116,7 @@ func TestRequestCanonicalFormIsStableAndOrdered(t *testing.T) {
 	if _, err := DecodeRequest(canonical, "proxy-squid-v2"); err == nil {
 		t.Fatal("a request of another version decoded")
 	}
-	if _, err := DecodeRequest(append(slices.Clone(canonical), '{'), "proxy-squid-v1"); err == nil {
+	if _, err := DecodeRequest(append(slices.Clone(canonical), '{'), RequestVersion); err == nil {
 		t.Fatal("trailing data decoded")
 	}
 }
@@ -607,7 +608,7 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			runner := &scriptedRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: tc.evidence}, err: tc.err}
 			observation, err := NewCapability(testDefinition(), runner).ObserveRemoval(context.Background(), call)
-			if err != nil || observation.Effect != tc.want {
+			if !errors.Is(err, tc.err) || observation.Effect != tc.want {
 				t.Fatalf("removal observation = %+v (%v), want %s", observation, err, tc.want)
 			}
 			if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" {
@@ -720,4 +721,78 @@ func clusterCatalog() api.Catalog {
 		))),
 	))
 	return api.NewCatalog([]api.Object{clusterEnvironment(), controller(), network, node, cluster})
+}
+
+func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
+	catalog := catalogOf(controller(), service(api.Proxy, "lab-proxy"))
+	plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext},
+		State: compilation.NewState(catalog, catalog, nil), Controller: "controller",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := reconciliation.NewPlan(reconciliation.Apply, plan.Definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := lifecycle.Execution{Operation: "op-1", Attempt: 1, Block: frozen.Blocks[0]}
+	request, err := DecodeRequest(call.Block.Request, testDefinition().Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reason := "foreign-listener-" + FormatPort(request.Port)
+	recorder := &scriptedRunner{err: errors.New("unused")}
+	if _, err := NewCapability(testDefinition(), recorder).Apply(context.Background(), call); err == nil {
+		t.Fatal("a failed run was accepted")
+	}
+	if len(recorder.requests) != 1 || len(recorder.requests[0].Refusals) != 1 || recorder.requests[0].Refusals[reason] == nil {
+		t.Fatalf("the runner was handed refusals %v, want exactly %s", recorder.requests[0].Refusals, reason)
+	}
+	runner := &scriptedRunner{err: recorder.requests[0].Refusals[reason]}
+	result, err := NewCapability(testDefinition(), runner).Apply(context.Background(), call)
+	if result.Outcome != reconciliation.OutcomeFailed {
+		t.Fatalf("a foreign listener's refusal = %+v (%v), want failed", result, err)
+	}
+	socket := HostPort(request.BindAddress, request.Port)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Name != request.Identity.Service ||
+		!strings.Contains(reported[0].Message, socket) || reported[0].Remediation == "" {
+		t.Fatalf("the refusal = %#v, want one naming %s on %s", reported, socket, request.Identity.Service)
+	}
+}
+
+// An observation that cannot run returns the runner's failure and leaves the
+// effect unknown. It logs nothing itself: the engine records the failure.
+func TestAnObservationReturnsTheRunnersFailure(t *testing.T) {
+	catalog := catalogOf(controller(), service(api.Proxy, "lab-proxy"))
+	plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext},
+		State: compilation.NewState(catalog, catalog, nil), Controller: "controller",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := reconciliation.NewPlan(reconciliation.Apply, plan.Definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logged := 0
+	call := lifecycle.Execution{Operation: "op-1", Attempt: 1, Block: frozen.Blocks[0], Log: func(context.Context, operationstore.LogRecord) error {
+		logged++
+		return nil
+	}}
+	failed := Refusal("lifecycle.state", "the adapter could not reach the host", "restore it")
+	capability := NewCapability(testDefinition(), &scriptedRunner{err: failed})
+	for name, observe := range map[string]func(context.Context, lifecycle.Execution) (lifecycle.Observation, error){
+		"observe": capability.Observe, "observe removal": capability.ObserveRemoval,
+	} {
+		observation, err := observe(context.Background(), call)
+		if !slices.Equal(diagnostics.Of(err), diagnostics.Of(failed)) || observation.Effect != reconciliation.EffectUnknown {
+			t.Fatalf("%s = %+v (%v), want unknown with the runner's failure", name, observation, diagnostics.Of(err))
+		}
+	}
+	if logged != 0 {
+		t.Fatalf("the capability logged %d records, want none", logged)
+	}
 }

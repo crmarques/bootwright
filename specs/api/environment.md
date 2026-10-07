@@ -428,17 +428,12 @@ Each service declares any connection trust it requires separately.
 
 The controller Machine's route follows the grammar every acquisition route
 shares, the one the [context-free route](../controller.md#the-context-free-acquisition-route)
-reads from the environment. Admission refuses, on this Environment at
-`spec.controller.machineRef` with `api.value`, each `spec.proxy.noProxy` entry
-of the controller Machine that is not `*`, a host name, a `.domain` or
-`*.domain` suffix, an IP address or a CIDR block, each name or address
-optionally with `:port` and an IPv6 address bracketed before one; and each
-`connection.httpProxy` or `connection.httpsProxy` of the external Proxy that
-Machine selects that is not a bare `http` or `https` endpoint: at most 4096
-ASCII bytes with a host and no `userinfo`, path, query or fragment. Its
-diagnostic names the field, never the value, and a value the Proxy's own
-schema already refuses is left to that refusal. This grammar holds a Proxy's
-endpoints only where the controller selects it. Admission never refuses a
+reads from the environment. That grammar is held where each value is declared,
+for every consumer: a Proxy's endpoints by
+[its own admission](infrastructure-services.md#proxy-dns-ntp-and-registry-deployment),
+and each bypass entry by the [proxy choice](infrastructure-services.md#proxy-choice)
+that declares it, each naming its field and never the value. This Environment
+therefore adds no refusal of its own. Admission never refuses a
 shape only this executable cannot realize: those are the controller's, and
 refuse before registration as the table below states.
 

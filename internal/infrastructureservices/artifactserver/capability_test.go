@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -294,7 +296,7 @@ func TestObserveMapsLiveEvidenceToItsEffectState(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			runner := &fakeRunner{result: tc.result, err: tc.err}
 			observation, err := New(runner, fixedClock{}).Observe(context.Background(), call)
-			if err != nil || observation.Effect != tc.want {
+			if !errors.Is(err, tc.err) || observation.Effect != tc.want {
 				t.Fatalf("observation = %+v (%v), want %s", observation, err, tc.want)
 			}
 		})
@@ -368,7 +370,7 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			runner := &fakeRunner{result: tc.result, err: tc.err}
 			observation, err := New(runner, fixedClock{}).ObserveRemoval(context.Background(), call)
-			if err != nil || observation.Effect != tc.want {
+			if !errors.Is(err, tc.err) || observation.Effect != tc.want {
 				t.Fatalf("removal observation = %+v (%v), want %s", observation, err, tc.want)
 			}
 			if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" {
@@ -420,5 +422,36 @@ func TestUnconfiguredCapabilityPerformsNoWork(t *testing.T) {
 	cancel()
 	if _, err := New(&fakeRunner{}, fixedClock{}).Apply(ctx, execution(t, material)); !errors.Is(err, context.Canceled) {
 		t.Fatalf("a canceled attempt = %v", err)
+	}
+}
+
+func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
+	material, _ := issue(t, validOptions())
+	call := execution(t, material)
+	request, err := DecodeRequest(call.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := &fakeRunner{err: errors.New("unused")}
+	if _, err := New(recorder, fixedClock{}).Apply(context.Background(), call); err == nil {
+		t.Fatal("a failed run was accepted")
+	}
+	if len(recorder.requests) != 1 {
+		t.Fatalf("adapter invocations = %d", len(recorder.requests))
+	}
+	refusals := recorder.requests[0].Refusals
+	if keys := slices.Sorted(maps.Keys(refusals)); !slices.Equal(keys, []string{"foreign-listener-8080", "foreign-listener-8443"}) {
+		t.Fatalf("the runner was handed refusals %v, want one per listener port", keys)
+	}
+	runner := &fakeRunner{err: refusals["foreign-listener-8443"]}
+	result, err := New(runner, fixedClock{}).Apply(context.Background(), call)
+	if result.Outcome != reconciliation.OutcomeFailed {
+		t.Fatalf("a foreign listener's refusal = %+v (%v), want failed", result, err)
+	}
+	socket := managedservice.HostPort(request.BindAddress, 8443)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Kind != Kind ||
+		reported[0].Object.Name != request.Identity.Service || !strings.Contains(reported[0].Message, socket) {
+		t.Fatalf("the refusal = %#v, want one naming %s on %s/%s", reported, socket, Kind, request.Identity.Service)
 	}
 }

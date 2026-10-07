@@ -8,6 +8,8 @@ safe to print should it ever be.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from ansible_collections.bootwright.core.plugins.action import (
     artifact_server_protocol,
     infra_service_protocol,
@@ -95,3 +97,17 @@ def test_only_an_observation_publishes_an_unmet_postcondition():
         assert protocol.publishes({"postcondition": False}, True)
         assert not protocol.publishes({"postcondition": False}, False)
         assert not protocol.publishes({"postcondition": False}, None)
+
+
+# A managed service checks its socket before it starts its unit, and something
+# else already listening there is refused through the protocol's refused record,
+# which the runner reports as the service's own diagnostic naming that socket.
+def test_a_managed_service_hands_a_foreign_listener_refusal(monkeypatch):
+    records = []
+    monkeypatch.setattr(
+        infra_service_protocol, "emit", lambda record, acknowledge=False: records.append((record, acknowledge)),
+    )
+    action = infra_service_protocol.ActionModule.__new__(infra_service_protocol.ActionModule)
+    action._task = SimpleNamespace(args={"phase": "refused", "reason": "foreign-listener", "port": 53})
+    assert action.run(task_vars={}) == {"changed": False}
+    assert records == [({"phase": "refused", "reason": "foreign-listener-53"}, False)]

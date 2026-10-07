@@ -7,10 +7,8 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -307,17 +305,7 @@ func (c HostCapability) mutate(ctx context.Context, execution lifecycle.Executio
 // storage driver that does not answer reports no network and no pool, so it
 // proves nothing: silence with nothing else of this context's is unknown.
 func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request HostRequest, digest string) reconciliation.EffectState {
-		switch {
-		case ValidateHostPresence(evidence, request, digest) == nil:
-			return reconciliation.EffectCompleted
-		case ValidateHostAbsence(evidence, digest) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidateHostPartial(evidence, digest) == nil:
-			return reconciliation.EffectPartial
-		}
-		return reconciliation.EffectUnknown
-	})
+	return c.observe(ctx, execution, reconciliation.Apply)
 }
 
 // ObserveRemoval reads the same observation for what a removal takes back, not
@@ -330,22 +318,43 @@ func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Executi
 // connection or driver that does not answer proves none of them absent, so it
 // stays unknown.
 func (c HostCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request HostRequest, digest string) reconciliation.EffectState {
+	return c.observe(ctx, execution, reconciliation.Destroy)
+}
+
+// hostEffect is the one reading of a provider host observation for the verb
+// the block was frozen for: an apply's checks are its presence, absence and
+// partial forms, a removal's its absence, unremoved and unfinished forms, each
+// in that order. When none accepts the evidence the effect is unknown, and the
+// refusal that decided it comes back with it: the presence check's for an
+// apply, the unfinished removal's for a removal.
+func hostEffect(verb reconciliation.Verb, evidence []byte, request HostRequest, digest string) (reconciliation.EffectState, error) {
+	if verb == reconciliation.Destroy {
 		switch {
 		case ValidateHostAbsence(evidence, digest) == nil:
-			return reconciliation.EffectCompleted
+			return reconciliation.EffectCompleted, nil
 		case ValidateHostUnremoved(evidence, request, digest) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidateHostRemovalUnfinished(evidence, request, digest) == nil:
-			return reconciliation.EffectPartial
+			return reconciliation.EffectNoEffect, nil
 		}
-		return reconciliation.EffectUnknown
-	})
+		if err := ValidateHostRemovalUnfinished(evidence, request, digest); err != nil {
+			return reconciliation.EffectUnknown, err
+		}
+		return reconciliation.EffectPartial, nil
+	}
+	presence := ValidateHostPresence(evidence, request, digest)
+	switch {
+	case presence == nil:
+		return reconciliation.EffectCompleted, nil
+	case ValidateHostAbsence(evidence, digest) == nil:
+		return reconciliation.EffectNoEffect, nil
+	case ValidateHostPartial(evidence, digest) == nil:
+		return reconciliation.EffectPartial, nil
+	}
+	return reconciliation.EffectUnknown, presence
 }
 
 // observe runs the one read-only observation both resolutions share and reads
 // its evidence for the verb the block was frozen for.
-func (c HostCapability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, HostRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
+func (c HostCapability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution)
 	if err != nil {
@@ -353,10 +362,10 @@ func (c HostCapability) observe(ctx context.Context, execution lifecycle.Executi
 	}
 	result, err := c.run(ctx, execution, "observe", request)
 	if err != nil {
-		recordObservationFailure(ctx, execution, err)
-		return unknown, nil
+		return unknown, err
 	}
-	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest), Evidence: result.Evidence}, nil
+	effect, _ := hostEffect(verb, result.Evidence, request, execution.Block.RequestDigest)
+	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
 func (c HostCapability) prepare(ctx context.Context, execution lifecycle.Execution) (HostRequest, error) {
@@ -434,17 +443,7 @@ func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execu
 // positive no effect; this context's own domain, controller or disks part way
 // realized is positive partial; a foreign domain stays unknown.
 func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request MachineRequest, digest string) reconciliation.EffectState {
-		switch {
-		case ValidateMachinePresence(evidence, request, digest) == nil:
-			return reconciliation.EffectCompleted
-		case ValidateMachineAbsence(evidence, digest) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidateMachinePartial(evidence, digest) == nil:
-			return reconciliation.EffectPartial
-		}
-		return reconciliation.EffectUnknown
-	})
+	return c.observe(ctx, execution, reconciliation.Apply)
 }
 
 // ObserveRemoval reads the same observation for what a removal takes back, not
@@ -457,22 +456,43 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 // converges, whatever the apply's postcondition says. A listener alone is not
 // proved to be this Machine's, so it stays unknown.
 func (c MachineCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request MachineRequest, digest string) reconciliation.EffectState {
+	return c.observe(ctx, execution, reconciliation.Destroy)
+}
+
+// machineEffect is the one reading of a machine observation for the verb the
+// block was frozen for: an apply's checks are its presence, absence and
+// partial forms, a removal's its absence, unremoved and unfinished forms, each
+// in that order. When none accepts the evidence the effect is unknown, and the
+// refusal that decided it comes back with it: the presence check's for an
+// apply, the unfinished removal's for a removal.
+func machineEffect(verb reconciliation.Verb, evidence []byte, request MachineRequest, digest string) (reconciliation.EffectState, error) {
+	if verb == reconciliation.Destroy {
 		switch {
 		case ValidateMachineAbsence(evidence, digest) == nil:
-			return reconciliation.EffectCompleted
+			return reconciliation.EffectCompleted, nil
 		case ValidateMachineUnremoved(evidence, request, digest) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidateMachineRemovalUnfinished(evidence, request, digest) == nil:
-			return reconciliation.EffectPartial
+			return reconciliation.EffectNoEffect, nil
 		}
-		return reconciliation.EffectUnknown
-	})
+		if err := ValidateMachineRemovalUnfinished(evidence, request, digest); err != nil {
+			return reconciliation.EffectUnknown, err
+		}
+		return reconciliation.EffectPartial, nil
+	}
+	presence := ValidateMachinePresence(evidence, request, digest)
+	switch {
+	case presence == nil:
+		return reconciliation.EffectCompleted, nil
+	case ValidateMachineAbsence(evidence, digest) == nil:
+		return reconciliation.EffectNoEffect, nil
+	case ValidateMachinePartial(evidence, digest) == nil:
+		return reconciliation.EffectPartial, nil
+	}
+	return reconciliation.EffectUnknown, presence
 }
 
 // observe runs the one read-only observation both resolutions share and reads
 // its evidence for the verb the block was frozen for.
-func (c MachineCapability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, MachineRequest, string) reconciliation.EffectState) (lifecycle.Observation, error) {
+func (c MachineCapability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution)
 	if err != nil {
@@ -480,10 +500,10 @@ func (c MachineCapability) observe(ctx context.Context, execution lifecycle.Exec
 	}
 	result, err := c.run(ctx, execution, "observe", request)
 	if err != nil {
-		recordObservationFailure(ctx, execution, err)
-		return unknown, nil
+		return unknown, err
 	}
-	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest), Evidence: result.Evidence}, nil
+	effect, _ := machineEffect(verb, result.Evidence, request, execution.Block.RequestDigest)
+	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
 func (c MachineCapability) prepare(ctx context.Context, execution lifecycle.Execution) (MachineRequest, error) {
@@ -519,19 +539,6 @@ func usableOutcome(result lifecycle.RunResult, subject string) (reconciliation.O
 		return reconciliation.OutcomeUnchanged, nil
 	}
 	return "", refusal("lifecycle.state", "the "+subject+" adapter reported no usable outcome", "")
-}
-
-// recordObservationFailure keeps the reason a resolution could not observe,
-// because without it a resolution loop reports only that it could not resolve.
-func recordObservationFailure(ctx context.Context, execution lifecycle.Execution, err error) {
-	if execution.Log == nil {
-		return
-	}
-	for _, reported := range diagnostics.Of(err) {
-		_ = execution.Log(ctx, operationstore.LogRecord{
-			Event: "observation-failed", Block: execution.Block.ID, Detail: reported.Code + ": " + reported.Message,
-		})
-	}
 }
 
 // Unsupported refuses every selected object neither capability can realize,

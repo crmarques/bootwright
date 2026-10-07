@@ -24,6 +24,18 @@ ownership of the external service.
 | `spec.image.local` | string | With `image` | Local image reference. |
 | `spec.image.public` | string | With `image` | Public image reference. |
 
+A managed service plans one lifecycle block whose identity is its name behind
+a fixed prefix, and a block identity is at most 63 bytes. Validate therefore
+refuses a longer managed name at `metadata.name`, naming the limit; an
+external service plans no block and has no such limit.
+
+| Kind | Block identity | Name limit |
+| --- | --- | --- |
+| `ArtifactServer` | `artifact-server-<name>` | 47 |
+| `Proxy` | `proxy-<name>` | 57 |
+| `DNSServer` | `dns-<name>` | 59 |
+| `NTPServer` | `ntp-<name>` | 59 |
+
 An image block sets at least one reference. Each reference is pinned by content
 digest, `<repository>@sha256:<64 hex>`, whose digest normalizes to lowercase,
 because planning resolves no tag; validate refuses a tag at that reference, in
@@ -64,6 +76,12 @@ The four managed kinds use these deployment defaults:
 | `NTPServer` | `chrony` | `0.0.0.0` | `123` |
 | `Registry` | `mirror-registry` | `0.0.0.0` | `5000` |
 
+A wildcard default binds every address, so it collides with any other listener
+on that port, such as another resolver on the host; the apply then refuses
+before starting the service and names the socket under
+[host reservations](../infrastructure-services.md#host-reservations), and the
+examples declare an explicit bindAddress.
+
 `bindAddress` is an IP literal. A port is in `1..65535`; DNSServer permits
 only `53` and NTPServer only `123`, because their consumers configure a
 resolver or a time server by address alone. Each optional `endpoints[]` record
@@ -87,7 +105,7 @@ External forms have these exact connection fields:
 
 | Kind | Fields | Rule |
 | --- | --- | --- |
-| `Proxy` | `connection.httpProxy`, `connection.httpsProxy`, `connection.auth.proxyAuthRef`, `connection.trustBundleRef` | `connection` sets at least one absolute HTTP(S) proxy URL without userinfo. Authentication names a `usernamePassword` Secret; trust names a `caBundle` Secret. |
+| `Proxy` | `connection.httpProxy`, `connection.httpsProxy`, `connection.auth.proxyAuthRef`, `connection.trustBundleRef` | `connection` sets at least one bare HTTP(S) proxy endpoint: at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment, under the [context-free route's grammar](../controller.md#the-context-free-acquisition-route); validate refuses another at that field, naming the field and never the value. Authentication names a `usernamePassword` Secret; trust names a `caBundle` Secret. |
 | `DNSServer` | `address`, optional `additionalIngressHosts[]` | Required resolver IP, canonicalized in effective state. |
 | `NTPServer` | `address` | Required IP or DNS hostname. |
 | `Registry` | `url` | Required registry location without embedded credentials. |
@@ -169,7 +187,12 @@ A proxy choice is an atomic closed record with exactly one of scalar
 `proxyRef` to a Proxy or `direct: {}`. The proxy arm also permits optional
 `endpointRef` and ordered unique `noProxy[]` strings. `direct` accepts neither
 field. Empty objects, null, empty references, conflicting choices, and the
-former `none` selector are invalid.
+former `none` selector are invalid. Each `noProxy[]` entry is `*`, a host
+name, a `.domain` or `*.domain` suffix, an IP address or a CIDR block, each
+name or address optionally with `:port` and an IPv6 address bracketed before
+one, in at most 1024 bytes. Validate refuses another at `noProxy[<i>]` of
+whichever consumer declares the choice: a Machine, a MachineInstallProfile or a
+ContainerCluster installation.
 
 An external Proxy forbids `endpointRef`. A managed Proxy requires an explicit
 endpoint or exactly one declared endpoint, in which case normalization

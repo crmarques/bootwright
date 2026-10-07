@@ -407,7 +407,7 @@ func TestAnObservationCarriesTheOutcomeAndEvidenceItsProofPublished(t *testing.T
 	} {
 		t.Run(name, func(t *testing.T) {
 			observation, err := NewMachine(runner).Observe(context.Background(), call)
-			if err != nil || observation.Effect != reconciliation.EffectUnknown || observation.Outcome != "" {
+			if !errors.Is(err, runner.err) || observation.Effect != reconciliation.EffectUnknown || observation.Outcome != "" {
 				t.Fatalf("observation = %+v (%v), want unknown with no outcome", observation, err)
 			}
 		})

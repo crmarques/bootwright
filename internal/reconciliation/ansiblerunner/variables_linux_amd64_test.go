@@ -83,7 +83,7 @@ func requestReader(t *testing.T, job *string, written *[]byte) Runner {
 			}
 		}
 		return exec.Command("/bin/sh", "-c", `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4
-printf '{"phase":"completed","outcome":"changed","evidence":{}}\n' >&3`)
+printf '{"evidence":{"absent":false},"outcome":"changed","phase":"completed"}\n' >&3`)
 	}
 	return runner
 }

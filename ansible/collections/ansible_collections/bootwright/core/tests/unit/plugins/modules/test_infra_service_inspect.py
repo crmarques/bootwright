@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 
 import pytest
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.testing import patch_module_args
 
-from ansible_collections.bootwright.core.plugins.module_utils import infra_service
+from ansible_collections.bootwright.core.plugins.module_utils import host_sockets, infra_service
 from ansible_collections.bootwright.core.plugins.modules import infra_service_inspect as inspect
 
 UNIT = "bootwright-lab-proxy-egress"
@@ -88,3 +89,43 @@ def run(arguments, capsys):
     with patch_module_args(arguments), pytest.raises(SystemExit):
         inspect.main()
     return json.loads(capsys.readouterr().out)
+
+
+def state_host(unit, present):
+    """systemctl and podman on a host whose unit is in `unit` and whose container is or is not present."""
+    def run_command(_module, argv, check_rc=False, environ_update=None):
+        assert check_rc is False and environ_update == infra_service.ENVIRONMENT
+        if argv[:2] == [infra_service.SYSTEMCTL, "show"]:
+            return 0, unit + "\n", ""
+        if argv[:3] == [infra_service.PODMAN, "container", "exists"]:
+            return (0 if present else 1), "", ""
+        if argv[:2] == [infra_service.PODMAN, "inspect"]:
+            return (0, IMAGE + "\n", "") if present else (125, "", "no such container")
+        raise AssertionError("unexpected command %r" % (argv,))
+    return run_command
+
+
+@pytest.fixture(name="listener")
+def planted_listener(monkeypatch):
+    """A real TCP listener this process holds, read from its own socket tables in place of PID 1's."""
+    own = host_sockets.table_lines
+    monkeypatch.setattr(host_sockets, "table_lines", lambda path: own(path.replace("/proc/1/", "/proc/self/")))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(1)
+    yield sock.getsockname()[1]
+    sock.close()
+
+
+# A unit that is active, or a container that exists, may hold the socket
+# itself, so only a service with neither reads what listens there as foreign.
+@pytest.mark.parametrize("unit, present, foreign", [
+    ("active", True, False), ("failed", True, False), ("", False, True), ("failed", False, True),
+], ids=["active", "container present", "undefined", "failed"])
+def test_the_module_reports_a_listener_the_service_does_not_own(service, listener, monkeypatch, capsys, unit, present, foreign):
+    request, _configuration = service
+    request = dict(request, kind="Proxy", bindAddress="127.0.0.1", port=listener)
+    monkeypatch.setattr(AnsibleModule, "run_command", state_host(unit, present))
+    result = run({"request": request, "foreign": True}, capsys)
+    assert result["foreign"] == ([{"transport": "tcp", "address": "127.0.0.1", "port": listener}] if foreign else [])
+    assert "foreign" not in run({"request": request}, capsys)

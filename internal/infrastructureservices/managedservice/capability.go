@@ -10,7 +10,6 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -321,17 +320,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 // unknown. A fresh destroy over an incomplete apply resolves the apply's block
 // through this reading too.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request Request, digest string) reconciliation.EffectState {
-		switch {
-		case ValidatePresence(evidence, request, digest) == nil:
-			return reconciliation.EffectCompleted
-		case ValidateAbsence(evidence, digest) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidatePartial(evidence, request, digest) == nil:
-			return reconciliation.EffectPartial
-		}
-		return reconciliation.EffectUnknown
-	})
+	return c.observe(ctx, execution, reconciliation.Apply)
 }
 
 // ObserveRemoval reads the same observation for what a removal takes back, not
@@ -341,22 +330,43 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 // partial removal the next attempt converges. Only an observation that cannot
 // be made or read as this request's stays unknown.
 func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, func(evidence []byte, request Request, digest string) reconciliation.EffectState {
+	return c.observe(ctx, execution, reconciliation.Destroy)
+}
+
+// serviceEffect is the one reading of a managed service observation for the
+// verb the block was frozen for: an apply's checks are its presence, absence
+// and partial forms, a removal's its absence, unremoved and unfinished forms,
+// each in that order. When none accepts the evidence the effect is unknown,
+// and the refusal that decided it comes back with it: the presence check's for
+// an apply, the unfinished removal's for a removal.
+func serviceEffect(verb reconciliation.Verb, evidence []byte, request Request, digest string) (reconciliation.EffectState, error) {
+	if verb == reconciliation.Destroy {
 		switch {
 		case ValidateAbsence(evidence, digest) == nil:
-			return reconciliation.EffectCompleted
+			return reconciliation.EffectCompleted, nil
 		case ValidateUnremoved(evidence, request, digest) == nil:
-			return reconciliation.EffectNoEffect
-		case ValidateRemovalUnfinished(evidence, request, digest) == nil:
-			return reconciliation.EffectPartial
+			return reconciliation.EffectNoEffect, nil
 		}
-		return reconciliation.EffectUnknown
-	})
+		if err := ValidateRemovalUnfinished(evidence, request, digest); err != nil {
+			return reconciliation.EffectUnknown, err
+		}
+		return reconciliation.EffectPartial, nil
+	}
+	presence := ValidatePresence(evidence, request, digest)
+	switch {
+	case presence == nil:
+		return reconciliation.EffectCompleted, nil
+	case ValidateAbsence(evidence, digest) == nil:
+		return reconciliation.EffectNoEffect, nil
+	case ValidatePartial(evidence, request, digest) == nil:
+		return reconciliation.EffectPartial, nil
+	}
+	return reconciliation.EffectUnknown, presence
 }
 
 // observe runs the one read-only observation both resolutions share and reads
 // its evidence for the verb the block was frozen for.
-func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, read func([]byte, Request, string) reconciliation.EffectState) (lifecycle.Observation, error) {
+func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	request, err := c.prepare(ctx, execution)
 	if err != nil {
@@ -364,9 +374,10 @@ func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, 
 	}
 	result, err := c.run(ctx, execution, "observe", request)
 	if err != nil {
-		return unknown, nil
+		return unknown, err
 	}
-	return lifecycle.Observation{Effect: read(result.Evidence, request, execution.Block.RequestDigest), Evidence: result.Evidence}, nil
+	effect, _ := serviceEffect(verb, result.Evidence, request, execution.Block.RequestDigest)
+	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
 func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution) (Request, error) {
@@ -387,12 +398,9 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: c.definition.Implementation, Operation: operation, Variable: c.definition.Variable,
 		Canonical: canonical, Placement: request.Placement,
+		Refusals: ForeignListenerRefusals(request.Kind, request.Identity.Service, request.BindAddress, []int{request.Port}),
 	}))
 }
-
-// Unsupported names every managed service of this kind the capability cannot
-// realize. Every declared shape is realizable today, so the list is empty.
-func (Capability) Unsupported(*compilation.State) []string { return nil }
 
 // Quiescent is derived rather than probed. What consumes a managed service is
 // the Machines and installations of this same context, and a removal probes

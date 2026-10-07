@@ -189,6 +189,14 @@ func validProxyEndpoint(value string) bool {
 // and the controller stage's acquisition each refuse past it.
 const maxProxyBypassBytes = 1024
 
+// ProxyBypassForms names every accepted form of a proxy bypass entry, as a
+// remedy writes it.
+const ProxyBypassForms = "*, a host name, a .domain or *.domain suffix, an IP address or a CIDR block, each name or address optionally with :port, in at most 1024 bytes"
+
+// ProxyEndpointForm names the accepted form of a proxy endpoint, as a remedy
+// writes it.
+const ProxyEndpointForm = "a bare http or https endpoint such as http://proxy.example.test:3128, with no userinfo, path, query or fragment"
+
 // validProxyBypass is the one grammar of a proxy bypass entry: "*", a CIDR
 // block, an IP address, or a host name or domain suffix, written as *.domain
 // or .domain, with an optional port, an IPv6 host bracketed before one.
