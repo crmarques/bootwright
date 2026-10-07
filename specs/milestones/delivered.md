@@ -2984,7 +2984,7 @@ not what its <verb> froze: <refusal>"), and the resolution log records an
 `unresolved` line. A drifted libvirt machine's apply resolution therefore names
 its first difference. The remedy for a drifted subject is to restore it to what
 its frozen request names; destroying cannot help, because a destroy over an
-unknown apply resolves its blocks with the apply's own check ([B440](backlog.md#b440)).
+unknown apply resolves its blocks with the apply's own check ([B440](m1.md#b440)).
 
 **Outcome, B359 and B378:** a destroy that replaces a failed removal records the
 removal it replaces in an optional `replaces` member, and `status` reads the

@@ -132,7 +132,6 @@ Alias cell.
 | [B434](#b434) | new, 2026-10-07 (X43) | enabling | State reconciliation and Container cluster | One rule for a request version and the content derived within one shape | Found in X43; parked under D48 (D116); it needs a decision and moves a digest, so a digest window |
 | [B438](#b438) | new, 2026-10-07 (X24) | enabling | Infrastructure services, with State reconciliation | A wildcard bind's foreign-listener refusal names the colliding address | Found in X24; parked under D48 (D116); the refused record carries no address, and D114 accepted a refusal that names the port and the bind |
 | [B439](#b439) | new, 2026-10-07 (X24) | enabling | Infrastructure services | A realized Registry and the managed examples hold the foreign-listener rule | Found in X24; parked under D48 (D116); no Registry is realized and no example binds a managed service to a wildcard |
-| [B440](#b440) | new, 2026-10-07 (X24) | enabling | State reconciliation | A destroy over an unknown apply resolves a drifted block by what a removal needs | Found in X24; parked under D48 (D116); it changes what a resolution proves, so it needs an owner decision first |
 | [B441](#b441) | new, 2026-10-07 (X24) | enabling | Architecture | The last canonical-JSON proofs and wrappers | Found in X24; parked under D48 (D116); no behavior changes |
 | [B442](#b442) | new, 2026-10-07 (X24) | enabling | State reconciliation, with Controller and Infrastructure services | Host observations of what X24 proved only in-tree | Found in X24; parked under D48 (D116); each needs a host run, which M1's closing run (D59) provides |
 | [B443](#b443) | new, 2026-10-07 (X24) | enabling | Each test's owner | Tests X24 left narrower than they read | Found in X24; parked under D48 (D116) |
@@ -768,19 +767,6 @@ X24). **Exit evidence:** the check in a realized Registry's role, or the note
 narrowed to the kinds that have it, and a `bindAddress` in any example that
 makes one of those components managed, each with a test or a doc check.
 
-### B440
-
-A destroy over an unknown apply resolves each block with the apply's own check,
-so a machine that drifted from its frozen request (a controller on another
-image, another system UUID, a resized disk) stays unknown and the destroy
-refuses until the operator restores it by hand, although the removal's own
-check reads it as no effect. X24's reason and remedy say to restore the
-subject; they cannot say to destroy (found in X24). **Exit evidence:** the
-owner's decision on whether the resolution of a removal's blocks uses the
-removal's check and what that proves, recorded in the state-reconciliation
-spec and, if yes, a journey test in which a drifted machine's apply is unknown
-and its destroy removes it.
-
 ### B441
 
 Two canonical-JSON proofs stay allowlisted in the controller's prerequisites
@@ -1024,3 +1010,4 @@ Requires cell as `owner decision: <question>`.
 - **D116** (2026-10-06, the owner): every safety or defect follow-up a slice finds in M1's journeys joins M1, folded into the next fitting slice or a final sweep slice before the closing run (D59); enabling and wording follow-ups stay parked. This amends D56 and D48 for follow-ups found from X39 on: a safety or defect follow-up found in M1's journeys joins M1 on the planned sweep slice X46, or on an earlier planned slice whose lane already owns its files, with the Alias `new, <date> (<slice>); attached to M1 on <date> (D116)`; an enabling, wording, test-depth or knowledge follow-up stays parked under D48. M1 takes X39's parked safety and defect follow-ups B339, B340, B342 to B344, B347, B349 to B351 and B356 on X46.
 - **D117** (2026-10-06, the owner accepted the session's recommendation): B357: D65 widens, so a confirmed trust write that takes over an endpoint also drops the record of a still-declared Machine that no longer uses the context's SSH trust, the controller Machine's included, as a `remove` row in every lifecycle state, with no input edit.
 - **D118** (2026-10-06, the owner accepted the session's recommendation): B372: a file-input `secret set` replacement, `secret delete` and `secret encryption rotate` confirm before the lease and revalidate under it, as standard input does since D73, refusing with `secret.store.conflict` and writing nothing when the store changed meanwhile.
+- **D119** (2026-10-07, the owner accepted the session's recommendation): B440 joins M1 on X46: a destroy over an unknown apply resolves each block with the removal's own check, which proves the object is this context's and can be taken back, so a drifted machine is removed with its ownership proved; the state-reconciliation spec records what that resolution proves.
