@@ -173,6 +173,7 @@ spec:
 
   implementation: squid
   machineRef: acceptance-hypervisor
+  bindAddress: 192.0.2.201
 
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -185,6 +186,7 @@ spec:
 
   implementation: dnsmasq
   machineRef: acceptance-hypervisor
+  bindAddress: 192.0.2.201
 
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -197,6 +199,7 @@ spec:
 
   implementation: chrony
   machineRef: acceptance-hypervisor
+  bindAddress: 192.0.2.201
 
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -209,6 +212,7 @@ spec:
 
   implementation: mirror-registry
   machineRef: acceptance-hypervisor
+  bindAddress: 192.0.2.201
 
 ---
 apiVersion: bootwright.io/v1alpha1

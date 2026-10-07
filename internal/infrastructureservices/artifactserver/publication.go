@@ -2,6 +2,7 @@ package artifactserver
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -107,7 +108,7 @@ func EndpointURL(catalog api.Catalog, server api.Object, endpointRef, identity s
 	if !ok || port < 1 {
 		return "", refusal("api.value", "the selected listener declares no port", "correct the listener on "+server.Identity())
 	}
-	return listener.Get("protocol").Text() + "://" + address + ":" + formatPort(int(port)), nil
+	return listener.Get("protocol").Text() + "://" + managedservice.HostPort(address, int(port)), nil
 }
 
 // PlacementFor is the arm a consumer's publication runs through: the Machine

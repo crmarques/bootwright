@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/machine"
@@ -59,9 +58,11 @@ func (v *requestValues) optionalBoolean(name string) bool {
 }
 
 func (v *requestValues) strings(name string) []string {
-	value, err := v.flags.GetStringArray(name)
-	v.recordFirstError(err)
-	return slices.Clone(value)
+	if flag := v.flags.Lookup(name); flag == nil || flag.Value.Type() != "stringArray" {
+		v.recordFirstError(fmt.Errorf("flag %s is not a declared repeatable flag", name))
+		return nil
+	}
+	return arrayValue(v.flags, name)
 }
 
 func (v *requestValues) names(name string) []string {

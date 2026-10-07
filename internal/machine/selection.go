@@ -27,7 +27,7 @@ func SelectedContext(ctx context.Context, selection CurrentSelection, name strin
 	}
 	if selected == "" {
 		return "", diagnostics.NewFailureWithRemediation("context.state", "no current context is selected", "",
-			"select one with context use --name <name>")
+			"select one with bootwright context use --name <context>, or create one with bootwright context init --name <context>")
 	}
 	return selected, nil
 }

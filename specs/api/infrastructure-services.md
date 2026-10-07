@@ -24,17 +24,22 @@ ownership of the external service.
 | `spec.image.local` | string | With `image` | Local image reference. |
 | `spec.image.public` | string | With `image` | Public image reference. |
 
-An image block sets at least one reference. Each reference has an explicit
-non-`latest` version tag or content digest. The selected image belongs to this
-service; fleet defaults can supply it through the corresponding kind entry.
+An image block sets at least one reference. Each reference is pinned by content
+digest, `<repository>@sha256:<64 hex>`, whose digest normalizes to lowercase,
+because planning resolves no tag; validate refuses a tag at that reference, in
+kind defaults too. The selected image belongs to this service; fleet defaults
+can supply it through the corresponding kind entry.
 Image declarations neither select an executable adapter nor establish release
 support.
 
 Every managed service runs as a container, so each requires its placement
-Machine's `container-runtime` capability. An external service forbids managed placement,
-implementation, image and listener configuration. Managed-only intrinsic
-defaults do not materialize on external declarations. An explicit management
-choice suppresses incompatible inherited fields under the ordinary
+Machine's `container-runtime` capability. That Machine also has effective
+`os.provided: true`, because a managed service runs only where the operating
+system is ready; validate refuses any other placement at `spec.machineRef`.
+An external service forbids managed placement, implementation, image and
+listener configuration. Managed-only intrinsic defaults do not materialize on
+external declarations. An explicit management choice suppresses incompatible
+inherited fields under the ordinary
 [variant-default rules](environment.md#kind-defaults).
 
 Effective service fields emit in this order, omitting inapplicable fields:
@@ -60,10 +65,19 @@ The four managed kinds use these deployment defaults:
 | `Registry` | `mirror-registry` | `0.0.0.0` | `5000` |
 
 `bindAddress` is an IP literal. A port is in `1..65535`; DNSServer permits
-only `53`. Each optional `endpoints[]` record has required unique `name` and
-required `addressRef` resolving to `Machine.spec.network.addresses[].name` on
-the placement Machine. Consumers select one named endpoint. Endpoint addresses
-are derived values, not another authored copy of Machine addresses.
+only `53` and NTPServer only `123`, because their consumers configure a
+resolver or a time server by address alone. Each optional `endpoints[]` record
+has required unique `name` and required `addressRef` resolving to
+`Machine.spec.network.addresses[].name` on the placement Machine. Consumers
+select one named endpoint. Endpoint addresses are derived values, not another
+authored copy of Machine addresses.
+
+A DNSServer endpoint names an IP address on its Machine, because a resolver is
+configured by address. When `bindAddress` is not a wildcard (`0.0.0.0` or
+`::`), every endpoint whose address is an IP equals it, because nothing answers
+on another address; a DNS-name endpoint is not compared, since admission
+performs no lookup. A wildcard bind requires at least one endpoint, because
+readiness probes the service through its endpoint addresses.
 
 Managed DNSServer additionally accepts optional `additionalIngressHosts[]`
 and `forwarders[]`; forwarders are IP resolver addresses. Managed NTPServer
@@ -98,13 +112,13 @@ A managed ArtifactServer accepts these fields after `management`:
 | `bindAddress` | string | no | IP literal; defaults `0.0.0.0`. |
 | `retention` | string | no | `persistent` by default, or `install-only`. |
 | `tls` | object | conditional | Required when any effective listener uses HTTPS; forbidden for HTTP-only listeners. |
-| `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. |
+| `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret's `ipAddresses` or `dnsNames` name the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. |
 | `tls.minVersion` | string | no | `TLSv1.2` by default, or `TLSv1.3`. |
-| `listeners` | array | no | Defaults to `[{name: https, protocol: https, port: 8443}]`. |
+| `listeners` | array | no | Non-empty; defaults to `[{name: https, protocol: https, port: 8443}]`. |
 | `listeners[].name` | string | yes | Unique listener name. |
 | `listeners[].protocol` | string | yes | `http` or `https`. |
 | `listeners[].port` | integer | yes | Unique port in `1..65535`. |
-| `endpoints` | array | no | Set keyed by required unique `name`. |
+| `endpoints` | array | no | Set keyed by required unique `name`. Under a wildcard `bindAddress`, every effective listener, the default one included, has an endpoint naming it; under any other, every endpoint whose address is an IP equals `bindAddress`. |
 | `endpoints[].listenerRef` | string | yes | Local listener name. |
 | `endpoints[].addressRef` | string | yes | Address name on the placement Machine. |
 | `image` | object | no | Managed image pins under the common rules above. |
@@ -121,9 +135,10 @@ TLS-serving configuration. The retired `tls.certificateRef` is rejected.
 An `artifactServerEndpoint` consumer has required scalar `serverRef` to an
 ArtifactServer followed by required scalar `endpointRef` to one of its
 endpoints. Neither is inferred from available services or endpoint count.
-Each consumer declares whether it requires managed placement, persistent
-retention, or HTTP package serving. It must satisfy those requirements after
-kind defaults have supplied any omitted fields.
+No consumer accepts an external ArtifactServer, because each publishes into the
+server it selects; selecting one refuses at `serverRef`. Each consumer declares
+whether it requires persistent retention or HTTP package serving. It must
+satisfy those requirements after kind defaults have supplied any omitted fields.
 
 ## LoadBalancer
 

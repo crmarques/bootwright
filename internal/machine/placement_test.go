@@ -15,6 +15,7 @@ import (
 func placementCatalog(machine api.Object) api.Catalog {
 	return api.NewCatalog([]api.Object{
 		object(api.Environment, "env", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet-key"))),
+		object(api.Secret, "fleet-key", m("type", "sshKeyPair")),
 		object(api.Proxy, "egress", m("management", "managed", "implementation", "squid", "machineRef", "services")),
 		object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "hypervisor", "uri", "qemu:///system"))),
 		object(api.ContainerCluster, "cluster", m("nodes", list(m("name", "master", "role", "master", "machineRef", "node")))),

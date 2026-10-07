@@ -23,9 +23,11 @@ import (
 
 const pristineEvidence = `{"version":1,"operation":"none","ownership":"none"}`
 
-const orphanAction = "delete with orphaned objects and any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)"
+const orphanAction = "delete, abandoning the objects bootwright status --context example lists and any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)"
 
 const lostAction = "delete with orphaned objects that cannot be listed (its directory is gone)"
+
+const unreadableAction = "delete with orphaned objects that cannot be listed (its mutation evidence cannot be read), removing any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)"
 
 const environmentInput = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
@@ -71,6 +73,9 @@ type repository struct {
 	reservations   map[string][]string
 	deletion       string
 	lost           string
+	controller     []string
+	updatePlan     *contexts.UpdatePlan
+	deletionPlan   *contexts.DeletionPlan
 }
 
 func newRepository(t *testing.T) *repository {
@@ -242,6 +247,41 @@ func (tx transaction) Publish(ctx context.Context, name, directory string, input
 	return revision, nil
 }
 
+// CheckControllerInput records the controller Machine an update's input names
+// and refuses as an injected failure at "controller" does.
+func (tx transaction) CheckControllerInput(ctx context.Context, name, machine string) error {
+	tx.requireLock()
+	tx.r.controller = []string{name, machine}
+	return tx.r.step(ctx, "controller")
+}
+
+// Unchanged reports input equal to what the selected revision published, by
+// roots, paths, categories, bytes and Environment directory. A revision this
+// double never published is unknown to it, so it is never unchanged.
+func (tx transaction) Unchanged(ctx context.Context, name, directory string, input desiredstate.Sources) (bool, error) {
+	tx.requireLock()
+	if err := tx.r.step(ctx, "unchanged"); err != nil {
+		return false, err
+	}
+	for _, record := range tx.r.registry.Contexts {
+		if record.Name != name {
+			continue
+		}
+		published, found := tx.r.published[record.Revision]
+		return found && record.EnvironmentDirectory == directory && sameSources(published, input), nil
+	}
+	return false, nil
+}
+
+func sameSources(a, b desiredstate.Sources) bool {
+	same := func(x, y []desiredstate.SourceFile) bool {
+		return slices.EqualFunc(x, y, func(p, q desiredstate.SourceFile) bool {
+			return p.Path() == q.Path() && string(p.Bytes()) == string(q.Bytes())
+		})
+	}
+	return slices.Equal(a.Roots, b.Roots) && same(a.Files, b.Files) && same(a.Markers, b.Markers)
+}
+
 func (tx transaction) HostReservations(ctx context.Context, name string) ([]string, error) {
 	tx.requireLock()
 	if err := tx.r.step(ctx, "reservations"); err != nil {
@@ -301,11 +341,34 @@ func (c confirmer) Confirm(ctx context.Context, action, name string) error {
 	if !c.r.locked || !lost && (!c.r.leased || !slices.Contains(c.r.calls, "guard")) {
 		c.r.t.Fatal("confirmation preceded locked mutation safeguards")
 	}
-	if name == "" || action != "update" && action != "delete" && action != orphanAction && !lost {
+	if name == "" || action != "update" && action != "delete" && action != orphanAction && action != unreadableAction && !lost {
 		c.r.t.Fatal("unexpected confirmation request", action, name)
+	}
+	if len(c.r.calls) == 0 || c.r.calls[len(c.r.calls)-1] != "present" {
+		c.r.t.Fatal("confirmation was not immediately preceded by its plan", c.r.calls)
 	}
 	c.r.confirmed = action
 	return c.r.step(ctx, "confirm")
+}
+
+// presenter records each plan it is shown, after every safeguard and under the
+// root lock, and fails as an injected failure at "present" does.
+type presenter struct{ r *repository }
+
+func (p presenter) PresentUpdate(ctx context.Context, plan contexts.UpdatePlan) error {
+	if !p.r.locked || !p.r.leased || !slices.Contains(p.r.calls, "guard") || !slices.Contains(p.r.calls, "unchanged") {
+		p.r.t.Fatal("the update plan preceded its safeguards", p.r.calls)
+	}
+	p.r.updatePlan = &plan
+	return p.r.step(ctx, "present")
+}
+
+func (p presenter) PresentDeletion(ctx context.Context, plan contexts.DeletionPlan) error {
+	if !p.r.locked || !slices.Contains(p.r.calls, "reservations") {
+		p.r.t.Fatal("the deletion plan preceded its safeguards", p.r.calls)
+	}
+	p.r.deletionPlan = &plan
+	return p.r.step(ctx, "present")
 }
 
 func sourceFixture(directory string) desiredstate.Sources {
@@ -316,6 +379,13 @@ func sourceFixture(directory string) desiredstate.Sources {
 }
 
 func service(t *testing.T, r *repository, input desiredstate.Sources) contexts.Service {
+	t.Helper()
+	return serviceWith(t, r, input, confirmer{r}, presenter{r})
+}
+
+// serviceWith is service with the confirmer and presenter it binds, either of
+// which may be absent.
+func serviceWith(t *testing.T, r *repository, input desiredstate.Sources, confirmation contexts.Confirmer, presentation contexts.Presenter) contexts.Service {
 	t.Helper()
 	realCompiler := compilation.NewCompiler(yamlstream.Parser{}, nil,
 		compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
@@ -341,7 +411,9 @@ func service(t *testing.T, r *repository, input desiredstate.Sources) contexts.S
 		}
 		return realCompiler.Compile(ctx, sources)
 	})
-	return contexts.New(reader, compiler, r, guard{r}, confirmer{r}, options(r))
+	configured := options(r)
+	configured.Presenter = presentation
+	return contexts.New(reader, compiler, r, guard{r}, confirmation, configured)
 }
 
 func existingRepository(t *testing.T) *repository {
@@ -467,7 +539,7 @@ func TestUpdatePreservesIdentityAndSelectionAndConfirmsUnderLease(t *testing.T) 
 	if err != nil || got.Context.Name != before.Contexts[0].Name || got.Context.Current || r.selection.Name != "other" || r.registry.Contexts[0].Revision == before.Contexts[0].Revision || !reflect.DeepEqual(r.registry.Contexts[1], before.Contexts[1]) || r.create {
 		t.Fatalf("update changed unrelated state: %#v %v", got, err)
 	}
-	if !reflect.DeepEqual(r.calls, []string{"preflight", "read", "compile", "transaction", "registry", "lease", "guard", "confirm", "publish", "commit"}) {
+	if !reflect.DeepEqual(r.calls, []string{"preflight", "read", "compile", "transaction", "registry", "lease", "guard", "unchanged", "present", "confirm", "publish", "commit"}) {
 		t.Fatal("update order", r.calls)
 	}
 }
@@ -512,7 +584,13 @@ func TestProtectedStatesRefuseRecreationAndUnsafeUpdateOrDelete(t *testing.T) {
 	}
 }
 
+// Evidence the guard cannot read, and a live lease, never let a command
+// through: init refuses the existing name, and an update and a default
+// deletion refuse unreadable evidence naming status and the orphan
+// acknowledgement as the one exit, while a live lease refuses before the
+// guard reads anything.
 func TestMissingCorruptAndLiveLeaseEvidenceCannotBeOverridden(t *testing.T) {
+	const exit = "bootwright context delete --name example --purge --allow-orphans"
 	for _, failure := range []string{"missing", "corrupt", "unsupported", "lease"} {
 		for _, command := range []string{"init", "update", "delete"} {
 			t.Run(failure+"/"+command, func(t *testing.T) {
@@ -548,6 +626,16 @@ func TestMissingCorruptAndLiveLeaseEvidenceCannotBeOverridden(t *testing.T) {
 				if failure == "lease" && slices.Contains(r.calls, "guard") {
 					t.Fatal("live lease failure reached the guard")
 				}
+				if failure == "lease" || command == "init" {
+					return
+				}
+				code := map[string]string{"update": "context.state", "delete": "context.unsafe-delete"}[command]
+				requireCode(t, err, code)
+				requireRemediation(t, err, "bootwright status --context example")
+				requireRemediation(t, err, exit)
+				if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != "the mutation evidence of context example is missing, corrupt or unsupported, so nothing proves what it owns" {
+					t.Fatalf("the refusal over unreadable evidence = %#v", reported)
+				}
 			})
 		}
 	}
@@ -581,11 +669,11 @@ func TestFailuresAndCancellationNeverClaimPublication(t *testing.T) {
 	for _, command := range []string{"init", "update", "use", "list", "current", "delete"} {
 		stages := map[string][]string{
 			"init":    {"preflight", "read", "compile", "transaction", "reserve", "initialize", "publish", "commit"},
-			"update":  {"preflight", "read", "compile", "transaction", "lease", "guard", "confirm", "publish", "commit"},
+			"update":  {"preflight", "read", "compile", "transaction", "lease", "guard", "unchanged", "present", "confirm", "publish", "commit"},
 			"use":     {"transaction", "select"},
 			"list":    {"view"},
 			"current": {"view"},
-			"delete":  {"transaction", "lease", "guard", "confirm", "reservations", "delete"},
+			"delete":  {"transaction", "lease", "guard", "reservations", "present", "confirm", "delete"},
 		}[command]
 		for _, stage := range stages {
 			for _, cancelStage := range []bool{false, true} {
@@ -688,7 +776,7 @@ func TestIncompleteCompilerResultsNeverStartTransaction(t *testing.T) {
 }
 
 func TestMissingSafeguardsCannotBeReplacedByConfirmationFlags(t *testing.T) {
-	for _, missing := range []string{"guard", "confirmer"} {
+	for _, missing := range []string{"guard", "confirmer", "presenter"} {
 		for _, command := range []string{"update", "delete"} {
 			t.Run(missing+"/"+command, func(t *testing.T) {
 				r := existingRepository(t)
@@ -697,12 +785,16 @@ func TestMissingSafeguardsCannotBeReplacedByConfirmationFlags(t *testing.T) {
 				compiler := compilation.NewCompiler(yamlstream.Parser{}, nil)
 				var mutationGuard contexts.ContextMutationGuard = guard{r}
 				var confirmation contexts.Confirmer = confirmer{r}
-				if missing == "guard" {
+				configured := options(r)
+				switch missing {
+				case "guard":
 					mutationGuard = nil
-				} else {
+				case "confirmer":
 					confirmation = nil
+				case "presenter":
+					configured.Presenter = nil
 				}
-				s := contexts.New(reader, compiler, r, mutationGuard, confirmation, options(r))
+				s := contexts.New(reader, compiler, r, mutationGuard, confirmation, configured)
 				var succeeded bool
 				var err error
 				if command == "update" {
@@ -712,10 +804,13 @@ func TestMissingSafeguardsCannotBeReplacedByConfirmationFlags(t *testing.T) {
 					got, failure := s.Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, SkipConfirmation: missing == "guard"})
 					succeeded, err = got != nil, failure
 				}
-				if succeeded || err == nil || slices.Contains(r.calls, "publish") || slices.Contains(r.calls, "delete") || slices.Contains(r.calls, "commit") {
+				if succeeded || err == nil || slices.Contains(r.calls, "confirm") || slices.Contains(r.calls, "publish") || slices.Contains(r.calls, "delete") || slices.Contains(r.calls, "commit") {
 					t.Fatal("missing capability reached publication", err, r.calls)
 				}
 				requireCode(t, err, "context.state")
+				if reported := diagnostics.Of(err); missing == "presenter" && (len(reported) != 1 || reported[0].Message != "context plan presentation is not configured") {
+					t.Fatalf("a confirmation without its plan refused with %#v", reported)
+				}
 			})
 		}
 	}
@@ -774,7 +869,7 @@ func options(r *repository) contexts.Options {
 			return contexts.ConfigurationError("unavailable implementation")
 		}
 		return ctx.Err()
-	}, InitializeSecrets: func(ctx context.Context, record contexts.Record, area secretstore.Area) error { return ctx.Err() }}
+	}, InitializeSecrets: func(ctx context.Context, record contexts.Record, area secretstore.Area) error { return ctx.Err() }, Presenter: presenter{r}}
 }
 
 func TestDefaultInitThenFirstInputImport(t *testing.T) {
@@ -859,7 +954,7 @@ func TestSelectionFailureAfterInitializationPreservesReadyContext(t *testing.T) 
 	if got != nil || err == nil || len(r.registry.Contexts) != 1 || r.registry.Contexts[0].Mode != contexts.Ready || r.selection.Name != "prior" {
 		t.Fatal("selection failure destroyed or misreported published context", got, err, r.registry)
 	}
-	if !strings.Contains(diagnostics.Of(err)[0].Message, "context was created") {
+	if reported := diagnostics.Of(err); len(reported) != 1 || !strings.HasPrefix(reported[0].Message, "context example was created, but the current selection could not be updated: ") || reported[0].Remediation != "select it with bootwright context use --name example" {
 		t.Fatal("partial success lacks recovery guidance", err)
 	}
 }
@@ -1033,10 +1128,14 @@ func TestAnAcknowledgedDeletionReleasesAndReportsTheContextsReservations(t *test
 	}
 }
 
+// The orphan acknowledgement waives only the disposal verdict: a live lease
+// still refuses under it before the guard reads anything, and evidence the
+// guard cannot read is never abandoned without it.
 func TestOrphanAcknowledgementNeverBypassesUnreadableEvidenceOrALiveLease(t *testing.T) {
 	for _, failure := range []string{"missing", "corrupt", "unsupported", "lease"} {
 		t.Run(failure, func(t *testing.T) {
 			r := existingRepository(t)
+			acknowledged := false
 			switch failure {
 			case "missing":
 				delete(r.evidence, "example")
@@ -1045,14 +1144,50 @@ func TestOrphanAcknowledgementNeverBypassesUnreadableEvidenceOrALiveLease(t *tes
 			case "unsupported":
 				r.evidence["example"] = []byte(`{"version":1,"operation":"future","ownership":"none"}`)
 			case "lease":
-				r.failure = "lease"
+				r.failure, acknowledged = "lease", true
 			}
 			before := cloneRegistry(r.registry)
-			got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true, SkipConfirmation: true})
+			got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: acknowledged, SkipConfirmation: true})
 			if got != nil || err == nil || !reflect.DeepEqual(r.registry, before) || slices.Contains(r.calls, "confirm") || slices.Contains(r.calls, "delete") || slices.Contains(r.calls, "commit") {
-				t.Fatal("acknowledgement bypassed a missing safety proof", err, r.calls)
+				t.Fatal("a deletion bypassed a missing safety proof", err, r.calls)
 			}
-			requireCode(t, err, "context.state")
+			if failure == "lease" {
+				requireCode(t, err, "context.state")
+				if slices.Contains(r.calls, "guard") {
+					t.Fatal("a live lease reached the guard", r.calls)
+				}
+				return
+			}
+			requireCode(t, err, "context.unsafe-delete")
+		})
+	}
+}
+
+// Over evidence the guard cannot read, nothing proves what the context owns,
+// so the orphan acknowledgement abandons it, presenting and confirming an
+// abandonment whose objects cannot be listed, and the result reports it. Its
+// keyring is still present, so the confirmation names the custodied cluster
+// kubeconfig the deletion removes with it and the command that exports it.
+func TestTheOrphanAcknowledgementAbandonsAContextWhoseEvidenceCannotBeRead(t *testing.T) {
+	for name, evidence := range map[string][]byte{
+		"missing": nil, "corrupt": []byte("{"), "unsupported": []byte(`{"version":2,"operation":"none","ownership":"none"}`), "empty": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := existingRepository(t)
+			r.evidence["example"] = evidence
+			if evidence == nil {
+				delete(r.evidence, "example")
+			}
+			got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true})
+			if err != nil || got == nil || got.Outcome != "deleted" || !got.OrphansAbandoned || len(r.registry.Contexts) != 0 {
+				t.Fatalf("the acknowledged deletion = %#v (%v), registry %#v", got, err, r.registry.Contexts)
+			}
+			if r.confirmed != unreadableAction || !strings.Contains(r.confirmed, "cannot be listed") || !strings.Contains(r.confirmed, "bootwright cluster kubeconfig --context example") {
+				t.Fatalf("the confirmation named %q", r.confirmed)
+			}
+			if plan := r.deletionPlan; plan == nil || plan.Abandons != contexts.AbandonsUnlisted || plan.Reason != "its mutation evidence cannot be read" || plan.Lost {
+				t.Fatalf("the deletion presented %+v", plan)
+			}
 		})
 	}
 }
@@ -1070,12 +1205,24 @@ func TestOrphanAcknowledgementClaimsNothingAndReplacesNoOtherSafeguard(t *testin
 	}
 }
 
+// The refusal and the confirmation of a deletion that would abandon objects
+// name bootwright status --context as their inventory, and the refusal also
+// names the destroy that removes them and the acknowledged deletion.
 func TestOrdinaryConfirmationNamesTheObjectsADeletionAbandons(t *testing.T) {
 	r := existingRepository(t)
 	r.evidence["example"] = []byte(`{"version":1,"operation":"applied","ownership":"retained"}`)
+	_, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true})
+	requireCode(t, err, "context.unsafe-delete")
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != "context example still owns realized objects; deleting it would orphan them" ||
+		reported[0].Remediation != "review them with bootwright status --context example, then remove them with bootwright destroy --context example, or abandon them with bootwright context delete --name example --purge --allow-orphans" {
+		t.Fatalf("the refusal = %#v", reported)
+	}
 	got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true})
-	if err != nil || got == nil || !got.OrphansAbandoned || r.confirmed != orphanAction {
+	if err != nil || got == nil || !got.OrphansAbandoned || r.confirmed != orphanAction || !strings.Contains(r.confirmed, "bootwright status --context example lists") {
 		t.Fatalf("confirmation did not name the abandonment: %#v %v %q", got, err, r.confirmed)
+	}
+	if plan := r.deletionPlan; plan == nil || plan.Abandons != contexts.AbandonsOwned || plan.Reason != "" {
+		t.Fatalf("the deletion presented %+v", plan)
 	}
 	r = existingRepository(t)
 	got, err = service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true})
@@ -1118,7 +1265,145 @@ func TestALostContextIsAbandonedOnlyWithTheOrphanAcknowledgement(t *testing.T) {
 	if r.confirmed != lostAction || !strings.Contains(r.confirmed, "cannot be listed") || strings.Contains(r.confirmed, "kubeconfig") {
 		t.Fatalf("the confirmation named %q, want the abandonment of objects that cannot be listed", r.confirmed)
 	}
-	if !slices.Equal(r.calls, []string{"transaction", "registry", "lease", "confirm", "reservations", "delete", "clear"}) {
+	if !slices.Equal(r.calls, []string{"transaction", "registry", "lease", "reservations", "present", "confirm", "delete", "clear"}) {
 		t.Fatalf("abandonment stages = %v", r.calls)
+	}
+	if plan := r.deletionPlan; plan == nil || plan.Abandons != contexts.AbandonsUnlisted || plan.Reason != "its directory is gone" || !plan.Lost || !slices.Equal(plan.Reservations, keys) {
+		t.Fatalf("the abandonment presented %+v", plan)
+	}
+}
+
+// An update over a registry that holds a controller descriptor checks the
+// controller Machine its input names through the transaction's own port, and
+// that port's refusal stops the update before anything is presented,
+// confirmed, published or committed. Without a descriptor nothing is checked.
+func TestAnUpdateChecksItsControllerInputThroughTheTransaction(t *testing.T) {
+	r := existingRepository(t)
+	r.registry.Controller = contexts.ControllerDescriptor{Version: 1, Mode: "ready", DirectoryDevice: 1, DirectoryInode: 2}
+	if _, err := service(t, r, sourceFixture("/synthetic/input")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(r.controller, []string{"example", "controller"}) {
+		t.Fatalf("the controller input check received %q", r.controller)
+	}
+	r = existingRepository(t)
+	r.registry.Controller = contexts.ControllerDescriptor{Version: 1, Mode: "ready", DirectoryDevice: 1, DirectoryInode: 2}
+	r.failure = "controller"
+	got, err := service(t, r, sourceFixture("/synthetic/input")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
+	if got != nil || !errors.Is(err, r.failureErr) {
+		t.Fatalf("the refused controller input = %#v (%v)", got, err)
+	}
+	for _, forbidden := range []string{"present", "confirm", "publish", "commit"} {
+		if slices.Contains(r.calls, forbidden) {
+			t.Fatalf("a refused controller input reached %s: %v", forbidden, r.calls)
+		}
+	}
+	r = existingRepository(t)
+	if _, err := service(t, r, sourceFixture("/synthetic/input")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input", SkipConfirmation: true}); err != nil || slices.Contains(r.calls, "controller") {
+		t.Fatalf("an update without a controller descriptor checked its controller input (%v): %v", err, r.calls)
+	}
+}
+
+// Input equal to the selected revision keeps that revision: the update
+// publishes nothing, presents and asks nothing, so it needs neither a
+// confirmer nor --yes, and reports the context unchanged with admission's
+// counts and warnings, whether the context is pristine or holds a completed
+// apply, which then still settles.
+func TestAnIdenticalUpdateKeepsTheSelectedRevisionAndAsksNothing(t *testing.T) {
+	applied := `{"version":1,"operation":"applied","ownership":"retained"}`
+	excluding := sourceFixture("/synthetic/input")
+	excluding.Files[0] = desiredstate.NewSourceFile(excluding.Files[0].Path(), []byte(environmentInput+"\n  resources:\n    - controller.yaml\n"))
+	excluding.Files = append(excluding.Files, desiredstate.NewSourceFile("/synthetic/input/excluded.yaml", []byte("apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: excluded}\nspec:\n  os: {provided: true}\n")))
+	for name, row := range map[string]struct {
+		evidence string
+		input    desiredstate.Sources
+		seen     int
+		warned   []string
+	}{
+		"pristine": {evidence: pristineEvidence, input: sourceFixture("/synthetic/input"), seen: 2},
+		"applied":  {evidence: applied, input: sourceFixture("/synthetic/input"), seen: 2},
+		"warned":   {evidence: applied, input: excluding, seen: 3, warned: []string{"/synthetic/input/excluded.yaml"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := existingRepository(t)
+			r.evidence["example"] = []byte(row.evidence)
+			selected := r.registry.Contexts[0].Revision
+			r.published[selected] = copySources(row.input)
+			before := cloneRegistry(r.registry)
+			got, err := serviceWith(t, r, row.input, nil, nil).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
+			if err != nil || got == nil || got.InputChanged || got.Presented || got.FilesCopied != 0 || got.Counts.FilesSeen != row.seen || !reflect.DeepEqual(r.registry, before) {
+				t.Fatalf("the identical update = %#v (%v), registry %#v", got, err, r.registry)
+			}
+			var warned []string
+			for _, diagnostic := range got.Diagnostics {
+				if diagnostic.Severity != "warning" || diagnostic.Code != "api.selection" || diagnostic.Source == nil {
+					t.Fatalf("the identical update reported %#v", got.Diagnostics)
+				}
+				warned = append(warned, diagnostic.Source.Path)
+			}
+			if !slices.Equal(warned, row.warned) {
+				t.Fatalf("the identical update warned of %v, want %v", warned, row.warned)
+			}
+			for _, forbidden := range []string{"present", "confirm", "publish", "commit"} {
+				if slices.Contains(r.calls, forbidden) {
+					t.Fatalf("the identical update reached %s: %v", forbidden, r.calls)
+				}
+			}
+		})
+	}
+}
+
+// Changed input over a completed apply warns, in the presented plan and in the
+// result, that apply refuses it until a destroy takes back what that apply
+// owns; over pristine evidence it does not.
+func TestChangedInputOverACompletedApplyWarnsBeforeThePrompt(t *testing.T) {
+	for name, evidence := range map[string]string{"pristine": pristineEvidence, "applied": `{"version":1,"operation":"applied","ownership":"retained"}`} {
+		t.Run(name, func(t *testing.T) {
+			r := existingRepository(t)
+			r.evidence["example"] = []byte(evidence)
+			got, err := service(t, r, sourceFixture("/synthetic/input")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
+			if err != nil || got == nil || !got.InputChanged || !got.Presented || r.updatePlan == nil || !slices.Contains(r.calls, "publish") {
+				t.Fatalf("the changed update = %#v (%v): %v", got, err, r.calls)
+			}
+			warned := func(reported []diagnostics.Diagnostic) bool {
+				return slices.ContainsFunc(reported, func(d diagnostics.Diagnostic) bool {
+					return d.Severity == "warning" && d.Code == "lifecycle.state" &&
+						d.Message == "context example holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back" &&
+						d.Remediation == "take it back with bootwright destroy --context example, then run bootwright apply --context example"
+				})
+			}
+			if want := name == "applied"; warned(r.updatePlan.Diagnostics) != want || warned(got.Diagnostics) != want {
+				t.Fatalf("the warning over %s evidence: plan %#v, result %#v", name, r.updatePlan.Diagnostics, got.Diagnostics)
+			}
+		})
+	}
+}
+
+// Each confirmation follows the plan of what it changes: an update's input
+// directory, files and counts, and a deletion's revision and the host
+// reservations it releases. A declined confirmation publishes and deletes
+// nothing.
+func TestUpdateAndDeletionPresentTheirPlanBeforeTheConfirmation(t *testing.T) {
+	r := existingRepository(t)
+	r.failure = "confirm"
+	got, err := service(t, r, sourceFixture("/synthetic/input")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
+	if got != nil || !errors.Is(err, r.failureErr) || slices.Contains(r.calls, "publish") || slices.Contains(r.calls, "commit") {
+		t.Fatalf("a declined update = %#v (%v): %v", got, err, r.calls)
+	}
+	want := contexts.UpdatePlan{Context: "example", InputDirectory: "/synthetic/input", FilesCopied: 2, Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 2}}
+	if r.updatePlan == nil || len(r.updatePlan.Diagnostics) != 0 || !reflect.DeepEqual(*r.updatePlan, want) || slices.Index(r.calls, "present") != slices.Index(r.calls, "confirm")-1 {
+		t.Fatalf("the update presented %+v, want %+v, before %v", r.updatePlan, want, r.calls)
+	}
+	keys := []string{"socket:192.0.2.1:8000", "unit:example"}
+	r = existingRepository(t)
+	r.failure = "confirm"
+	r.reservations = map[string][]string{"example": slices.Clone(keys)}
+	deleted, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true})
+	if deleted != nil || !errors.Is(err, r.failureErr) || slices.Contains(r.calls, "delete") || len(r.registry.Contexts) != 1 {
+		t.Fatalf("a declined deletion = %#v (%v): %v", deleted, err, r.calls)
+	}
+	plan := contexts.DeletionPlan{Context: "example", Mode: contexts.Ready, Revision: "rev-00000000000000000000000000000001", Reservations: keys, Abandons: contexts.AbandonsNone}
+	if r.deletionPlan == nil || !reflect.DeepEqual(*r.deletionPlan, plan) || slices.Index(r.calls, "present") != slices.Index(r.calls, "confirm")-1 {
+		t.Fatalf("the deletion presented %+v, want %+v, before %v", r.deletionPlan, plan, r.calls)
 	}
 }

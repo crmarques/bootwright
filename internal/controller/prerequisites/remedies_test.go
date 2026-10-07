@@ -2,6 +2,7 @@ package prerequisites
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -142,6 +143,23 @@ func unboundCheck(t *testing.T, extra ...api.Object) (*Report, error) {
 		t.Fatalf("an unbound context was not pending its own binding: %#v %v", report, err)
 	}
 	return report, err
+}
+
+// An unbound context's binding says why it is missing and what binds it, and
+// its route names the controller Machine whose direct choice selected it,
+// while readiness still reports it not ready rather than pending.
+func TestAnUnboundContextSaysWhatBindsItAndWhoChoseItsRoute(t *testing.T) {
+	report, _ := unboundCheck(t)
+	index := slices.IndexFunc(report.Checks, func(check Check) bool { return check.ID == "controller-binding" })
+	if index < 0 {
+		t.Fatalf("no binding check: %#v", report.Checks)
+	}
+	if binding := report.Checks[index]; binding.Observed != "not yet bound; its first apply binds it" || binding.Status != "not-ready" || binding.Required != "controller" {
+		t.Fatalf("binding = %#v", binding)
+	}
+	if report.Route != "direct (Machine controller)" {
+		t.Fatalf("route = %q", report.Route)
+	}
 }
 
 // A context without a controller stage has nothing for that stage to run; its

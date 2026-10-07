@@ -28,8 +28,8 @@ const (
 // a report lists them, so each one a presenter labels is known in one place.
 func CheckIDs() []string {
 	return []string{
-		"host", "installed-host", "execution-bundle", "container-runtime", "target-tools",
-		"libvirt-client", "hypervisor", "installer-media", "controller-binding", "setup-recovery", "setup-state",
+		"host", "installed-host", "execution-foundation", "fips-mode", "execution-bundle", "container-runtime", "target-tools",
+		"libvirt-client", "hypervisor", "installer-media", "controller-binding", "state-root", "setup-recovery", "setup-state",
 	}
 }
 
@@ -64,8 +64,13 @@ type Report struct {
 	Actions       []string
 	Dependencies  []string
 	PlanPresented bool
+	// Purge records that setup ran with --purge-old-bundles, so a completed
+	// setup that retired nothing says so rather than staying silent.
+	Purge bool
 	// Next is the one command that settles a not-ready readiness check, as
-	// preflight decided it. It is empty for every other outcome.
+	// preflight decided it, the setup a dry run previewed, or the bootwright
+	// command a refused or failed setup's remediation names. It is empty for
+	// every other outcome and for a remediation that names no command.
 	Next string
 	// ProgressPresented records that progress rows were already streamed, so a
 	// failure report adds only its outcome rather than repeating the headline.

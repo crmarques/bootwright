@@ -82,12 +82,18 @@ keys. Each action records `planned`, `intent` or `observed`; an observed action
 requires bounded evidence and an explicit outcome. Successful observations
 cannot regress. `pending` and `unknown` retain recovery protection. `complete`
 requires every action's verified `changed` or `unchanged` postcondition;
-`failed`/`canceled` require no unresolved intent or unknown effect. A receipt
-setup [abandons at the bound](../controller.md#supported-host-and-dependency-selection)
-is recorded `canceled` under its own ID and plan: its first action,
-`execution-bundle`, when it held its intent, is observed `canceled` with the
-evidence `{"bundleArea":"absent"}`, because the record holds no area for the
-bundle the receipt names, and every later action stays `planned`. The plan
+`failed`/`canceled` require no unresolved intent or unknown effect. A pending
+receipt setup [cancels](../controller.md#supported-host-and-dependency-selection)
+is recorded `canceled` under its own ID and plan, observing what it found. A
+setup that never started has its first action, `execution-bundle`, when it
+held its intent, observed `canceled` with the evidence
+`{"bundleArea":"absent"}` when the record holds no area for the bundle the
+receipt names, or `{"bundleArea":"unsealed"}` when it holds that area
+unsealed, and every later action stays `planned`. A setup whose native
+transaction never started keeps its observed `execution-bundle` and has its
+`container-runtime` action observed `canceled` with the evidence
+`{"nativeInventory":"unchanged"}`, its preparation kept. Evidence is not part
+of the plan digest, so neither moves it. The plan
 digest is SHA-256 of the domain-separated host digest, catalog, resolution, egress,
 sources and immutable action requests; progress and receipt ID are excluded.
 Receipt IDs are `setup-` plus 128 bits of a domain-separated SHA-256 over the
@@ -135,8 +141,14 @@ reservations record their mode and physical directory identity. A new receipt
 naming a namespace the record does not hold is refused while all 16 are held,
 so none is left pending on a bundle that can never be reserved;
 [setup](../controller.md#supported-host-and-dependency-selection) makes room
-first. A bundle is bounded to 8 GiB total, 1 GiB per file, 32768 entries and
-depth 32. Symlinks, hard links, nested
+first. A controller stage's client-area reservation, or its new retained
+resolution, that finds its bound held refuses with `controller.conflict`,
+naming that bound, and its remedy is to run
+`bootwright setup --purge-old-bundles` to retire superseded execution bundles,
+then repeat the command; when client areas and the current execution bundle
+fill the host, no command of this build frees that room
+([B322](../milestones/backlog.md#b322)). A bundle is bounded to 8 GiB total,
+1 GiB per file, 32768 entries and depth 32. Symlinks, hard links, nested
 mounts, unsafe modes, unexpected entries and replacement refuse. Completion
 verifies and syncs the complete tree before sealing; sealed contents cannot be
 rewritten. Each published file is written to a private stage named
@@ -150,6 +162,19 @@ stage. A stage a killed write or a crash leaves in an unsealed area is not
 bundle content: reads skip it and leave it, and the area's next writer, such
 as the exact replay, removes it before it writes, as completion does before it
 seals; a sealed area holding one refuses.
+
+A build before X39 wrote each file under its final name, so one killed between
+creating a file and syncing it could leave fewer bytes than approved there, and
+since X39 a final name holds fewer bytes than approved in no other case. In an
+unsealed setup bundle, a private regular file at a path the approved closure
+names, a retained baseline or native source or a projected file, that is
+smaller than its approved size and otherwise the file approved is that partial
+write: inspection reports the closure recoverable and not ready, and the exact
+replay has the area's writer remove the file, only under the write capability,
+against the identity it inspected, syncing its directory, then inspects again
+and publishes it. A file of its approved size with other bytes, any entry the
+closure does not name, and any short file in a sealed area still refuse, and an
+area that offers no such removal refuses naming the file.
 
 ## Bundles and client areas
 
@@ -171,7 +196,9 @@ interrupted attempt, adoptable only while empty. Sealing verifies and syncs the
 complete tree, then makes the closure immutable; a sealed area reopens
 read-only for every later operation and context. An unsealed attributed area is
 completed by an exact replay of the same closure, whose publication verifies
-existing bytes rather than overwriting them. Removal never applies: the
+existing bytes rather than overwriting them; only a setup bundle's writer
+removes a file an earlier build left short, as [bounds](#bounds) describes.
+Removal never applies: the
 closure is shared host state that outlives the context that published it, and
 no command deletes or garbage-collects one.
 
@@ -229,7 +256,10 @@ retires one it holds.
 `runs/` beside the record keeps what setup's controller Ansible printed, as
 [setup run output](../cli/output.md#setup-run-output) describes. A run is a
 directory named `setup-` and six digits, from `setup-000001` upward, holding at
-most one file, `run.output`, which is bounded at 8 MiB. Directories are `0700`
+most one file, `run.output`, which is bounded at 4 MiB. That is the
+[bounded run](../cli/output.md#bounded-run-output)'s bound, so every run's
+output shares one ([D92](../milestones/backlog.md#decisions)); an earlier build
+kept up to 8 MiB, which admission still accepts. Directories are `0700`
 and the file `0600`, owned like every other entry. There are at most 8 runs:
 the next is numbered one past the newest, the oldest are removed before it is
 created, and a setup whose next number would need a seventh digit keeps no
@@ -242,7 +272,8 @@ run, and nothing reads one back.
 
 Admission accepts `runs/` only as this store leaves it, a killed run's shape
 included: a private directory holding at most 8 run directories, each empty or
-holding only its private, singly linked `run.output` within its bound. Anything
+holding only its private, singly linked `run.output` of at most 8 MiB, an
+earlier build's bound, because admission runs on every controller read. Anything
 else refuses every controller read and mutation, as any other unexpected entry
 does, and a controller that never published its first record admits no runs.
 A build that predates setup runs refuses `runs/` the same way, and no setup
@@ -265,8 +296,9 @@ precedes the selected context lease and remains held through each callback.
 Read-only bundle capabilities expire with their shared-lock callback, and all
 mutation capabilities expire with their transaction.
 
-Inspection never converts a pending receipt to completion. Only explicit setup retry
-resolves it through Controller postconditions, or, for one stranded at the
-bound that the running executable cannot resume, the explicit setup that
-abandons it. Setup effects retain their
+Inspection never converts a pending receipt to completion or cancellation.
+Only explicit setup retry resolves it through Controller postconditions, or,
+for one the running executable cannot resume and whose setup never took
+effect, at the bound or below it, the explicit `setup --purge-old-bundles`
+that cancels it. Setup effects retain their
 receipt; a new context cannot bypass that pending host work. Reads never bootstrap, upgrade, repair or write these records.

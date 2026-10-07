@@ -16,3 +16,10 @@ func (ExecutionGuard) WithPython(ctx context.Context, _ prerequisites.BundleArea
 	}
 	return unsupportedPlatform()
 }
+
+func (ExecutionGuard) Inspect(ctx context.Context, _ prerequisites.Platform) (prerequisites.FoundationInspection, error) {
+	if err := ctx.Err(); err != nil {
+		return prerequisites.FoundationInspection{}, err
+	}
+	return prerequisites.FoundationInspection{}, unsupportedPlatform()
+}

@@ -1,0 +1,112 @@
+#!/bin/sh
+# Print this host's native record for the compiled catalog,
+# internal/controller/bundlelocal/catalog.json: the release, the loader, glibc
+# and libgcc files the private interpreter runs on with their digests, the
+# links that reach them, the files it preloads, and the package build that
+# provides each file. Run it unprivileged on a host of a qualified release
+# that holds the builds to qualify, and replace that release's record with
+# what it prints. It reads files beneath FOUNDATION_ROOT (default /) and
+# attributes them with FOUNDATION_RPM (default rpm); both exist for tests, and
+# the attribution always queries this host's package database.
+set -euf
+root=${FOUNDATION_ROOT:-/}
+root=${root%/}
+rpm=${FOUNDATION_RPM:-rpm}
+LC_ALL=C
+export LC_ALL
+
+fail() {
+    printf 'foundation-catalog: %s\n' "$1" >&2
+    exit 1
+}
+
+# plain refuses a value the printed JSON could not carry verbatim.
+plain() {
+    case $1 in
+    '' | *[!A-Za-z0-9._+/:-]*) fail "unexpected value '$1'" ;;
+    esac
+}
+
+release_field() {
+    value=$(sed -n "s/^$1=//p" "$root/etc/os-release" | tr -d "\"'")
+    plain "$value"
+    printf '%s' "$value"
+}
+
+os=$(release_field ID)
+release=$(release_field VERSION_ID)
+case $os in
+fedora) lock=/usr/lib/sysimage/rpm/.rpm.lock ;;
+rhel) lock=/var/lib/rpm/.rpm.lock ;;
+*) fail "$os $release is not a release Bootwright qualifies" ;;
+esac
+
+loader=/usr/lib64/ld-linux-x86-64.so.2
+gcc=$(readlink "$root/usr/lib64/libgcc_s.so.1") || fail "/usr/lib64/libgcc_s.so.1 is not a symbolic link"
+case $gcc in
+libgcc_s-*.so.1) plain "$gcc" ;;
+*) fail "/usr/lib64/libgcc_s.so.1 points to '$gcc'" ;;
+esac
+lib64=$(readlink "$root/lib64") || fail "/lib64 is not a symbolic link"
+plain "$lib64"
+files=$(printf '%s\n' "$loader" /usr/lib64/libc.so.6 /usr/lib64/libdl.so.2 "/usr/lib64/$gcc" /usr/lib64/libm.so.6 /usr/lib64/libpthread.so.0 /usr/lib64/librt.so.1 /usr/lib64/libutil.so.1 | sort)
+
+owners=
+for path in $files; do
+    if [ ! -f "$root$path" ] || [ -L "$root$path" ]; then
+        fail "$path is not a regular file"
+    fi
+    owner=$("$rpm" -qf --queryformat '%{NAME} %{VERSION}-%{RELEASE}\n' -- "$path") || fail "no package provides $path"
+    set -- $owner
+    if [ $# -ne 2 ]; then
+        fail "$path is provided by '$owner', not by one package build"
+    fi
+    plain "$1"
+    plain "$2"
+    owners="$owners$1 $2 $path
+"
+done
+
+printf '{\n  "os": "%s",\n  "release": "%s",\n  "execution": {\n' "$os" "$release"
+printf '    "loader": "%s",\n    "lockPath": "%s",\n    "files": [\n' "$loader" "$lock"
+separator=
+for path in $files; do
+    digest=$(sha256sum -- "$root$path" | cut -d ' ' -f 1)
+    plain "$digest"
+    printf '%s      {\n        "path": "%s",\n        "sha256": "%s"\n      }' "$separator" "$path" "$digest"
+    separator=',
+'
+done
+printf '\n    ],\n    "links": [\n      {\n        "path": "/lib64",\n        "target": "%s"\n      },\n' "$lib64"
+printf '      {\n        "path": "/usr/lib64/libgcc_s.so.1",\n        "target": "%s"\n      }\n    ],\n    "preload": [\n' "$gcc"
+separator=
+for path in $files; do
+    if [ "$path" != "$loader" ]; then
+        printf '%s      "%s"' "$separator" "$path"
+        separator=',
+'
+    fi
+done
+printf '\n    ]\n  },\n  "packages": [\n'
+printf '%s' "$owners" | awk '
+{
+    if (!($1 in build)) {
+        order[++count] = $1
+        build[$1] = $2
+    } else if (build[$1] != $2) {
+        print "foundation-catalog: " $1 " is installed as two builds" | "cat 1>&2"
+        failed = 1
+        exit 1
+    }
+    files[$1] = files[$1] (files[$1] == "" ? "" : ",\n") "        \"" $3 "\""
+}
+END {
+    if (failed) {
+        exit 1
+    }
+    for (i = 1; i <= count; i++) {
+        name = order[i]
+        printf "%s    {\n      \"name\": \"%s\",\n      \"build\": \"%s\",\n      \"files\": [\n%s\n      ]\n    }", (i > 1 ? ",\n" : ""), name, build[name], files[name]
+    }
+}'
+printf '\n  ]\n}\n'

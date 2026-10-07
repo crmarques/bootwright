@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-func (s Service) selectedResolution(current inspection, requirements NativeRequirements, frozen []inspectionResolution) (Definition, bool, error) {
+func (s Service) selectedResolution(ctx context.Context, current inspection, requirements NativeRequirements, frozen []inspectionResolution) (Definition, bool, error) {
 	// A retained resolution serves any context, because setup resolves only the
 	// context-independent closure. Target tools are resolved and retained by the
 	// controller stage and never take part in this selection.
@@ -50,8 +50,8 @@ func (s Service) selectedResolution(current inspection, requirements NativeRequi
 		if !matches(*selected) {
 			// No executable resumes, on this host, a receipt frozen for other
 			// dependencies than it now selects, such as another platform.
-			if pending && abandonable(current.view) {
-				return Definition{}, false, unresumable()
+			if pending && s.abandonable(ctx, current.view, current.platform) {
+				return Definition{}, false, unresumable(current.view)
 			}
 			return Definition{}, false, failure("controller.unknown", "frozen setup dependencies differ from current intent", "restore the original input before retrying")
 		}

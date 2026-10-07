@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"syscall"
+
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 const trustSubtree = "trust"
@@ -59,7 +61,7 @@ func (s *Store) withTrustArea(ctx context.Context, name string, mutation bool, c
 	}
 	root, err := s.openRoot(ctx, false, nil)
 	if errors.Is(err, syscall.ENOENT) {
-		return state("context store does not exist")
+		return contexts.AbsentContext(name)
 	}
 	if err != nil {
 		return safeError(err)
@@ -78,7 +80,7 @@ func (s *Store) withTrustArea(ctx context.Context, name string, mutation bool, c
 		return safeError(err)
 	}
 	if !exists {
-		return state("context store does not exist")
+		return contexts.AbsentContext(name)
 	}
 	if err := verifyMappings(ctx, root, registry); err != nil {
 		return safeError(err)

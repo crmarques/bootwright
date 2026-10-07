@@ -25,6 +25,7 @@ type Options struct {
 	Bootstrap       BootstrapResolver
 	Native          NativeResolver
 	NativeInspector NativeInspector
+	Foundation      FoundationInspector
 }
 
 type Service struct {
@@ -36,9 +37,9 @@ type Service struct {
 	runtime  RuntimeInstaller
 	options  Options
 	// abandon is set on the copy one setup --purge-old-bundles runs as. That
-	// setup cancels a receipt stranded at the bound which this executable
-	// cannot resume, so each of its inspections judges the host as it will
-	// be once that receipt is canceled.
+	// setup cancels a pending receipt this executable cannot resume and whose
+	// setup never took effect, so each of its inspections judges the host as
+	// it will be once that receipt is canceled.
 	abandon bool
 }
 
@@ -79,16 +80,21 @@ type inspection struct {
 	native       StageNative
 	closures     []ClosurePresence
 	admission    error
+	// foundation is the refusal of a provided execution foundation that
+	// differs from the one this executable pins. Its remedy restores the host
+	// and no bootwright command settles it, so no next command is offered.
+	foundation error
 }
 
 func (s Service) available(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// Setup resolves every dependency it prepares, so a composition without
-	// its resolution ports has no setup to offer and fails closed.
+	// Setup resolves every dependency it prepares and reports the execution
+	// foundation it runs on, so a composition without its resolution ports or
+	// its foundation inspector has no setup to offer and fails closed.
 	if s.storage == nil || s.compiler == nil || s.host == nil || s.catalog == nil || s.bundle == nil ||
-		s.options.Bootstrap == nil || s.options.Native == nil || s.options.NativeInspector == nil {
+		s.options.Bootstrap == nil || s.options.Native == nil || s.options.NativeInspector == nil || s.options.Foundation == nil {
 		return availability.ErrNotImplemented
 	}
 	return nil
@@ -105,6 +111,11 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 			if len(current.report.Checks) != 0 {
 				current.report.Outcome = "not-ready"
 				current.report.Next = current.next()
+				// A pending setup this executable cannot resume is settled
+				// only by the purge its refusal names.
+				if errors.Is(err, errUnresumable) {
+					current.report.Next = purgeInvocation
+				}
 				result = &current.report
 			}
 			return err
@@ -130,6 +141,15 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 
 func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, error) {
 	report, err := s.setup(ctx, request)
+	// A refusal's next command is the one its remediation names, and none
+	// when it names none, so the result never offers a command that the
+	// diagnostic beside it does not.
+	if report != nil {
+		report.Purge = request.PurgeOldBundles
+		if err != nil {
+			report.Next = remedyInvocation(err)
+		}
+	}
 	// Retirement reads what the completed setup left behind, so it runs only
 	// after one completed: a refusal, a failure and a preview retire nothing
 	// here, because what may be retired is decided by what the bundle this
@@ -142,9 +162,59 @@ func (s Service) Setup(ctx context.Context, request SetupRequest) (*Report, erro
 		return report, nil
 	}
 	if err := s.retireSuperseded(ctx, report); err != nil {
-		return report, err
+		report.Next = purgeInvocation
+		return report, retirementFailure(err)
 	}
 	return report, nil
+}
+
+// retirementFailure is the refusal of a retirement that followed a completed
+// setup. Repeating the purge completes what an interrupted retirement left
+// unfinished, so a diagnostic of that refusal that names no remedy of its own
+// is given that one, and the error keeps every identity it had.
+func retirementFailure(err error) error {
+	reported := diagnostics.Of(err)
+	if len(reported) == 0 {
+		return err
+	}
+	for index := range reported {
+		if reported[index].Remediation == "" {
+			reported[index].Remediation = "the setup completed; run " + purgeInvocation + " again to complete the retirement"
+		}
+	}
+	return errors.Join(&diagnostics.Failure{Diagnostics: reported}, err)
+}
+
+// remedyInvocation is the bootwright command a setup refusal's remediation
+// tells the operator to run, as "run" or "rerun" does, so the result's next
+// command is that remedy rather than one re-derived from its outcome. A
+// remediation that names none offers none, and neither does a confirmation's,
+// whose remedy repeats the operator's own invocation with --yes.
+func remedyInvocation(err error) string {
+	for _, reported := range diagnostics.Of(err) {
+		for _, invocation := range []string{purgeInvocation, setupInvocation} {
+			if runs(reported.Remediation, invocation) {
+				return invocation
+			}
+		}
+	}
+	return ""
+}
+
+// runs reports whether a remediation runs invocation itself, not a longer
+// command that begins with it, such as the same command with a flag.
+func runs(remediation, invocation string) bool {
+	command := "run " + invocation
+	for offset := 0; ; {
+		index := strings.Index(remediation[offset:], command)
+		if index < 0 {
+			return false
+		}
+		offset += index + len(command)
+		if !strings.HasPrefix(remediation[offset:], " -") {
+			return true
+		}
+	}
 }
 
 // retireSuperseded removes every execution bundle a retained resolution names
@@ -228,11 +298,16 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	// definition remains historical evidence; only a fresh setup may resolve a
 	// new compatible bundle. Pending retry and corruption refuse.
 	if err != nil && (request.DryRun || current.view.State.Receipt.Incomplete() || !errors.Is(err, ErrBootstrapIncompatible)) {
+		// A pending receipt this executable cannot resume is settled by one
+		// command, so its refusal keeps the report that names it, and a
+		// drifted execution foundation keeps the check that names it.
+		if errors.Is(err, errUnresumable) || current.foundation != nil {
+			return &current.report, err
+		}
 		return nil, err
 	}
 	if request.DryRun {
-		current.report.Outcome = "planned"
-		return &current.report, nil
+		return s.preview(ctx, &current.report, request)
 	}
 	// An executable whose embedded automation moved needs a new bundle, not new
 	// dependencies. The retained closure is reprojected from the sources this
@@ -299,6 +374,34 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	return s.executeApprovedPlan(ctx, current, request)
 }
 
+// preview closes a dry run: its next command is the setup it previewed, and a
+// purge plans the retirement that follows that setup's completion.
+func (s Service) preview(ctx context.Context, report *Report, request SetupRequest) (*Report, error) {
+	report.Outcome, report.Next = "planned", setupInvocation
+	if request.PurgeOldBundles {
+		report.Actions = append(report.Actions, "Retire the superseded execution bundles this host holds once setup completes")
+		report.Next = purgeInvocation
+	}
+	return report, s.stateRoot(ctx, report)
+}
+
+// stateRoot reports in a dry run whether this build can use the store's state
+// root, from the store's own unprivileged inspection, and returns the store's
+// refusal of a root it cannot use, so the preview never promises a setup that
+// root would refuse.
+func (s Service) stateRoot(ctx context.Context, report *Report) error {
+	inspector, ok := s.storage.(StateRootInspector)
+	if !ok {
+		return nil
+	}
+	inspection, err := inspector.InspectStateRoot(ctx)
+	if err != nil {
+		return err
+	}
+	report.setCheck(Check{ID: "state-root", Required: inspection.Required, Observed: inspection.Observed, Status: inspection.Status, Scope: HostScope})
+	return inspection.Refusal
+}
+
 func (s Service) executeApprovedPlan(ctx context.Context, approved inspection, request SetupRequest) (*Report, error) {
 	current := approved
 	var retired []string
@@ -359,7 +462,7 @@ type inspectionResolution struct {
 func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, phase string, frozen ...inspectionResolution) (inspection, error) {
 	abandoned := s.abandoned(ctx, view)
 	if abandoned.ID != "" {
-		view.State.Receipt = canceled(abandoned)
+		view.State.Receipt = canceled(abandoned, view.Areas)
 	}
 	current, err := s.selectInspection(ctx, view, frozen)
 	current.abandoned = abandoned
@@ -367,7 +470,7 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 		return current, err
 	}
 	platform := current.platform
-	current.report = Report{ContextName: view.Context.Name, Machine: current.selection.MachineName(), Platform: platform, DryRun: dryRun, Outcome: "planned", Route: current.selection.Route().Summary(), Checks: []Check{}, Actions: []string{}}
+	current.report = Report{ContextName: view.Context.Name, Machine: current.selection.MachineName(), Platform: platform, DryRun: dryRun, Outcome: "planned", Route: current.routeSummary(), Checks: []Check{}, Actions: []string{}}
 	if !current.toolsResolved {
 		current.report.Dependencies = dependencyIntent(current.selection)
 	}
@@ -400,7 +503,11 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 	}
 	hostText := platform.OS + " " + platform.Release + "/" + platform.Architecture
 	settle(Check{"host", hostText, hostText, "ready", HostScope})
-	current.report.Checks = append(current.report.Checks, Check{"installed-host", "verified local identity", "unverified", "unverified", HostScope}, Check{"execution-bundle", current.versions(), "unverified", "unverified", HostScope})
+	current.report.Checks = append(current.report.Checks, Check{"installed-host", "verified local identity", "unverified", "unverified", HostScope}, Check{"execution-foundation", foundationRequirement, "unverified", "unverified", HostScope})
+	if _, reports := s.host.(FIPSInspector); reports && !dryRun {
+		current.report.Checks = append(current.report.Checks, Check{"fips-mode", "the host's FIPS mode", "unverified", "unverified", HostScope})
+	}
+	current.report.Checks = append(current.report.Checks, Check{"execution-bundle", current.versions(), "unverified", "unverified", HostScope})
 	if current.selection.ContainerRuntime() {
 		current.report.Checks = append(current.report.Checks, Check{"container-runtime", current.definition.Runtime.Version, "unverified", "unverified", HostScope})
 	}
@@ -478,7 +585,7 @@ func (s Service) selectInspection(ctx context.Context, view StorageView, frozen 
 	// one context's desired state, so its controller stage installs them and
 	// this inspection only reports whether they are present.
 	requirements := NativeRequirements{ContainerRuntime: current.selection.ContainerRuntime()}
-	current.definition, current.toolsResolved, err = s.selectedResolution(current, requirements, frozen)
+	current.definition, current.toolsResolved, err = s.selectedResolution(ctx, current, requirements, frozen)
 	if err != nil {
 		return current, err
 	}
@@ -523,21 +630,27 @@ func (s Service) settleHostChecks(ctx context.Context, view StorageView, current
 		return failure("controller.identity", "stored setup belongs to a different installed host", "restore the original host and state; setup cannot rebind it")
 	}
 	settle(readiness("installed-host", "verified local identity", true, HostScope))
+	if err := s.settleFoundation(ctx, current, settle, start); err != nil {
+		return err
+	}
+	if err := s.settleFIPS(ctx, current, settle); err != nil {
+		return err
+	}
 	if receipt := view.State.Receipt; receipt.ID != "" && receipt.Incomplete() {
 		own := current.compatibleReceipt(receipt) && current.matchesActions(receipt.Actions)
 		foreign := !own || !current.sameRoute(receipt)
-		// A stranded receipt resumes only after a retirement, which is never
-		// undone, makes room for it, so this executable first proves that it
-		// can prepare that receipt's bundle at all. One it cannot prepare is
-		// abandoned instead when its setup never took effect, whatever route
-		// it recorded.
-		if own && stranded(view) {
+		// A pending receipt of setup's own resumes exactly, and a stranded
+		// one only after a retirement, which is never undone, so this
+		// executable first proves that it can prepare that receipt's bundle
+		// at all. One it cannot prepare is canceled instead when its setup
+		// never took effect, whatever route it recorded.
+		if own {
 			if err := s.bundle.Validate(current.definition); err != nil {
 				if !errors.Is(err, ErrBootstrapIncompatible) {
 					return err
 				}
-				if abandonable(view) {
-					return unresumable()
+				if s.abandonable(ctx, view, current.platform) {
+					return unresumable(view)
 				}
 				foreign = true
 			}
@@ -568,6 +681,62 @@ func (s Service) settleHostChecks(ctx context.Context, view StorageView, current
 	if !current.bundle.Ready {
 		current.report.Actions = append(current.report.Actions, "Prepare and verify the pinned execution bundle")
 	}
+	return nil
+}
+
+// foundationRequirement is what the execution foundation check requires
+// before its inspector names the exact package builds.
+const foundationRequirement = "the glibc and libgcc builds this executable pins"
+
+// settleFoundation verifies the provided execution foundation the private
+// interpreter runs on. A foundation that differs settles not-ready and its
+// refusal, which names the path, the package build and the remedy, stops the
+// inspection before any plan.
+func (s Service) settleFoundation(ctx context.Context, current *inspection, settle func(Check), start func(string, string)) error {
+	start("execution-foundation", "verifying the provided glibc and libgcc files")
+	inspection, err := s.options.Foundation.Inspect(ctx, current.platform)
+	if err != nil {
+		settle(unverified("execution-foundation", foundationRequirement, HostScope))
+		return err
+	}
+	check := Check{ID: "execution-foundation", Required: inspection.Required, Observed: inspection.Required, Status: "ready", Scope: HostScope}
+	if inspection.Refusal != nil {
+		check.Observed, check.Status = "differs", "not-ready"
+		if inspection.Drift != "" {
+			check.Observed = "differs at " + inspection.Drift
+		}
+		settle(check)
+		current.foundation = inspection.Refusal
+		return inspection.Refusal
+	}
+	settle(check)
+	return nil
+}
+
+// fipsEnabled is what the FIPS mode check reports on a host whose kernel runs
+// in FIPS mode (D108): the runtime Bootwright brings uses its own
+// cryptography, which no FIPS-validated module of the host provides.
+const fipsEnabled = "enabled; Bootwright's runtime brings its own cryptography, outside this host's FIPS-validated modules"
+
+// settleFIPS reports the host's FIPS mode when its inspector reads it. A read
+// mode is informational: ready, and never changing readiness, the plan or the
+// next command. An inspector refusal settles the check unverified and stops the
+// inspection (B414).
+func (s Service) settleFIPS(ctx context.Context, current *inspection, settle func(Check)) error {
+	inspector, reports := s.host.(FIPSInspector)
+	if !reports {
+		return nil
+	}
+	enabled, err := inspector.FIPSMode(ctx)
+	if err != nil {
+		settle(unverified("fips-mode", "the host's FIPS mode", HostScope))
+		return err
+	}
+	mode := "disabled"
+	if enabled {
+		mode = fipsEnabled
+	}
+	settle(Check{ID: "fips-mode", Required: mode, Observed: mode, Status: "ready", Scope: HostScope})
 	return nil
 }
 
@@ -658,7 +827,11 @@ func (s Service) settleContextChecks(ctx context.Context, view StorageView, curr
 		}
 		current.bound = true
 	}
-	settle(readiness("controller-binding", current.selection.MachineName(), current.bound, ContextScope))
+	binding := readiness("controller-binding", current.selection.MachineName(), current.bound, ContextScope)
+	if !current.bound {
+		binding.Observed = "not yet bound; its first apply binds it"
+	}
+	settle(binding)
 	return nil
 }
 
@@ -713,6 +886,17 @@ func closureRequirement(id string) string {
 		return "installer-media tooling (lorax, xorriso)"
 	}
 	return "libvirt client"
+}
+
+// routeSummary names the route and what selected it. A context's direct route
+// was chosen by its controller Machine, so that Machine is named; the
+// baseline's own direct route was chosen by nothing.
+func (i inspection) routeSummary() string {
+	route := i.selection.Route()
+	if machine := i.selection.MachineName(); machine != "" && route.Direct() && route.Origin() == "" {
+		return "direct (Machine " + machine + ")"
+	}
+	return route.Summary()
 }
 
 func (i inspection) versions() string {
@@ -886,6 +1070,11 @@ func setupCommand() string { return "run " + setupInvocation }
 
 const setupInvocation = "bootwright setup"
 
+// purgeInvocation is the only command that retires superseded execution
+// bundles, completes an interrupted retirement or cancels a pending receipt
+// this executable cannot resume.
+const purgeInvocation = "bootwright setup --purge-old-bundles"
+
 func stageInvocation(name string) string {
 	return "bootwright apply --stage controller --context " + name
 }
@@ -897,10 +1086,11 @@ func stageCommand(name string) string { return "run " + stageInvocation(name) }
 // controller stage, after the operator's own installation of a RHEL
 // controller's installer-media tooling when that is missing. A context with no
 // stage has nothing pending but its binding, which its first apply publishes.
-// A selection this platform cannot realize has no command at all.
+// A selection this platform cannot realize has no command at all, and neither
+// has an execution foundation that differs, whose remedy restores the host.
 func (i inspection) next() string {
 	name := i.report.ContextName
-	if i.admission != nil {
+	if i.admission != nil || i.foundation != nil {
 		return ""
 	}
 	if PendingScope(i.report) != ContextScope || name == "" {

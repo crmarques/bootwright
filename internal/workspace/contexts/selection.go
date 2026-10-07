@@ -24,7 +24,7 @@ func (w SelectionWorkspace) SecretContext(ctx context.Context, name string) (sec
 			return secretstore.ContextSnapshot{}, err
 		}
 		if selected.Name == "" {
-			return secretstore.ContextSnapshot{}, StateError("no current context; run context use --name <name>")
+			return secretstore.ContextSnapshot{}, NoSelection()
 		}
 		name = selected.Name
 	}

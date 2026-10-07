@@ -47,9 +47,10 @@ ansible-check:
 	./scripts/ansible-check
 
 # Guidance links, cited paths and tests, command lines, and the tables specs
-# share with code: diagnostics, bounds, the command catalog and transitions.
+# share with code: diagnostics, bounds, the command catalog and transitions, and
+# the destinations the operator guide lists for a proxied network.
 docs-check:
-	$(GO) test -count=1 -run '^(TestDocs|TestDiagnosticCodesMatchOutputSpec|TestDocumentedBoundsMatchCode|TestCommandCatalogMatchesSpec|TestTransitionTablesMatchSpec)' ./test/architecture ./internal/cli ./internal/reconciliation/lifecycle
+	$(GO) test -count=1 -run '^(TestDocs|TestDiagnosticCodesMatchOutputSpec|TestDocumentedBoundsMatchCode|TestCommandCatalogMatchesSpec|TestTransitionTablesMatchSpec)' ./test/architecture ./internal/cli ./internal/reconciliation/lifecycle ./internal/controller/bundlelocal
 
 # The inner-loop tier: formatting, vet, the architecture suite and the packages
 # this branch changed together with their dependents.

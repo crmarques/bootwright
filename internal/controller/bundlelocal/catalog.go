@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -51,10 +52,50 @@ type catalogRecord struct {
 	Native     []nativeRecord `json:"native"`
 }
 
+// nativeRecord is one admitted release. Packages attributes each foundation
+// file to the package build that provides it on a qualified host, so a refusal
+// can name what to reinstall. It sits beside the execution requirement, never
+// inside it, because that requirement is what every resolution carries and
+// its digests bind; the attribution binds nothing.
 type nativeRecord struct {
 	OS        string                             `json:"os"`
 	Release   string                             `json:"release"`
 	Execution prerequisites.ExecutionRequirement `json:"execution"`
+	Packages  []foundationPackage                `json:"packages"`
+}
+
+// foundationPackage is one package build and the foundation files it provides.
+type foundationPackage struct {
+	Name  string   `json:"name"`
+	Build string   `json:"build"`
+	Files []string `json:"files"`
+}
+
+// foundationBuilds names the package builds that provide a foundation, in
+// catalog order, as a check states what it requires.
+func foundationBuilds(packages []foundationPackage) string {
+	builds := make([]string, 0, len(packages))
+	for _, pkg := range packages {
+		builds = append(builds, pkg.Name+" "+pkg.Build)
+	}
+	return strings.Join(builds, ", ")
+}
+
+// compiledAttribution is the package attribution of the compiled record whose
+// execution requirement is the one given, apart from the interpreter path a
+// resolution adds, and none when no compiled record carries it.
+func compiledAttribution(requirement prerequisites.ExecutionRequirement) []foundationPackage {
+	record, err := compiledCatalog()
+	if err != nil {
+		return nil
+	}
+	requirement.PythonExecutable = ""
+	for _, native := range record.Native {
+		if equalExecution(native.Execution, requirement) {
+			return native.Packages
+		}
+	}
+	return nil
 }
 
 func cloneExecution(value prerequisites.ExecutionRequirement) prerequisites.ExecutionRequirement {

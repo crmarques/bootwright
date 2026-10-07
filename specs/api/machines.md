@@ -23,6 +23,12 @@ spec contains exactly one implementation arm alongside optional
 accepted. Missing, multiple, or unknown arms fail validation, as do missing
 required fields inside the selected arm.
 
+An `InfraProvider` name is at most 48 bytes, because a libvirt provider's host
+block `substrate-host-<name>` is a
+[block identity](../state-reconciliation.md#durable-identities-and-private-paths)
+of at most 63 bytes; a longer name refuses at `metadata.name`, whichever arm
+the provider selects, naming that limit.
+
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `spec.baremetal` | object | union | The bare-metal arm below. |
@@ -76,15 +82,16 @@ certificate that is not a CA cannot be anchored by one and keeps
 | `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | yes | — | Listener address; one unicast IP address, so that every hosted Machine's controller endpoint names it: not unspecified, multicast or `255.255.255.255`, and not an IPv6 link-local, zoned or IPv4-mapped address. Loopback is admitted, and an IPv6 address normalizes to the spelling Go's `netip` prints. |
 | `spec.libvirt.bmcEmulationDefaults.port` | integer | no | `8000` | `1..65535`; the first port of the contiguous range the provider's emulated BMCs listen on. |
 | `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`; required while emulation is enabled. |
-| `spec.libvirt.bmcEmulationDefaults.disableCertificateVerification` | boolean | no | `false` | Explicit TLS verification opt-out. |
 | `spec.libvirt.machineProfiles` | array | no | `[]` | Provider-local set keyed by `name`; common profile shape below. |
 
-`bmcEmulationDefaults` is required and its defaults materialize. Every Machine
-on the provider is realized with its own emulated BMC, listening at `port` plus
-that Machine's position in the canonical name order of the provider's Machines,
-so a provider with `n` Machines claims the range `port` through `port + n - 1`.
-The range ends at or below `65535`, and the ranges of providers on the same
-host do not overlap. The retired `vMediaPort` is rejected: the emulator fetches
+`bmcEmulationDefaults` is required and its defaults materialize. Only a
+Machine on the provider whose `os.provided` is `false` is realized and counted:
+each such Machine has its own emulated BMC, listening at `port` plus its
+position in the canonical name order of those Machines, so a provider realizing
+`n` Machines claims the range `port` through `port + n - 1`. An OS-ready
+Machine that names the provider is not realized and claims no port. The range
+ends at or below `65535`, and the ranges of providers on the same host do not
+overlap. The retired `vMediaPort` is rejected: the emulator fetches
 media from the artifact server and opens no second listener.
 [Substrates](../substrates.md#machine-realization) owns the controller each
 Machine receives.
@@ -97,6 +104,8 @@ before registration by [substrate selection](../substrates.md#selection-and-refu
 and [managed-OS installation](../managed-os.md#installation). Their field
 detail is recorded in [refused machine arms](../deferred/machine-arms.md),
 which [B87](../milestones/m6.md#b87) and [B99](../milestones/backlog.md#b99) revive.
+A Machine's [`network.interfaceAttachments`](#network-configuration), which
+only the KubeVirt arm reads, refuses at admission on every realized substrate.
 
 ### Machine profiles and network attachments
 
@@ -107,30 +116,38 @@ shape; the vSphere-only `template` and `failureDomainRef` fields belong to the
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `name` | string | yes | — | Unique in the provider. |
-| `cpu` | integer | no | `0` | Non-negative; greater than zero for libvirt and vSphere. |
-| `memoryMiB` | integer | no | `0` | Non-negative; greater than zero for libvirt and vSphere. |
-| `diskGiB` | integer | no | `0` | Non-negative; greater than zero for libvirt and vSphere. |
-| `dataDisks` | array | no | `[]` | Libvirt/vSphere only; set keyed by required `name`, with positive `sizeGiB`. |
+| `cpu` | integer | no | `0` | `0..1024`; greater than zero for libvirt and vSphere. |
+| `memoryMiB` | integer | no | `0` | `0..16777216` (16 TiB); greater than zero for libvirt and vSphere. |
+| `diskGiB` | integer | no | `0` | `0..65536` (64 TiB); greater than zero for libvirt and vSphere. |
+| `dataDisks` | array | no | `[]` | Libvirt/vSphere only; set keyed by a required `name`, a DNS label, with `sizeGiB` `1..65536`. A libvirt profile declares at most 7 data disks, which the domain presents as `vdb` through `vdh`, and none named `root`, which names the root disk. |
 | `tpm` | object | no | — | Libvirt/KubeVirt only; its presence requests TPM 2.0. |
 | `tpm.persistent` | boolean | KubeVirt only | `true` | Forbidden for libvirt, whose emulated TPM state is already persistent. |
 
 A libvirt or vSphere profile therefore sets all three sizes: an omitted one
 materializes `0`, which admission refuses at that profile's size.
 
-`networkAttachments[]` names are unique. Each entry has required `name` and
-exactly one arm matching the provider's selected substrate; the `vsphere` and
-`kubevirt` arms are [refused](#refused-arms):
+`networkAttachments[]` names are unique DNS labels. Each entry has required
+`name` and exactly one arm matching the provider's selected substrate; the
+`vsphere` and `kubevirt` arms are [refused](#refused-arms):
 
 | Arm | Exact fields | Rule |
 | --- | --- | --- |
-| `baremetal` | optional integer `vlan` | `0..4094`; zero means no VLAN selection. |
-| `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. |
+| `baremetal` | none | Names a physical network a Machine may select; it configures nothing. A VLAN interface is [B74](../milestones/m4.md#b74)'s. |
+| `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `bridge` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. On one host, no two providers declare a managed attachment of one name, and a bridge a managed attachment defines is named by no other attachment, of the same provider or another; each refuses at admission, naming both providers. |
 
 ## Machine
 
 `Machine` is the single object for physical machines, provider-created virtual
 machines, OS-ready hosts, Bootwright-installed hosts, and hosts whose OS a
 downstream installer supplies.
+
+A `Machine` name is at most 52 bytes, because the longest block a Machine
+contributes, its installation's `os-install-<name>`, is a
+[block identity](../state-reconciliation.md#durable-identities-and-private-paths)
+of at most 63 bytes. A longer name refuses at `metadata.name`, naming that
+limit, on every Machine whatever its lifecycle, because a Machine may change
+lifecycle. A name outside the label grammar has only the compiler's own
+refusal.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
@@ -140,9 +157,8 @@ downstream installer supplies.
 | `spec.substrate.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required for a virtual install machine and forbidden for bare metal. |
 | `spec.hardware.nics` | array | conditional | `[]` | Set keyed by `name`; required for a bare-metal install machine. |
 | `spec.hardware.nics[].name` | string | yes | — | Machine-local NIC name. |
-| `spec.hardware.nics[].macAddress` | string | conditional | — | EUI-48; required on every bare-metal install NIC. |
-| `spec.hardware.boot.nicRef` | string | conditional | — | Machine-local `nics[].name`; required for bare-metal install. |
-| `spec.hardware.management.bmc` | object | conditional | — | Required for bare-metal install; exact shape below. |
+| `spec.hardware.nics[].macAddress` | string | conditional | — | EUI-48; required on every bare-metal install NIC; refused on a libvirt provider's Machine, whose MACs the provider derives. |
+| `spec.hardware.management.bmc` | object | conditional | — | Required for bare-metal install; refused on a libvirt provider's Machine, whose controller is its emulated BMC; exact shape below. |
 | `spec.os.provided` | boolean | yes | — | Selects the OS lifecycle with `installProfileRef`. |
 | `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
@@ -172,8 +188,8 @@ Every non-provided machine has `substrate.providerRef`. Bare metal forbids
 not provided. A selected profile resolves only in its provider.
 
 A bare-metal non-provided machine has at least one NIC; every NIC has a MAC;
-`boot.nicRef` resolves locally; BMC address and credentials are present; and
-root device hints contain `deviceName` or `wwn`. Its BMC address, like every
+BMC address and credentials are present; and root device hints contain
+`deviceName` or `wwn`. Its BMC address, like every
 authored one, selects one exact `/redfish/v1/Systems/<id>` ComputerSystem in
 the [one spelling](#bmc-and-root-device-shape) the realized target sends. These
 declarations identify an install target but do not authorize a destructive
@@ -198,6 +214,16 @@ declares none, having no Bootwright-performed installation to deliver it.
 NIC names and canonical MACs are unique in a machine, and authored MACs are
 unique across the complete graph. Effective normalization writes MACs as
 lowercase colon-separated EUI-48 values.
+
+A libvirt provider's Machine authors neither a MAC nor `management.bmc`, since
+realization would ignore both: the provider derives every interface's MAC from
+the context, Machine and interface names, and realizes the Machine's management
+controller as its emulated BMC
+([substrates](../substrates.md#machine-realization)). Each
+`hardware.nics[].macAddress` refuses with `api.invariant` at its own path, and
+an authored controller refuses once at `hardware.management.bmc`, however
+complete, and no other BMC rule applies to it. NIC names alone stay admitted,
+and such a Machine's MACs take no part in the graph-wide uniqueness check.
 
 ### BMC and root-device shape
 
@@ -265,7 +291,8 @@ and which it refuses, is the rule of the consumer that installs the Machine:
 | --- | --- | --- | --- | --- |
 | `configRef` | string | union | — | Global `NetworkConfig`. |
 | `inline` | `NetworkConfig.spec` object | union | — | Inline one-off alternative with the same NMState, CIDR, and DNS selection constraints. |
-| `attachmentRef` | string | conditional | `configRef` name | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. |
+| `attachmentRef` | string | conditional | `configRef` name | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. Required with a configured network on a libvirt Machine unless the default applies; optional on bare metal, where it selects nothing. |
+| `interfaceAttachments` | array | no | — | Set of `{interface, attachmentRef}` keyed by `interface`; mutually exclusive with `attachmentRef`. `interface` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. Only the [refused](#refused-arms) KubeVirt arm reads it, so it refuses at admission on every realized substrate. |
 | `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
 | `addresses` | array | no | `[]`, plus derived `fqdn` contact | Set keyed by `name`; exact entry shape below. |
 | `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. `interfaceName` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
@@ -283,10 +310,27 @@ forms are rejected; they are not aliases.
 On a provider-backed machine with `configRef`, absent attachment selection
 defaults `attachmentRef` to that reference's name. The default is valid only
 when the provider exposes exactly one attachment and that name resolves;
-otherwise an explicit selection is required. An authored attachment always
-wins. Inline configuration has no reference name from which to derive an
-attachment. A Machine attached to a managed libvirt network selects an install
-address inside that attachment's prefix.
+otherwise a libvirt Machine requires an explicit selection, while a bare-metal
+Machine, whose attachment configures nothing, needs none. An authored
+attachment always wins and always resolves on its provider. Inline
+configuration has no reference name from which to derive an attachment. A
+Machine attached to a managed libvirt network selects an install address inside
+that attachment's prefix, other than the bridge's host address and, for an IPv4
+prefix shorter than /31, its network and broadcast addresses; each refuses at
+`network.installAddressRef` naming the prefix and every reserved address.
+
+A non-provided Machine of a libvirt provider selects a network configuration
+whose composed NMState, after its overrides, has at least one `ethernet`
+interface whose `state` is neither `absent` nor `ignore`, because its domain
+attaches one interface per such interface. One that selects no configuration
+refuses at `network`, and one whose configuration presents none at
+`network.configRef` or `network.inline.nmstate`. A Bootwright-installed
+Anaconda Machine that selects no configuration refuses only at
+`network.installAddressRef`, as below.
+
+Not yet met: realization still reads the uncomposed template, so it ignores
+`network.overrides` and also attaches `absent` and `ignore` ethernet
+interfaces; tracked as [B338](../milestones/m1.md#b338).
 
 `network.addresses[]` has exactly these fields:
 
@@ -298,7 +342,10 @@ address inside that attachment's prefix.
 
 An assigned interface may be physical or logical, including a VLAN, bond, or
 OVS internal interface. DNS names cannot be assigned. IPv4 prefixes are
-`1..32`, IPv6 prefixes `1..128`; the IP determines the family. Preserve host
+`1..32`, IPv6 prefixes `1..128`; the IP determines the family. An IPv4
+assignment with a prefix shorter than /31 is a host address of its prefix,
+never its network or broadcast address, and refuses with `api.value` at its
+`address`; a /31, a /32 and an IPv6 assignment reserve neither. Preserve host
 bits while canonicalizing IP/prefix spelling: `192.0.2.3/24` must not become
 `192.0.2.0/24`. Consumers of an address reference receive the host IP without
 its prefix, or the DNS name for a DNS contact. A contact never requests an
@@ -395,7 +442,10 @@ Machine name or local access. The retired `Machine.spec.os.install.proxy` and
 
 Address names and references in this section belong to
 `Machine.spec.network.addresses`. Normalization appends an absent `fqdn`
-contact using [Environment domains](environment.md#domains). An authored
+contact, `<name>.<domain>`, using [Environment domains](environment.md#domains),
+only for a Machine whose name is a DNS label; for any other name it derives
+no contact and no session address it does not declare, so the name's refusal
+is the only one. An authored
 `fqdn` is preserved verbatim, is a DNS subdomain, has no assigned interface,
 and is unique across Machines.
 
@@ -450,8 +500,11 @@ accepts only its qualified algorithm allow-list; one declared target, port,
 and key is therefore bound before observation.
 
 A Bootwright-installed machine authors no `access` or `rootLogin`.
-Normalization derives SSH user `bootwright`, the fleet
-`Environment.spec.remoteMachinesAccessKey.keyRef`, `rootLogin: keep`, and
+Normalization derives its access only when the fleet
+`Environment.spec.remoteMachinesAccessKey.keyRef` names an `sshKeyPair`
+`Secret`; otherwise access stays underived, so the Environment's refusal of
+that key is the only one. The derived access is SSH user `bootwright`, that
+fleet key, `rootLogin: keep`, and
 `addressRef` `ssh` when the Machine declares that address, else its
 `network.installAddressRef` when the Machine declares the address it names,
 else `fqdn`. An install address the Machine does not declare is refused only at

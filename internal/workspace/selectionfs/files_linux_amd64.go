@@ -103,8 +103,8 @@ func (s *Store) publishRecord(ctx context.Context, dir *os.File, current selecti
 	file := os.NewFile(uintptr(fd), name)
 	defer file.Close()
 	defer syscall.Unlinkat(int(dir.Fd()), name) // Only our exclusive staging name.
-	if err := s.check(file, syscall.S_IFREG, 0600); err != nil {
-		return contexts.Selection{}, err
+	if s.check(file, syscall.S_IFREG, 0600) != nil {
+		return contexts.Selection{}, state("selection staging file owner, type, links or permissions are unsafe")
 	}
 	if _, err := file.Write(data); err != nil {
 		return contexts.Selection{}, state("selection staging file could not be written")
@@ -144,13 +144,42 @@ func (s *Store) publishRecord(ctx context.Context, dir *os.File, current selecti
 func (s *Store) check(file *os.File, kind, mode uint32) error {
 	var stat syscall.Stat_t
 	if err := syscall.Fstat(int(file.Fd()), &stat); err != nil || !s.private(stat, kind, mode) {
-		return state("selection owner, type, links or permissions are unsafe")
+		if kind == syscall.S_IFDIR {
+			return unsafeSelectionDirectory()
+		}
+		return unsafeSelectionFile()
 	}
 	return nil
 }
 
+func unsafeSelectionFile() error {
+	return contexts.StateErrorWithRemediation("selection file ~/.bootwright/context has an unsafe owner, type, link count or mode",
+		"remove it and select again with bootwright context use --name <context>")
+}
+
+func unsafeSelectionDirectory() error {
+	return contexts.StateErrorWithRemediation("~/.bootwright has an unsafe owner, type or mode",
+		"make ~/.bootwright a directory you own with mode 0700")
+}
+
 func (s *Store) private(stat syscall.Stat_t, kind, mode uint32) bool {
 	return stat.Mode&syscall.S_IFMT == kind && stat.Mode&07777 == mode && stat.Uid == uint32(s.options.UID) && stat.Gid == uint32(s.options.GID) && (kind != syscall.S_IFREG || stat.Nlink == 1)
+}
+
+// O_PATH permits metadata inspection without opening a substituted device for
+// I/O. O_NOFOLLOW keeps a substituted symlink as the inspected object.
+const pathHandle = 0x200000
+
+// unsafeEntry reports an entry that exists but is not the store's private
+// object, such as a symlink, socket or unreadable file an open refused.
+func (s *Store) unsafeEntry(dir int, name string, kind, mode uint32) bool {
+	fd, err := syscall.Openat(dir, name, pathHandle|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return false
+	}
+	defer syscall.Close(fd)
+	var stat syscall.Stat_t
+	return syscall.Fstat(fd, &stat) == nil && !s.private(stat, kind, mode)
 }
 
 func (s *Store) openDirectory(create bool) (*os.File, error) {
@@ -191,6 +220,9 @@ func (s *Store) openDirectory(create bool) (*os.File, error) {
 		if errors.Is(err, syscall.ENOENT) {
 			return nil, err
 		}
+		if s.unsafeEntry(fd, ".bootwright", syscall.S_IFDIR, 0700) {
+			return nil, unsafeSelectionDirectory()
+		}
 		return nil, state("selection directory cannot be opened safely")
 	}
 	file := os.NewFile(uintptr(child), ".bootwright")
@@ -230,9 +262,6 @@ func (s *Store) verifyRecord(dir *os.File, observed selectionRecord) error {
 	if err := s.verifyDirectory(dir); err != nil {
 		return err
 	}
-	// O_PATH permits metadata inspection without opening a substituted device
-	// for I/O. O_NOFOLLOW keeps a substituted symlink as the inspected object.
-	const pathHandle = 0x200000
 	fd, err := syscall.Openat(int(dir.Fd()), "context", pathHandle|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
 	if errors.Is(err, syscall.ENOENT) && observed.file == nil {
 		return nil
@@ -255,6 +284,9 @@ func (s *Store) readRecord(dir *os.File) (selectionRecord, error) {
 		return result, nil
 	}
 	if err != nil {
+		if s.unsafeEntry(int(dir.Fd()), "context", syscall.S_IFREG, 0600) {
+			return result, unsafeSelectionFile()
+		}
 		return result, state("selection file cannot be opened safely")
 	}
 	file := os.NewFile(uintptr(fd), "context")
@@ -272,7 +304,7 @@ func (s *Store) readRecord(dir *os.File) (selectionRecord, error) {
 		return result, state("selection file cannot be inspected safely")
 	}
 	if !s.private(before, syscall.S_IFREG, 0600) {
-		return result, state("selection owner, type, links or permissions are unsafe")
+		return result, unsafeSelectionFile()
 	}
 	// Content this store cannot read is the account's own superseded record,
 	// not an unsafe object: hold it for identity, report no selection, and let

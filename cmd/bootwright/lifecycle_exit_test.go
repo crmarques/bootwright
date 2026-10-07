@@ -143,19 +143,24 @@ func TestAPlainDeleteClearsTheRefusedRecordStatesBesidePristineEvidence(t *testi
 var namedDeletion = regexp.MustCompile(`bootwright (context delete[^,\n]*)`)
 
 // Evidence spelled otherwise than this build publishes it, beside no
-// operation, admits neither verb. Where the context guard still reads it, both
-// refusals name the deletion the guard admits, and that command, run exactly as
-// named, removes the context. Evidence the guard cannot read admits no
-// deletion, acknowledged or not, so both refusals name none, and the
-// acknowledged deletion refuses and leaves the context in place.
+// operation, admits neither verb. Both refusals name the deletion the context
+// guard admits, and that command, run exactly as named, removes the context:
+// a plain one over evidence it reads as pristine, and the orphan
+// acknowledgement over any other, which over evidence it cannot read abandons
+// what it cannot list.
 func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
+	acknowledged := []string{"context", "delete", "--name", "alpha", "--purge", "--allow-orphans"}
+	unrecognized := "the mutation evidence reads an unrecognized record"
 	for name, test := range map[string]struct {
 		evidence string
 		named    []string
+		entry    string
 	}{
-		"respelled protected evidence": {`{"ownership":"retained","operation":"applied","version":1}`, []string{"context", "delete", "--name", "alpha", "--purge", "--allow-orphans"}},
-		"respelled pristine evidence":  {`{"version":1,"operation":"none","ownership":"none"}`, []string{"context", "delete", "--name", "alpha", "--purge"}},
-		"corrupt evidence":             {`{`, nil},
+		"respelled protected evidence": {`{"ownership":"retained","operation":"applied","version":1}`, acknowledged, unrecognized},
+		"respelled pristine evidence":  {`{"version":1,"operation":"none","ownership":"none"}`, []string{"context", "delete", "--name", "alpha", "--purge"}, unrecognized},
+		"corrupt evidence":             {`{`, acknowledged, unrecognized},
+		"unsupported evidence":         {`{"version":2,"operation":"none","ownership":"none"}` + "\n", acknowledged, unrecognized},
+		"empty evidence":               {``, acknowledged, "the mutation evidence is absent or empty"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			services, repository, input, root := contextFixture(t)
@@ -169,20 +174,15 @@ func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
 				if found := namedDeletion.FindStringSubmatch(stderr); found != nil {
 					named = strings.Fields(found[1])
 				}
-				if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, "the mutation evidence reads an unrecognized record") ||
-					!slices.Equal(named, test.named) || (named == nil) != strings.Contains(stderr, "restore the whole store from a matching backup") {
+				if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, test.entry) ||
+					!slices.Equal(named, test.named) || strings.Contains(stderr, "restore the whole store") {
 					t.Fatalf("the %s refused with %s", verb, stderr)
 				}
 			}
-			if test.named == nil {
-				contextRun(t, services, 1, "context", "delete", "--name", "alpha", "--purge", "--allow-orphans", "--yes")
-				registry, err := repository.View(context.Background())
-				if err != nil || len(registry.Contexts) != 1 {
-					t.Fatalf("the refused deletion left %+v (%v)", registry.Contexts, err)
-				}
-				return
+			out, _ := contextRun(t, services, 0, append(slices.Clone(test.named), "--yes")...)
+			if abandoned := strings.Contains(out, "Orphans abandoned  true"); abandoned != slices.Contains(test.named, "--allow-orphans") {
+				t.Fatalf("the deletion reported abandonment %t: %s", abandoned, out)
 			}
-			contextRun(t, services, 0, append(slices.Clone(test.named), "--yes")...)
 			registry, err := repository.View(context.Background())
 			if err != nil || len(registry.Contexts) != 0 {
 				t.Fatalf("the registry still holds %+v (%v)", registry.Contexts, err)

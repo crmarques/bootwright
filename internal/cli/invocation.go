@@ -38,11 +38,8 @@ func ClassifyInvocation(args []string) InvocationClass {
 	if command.ParseFlags(resolved.arguments) != nil || boolValue(command.Flags(), "help") || validateInvocation(command, path) != "" || !privilegedOperation(path) {
 		return InvocationClass{}
 	}
-	if path == "validate" {
-		files, _ := command.Flags().GetStringArray("file")
-		if len(files) != 0 {
-			return InvocationClass{}
-		}
+	if path == "validate" && len(arrayValue(command.Flags(), "file")) != 0 {
+		return InvocationClass{}
 	}
 	ambient := contextFreeAcquisition(path, command.Flags())
 	if path == "setup" && boolValue(command.Flags(), "dry-run") {

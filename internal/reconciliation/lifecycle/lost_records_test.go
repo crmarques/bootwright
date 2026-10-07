@@ -18,10 +18,12 @@ import (
 const reviewWithStatus = "review its durable state with bootwright status --context lab"
 
 // The exits of the record states neither verb acts on: deleting the context,
-// acknowledging orphans unless its evidence is pristine.
+// acknowledging orphans unless its evidence is pristine, and over evidence the
+// guard cannot read abandoning what that acknowledgement cannot list.
 const (
 	plainDeletion    = "delete the context with bootwright context delete --name lab --purge"
 	orphanedDeletion = plainDeletion + " --allow-orphans, which abandons what it may still own"
+	unlistedDeletion = "abandon the context with bootwright context delete --name lab --purge --allow-orphans, which cannot list what it may still own"
 )
 
 // requireRefused runs verb over what the harness holds and requires it to
@@ -145,21 +147,26 @@ func TestACompletedDestroyHoldingABlockNotDoneRefusesEitherVerb(t *testing.T) {
 // The deletion a refusal names is the one the context guard admits, decided
 // from the guard's own reading of the evidence, however the record is
 // spelled: a plain deletion over evidence it reads as pristine, an
-// acknowledged one over any other evidence it reads, and none over evidence
-// it cannot read, which no deletion admits.
+// acknowledged one over any other evidence it reads, and over evidence it
+// cannot read the acknowledged deletion that cannot list what it abandons,
+// the only one the context service then admits. Evidence of no bytes, as a
+// ready context's store reads an absent file, is named absent or empty rather
+// than an unrecognized record.
 func TestTheDeletionARefusalNamesIsTheOneTheGuardAdmits(t *testing.T) {
 	ctx := context.Background()
-	for name, test := range map[string]struct{ evidence, remedy string }{
-		"respelled pristine evidence":  {`{"version":1,"operation":"none","ownership":"none"}`, plainDeletion},
-		"respelled protected evidence": {`{"ownership":"retained","operation":"applied","version":1}`, orphanedDeletion},
-		"corrupt evidence":             {`{`, unreadableEvidenceExit},
-		"unsupported evidence":         {`{"version":2,"operation":"none","ownership":"none"}` + "\n", unreadableEvidenceExit},
+	unrecognized := "the mutation evidence reads an unrecognized record"
+	for name, test := range map[string]struct{ evidence, remedy, entry string }{
+		"respelled pristine evidence":  {`{"version":1,"operation":"none","ownership":"none"}`, plainDeletion, unrecognized},
+		"respelled protected evidence": {`{"ownership":"retained","operation":"applied","version":1}`, orphanedDeletion, unrecognized},
+		"corrupt evidence":             {`{`, unlistedDeletion, unrecognized},
+		"unsupported evidence":         {`{"version":2,"operation":"none","ownership":"none"}` + "\n", unlistedDeletion, unrecognized},
+		"absent or empty evidence":     {``, unlistedDeletion, "the mutation evidence is absent or empty"},
 	} {
 		disposition, err := (contextguard.Guard{}).Check(ctx, []byte(test.evidence))
 		admitted := orphanedDeletion
 		switch {
 		case err != nil:
-			admitted = unreadableEvidenceExit
+			admitted = unlistedDeletion
 		case disposition.Dispose:
 			admitted = plainDeletion
 		}
@@ -169,9 +176,8 @@ func TestTheDeletionARefusalNamesIsTheOneTheGuardAdmits(t *testing.T) {
 		t.Run(name+" beside no operation", func(t *testing.T) {
 			h := newHarness(t, "alpha")
 			h.workspace.evidence = []byte(test.evidence)
-			entry := "the mutation evidence reads an unrecognized record"
-			requireStatusNames(t, h, entry)
-			message := "the context holds operation records or evidence that no index names: " + entry
+			requireStatusNames(t, h, test.entry)
+			message := "the context holds operation records or evidence that no index names: " + test.entry
 			requirePreviewRefused(t, h, message, test.remedy)
 			requireRefused(t, h, reconciliation.Apply, message, test.remedy)
 			requireRefused(t, h, reconciliation.Destroy, message, test.remedy)

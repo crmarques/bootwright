@@ -46,9 +46,13 @@ func contextSummaryFields(text *display, summary contexts.Summary) {
 	)
 }
 
+// writeAdmission reports an admission. Its warnings appear once on standard
+// error, so an update whose plan already showed them does not repeat them.
 func writeAdmission(out, errOut io.Writer, command string, result *contexts.AdmissionResult) error {
-	if err := writeHumanDiagnostics(errOut, displayDiagnostics(result.Diagnostics)); err != nil {
-		return err
+	if !result.Presented {
+		if err := writeHumanDiagnostics(errOut, displayDiagnostics(result.Diagnostics)); err != nil {
+			return err
+		}
 	}
 	action := "initialized"
 	if command == "context update" {

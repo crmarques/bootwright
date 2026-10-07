@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -128,8 +127,11 @@ func (s *Store) View(ctx context.Context) (contexts.Registry, error) {
 func readRegistry(ctx context.Context, root *directory) (contexts.Registry, bool, error) {
 	data, err := readBounded(ctx, root, "registry.json", maxRegistry, false)
 	if errors.Is(err, syscall.ENOENT) {
-		names, readErr := root.file.Readdirnames(1)
-		if len(names) == 0 && errors.Is(readErr, io.EOF) {
+		held, listErr := rootHoldsEntries(root)
+		if listErr != nil {
+			return contexts.Registry{}, false, listErr
+		}
+		if !held {
 			return emptyRegistry(), false, nil
 		}
 		_, _, recoverable, inspectErr := inspectInitialRegistry(ctx, root)
@@ -203,17 +205,35 @@ func pendingInitialRegistryName(name string) bool {
 
 func rootEntryNames(root *directory, maximum int) ([]string, error) {
 	names, err := heldNames(root, maximum)
+	if err != nil {
+		return nil, rootListingError(err)
+	}
+	return names, nil
+}
+
+// rootHoldsEntries answers whether the state root holds any entry, listing it
+// through a fresh handle so the held one keeps its directory offset.
+func rootHoldsEntries(root *directory) (bool, error) {
+	_, err := heldNames(root, 0)
+	var failed *listingFailure
+	if errors.As(err, &failed) && failed.kind == listingOverLimit {
+		return true, nil
+	}
+	return false, rootListingError(err)
+}
+
+func rootListingError(err error) error {
 	var failed *listingFailure
 	if !errors.As(err, &failed) {
-		return names, err
+		return err
 	}
 	switch failed.kind {
 	case listingReplaced:
-		return nil, state("state root changed during enumeration")
+		return state("state root changed during enumeration")
 	case listingOverLimit:
-		return nil, state("state root entry count exceeds its limit")
+		return state("state root entry count exceeds its limit")
 	}
-	return nil, state("state root cannot be enumerated safely")
+	return state("state root cannot be enumerated safely")
 }
 
 func soleRootEntry(root *directory) (string, bool, error) {
@@ -638,16 +658,39 @@ func verifyReservation(ctx context.Context, dir *directory, name string) error {
 }
 
 func readMutation(ctx context.Context, dir *directory) ([]byte, error) {
+	return readEvidence(ctx, dir, false)
+}
+
+// readReadyMutation reads a ready context's mutation evidence. Evidence absent
+// from its present directory reads as empty, which no guard reads, so the
+// context refuses and is abandoned as one with corrupt evidence is, not as
+// storage that cannot be accessed. Initialization and publication still
+// require the file.
+func readReadyMutation(ctx context.Context, dir *directory) ([]byte, error) {
+	return readEvidence(ctx, dir, true)
+}
+
+func readEvidence(ctx context.Context, dir *directory, absentReadsEmpty bool) ([]byte, error) {
 	runtime, err := openDirectory(dir, "state")
 	if err != nil {
 		return nil, err
 	}
 	defer runtime.file.Close()
-	return readBounded(ctx, runtime, "mutation.json", maxRecord, true)
+	data, err := readBounded(ctx, runtime, "mutation.json", maxRecord, true)
+	if absentReadsEmpty && errors.Is(err, syscall.ENOENT) {
+		return []byte{}, nil
+	}
+	return data, err
 }
 
 func (s *Store) ReadInputs(ctx context.Context, name string) (desiredstate.Sources, error) {
+	if !contextName(name) {
+		return desiredstate.Sources{}, state("no valid current context is selected")
+	}
 	root, err := s.openRoot(ctx, false, nil)
+	if errors.Is(err, syscall.ENOENT) {
+		return desiredstate.Sources{}, contexts.AbsentContext(name)
+	}
 	if err != nil {
 		return desiredstate.Sources{}, safeError(err)
 	}
@@ -663,24 +706,33 @@ func (s *Store) ReadInputs(ctx context.Context, name string) (desiredstate.Sourc
 	if err := verifyMappings(ctx, root, registry); err != nil {
 		return desiredstate.Sources{}, safeError(err)
 	}
-
-	if !contextName(name) {
-		return desiredstate.Sources{}, state("no valid current context is selected")
-	}
 	for _, record := range registry.Contexts {
 		if record.Name == name {
 			if record.Mode != contexts.Ready {
-				return desiredstate.Sources{}, state("context is incomplete; repeat its init or delete command")
+				return desiredstate.Sources{}, contexts.NotReady(record)
 			}
 			if record.Revision == "" {
-				return desiredstate.Sources{}, diagnostics.NewFailure("context.input", "context has no desired state; run context update --name "+record.Name+" --input-dir <dir>", "")
+				return desiredstate.Sources{}, contexts.MissingInput(record.Name)
 			}
 			result, err := readSnapshot(ctx, root, record)
 			return result, safeError(err)
 		}
 	}
-	return desiredstate.Sources{}, state("requested context does not exist")
+	return desiredstate.Sources{}, contexts.AbsentContext(name)
 }
+
+// emptyStore is the refusal of a transaction over a store that holds no
+// context yet, which a caller asked for one name tells from every other
+// refusal by contexts.ErrNoContexts.
+func emptyStore() error { return &noContexts{contexts.NoContexts()} }
+
+type noContexts struct{ failure error }
+
+func (e *noContexts) Error() string { return e.failure.Error() }
+
+func (e *noContexts) Unwrap() error { return e.failure }
+
+func (e *noContexts) Is(target error) bool { return target == contexts.ErrNoContexts }
 
 func (s *Store) Transact(ctx context.Context, create bool, inputs []string, callback func(contexts.Transaction) error) error {
 	if callback == nil {
@@ -713,6 +765,9 @@ func (s *Store) TransactDeletion(ctx context.Context, name string, callback func
 // scope names the one context a deletion transaction admits unverified.
 func (s *Store) transact(ctx context.Context, create bool, inputs []string, scope string, callback func(*transaction) error) error {
 	root, err := s.openRoot(ctx, create, inputs)
+	if !create && errors.Is(err, syscall.ENOENT) {
+		return emptyStore()
+	}
 	if err != nil {
 		return safeError(err)
 	}
@@ -737,7 +792,7 @@ func (s *Store) transact(ctx context.Context, create bool, inputs []string, scop
 	}
 	if !exists {
 		if !create {
-			return state("context store does not exist")
+			return emptyStore()
 		}
 		if err := s.publishInitialRegistry(ctx, root, registry); err != nil {
 			return safeError(err)
@@ -899,7 +954,11 @@ func (t *transaction) MutationState(ctx context.Context, name string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	data, err := readMutation(ctx, dir)
+	read := readMutation
+	if record, err := t.record(name); err == nil && record.Mode == contexts.Ready {
+		read = readReadyMutation
+	}
+	data, err := read(ctx, dir)
 	if err != nil {
 		return nil, err
 	}

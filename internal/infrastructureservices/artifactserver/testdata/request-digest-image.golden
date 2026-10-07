@@ -1,0 +1,68 @@
+{
+  "request": {
+    "bindAddress": "192.0.2.1",
+    "contentRoot": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts",
+    "egress": {
+      "noProxy": []
+    },
+    "endpoints": [
+      {
+        "address": "192.0.2.1",
+        "listener": "http",
+        "name": "ip-http"
+      },
+      {
+        "address": "192.0.2.1",
+        "listener": "https",
+        "name": "ip-https"
+      }
+    ],
+    "identity": {
+      "block": "artifact-server-lab-artifacts",
+      "context": "lab",
+      "service": "lab-artifacts"
+    },
+    "image": "registry.example.test/nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "listeners": [
+      {
+        "name": "http",
+        "port": 8080,
+        "protocol": "http"
+      },
+      {
+        "name": "https",
+        "port": 8443,
+        "protocol": "https"
+      }
+    ],
+    "placement": {
+      "connection": "local",
+      "machine": "controller"
+    },
+    "tls": {
+      "fingerprint": "",
+      "minVersion": "TLSv1.2",
+      "secret": "artifact-server-tls"
+    },
+    "unit": "bootwright-lab-artifacts-lab-artifacts",
+    "version": "artifact-server-nginx-v2"
+  },
+  "reservationKeys": [
+    "path:/var/lib/bootwright-services/lab/artifact-server/lab-artifacts",
+    "socket:192.0.2.1:8080",
+    "socket:192.0.2.1:8443",
+    "unit:bootwright-lab-artifacts-lab-artifacts"
+  ],
+  "planImpacts": [
+    "create-container-unit bootwright-lab-artifacts-lab-artifacts",
+    "create-path /var/lib/bootwright-services/lab/artifact-server/lab-artifacts",
+    "open-listener 192.0.2.1:8080",
+    "open-listener 192.0.2.1:8443"
+  ],
+  "removalImpacts": [
+    "close-listener 192.0.2.1:8080",
+    "close-listener 192.0.2.1:8443",
+    "remove-container-unit bootwright-lab-artifacts-lab-artifacts",
+    "remove-path /var/lib/bootwright-services/lab/artifact-server/lab-artifacts"
+  ]
+}

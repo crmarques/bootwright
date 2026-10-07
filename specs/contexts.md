@@ -44,23 +44,31 @@ states. Perform its filesystem effects with that user's credentials. Use verifie
 no-follow handles, exclusive temporary files and atomic replacement. A refusal
 raised under that account reports that account's own bounded diagnosis.
 
-Unsafe ownership, permissions, object type or link count fail with
-`context.state`. Content the store cannot read as a supported record, including
+Unsafe ownership, permissions, object type (a symbolic link included) or link
+count fail with `context.state`, naming the object and its repair: an unsafe
+marker names `~/.bootwright/context` and its removal followed by
+`bootwright context use --name <context>`, and an unsafe directory names
+`~/.bootwright` and that it must be a directory the user owns with mode 0700.
+Content the store cannot read as a supported record, including
 a superseded format, an unknown or retired field, a non-canonical encoding and
 an over-bound file, is the account's own superseded marker rather than an unsafe
 object: report no current selection, hold its observed identity, and let the
-next selecting command replace it. Selection never requires manual repair.
+next selecting command replace it. A superseded marker never requires manual
+repair.
 
 There is no global current selection. Explicit `--context` bypasses the user
 file; an implicit selection must still name a ready registry entry. A selection
-naming an absent context fails with `context use` guidance. List remains
+naming an absent context fails naming that context, with
+`bootwright context use --name <context>` and
+`bootwright context init --name <name>` guidance. List remains
 usable without a current marker. Init selects only after store publication;
 use changes only selection; update preserves it; delete clears only the
 invoking user's matching name. Never enumerate other users' homes.
 
 Store publication and user-file publication are separate durable effects. If
 selection fails after creation, retain the context and report that creation
-succeeded but selection failed, with `context use --name <name>` guidance.
+succeeded but selection failed, with the selection store's own diagnosis and
+`bootwright context use --name <name>` guidance.
 Never claim rollback. A post-rename sync failure reports uncertain durability.
 
 ### Controller relationship and host binding
@@ -116,7 +124,12 @@ The envelope and all records are closed. Exactly one document is accepted;
 `metadata.name` must equal the command's required `--name`. The secret-store
 type defaults to `local-keyring`; its current configuration has no additional
 parameters. Unknown types/fields, duplicate keys, aliases, conflicting names,
-and malformed values refuse before publication. Configuration contains no
+and malformed values refuse before publication, under the file's path. An
+unknown or duplicate field is named by its field path and YAML line; a
+document that is not a Context is refused naming the apiVersion and kind it
+declares, with the remedy that desired state is passed with
+`--input-dir <dir>` and `-f` takes one standalone Context file, a remedy a
+refused file read without its own also carries. Configuration contains no
 material, runtime identity, path override or user selection.
 
 Store the canonical defaulted document as `context.yaml`. Context commands
@@ -134,7 +147,15 @@ init creates a context without desired state; omission at update preserves its
 selected input revision. An input update preserves the context's name, secrets
 and runtime state, and the
 [mutation guard](state-reconciliation.md#context-mutation-evidence) refuses one
-that would invalidate exact continuation. Before discovery, resolve the
+that would invalidate exact continuation. Once the guard admits it, an update
+whose admitted manifest equals the selected revision's, its revision aside,
+over frozen bytes that still verify, keeps that revision: it publishes
+nothing, asks nothing and reports the context unchanged, so a completed apply
+over that revision still
+[settles](state-reconciliation.md#lifecycle-unit). Changed input over a
+completed apply warns, before the prompt, with `lifecycle.state` that apply
+refuses it until `bootwright destroy --context <name>` takes back what that
+apply owns. Before discovery, resolve the
 state-root location read-only and reject a root within the input directory;
 revalidate containment through held handles at publication. Freeze every
 acquired YAML candidate and permitted marker, including streams excluded by
@@ -347,10 +368,14 @@ automatically generated.
 Interrupted initialization keeps its name reserved. Explicit init retry may
 resume only that exact attributable pending name and configuration, using
 the keyring's authenticated initialization recovery; its input, if any, is
-supplied again and may come from any directory. Unverifiable partial
+supplied again and may come from any directory, and the resumed context
+records the directory its retry admitted. Unverifiable partial
 state refuses; never adopt an unrelated directory. A filesystem create and
 recording its identity are not one atomic operation, so not every interruption
-is automatically resumable.
+is automatically resumable. `bootwright context delete --name <name> --purge`
+discards an interrupted initialization, and every refusal over an initializing
+name names both exits: finishing it with `bootwright context init --name <name>`
+and its original Context file, or discarding it with that delete.
 
 Input update writes new immutable blobs/manifests exclusively, flushes files
 and containing directories, then atomically replaces and syncs the registry.
@@ -544,8 +569,9 @@ refused beside pristine evidence and no such claim names
 configuration and input. A removal refused at its registration has no destroy
 left to name, so it names the deletion the guard admits, with
 `--allow-orphans`, which abandons what the context may still own, and then the
-same init. Over evidence the guard cannot read, the refusal names restoring the
-whole store from a matching backup
+same init. Over evidence the guard cannot read, either refusal names the
+deletion with `--allow-orphans`, which cannot list what the context may still
+own, and then the same init
 (`TestTheRetainedOperationRefusalsMatchTheirGolden`,
 `TestEachRetainedOperationExitLeadsOutOfTheBound`).
 
@@ -671,13 +697,22 @@ silently become current writable state. See the bounded restore outcome in
 The [Reconciliation guard](state-reconciliation.md#context-mutation-evidence)
 owns positive disposal proof. Under the root lock and context lease, refuse
 live resources, incomplete operations, retained ownership, unknown/corrupt
-evidence, or any required recovery material. A default refusal reports what the
-context still owns and directs the operator to `destroy` before deletion.
+evidence, or any required recovery material. A default refusal over evidence
+that still attributes objects to the context names
+`bootwright status --context <name>` as their inventory, `destroy` as the way
+to remove them before deletion, and the acknowledged deletion.
 
 Only the explicit orphan acknowledgement defined by that guard waives the
-disposal verdict, and only over recognized evidence; unreadable evidence in a
-present context directory and a live lease refuse under it exactly as they do
-without it. A ready context whose directory is gone from a `contexts`
+disposal verdict. Over missing, corrupt or unsupported evidence in a present
+context directory nothing proves what the context owns: an input update and a
+default `--purge` refuse, naming `bootwright status --context <name>` and the
+exit `bootwright context delete --name <name> --purge --allow-orphans`, and
+that acknowledgement abandons the context, its confirmation saying that its
+objects cannot be listed because its mutation evidence cannot be read; an
+absent evidence file is read so, never as storage that cannot be accessed
+(`TestMissingEvidenceIsRefusedAndAbandonedAsCorruptEvidenceIs`). A live
+lease refuses under it exactly as it does without it, before the guard reads
+anything. A ready context whose directory is gone from a `contexts`
 container that still verifies is lost: what it owned cannot be listed, so its
 `--purge` refuses with `context.unsafe-delete`, naming the context, the entry
 `contexts/<name>` and the kernel's answer, and the exit `bootwright context
@@ -688,14 +723,19 @@ the container, drops its binding and host reservations and removes its
 registry entry, and the result reports the abandonment. An acknowledged
 deletion abandons the objects rather than removing them: it is otherwise the
 same permanent local deletion, it needs `--purge` and ordinary confirmation
-like any other, its confirmation names the abandonment, its result reports it,
-and it has no remote resource effect. There is no recovery-only mode or
+like any other, its confirmation names the abandonment with
+`bootwright status --context <name>` as the inventory of the objects it
+abandons, or says they cannot be listed, its result reports it, and it has no
+remote resource effect. There is no recovery-only mode or
 archival. It still removes the keyring, and with it the
 [produced material](secrets.md#produced-material) no completed removal
 withdrew, such as the administrator kubeconfig of an installed cluster, which
 nothing else keeps: export it first with `bootwright cluster kubeconfig --name
 <cluster>`. The orphan confirmation names that custodied access and the
-export command, with the context, beside the abandoned objects.
+export command, with the context, beside the abandoned objects, whether status
+lists them or the context's mutation evidence cannot be read; a lost context's
+keyring went with its directory, so its confirmation names none
+(`TestTheOrphanAcknowledgementAbandonsAContextWhoseEvidenceCannotBeRead`).
 
 Deletion also drops what the controller record holds for the context: its
 [host binding](#controller-relationship-and-host-binding) and every host
@@ -737,11 +777,25 @@ root.
 Fresh init and use need no confirmation. Init refuses an already-ready name
 and directs the user to update. Input update and deletion require
 [ordinary confirmation](cli.md#ordinary-confirmation) unless `--yes`;
-equivalent configuration-only update does not. The prompt follows admission and
-safeguards while locks remain held, and a refused confirmation publishes
-nothing.
+equivalent configuration-only update and an input update that keeps the
+selected revision do not. The prompt follows admission and safeguards while
+locks remain held, and a refused confirmation publishes nothing. An update's
+prompt follows its presented plan: the name, the admitted input directory, the
+files it copies, the files seen and the objects decoded on standard output,
+and every warning on standard error, the completed-apply warning above
+included, which its result then does not repeat. A deletion's prompt follows a
+plan naming the context, its selected input revision, the keyring with every
+secret version it holds and the host reservations it removes, and what it
+abandons: nothing, the objects `bootwright status --context <name>` lists, or
+objects that cannot be listed and why. A command that would prompt without a
+plan presenter refuses with `context.state` rather than ask.
 
-Context-backed validate/render and declaration-dependent secret commands
-reject a missing input revision with `context update --name <name>
---input-dir <dir>` guidance. Encryption init/status/rotate do not require input.
+Every context-backed command that needs desired state (validate, render,
+declaration-dependent secret commands, plan, status, apply, destroy, the
+machine commands and `preflight controller --context`) rejects a missing input
+revision with `context.input`, naming the context, and the remedy
+`bootwright context update --name <name> --input-dir <dir>`. An absent store or
+an absent named context refuses with `context.state`, naming that context, with
+`bootwright context init --name <name>` and
+`bootwright context use --name <context>` guidance. Encryption init/status/rotate do not require input.
 Effective output and compilation diagnostics retain their existing contracts.

@@ -113,14 +113,14 @@ func lifecycleRecord(registry contexts.Registry, name string) (contexts.Record, 
 			continue
 		}
 		if record.Mode != contexts.Ready {
-			return contexts.Record{}, state("the selected context is not ready for lifecycle work")
+			return contexts.Record{}, contexts.NotReady(record)
 		}
 		if record.Revision == "" {
-			return contexts.Record{}, contexts.StateErrorWithRemediation("the selected context has no desired-state revision", "import one with context update --name "+name+" --input-dir <dir>")
+			return contexts.Record{}, contexts.MissingInput(record.Name)
 		}
 		return record, nil
 	}
-	return contexts.Record{}, state("the selected context does not exist")
+	return contexts.Record{}, contexts.AbsentContext(name)
 }
 
 // ReadLifecycle takes a coherent read under the shared root lock. It creates,
@@ -156,7 +156,7 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 	}
 	root, err := s.openRoot(ctx, false, nil)
 	if errors.Is(err, syscall.ENOENT) {
-		return state("context store does not exist")
+		return contexts.AbsentContext(name)
 	}
 	if err != nil {
 		return safeError(err)
@@ -171,7 +171,7 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 		return safeError(err)
 	}
 	if !exists {
-		return state("context store does not exist")
+		return contexts.AbsentContext(name)
 	}
 	if err := verifyMappings(ctx, root, registry); err != nil {
 		return safeError(err)
@@ -201,7 +201,7 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 	if err != nil {
 		return safeError(err)
 	}
-	evidence, err := readMutation(ctx, dir)
+	evidence, err := readReadyMutation(ctx, dir)
 	if err != nil {
 		return safeError(err)
 	}
@@ -259,7 +259,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 	if !contextName(name) {
 		return state("lifecycle mutation requires an explicit context name")
 	}
-	return s.Transact(ctx, false, nil, func(base contexts.Transaction) error {
+	err := s.Transact(ctx, false, nil, func(base contexts.Transaction) error {
 		t := base.(*transaction)
 		record, err := lifecycleRecord(t.registry, name)
 		if err != nil {
@@ -329,6 +329,10 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 		// changes no context record.
 		return callback(tx)
 	})
+	if errors.Is(err, contexts.ErrNoContexts) {
+		return contexts.AbsentContext(name)
+	}
+	return err
 }
 
 // PublishEvidence replaces the context's mutation record atomically after

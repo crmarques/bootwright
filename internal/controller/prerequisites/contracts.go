@@ -22,6 +22,32 @@ type HostInspector interface {
 	Identity(context.Context) (controller.InstalledHostIdentity, error)
 }
 
+// FIPSInspector is how a HostInspector reports whether the host's kernel runs
+// in FIPS mode. A host without it reports no FIPS mode check; the check never
+// changes readiness either way.
+type FIPSInspector interface {
+	FIPSMode(context.Context) (bool, error)
+}
+
+// FoundationInspector verifies, under the native package read lock, the
+// provided execution foundation this executable was compiled against for a
+// platform: the loader, glibc and libgcc files and links the private
+// interpreter runs on, byte for byte, exactly as every private Python launch
+// verifies them.
+type FoundationInspector interface {
+	Inspect(context.Context, Platform) (FoundationInspection, error)
+}
+
+// FoundationInspection names the package builds that provide the foundation
+// and, for one that differs, the first path that differs and the refusal that
+// names that path, the package build that provides it, what was found and the
+// remedy. Its error is reserved for an inspection that could not run.
+type FoundationInspection struct {
+	Required string
+	Drift    string
+	Refusal  error
+}
+
 // DependencyCatalog is pure: Admit refuses a platform whose provided execution
 // foundation this executable was not compiled against, before any dependency
 // is resolved or acquired, and ValidateEgress the acquisition policy.
@@ -113,6 +139,15 @@ type NativeInspector interface {
 	OperatorRoots(context.Context, Platform, []string) (OperatorPresence, error)
 }
 
+// NativeInventory is how a NativeInspector reads the digest of the host's
+// installed package inventory, from a snapshot taken under the native package
+// read lock and over the same inventory a native resolution records as its
+// before-state. Without it setup never decides that a native transaction did
+// not start, so it never cancels a receipt on that observation.
+type NativeInventory interface {
+	Inventory(context.Context, Platform) (string, error)
+}
+
 type TargetToolCatalog interface {
 	// Select is pure: recover exact retained identities without metadata reads.
 	// Complete is false when setup must resolve a previously unseen requirement.
@@ -134,6 +169,25 @@ type Storage interface {
 	// Create authorizes root/empty-registry bootstrap and requires prior ordinary
 	// confirmation. Mutations additionally hold the selected context's lease.
 	MutateController(context.Context, SetupContext, bool, func(StorageTransaction) error) error
+}
+
+// StateRootInspector is how a Storage that keeps its state beneath one root
+// lets a setup dry run, which reads no record and stays unprivileged, report
+// whether this build can use that root. A Storage without it leaves the dry
+// run's report as it was.
+type StateRootInspector interface {
+	InspectStateRoot(context.Context) (StateRootInspection, error)
+}
+
+// StateRootInspection is what that inspection observed, as one check's
+// requirement, observation and status, and, for a root this build cannot use,
+// the store's own refusal of it, which names its remedy. Its error is reserved
+// for an inspection that could not run at all.
+type StateRootInspection struct {
+	Required string
+	Observed string
+	Status   string
+	Refusal  error
 }
 
 // StorageTransaction is invocation-scoped. Publish revalidates exact stored
@@ -191,6 +245,16 @@ type BundleArea interface {
 // fails unless consume read it whole and the file kept its identity.
 type BundleStream interface {
 	Stream(ctx context.Context, path string, maximum int64, consume func(BundleReader) error) error
+}
+
+// BundleDiscard is how a setup bundle area lets preparation remove a file an
+// earlier build left shorter than its approved size under its final name,
+// which only a write killed before its sync leaves, so the exact replay can
+// publish it again. It removes only a private regular file smaller than
+// approved bytes, only under the area's write capability and never in a
+// sealed area.
+type BundleDiscard interface {
+	DiscardPartial(ctx context.Context, path string, approved int64) error
 }
 
 // BundleReader is one bundle file's stream. Its shape is declared here rather

@@ -73,7 +73,8 @@ func (s Service) resolve(ctx context.Context, name string) (string, error) {
 		return "", err
 	}
 	if selected == "" {
-		return "", failure("context.state", "no current context is selected", "select one with context use --name <name>")
+		return "", failure("context.state", "no current context is selected",
+			"select one with bootwright context use --name <context>, or create one with bootwright context init --name <context>")
 	}
 	return selected, nil
 }

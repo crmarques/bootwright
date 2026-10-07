@@ -120,8 +120,6 @@ spec:
         macAddress: 02:00:00:00:00:18
       - name: eth2
         macAddress: 02:00:00:00:00:19
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-edge-a-01.example.com/redfish/v1/Systems/1
@@ -176,8 +174,6 @@ spec:
         macAddress: 02:00:00:00:00:1a
       - name: eth2
         macAddress: 02:00:00:00:00:1b
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-edge-a-02.example.com/redfish/v1/Systems/1
@@ -232,8 +228,6 @@ spec:
         macAddress: 02:00:00:00:00:1c
       - name: eth2
         macAddress: 02:00:00:00:00:1d
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-edge-a-03.example.com/redfish/v1/Systems/1
@@ -288,8 +282,6 @@ spec:
         macAddress: 02:00:00:00:00:1e
       - name: eth2
         macAddress: 02:00:00:00:00:1f
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-edge-b-01.example.com/redfish/v1/Systems/1
@@ -344,8 +336,6 @@ spec:
         macAddress: 02:00:00:00:00:20
       - name: eth2
         macAddress: 02:00:00:00:00:21
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-edge-b-02.example.com/redfish/v1/Systems/1
@@ -400,8 +390,6 @@ spec:
         macAddress: 02:00:00:00:00:22
       - name: eth2
         macAddress: 02:00:00:00:00:23
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-edge-b-03.example.com/redfish/v1/Systems/1
@@ -1052,8 +1040,6 @@ spec:
         macAddress: 02:00:00:00:00:02
       - name: eth3
         macAddress: 02:00:00:00:00:03
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-storage-a-01.example.com/redfish/v1/Systems/1
@@ -1135,8 +1121,6 @@ spec:
         macAddress: 02:00:00:00:00:06
       - name: eth3
         macAddress: 02:00:00:00:00:07
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-storage-a-02.example.com/redfish/v1/Systems/1
@@ -1218,8 +1202,6 @@ spec:
         macAddress: 02:00:00:00:00:0a
       - name: eth3
         macAddress: 02:00:00:00:00:0b
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-storage-a-03.example.com/redfish/v1/Systems/1
@@ -1301,8 +1283,6 @@ spec:
         macAddress: 02:00:00:00:00:0e
       - name: eth3
         macAddress: 02:00:00:00:00:0f
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-storage-b-01.example.com/redfish/v1/Systems/1
@@ -1384,8 +1364,6 @@ spec:
         macAddress: 02:00:00:00:00:12
       - name: eth3
         macAddress: 02:00:00:00:00:13
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-storage-b-02.example.com/redfish/v1/Systems/1
@@ -1467,8 +1445,6 @@ spec:
         macAddress: 02:00:00:00:00:16
       - name: eth3
         macAddress: 02:00:00:00:00:17
-    boot:
-      nicRef: eth0
     management:
       bmc:
         address: https://bmc-storage-b-03.example.com/redfish/v1/Systems/1
@@ -1924,11 +1900,9 @@ spec:
             trust: established
   networkAttachments:
     - name: ocp-bare-metal-network
-      baremetal:
-        vlan: 100
+      baremetal: {}
     - name: ceph-network
-      baremetal:
-        vlan: 200
+      baremetal: {}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider

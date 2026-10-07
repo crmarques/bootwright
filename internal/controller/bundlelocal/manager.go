@@ -194,11 +194,23 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 			progress(prerequisites.ProgressEvent{Status: "running", Detail: detail, Completed: completed, Declared: len(record.Baseline)})
 		}
 	}
-	before, entries, err := inspectFiles(ctx, area, record, definition.Tools)
+	before, entries, partials, err := inspectClosure(ctx, area, record, definition.Tools)
 	if err != nil {
 		return prerequisites.BundleInspection{}, err
 	}
-	if !before.Recoverable {
+	if before.Recoverable && len(partials) != 0 {
+		// An earlier build's write killed before its sync is the only way a
+		// final name holds fewer bytes than approved, so the file is
+		// removed and the exact replay publishes it again.
+		if err := discardPartials(ctx, area, partials); err != nil {
+			return prerequisites.BundleInspection{}, err
+		}
+		before, entries, partials, err = inspectClosure(ctx, area, record, definition.Tools)
+		if err != nil {
+			return prerequisites.BundleInspection{}, err
+		}
+	}
+	if !before.Recoverable || len(partials) != 0 {
 		return prerequisites.BundleInspection{}, bundleFailure("existing bundle content is not attributable to the approved closure")
 	}
 	if before.Ready {
@@ -421,16 +433,55 @@ func (m *Manager) Rebase(ctx context.Context, area prerequisites.BundleArea, ret
 	return prerequisites.CanonicalBootstrap(retained)
 }
 
+// partialFile is a private regular file at an approved closure path holding
+// fewer bytes than approved under its final name. Since X39 a final name only
+// ever holds complete, synced bytes, so in an unsealed setup bundle such a
+// file can only be a write an earlier build was killed in before its sync.
+type partialFile struct {
+	path     string
+	approved int64
+}
+
+// shortOf reports an entry that holds fewer bytes than approved but is
+// otherwise the file approved: a regular file of the approved mode.
+func shortOf(entry prerequisites.BundleEntry, approved int64, executable bool) bool {
+	return !entry.Directory && entry.Executable == executable && entry.Size >= 0 && entry.Size < approved
+}
+
+// discardPartials removes each partial file through the area's own removal,
+// which only its write capability grants and never in a sealed area.
+func discardPartials(ctx context.Context, area prerequisites.BundleArea, partials []partialFile) error {
+	discard, removes := area.(prerequisites.BundleDiscard)
+	if !removes {
+		return &prerequisites.ScopedFailure{Code: "controller.unsupported", Message: "the bundle file " + partials[0].path + " an earlier build left incomplete cannot be removed, because this bundle area offers no removal", Correction: "Use an executable whose controller store removes an incomplete bundle file"}
+	}
+	for _, partial := range partials {
+		if err := discard.DiscardPartial(ctx, partial.path, partial.approved); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record closureRecord, selectedTools ...[]prerequisites.ToolDefinition) (prerequisites.BundleInspection, map[string]prerequisites.BundleEntry, error) {
+	inspection, entries, _, err := inspectClosure(ctx, area, record, selectedTools...)
+	return inspection, entries, err
+}
+
+// inspectClosure is inspectFiles that also returns the partial files it
+// found. A partial file leaves the closure recoverable and never ready, and
+// only preparation, which may remove it, reads that list.
+func inspectClosure(ctx context.Context, area prerequisites.BundleArea, record closureRecord, selectedTools ...[]prerequisites.ToolDefinition) (prerequisites.BundleInspection, map[string]prerequisites.BundleEntry, []partialFile, error) {
 	entries, err := bundleInventory(ctx, area)
 	if err != nil {
-		return prerequisites.BundleInspection{}, nil, err
+		return prerequisites.BundleInspection{}, nil, nil, err
 	}
 	projected := projectionFor(record)
 	if err := projected.automation(ctx); err != nil {
-		return prerequisites.BundleInspection{}, entries, err
+		return prerequisites.BundleInspection{}, entries, nil, err
 	}
 	expected := make(map[string]projectedFile)
+	var partials []partialFile
 	allBaseline := true
 	for index, source := range record.Baseline {
 		name := sourcePath(source)
@@ -439,19 +490,24 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record clo
 			allBaseline = false
 			continue
 		}
+		if shortOf(entry, source.Bytes, false) {
+			partials = append(partials, partialFile{path: name, approved: source.Bytes})
+			allBaseline = false
+			continue
+		}
 		if entry.Directory || entry.Executable || entry.Size != source.Bytes {
-			return prerequisites.BundleInspection{}, entries, nil
+			return prerequisites.BundleInspection{}, entries, nil, nil
 		}
 		data, err := area.Read(ctx, name, int(source.Bytes))
 		if err != nil {
-			return prerequisites.BundleInspection{}, entries, err
+			return prerequisites.BundleInspection{}, entries, nil, err
 		}
 		if !approvedBytes(source, data) {
-			return prerequisites.BundleInspection{}, entries, nil
+			return prerequisites.BundleInspection{}, entries, nil, nil
 		}
 		expected[name] = projectedFile{data: data}
 		if err := projectSource(ctx, projected, index, data); err != nil {
-			return prerequisites.BundleInspection{}, entries, err
+			return prerequisites.BundleInspection{}, entries, nil, err
 		}
 	}
 	for _, pkg := range record.Native {
@@ -460,15 +516,19 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record clo
 		if !found {
 			continue
 		}
+		if shortOf(entry, pkg.Source.Bytes, false) {
+			partials = append(partials, partialFile{path: name, approved: pkg.Source.Bytes})
+			continue
+		}
 		if entry.Directory || entry.Executable || entry.Size != pkg.Source.Bytes {
-			return prerequisites.BundleInspection{}, entries, nil
+			return prerequisites.BundleInspection{}, entries, nil, nil
 		}
 		data, err := area.Read(ctx, name, int(pkg.Source.Bytes))
 		if err != nil {
-			return prerequisites.BundleInspection{}, entries, err
+			return prerequisites.BundleInspection{}, entries, nil, err
 		}
 		if !approvedBytes(pkg.Source, data) {
-			return prerequisites.BundleInspection{}, entries, nil
+			return prerequisites.BundleInspection{}, entries, nil, nil
 		}
 		expected[name] = projectedFile{data: data}
 	}
@@ -480,7 +540,7 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record clo
 		directories[name] = true
 	}
 	if len(selectedTools) > 1 {
-		return prerequisites.BundleInspection{}, entries, bundleFailure("target tool inspection has ambiguous closure inputs")
+		return prerequisites.BundleInspection{}, entries, nil, bundleFailure("target tool inspection has ambiguous closure inputs")
 	}
 	var selected []prerequisites.ToolDefinition
 	if len(selectedTools) == 1 {
@@ -488,24 +548,25 @@ func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record clo
 	}
 	tools, err := inspectTools(ctx, area, selected, entries, directories, expected)
 	if err != nil || !tools.consistent {
-		return prerequisites.BundleInspection{}, entries, err
+		return prerequisites.BundleInspection{}, entries, nil, err
 	}
-	attributable, err := entriesAttributable(ctx, area, entries, projected, expected, directories, tools)
+	attributable, err := entriesAttributable(ctx, area, entries, projected, expected, directories, tools, &partials)
 	if err != nil || !attributable {
-		return prerequisites.BundleInspection{}, entries, err
+		return prerequisites.BundleInspection{}, entries, nil, err
 	}
 	if allBaseline && !projected.matches(record.Bootstrap) {
-		return prerequisites.BundleInspection{}, entries, bundleFailure("retained bootstrap sources differ from the frozen projection")
+		return prerequisites.BundleInspection{}, entries, nil, bundleFailure("retained bootstrap sources differ from the frozen projection")
 	}
-	ready := allBaseline && documentationPresent(entries, projected.documentationNames())
+	ready := allBaseline && len(partials) == 0 && documentationPresent(entries, projected.documentationNames())
 	for name := range projected.files {
 		_, exists := entries[name]
 		ready = ready && exists
 	}
 	if err := area.Verify(ctx); err != nil {
-		return prerequisites.BundleInspection{}, entries, err
+		return prerequisites.BundleInspection{}, entries, nil, err
 	}
-	return prerequisites.BundleInspection{Ready: ready, ToolsReady: tools.ready, Recoverable: true}, entries, nil
+	slices.SortFunc(partials, func(a, b partialFile) int { return strings.Compare(a.path, b.path) })
+	return prerequisites.BundleInspection{Ready: ready, ToolsReady: tools.ready, Recoverable: true}, entries, partials, nil
 }
 
 func bundleInventory(ctx context.Context, area prerequisites.BundleArea) (map[string]prerequisites.BundleEntry, error) {
@@ -535,10 +596,17 @@ func bundleInventory(ctx context.Context, area prerequisites.BundleArea) (map[st
 	return entries, nil
 }
 
-func entriesAttributable(ctx context.Context, area prerequisites.BundleArea, entries map[string]prerequisites.BundleEntry, projected *projection, expected map[string]projectedFile, directories map[string]bool, tools toolInspection) (bool, error) {
+// entriesAttributable reports whether every entry is approved closure content.
+// A partial source already found stays attributable, and a projected file
+// that holds fewer bytes than approved is added to partials.
+func entriesAttributable(ctx context.Context, area prerequisites.BundleArea, entries map[string]prerequisites.BundleEntry, projected *projection, expected map[string]projectedFile, directories map[string]bool, tools toolInspection, partials *[]partialFile) (bool, error) {
+	sources := slices.Clone(*partials)
 	for name, entry := range entries {
 		if err := ctx.Err(); err != nil {
 			return false, err
+		}
+		if slices.ContainsFunc(sources, func(partial partialFile) bool { return partial.path == name }) {
+			continue
 		}
 		if _, documented := projected.documentation[name]; documented {
 			if !attributableDocumentation(entry) {
@@ -560,6 +628,10 @@ func entriesAttributable(ctx context.Context, area prerequisites.BundleArea, ent
 			continue
 		}
 		file, found := expected[name]
+		if found && !strings.HasPrefix(name, "sources/") && shortOf(entry, int64(len(file.data)), file.executable) {
+			*partials = append(*partials, partialFile{path: name, approved: int64(len(file.data))})
+			continue
+		}
 		if !found || entry.Executable != file.executable || entry.Size != int64(len(file.data)) {
 			return false, nil
 		}

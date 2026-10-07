@@ -18,6 +18,10 @@ var imageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 var cliVersionPattern = regexp.MustCompile(`^(?:latest|v?(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8}))$`)
 var packageVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~^:-]{0,95}$`)
 
+// ociPathComponentPattern is one repository path component of the OCI
+// distribution grammar, outside of which container runtimes refuse to pull.
+var ociPathComponentPattern = regexp.MustCompile(`^[a-z0-9]+(?:(?:[._]|__|[-]+)[a-z0-9]+)*$`)
+
 // devicePathPattern confines a device path to characters that neither an
 // installer directive nor a shell word can reinterpret, because the path
 // reaches both verbatim.
@@ -70,6 +74,8 @@ func ValidLexical(rule, value string) bool {
 		return validHTTPURL(value, rule == "https-url")
 	case "repository-url":
 		return validHTTPURL(value, false) && !strings.ContainsAny(value, "#'")
+	case "mirror-url":
+		return validMirrorURL(value)
 	case "proxy-endpoint":
 		return validProxyEndpoint(value)
 	case "proxy-bypass":
@@ -98,8 +104,6 @@ func ValidLexical(rule, value string) bool {
 	case "mac":
 		mac, err := net.ParseMAC(value)
 		return err == nil && len(mac) == 6
-	case "checksum":
-		return digestPattern.MatchString(strings.TrimSpace(value))
 	case "absolute-path":
 		return strings.HasPrefix(value, "/") && path.Clean(value) == value && !strings.ContainsRune(value, 0)
 	case "device-path":
@@ -142,6 +146,22 @@ func validHTTPURL(value string, secure bool) bool {
 	}
 	u, err := neturl.Parse(value)
 	return err == nil && u.Opaque == "" && u.User == nil && u.Host != "" && validHost(u.Hostname()) && (u.Scheme == "https" || !secure && u.Scheme == "http") && validURLPort(u)
+}
+
+// maxMirrorURLBytes bounds a download mirror, which a frozen controller
+// request carries.
+const maxMirrorURLBytes = 4096
+
+// validMirrorURL is the one grammar of a download mirror, shared by admission
+// and the controller stage that fetches beneath it: an HTTPS base URL on the
+// default port with an unescaped path, no query and no fragment, because the
+// stage appends a release path to it.
+func validMirrorURL(value string) bool {
+	if len(value) > maxMirrorURLBytes || strings.ContainsAny(value, "?#") || !validHTTPURL(value, true) {
+		return false
+	}
+	u, err := neturl.Parse(value)
+	return err == nil && u.RawPath == "" && (u.Port() == "" || u.Port() == "443")
 }
 
 // maxProxyEndpointBytes bounds a proxy endpoint, which a setup receipt and a
@@ -266,11 +286,21 @@ func validRegistry(value string) bool {
 		if u.Path == "" {
 			break
 		}
-		if part == "" || part == "." || part == ".." || strings.ContainsAny(part, ":%") {
+		if !ociPathComponentPattern.MatchString(part) {
 			return false
 		}
 	}
 	return true
+}
+
+// CanonicalImage writes an image reference's digest algorithm and hex in
+// lowercase and leaves everything else, a tag included, as written.
+func CanonicalImage(value string) string {
+	base, digest, found := strings.Cut(value, "@")
+	if !found {
+		return value
+	}
+	return base + "@" + strings.ToLower(digest)
 }
 
 func validImage(value string) bool {

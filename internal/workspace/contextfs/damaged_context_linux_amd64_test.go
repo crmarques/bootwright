@@ -131,6 +131,53 @@ func TestADamagedContextIsNamedEverywhere(t *testing.T) {
 	}
 }
 
+// Evidence removed from a ready context's present directory reads as empty,
+// which no guard reads, so the orphan acknowledgement deletes the context, and
+// evidence that reappears after that reading refuses the deletion, which then
+// removes nothing. An initializing context, whose init writes its evidence
+// first, still refuses evidence it cannot find.
+func TestEvidenceAbsentFromAReadyContextReadsEmpty(t *testing.T) {
+	ctx := context.Background()
+	store, _, beta := damagedPair(t)
+	mutation := filepath.Join("contexts", beta.Name, "state", "mutation.json")
+	directory := filepath.Join(store.options.Root, "contexts", beta.Name)
+	damage(t, store, mutation)
+	expectState(t, store.TransactDeletion(ctx, beta.Name, func(tx contexts.Transaction) error {
+		if data, err := tx.MutationState(ctx, beta.Name); err != nil || data == nil || len(data) != 0 {
+			t.Fatalf("absent evidence read as %q (%v)", data, err)
+		}
+		writePrivate(t, filepath.Join(store.options.Root, mutation), []byte(pristineMutation))
+		return tx.Delete(ctx, beta)
+	}))
+	if _, err := os.Stat(directory); err != nil {
+		t.Fatalf("the refused deletion removed the context (%v)", err)
+	}
+	damage(t, store, mutation)
+	if err := store.TransactDeletion(ctx, beta.Name, func(tx contexts.Transaction) error {
+		if _, err := tx.MutationState(ctx, beta.Name); err != nil {
+			return err
+		}
+		return tx.Delete(ctx, beta)
+	}); err != nil {
+		t.Fatalf("the deletion over absent evidence refused: %#v", diagnostics.Of(err))
+	}
+	if _, err := os.Stat(directory); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the deleted context remains (%v)", err)
+	}
+	initializing, sources := fixture(t)
+	if err := initializing.Transact(ctx, true, sources.Roots, func(tx contexts.Transaction) error {
+		record, err := tx.Reserve(ctx, "gamma", sources.Roots[0], contexts.DefaultConfiguration("gamma").Canonical())
+		if err != nil {
+			return err
+		}
+		damage(t, initializing, filepath.Join("contexts", record.Name, "state", "mutation.json"))
+		_, err = tx.MutationState(ctx, record.Name)
+		return err
+	}); err == nil {
+		t.Fatal("an initializing context read evidence it cannot find")
+	}
+}
+
 // purgeBeta runs the deletion of beta over its scoped transaction as the
 // service does: it reads beta's mutation state, then releases and deletes.
 func purgeBeta(ctx context.Context, store *Store, beta contexts.Record) ([]string, error, error) {

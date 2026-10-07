@@ -28,6 +28,68 @@ type ExecutionGuard struct{ view executionView }
 type executionView struct {
 	root  string
 	owner uint32
+	// packages attributes a synthetic foundation's files in tests; nil reads
+	// the attribution of the compiled record the requirement matches.
+	packages []foundationPackage
+}
+
+var _ prerequisites.FoundationInspector = ExecutionGuard{}
+
+// Inspect verifies the provided execution foundation this executable was
+// compiled against for platform, under the native package read lock, exactly
+// as every private Python launch does, and names the package builds that
+// provide it. A foundation that differs is reported with its refusal; the
+// error is reserved for an inspection that could not run.
+func (guard ExecutionGuard) Inspect(ctx context.Context, platform prerequisites.Platform) (prerequisites.FoundationInspection, error) {
+	if err := ctx.Err(); err != nil {
+		return prerequisites.FoundationInspection{}, err
+	}
+	record, err := compiledCatalog()
+	if err != nil {
+		return prerequisites.FoundationInspection{}, err
+	}
+	native, found := selectNative(record, platform)
+	if !found || platform.Architecture != "amd64" {
+		return prerequisites.FoundationInspection{}, unsupportedPlatform()
+	}
+	return guard.inspectRecord(ctx, native)
+}
+
+func (guard ExecutionGuard) inspectRecord(ctx context.Context, native nativeRecord) (prerequisites.FoundationInspection, error) {
+	requirement := cloneExecution(native.Execution)
+	if !validExecutionRequirement(requirement) {
+		return prerequisites.FoundationInspection{}, executionFailure("controller.unsupported", "the private Python execution foundation is incomplete")
+	}
+	view := guard.view
+	if view.root == "" {
+		view = executionView{root: "/", owner: 0}
+	}
+	if view.packages == nil {
+		view.packages = native.Packages
+	}
+	root, err := openExecutionRoot(view)
+	if err != nil {
+		return prerequisites.FoundationInspection{}, executionFailure("controller.unsupported", "the execution foundation root is unsafe")
+	}
+	defer root.Close()
+	fs := executionFilesystem{root: root, owner: view.owner, links: make(map[string]string, len(requirement.Links))}
+	for _, link := range requirement.Links {
+		fs.links[link.Path] = link.Target
+	}
+	lock, err := fs.readLock(ctx, requirement.LockPath)
+	if err != nil {
+		return prerequisites.FoundationInspection{}, err
+	}
+	defer lock.Close()
+	inspection := prerequisites.FoundationInspection{Required: foundationBuilds(view.packages)}
+	if err := fs.verify(ctx, requirement); err != nil {
+		if ctx.Err() != nil {
+			return prerequisites.FoundationInspection{}, ctx.Err()
+		}
+		inspection.Drift = driftOf(err).path
+		inspection.Refusal = foundationRefusal(view, requirement, err)
+	}
+	return inspection, nil
 }
 
 func (guard ExecutionGuard) WithPython(ctx context.Context, area prerequisites.BundleArea, requirement prerequisites.ExecutionRequirement, use func(prerequisites.PythonLaunch, func() error) error) (result error) {
@@ -89,7 +151,7 @@ func (guard ExecutionGuard) WithPython(ctx context.Context, area prerequisites.B
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return executionFailure("controller.unsupported", "the provided execution libraries or loader configuration do not match the qualified foundation")
+		return foundationRefusal(view, requirement, err)
 	}
 	launch, bundle, err := openBundleLaunch(ctx, area, requirement, view.owner)
 	if err != nil {
@@ -348,24 +410,32 @@ func sameExecutionFile(before, after unix.Stat_t) bool {
 	return before.Dev == after.Dev && before.Ino == after.Ino && before.Mode == after.Mode && before.Uid == after.Uid && before.Gid == after.Gid && before.Nlink == after.Nlink && before.Size == after.Size && before.Mtim == after.Mtim && before.Ctim == after.Ctim
 }
 
+// verify returns the first place the host's foundation differs from the
+// requirement as a *foundationDrift, or the context's error.
 func (fs executionFilesystem) verify(ctx context.Context, requirement prerequisites.ExecutionRequirement) error {
-	preload, stat, err := fs.open(ctx, "/etc/ld.so.preload", true, false)
+	preload, stat, err := fs.open(ctx, preloadConfiguration, true, false)
 	if preload != nil {
 		preload.Close()
 	}
-	if err != nil && !errors.Is(err, unix.ENOENT) || err == nil && stat.Size != 0 {
-		return unix.EPERM
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err != nil && !errors.Is(err, unix.ENOENT) {
+		return &foundationDrift{path: preloadConfiguration, condition: driftUnsafe}
+	}
+	if err == nil && stat.Size != 0 {
+		return &foundationDrift{path: preloadConfiguration, condition: driftPreload}
 	}
 	files := make(map[string]bool, len(requirement.Files))
 	var total int64
 	for _, approved := range requirement.Files {
 		file, before, err := fs.open(ctx, approved.Path, true, false)
 		if err != nil {
-			return err
+			return openDrift(ctx, approved.Path, err)
 		}
 		if before.Size <= 0 || before.Size > 128<<20 || total > 512<<20-before.Size {
 			file.Close()
-			return unix.EFBIG
+			return &foundationDrift{path: approved.Path, condition: driftContent}
 		}
 		total += before.Size
 		digest := sha256.New()
@@ -373,23 +443,35 @@ func (fs executionFilesystem) verify(ctx context.Context, requirement prerequisi
 		var after unix.Stat_t
 		statErr := unix.Fstat(int(file.Fd()), &after)
 		file.Close()
-		if err != nil || statErr != nil || !sameExecutionFile(before, after) || hex.EncodeToString(digest.Sum(nil)) != approved.SHA256 {
-			return unix.ESTALE
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		if err != nil || statErr != nil || !sameExecutionFile(before, after) {
+			return &foundationDrift{path: approved.Path, condition: driftChanged}
+		}
+		if hex.EncodeToString(digest.Sum(nil)) != approved.SHA256 {
+			return &foundationDrift{path: approved.Path, condition: driftContent}
 		}
 		files[approved.Path] = true
 	}
 	for _, approved := range requirement.Links {
 		file, before, err := fs.open(ctx, approved.Path, false, false)
 		if err != nil {
-			return err
+			return openDrift(ctx, approved.Path, err)
 		}
 		buffer := make([]byte, 4097)
 		n, readErr := unix.Readlinkat(int(file.Fd()), "", buffer)
 		var after unix.Stat_t
 		statErr := unix.Fstat(int(file.Fd()), &after)
 		file.Close()
-		if readErr != nil || statErr != nil || n == 0 || n > 4096 || before.Mode&unix.S_IFMT != unix.S_IFLNK || !sameExecutionFile(before, after) || string(buffer[:n]) != approved.Target {
-			return unix.ESTALE
+		if before.Mode&unix.S_IFMT != unix.S_IFLNK {
+			return &foundationDrift{path: approved.Path, condition: driftNotLink}
+		}
+		if readErr != nil || statErr != nil || n == 0 || n > 4096 || !sameExecutionFile(before, after) {
+			return &foundationDrift{path: approved.Path, condition: driftChanged}
+		}
+		if string(buffer[:n]) != approved.Target {
+			return &foundationDrift{path: approved.Path, condition: "points elsewhere than " + approved.Target}
 		}
 		destination := approved.Target
 		if !path.IsAbs(destination) {
@@ -397,7 +479,7 @@ func (fs executionFilesystem) verify(ctx context.Context, requirement prerequisi
 		}
 		for count := 0; fs.links[destination] != ""; count++ {
 			if count == 16 {
-				return unix.ELOOP
+				return &foundationDrift{path: approved.Path, condition: driftUnpinnedLink}
 			}
 			target := fs.links[destination]
 			if !path.IsAbs(target) {
@@ -406,10 +488,113 @@ func (fs executionFilesystem) verify(ctx context.Context, requirement prerequisi
 			destination = target
 		}
 		if !files[destination] && destination != "/usr/lib64" {
-			return unix.EPERM
+			return &foundationDrift{path: approved.Path, condition: driftUnpinnedLink}
 		}
 	}
 	return ctx.Err()
+}
+
+const preloadConfiguration = "/etc/ld.so.preload"
+
+// The conditions a foundation path can be found in, as a refusal states them
+// after the path.
+const (
+	driftMissing      = "is missing"
+	driftContent      = "holds other content than this build pins"
+	driftChanged      = "changed while it was verified"
+	driftUnsafe       = "has an unsafe owner, mode, type or link count"
+	driftUnpinnedLink = "is reached through a link this build does not pin"
+	driftNotLink      = "is no longer a symbolic link"
+	driftPreload      = "is not empty, so it would preload libraries into every process"
+)
+
+// foundationDrift is the first path at which the host's execution foundation
+// differs from the one a requirement pins, and what was found there.
+type foundationDrift struct {
+	path, condition string
+}
+
+func (drift *foundationDrift) Error() string { return drift.path + " " + drift.condition }
+
+// openDrift names why a pinned path could not be opened as the foundation
+// requires.
+func openDrift(ctx context.Context, name string, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	switch {
+	case errors.Is(err, unix.ENOENT), errors.Is(err, unix.ENOTDIR):
+		return &foundationDrift{path: name, condition: driftMissing}
+	case errors.Is(err, unix.ELOOP):
+		return &foundationDrift{path: name, condition: driftUnpinnedLink}
+	case errors.Is(err, unix.ESTALE):
+		return &foundationDrift{path: name, condition: driftChanged}
+	}
+	return &foundationDrift{path: name, condition: driftUnsafe}
+}
+
+// driftOf is the drift a verification returned, or one that names nothing
+// when it returned another error.
+func driftOf(err error) foundationDrift {
+	var drift *foundationDrift
+	if errors.As(err, &drift) {
+		return *drift
+	}
+	return foundationDrift{condition: "cannot be verified"}
+}
+
+// foundationRefusal is the one refusal of a foundation that drifted, whichever
+// command met it: the private Python guard before any launch, or the check
+// setup and preflight report. It names the path, the package build that
+// provides it on a qualified host, the condition, and a remedy that holds
+// from every command.
+func foundationRefusal(view executionView, requirement prerequisites.ExecutionRequirement, err error) error {
+	drift := driftOf(err)
+	if drift.path == "" {
+		return executionFailure("controller.unsupported", "the provided execution foundation cannot be verified")
+	}
+	message := "the provided execution foundation differs at " + drift.path + ","
+	pkg, attributed := foundationOwner(view, requirement, drift.path)
+	if attributed {
+		message += " from " + pkg.Name + " " + pkg.Build + ","
+	}
+	message += " which " + drift.condition
+	remedy := "Restore " + drift.path + " as this host's release provides it, then repeat this command; a host that must keep the change needs a Bootwright build whose execution foundation pins it."
+	switch {
+	case drift.path == preloadConfiguration:
+		remedy = "Empty or remove " + preloadConfiguration + ", then repeat this command."
+	case attributed:
+		build := pkg.Name + "-" + pkg.Build
+		remedy = "Install exactly " + pkg.Name + " " + pkg.Build + " again with dnf (dnf install " + build + ", or dnf reinstall " + build + " while that build is installed), hold it with dnf versionlock add " + build + ", then repeat this command; a host that must take the update needs a Bootwright build whose execution foundation pins it."
+	}
+	return diagnostics.NewFailureWithRemediation("controller.unsupported", message, "", remedy)
+}
+
+// foundationOwner is the package build that provides a foundation path: the
+// one listing it, or for a pinned link the one listing the file it resolves
+// to.
+func foundationOwner(view executionView, requirement prerequisites.ExecutionRequirement, name string) (foundationPackage, bool) {
+	packages := view.packages
+	if packages == nil {
+		packages = compiledAttribution(requirement)
+	}
+	links := make(map[string]string, len(requirement.Links))
+	for _, link := range requirement.Links {
+		links[link.Path] = link.Target
+	}
+	for count := 0; links[name] != "" && count < 16; count++ {
+		target := links[name]
+		if !path.IsAbs(target) {
+			target = path.Join(path.Dir(name), target)
+		}
+		name = target
+	}
+	for _, pkg := range packages {
+		if slices.Contains(pkg.Files, name) {
+			return pkg, true
+		}
+	}
+	return foundationPackage{}, false
 }
 
 type executionReader struct {

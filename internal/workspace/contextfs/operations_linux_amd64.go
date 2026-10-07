@@ -50,11 +50,23 @@ func safeOperationName(name string) bool {
 // every later operation and names nothing; without the cause, a transient
 // answer and a foreign entry read identically.
 func unsafeEntry(parent *directory, name string, cause error) error {
-	message := "lifecycle operation entry is not this store's own: " + filepath.Join(parent.path, name)
+	message := "lifecycle operation entry is not this store's own: " + storeEntry(parent, name)
 	if text := causeText(cause); text != "" {
 		message += ": " + text
 	}
 	return state(message)
+}
+
+// storeEntry names an entry relative to the state root, which is how every
+// refusal names one, by the held handles' own names rather than the root's
+// location on the host.
+func storeEntry(dir *directory, name string) string {
+	parts := []string{name}
+	for current := dir; current != nil && current.parent != nil; current = current.parent {
+		parts = append(parts, current.name)
+	}
+	slices.Reverse(parts)
+	return path.Join(parts...)
 }
 
 // causeText renders why an entry was refused. A refusal this area raised is a
@@ -492,7 +504,7 @@ func (a *operationArea) RemoveDirectory(ctx context.Context, target string) (err
 	child.file.Close()
 	generation := a.generation()
 	if err := unlinkVerified(parent, name, identity, true); err != nil {
-		return state("lifecycle operation directory could not be removed: " + filepath.Join(parent.path, name))
+		return state("lifecycle operation directory could not be removed: " + storeEntry(parent, name))
 	}
 	if err := a.store.syncDirectory(ctx, parent); err != nil {
 		return err
@@ -530,11 +542,11 @@ func (a *operationArea) RemoveRecord(ctx context.Context, target string, expecte
 		return err
 	}
 	if !bytes.Equal(current, expected) {
-		return state("lifecycle operation record changed before its removal: " + filepath.Join(parent.path, name))
+		return state("lifecycle operation record changed before its removal: " + storeEntry(parent, name))
 	}
 	generation := a.generation()
 	if err := unlinkVerified(parent, name, identity, false); err != nil {
-		return state("lifecycle operation record could not be removed: " + filepath.Join(parent.path, name))
+		return state("lifecycle operation record could not be removed: " + storeEntry(parent, name))
 	}
 	if err := a.store.syncDirectory(ctx, parent); err != nil {
 		return err

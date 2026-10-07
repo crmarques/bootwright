@@ -14,6 +14,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 // intendedControllerFixture holds a pending receipt whose action records its
@@ -181,8 +182,9 @@ func TestSetupRunsKeepOnlyTheNewestEight(t *testing.T) {
 
 // What an Ansible prints past the bound is dropped, and the writer still
 // accepts it, because a writer that failed would stop the copy of the output
-// and could leave the Ansible blocked.
-func TestASetupRunIsTruncatedAtItsBound(t *testing.T) {
+// and could leave the Ansible blocked. The bound is the bounded run's own, so
+// every run's output shares one (D92).
+func TestASetupRunTruncatesAtTheBoundedRunsBound(t *testing.T) {
 	store, _ := intendedControllerFixture(t)
 	location := ""
 	err := store.MutateController(context.Background(), prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
@@ -191,7 +193,7 @@ func TestASetupRunIsTruncatedAtItsBound(t *testing.T) {
 			return err
 		}
 		location = run.Location()
-		for _, size := range []int{maxSetupRunOutput - 10, 100, 1} {
+		for _, size := range []int{operationstore.MaxAdapterOutputBytes - 10, 100, 1} {
 			if written, err := run.Write(bytes.Repeat([]byte("x"), size)); err != nil || written != size {
 				t.Fatalf("a write of %d bytes returned %d (%v)", size, written, err)
 			}
@@ -202,8 +204,8 @@ func TestASetupRunIsTruncatedAtItsBound(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(filepath.Join(location, "run.output"))
-	if err != nil || info.Size() != maxSetupRunOutput {
-		t.Fatalf("the run kept %d bytes (%v), want %d", info.Size(), err, maxSetupRunOutput)
+	if err != nil || info.Size() != operationstore.MaxAdapterOutputBytes {
+		t.Fatalf("the run kept %d bytes (%v), want the bounded run's %d", info.Size(), err, operationstore.MaxAdapterOutputBytes)
 	}
 	readable(t, store, "after a truncated setup run")
 }
@@ -430,9 +432,9 @@ func TestControllerAdmissionAcceptsOnlyWellFormedSetupRuns(t *testing.T) {
 				plantRun(t, store, setupRunName(number), []byte("run\n"))
 			}
 		},
-		"a run at its bound": func(t *testing.T, store *Store) {
+		"a run at an earlier build's bound": func(t *testing.T, store *Store) {
 			plantRun(t, store, "setup-000001", []byte{})
-			if err := os.Truncate(filepath.Join(runsPath(store), "setup-000001", "run.output"), maxSetupRunOutput); err != nil {
+			if err := os.Truncate(filepath.Join(runsPath(store), "setup-000001", "run.output"), earlierSetupRunBound); err != nil {
 				t.Fatal(err)
 			}
 		},
@@ -517,9 +519,9 @@ func TestControllerAdmissionAcceptsOnlyWellFormedSetupRuns(t *testing.T) {
 				t.Fatal(err)
 			}
 		},
-		"a run output past its bound": func(t *testing.T, store *Store) {
+		"a run output past an earlier build's bound": func(t *testing.T, store *Store) {
 			plantRun(t, store, "setup-000001", []byte{})
-			if err := os.Truncate(filepath.Join(runsPath(store), "setup-000001", "run.output"), maxSetupRunOutput+1); err != nil {
+			if err := os.Truncate(filepath.Join(runsPath(store), "setup-000001", "run.output"), earlierSetupRunBound+1); err != nil {
 				t.Fatal(err)
 			}
 		},
@@ -548,6 +550,27 @@ func TestControllerAdmissionAcceptsOnlyWellFormedSetupRuns(t *testing.T) {
 				t.Fatalf("a run was opened beside %s", name)
 			}
 		})
+	}
+}
+
+// earlierSetupRunBound is the 8 MiB a setup run kept before it shared the
+// bounded run's bound.
+const earlierSetupRunBound = 8 << 20
+
+// An earlier build kept up to 8 MiB of a setup run, and admission runs on
+// every controller read, so such a run stays admitted and its controller
+// readable, while a run past that bound is still refused.
+func TestAnEarlierBuildsLargerSetupRunIsStillAdmitted(t *testing.T) {
+	for size, admitted := range map[int64]bool{earlierSetupRunBound: true, earlierSetupRunBound + 1: false} {
+		store, _ := intendedControllerFixture(t)
+		plantRun(t, store, "setup-000001", []byte{})
+		if err := os.Truncate(filepath.Join(runsPath(store), "setup-000001", "run.output"), size); err != nil {
+			t.Fatal(err)
+		}
+		err := store.ReadController(context.Background(), "", func(prerequisites.StorageView) error { return nil })
+		if (err == nil) != admitted {
+			t.Fatalf("a %d-byte run: admitted %t, want %t (%#v)", size, err == nil, admitted, diagnostics.Of(err))
+		}
 	}
 }
 

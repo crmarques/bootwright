@@ -248,10 +248,37 @@ func TestProxyGrammarIsOneRule(t *testing.T) {
 	}
 }
 
+// The setup receipt records an endpoint's host in lowercase and refuses any
+// other spelling, so the ambient route records it that way before anything is
+// confirmed, resolved or published, and changes nothing else about it.
+func TestAnAmbientEndpointIsRecordedWithALowercaseHost(t *testing.T) {
+	for _, test := range []struct{ value, want string }{
+		{"http://PROXY.Example:3128", "http://proxy.example:3128"},
+		{"http://[FD00::1]:3128", "http://[fd00::1]:3128"},
+		{"HTTPS://Proxy.Example:8443/", "https://proxy.example:8443/"},
+		{"http://192.0.2.10:3128", "http://192.0.2.10:3128"},
+		{"http://proxy.example", "http://proxy.example"},
+	} {
+		route, err := controller.RouteFromEnvironment(environment("HTTPS_PROXY", test.value, "NO_PROXY", "Internal.Example"))
+		if err != nil {
+			t.Fatalf("%s: %v", test.value, err)
+		}
+		if route.HTTPSProxy() != test.want {
+			t.Errorf("%s is recorded as %q, want %q", test.value, route.HTTPSProxy(), test.want)
+		}
+		if bypass := route.NoProxy(); len(bypass) != 1 || bypass[0] != "Internal.Example" {
+			t.Errorf("%s: the bypass list became %q", test.value, bypass)
+		}
+	}
+}
+
 func TestRouteSummaryNamesItsEndpointAndOrigin(t *testing.T) {
 	direct, err := controller.RouteFromEnvironment(environment())
-	if err != nil || direct.Summary() != "direct" {
+	if err != nil || direct.Summary() != "direct (no HTTPS_PROXY)" {
 		t.Fatal(direct.Summary(), err)
+	}
+	if baseline := controller.Baseline().Route().Summary(); baseline != "direct" {
+		t.Fatalf("the baseline's own direct route reads %q", baseline)
 	}
 	single, err := controller.RouteFromEnvironment(environment("HTTPS_PROXY", "http://proxy.example:3128", "NO_PROXY", ".internal.example"))
 	if err != nil || single.Summary() != "http://proxy.example:3128 (HTTPS_PROXY), 1 bypass entry" {

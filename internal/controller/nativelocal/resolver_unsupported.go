@@ -24,3 +24,6 @@ func (*Resolver) Check(context.Context, prerequisites.NativeResolvedPlan) (prere
 func (*Resolver) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
 	return prerequisites.OperatorPresence{}, errors.New("native dependency inspection requires Linux amd64")
 }
+func (*Resolver) Inventory(context.Context, prerequisites.Platform) (string, error) {
+	return "", errors.New("native dependency inspection requires Linux amd64")
+}

@@ -219,14 +219,13 @@ func atTheBound(ctx context.Context, view View, store OperationStore, verb recon
 // is that destroy, so it names, as a fresh apply with nothing left to free
 // does, the deletion the guard admits and the init that creates the context
 // again. A listing of the claims that fails names the destroy, which deletes
-// nothing, and evidence the guard cannot read admits no deletion at all.
+// nothing. Over evidence the guard cannot read, either verb names that
+// deletion and init: the guard admits only the orphan acknowledgement there,
+// which cannot list what it abandons.
 func retainedExit(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb) string {
 	evidence, readable := reconciliation.ReadEvidence(view.Evidence())
-	if !readable {
-		return unreadableEvidenceExit
-	}
 	name := view.Identity().Name
-	if verb == reconciliation.Apply {
+	if readable && verb == reconciliation.Apply {
 		if evidence != reconciliation.PristineEvidence() {
 			return "remove what the context owns with bootwright destroy --context " + name + ", then repeat the apply"
 		}
@@ -429,7 +428,7 @@ func unindexed(ctx context.Context, view View, store OperationStore) ([]string, 
 	}
 	entries := []string{}
 	if evidence := view.Evidence(); !bytes.Equal(evidence, pristine) && !bytes.Equal(evidence, running) {
-		entries = append(entries, "the mutation evidence reads "+evidenceReading(evidence))
+		entries = append(entries, "the mutation evidence "+evidenceReading(evidence))
 	}
 	claimed, err := store.Claimed(ctx)
 	if err != nil {
@@ -447,17 +446,22 @@ func unindexed(ctx context.Context, view View, store OperationStore) ([]string, 
 	return entries, nil
 }
 
-// evidenceReading names recognized evidence by its operation and ownership.
+// evidenceReading names recognized evidence by its operation and ownership,
+// and evidence of no bytes as absent or empty, since a ready context's store
+// reads absent evidence as empty.
 func evidenceReading(data []byte) string {
+	if len(data) == 0 {
+		return "is absent or empty"
+	}
 	for _, operation := range []reconciliation.MutationOperation{reconciliation.MutationNone, reconciliation.MutationPending, reconciliation.MutationFailed, reconciliation.MutationUnknown, reconciliation.MutationApplied} {
 		for _, ownership := range []reconciliation.MutationOwnership{reconciliation.OwnershipNone, reconciliation.OwnershipRetained} {
 			recognized, err := reconciliation.Evidence{Operation: operation, Ownership: ownership}.Bytes()
 			if err == nil && bytes.Equal(data, recognized) {
-				return string(operation) + " and " + string(ownership)
+				return "reads " + string(operation) + " and " + string(ownership)
 			}
 		}
 	}
-	return "an unrecognized record"
+	return "reads an unrecognized record"
 }
 
 // releaseUnclaimed gives back what an interrupted registration left. Under the

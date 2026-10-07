@@ -1,0 +1,28 @@
+{
+  "baremetalMachines": [
+    {
+      "controller": {
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "https://bmc-01.metal.example.test/redfish/v1/Systems/1",
+        "tlsVerify": false
+      },
+      "hardware": [
+        {
+          "macAddress": "52:54:00:9a:1b:01",
+          "name": "eno1"
+        }
+      ],
+      "identity": {
+        "block": "machine-metal-01",
+        "context": "lab",
+        "object": "metal-01"
+      },
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "provider": "lab-metal",
+      "version": "machine-baremetal-v2"
+    }
+  ]
+}

@@ -80,7 +80,10 @@ func decodeEvidence(data []byte) (Evidence, error) {
 }
 
 // ValidatePresence accepts evidence only when it proves the exact frozen
-// request is running and serving the bound certificate on every target.
+// request is running and serving the bound certificate on every target. A
+// request naming no target, or a listener no target probes, as a wildcard bind
+// an earlier build froze without an endpoint for it does, never proves
+// presence, because no answer can prove that listener.
 func ValidatePresence(data []byte, request Request, digest, fingerprint string) error {
 	evidence, err := decodeEvidence(data)
 	if err != nil {
@@ -102,6 +105,14 @@ func ValidatePresence(data []byte, request Request, digest, fingerprint string) 
 		return refusal("lifecycle.state", "the artifact-server content root is missing", "")
 	}
 	targets := request.ProbeTargets()
+	if len(targets) == 0 {
+		return refusal("lifecycle.state", "the frozen artifact-server request names no address readiness can probe", "")
+	}
+	for _, listener := range request.Listeners {
+		if !slices.ContainsFunc(targets, func(target ProbeTarget) bool { return target.Name == listener.Name }) {
+			return refusal("lifecycle.state", "listener "+listener.Name+" has no address readiness can probe", "")
+		}
+	}
 	if len(evidence.Listeners) != len(targets) {
 		return refusal("lifecycle.state", "the artifact-server evidence does not cover every listener", "")
 	}

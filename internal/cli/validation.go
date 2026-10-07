@@ -2,7 +2,9 @@ package cli
 
 import (
 	"net/url"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/managedos/media"
@@ -287,17 +289,41 @@ func validateMediaSource(flags *pflag.FlagSet) string {
 		}
 		normalizeScalar(flags, "sha256", strings.ToLower(digest))
 	}
-	if sourceURL != "" {
-		if digest == "" {
-			return "--from-url requires --sha256"
-		}
-		parsed, err := url.Parse(sourceURL)
-		if err != nil || parsed.Hostname() == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-			return "--from-url must be an HTTP or HTTPS URL without userinfo"
-		}
+	if file != "" {
+		return validateMediaFile(file)
+	}
+	if digest == "" {
+		return "--from-url requires --sha256"
+	}
+	if strings.ContainsFunc(sourceURL, controlCharacter) {
+		return "--from-url must not contain a control character"
+	}
+	parsed, err := url.Parse(sourceURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Opaque != "" || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" {
+		return "--from-url must be an HTTPS URL without userinfo or fragment"
+	}
+	origin := &url.URL{Scheme: parsed.Scheme, Host: parsed.Host, Path: parsed.Path, RawPath: parsed.RawPath}
+	if len(origin.String()) > media.MaxMediaOrigin {
+		return "--from-url must name a scheme, host and path of at most " + strconv.Itoa(media.MaxMediaOrigin) + " bytes; its query is never recorded"
 	}
 	return ""
 }
+
+// validateMediaFile refuses a path the media record could not carry as its
+// file:// origin. A relative path is checked by the media store once it is
+// made absolute.
+func validateMediaFile(file string) string {
+	if strings.ContainsFunc(file, controlCharacter) {
+		return "--from-file must not contain a control character"
+	}
+	if path := strings.TrimSpace(file); filepath.IsAbs(path) && len("file://"+filepath.ToSlash(filepath.Clean(path))) > media.MaxMediaOrigin {
+		return "--from-file must name a path whose file:// URL is at most " + strconv.Itoa(media.MaxMediaOrigin) + " bytes"
+	}
+	return ""
+}
+
+// controlCharacter is a character a media record's origin never carries.
+func controlCharacter(c rune) bool { return c < 0x20 || c == 0x7f }
 
 // validateEnumList checks each member of a comma-separated enum list. An
 // omitted flag selects the command's documented default; a supplied value that

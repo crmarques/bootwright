@@ -56,7 +56,7 @@ func refusalRows() []refusalRow {
 		{"non-identifier key", environmentYAML, refusalSecret + "  type: opaque\n  \"" + refusalSentinel + " key!\": value\n"},
 		{"kind defaults key", environmentYAML + "  defaults:\n    Machines: {}\n", ""},
 		{"two Secret source arms", environmentYAML, refusalSecret + "  type: token\n  source: {contextStore: {}, generated: {bytes: 32}}\n"},
-		{"Proxy implementation enum", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Proxy\nmetadata: {name: probe}\nspec:\n  management: managed\n  machineRef: controller\n  implementation: " + refusalSentinel + "\n"},
+		{"Proxy implementation enum", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Proxy\nmetadata: {name: probe}\nspec:\n  management: managed\n  machineRef: controller\n  implementation: " + refusalSentinel + "\n  bindAddress: 192.0.2.1\n"},
 		{"Context document", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Context\nmetadata: {name: probe}\nspec: {secretStore: {type: local-keyring}}\n"},
 		{"machineAccess", environmentYAML + "  machineAccess: {}\n", ""},
 		{"safety", environmentYAML + "  safety: {}\n", ""},

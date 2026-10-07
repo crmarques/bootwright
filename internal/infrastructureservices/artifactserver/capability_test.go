@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -208,12 +210,20 @@ func TestApplyRefusesBeforeTheAdapterWhenMaterialIsUnusable(t *testing.T) {
 		ips: []string{"203.0.113.9"}, notBefore: testMoment.Add(-time.Hour), notAfter: testMoment.Add(time.Hour),
 	})
 	runner := &fakeRunner{}
-	result, err := New(runner, fixedClock{}).Apply(context.Background(), execution(t, material))
+	uncovered := execution(t, material)
+	uncovered.Context = testContext
+	result, err := New(runner, fixedClock{}).Apply(context.Background(), uncovered)
 	if err == nil || result.Outcome != reconciliation.OutcomeFailed {
 		t.Fatalf("an uncovered certificate reached the adapter: %+v (%v)", result, err)
 	}
 	if len(runner.requests) != 0 {
 		t.Fatal("the adapter ran despite an unusable certificate")
+	}
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "secret.part" || reported[0].Object == nil ||
+		reported[0].Object.Kind != "Secret" || reported[0].Object.Name != "artifact-server-tls" ||
+		!strings.Contains(reported[0].Remediation, "--context "+testContext) {
+		t.Fatalf("the refusal = %#v, want secret.part on Secret/artifact-server-tls with a remedy in this context", reported)
 	}
 	missing := execution(t, material)
 	missing.Material = nil

@@ -142,6 +142,16 @@ Four rules govern the stream:
    field naming where to read it. A check reports under rules 2 to 4 like any
    other step: what it probes is its sub-step, so the whole of one check
    settles as one row however many targets it has to observe.
+
+   `media add` reports its acquisition, or its re-verification of the image an
+   interrupted add retained, and then its publication as two steps under
+   `Progress`; `media list --checksums` reads each image as one check under
+   `Checks`. The media store keeps no log, so no `Logs` field precedes them.
+   An acquisition names the origin it reads and counts no sub-steps, so its
+   row shows no completion and the heartbeat repeats it; it closes with the
+   bytes it wrote. A check closes `[OK]` when the image matches its record and
+   `[FAIL]` naming the digest it computed when it does not. A plain
+   `media list` and a `media delete` report no progress.
 2. **Silence bound.** While a step runs and ten seconds pass without a new
    row of its own, the presenter repeats that step's row with `still running`
    and the time since the step started. The bound is per step, so a step that
@@ -376,6 +386,49 @@ The human table shows the same columns, `NAME`, `CONTACT`, `ADDRESSES`, `OS`,
 or `off` state the management controller proved after the verb; `previous`, the
 state it reported before the verb, omitted when it reported none; and
 `changed`, whether the verb changed it.
+
+### Media results
+
+Each `media` entry of `media list` orders its fields as follows:
+
+```json
+{"name":"rhel-9.8-x86_64-boot.iso","size":1045430272,"sha256":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82","source":"file:///srv/images/rhel-9.8-x86_64-boot.iso","added":"2026-09-20T08:15:00Z","frozen":true,"reservedBy":["lab-rhel"],"verified":"ok","computed":"e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82"}
+```
+
+`name`, `size`, `sha256`, `source`, `added`, `frozen` and `reservedBy` are
+always present. The first five are the image's
+[record](../managed-os.md#media-store): its name, its size in bytes, its
+hexadecimal SHA-256, its credential-free origin and its time of publication.
+`reservedBy` is the array of contexts that reserve the image, sorted and empty
+when none does, and `frozen` is `true` exactly when it is not empty. `verified`
+is `mismatch` when the bytes the store holds no longer have the size the record
+states and, with `--checksums`, also when their computed digest differs from
+`sha256`; it is `ok` only with `--checksums`, when both match, and is otherwise
+omitted, never empty. `computed` is the hexadecimal SHA-256 that `--checksums`
+computed from the bytes, and is present only with `--checksums`. Whether a
+context reserves an image never hides whether it verified.
+
+The human table shows the columns `NAME`, `SIZE`, `DIGEST`, `COMPUTED` (only
+with `--checksums`), `ADDED`, `RESERVED` and `STATE`, with the digests
+prefixed by `sha256:`. `RESERVED` joins the reserving contexts with commas, or
+shows `-`. `STATE` is `verified` for an `ok` image; `mismatch` for a
+`mismatch` one, which `media add` replaces or `media delete` removes; and
+`stored` for an image whose bytes were not read and whose size matches its
+record.
+
+Before a replacing `media add` or a `media delete` prompts, standard output
+shows the stored image under a `Media replacement` or `Media deletion` title:
+its `Name`, then the `Size`, `Digest`, `Added` and `Source` of its record, or a
+`Record` field reading `unreadable` when the name holds an image whose record
+cannot be read. A replacement adds `New source`, the origin the new record
+would carry: when its pin adopts the stage an interrupted add retained for that
+name, that stage's source, and otherwise the origin of the source it names
+(`TestAReplacementShowsTheSourceItsRecordWillCarry`); a deletion that also
+removes the stage an interrupted add retained
+adds `Retained`, and one that removes only such a stage shows its name and
+`Retained` alone. A presentation that cannot be written refuses the command
+before it prompts. The result of `media delete` names the image and, when its
+record could be read, the size and digest that record stated.
 
 ## Cluster discovery
 

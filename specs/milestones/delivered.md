@@ -1616,7 +1616,7 @@ commit. `./scripts/ansible-check` was not required, since nothing under
 **Constraints left behind:** no record, request or automation digest moves, so
 no context is stranded. A never-started pending receipt below the bound still
 refuses after the host's release moves, with a remedy an upgraded host cannot
-follow ([B271](m1.md#b271)). Under D48 every follow-up was parked: B268
+follow ([B271](#x42--media-contexts-setup-service-and-machine-admission)). Under D48 every follow-up was parked: B268
 to B271.
 
 ### X36 — the resolution test off the host's foundation
@@ -1897,7 +1897,7 @@ a root-squashed home are proved only unprivileged
 ([B352](backlog.md#b352)), and a second Ctrl-C under a foreground `use_pty`
 leaves the cancellation running ([B339](m1.md#b339)). A host an
 earlier build already left with a partial bundle file under its final name
-still refuses that replay ([B356](m1.md#b356)); X39 prevents new
+still refuses that replay ([B356](#x42--media-contexts-setup-service-and-machine-admission)); X39 prevents new
 ones. Tracked elsewhere:
 `--ssh-id-file` ([B283](#x40--machine-commands-status-secrets-and-validate-refusals)); `status` over a revision a new rule
 refuses ([B226](backlog.md#b226)); a bind-time refusal naming its Secret
@@ -2091,7 +2091,7 @@ starts its first block, the object the replaced attempt failed on reads done
 file-source remedy name no `--context` ([B361](m1.md#b361));
 `machine list --power-status` reads controllers with no progress row
 ([B370](m1.md#b370)); the context store's uncertain secret-state publication
-names no inspection command ([B371](m1.md#b371)); a file-input secret
+names no inspection command ([B371](#x42--media-contexts-setup-service-and-machine-admission)); a file-input secret
 replacement, deletion or rotation prompts under the host-wide lock and lease,
 which the owner decides ([B372](m1.md#b372)); and nothing reports a sudo
 policy that logs a standard-input secret ([B373](m1.md#b373)). Under D116 these
@@ -2107,7 +2107,7 @@ the `media list` row ([B300](m1.md#b300)); the `secret set` help
 ([B332](backlog.md#b332)); `status` over input a new rule refuses
 ([B226](backlog.md#b226)); `--ssh-id-file` through the helper as root,
 now part of [B352](backlog.md#b352); and the defaulted fleet-key duplicate on
-an installed Machine ([B294](m1.md#b294)). Under D48 (D116) the other
+an installed Machine ([B294](#x42--media-contexts-setup-service-and-machine-admission)). Under D48 (D116) the other
 follow-ups were parked: B362 to B369 and B374 to B376.
 
 ### X41 — lifecycle results, the controller stage, installation shapes and bounded runs
@@ -2380,8 +2380,277 @@ and IPv6 policy among it ([B338](m1.md#b338), [B326](m4.md#b326)); RHEL 9.8's
 `rpm` output and the snapshot read as the helper account
 ([B335](backlog.md#b335), and the RHEL 9.8 controller run D60 plans); the
 glibc and libgcc builds a RHEL 9.8 controller must hold, and building on a
-workstation ([B292](m1.md#b292)); help beyond destroy ([B95](m1.md#b95)); an
+workstation ([B292](#x42--media-contexts-setup-service-and-machine-admission)); help beyond destroy ([B95](m1.md#b95)); an
 invocation's own in-flight jobs ([B304](m3.md#b304)); and a bounded run
 beside another context's exclusive apply lock ([B18](m3.md#b18)). Under D48
 (D116) the other follow-ups were parked: B385 to B397, B385 and B393 split
 from B94 and B289.
+
+### X42 — Media, contexts, setup, service and machine admission
+
+**Owner:** Managed OS with CLI, Workspace and State reconciliation, Controller
+setup, Infrastructure services, and Substrate and Machine. Integrated on local
+`main` on 2026-10-06 as one commit. **Items:** B290, B236, B291, B179, B202,
+B228, B271, B292, B198, B293, B294, B349, B356, B350, B371. **Decisions:**
+D55, D56, D66, D77, D86 to D95, D107, D108, D113, D114.
+
+**Outcome, B290:** `media add --from-url` takes only an HTTPS URL (D86): a
+plain `http://` URL, userinfo, a fragment, a control character in either
+source and an origin over 512 bytes exit 2 before anything elevates or
+downloads, and the acquirer refuses a non-HTTPS URL before any request. The
+record carries a query-free origin, derived once before the confirmation and
+the claim, while the request keeps its query. A redirect refuses naming its
+status and its query-free target; DNS, certificate, timeout, HTTP status and
+cancellation failures each name their own cause and the route, and so does
+the new six-hour transfer deadline, beside the 30-second connection and
+60-second response bounds the managed-OS spec states. No response body, query
+or transport error text reaches a diagnostic, and a full disk is still never
+blamed on the source. A reserved image's deletion, replacement and
+revalidation name every reserving context and
+`bootwright destroy --context <it>`, and a digest mismatch names the image,
+its origin and both digests. `media add` reports an acquire or verify step and
+a publish step, and `media list --checksums` one check per image, as progress
+rows that JSON output never shows. `media list` lists a short image as a
+mismatch instead of failing, names the contexts that reserve each image and,
+with `--checksums`, shows the computed digest; its state reads stored,
+verified or mismatch, and its JSON row gains `reservedBy` and `computed`. A
+replacing add and a deletion present the stored record before the prompt, and
+a replacement shows the source its record will carry, the retained one when
+the claim adopts a retained stage. The media record format and its version
+are unchanged, and records with `http://` or query-bearing origins stay
+readable.
+
+**Outcome, B291, B236, B350 and B371:** a sole empty occurrence of a
+repeatable flag, as in `validate -f ""`, `--file=` or `apply --authorize=`,
+exits 2 as a usage error before classification elevates. Context refusals
+name the context and the exact next command, whether `context init`,
+`context use`, `context update` or the deletion, use one code,
+`context.input`, for missing input, and name the selection file or directory
+and its repair; a Context file refusal names the field and its YAML line, and
+a document of another kind the kind it declares. An interrupted
+`context init` resumes from another directory and from no input. An identical
+`context update` keeps the selected revision, publishes nothing and asks
+nothing, so apply still settles (D87), and changed input over a completed
+apply warns that apply refuses it until a destroy. `context update` and
+`context delete` present what they change before the prompt: the source,
+files, counts and warnings, or the revision, keyring, host reservations and
+any abandonment. The orphan refusal and confirmation name
+`bootwright status --context <name>` as the inventory (D88). Missing, empty,
+corrupt or unsupported mutation evidence now has an exit: update and a default
+deletion refuse naming status and
+`bootwright context delete --name <name> --purge --allow-orphans`, which
+abandons the context, saying that its objects cannot be listed and naming the
+export of any custodied cluster kubeconfig first; status and the lifecycle
+refusals offer that deletion instead of a whole-store restore, and absent or
+empty evidence reads as such (B236, D89). `context update` reaches the
+controller-input check through its transaction port, and over an incomplete
+operation names its destroy outright beside the continuation status names.
+Lifecycle operation refusals name store-relative entries, and listing the
+registry leaves the held root handle's offset alone (B350). An uncertain
+secret-state publication names `secret encryption status` and `secret check`
+with `--context` (B371).
+
+**Outcome, B179, B202, B228, B292, B349, B271 and B356:** setup's `Next`
+line follows its refusal's remedy, and is absent when no command settles it;
+a failed retirement and the retiring-area refusal name the purge (B179).
+Resolution warnings print with the plan, before the prompt (B202, D91). A
+setup run keeps 4 MiB of output, the bounded run's bound, while an earlier
+build's 8 MiB run is still admitted; its output writer never fails the
+runner; an Ansible failure's remedy names the run's output and that reading
+it needs root; the checkpoint harness interrupts a setup run at every
+checkpoint; and the operator guide describes setup runs (B228, D92). The
+ambient `HTTPS_PROXY` host is lowercased as the receipt requires, and routes
+read "direct (no HTTPS_PROXY)" or "direct (Machine <name>)". A bound full of
+client areas refuses saying that no command of this build frees it, and the
+stage's client-area and resolution bound refusals name the purge (D90; the
+retirement stays parked as [B322](backlog.md#b322)). A purge dry run plans the
+retirement, and a purge that removed nothing prints "Retired none". The
+execution foundation gains a named check in setup and preflight: the catalog
+attributes each release's glibc and libgcc files to their package and build
+beside the execution profile; a drift refuses before the plan, naming the
+file, package and build with a reinstall, versionlock and repeat remedy that
+also serves apply and destroy; and `scripts/foundation-catalog` regenerates a
+release's record, reproducing the Fedora 43 record exactly (D107). Setup and
+preflight report the host's FIPS mode, with the statement that Bootwright's
+runtime brings its own cryptography (D108). The operator guide lists the
+destinations an allowlisting proxy must admit, which
+`TestDocsProxiedNetworkDestinationsMatchTheCode` holds to the code under
+`make docs-check`, says that a dry run only parses the proxy variables while
+`preflight controller` confirms they crossed sudo, and describes holding the
+foundation and building on a workstation (B292). `setup --dry-run` reports a
+state-root check, inspecting the root without privilege and refusing, with
+the store's own refusal, a wrong type, owner, mode or filesystem or an
+earlier build's root (B349). `--purge-old-bundles` cancels a pending setup of
+setup's own, at the bound or below it, that this executable cannot resume and
+that never took effect: one never started, or one whose native transaction
+holds only its intent while the host's package inventory, read under the rpm
+lock, still equals the transaction's before-state. The cancellation is
+decided again under the mutation and must match the plan, and without the
+flag setup and preflight refuse naming the purge (B271, D55, D93); the setup
+help and command row say so. A short file an earlier build left under its
+final name in an unsealed bundle area is reported partial and discarded
+through the area's write capability before the replay proceeds, while a
+same-size file holding other bytes still refuses (B356).
+
+**Outcome, B293 and B198:** validate refuses the service shapes their only
+consumers cannot use: a DNSServer endpoint whose Machine address is a DNS
+name; under a non-wildcard bind, an IP endpoint other than the bind; an
+NTPServer port other than 123; a wildcard bind without an endpoint, or an
+ArtifactServer without one per listener; a managed service on a Machine that
+provides no OS; a tag image pin, defaults included; an empty listener list; a
+download mirror that is not an HTTPS base URL on the default port without a
+query, fragment or percent escape, a rule the controller stage's resolution
+shares, while recovering a block an earlier build froze keeps the earlier
+stage's tolerance; and an image repository holding an uppercase letter or a
+`+`, while image digests are lowercased. A generated serving certificate that
+misses an HTTPS endpoint's address refuses at that endpoint, naming the Secret
+and the address, with a remedy that imports the corrected Secret with
+`context update` before `secret generate --context`; every serving-certificate
+refusal at execution names `Secret/<name>`, the field or command and
+`--context`, and certificates stay P-256 (D113). Each service admission
+refusal carries an exact remedy, and a mistyped `serverRef` is only a
+reference problem. Readiness refuses a frozen request with no probe target or
+with an unprobed listener, so such a service reads partial, never completed.
+The artifact server reuses the managed-service derivations, and request
+goldens written before that refactor pass unchanged after it. IPv6 listener
+impacts and artifact endpoint URLs are bracketed (B198), while reservation
+keys and probe addresses stay unbracketed and IPv4 and DNS-name bytes are
+unchanged. The DNSServer keeps its wildcard default (D114).
+
+**Outcome, B294:** validate refuses the libvirt shapes the host cannot
+realize: an attachment or data-disk name that is not a DNS label; a data disk
+named `root`, or more than seven; a CPU, memory or disk size past its
+ceiling; one managed attachment name or bridge on two providers of one host,
+naming both (D95); an InfraProvider name over 48 bytes or a Machine name over
+52, so that their block identities fit 63 bytes; a non-provided libvirt
+Machine that selects no network or whose composed network has no available
+ethernet interface; an install address equal to its managed bridge's host,
+network or broadcast address, and an IPv4 assignment that is its own prefix's
+network or broadcast address; and `hardware.nics` MACs or `management.bmc` on
+a libvirt provider's Machine. The emulated BMC port range counts only the
+Machines allocation realizes. The libvirt provider's
+`bmcEmulationDefaults.disableCertificateVerification`, the bare-metal
+attachment's `vlan` (with [B74](m4.md#b74)) and `hardware.boot` leave
+v1alpha1 and refuse as unknown fields, and bare metal no longer requires an
+`attachmentRef` (D94). An invalid Machine name or an unresolved fleet key
+yields only its own diagnostic, and the fqdn grammar is the API's DNS rule.
+The machines and substrates specs state each rule, the kind tables match the
+schema, and the lab-baremetal and multidc-platform examples drop the removed
+fields.
+
+**Toward B342 and B380:** the libvirt bridge and a Machine's
+`interfaceAttachments[].interface` take the Linux interface-name grammar,
+which the machines spec's tables state; [B342](m1.md#b342) keeps the
+templates' escaping of the bridge for X46's digest window. The context store's
+refusal of a context with no revision carries its remedy as the remediation,
+which [B380](m1.md#b380) no longer lists.
+
+**Operator-visible effects:** media URLs are HTTPS only (D86), so
+`media add --from-url http://...` exits 2, and a redirect refuses. `media list`
+gains a reserving-contexts column and, with `--checksums`, a computed-digest
+column; its state tokens are stored, verified and mismatch where they were
+corrupt and reserved; its JSON row gains `reservedBy` and `computed` and omits
+`verified` when nothing was verified; and `media add` and
+`media list --checksums` show progress. Context commands exit 2 on a sole
+empty repeatable flag, refuse with new wording under one missing-input code,
+present their plans before the prompt and keep an identical update silent.
+Setup and preflight report the execution-foundation and FIPS-mode checks, and
+a dry run the state-root check; a drifted glibc or libgcc file is named with
+its package and build; setup runs keep 4 MiB of output; and `Next` lines
+follow remedies. `validate` refuses more: the service, libvirt provider and
+Machine shapes above, which earlier builds admitted, so an input that
+validated before may now refuse; and the removed
+`disableCertificateVerification`, bare-metal `vlan` and `hardware.boot`
+fields refuse as unknown. IPv6 listener impacts and artifact URLs print
+bracketed. **Digest effects:** no request or record version, setup or
+controller record format, setup plan digest or automation digest moves, and
+nothing under `ansible/` changed. The fields D94 removed were frozen in no
+request: `TestExampleRequestsKeepTheirBytes` pins the libvirt host and
+Machine, installation and bare-metal requests of lab-rhel, lab-sno and
+lab-baremetal to goldens written at X42's base, and they pass unchanged, as do
+the installation request goldens and the plan-digest golden, while the
+effective goldens lose only the removed fields. The catalog's per-release
+package attribution sits outside each release's execution profile, which
+`TestTheCompiledExecutionFoundationIsUnchanged` pins, and the cancellation
+evidence sits outside the setup plan digest. Only IPv6 moves bytes: an
+IPv6-bound service's plan digest moves through its bracketed impacts, and an
+IPv6 artifact endpoint's installation requests freeze bracketed URLs, with no
+version bump, because the unbracketed form an earlier build froze was
+unusable.
+
+**Review:** the lanes integrated without a conflict or an integration fix.
+The review raised seven findings, six confirmed, all in X42's scope and two
+of them blocking; the seventh, a bridge grammar admitting a trailing `+` that
+firewalld reads as a wildcard, was not confirmed as X42's, since it predates
+X42, and became [B410](m1.md#b410). The first fix round fixed five and part
+of the sixth: abandoning a context over unreadable evidence deleted its
+keyring without naming the custodied kubeconfig's export (blocking); a
+missing evidence file in a present context directory had no exit and named
+neither the context nor a remedy (blocking); a replacing add that adopts a
+retained stage showed a source its record would not carry; the setup help and
+command row said the purge cancels only at the bound; and the
+certificate-coverage remedy named `secret generate` without the import before
+it, so following it looped. Of the sixth, which found status named as the
+inventory and next step although it refuses a live context whose stored input
+the new rules refuse, the round made the update refusal name the destroy
+outright; the rest is status over a revision that no longer compiles, which
+stays parked as [B226](backlog.md#b226) with X42's case added. Three checks
+followed. The first found three defects the fixes introduced, a misplaced
+doc comment, a spec sentence giving `context update` a `--context` flag and
+absent evidence worded as an unrecognized record, all fixed in the second
+round, beside the residual, which it recorded; the second found only the
+residual; the third round had nothing to fix, and the third check found no
+gap.
+
+**Gates:** on the integrated lanes, `make check-offline tidy-check
+modules-check vulncheck docs-check race` passed, as it did after each of the
+three fix rounds and on the squashed commit; each check round's
+`make check-offline docs-check` passed; and `./scripts/check-commits` and
+`git diff --check` pass. `./scripts/ansible-check` was not required, since
+nothing under `ansible/` changed, and is unrun. The adversarial review, by
+reviewers that did not write the diff, is the independent review the items
+name. The RHEL 9.8 builds in the foundation record come from the brief, not
+from a RHEL host, and no unprivileged test reaches a root-owned state root
+the invoker cannot list. No real-host run.
+
+**Constraints left behind:** a live context whose stored input a new
+admission rule or a removed field refuses keeps its destroy, which plans from
+the frozen plan, while its next fresh apply, its plan and its `status` refuse
+until `context update` imports corrected input; status over such a revision is
+[B226](backlog.md#b226). An IPv6 service operation an earlier build
+registered keeps its frozen unbracketed URLs, so destroy it before applying
+again, and a request an earlier build froze with no probe target no longer
+proves presence, while its destroy is unaffected. Tracked elsewhere: the
+templates' escaping of the bridge ([B342](m1.md#b342)); the generic
+execution-failure remedy that an rpm lock conflict, an unsafe root or an
+unverified bundle location still gives when reached from apply or destroy
+([B379](m1.md#b379)); a receipt that this build leaves pending after a native
+action refused before authorizing, which only the build that moves the
+automation digest can cancel (D93, [B297](m1.md#b297)); realization reading
+the uncomposed template, so an override that adds the only ethernet interface
+passes validate and refuses at plan ([B338](m1.md#b338)); overlapping managed
+prefixes across contexts ([B295](m1.md#b295)); a managed service's egress
+through a managed or authenticated Proxy, refused only at plan
+([B382](m1.md#b382)); the RHEL 9.8 foundation record, for the RHEL 9.8
+controller run D60 plans to confirm ([B335](backlog.md#b335) beside it); and a
+guard port that lists the owned blocks ([B324](backlog.md#b324)). Under D116
+these join M1 on X46: an elevated selection refusal drops its remedy
+([B398](m1.md#b398)); the `context delete` row still promises a listing of
+what an orphan-acknowledged deletion abandons, and a lost context's plan says
+its keyring is removed ([B399](m1.md#b399)); unsafe mutation evidence has no
+named exit ([B400](m1.md#b400)); stage-collection, bounded-run and setup-run
+refusals name absolute paths, and setup's store backstops name no remedy
+([B401](m1.md#b401)); the dry run's state-root inspection follows a
+symbolic-link ancestor the store refuses ([B402](m1.md#b402)); a setup action
+whose adapter failed before any native record stays unknown
+([B403](m1.md#b403)); a `contextStore` serving certificate is proved only
+after registration, and missing material names no Secret
+([B404](m1.md#b404)); the `metadata.name` grammar refusal names no object or
+remedy ([B405](m1.md#b405)); a managed service's name can outgrow its block
+identity ([B406](m1.md#b406)); overlapping managed prefixes on one host in one
+context are admitted ([B407](m1.md#b407)); a mid-body media cancellation is
+misnamed, and one unreadable media entry hides the listing
+([B408](m1.md#b408)); `media list --checksums` holds the root lock while it
+hashes ([B409](m1.md#b409)); and a bridge name may end in firewalld's
+wildcard ([B410](m1.md#b410)). Under D48 (D116) the other follow-ups were
+parked: B411 to B419.

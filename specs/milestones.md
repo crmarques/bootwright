@@ -17,7 +17,7 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X42 |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X43 |
 | [M2](milestones/m2.md) | Native input files for `openshift-install` and the cephadm and ceph CLIs | none | not started | define B51 |
 | [M3](milestones/m3.md) | Provision and destroy OpenShift clusters on bare metal | M1 | in progress | B61's operator gate |
 | [M4](milestones/m4.md) | Provision and destroy IBM Ceph clusters on bare metal | M1, M2, M3 | in progress | X45 after X24, on the owner's request (D60) |
@@ -25,9 +25,9 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Provision and destroy OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M7](milestones/m7.md) | Add-ons ACM, Argo CD and GitLab | M5 | not started | nothing until M5 |
 
-No slice is active; X41 is delivered, and X42 is next under D56.
+No slice is active; X42 is delivered, and X43 is next under D56.
 
-- **Next for agents:** open and deliver X42; X43, X24, M4's X45 (D60),
+- **Next for agents:** open and deliver X43; X24, M4's X45 (D60),
   X46, whose B357 and B372 await owner decisions, and X44 follow in that
   order.
 - **Next for operator:** for [lab-sno](../examples/lab-sno/README.md) and

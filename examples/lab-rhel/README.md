@@ -106,9 +106,9 @@ The two images this example installs from live in the host-wide media store,
 which every context shares. The store lives beside the rest of the prepared
 host state, so `setup` runs before the first `media add`. Each image is added
 once, under the exact name the `MachineImage` and the install profile select.
-An operation that uses a stored image freezes it: `media list` marks it
-reserved, and `media delete` refuses until every context that froze it is
-destroyed.
+An operation that uses a stored image freezes it: `media list` names the
+contexts that reserve it, and `media delete` refuses until every context that
+froze it is destroyed.
 
 ## Run it
 

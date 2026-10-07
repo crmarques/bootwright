@@ -177,6 +177,35 @@ func TestDocsCommandLinesMatchTheCatalog(t *testing.T) {
 	t.Logf("checked %d documented invocations", checked)
 }
 
+// The setup help and its catalog row place the cancellation
+// --purge-old-bundles performs where the controller spec does: a pending setup
+// that never took effect and that this executable cannot resume is canceled at
+// the host's bound or below it, not only at it.
+func TestDocsSetupPurgeCancelsAPendingSetupAtOrBelowTheBound(t *testing.T) {
+	read := func(name string) string {
+		data, err := os.ReadFile(filepath.Join("..", "..", "specs", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	if !strings.Contains(read("controller.md"), "A pending receipt that is [setup's own](#publication-and-interrupted-setup),\nat the bound or below it") {
+		t.Fatal("specs/controller.md no longer cancels a pending setup at the bound or below it")
+	}
+	row := ""
+	for _, line := range strings.Split(read(filepath.Join("cli", "commands.md")), "\n") {
+		if strings.HasPrefix(line, "| `bootwright setup` |") {
+			row = line
+		}
+	}
+	help := catalogPaths()["setup"].long
+	for name, text := range map[string]string{"the setup help": help, "the setup row of specs/cli/commands.md": row} {
+		if !strings.Contains(text, "a setup left pending, at ") || !strings.Contains(text, " bound or below it, that never took effect") {
+			t.Errorf("%s does not cancel a pending setup at the bound or below it: %s", name, text)
+		}
+	}
+}
+
 // catalogRows returns the command rows of the catalog tables in
 // specs/cli/commands.md, keyed by command path, as their local-flags cell.
 func catalogRows(t *testing.T) map[string]string {

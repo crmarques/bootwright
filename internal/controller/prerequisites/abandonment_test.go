@@ -1,6 +1,7 @@
 package prerequisites
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"reflect"
@@ -14,7 +15,7 @@ import (
 const (
 	unresumableRefusal     = "an earlier build left a setup pending at this host's bound that this executable cannot resume"
 	unresumableRemediation = "run bootwright setup --purge-old-bundles to cancel it, retire the superseded execution bundles and set this host up afresh"
-	abandonmentAction      = "Cancel the setup an earlier build left pending at this host's bound, which never published its bundle"
+	abandonmentAction      = "Cancel the setup an earlier build left pending at this host's bound, which this executable cannot resume and which never published its bundle"
 	frozenRefusal          = "frozen setup dependencies differ from current intent"
 	frozenRemediation      = "restore the original input before retrying"
 )
@@ -86,11 +87,29 @@ func movedExecutable(t *testing.T, f *fixture) string {
 // started, its native transaction still planned, and its resolution kept.
 func canceledAs(t *testing.T, f *fixture, pending SetupReceipt) {
 	t.Helper()
+	canceledWith(t, f, pending, 0, `{"bundleArea":"absent"}`)
+}
+
+// canceledWith fails the test unless the store holds the pending receipt as
+// setup cancels it: canceled under its own ID and plan, the action at index
+// observed canceled with evidence and its preparation kept, every other
+// action exactly as it was, and its resolution kept.
+func canceledWith(t *testing.T, f *fixture, pending SetupReceipt, index int, evidence string) {
+	t.Helper()
 	receipt := f.store.state.Receipt
-	if receipt.ID != pending.ID || receipt.PlanDigest != pending.PlanDigest || receipt.Status != "canceled" || len(receipt.Actions) != 2 ||
-		receipt.Actions[0].Phase != "observed" || receipt.Actions[0].Outcome != "canceled" || string(receipt.Actions[0].Evidence) != `{"bundleArea":"absent"}` ||
-		receipt.Actions[1].Phase != "planned" {
-		t.Fatalf("the stranded receipt was not canceled as setup abandons it: %#v", receipt)
+	if receipt.ID != pending.ID || receipt.PlanDigest != pending.PlanDigest || receipt.Status != "canceled" || len(receipt.Actions) != len(pending.Actions) {
+		t.Fatalf("the pending receipt was not canceled as setup cancels it: %#v", receipt)
+	}
+	for position, action := range receipt.Actions {
+		if position != index {
+			if !reflect.DeepEqual(action, pending.Actions[position]) {
+				t.Fatalf("the cancellation moved action %s: %#v", action.ID, action)
+			}
+			continue
+		}
+		if action.Phase != "observed" || action.Outcome != "canceled" || string(action.Evidence) != evidence || !bytes.Equal(action.Preparation, pending.Actions[position].Preparation) {
+			t.Fatalf("action %s was not observed canceled with %s: %#v", action.ID, evidence, action)
+		}
 	}
 	if !slices.ContainsFunc(f.store.state.RetainedDefinitions, func(definition Definition) bool {
 		return definition.ResolutionDigest == pending.Definition.ResolutionDigest
@@ -283,25 +302,20 @@ func TestAStrandedSetupFrozenForAnotherPlatformIsAbandonedAlike(t *testing.T) {
 	})
 }
 
-// Setup abandons only a stranded receipt of its own. A pending receipt below
-// the bound is not stranded, because the build that recorded it could still
-// reserve its bundle there, and a receipt naming a context is never setup's.
-// Frozen for a platform the host has since left, each that never took effect
-// still refuses before any effect as frozen for other dependencies, with or
-// without the flag, and so does preflight, rather than naming
+// Setup cancels only a pending receipt of its own that never took effect.
+// Below the bound, one whose native transaction holds its intent with no
+// recorded preparation may have taken effect, and a receipt naming a context
+// is never setup's. Frozen for a platform the host has since left, each still
+// refuses before any effect as frozen for other dependencies, with or without
+// the flag, and so does preflight, rather than naming
 // setup --purge-old-bundles, which would refuse it the same way.
-func TestOnlySetupsOwnStrandedSetupIsAbandonedOnAMovedPlatform(t *testing.T) {
+func TestOnlySetupsOwnUnstartedSetupIsCanceledOnAMovedPlatform(t *testing.T) {
 	for name, pending := range map[string]func(*testing.T) *fixture{
-		"one below the bound": func(t *testing.T) *fixture {
-			f, _ := dynamicFixture(t)
-			f.store.failPublication = f.store.writes + 2
-			if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err == nil {
-				t.Fatal("the lost intent publication was not reported")
-			}
-			f.store.failPublication = 0
-			f.store.state.Receipt.Actions[0].Phase = "intent"
-			if stranded(f.store.view()) {
-				t.Fatalf("the pending receipt is stranded over %#v", f.store.areas)
+		"one below the bound whose native transaction may have started": func(t *testing.T) *fixture {
+			f, _ := belowTheBound(t, false)
+			f.store.state.Receipt.Actions[1].Phase = "intent"
+			if receipt := f.store.state.Receipt; neverStarted(receipt) {
+				t.Fatalf("the pending receipt never started: %#v", receipt)
 			}
 			return f
 		},
@@ -313,8 +327,8 @@ func TestOnlySetupsOwnStrandedSetupIsAbandonedOnAMovedPlatform(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := pending(t)
-			if receipt := f.store.state.Receipt; !receipt.Incomplete() || !neverStarted(receipt) {
-				t.Fatalf("the pending receipt may have taken effect: %#v", receipt)
+			if receipt := f.store.state.Receipt; !receipt.Incomplete() {
+				t.Fatalf("the receipt is not pending: %#v", receipt)
 			}
 			movePlatform(t, f)
 			f.events = nil
@@ -373,19 +387,15 @@ func TestAStrandedSetupWithAnotherUnresolvedActionStillRefuses(t *testing.T) {
 // The abandonment is decided again under the mutation that records it: a
 // stranded receipt that is no longer the one the plan was approved over, or
 // whose other action now holds an intent, refuses before anything is canceled
-// or retired. So does one no longer stranded, below the bound or with its
-// bundle now holding an area: the build that recorded it could resume it, and
-// its cancellation could not observe that no area holds its bundle. Each
-// change disarms itself once made.
+// or retired. So does one whose bundle now holds an area, because its
+// cancellation would no longer observe what the plan presented, that no area
+// holds that bundle. Each change disarms itself once made.
 func TestAnAbandonmentIsDecidedAgainUnderItsMutation(t *testing.T) {
 	client := HeldArea{ID: strandedClient}
 	for name, change := range map[string]func(*fixture, SetupReceipt){
 		"another action now intended": func(f *fixture, _ SetupReceipt) { f.store.state.Receipt.Actions[1].Phase = "intent" },
 		"another receipt":             func(f *fixture, _ SetupReceipt) { f.store.state.Receipt.ID = "setup-" + strings.Repeat("e", 32) },
 		"another plan":                func(f *fixture, _ SetupReceipt) { f.store.state.Receipt.PlanDigest = strings.Repeat("e", 64) },
-		"a client area released": func(f *fixture, _ SetupReceipt) {
-			f.store.areas = slices.DeleteFunc(f.store.areas, func(held HeldArea) bool { return held == client })
-		},
 		"its bundle now holding an area": func(f *fixture, pending SetupReceipt) {
 			f.store.areas[slices.Index(f.store.areas, client)] = HeldArea{ID: pending.CatalogDigest}
 		},
@@ -461,5 +471,370 @@ func TestAnInterruptedAbandonmentAtTheBoundCompletesOnTheNextPurge(t *testing.T)
 			}
 			setUpAfresh(t, f, pending, moved)
 		})
+	}
+}
+
+// belowTheBoundRefusal refuses a pending setup below the bound that this
+// executable cannot resume, naming no bound the host has not met.
+const belowTheBoundRefusal = "a setup left pending on this host never took effect and cannot be resumed by this executable"
+
+// belowTheBound leaves a host as a first setup that lost the publication after
+// its first intent left it, below the bound: its pending receipt holds the
+// intent of its execution bundle and plans its native transaction. With held
+// the record holds the area that bundle names, unsealed, as a preparation
+// that began before the loss leaves it. It returns the pending receipt.
+func belowTheBound(t *testing.T, held bool) (*fixture, SetupReceipt) {
+	t.Helper()
+	f, _ := dynamicFixture(t)
+	f.store.failPublication = f.store.writes + 2
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err == nil {
+		t.Fatal("the lost intent publication was not reported")
+	}
+	f.store.failPublication = 0
+	f.store.state.Receipt.Actions[0].Phase = "intent"
+	if held {
+		f.store.areas = append(f.store.areas, HeldArea{ID: f.store.state.Receipt.CatalogDigest})
+	}
+	pending := copyState(f.store.state).Receipt
+	if !pending.Incomplete() || !neverStarted(pending) || stranded(f.store.view()) {
+		t.Fatalf("the interrupted setup left receipt %#v over %#v", pending, f.store.areas)
+	}
+	f.events, f.plan = nil, Report{}
+	return f, pending
+}
+
+// inventoryInspector is the native inspector with the inventory port. It
+// reads digest as the host's installed package inventory, or fails with err,
+// and counts its reads.
+type inventoryInspector struct {
+	*resolvingFixture
+	digest string
+	err    error
+	reads  int
+}
+
+func (i *inventoryInspector) Inventory(context.Context, Platform) (string, error) {
+	i.reads++
+	return i.digest, i.err
+}
+
+// nativeBefore and nativeAfter are the package inventories, before and after
+// it, of the podman upgrade nativeNeverStarted plans.
+var nativeBefore, nativeAfter = strings.Repeat("d", 64), strings.Repeat("f", 64)
+
+// nativeNeverStarted leaves a host as a setup whose native transaction
+// refused before authorizing one, as every Python-side download did before
+// B297: a completed setup, then one that published its bundle, recorded the
+// preparation of a podman upgrade and failed with no definitive result, so its
+// receipt stays pending with that transaction's intent. The host's inventory
+// still reads as the preparation's before-state, and the installer's next
+// transaction succeeds. It returns the pending receipt, the installer and the
+// inventory port.
+func nativeNeverStarted(t *testing.T) (*fixture, SetupReceipt, *testRuntimeInstaller, *inventoryInspector) {
+	t.Helper()
+	f, r := dynamicFixture(t)
+	base := r.native
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	installer := &testRuntimeInstaller{owner: f, result: ActionResult{Outcome: "unknown"}, err: failure("controller.unknown", "the Ansible operation has no complete result", "")}
+	f.service.runtime = installer
+	f.host.runtime = RuntimeInspection{}
+	f.bundle.ready, f.bundle.sealed = false, false
+	upgradePodman(t, r, base, "1.2.4", nativeBefore)
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err == nil {
+		t.Fatal("the refused native transaction was not reported")
+	}
+	pending := copyState(f.store.state).Receipt
+	if _, prepared := nativePrepared(pending); !pending.Incomplete() || !prepared || !holdsArea(f.store.areas, pending.CatalogDigest) {
+		t.Fatalf("the refused native transaction left receipt %#v", pending)
+	}
+	inventory := &inventoryInspector{resolvingFixture: r, digest: nativeBefore}
+	f.service.options.NativeInspector = inventory
+	installer.result, installer.err = ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}, nil
+	f.events, f.plan = nil, Report{}
+	return f, pending, installer, inventory
+}
+
+// untouched fails the test unless a refusal left the store as it found it and
+// presented no plan.
+func untouched(t *testing.T, f *fixture, pending SetupReceipt, writes int, areas []HeldArea) {
+	t.Helper()
+	if slices.Contains(f.events, "present") || f.store.writes != writes || len(f.store.retired) != 0 || !slices.Equal(f.store.areas, areas) || !reflect.DeepEqual(f.store.state.Receipt, pending) {
+		t.Fatalf("a refusal acted: events=%v writes=%d retired=%v areas=%#v receipt=%#v", f.events, f.store.writes-writes, f.store.retired, f.store.areas, f.store.state.Receipt)
+	}
+}
+
+// A setup that never started, below the bound, is canceled under
+// --purge-old-bundles once the host's release moved since it froze its
+// dependencies (D93), whether or not its bundle's area was reserved. The plan
+// names the cancellation and no retirement, the fresh setup resolves for the
+// release the host now runs and completes, and the purge after it retires
+// what the canceled receipt left: its area when it held one, and otherwise its
+// resolution.
+func TestPurgeBelowTheBoundCancelsANeverStartedSetupAfterAHostReleaseChange(t *testing.T) {
+	for name, held := range map[string]bool{"its bundle holding no area": false, "its bundle's area unsealed": true} {
+		t.Run(name, func(t *testing.T) {
+			f, pending := belowTheBound(t, held)
+			movePlatform(t, f)
+			report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
+			if err != nil || report.Outcome != "changed" {
+				t.Fatalf("the cancellation under the flag: %#v %#v", report, diagnostics.Of(err))
+			}
+			action := "Cancel the setup left pending on this host, which this executable cannot resume and which never published its bundle"
+			if held {
+				action = "Cancel the setup left pending on this host, which this executable cannot resume and which never completed its bundle"
+			}
+			if !slices.Contains(f.plan.Actions, action) || slices.ContainsFunc(f.plan.Actions, func(line string) bool { return strings.HasPrefix(line, "Retire ") }) {
+				t.Fatalf("the plan did not present the cancellation alone: %q", f.plan.Actions)
+			}
+			receipt := f.store.state.Receipt
+			if receipt.ID == pending.ID || receipt.Status != "complete" || receipt.Definition.Platform != upgradedPlatform {
+				t.Fatalf("no fresh setup for the moved release took the pending receipt's place: %#v", receipt)
+			}
+			if held && (!slices.Equal(report.RetiredBundles, []string{pending.CatalogDigest}) || len(f.store.retiredResolutions) != 0) ||
+				!held && (len(report.RetiredBundles) != 0 || !slices.Equal(f.store.retiredResolutions, []string{pending.Definition.ResolutionDigest})) {
+				t.Fatalf("the purge after completion retired bundles %v and resolutions %v", report.RetiredBundles, f.store.retiredResolutions)
+			}
+			if retained := f.store.state.RetainedDefinitions; !slices.Equal(f.store.areas, []HeldArea{{ID: receipt.CatalogDigest}}) || len(retained) != 1 || retained[0].ResolutionDigest != receipt.Definition.ResolutionDigest {
+				t.Fatalf("the host keeps areas %#v and resolutions %#v", f.store.areas, retained)
+			}
+		})
+	}
+}
+
+// Below the bound, a pending setup of setup's own that this executable cannot
+// resume and that never took effect refuses setup without the flag, and
+// preflight, before any effect: controller.conflict, the purge as the next
+// command, and nothing said of a bound the host has not met, whether the
+// host's release moved or its executable did.
+func TestBelowTheBoundAnUnresumableSetupNamesPurgeOldBundles(t *testing.T) {
+	for name, move := range map[string]func(*testing.T, *fixture){
+		"a host release change": movePlatform,
+		"a moved executable":    func(t *testing.T, f *fixture) { movedExecutable(t, f) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, pending := belowTheBound(t, false)
+			move(t, f)
+			writes, areas := f.store.writes, slices.Clone(f.store.areas)
+			report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+			refusal(t, err, belowTheBoundRefusal, unresumableRemediation)
+			if report == nil || report.Next != purgeInvocation {
+				t.Fatalf("setup's refusal offers %#v", report)
+			}
+			report, err = f.service.Check(context.Background(), CheckRequest{})
+			refusal(t, err, belowTheBoundRefusal, unresumableRemediation)
+			if name == "a moved executable" && report == nil || report != nil && (report.Outcome != "not-ready" || report.Next != purgeInvocation) {
+				t.Fatalf("preflight's refusal offers %#v", report)
+			}
+			untouched(t, f, pending, writes, areas)
+		})
+	}
+}
+
+// A setup whose native transaction refused before authorizing one, its
+// bundle published and its preparation recorded, is canceled under
+// --purge-old-bundles by the executable that follows (D93), once the host's
+// package inventory still reads as that preparation's before-state: without
+// the flag setup and preflight refuse naming the purge, and with it the
+// native action is observed canceled over the unchanged inventory, a fresh
+// setup completes, the purge after it retires the canceled receipt's area, and
+// the next setup finds the host ready.
+func TestPurgeCancelsASetupWhoseNativeTransactionNeverStarted(t *testing.T) {
+	f, pending, installer, inventory := nativeNeverStarted(t)
+	movedExecutable(t, f)
+	writes, areas := f.store.writes, slices.Clone(f.store.areas)
+	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); diagnostics.Of(err) == nil || diagnostics.Of(err)[0].Remediation != unresumableRemediation {
+		t.Fatalf("setup without the flag: %#v", diagnostics.Of(err))
+	}
+	if _, err := f.service.Check(context.Background(), CheckRequest{}); diagnostics.Of(err) == nil || diagnostics.Of(err)[0].Remediation != unresumableRemediation {
+		t.Fatalf("preflight: %#v", diagnostics.Of(err))
+	}
+	untouched(t, f, pending, writes, areas)
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
+	if err != nil || report.Outcome != "changed" {
+		t.Fatalf("the cancellation under the flag: %#v %#v", report, diagnostics.Of(err))
+	}
+	if !slices.Contains(f.plan.Actions, "Cancel the setup left pending on this host, which this executable cannot resume and whose native package transaction never started, as its unchanged package inventory shows") {
+		t.Fatalf("the plan did not present the cancellation: %q", f.plan.Actions)
+	}
+	receipt := f.store.state.Receipt
+	if receipt.ID == pending.ID || receipt.Status != "complete" || installer.calls != 2 || inventory.reads == 0 {
+		t.Fatalf("no fresh setup took the pending receipt's place: %#v, %d transactions, %d inventory reads", receipt, installer.calls, inventory.reads)
+	}
+	if !slices.Contains(report.RetiredBundles, pending.CatalogDigest) || !slices.Equal(f.store.areas, []HeldArea{{ID: receipt.CatalogDigest}}) {
+		t.Fatalf("the purge after completion retired %v and the host keeps %#v", report.RetiredBundles, f.store.areas)
+	}
+	report, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || report.Outcome != "unchanged" || installer.calls != 2 {
+		t.Fatalf("the next setup: %#v %#v", report, diagnostics.Of(err))
+	}
+}
+
+// A setup whose native action holds its intent is canceled only on proof that
+// its transaction never started. With an inventory that differs from the
+// preparation's before-state, one that reads as its after-state, one that
+// cannot be read, or no inventory port at all, setup with or without the
+// flag, and preflight, refuse with controller.unknown before any effect, as
+// they refuse another executable's pending attempt.
+func TestASetupWhoseInventoryMovedIsNeverCanceled(t *testing.T) {
+	for name, observe := range map[string]func(*fixture, *inventoryInspector){
+		"an inventory that differs": func(_ *fixture, inventory *inventoryInspector) { inventory.digest = strings.Repeat("e", 64) },
+		"the after-state":           func(_ *fixture, inventory *inventoryInspector) { inventory.digest = nativeAfter },
+		"an unreadable inventory":   func(_ *fixture, inventory *inventoryInspector) { inventory.err = errors.New("native database is busy") },
+		"no inventory port":         func(f *fixture, _ *inventoryInspector) { f.service.options.NativeInspector = f.resolution },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, pending, _, inventory := nativeNeverStarted(t)
+			movedExecutable(t, f)
+			observe(f, inventory)
+			writes, areas := f.store.writes, slices.Clone(f.store.areas)
+			unresolved := func(what string, err error) {
+				if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.unknown" || found[0].Message != "another exact setup attempt remains unresolved" {
+					t.Fatalf("%s: %#v (%v)", what, found, err)
+				}
+			}
+			for _, purge := range []bool{false, true} {
+				_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: purge})
+				unresolved("setup", err)
+			}
+			_, err := f.service.Check(context.Background(), CheckRequest{})
+			unresolved("preflight", err)
+			untouched(t, f, pending, writes, areas)
+		})
+	}
+}
+
+// A pending setup this executable can resume is resumed, never canceled, even
+// under --purge-old-bundles and over an unchanged inventory: its recorded
+// native transaction is recovered exactly and the receipt completes, and its
+// inventory is never read to judge a cancellation.
+func TestAPendingSetupThisExecutableCanResumeIsNotCanceled(t *testing.T) {
+	f, pending, installer, inventory := nativeNeverStarted(t)
+	f.host.runtime = RuntimeInspection{Present: true, Ready: true}
+	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
+	if err != nil || report.Outcome != "changed" {
+		t.Fatalf("the resumed setup: %#v %#v", report, diagnostics.Of(err))
+	}
+	receipt := f.store.state.Receipt
+	if receipt.ID != pending.ID || receipt.Status != "complete" || installer.recovers != 1 || inventory.reads != 0 ||
+		slices.ContainsFunc(f.plan.Actions, func(line string) bool { return strings.HasPrefix(line, "Cancel ") }) {
+		t.Fatalf("the pending receipt was not resumed exactly: %#v, %d recoveries, %d inventory reads, plan %q", receipt, installer.recovers, inventory.reads, f.plan.Actions)
+	}
+}
+
+// The cancellation below the bound is decided again under the mutation that
+// records it: a receipt whose native transaction now holds an intent, whose
+// bundle now holds an area its plan said it lacked, whose plan changed, or
+// whose package inventory moved since the plan was presented refuses before
+// anything is canceled. Each change disarms itself once made.
+func TestTheCancellationBelowTheBoundIsDecidedAgainUnderItsMutation(t *testing.T) {
+	type pending struct {
+		f       *fixture
+		receipt SetupReceipt
+		native  *inventoryInspector
+	}
+	neverStartedSetup := func(t *testing.T) pending {
+		f, receipt := belowTheBound(t, false)
+		movePlatform(t, f)
+		return pending{f: f, receipt: receipt}
+	}
+	refusedTransaction := func(t *testing.T) pending {
+		f, receipt, _, inventory := nativeNeverStarted(t)
+		movedExecutable(t, f)
+		return pending{f: f, receipt: receipt, native: inventory}
+	}
+	for name, test := range map[string]struct {
+		left   func(*testing.T) pending
+		change func(pending)
+	}{
+		"another action now intended": {neverStartedSetup, func(p pending) { p.f.store.state.Receipt.Actions[1].Phase = "intent" }},
+		"its bundle now holding an area": {neverStartedSetup, func(p pending) {
+			p.f.store.areas = append(p.f.store.areas, HeldArea{ID: p.receipt.CatalogDigest})
+		}},
+		"another plan":                {refusedTransaction, func(p pending) { p.f.store.state.Receipt.PlanDigest = strings.Repeat("e", 64) }},
+		"its package inventory moved": {refusedTransaction, func(p pending) { p.native.digest = nativeAfter }},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := test.left(t)
+			fired, changed, areas := false, SetupReceipt{}, []HeldArea(nil)
+			p.f.beforeMutation = func() {
+				p.f.beforeMutation, fired = nil, true
+				test.change(p)
+				changed, areas = copyState(p.f.store.state).Receipt, slices.Clone(p.f.store.areas)
+			}
+			writes := p.f.store.writes
+			_, err := p.f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
+			if found := diagnostics.Of(err); !fired || len(found) != 1 || found[0].Code != "controller.conflict" || found[0].Message != "controller state changed after plan confirmation" {
+				t.Fatalf("a changed receipt was canceled (changed: %t): %#v (%v)", fired, found, err)
+			}
+			if p.f.store.writes != writes || len(p.f.store.retired) != 0 || !slices.Equal(p.f.store.areas, areas) || !reflect.DeepEqual(p.f.store.state.Receipt, changed) || !changed.Incomplete() {
+				t.Fatalf("a refused cancellation acted: writes=%d retired=%v areas=%#v receipt=%#v", p.f.store.writes-writes, p.f.store.retired, p.f.store.areas, p.f.store.state.Receipt)
+			}
+		})
+	}
+}
+
+// However the cancellation below the bound is interrupted, the next
+// setup --purge-old-bundles completes it. A lost cancellation leaves the
+// receipt pending; one interrupted after the cancellation leaves it canceled
+// as it observed it, settled, so the next setup sets the host up afresh
+// whatever it is run with. Each interruption disarms itself.
+func TestAnInterruptedCancellationBelowTheBoundCompletesOnTheNextPurge(t *testing.T) {
+	type shape struct {
+		left     func(*testing.T) (*fixture, SetupReceipt)
+		index    int
+		evidence string
+	}
+	shapes := map[string]shape{
+		"a setup that never started": {func(t *testing.T) (*fixture, SetupReceipt) {
+			f, pending := belowTheBound(t, false)
+			movePlatform(t, f)
+			return f, pending
+		}, 0, `{"bundleArea":"absent"}`},
+		"a setup over an unsealed area": {func(t *testing.T) (*fixture, SetupReceipt) {
+			f, pending := belowTheBound(t, true)
+			movePlatform(t, f)
+			return f, pending
+		}, 0, `{"bundleArea":"unsealed"}`},
+		"a native transaction that never started": {func(t *testing.T) (*fixture, SetupReceipt) {
+			f, pending, _, _ := nativeNeverStarted(t)
+			movedExecutable(t, f)
+			return f, pending
+		}, 1, `{"nativeInventory":"unchanged"}`},
+	}
+	for shapeName, test := range shapes {
+		for _, lost := range []bool{true, false} {
+			name := shapeName + ", after the cancellation"
+			if lost {
+				name = shapeName + ", cancellation lost"
+			}
+			t.Run(name, func(t *testing.T) {
+				f, pending := test.left(t)
+				f.store.failPublication = f.store.writes + 2
+				if lost {
+					f.store.failPublication = f.store.writes + 1
+				}
+				_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
+				if err == nil || f.store.writes < f.store.failPublication {
+					t.Fatalf("the interruption did not fire or was not reported: %v", err)
+				}
+				f.store.failPublication = 0
+				if lost {
+					if !reflect.DeepEqual(f.store.state.Receipt, pending) {
+						t.Fatalf("a lost cancellation moved the pending receipt: %#v", f.store.state.Receipt)
+					}
+				} else {
+					canceledWith(t, f, pending, test.index, test.evidence)
+				}
+				report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: true})
+				if err != nil || report.Outcome != "changed" {
+					t.Fatalf("repeating the setup: %#v %#v", report, diagnostics.Of(err))
+				}
+				if receipt := f.store.state.Receipt; receipt.ID == pending.ID || receipt.Status != "complete" || !slices.Equal(f.store.areas, []HeldArea{{ID: receipt.CatalogDigest}}) {
+					t.Fatalf("the repeated setup left receipt %#v over %#v", receipt, f.store.areas)
+				}
+			})
+		}
 	}
 }

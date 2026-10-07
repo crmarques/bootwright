@@ -22,6 +22,19 @@ const BootRedfishVirtualMedia = "redfishVirtualMedia"
 // carries the labels the hypervisor expects.
 const ImagePrefix = "/var/lib/libvirt/images/bootwright"
 
+// MaxDataDisks is how many data disks a libvirt domain presents after its root
+// disk, as vdb through vdh.
+const MaxDataDisks = 7
+
+// ProviderNameLimit keeps a provider's host block, substrate-host-<name>,
+// inside the 63-byte block identity a plan admits.
+const ProviderNameLimit = 48
+
+// MachineNameLimit keeps the longest block a Machine contributes,
+// os-install-<name>, inside the 63-byte block identity a plan admits. It holds
+// for every Machine, because a Machine may change lifecycle.
+const MachineNameLimit = 52
+
 func NetworkName(contextName, attachment string) string {
 	return Prefix + "-" + contextName + "-" + attachment
 }

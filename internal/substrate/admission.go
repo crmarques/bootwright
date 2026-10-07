@@ -192,12 +192,17 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if o.Kind() != api.InfraProvider {
 		return nil
 	}
+	issues := []api.Issue{}
+	if api.ValidLexical("name", o.Name()) && len(o.Name()) > ProviderNameLimit {
+		issues = add(issues, api.Issue{Code: "api.value", Field: "$.metadata.name",
+			Message:     fmt.Sprintf("an InfraProvider name is at most %d bytes, because its host block substrate-host-<name> is a 63-byte identity", ProviderNameLimit),
+			Remediation: fmt.Sprintf("rename %s to at most %d bytes, with every providerRef that names it", o.Identity(), ProviderNameLimit)})
+	}
 	variant := Variant(o)
 	if variant == "" {
-		return nil
+		return issues
 	}
 	arm := o.Spec().Get(variant)
-	issues := []api.Issue{}
 	if variant == "baremetal" {
 		issues = add(issues, ValidateBMCDefaults(arm.Get("defaults", "bmc"), "$.spec.baremetal.defaults.bmc", false)...)
 	}
@@ -212,6 +217,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		}
 		issues = add(issues, validateEmulatedListener(bmc)...)
 		issues = add(issues, requirePositiveCapacity(arm, variant, "libvirt")...)
+		issues = add(issues, validateLibvirtDataDisks(o, arm)...)
 		first, last, ranged := bmcPortRange(o, c)
 		if ranged && last > 65535 {
 			issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.port", "the emulated BMC port range must end at or below 65535"))
@@ -227,6 +233,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 				break
 			}
 		}
+		issues = add(issues, validateSharedHostNetworks(o, c)...)
 	}
 	if variant == "vsphere" {
 		domains := arm.Get("failureDomains").Items()
@@ -332,13 +339,106 @@ func bmcPortRange(provider api.Object, c api.Catalog) (int64, int64, bool) {
 	if !ok {
 		return 0, 0, false
 	}
-	machines := int64(0)
-	for _, machine := range c.OfKind(api.Machine) {
-		if machine.Spec().Get("substrate", "providerRef").Text() == provider.Name() {
-			machines++
+	machines := int64(len(HostedMachines(c, provider.Name())))
+	return first, first + max(machines, 1) - 1, true
+}
+
+// validateLibvirtDataDisks refuses a profile whose data disks the domain cannot
+// present: more than its targets after the root disk, or one named root, whose
+// image the root disk already is.
+func validateLibvirtDataDisks(o api.Object, arm api.Value) []api.Issue {
+	issues := []api.Issue{}
+	for index, profile := range arm.Get("machineProfiles").Items() {
+		path := fmt.Sprintf("$.spec.libvirt.machineProfiles[%d].dataDisks", index)
+		disks := profile.Get("dataDisks")
+		if disks.Len() > MaxDataDisks {
+			issues = add(issues, api.Issue{Code: "api.invariant", Field: path,
+				Message:     fmt.Sprintf("a libvirt domain presents at most %d data disks, vdb through vdh, after its root disk", MaxDataDisks),
+				Remediation: fmt.Sprintf("declare at most %d dataDisks on spec.libvirt.machineProfiles[%d] of %s", MaxDataDisks, index, o.Identity())})
+		}
+		for disk, data := range disks.Items() {
+			if data.Get("name").Text() == "root" {
+				issues = add(issues, api.Issue{Code: "api.invariant", Field: fmt.Sprintf("%s[%d].name", path, disk),
+					Message:     "the data disk name root is reserved for the root disk, which the domain presents as vda from root.qcow2",
+					Remediation: fmt.Sprintf("rename spec.libvirt.machineProfiles[%d].dataDisks[%d] on %s", index, disk, o.Identity())})
+			}
 		}
 	}
-	return first, first + max(machines, 1) - 1, true
+	return issues
+}
+
+// hostAttachment is one libvirt network attachment of a provider on a host.
+type hostAttachment struct {
+	provider api.Object
+	index    int
+	name     string
+	bridge   string
+	managed  bool
+}
+
+// libvirtAttachments lists a provider's libvirt attachments, keeping each name
+// and bridge only when it passes its grammar, so an invalid value yields its
+// grammar refusal and nothing else.
+func libvirtAttachments(provider api.Object) []hostAttachment {
+	var found []hostAttachment
+	for index, attachment := range provider.Spec().Get("networkAttachments").Items() {
+		libvirt := attachment.Get("libvirt")
+		if !libvirt.Present() {
+			continue
+		}
+		entry := hostAttachment{provider: provider, index: index, managed: libvirt.Get("management").Text() == "managed"}
+		if name := attachment.Get("name").Text(); api.ValidLexical("name", name) {
+			entry.name = name
+		}
+		if bridge := libvirt.Get("bridge").Text(); api.ValidLexical("ifname", bridge) {
+			entry.bridge = bridge
+		}
+		found = append(found, entry)
+	}
+	return found
+}
+
+// validateSharedHostNetworks refuses what two attachments on one host would
+// both claim: a managed attachment name another provider also manages, since
+// a context names the one network it defines after it, and a bridge a managed
+// attachment defines that another attachment also names, since a bridge name
+// is host-global and goes with the host block that defines it.
+func validateSharedHostNetworks(o api.Object, c api.Catalog) []api.Issue {
+	host := o.Spec().Get("libvirt", "machineRef").Text()
+	if !api.ValidLexical("name", host) {
+		return nil
+	}
+	attachments := libvirtAttachments(o)
+	onHost := slices.Clone(attachments)
+	for _, other := range c.OfKind(api.InfraProvider) {
+		if other.Identity() != o.Identity() && other.Spec().Get("libvirt").Present() && other.Spec().Get("libvirt", "machineRef").Text() == host {
+			onHost = append(onHost, libvirtAttachments(other)...)
+		}
+	}
+	issues := []api.Issue{}
+	for _, own := range attachments {
+		path := fmt.Sprintf("$.spec.networkAttachments[%d]", own.index)
+		for _, peer := range onHost {
+			sameProvider := peer.provider.Identity() == o.Identity()
+			if sameProvider && peer.index == own.index {
+				continue
+			}
+			if !sameProvider && own.managed && peer.managed && own.name != "" && own.name == peer.name {
+				issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".name",
+					Message: fmt.Sprintf("managed attachment %s is also a managed attachment of %s on host Machine/%s, and both would define the one libvirt network this context names after it",
+						own.name, peer.provider.Identity(), host),
+					Remediation: fmt.Sprintf("rename the attachment on %s or %s, with the attachmentRef of every Machine that selects it", o.Identity(), peer.provider.Identity())})
+			}
+			if (own.managed || peer.managed) && own.bridge != "" && own.bridge == peer.bridge {
+				issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".libvirt.bridge",
+					Message: fmt.Sprintf("bridge %s of networkAttachments[%d] is also named by networkAttachments[%d] of %s on host Machine/%s; a bridge a managed attachment defines belongs to that attachment alone",
+						own.bridge, own.index, peer.index, peer.provider.Identity(), host),
+					Remediation: fmt.Sprintf("give spec.networkAttachments[%d] of %s or spec.networkAttachments[%d] of %s its own bridge, or make both external",
+						own.index, o.Identity(), peer.index, peer.provider.Identity())})
+			}
+		}
+	}
+	return issues
 }
 
 func validateLibvirtAttachment(arm api.Value, path string) []api.Issue {

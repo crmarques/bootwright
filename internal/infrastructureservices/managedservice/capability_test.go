@@ -358,6 +358,24 @@ func TestPresenceRequiresEveryDeclaredAnswer(t *testing.T) {
 			}
 		})
 	}
+	// A wildcard bind an earlier build froze without an endpoint names no
+	// address to probe, so no answer, none included, proves it present, and
+	// everything present reads as a partial realization instead.
+	unprobed := api.NewObject(api.Proxy, "lab-proxy", api.Value{},
+		service(api.Proxy, "lab-proxy").Spec().With("bindAddress", api.StringValue("0.0.0.0")).With("endpoints", api.ListValue()))
+	requests, err = capability.Requests(catalogOf(controller(), unprobed), "controller", testContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	silent := complete
+	silent.Answers = []Answer{}
+	reported := diagnostics.Of(ValidatePresence(encode(t, silent), requests[0], digest))
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != "the frozen managed service request names no address readiness can probe" {
+		t.Fatalf("an unprobed wildcard request = %#v, want its readiness refusal", reported)
+	}
+	if err := ValidatePartial(encode(t, silent), requests[0], digest); err != nil {
+		t.Fatalf("a present service readiness cannot prove was not partial: %v", err)
+	}
 }
 
 func TestAbsenceRequiresEveryOwnedResourceGone(t *testing.T) {

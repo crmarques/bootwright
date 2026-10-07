@@ -123,7 +123,7 @@ func aPublicationReplacesOnlyWhenAsked(t *testing.T, store media.Store) {
 
 func aRetainingStageIsListedAndAdopted(t *testing.T, store media.Store) {
 	retain(t, store, image, original)
-	holds(t, store, nil, []string{image})
+	holds(t, store, nil, []managedos.MediaEntry{entry(image, original)})
 	adopted := claim(t, store, image, digest(original))
 	retained, found := adopted.Retained()
 	if !found || retained != entry(image, original) {
@@ -154,7 +154,7 @@ func aDeletionRemovesEverything(t *testing.T, store media.Store) {
 	add(t, store, image, original)
 	retain(t, store, image, changed)
 	add(t, store, other, changed)
-	holds(t, store, []managedos.MediaEntry{entry(image, original), entry(other, changed)}, []string{image})
+	holds(t, store, []managedos.MediaEntry{entry(image, original), entry(other, changed)}, []managedos.MediaEntry{entry(image, changed)})
 	succeeds(t, store.MutateMedia(context.Background(), func(tx media.Transaction) error {
 		return tx.Delete(context.Background(), image)
 	}), "a deletion")
@@ -244,15 +244,23 @@ func closes(t *testing.T, stage media.Stage) {
 }
 
 // holds asserts what a read of the store reports: its complete entries by
-// name, each image's occupied name, record and digest, and the names whose
-// stage is retained.
-func holds(t *testing.T, store media.Store, entries []managedos.MediaEntry, retained []string) {
+// name, each observed at the size its record states, each image's occupied
+// name, record and digest, and each retained stage as the entry it was
+// retained with, in name order.
+func holds(t *testing.T, store media.Store, entries []managedos.MediaEntry, retained []managedos.MediaEntry) {
 	t.Helper()
 	ctx := context.Background()
 	if err := store.ReadMedia(ctx, func(view media.View) error {
-		listed, err := view.Entries(ctx)
+		images, err := view.Entries(ctx)
 		if err != nil {
 			return err
+		}
+		listed := make([]managedos.MediaEntry, 0, len(images))
+		for _, image := range images {
+			if image.Observed != image.Size {
+				t.Fatalf("image %s is observed at %d bytes, want the %d its record states", image.Name, image.Observed, image.Size)
+			}
+			listed = append(listed, image.MediaEntry)
 		}
 		sorted := func(x, y managedos.MediaEntry) int { return strings.Compare(x.Name, y.Name) }
 		if !slices.Equal(slices.SortedFunc(slices.Values(listed), sorted), slices.SortedFunc(slices.Values(entries), sorted)) {
@@ -280,8 +288,8 @@ func holds(t *testing.T, store media.Store, entries []managedos.MediaEntry, reta
 		if err != nil {
 			return err
 		}
-		if !slices.Equal(slices.Sorted(slices.Values(kept)), slices.Sorted(slices.Values(retained))) {
-			t.Fatalf("retained = %v, want %v", kept, retained)
+		if !slices.Equal(kept, slices.SortedFunc(slices.Values(retained), sorted)) {
+			t.Fatalf("retained = %+v, want %+v", kept, retained)
 		}
 		return nil
 	}); err != nil {

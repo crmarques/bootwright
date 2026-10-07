@@ -78,22 +78,24 @@
       "contradictions": [
         "bravo (pending)"
       ],
-      "nextSteps": []
+      "nextSteps": [
+        "bootwright context delete --name lab --purge --allow-orphans"
+      ]
     },
     "plan": {
       "code": "lifecycle.state",
       "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
-      "remediation": "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
+      "remediation": "abandon the context with bootwright context delete --name lab --purge --allow-orphans, which cannot list what it may still own"
     },
     "apply": {
       "code": "lifecycle.state",
       "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
-      "remediation": "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
+      "remediation": "abandon the context with bootwright context delete --name lab --purge --allow-orphans, which cannot list what it may still own"
     },
     "destroy": {
       "code": "lifecycle.state",
       "message": "the completed destroy operation-1 records no block completion for these blocks, so nothing proves their effects removed: bravo (pending)",
-      "remediation": "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
+      "remediation": "abandon the context with bootwright context delete --name lab --purge --allow-orphans, which cannot list what it may still own"
     }
   }
 }

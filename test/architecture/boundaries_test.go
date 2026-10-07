@@ -468,7 +468,7 @@ func effectGrants() map[string][]string {
 		// from the invoking account's opener and opens no path itself, or
 		// downloads from one authorized endpoint; it runs no process and holds
 		// no state.
-		"internal/managedos/medialocal": {"net.Dialer", "net/http", "os"},
+		"internal/managedos/medialocal": {"net.DNSError", "net.Dialer", "net/http", "os"},
 		// The composition root is the process boundary: it reads the process's
 		// arguments, environment and terminal and lists completion's paths. It
 		// only binds entropy and the media proxy selector, and holds no

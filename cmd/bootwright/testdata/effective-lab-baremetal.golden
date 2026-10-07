@@ -47,8 +47,6 @@ spec:
     nics:
       - name: eno1
         macAddress: 52:54:00:9a:1b:01
-    boot:
-      nicRef: eno1
     management:
       bmc:
         address: https://bmc-01.metal.example.test/redfish/v1/Systems/1
@@ -201,8 +199,7 @@ spec:
             removeCertificateAfterBoot: false
   networkAttachments:
     - name: lab-metal
-      baremetal:
-        vlan: 0
+      baremetal: {}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: DNSServer

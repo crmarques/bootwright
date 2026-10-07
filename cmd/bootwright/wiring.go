@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/privilege"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/power"
+	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -34,6 +35,7 @@ type processDependencies struct {
 	Presenter          prerequisites.PlanPresenter
 	LifecycleProgress  lifecycle.ProgressReporter
 	LifecyclePresenter lifecycle.PlanPresenter
+	MediaPresenter     media.Presenter
 	Executable         lifecycle.Executable
 	// AmbientRoute is the acquisition route the invoking environment selected
 	// for a context-free command. Its zero value selects nothing, so every
@@ -115,7 +117,7 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 		Reporter:         process.LifecycleProgress,
 		Controller:       controllerPorts,
 		AmbientRoute:     process.AmbientRoute,
-		Media:            localMediaDependencies(repository, process.Confirmer, process.AmbientRoute, files),
+		Media:            localMediaDependencies(repository, process.Confirmer, process.LifecycleProgress, process.MediaPresenter, process.AmbientRoute, files),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: account},
 			Host: hostlinux.New(), Guard: bundlelocal.ExecutionGuard{}, Selection: account,

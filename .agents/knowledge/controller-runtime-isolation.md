@@ -19,7 +19,11 @@ and why each mechanism is necessary.
   shared libraries. Their package ownership is frozen with the execution
   profile, and a native transaction that would change them is refused before
   the plan is presented. A dependency release that needs a different foundation
-  needs a separately qualified profile. Code:
+  needs a separately qualified profile. The catalog attributes each pinned file
+  to its package build beside the execution requirement, never inside it,
+  because every bundle identity digests that requirement; the attribution only
+  lets a drift refusal name what to reinstall, and `scripts/foundation-catalog`
+  regenerates a release's record from a qualified host. Code:
   `internal/controller/bundlelocal/catalog.go`, `internal/controller/nativelocal/resolver_linux_amd64.go`.
 - Execution verifies the catalogued host loader, ELF library files and aliases
   under the native package read lock, then invokes that loader directly with the
@@ -30,6 +34,9 @@ and why each mechanism is necessary.
   releases that lock, and package installation then acquires native transaction
   coordination and revalidates the selected foundation. No ambient loader cache,
   library search variable or preload configuration can select executable code.
+  The guard and the `execution-foundation` check setup and preflight report
+  verify through the same code and refuse a drift with one diagnostic, so a
+  launch from apply or destroy names the same file, build and remedy.
   Code: `internal/controller/bundlelocal/execution_linux_amd64.go`,
   `internal/controller/ansiblelocal/runner_linux_amd64.go`.
 - Evidence: the `internal/controller/bundlelocal` package tests, and the

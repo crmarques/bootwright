@@ -104,6 +104,9 @@ func (r Route) Summary() string {
 		endpoint = r.httpProxy
 	}
 	if endpoint == "" {
+		if r.origin != "" {
+			return "direct (" + r.origin + ")"
+		}
 		return "direct"
 	}
 	summary := endpoint
@@ -120,9 +123,15 @@ func (r Route) Summary() string {
 	return summary
 }
 
+// directOrigin is what selected an ambient direct route, so a report says why
+// acquisition takes no proxy.
+const directOrigin = "no HTTPS_PROXY"
+
 // RouteFromEnvironment selects the acquisition route for the commands that run
 // before any context exists. It reads exactly ProxyEnvironmentNames in either
-// case, and an unset environment keeps direct access.
+// case, and an unset environment keeps direct access. The endpoint's host is
+// kept in lowercase, as the setup receipt records it, so a route this admits
+// is one the receipt accepts.
 func RouteFromEnvironment(lookup func(string) (string, bool)) (Route, error) {
 	if lookup == nil {
 		return Route{direct: true}, nil
@@ -139,7 +148,7 @@ func RouteFromEnvironment(lookup func(string) (string, bool)) (Route, error) {
 		if values["HTTP_PROXY"] != "" {
 			return Route{}, routeFailure("every dependency source is HTTPS, so HTTP_PROXY alone selects no acquisition route", "Set HTTPS_PROXY to the proxy endpoint, or unset HTTP_PROXY for direct access.")
 		}
-		return Route{direct: true}, nil
+		return Route{direct: true, origin: directOrigin}, nil
 	}
 	route := Route{origin: "HTTPS_PROXY", httpsProxy: values["HTTPS_PROXY"]}
 	bypass, err := parseBypassList(values["NO_PROXY"])
@@ -150,6 +159,12 @@ func RouteFromEnvironment(lookup func(string) (string, bool)) (Route, error) {
 	if _, err := route.Selector(); err != nil {
 		return Route{}, environmentFault(err)
 	}
+	endpoint, err := url.Parse(route.httpsProxy)
+	if err != nil {
+		return Route{}, environmentFault(ErrProxyEndpoint)
+	}
+	endpoint.Host = strings.ToLower(endpoint.Host)
+	route.httpsProxy = endpoint.String()
 	return route, nil
 }
 

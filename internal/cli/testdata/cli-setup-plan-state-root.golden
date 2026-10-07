@@ -1,0 +1,17 @@
+Controller setup plan
+
+  Scope     baseline
+  Platform  fedora 43/amd64
+  Route     direct (no HTTPS_PROXY)
+
+Checks
+  [UNKNOWN]  Execution bundle  required qualified Python and Ansible; observed unverified
+  [FAIL]     State root        required a root:root 0700 directory on a local filesystem; observed a directory owned by root:root with mode 0755
+
+Dependencies
+  qualified-source.tar.gz
+
+Planned changes
+  1. Prepare the qualified execution bundle
+
+  Outcome  planned (dry run)

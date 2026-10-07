@@ -13,7 +13,9 @@ that plans one block per service object.
 ## Selection and refusal
 
 A managed service becomes a block only when its placement Machine has effective
-`os.provided: true` and the service's declared requirements hold. Reference
+`os.provided: true` and the service's declared requirements hold; admission
+refuses a placement Machine without it at `$.spec.machineRef`
+([placement](api/infrastructure-services.md#management-and-placement)). Reference
 resolution alone is not a readiness edge: an endpoint's Machine address supplies
 a value, while deployment requires the host itself. One realization edge does
 exist: a service whose bind address is the host address of a
@@ -91,6 +93,12 @@ A reservation key is one of:
 | `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its normalized management-controller endpoint and exact ComputerSystem, so two contexts never drive one server. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. |
 | `media:<filename.iso>` | A shared claim on one image of the [media store](managed-os.md#media-store); it conflicts with nothing and blocks only that image's deletion or replacement while any context holds it. |
 
+A `socket:` key writes an IPv6 address unbracketed, the one form every
+capability claims, while a plan's listener impact names the socket as an
+address and port are written, an IPv6 address bracketed, as
+`open-listener [fd00::1]:3128` (`TestIPv6ListenerImpactsAreBracketed`,
+`TestIPv6ArtifactListenerImpactsAreBracketed`).
+
 Every key is exclusive except the class marked shared. Reservations are
 published under the root lock before the operation's first effect and released
 by a completed destroy, or by a destroy that finds them held by no operation
@@ -148,8 +156,9 @@ plan, never by appending to a frozen one.
 **Implementation.** One container image runs an HTTP server under the host
 service manager with host networking, so declared bind addresses and ports are
 the real sockets. The image is `spec.image.local`, else `spec.image.public`,
-else the executable's compiled default. Every reference resolves to an
-immutable content digest before the plan freezes; a floating tag is refused.
+else the executable's compiled default. An authored reference is pinned by
+content digest at [admission](api/infrastructure-services.md#management-and-placement)
+and the compiled default is one, so a tag never reaches a plan.
 Image acquisition uses the placement Machine's normalized
 [proxy choice](api/machines.md#machine-proxy) and no ambient proxy variable.
 `retention: install-only` is unsupported and refuses, as the
@@ -163,20 +172,46 @@ The content root is outside the Bootwright state root, so serving never exposes
 context storage. Nothing else on the host is created, modified or removed.
 
 **TLS.** The [schema](api/infrastructure-services.md#artifactserver) requires a
-serving certificate exactly when an effective listener uses HTTPS. Its bound
-material is validated before effects: bounded PEM parsing, certificate and key agreement, an RSA
-serving key of at least 2048 bits, validity at the injected clock,
-server-authentication suitability, not a certificate authority, and
-subject-alternative-name coverage of every address an HTTPS endpoint serves. A failure refuses before connection or installation and names the
-Secret and the unmet condition, never material or its digest. `tls.minVersion`
-selects the exact protocol floor the server enforces.
+serving certificate exactly when an effective listener uses HTTPS. A
+[generated](api/secrets.md#generated-source) certificate names what its
+declaration lists, so admission refuses, as `api.invariant` at
+`$.spec.endpoints[i]`, an HTTPS endpoint whose address it does not name,
+naming the Secret and the missing address, with the remedy to add that address,
+import the change with `context update --name <context>` and then run
+`secret generate` with `--context`, since generation reads the context's stored
+revision rather than the edited input: an IP address must be one of
+`spec.source.generated.ipAddresses`, compared as hostname verification compares
+them, so an IPv4-mapped IPv6 address names its IPv4 one, and a DNS name one of
+`dnsNames`, compared without case; the common name names nothing
+(`TestAGeneratedServingCertificateCoversEveryHTTPSEndpoint`). Admission reads
+no material, so a `contextStore` certificate is proved at apply alone. Its
+bound material is validated before effects: bounded PEM parsing, certificate
+and key agreement, an RSA serving key of at least 2048 bits, validity at the
+injected clock, server-authentication suitability, not a certificate
+authority, and subject-alternative-name coverage of every address an HTTPS
+endpoint serves. A failure refuses before connection or installation as
+`secret.part` on `Secret/<name>`, and names the unmet condition and what stores
+usable material in the context: `secret set` with the certificate and key
+files, or, for a generated Secret, the declaration field to extend and
+`secret generate`, each with `--context`. It never names material or its
+digest. The operation keeps the Secret version it
+[bound](secrets.md#immutable-binding-and-contexts), and its continuation
+reopens that version, so the remedy ends by destroying the apply and applying
+again (`TestServingCertificateRefusalsNameTheSecretAndTheirRemedy`).
+`tls.minVersion` selects the exact protocol floor the server enforces.
 
 **Readiness.** Completion requires positive evidence for every listener: the
 socket accepts a connection at the declared address and port; an HTTPS listener
 completes a handshake whose presented leaf certificate digest equals the bound
 certificate's; and the listener answers one bounded HTTP status line. A
-certificate mismatch or a refused connection after the service reports started
-is a definite failure. A socket that never answers within the bounded readiness
+listener is probed at the bind address, or under a wildcard bind at each
+endpoint address that names it. A frozen request with no probe target, or with
+a listener no target probes, such as one an earlier build froze for a wildcard
+bind that admission now refuses, therefore never proves presence: everything
+present reads as a partial realization, and its removal, which reads no probe,
+is unaffected (`TestPresenceRefusesAnUnprobedListener`). A certificate
+mismatch or a refused connection after the service reports started is a
+definite failure. A socket that never answers within the bounded readiness
 window is unknown, not failure. A listener left unproved is reported with its
 last attempt's cause: the error's name, with the system's number and message
 when it carries them, and a timeout named `TimeoutError` on every Python a
@@ -242,6 +277,14 @@ never enumerates consumer content, its replay ignores it, and its inverse
 removes the root only after every consumer subtree is gone. Published content
 is non-sensitive. The first consumer is the installer image and package tree of
 [managed OS](managed-os.md#installation).
+
+A consumer fetches what it published at the selected endpoint's URL,
+`<protocol>://<host>:<port>/` followed by its subtree and file, where the host is
+the address the endpoint names on the server's Machine, an IPv6 address
+bracketed as every URL writes one, so a fetcher reads the port as the port
+(`TestEndpointURLsBracketIPv6`,
+`TestAnIPv6ArtifactEndpointFreezesABracketedInstallURL`). IPv4 addresses and
+DNS names are written as they are.
 
 The consumer-level directories above those subtrees, such as `os/`,
 `private/` and `private/os/`, are created by the first consumer that needs
@@ -359,8 +402,11 @@ Machine uses and the installer that polls the cluster agree by construction.
 
 **Readiness.** Completion requires a positive answer on every address the
 service serves: the declared bind address, or every declared endpoint address
-when the bind address is a wildcard. A proxy answers a bounded HTTP request
-with a well-formed status line; a resolver answers one of its own records over
+when the bind address is a wildcard. A frozen request naming no such address,
+such as one an earlier build froze for a wildcard bind without an endpoint that
+admission now refuses, never proves presence, so everything present reads as a
+partial realization (`TestPresenceRequiresEveryDeclaredAnswer`). A proxy
+answers a bounded HTTP request with a well-formed status line; a resolver answers one of its own records over
 both UDP and TCP; a time service returns a server-mode reply, whose stratum may
 show it unsynchronized without being a failure. An address that never answers
 within the bounded readiness window is unknown, not failure, and is reported

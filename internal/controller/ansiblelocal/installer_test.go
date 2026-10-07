@@ -3,6 +3,7 @@ package ansiblelocal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -76,13 +77,33 @@ func (execution heldExecution) WithPython(_ context.Context, _ prerequisites.Bun
 	return run(prerequisites.PythonLaunch{Loader: "/bundle/python/lib/ld.so", Directory: "/bundle"}, func() error { return nil })
 }
 
-type retainedOutput struct{ name string }
+// retainedOutput keeps what reaches it; a broken one refuses every write, as a
+// run on a full device does.
+type retainedOutput struct {
+	name   string
+	kept   []byte
+	broken bool
+}
 
-func (output *retainedOutput) Write(value []byte) (int, error) { return len(value), nil }
+func (output *retainedOutput) Write(value []byte) (int, error) {
+	if output.broken {
+		return 0, errors.New("no space left on the device")
+	}
+	output.kept = append(output.kept, value...)
+	return len(value), nil
+}
+
+// locatedOutput is a setup run, which names its own directory.
+type locatedOutput struct{ retainedOutput }
+
+func (output *locatedOutput) Location() string {
+	return "/var/lib/bootwright/controller/runs/" + output.name
+}
 
 // Setup's own Ansible prints into the run its caller opened, so each way the
-// installer starts that Ansible must hand the runner exactly the output it was
-// given, and a nil one, when no run could be opened, must stay nil.
+// installer starts that Ansible must hand the runner a writer into exactly
+// the output it was given, and a nil one, when no run could be opened, must
+// stay nil.
 func TestEachInstallerOperationHandsItsAnsibleTheOutputItWasGiven(t *testing.T) {
 	area := authorityArea{location: prerequisites.BundleLocation{Path: "/bundle", Writable: true}}
 	definition := prerequisites.Definition{CatalogDigest: strings.Repeat("a", 64)}
@@ -116,8 +137,13 @@ func TestEachInstallerOperationHandsItsAnsibleTheOutputItWasGiven(t *testing.T) 
 				if err != nil || result.Outcome != "changed" {
 					t.Fatalf("%s = %q (%v), want the runner's changed result", name, result.Outcome, err)
 				}
-				if len(handed) != 1 || handed[0] != output {
-					t.Fatalf("%s handed its Ansible %#v, want exactly %#v", name, handed, output)
+				if len(handed) != 1 || (handed[0] == nil) != (output == nil) {
+					t.Fatalf("%s handed its Ansible %#v, want a writer into %#v", name, handed, output)
+				}
+				if output != nil {
+					if written, err := handed[0].Write([]byte("printed\n")); err != nil || written != 8 || string(output.(*retainedOutput).kept) != "printed\n" {
+						t.Fatalf("%s handed its Ansible a writer that did not reach its output: %d %v", name, written, err)
+					}
 				}
 			})
 		}
@@ -145,4 +171,66 @@ func TestTheInstallerRunsItsOwnProcessAndRefusesWithoutARunner(t *testing.T) {
 	incomplete("a preparation", result, err)
 	result, err = installer.Clients(context.Background(), prerequisites.ClientInstallation{Execution: area, Target: area, Definition: definition, Release: func() error { return nil }, Publish: publish})
 	incomplete("a client installation", result, err)
+}
+
+// The runner copies the Ansible's output through the writer it is handed, and
+// os/exec stops copying from one that fails, which could leave the Ansible
+// blocked on a full pipe. So the writer it gets accepts every write whatever
+// the output beneath it does.
+func TestTheRunnerGetsAWriterThatNeverFails(t *testing.T) {
+	area := authorityArea{location: prerequisites.BundleLocation{Path: "/bundle", Writable: true}}
+	definition := prerequisites.Definition{CatalogDigest: strings.Repeat("a", 64)}
+	publish := func(context.Context, prerequisites.NativePreparation) error { return nil }
+	for name, operate := range map[string]func(Installer, prerequisites.RunOutput) (prerequisites.ActionResult, error){
+		"setup": func(installer Installer, output prerequisites.RunOutput) (prerequisites.ActionResult, error) {
+			return installer.Prepare(context.Background(), area, prerequisites.Platform{}, definition, prerequisites.SetupEgress{}, publish, nil, output)
+		},
+		"a client installation": func(installer Installer, output prerequisites.RunOutput) (prerequisites.ActionResult, error) {
+			return installer.Clients(context.Background(), prerequisites.ClientInstallation{Execution: area, Target: area, Definition: definition, Release: func() error { return nil }, Publish: publish, Output: output})
+		},
+	} {
+		broken := &retainedOutput{name: "setup-000001", broken: true}
+		installer := New(heldExecution{})
+		installer.runner = func(_ context.Context, _ prerequisites.PythonLaunch, _ capabilityRequest, _ func() error, _ func(context.Context, prerequisites.NativePreparation) error, _ func(prerequisites.ProgressEvent), retain prerequisites.RunOutput) (prerequisites.ActionResult, error) {
+			for _, line := range []string{"first\n", "second\n"} {
+				if written, err := retain.Write([]byte(line)); err != nil || written != len(line) {
+					t.Fatalf("%s: a write to a broken output returned %d (%v)", name, written, err)
+				}
+			}
+			return actionResult("changed", true), nil
+		}
+		if result, err := operate(installer, broken); err != nil || result.Outcome != "changed" {
+			t.Fatalf("%s: a broken output changed the result: %q (%v)", name, result.Outcome, err)
+		}
+	}
+}
+
+// A failure of setup's own Ansible that its run's output explains leads its
+// remedy with where that output is and that only root reads it, before the
+// correction it already gave; one whose output no run kept is unchanged.
+func TestASetupAnsibleFailureNamesItsRunOutput(t *testing.T) {
+	area := authorityArea{location: prerequisites.BundleLocation{Path: "/bundle", Writable: true}}
+	definition := prerequisites.Definition{CatalogDigest: strings.Repeat("a", 64)}
+	publish := func(context.Context, prerequisites.NativePreparation) error { return nil }
+	unchanged := "Preserve the controller state and restore the qualified controller execution environment, then rerun bootwright setup."
+	for kept, test := range map[string]struct {
+		output prerequisites.RunOutput
+		want   string
+	}{
+		"a run":                       {&locatedOutput{retainedOutput{name: "setup-000003"}}, "Read /var/lib/bootwright/controller/runs/setup-000003/run.output as root for what the Ansible printed, then preserve the controller state and restore the qualified controller execution environment, then rerun bootwright setup."},
+		"no run":                      {nil, unchanged},
+		"an output that names no run": {&retainedOutput{name: "setup-000004"}, unchanged},
+	} {
+		installer := New(heldExecution{})
+		installer.runner = func(context.Context, prerequisites.PythonLaunch, capabilityRequest, func() error, func(context.Context, prerequisites.NativePreparation) error, func(prerequisites.ProgressEvent), prerequisites.RunOutput) (prerequisites.ActionResult, error) {
+			// The runner's own refusal of an Ansible that did not complete
+			// (runner_linux_amd64.go).
+			return actionResult("failed", false), failure("controller.setup", "Ansible did not complete the authorized dependency operation")
+		}
+		_, err := installer.Prepare(context.Background(), area, prerequisites.Platform{}, definition, prerequisites.SetupEgress{}, publish, nil, test.output)
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Message != "Ansible did not complete the authorized dependency operation" || reported[0].Remediation != test.want {
+			t.Fatalf("with %s: refusal = %#v, want the remedy %q", kept, reported, test.want)
+		}
+	}
 }

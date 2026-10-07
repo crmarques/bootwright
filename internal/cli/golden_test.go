@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,6 +23,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
+	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -424,17 +426,22 @@ func cliGoldens() []cliGolden {
 			Items:     encryption.ItemStatus{CurrentVersions: 3, BoundVersions: 3, MaterialParts: 6},
 		}
 	}
-	stored := func() *media.ListResult {
-		return &media.ListResult{Media: []media.MediaRow{
-			{
-				Name: "rhel-9.8-x86_64-boot.iso", Size: 1045430272, SHA256: "e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82",
-				Source: "file:///srv/images/rhel-9.8-x86_64-boot.iso", Added: "2026-09-20T08:15:00Z", Frozen: true, Verified: "ok",
-			},
-			{
-				Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f",
-				Source: "https://images.example.test/rhel-9.8-x86_64-dvd.iso", Added: "2026-09-21T10:02:41Z", Verified: "ok",
-			},
-		}}
+	// A reserved image that verified and an unreserved one whose bytes no
+	// longer match its record, read in full only with --checksums.
+	stored := func(checksums bool) *media.ListResult {
+		boot := media.MediaRow{
+			Name: "rhel-9.8-x86_64-boot.iso", Size: 1045430272, SHA256: "e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82",
+			Source: "file:///srv/images/rhel-9.8-x86_64-boot.iso", Added: "2026-09-20T08:15:00Z", Frozen: true, ReservedBy: []string{"lab-rhel", "lab-sno"},
+		}
+		dvd := media.MediaRow{
+			Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f",
+			Source: "https://images.example.test/rhel-9.8-x86_64-dvd.iso", Added: "2026-09-21T10:02:41Z", ReservedBy: []string{},
+		}
+		if checksums {
+			boot.Verified, boot.Computed = "ok", boot.SHA256
+			dvd.Verified, dvd.Computed = "mismatch", "0d9b7e5c3a1f9d7b5e3c1a0f8e6d4b2c0a8f6e4d2a1b0f3e5c6a7d9b2e8f1c4a"
+		}
+		return &media.ListResult{Media: []media.MediaRow{boot, dvd}, Checksums: checksums}
 	}
 	// Rows arrive in name order, as inventory.Rows derives them.
 	machines := func(powerRead bool) *inventory.ListResult {
@@ -491,7 +498,7 @@ func cliGoldens() []cliGolden {
 		// that retired bundles, and a context's readiness.
 		{golden: "cli-setup-plan", args: "setup --dry-run", record: func(r *dispatchRecord) {
 			r.result.controller = &prerequisites.Report{
-				Platform: platform, Route: "direct", DryRun: true, Outcome: "planned",
+				Platform: platform, Route: "direct", DryRun: true, Outcome: "planned", Next: "bootwright setup",
 				Checks: []prerequisites.Check{
 					{ID: "execution-bundle", Required: "qualified Python and Ansible", Observed: "unverified", Status: "unverified"},
 					{ID: "container-runtime", Required: "podman", Observed: "unverified", Status: "unverified"},
@@ -502,12 +509,74 @@ func cliGoldens() []cliGolden {
 		}},
 		{golden: "cli-setup-changed", args: "setup --yes --purge-old-bundles", record: func(r *dispatchRecord) {
 			r.result.controller = &prerequisites.Report{
-				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true,
+				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true, Purge: true,
 				Checks:         []prerequisites.Check{ready("execution-bundle", "qualified"), ready("container-runtime", "podman 5.6.1")},
 				Actions:        []string{"Prepare the qualified execution bundle"},
 				RetiredBundles: []string{"bundle-2026-08", "bundle-2026-09"},
 			}
 		}},
+		// A purge beside a setup that had nothing to do says it retired
+		// nothing rather than staying silent.
+		{golden: "cli-setup-purge-none", args: "setup --purge-old-bundles", record: func(r *dispatchRecord) {
+			r.result.controller = &prerequisites.Report{
+				Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "unchanged", ProgressPresented: true, Purge: true,
+				Checks: []prerequisites.Check{ready("execution-bundle", "qualified"), ready("container-runtime", "podman 5.6.1")},
+			}
+		}},
+		// Refused setups: each result's next command is the one its
+		// remediation names (internal/controller/prerequisites/capacity.go and
+		// service.go), and none beside a confirmation refusal, whose remedy
+		// repeats the operator's invocation with --yes
+		// (internal/cli/confirmation.go).
+		{golden: "cli-setup-bound-refused", args: "setup", code: 1,
+			stderr: "[FAIL] controller.conflict: this host already retains the 16 bundle areas or resolutions it may hold, so the new execution bundle has no room; next: run bootwright setup --purge-old-bundles to retire the superseded execution bundles first\n",
+			record: func(r *dispatchRecord) {
+				r.result.controller = &prerequisites.Report{
+					Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "planned", ProgressPresented: true, Next: "bootwright setup --purge-old-bundles",
+					Checks: []prerequisites.Check{ready("execution-bundle", "qualified"), ready("container-runtime", "podman 5.6.1")},
+				}
+				r.err = diagnostics.NewFailureWithRemediation("controller.conflict", "this host already retains the 16 bundle areas or resolutions it may hold, so the new execution bundle has no room", "",
+					"run bootwright setup --purge-old-bundles to retire the superseded execution bundles first")
+			}},
+		{golden: "cli-setup-retirement-failed", args: "setup --yes --purge-old-bundles", code: 1,
+			stderr: "[FAIL] context.state: controller retirement requires an initialized record; next: the setup completed; run bootwright setup --purge-old-bundles again to complete the retirement\n",
+			record: func(r *dispatchRecord) {
+				r.result.controller = &prerequisites.Report{
+					Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "changed", PlanPresented: true, ProgressPresented: true, Purge: true, Next: "bootwright setup --purge-old-bundles",
+					Checks:  []prerequisites.Check{ready("execution-bundle", "qualified"), ready("container-runtime", "podman 5.6.1")},
+					Actions: []string{"Prepare the qualified execution bundle"},
+				}
+				r.err = diagnostics.NewFailureWithRemediation("context.state", "controller retirement requires an initialized record", "",
+					"the setup completed; run bootwright setup --purge-old-bundles again to complete the retirement")
+			}},
+		{golden: "cli-setup-confirmation-refused", args: "setup", code: 1,
+			stderr: "[FAIL] controller.setup: setup confirmation requires an interactive terminal; next: review the plan, then repeat bootwright setup with --yes\n",
+			record: func(r *dispatchRecord) {
+				r.result.controller = &prerequisites.Report{
+					Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "planned", PlanPresented: true, ProgressPresented: true,
+					Checks:  []prerequisites.Check{ready("execution-bundle", "qualified"), {ID: "container-runtime", Required: "podman", Observed: "missing or unverified", Status: "not-ready", Scope: prerequisites.HostScope}},
+					Actions: []string{"Run the Ansible controller role to install and verify missing native prerequisites"},
+				}
+				r.err = diagnostics.NewFailureWithRemediation("controller.setup", "setup confirmation requires an interactive terminal", "", "review the plan, then repeat bootwright setup with --yes")
+			}},
+		// A dry run over a state root this build cannot use reports the row
+		// and the store's refusal of it
+		// (internal/workspace/contextfs/root_inspection_linux_amd64.go).
+		{golden: "cli-setup-plan-state-root", args: "setup --dry-run", code: 1,
+			stderr: "[FAIL] context.state: the state root is a directory owned by root:root with mode 0755, but it must be a directory owned by root:root with mode 0700; next: nothing repairs it, because Bootwright never changes the owner or mode of an existing state root\n",
+			record: func(r *dispatchRecord) {
+				r.result.controller = &prerequisites.Report{
+					Platform: platform, Route: "direct (no HTTPS_PROXY)", DryRun: true, Outcome: "planned",
+					Checks: []prerequisites.Check{
+						{ID: "execution-bundle", Required: "qualified Python and Ansible", Observed: "unverified", Status: "unverified"},
+						{ID: "state-root", Required: "a root:root 0700 directory on a local filesystem", Observed: "a directory owned by root:root with mode 0755", Status: "not-ready", Scope: prerequisites.HostScope},
+					},
+					Actions:      []string{"Prepare the qualified execution bundle"},
+					Dependencies: []string{"qualified-source.tar.gz"},
+				}
+				r.err = diagnostics.NewFailureWithRemediation("context.state", "the state root is a directory owned by root:root with mode 0755, but it must be a directory owned by root:root with mode 0700", "",
+					"nothing repairs it, because Bootwright never changes the owner or mode of an existing state root")
+			}},
 		// Each check carries the summary its constructor in
 		// internal/controller/prerequisites/service.go gives a held check,
 		// which readiness makes both required and observed: the platform, the
@@ -744,10 +813,28 @@ func cliGoldens() []cliGolden {
 			r.result.mediaMutation = &media.MutationResult{Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f", Outcome: "stored"}
 		}},
 		{golden: "cli-media-delete", args: "media delete --name rhel-9.8-x86_64-dvd.iso --yes", record: func(r *dispatchRecord) {
-			r.result.mediaMutation = &media.MutationResult{Name: "rhel-9.8-x86_64-dvd.iso", Outcome: "deleted"}
+			r.result.mediaMutation = &media.MutationResult{Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f", Outcome: "deleted"}
 		}},
-		{golden: "cli-media-list", args: "media list --checksums", record: func(r *dispatchRecord) { r.result.mediaList = stored() }},
-		{golden: "cli-media-list-json", args: "media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored() }},
+		{
+			golden: "cli-media-replace-plan", args: "media add --name rhel-9.8-x86_64-dvd.iso --from-file rhel-9.8-x86_64-dvd.iso", code: 1,
+			record: func(r *dispatchRecord) {
+				r.mediaChange = &media.Change{Action: media.ReplaceChange, Name: storedImage.Name, Stored: true, Readable: true, Entry: storedImage, NewOrigin: "file:///srv/images/rhel-9.8-x86_64-dvd.iso"}
+				r.err = declinedConfirmation("media add --name rhel-9.8-x86_64-dvd.iso --from-file rhel-9.8-x86_64-dvd.iso", "media replace", storedImage.Name)
+			},
+			stderr: "[FAIL] media.store: media confirmation was declined; nothing changed; next: review it, then repeat bootwright media add --from-file rhel-9.8-x86_64-dvd.iso --name rhel-9.8-x86_64-dvd.iso with --yes\n",
+		},
+		{
+			golden: "cli-media-delete-plan", args: "media delete --name rhel-9.8-x86_64-dvd.iso", code: 1,
+			record: func(r *dispatchRecord) {
+				r.mediaChange = &media.Change{Action: media.DeleteChange, Name: storedImage.Name, Stored: true, Readable: true, Entry: storedImage, Retained: true}
+				r.err = declinedConfirmation("media delete --name rhel-9.8-x86_64-dvd.iso", "media delete", storedImage.Name)
+			},
+			stderr: "[FAIL] media.store: media confirmation was declined; nothing changed; next: review it, then repeat bootwright media delete --name rhel-9.8-x86_64-dvd.iso with --yes\n",
+		},
+		{golden: "cli-media-list", args: "media list --checksums", record: func(r *dispatchRecord) { r.result.mediaList = stored(true) }},
+		{golden: "cli-media-list-json", args: "media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored(true) }},
+		{golden: "cli-media-list-unchecked", args: "media list", record: func(r *dispatchRecord) { r.result.mediaList = stored(false) }},
+		{golden: "cli-media-list-unchecked-json", args: "media list --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored(false) }},
 
 		// Machines. A power verb's service also reports where its run's
 		// output is kept, through a reporter outside this boundary, which a
@@ -787,6 +874,21 @@ func cliGoldens() []cliGolden {
 		},
 		{golden: "cli-not-implemented-json", args: "status --output json", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented }},
 	}
+}
+
+// storedImage is the record a media confirmation shows before its prompt.
+var storedImage = managedos.MediaEntry{
+	Name: "rhel-9.8-x86_64-dvd.iso", Size: 13123217408, SHA256: "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f",
+	Source: "https://images.example.test/rhel-9.8-x86_64-dvd.iso", Added: "2026-09-21T10:02:41Z",
+}
+
+// declinedConfirmation is the refusal the production confirmer gives when the
+// operator answers no to the prompt of the invocation args.
+func declinedConfirmation(args, action, name string) error {
+	answer := strings.NewReader("n\n")
+	read := func(_ context.Context, buffer []byte) (int, error) { return answer.Read(buffer) }
+	terminal := func() (bool, error) { return true, nil }
+	return NewConfirmation(read, io.Discard, terminal).Repeating(strings.Fields(args)).Confirm(context.Background(), action, name)
 }
 
 const kubeconfigFixture = "apiVersion: v1\nclusters:\n- cluster:\n    server: https://api.sno.lab.example:6443\n  name: sno\nkind: Config\n"
@@ -855,6 +957,7 @@ func TestCommandOutputMatchesItsGoldens(t *testing.T) {
 				test.record(record)
 			}
 			var out, errOut bytes.Buffer
+			record.out = &out
 			code := New(Config{
 				Out: &out, ErrOut: &errOut, Services: dispatchSpies(record),
 				EncodeEffectiveYAML: stateencoding.YAML, EncodeEffectiveJSON: stateencoding.JSON,

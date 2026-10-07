@@ -291,6 +291,14 @@ func (preflightHost) Identity(context.Context) (controller.InstalledHostIdentity
 func (preflightHost) Admit(prerequisites.Platform) error             { return nil }
 func (preflightHost) ValidateEgress(prerequisites.SetupEgress) error { return nil }
 
+// qualifiedFoundation answers as a host holding the execution foundation the
+// build pins.
+type qualifiedFoundation struct{}
+
+func (qualifiedFoundation) Inspect(context.Context, prerequisites.Platform) (prerequisites.FoundationInspection, error) {
+	return prerequisites.FoundationInspection{Required: "glibc 2.42-16.fc43, libgcc 15.3.1-1.fc43"}, nil
+}
+
 // unresolvedBootstrap resolves nothing: preflight never consults a publisher.
 type unresolvedBootstrap struct{}
 
@@ -325,7 +333,7 @@ func TestPreflightAndTheStageReadOneClosure(t *testing.T) {
 			state.RetainedDefinitions = append([]prerequisites.Definition{*state.Receipt.Definition}, test.retained...)
 			host := preflightHost{state: stateOf(objects...)}
 			view := prerequisites.StorageView{Exists: true, Initialized: true, Context: prerequisites.SetupContext{Name: "lab"}, State: state}
-			report, _ := prerequisites.New(preflightStorage{view}, host, host, host, host, nil, prerequisites.Options{Bootstrap: unresolvedBootstrap{}, Native: native, NativeInspector: native}).Check(context.Background(), prerequisites.CheckRequest{ContextName: "lab"})
+			report, _ := prerequisites.New(preflightStorage{view}, host, host, host, host, nil, prerequisites.Options{Bootstrap: unresolvedBootstrap{}, Native: native, NativeInspector: native, Foundation: qualifiedFoundation{}}).Check(context.Background(), prerequisites.CheckRequest{ContextName: "lab"})
 			if report == nil {
 				t.Fatal("preflight reported nothing")
 			}

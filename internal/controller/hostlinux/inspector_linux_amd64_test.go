@@ -182,3 +182,42 @@ func snapshot(t *testing.T, root string) map[string]string {
 	}))
 	return result
 }
+
+// The FIPS mode is the kernel's own flag beneath /proc: 1 is enabled, 0 or a
+// flag the kernel does not provide is disabled, and any other value, or a flag
+// another account owns, refuses. Reading it changes nothing.
+func TestFIPSModeReadsTheKernelFlag(t *testing.T) {
+	for name, test := range map[string]struct {
+		flag    string
+		mode    os.FileMode
+		enabled bool
+		refused bool
+	}{
+		"enabled":         {flag: "1\n", mode: 0444, enabled: true},
+		"disabled":        {flag: "0\n", mode: 0444},
+		"absent":          {},
+		"another value":   {flag: "2\n", mode: 0444, refused: true},
+		"empty":           {flag: "", mode: 0444, refused: true},
+		"writable by all": {flag: "1\n", mode: 0666, refused: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			i := fixture(t, "xfs")
+			if test.mode != 0 {
+				writeFixture(t, i, "/proc/sys/crypto/fips_enabled", test.flag, test.mode)
+				must(t, os.Chmod(filepath.Join(i.view.root, "proc/sys/crypto/fips_enabled"), test.mode))
+			}
+			before := snapshot(t, i.view.root)
+			enabled, err := i.FIPSMode(context.Background())
+			if test.refused {
+				assertDiagnostic(t, err, "controller.unsupported")
+				return
+			}
+			if err != nil || enabled != test.enabled {
+				t.Fatalf("FIPS mode = %t (%v), want %t", enabled, err, test.enabled)
+			}
+			if after := snapshot(t, i.view.root); len(after) != len(before) {
+				t.Fatal("reading the FIPS mode changed the filesystem")
+			}
+		})
+	}
+}

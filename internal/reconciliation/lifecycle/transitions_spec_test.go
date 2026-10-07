@@ -58,7 +58,7 @@ type stateMachineRow struct {
 	cases      map[string]stateMachineCase
 }
 
-const exitByDeletion = "none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, and no deletion over evidence the guard cannot read"
+const exitByDeletion = "none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, which cannot list what it abandons over evidence the guard cannot read"
 
 // stateMachineRows is what each row of the state machine means, keyed by the
 // durable state it names: the exact transition it states, and the durable

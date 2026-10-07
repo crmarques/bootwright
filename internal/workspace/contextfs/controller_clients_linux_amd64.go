@@ -7,6 +7,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -62,6 +63,16 @@ func (t *lifecycleTransaction) ClientArea(ctx context.Context, id string) (prere
 	return area, nil
 }
 
+// clientBoundFailure refuses a controller stage whose client closure finds the
+// host's bound already held. Setup retires superseded execution bundles, never
+// a client area, so that retirement is the remedy, and nothing of this build
+// frees a bound that client areas and the current execution bundle hold.
+func clientBoundFailure(held string) error {
+	return controllerFailure("controller.conflict", "this host already holds "+held+", so the controller stage's client closure has no room",
+		"run bootwright setup --purge-old-bundles to retire superseded execution bundles, then repeat the command; "+
+			"when client areas and the current execution bundle fill the host, no command of this build frees that room")
+}
+
 // attributeClientArea publishes the reservation, then creates the directory,
 // then records its physical identity. The record is durable before the
 // directory exists, so a crash leaves this store's own recognizable intent
@@ -69,7 +80,7 @@ func (t *lifecycleTransaction) ClientArea(ctx context.Context, id string) (prere
 func (t *lifecycleTransaction) attributeClientArea(ctx context.Context, id string, fresh, interrupted bool) error {
 	if fresh {
 		if len(t.stored.bundles) >= maxControllerBundles {
-			return state("retained controller bundle limit exceeded")
+			return clientBoundFailure("the " + strconv.Itoa(maxControllerBundles) + " bundle areas this host may hold")
 		}
 		next := append(slices.Clone(t.stored.bundles), controllerBundleReservation{ID: id, Mode: "reserved"})
 		slices.SortFunc(next, func(x, y controllerBundleReservation) int { return strings.Compare(x.ID, y.ID) })
@@ -207,7 +218,7 @@ func retainDependencies(value prerequisites.HostState, held []controllerBundleRe
 		return value, nil
 	}
 	if len(value.RetainedDefinitions) >= maxControllerBundles {
-		return prerequisites.HostState{}, state("retained controller resolution limit exceeded")
+		return prerequisites.HostState{}, clientBoundFailure("the " + strconv.Itoa(maxControllerBundles) + " dependency resolutions this host may retain")
 	}
 	value.RetainedDefinitions = append(value.RetainedDefinitions, prerequisites.CloneDefinition(*definition))
 	return value, nil

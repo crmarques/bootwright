@@ -82,16 +82,18 @@ func validOptions() certificateOptions {
 
 var testMoment = time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
 
+const testSecret = "artifact-server-tls"
+
 func TestServingCertificateCoversEveryServedAddress(t *testing.T) {
 	material, fingerprint := issue(t, validOptions())
-	certificate, err := ValidateServingCertificate(material, []string{"192.0.2.1"}, testMoment)
+	certificate, err := ValidateServingCertificate(material, testSecret, testContext, []string{"192.0.2.1"}, testMoment)
 	if err != nil || certificate.Fingerprint != fingerprint {
 		t.Fatalf("fingerprint = %q (%v), want %q", certificate.Fingerprint, err, fingerprint)
 	}
-	if _, err := ValidateServingCertificate(material, []string{"192.0.2.1", "artifacts.lab.example.test"}, testMoment); err != nil {
+	if _, err := ValidateServingCertificate(material, testSecret, testContext, []string{"192.0.2.1", "artifacts.lab.example.test"}, testMoment); err != nil {
 		t.Fatal("a covered DNS name was rejected:", err)
 	}
-	_, err = ValidateServingCertificate(material, []string{"192.0.2.9"}, testMoment)
+	_, err = ValidateServingCertificate(material, testSecret, testContext, []string{"192.0.2.9"}, testMoment)
 	reported := diagnostics.Of(err)
 	if err == nil || len(reported) != 1 || reported[0].Code != "secret.part" || !strings.Contains(reported[0].Remediation, "192.0.2.9") {
 		t.Fatalf("an uncovered address was accepted: %+v", reported)
@@ -112,7 +114,7 @@ func TestServingCertificateRefusesUnusableMaterial(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			material, _ := issue(t, options)
-			if _, err := ValidateServingCertificate(material, []string{"192.0.2.1"}, testMoment); err == nil {
+			if _, err := ValidateServingCertificate(material, testSecret, testContext, []string{"192.0.2.1"}, testMoment); err == nil {
 				t.Fatal("unusable serving material was accepted")
 			}
 		})
@@ -136,7 +138,7 @@ func TestServingCertificateRefusesMalformedOrMismatchedParts(t *testing.T) {
 	}
 	for name, candidate := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := ValidateServingCertificate(candidate, []string{"192.0.2.1"}, testMoment); err == nil {
+			if _, err := ValidateServingCertificate(candidate, testSecret, testContext, []string{"192.0.2.1"}, testMoment); err == nil {
 				t.Fatal("unusable serving material was accepted")
 			}
 		})
@@ -149,7 +151,7 @@ func TestServingCertificateFailuresDiscloseNoMaterial(t *testing.T) {
 	material := secrets.NewMaterial(map[secrets.Part][]byte{
 		secrets.CertificatePart: canary, secrets.PrivateKeyPart: canary,
 	})
-	_, err := ValidateServingCertificate(material, []string{"192.0.2.1"}, testMoment)
+	_, err := ValidateServingCertificate(material, testSecret, testContext, []string{"192.0.2.1"}, testMoment)
 	if err == nil {
 		t.Fatal("canary material was accepted")
 	}
@@ -204,13 +206,80 @@ func issueRSA(t *testing.T, bits int) secrets.Material {
 // A serving key with fewer than 2048 RSA bits refuses, naming its size and the
 // certificates that replace it.
 func TestTLSServingKeysUnder2048BitsRefuse(t *testing.T) {
-	_, err := ValidateServingCertificate(issueRSA(t, 1024), []string{"192.0.2.1"}, testMoment)
+	_, err := ValidateServingCertificate(issueRSA(t, 1024), testSecret, testContext, []string{"192.0.2.1"}, testMoment)
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "secret.part" || reported[0].Message != "the serving certificate's RSA key has 1024 bits; a serving key needs at least 2048" ||
-		reported[0].Remediation != "replace the tlsCertificate Secret with an RSA-2048 or P-256 certificate" {
+		reported[0].Remediation != "replace the tlsCertificate Secret with an RSA-2048 or P-256 certificate, stored with bootwright secret set --name artifact-server-tls --certificate-file <path> --private-key-file <path> --context lab; then destroy this apply with bootwright destroy --context lab and apply again" {
 		t.Fatalf("an RSA-1024 serving key: %+v", reported)
 	}
-	if _, err := ValidateServingCertificate(issueRSA(t, 2048), []string{"192.0.2.1"}, testMoment); err != nil {
+	if _, err := ValidateServingCertificate(issueRSA(t, 2048), testSecret, testContext, []string{"192.0.2.1"}, testMoment); err != nil {
 		t.Fatalf("an RSA-2048 serving key was refused: %+v", diagnostics.Of(err))
+	}
+}
+
+// Every refusal of the bound material names the Secret it read, as the object
+// secret check and secret set act on, and a remedy that stores usable material
+// in this context and then leaves the apply the only way that uses it: the
+// operation keeps the version it bound, so it is destroyed and applied again.
+// No refusal carries material.
+func TestServingCertificateRefusalsNameTheSecretAndTheirRemedy(t *testing.T) {
+	material, _ := issue(t, validOptions())
+	other, _ := issue(t, validOptions())
+	certificate, _ := material.Part(secrets.CertificatePart)
+	key, _ := material.Part(secrets.PrivateKeyPart)
+	otherKey, _ := other.Part(secrets.PrivateKeyPart)
+	block := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("CANARY")})
+	expired, authority, client := validOptions(), validOptions(), validOptions()
+	expired.notBefore, expired.notAfter = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+	authority.isCA, client.clientOnly = true, true
+	issued := func(options certificateOptions) secrets.Material {
+		candidate, _ := issue(t, options)
+		return candidate
+	}
+	for name, candidate := range map[string]secrets.Material{
+		"no certificate":  secrets.NewMaterial(map[secrets.Part][]byte{secrets.PrivateKeyPart: key}),
+		"no private key":  secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: certificate}),
+		"oversized":       secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: make([]byte, maxCertificateBytes+1), secrets.PrivateKeyPart: key}),
+		"not pem":         secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte("CANARY"), secrets.PrivateKeyPart: key}),
+		"too many blocks": secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte(strings.Repeat(string(block), maxPEMBlocks+1)), secrets.PrivateKeyPart: key}),
+		"mismatched key":  secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: certificate, secrets.PrivateKeyPart: otherKey}),
+		"expired":         issued(expired),
+		"authority":       issued(authority),
+		"client only":     issued(client),
+		"rsa-1024":        issueRSA(t, 1024),
+		"uncovered":       material,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := ValidateServingCertificate(candidate, testSecret, testContext, []string{"192.0.2.1", "192.0.2.9"}, testMoment)
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "secret.part" {
+				t.Fatalf("refusal = %#v, want one secret.part", reported)
+			}
+			got := reported[0]
+			if got.Object == nil || got.Object.Kind != "Secret" || got.Object.Name != testSecret {
+				t.Fatalf("object = %#v, want Secret/%s", got.Object, testSecret)
+			}
+			if !strings.Contains(got.Remediation, "bootwright secret set --name "+testSecret+" ") || !strings.Contains(got.Remediation, "--context "+testContext) ||
+				!strings.HasSuffix(got.Remediation, "then destroy this apply with bootwright destroy --context "+testContext+" and apply again") {
+				t.Fatalf("remediation = %q, want the set command in this context and the destroy exit", got.Remediation)
+			}
+			for _, forbidden := range []string{"CANARY", "BEGIN"} {
+				if strings.Contains(got.Message+got.Remediation, forbidden) {
+					t.Fatalf("a refusal disclosed material: %#v", got)
+				}
+			}
+		})
+	}
+	_, err := ValidateServingCertificate(material, testSecret, testContext, []string{"192.0.2.9"}, testMoment)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || !strings.Contains(reported[0].Message, "192.0.2.9") ||
+		reported[0].Remediation != "store a certificate that names 192.0.2.9 with bootwright secret set --name artifact-server-tls --certificate-file <path> --private-key-file <path> --context lab, "+
+			"or, for a generated Secret, add 192.0.2.9 to spec.source.generated.ipAddresses, import the change with bootwright context update --name lab --input-dir <dir> "+
+			"and run bootwright secret generate --name artifact-server-tls --context lab; then destroy this apply with bootwright destroy --context lab and apply again" {
+		t.Fatalf("an uncovered IP address = %#v", reported)
+	}
+	_, err = ValidateServingCertificate(material, testSecret, testContext, []string{"artifacts.other.example.test"}, testMoment)
+	if reported := diagnostics.Of(err); len(reported) != 1 || !strings.Contains(reported[0].Remediation, "add artifacts.other.example.test to spec.source.generated.dnsNames,") {
+		t.Fatalf("an uncovered name = %#v, want its dnsNames remedy", reported)
 	}
 }

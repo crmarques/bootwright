@@ -397,7 +397,7 @@ func (t *transaction) removeContextDirectory(ctx context.Context, record context
 			if _, held := t.leases[record.Name]; !held {
 				return state("context deletion requires its mutation lease")
 			}
-			current, err := readMutation(ctx, dir)
+			current, err := readReadyMutation(ctx, dir)
 			if err != nil || !bytes.Equal(current, t.evidence[record.Name]) {
 				return state("context deletion evidence changed after the disposal check")
 			}
@@ -475,6 +475,14 @@ func (d *deletionTransaction) InitializeSecrets(context.Context, string, func(se
 
 func (d *deletionTransaction) Publish(context.Context, string, string, desiredstate.Sources) (string, error) {
 	return "", outsideDeletion()
+}
+
+func (d *deletionTransaction) CheckControllerInput(context.Context, string, string) error {
+	return outsideDeletion()
+}
+
+func (d *deletionTransaction) Unchanged(context.Context, string, string, desiredstate.Sources) (bool, error) {
+	return false, outsideDeletion()
 }
 
 func (d *deletionTransaction) Commit(context.Context, contexts.Registry) error {

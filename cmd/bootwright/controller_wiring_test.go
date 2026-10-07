@@ -21,6 +21,7 @@ func TestComposedBaselineDryRunUsesOnlyPlatformAndCatalog(t *testing.T) {
 		services := assembleServices(serviceDependencies{Controller: controllerDependencies{
 			Storage: ports, Host: ports, Catalog: ports, Bundle: ports,
 			Bootstrap: bootstrapPort{ports}, Native: nativePort{ports}, NativeInspector: nativePort{ports},
+			Foundation: foundationPort{ports},
 		}})
 		args := []string{"setup", "--dry-run"}
 		if flag != "" {
@@ -57,6 +58,15 @@ func (b bootstrapPort) Resolve(context.Context, prerequisites.Platform, controll
 }
 
 type nativePort struct{ ports *controllerPorts }
+
+// foundationPort is the execution foundation inspector a dry run never
+// reaches: its call is an effect.
+type foundationPort struct{ ports *controllerPorts }
+
+func (f foundationPort) Inspect(context.Context, prerequisites.Platform) (prerequisites.FoundationInspection, error) {
+	f.ports.effects++
+	return prerequisites.FoundationInspection{}, errors.New("unexpected foundation inspection")
+}
 
 func (n nativePort) Resolve(context.Context, prerequisites.Platform, prerequisites.NativeRequirements, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
 	n.ports.effects++
@@ -99,7 +109,7 @@ func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, pre
 }
 
 func TestComposedControllerSuppliesEveryPort(t *testing.T) {
-	presenter := cli.NewControllerPresenter(io.Discard, nil)
+	presenter := cli.NewControllerPresenter(io.Discard, io.Discard, nil)
 	process := processDependencies{Progress: presenter, Presenter: presenter}
 	composed, release := localControllerDependencies(testRepository(t.TempDir()), process)
 	defer release()
@@ -110,8 +120,14 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 			t.Fatalf("composition left %s unsupplied", fields.Field(index).Name)
 		}
 	}
-	if fields.NumField() != 12 {
+	if fields.NumField() != 13 {
 		t.Fatalf("controller port count = %d; update this gate with the port it covers", fields.NumField())
+	}
+	if _, reports := composed.Host.(prerequisites.FIPSInspector); !reports {
+		t.Fatal("the composed host inspector reports no FIPS mode")
+	}
+	if _, reads := composed.NativeInspector.(prerequisites.NativeInventory); !reads {
+		t.Fatal("the composed native inspector reads no package inventory")
 	}
 }
 

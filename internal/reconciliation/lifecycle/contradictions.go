@@ -11,21 +11,20 @@ import (
 
 const failedWithoutFailure = "the apply records failed, yet no block records the failure"
 
-const unreadableEvidenceExit = "restore the whole store from a matching backup, then retry: context deletion refuses mutation evidence it cannot read, with --allow-orphans or without"
-
 // deletionExit is the remedy of the record states neither verb acts on: a lost
 // index beside what no index accounts for, and a completed removal holding a
-// block that is not done. Deleting the context is their only exit while the
-// context guard reads its evidence, so the remedy names the deletion the guard
-// admits, from the guard's own reading: evidence read as pristine admits a
-// plain deletion, and any other it reads protects the context, so the
-// deletion must acknowledge the objects it abandons. Evidence the guard cannot
-// read admits no deletion at all, so over it the remedy names none.
+// block that is not done. Deleting the context is their only exit, so the
+// remedy names the deletion the context guard admits, from the guard's own
+// reading of the evidence: evidence read as pristine admits a plain deletion,
+// and any other it reads protects the context, so the deletion must
+// acknowledge the objects it abandons. Over evidence the guard cannot read only
+// that acknowledgement deletes the context, and it cannot list what it
+// abandons.
 func deletionExit(view View) string {
 	command, readable := deletionCommand(view)
 	switch {
 	case !readable:
-		return unreadableEvidenceExit
+		return "abandon the context with " + command + ", which cannot list what it may still own"
 	case strings.HasSuffix(command, " "+allowOrphans):
 		return "delete the context with " + command + ", which abandons what it may still own"
 	}
@@ -35,18 +34,17 @@ func deletionExit(view View) string {
 const allowOrphans = "--allow-orphans"
 
 // deletionCommand is the deletion the context guard admits, from its own
-// reading of the evidence, and false over evidence it cannot read, which
-// admits none. Status offers it where deletionExit names it.
+// reading of the evidence: a plain one over pristine evidence, and otherwise
+// the orphan acknowledgement. It reports false over evidence the guard cannot
+// read, whose acknowledged deletion cannot list what it abandons. Status
+// offers it where deletionExit names it.
 func deletionCommand(view View) (string, bool) {
-	evidence, readable := reconciliation.ReadEvidence(view.Evidence())
-	if !readable {
-		return "", false
-	}
 	command := "bootwright context delete --name " + view.Identity().Name + " --purge"
-	if evidence != reconciliation.PristineEvidence() {
+	evidence, readable := reconciliation.ReadEvidence(view.Evidence())
+	if !readable || evidence != reconciliation.PristineEvidence() {
 		command += " " + allowOrphans
 	}
-	return command, true
+	return command, readable
 }
 
 // refuseContradictions refuses the removal of an incomplete apply whose records

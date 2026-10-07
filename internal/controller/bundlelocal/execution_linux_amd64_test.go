@@ -253,3 +253,96 @@ func TestExecutionGuardRejectsUnqualifiedExecutionAuthority(t *testing.T) {
 		})
 	}
 }
+
+// A drifted foundation is refused by one diagnostic, whether the guard meets
+// it before a private Python launch, from setup, preflight, apply or destroy,
+// or the check that setup and preflight report: it names the path, the
+// package build that provides it, a pinned link by the file it reaches, and
+// what was found, and its remedy reinstalls and holds that build and repeats
+// whichever command met it. A non-empty loader preload names the file alone.
+func TestTheFoundationRefusalNamesPackageBuildAndFile(t *testing.T) {
+	packages := []foundationPackage{
+		{Name: "glibc", Build: "2.42-16.fc43", Files: []string{"/usr/lib64/ld-linux-x86-64.so.2", "/usr/lib64/libc.so.6"}},
+		{Name: "libgcc", Build: "15.3.1-1.fc43", Files: []string{"/usr/lib64/libgcc_s-1.so.1"}},
+	}
+	glibc := "Install exactly glibc 2.42-16.fc43 again with dnf (dnf install glibc-2.42-16.fc43, or dnf reinstall glibc-2.42-16.fc43 while that build is installed), hold it with dnf versionlock add glibc-2.42-16.fc43, then repeat this command; a host that must take the update needs a Bootwright build whose execution foundation pins it."
+	libgcc := "Install exactly libgcc 15.3.1-1.fc43 again with dnf (dnf install libgcc-15.3.1-1.fc43, or dnf reinstall libgcc-15.3.1-1.fc43 while that build is installed), hold it with dnf versionlock add libgcc-15.3.1-1.fc43, then repeat this command; a host that must take the update needs a Bootwright build whose execution foundation pins it."
+	for name, test := range map[string]struct {
+		drift            func(*testing.T, executionFixture)
+		path, message    string
+		remedy, required string
+	}{
+		"other content": {
+			drift: func(t *testing.T, f executionFixture) {
+				library := filepath.Join(f.root, "usr/lib64/libc.so.6")
+				if err := os.Chmod(library, 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(library, []byte("a later glibc build"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			path:    "/usr/lib64/libc.so.6",
+			message: "the provided execution foundation differs at /usr/lib64/libc.so.6, from glibc 2.42-16.fc43, which holds other content than this build pins",
+			remedy:  glibc,
+		},
+		"missing": {
+			drift: func(t *testing.T, f executionFixture) {
+				if err := os.Remove(filepath.Join(f.root, "usr/lib64/libgcc_s-1.so.1")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			path:    "/usr/lib64/libgcc_s-1.so.1",
+			message: "the provided execution foundation differs at /usr/lib64/libgcc_s-1.so.1, from libgcc 15.3.1-1.fc43, which is missing",
+			remedy:  libgcc,
+		},
+		"link retargeted": {
+			drift: func(t *testing.T, f executionFixture) {
+				link := filepath.Join(f.root, "usr/lib64/libgcc_s.so.1")
+				if err := os.Remove(link); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink("libc.so.6", link); err != nil {
+					t.Fatal(err)
+				}
+			},
+			path:    "/usr/lib64/libgcc_s.so.1",
+			message: "the provided execution foundation differs at /usr/lib64/libgcc_s.so.1, from libgcc 15.3.1-1.fc43, which points elsewhere than libgcc_s-1.so.1",
+			remedy:  libgcc,
+		},
+		"ld.so.preload": {
+			drift: func(t *testing.T, f executionFixture) {
+				if err := os.WriteFile(filepath.Join(f.root, "etc/ld.so.preload"), []byte("/untrusted.so\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			path:    "/etc/ld.so.preload",
+			message: "the provided execution foundation differs at /etc/ld.so.preload, which is not empty, so it would preload libraries into every process",
+			remedy:  "Empty or remove /etc/ld.so.preload, then repeat this command.",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newExecutionFixture(t)
+			f.guard.view.packages = packages
+			test.drift(t, f)
+			named := func(what string, err error) {
+				t.Helper()
+				found := diagnostics.Of(err)
+				if len(found) != 1 || found[0].Code != "controller.unsupported" || found[0].Message != test.message || found[0].Remediation != test.remedy ||
+					!strings.Contains(found[0].Remediation, "repeat this command") || strings.Contains(found[0].Remediation, "setup or preflight") {
+					t.Fatalf("%s refused with %#v (%v)", what, found, err)
+				}
+			}
+			err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(prerequisites.PythonLaunch, func() error) error {
+				t.Fatal("a drifted foundation reached the launch")
+				return nil
+			})
+			named("the guard", err)
+			inspection, err := f.guard.inspectRecord(context.Background(), nativeRecord{OS: "fedora", Release: "43", Execution: f.requirement, Packages: packages})
+			if err != nil || inspection.Drift != test.path || inspection.Required != "glibc 2.42-16.fc43, libgcc 15.3.1-1.fc43" {
+				t.Fatalf("the check reported %+v (%v)", inspection, err)
+			}
+			named("the check", inspection.Refusal)
+		})
+	}
+}

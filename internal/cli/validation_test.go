@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/managedos"
+	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/spf13/cobra"
 )
 
@@ -112,11 +113,49 @@ func TestTheCLIMediaNameIsTheStoreRule(t *testing.T) {
 }
 
 func TestMediaURLBoundaries(t *testing.T) {
-	for _, value := range []string{"https://account@example.invalid/image.iso", "file:///image.iso", "https:///image.iso", "https://[invalid/image.iso"} {
+	origin := "https://example.invalid/"
+	longest := origin + strings.Repeat("a", media.MaxMediaOrigin-len(origin))
+	for value, want := range map[string]string{
+		"https://account@example.invalid/image.iso":    "--from-url must be an HTTPS URL without userinfo or fragment",
+		"file:///image.iso":                            "--from-url must be an HTTPS URL without userinfo or fragment",
+		"https:///image.iso":                           "--from-url must be an HTTPS URL without userinfo or fragment",
+		"https://[invalid/image.iso":                   "--from-url must be an HTTPS URL without userinfo or fragment",
+		"http://example.invalid/image.iso":             "--from-url must be an HTTPS URL without userinfo or fragment",
+		"https://example.invalid/image.iso#part":       "--from-url must be an HTTPS URL without userinfo or fragment",
+		"https:image.iso":                              "--from-url must be an HTTPS URL without userinfo or fragment",
+		longest + "a":                                  "--from-url must name a scheme, host and path of at most 512 bytes; its query is never recorded",
+		"https://example.invalid/ima\x1bge.iso":        "--from-url must not contain a control character",
+		"https://example.invalid/image.iso?sig=\u007f": "--from-url must not contain a control character",
+	} {
 		args := []string{"media", "add", "--name", "image.iso", "--from-url", value, "--sha256", strings.Repeat("a", 64)}
-		code, _, _, record := runRecorded(args)
-		if code != 2 || record.calls != 0 {
-			t.Fatalf("unsafe URL dispatched: %q", value)
+		code, _, errOut, record := runRecorded(args)
+		if code != 2 || record.calls != 0 || !strings.Contains(errOut, want) {
+			t.Errorf("--from-url %q: code=%d calls=%d err=%q, want exit 2 naming %q", value, code, record.calls, errOut, want)
+		}
+	}
+	for _, value := range []string{longest, "https://example.invalid/image.iso?X-Amz-Signature=" + strings.Repeat("b", 600)} {
+		args := []string{"media", "add", "--name", "image.iso", "--from-url", value, "--sha256", strings.Repeat("a", 64)}
+		if code, _, errOut, record := runRecorded(args); code == 2 || record.calls != 1 {
+			t.Errorf("--from-url of %d bytes: code=%d calls=%d err=%q, want it dispatched", len(value), code, record.calls, errOut)
+		}
+	}
+}
+
+func TestMediaFileBoundaries(t *testing.T) {
+	longest := "/" + strings.Repeat("a", media.MaxMediaOrigin-len("file:///"))
+	for value, want := range map[string]string{
+		"/images/ima\x1bge.iso": "--from-file must not contain a control character",
+		"images/image.iso\n":    "--from-file must not contain a control character",
+		longest + "a":           "--from-file must name a path whose file:// URL is at most 512 bytes",
+	} {
+		code, _, errOut, record := runRecorded([]string{"media", "add", "--name", "image.iso", "--from-file", value})
+		if code != 2 || record.calls != 0 || !strings.Contains(errOut, want) {
+			t.Errorf("--from-file %q: code=%d calls=%d err=%q, want exit 2 naming %q", value, code, record.calls, errOut, want)
+		}
+	}
+	for _, value := range []string{longest, "/images/" + strings.Repeat("./", 300) + "image.iso", strings.Repeat("a", 600) + ".iso"} {
+		if code, _, errOut, record := runRecorded([]string{"media", "add", "--name", "image.iso", "--from-file", value}); code == 2 || record.calls != 1 {
+			t.Errorf("--from-file of %d bytes: code=%d calls=%d err=%q, want it dispatched", len(value), code, record.calls, errOut)
 		}
 	}
 }

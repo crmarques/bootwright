@@ -260,6 +260,14 @@ func (h readyHost) Identity(context.Context) (controller.InstalledHostIdentity, 
 
 func (h readyHost) Admit(prerequisites.Platform) error { return nil }
 
+// heldFoundation answers as a host holding the execution foundation the build
+// pins.
+type heldFoundation struct{}
+
+func (heldFoundation) Inspect(context.Context, prerequisites.Platform) (prerequisites.FoundationInspection, error) {
+	return prerequisites.FoundationInspection{Required: "glibc 2.42-16.fc43, libgcc 15.3.1-1.fc43"}, nil
+}
+
 // unresolved resolves nothing: a ready host's setup consults no publisher.
 type unresolved struct{}
 
@@ -300,7 +308,7 @@ func TestSetupsPurgeLeavesAControllerStageResolution(t *testing.T) {
 		t.Fatalf("the stage retained no resolution without an area beside the setup's: %d resolutions over %#v", len(held), before.Areas)
 	}
 	host := readyHost{identity: before.State.Host, definition: *before.State.Receipt.Definition}
-	service := prerequisites.New(store, host, host, host, host, nil, prerequisites.Options{Bootstrap: unresolved{}, Native: &solvingAgain{}, NativeInspector: host})
+	service := prerequisites.New(store, host, host, host, host, nil, prerequisites.Options{Bootstrap: unresolved{}, Native: &solvingAgain{}, NativeInspector: host, Foundation: heldFoundation{}})
 	for purge := 1; purge <= 2; purge++ {
 		report, err := service.Setup(context.Background(), prerequisites.SetupRequest{PurgeOldBundles: true})
 		if err != nil || report.Outcome != "unchanged" || len(report.RetiredBundles) != 0 {

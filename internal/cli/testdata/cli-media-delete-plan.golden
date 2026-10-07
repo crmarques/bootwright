@@ -1,0 +1,8 @@
+Media deletion
+
+  Name      rhel-9.8-x86_64-dvd.iso
+  Size      13123217408
+  Digest    sha256:4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f
+  Added     2026-09-21T10:02:41Z
+  Source    https://images.example.test/rhel-9.8-x86_64-dvd.iso
+  Retained  the stage an interrupted add kept, removed too

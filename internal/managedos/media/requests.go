@@ -20,7 +20,9 @@ type DeleteMediaRequest struct {
 }
 
 // MutationResult reports the exact image a mutation published or removed.
-// Outcome is `stored`, `replaced` or `deleted`.
+// Outcome is `stored`, `replaced` or `deleted`. A deletion carries the size
+// and digest of the record it removed when that record could be read, and
+// otherwise only the name.
 type MutationResult struct {
 	Name    string
 	Size    int64
@@ -28,18 +30,27 @@ type MutationResult struct {
 	Outcome string
 }
 
-// MediaRow is one stored image as a listing presents it. Verified is empty
-// unless checksums were requested, and otherwise `ok` or `mismatch`.
+// MediaRow is one stored image as a listing presents it. Size and SHA256 are
+// its record. ReservedBy names the contexts that reserve it, sorted, and Frozen
+// is true exactly when one does. Verified is `mismatch` when the bytes held no
+// longer have the recorded size or, with checksums, the recorded digest; it is
+// `ok` only when checksums proved both, and empty otherwise. Computed is the
+// digest checksums computed, and empty without them.
 type MediaRow struct {
-	Name     string
-	Size     int64
-	SHA256   string
-	Source   string
-	Added    string
-	Frozen   bool
-	Verified string
+	Name       string
+	Size       int64
+	SHA256     string
+	Source     string
+	Added      string
+	Frozen     bool
+	ReservedBy []string
+	Verified   string
+	Computed   string
 }
 
+// ListResult is the store's inventory in name order. Checksums reports that
+// every image was read in full.
 type ListResult struct {
-	Media []MediaRow
+	Media     []MediaRow
+	Checksums bool
 }

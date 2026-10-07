@@ -11,10 +11,11 @@ gate and which build it must match.
 
 `setup` supports RHEL 9 and Fedora on Linux/amd64 at the exact releases it
 [admits](development.md#qualified-hosts-and-images), Fedora 43 and RHEL 9.8,
-and refuses any other. Fedora 43 has run; RHEL 9.8 is admitted but not yet run,
-and until the [acceptance ledger](acceptance.md#ledger) records it a RHEL 9.8
-controller must hold exactly the glibc and libgcc builds
-[development](development.md#qualified-hosts-and-images) describes. Setup,
+and refuses any other. Fedora 43 has run; RHEL 9.8 is admitted but not yet run
+until the [acceptance ledger](acceptance.md#ledger) records it. A controller
+must hold exactly the glibc and libgcc builds
+[development](development.md#qualified-hosts-and-images) names, as
+[hold the execution foundation](#hold-the-execution-foundation) keeps them. Setup,
 preflight and the controller stage stage their dependency resolution and
 package inspection beneath /var/lib/bootwright-staging, which the first of them
 creates, and run what they stage from there, so that directory must be on a
@@ -27,7 +28,10 @@ state under `/var/lib/bootwright`
 [The sudo rule](#the-sudo-rule) says what that account's policy must permit,
 [directory accounts](#directory-accounts) how an SSSD, LDAP or AD account runs
 it, [a network home with root squash](#a-network-home-with-root-squash) where
-the executable must live, [a FIPS-mode controller](#a-fips-mode-controller)
+the executable must live,
+[hold the execution foundation](#hold-the-execution-foundation) how to keep
+the glibc and libgcc builds it runs on,
+[a FIPS-mode controller](#a-fips-mode-controller) what its runtime claims and
 which SSH keys it can use, and
 [a host an earlier build manages](#a-host-an-earlier-bootwright-build-manages)
 when a host is not yet a controller for this build.
@@ -43,7 +47,11 @@ make build
 ```
 
 `make build` stamps `bin/bootwright` with the commit and source state of the
-checkout, which `version` prints as its `Commit` and `Source` lines. `setup`
+checkout, which `version` prints as its `Commit` and `Source` lines. A
+controller needs no checkout or Go toolchain: run `make build` on a
+Linux/amd64 workstation and copy `bin/bootwright`, a static executable that
+embeds its automation, to the controller, for example to /usr/local/bin;
+`bootwright version` prints the same `Commit` there. `setup`
 prepares the foundation every context on the host shares and reads no desired
 state; the dry run previews it, and `preflight controller` reports what it
 proved. Each context's first `apply` then binds the context to this host
@@ -52,6 +60,13 @@ its `controller` stage installs the clients its graph selects
 ([controller](../specs/controller.md#the-controller-stage)). Media images live
 in one host-wide store that every context shares, so `setup` runs before the
 first `media add`.
+
+A setup that runs its controller Ansible keeps what that Ansible printed in a
+[setup run](../specs/cli/output.md#setup-run-output),
+/var/lib/bootwright/controller/runs/setup-NNNNNN/run.output, which only root
+can read. The host keeps the newest 8 runs, and the `Logs` field of setup's
+result names the run; a failure that run explains names its `run.output` in
+its remedy.
 
 A RHEL controller that publishes installer media, because the artifact server
 an Anaconda installation uses is placed on it, builds that media with `lorax`
@@ -84,8 +99,39 @@ declared proxy instead, and exporting a variable does not change it.
 `sudo` clears the environment, so an unprivileged invocation forwards the
 variables to its elevated child on the sudo command line; a sudoers rule that
 grants neither `ALL` nor `SETENV` refuses that, and running as root avoids it.
-`bootwright setup --dry-run` prints the resolved route under `Route` in its
-scope block, which is the cheapest way to confirm the variables took effect.
+`bootwright setup --dry-run` never elevates, so the route it prints under
+`Route` in its scope block shows only how the values parse.
+`bootwright preflight controller` elevates and prints the same `Route` field,
+which confirms that the variables crossed sudo.
+
+#### Destinations to allow
+
+A proxy that admits only listed destinations must admit HTTPS, on port 443, to
+these hosts, which setup and the controller stage contact, directly or through
+a redirect the download follows; `media add --from-url` contacts the URL it is
+given. A proxy that inspects TLS re-signs every certificate, so its
+certificate authority must be in the host's system trust store, which every
+acquisition verifies against.
+
+- `api.github.com`: release metadata of helm, govc, virtctl and the OKD
+  clients.
+- `cdn-ubi.redhat.com`: the UBI 9 BaseOS and AppStream repositories a RHEL 9.8
+  controller's native packages resolve from.
+- `cdn.dl.k8s.io`: where `dl.k8s.io` redirects a kubectl download.
+- `dl.fedoraproject.org`: the Fedora 43 release and updates repositories a
+  Fedora controller's native packages resolve from.
+- `dl.k8s.io`: kubectl releases and their stable version.
+- `files.pythonhosted.org`: the `ansible-core` wheel and its supporting wheels.
+- `get.helm.sh`: helm releases.
+- `github.com`: the python-build-standalone CPython release and the govc,
+  virtctl and OKD client releases.
+- `mirror.openshift.com`: OpenShift client and installer releases.
+- `objects.githubusercontent.com`: where `github.com` redirects a release
+  download.
+- `pypi.org`: the `ansible-core` project page and wheel resolution.
+- `raw.githubusercontent.com`: the CPython release metadata setup selects from.
+- `release-assets.githubusercontent.com`: where `github.com` redirects a
+  release download.
 
 ### The sudo rule
 
@@ -125,7 +171,54 @@ still execute Bootwright itself, so copy `bin/bootwright` to a local directory
 such as `/usr/local/bin` and run it from there. Where root cannot, sudo refuses
 with `unable to execute` and the refusal names that local copy as the remedy.
 
+### Hold the execution foundation
+
+Bootwright's private interpreter runs on the host's own loader, glibc and
+libgcc, and each build pins their exact files, so it runs on no other build
+of them. `setup` and `preflight controller` report the builds this build
+requires as the `Execution foundation` check, for example
+`glibc 2.42-16.fc43, libgcc 15.3.1-1.fc43` on Fedora 43. Hold both packages at
+those builds on a controller; on RHEL 9 the `versionlock` command comes from
+the `python3-dnf-plugin-versionlock` package, and the minor release is pinned
+too, so updates come from the release Bootwright admits:
+
+```sh
+dnf versionlock add glibc libgcc
+subscription-manager release --set=9.8
+```
+
+Before a host update that would move either package, destroy the contexts this
+host runs, or let their operations complete, because every `apply` and
+`destroy` runs the private interpreter, and set the host up afterwards with a
+Bootwright build whose execution foundation pins the new builds
+([controller](../specs/controller.md#supported-host-and-dependency-selection)).
+
+When a pinned file differs, `setup` and `preflight controller` refuse with
+`controller.unsupported` before any plan, and an `apply` or `destroy` refuses
+the same way before its private interpreter runs, naming the file, the
+package build that provides it and what was found, for
+example `the provided execution foundation differs at /usr/lib64/libc.so.6,
+from glibc 2.42-16.fc43, which holds other content than this build pins`.
+Restore that build and hold it, then repeat the command:
+
+```sh
+dnf install glibc-2.42-16.fc43
+dnf versionlock add glibc-2.42-16.fc43
+```
+
+`dnf reinstall` restores a file of a build that is still installed. A
+non-empty `/etc/ld.so.preload` refuses the same way; empty or remove it.
+
 ### A FIPS-mode controller
+
+Bootwright's runtime brings its own cryptography: its executable and its
+private CPython use their own cryptographic implementations, outside the
+host's FIPS-validated modules, so running it on a FIPS-mode controller claims
+no FIPS compliance ([D108](../specs/milestones/backlog.md#decisions)).
+`preflight controller`, like `setup`, reports the kernel's FIPS mode as its
+`FIPS mode` check with that statement; the check never changes readiness,
+except that a FIPS flag that cannot be read as 0 or 1 refuses setup and
+preflight with `controller.unsupported`.
 
 Under the FIPS crypto policy (`update-crypto-policies --show` prints `FIPS`),
 OpenSSH accepts no Ed25519 key. Declare `remoteMachinesAccessKey` and every SSH

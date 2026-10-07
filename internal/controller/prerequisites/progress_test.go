@@ -113,7 +113,7 @@ func TestInspectionStreamsEachCheckOnceAndReadinessUsesItsOwnPhase(t *testing.T)
 	if _, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	fresh := []string{"host:ok", "installed-host:ok", "execution-bundle:failed", "container-runtime:failed", "setup-state:failed"}
+	fresh := []string{"host:ok", "installed-host:ok", "execution-foundation:ok", "execution-bundle:failed", "container-runtime:failed", "setup-state:failed"}
 	if !slices.Equal(f.scopes, []string{InspectionPhase}) || !slices.Equal(progress.settled(t, InspectionPhase), fresh) {
 		t.Fatalf("scopes=%v inspection=%v", f.scopes, progress.settled(t, InspectionPhase))
 	}
@@ -122,7 +122,7 @@ func TestInspectionStreamsEachCheckOnceAndReadinessUsesItsOwnPhase(t *testing.T)
 	if err != nil || report.Outcome != "unchanged" || !report.ProgressPresented {
 		t.Fatalf("ready setup=%#v err=%v", report, err)
 	}
-	ready := []string{"host:ok", "installed-host:ok", "execution-bundle:ok", "container-runtime:ok"}
+	ready := []string{"host:ok", "installed-host:ok", "execution-foundation:ok", "execution-bundle:ok", "container-runtime:ok"}
 	if !slices.Equal(f.scopes, []string{InspectionPhase}) || !slices.Equal(progress.settled(t, InspectionPhase), ready) || len(progress.settled(t, ResolutionPhase)) != 0 {
 		t.Fatalf("scopes=%v inspection=%v events=%#v", f.scopes, progress.settled(t, InspectionPhase), progress.events)
 	}

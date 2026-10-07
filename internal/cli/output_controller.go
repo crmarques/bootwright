@@ -18,15 +18,17 @@ const controllerSetupHeadline = "Controller setup"
 // setup mutation.
 type ControllerPresenter struct {
 	progress progressPresenter
+	errOut   io.Writer
 	headline bool
 	scope    bool
 	checks   bool
 }
 
-// NewControllerPresenter streams to out. Given a terminal width reader the
-// running row is rewritten in place within it; anywhere else rows are appended.
-func NewControllerPresenter(out io.Writer, columns func() int) *ControllerPresenter {
-	return &ControllerPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), columns: columns}}
+// NewControllerPresenter streams to out and writes the plan's warnings to
+// errOut. Given a terminal width reader the running row is rewritten in place
+// within it; anywhere else rows are appended.
+func NewControllerPresenter(out, errOut io.Writer, columns func() int) *ControllerPresenter {
+	return &ControllerPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), columns: columns}, errOut: errOut}
 }
 
 // PresentControllerScope opens the result before inspection starts streaming
@@ -65,6 +67,13 @@ func (p *ControllerPresenter) PresentControllerPlan(ctx context.Context, report 
 	controllerPlanText(&text, &report, !p.scope, !p.checks)
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	// What resolution read but did not refuse qualifies the plan, so it is
+	// written just before it and therefore before any prompt (D91).
+	if len(report.Warnings) != 0 {
+		if p.errOut == nil || writeHumanDiagnostics(p.errOut, displayDiagnostics(report.Warnings)) != nil {
+			return &controllerOutputFailure{}
+		}
 	}
 	if p.headline {
 		// The plan follows the streamed rows as its own block.
@@ -191,6 +200,10 @@ func controllerActionLabel(id string) string {
 		return "Host"
 	case "installed-host":
 		return "Installed host"
+	case "execution-foundation":
+		return "Execution foundation"
+	case "fips-mode":
+		return "FIPS mode"
 	case "execution-bundle":
 		return "Execution bundle"
 	case "container-runtime":
@@ -205,6 +218,8 @@ func controllerActionLabel(id string) string {
 		return "Installer media"
 	case "controller-binding":
 		return "Controller binding"
+	case "state-root":
+		return "State root"
 	case "setup-recovery":
 		return "Setup recovery"
 	case "setup-state":
@@ -213,13 +228,15 @@ func controllerActionLabel(id string) string {
 	return id
 }
 
-// writeControllerReport closes the result, its warnings on errOut. Whatever
-// the presenter already streamed is not repeated: the scope, checks and plan
-// after a streamed inspection, or everything but the outcome after a
-// presented plan.
+// writeControllerReport closes the result, its warnings on errOut unless the
+// presented plan already carried them. Whatever the presenter already
+// streamed is not repeated: the scope, checks and plan after a streamed
+// inspection, or everything but the outcome after a presented plan.
 func writeControllerReport(out, errOut io.Writer, command string, report *prerequisites.Report) error {
-	if err := writeHumanDiagnostics(errOut, displayDiagnostics(report.Warnings)); err != nil {
-		return err
+	if !report.PlanPresented {
+		if err := writeHumanDiagnostics(errOut, displayDiagnostics(report.Warnings)); err != nil {
+			return err
+		}
 	}
 	var text display
 	presented := report.PlanPresented || report.ProgressPresented
@@ -262,9 +279,12 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 		fields = append(fields, field{Label: "Readiness", Value: "all required prerequisites verified"})
 	}
 	// Retirement removes shared host content, so what it took back is reported
-	// rather than left for the operator to discover.
+	// rather than left for the operator to discover, and a completed purge
+	// that took back nothing says so.
 	if len(report.RetiredBundles) != 0 {
 		fields = append(fields, field{Label: "Retired", Value: strconv.Itoa(len(report.RetiredBundles)) + " superseded execution " + bundleNoun(len(report.RetiredBundles))})
+	} else if report.Purge && !report.DryRun && (report.Outcome == "changed" || report.Outcome == "unchanged") {
+		fields = append(fields, field{Label: "Retired", Value: "none"})
 	}
 	if report.LogLocation != "" {
 		fields = append(fields, field{Label: logLocationLabel, Value: report.LogLocation})
@@ -276,13 +296,18 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 }
 
 // controllerNextCommand offers the one command that settles what is missing.
-// A completed setup moves the operator on to verification; a not-ready
-// preflight offers the command its service decided, never one re-derived here,
-// and none when its service decided none, as for a selection the platform
-// cannot realize, whose refusal names its own remedy. A context whose
-// readiness holds moves on to its plan; a ready host names no next command,
-// because which context to plan is the operator's choice.
+// The command the service decided always wins, never one re-derived here: a
+// not-ready preflight's, and the one a refused or failed setup's remediation
+// names, such as the purge after a retirement that failed once its setup
+// completed. Otherwise a completed setup moves the operator on to
+// verification, a context whose readiness holds moves on to its plan, and a
+// ready host names no next command, because which context to plan is the
+// operator's choice. Any other outcome names none, as for a remediation that
+// names no command or a selection the platform cannot realize.
 func controllerNextCommand(command string, report *prerequisites.Report) string {
+	if report.Next != "" {
+		return report.Next
+	}
 	if report.Outcome == "ready" {
 		if command == "preflight controller" && report.ContextName != "" {
 			return "bootwright plan --context " + report.ContextName
@@ -296,10 +321,7 @@ func controllerNextCommand(command string, report *prerequisites.Report) string 
 		}
 		return next
 	}
-	if report.Outcome == "not-ready" {
-		return report.Next
-	}
-	return "bootwright setup"
+	return ""
 }
 
 // Progress uses the same status vocabulary: an observed action reports its

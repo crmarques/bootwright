@@ -76,13 +76,14 @@ func TestControllerRefusalsNameTheirOwnRemedies(t *testing.T) {
 }
 
 // A bundle area that is being retired, or that no attribution names, is
-// settled by setup, which every command reading it is sent to.
+// settled by setup, which every command reading it is sent to; only the purge
+// completes a retirement.
 func TestABundleAreaSetupMustSettleNamesSetup(t *testing.T) {
 	for _, test := range []struct {
 		name, message, remedy string
 		reservation           controllerBundleReservation
 	}{
-		{"retiring", "this controller bundle is being retired", "run bootwright setup to complete its retirement", controllerBundleReservation{ID: clientClosure, Mode: "retiring", DirectoryInode: 7}},
+		{"retiring", "this controller bundle is being retired", "run bootwright setup --purge-old-bundles to complete its retirement", controllerBundleReservation{ID: clientClosure, Mode: "retiring", DirectoryInode: 7}},
 		{"unattributed", "required controller bundle is not attributable", "run bootwright setup", controllerBundleReservation{ID: clientClosure, Mode: "sealed"}},
 	} {
 		stored := controllerStored{bundles: []controllerBundleReservation{test.reservation}}

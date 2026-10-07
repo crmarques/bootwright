@@ -1,0 +1,7 @@
+Context deletion plan
+
+  Name             retired
+  Input revisions  selected rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
+  Keyring          removed with every secret version it holds
+  Reservations     libvirt-domain:bootwright-lab-rhel-01, socket:192.0.2.1:8000
+  Owned objects    abandoned unmanaged; bootwright status --context retired lists them

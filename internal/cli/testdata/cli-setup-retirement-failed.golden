@@ -1,0 +1,5 @@
+
+  Outcome    changed
+  Readiness  all required prerequisites verified
+  Retired    none
+  Next       bootwright setup --purge-old-bundles

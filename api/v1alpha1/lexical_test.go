@@ -195,3 +195,54 @@ func TestAnInterfaceNameIsALinuxInterfaceName(t *testing.T) {
 		[]string{strings.Repeat("e", 15), "enp1s0", "eno1", "eth0", "bond0.100", "br-ceph-public", "a+b_c"},
 		[]string{strings.Repeat("e", 16), "eth0/1", "eth0:1", ".", "..", "eth0\n%post", "eth 0", "\u00ebth0", "eth0'", `eth0"`})
 }
+
+const lexicalDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+// A repository path component follows the OCI distribution grammar, so
+// admission refuses what a container runtime would refuse to pull.
+func TestImageAndRegistryPathsFollowTheOCIGrammar(t *testing.T) {
+	refusedComponents := []string{"Bad", "a+b", "a!b", "-a", "a..b", "a_-b", "a___b", "a.", "_a"}
+	admittedComponents := []string{"a.b", "a_b", "a__b", "a--b", "ocp-v4.0-art-dev", "ubi9"}
+	for _, rule := range []string{"registry", "registry-base"} {
+		admitted, refused := []string{"registry.example.test:5000", "registry.example.test"}, []string{}
+		for _, component := range admittedComponents {
+			admitted = append(admitted, "registry.example.test/team/"+component)
+		}
+		for _, component := range refusedComponents {
+			refused = append(refused, "registry.example.test/team/"+component)
+		}
+		lexicalRows(t, rule, admitted, refused)
+	}
+	admitted, refused := []string{"registry.example.test/squid:V6.10-Beta_1", "registry.example.test/squid@SHA256:" + strings.ToUpper(lexicalDigest[7:])}, []string{}
+	for _, component := range admittedComponents {
+		admitted = append(admitted, "registry.example.test/"+component+":1", "registry.example.test/"+component+"@"+lexicalDigest)
+	}
+	for _, component := range refusedComponents {
+		refused = append(refused, "registry.example.test/"+component+":1", "registry.example.test/"+component+"@"+lexicalDigest)
+	}
+	lexicalRows(t, "image", admitted, append(refused, "registry.example.test/squid:latest"))
+}
+
+// A download mirror is an HTTPS base URL the controller stage appends a
+// release path to, so nothing after the path and no escape in it survives.
+func TestMirrorURLsAreHTTPSBaseURLs(t *testing.T) {
+	lexicalRows(t, "mirror-url",
+		[]string{"https://mirror.example.test/helm", "https://mirror.example.test:443/helm", "https://mirror.example.test", "https://192.0.2.1/tools/", "https://[2001:db8::1]/tools"},
+		[]string{"http://mirror.example.test/helm", "https://mirror.example.test:8443/helm", "https://mirror.example.test/helm?q", "https://mirror.example.test/helm?",
+			"https://mirror.example.test/helm#f", "https://mirror.example.test/helm#", "https://user@mirror.example.test/helm", "https://mirror.example.test/a%2Fb",
+			"https://mirror.example.test/" + strings.Repeat("a", 4096), "https://Mirror.example.test/helm", "https://mirror.example.test/rhel 9", ""})
+}
+
+func TestCanonicalImageLowercasesOnlyTheDigest(t *testing.T) {
+	upper := "SHA256:" + strings.ToUpper(lexicalDigest[7:])
+	for value, want := range map[string]string{
+		"registry.example.test/squid@" + upper:              "registry.example.test/squid@" + lexicalDigest,
+		"registry.example.test:5000/squid@" + lexicalDigest: "registry.example.test:5000/squid@" + lexicalDigest,
+		"registry.example.test/squid:V6.10-Beta":            "registry.example.test/squid:V6.10-Beta",
+		"Registry.Example.Test/Squid:V1":                    "Registry.Example.Test/Squid:V1",
+	} {
+		if got := CanonicalImage(value); got != want {
+			t.Errorf("CanonicalImage(%q) = %q, want %q", value, got, want)
+		}
+	}
+}

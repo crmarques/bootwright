@@ -28,15 +28,16 @@ func obj(kind api.Kind, name string, spec api.Value) api.Object {
 func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 
 func TestManagedServicesAndPlacement(t *testing.T) {
-	machine := obj(api.Machine, "host", m("capabilities", api.StringList("container-runtime"), "network", m("addresses", list(m("name", "fqdn", "address", "host.example.test")))))
+	machine := obj(api.Machine, "host", m("capabilities", api.StringList("container-runtime"), "network", m("addresses", list(m("name", "fqdn", "address", "host.example.test"), m("name", "ip", "address", "192.0.2.10/24")))))
 	c := api.NewCatalog([]api.Object{machine})
+	endpoints := list(m("name", "ip", "addressRef", "ip"))
 	services := map[api.Kind]api.Value{
 		api.ArtifactServer: m("listeners", list(m("name", "http", "protocol", "http", "port", api.IntegerValue("8080"))), "endpoints", list(m("name", "packages", "listenerRef", "http", "addressRef", "fqdn"))),
 		api.LoadBalancer:   m("implementation", "haproxy", "bindAddresses", list(m("address", "192.0.2.5"))),
-		api.Proxy:          m("implementation", "squid"),
-		api.DNSServer:      m("implementation", "dnsmasq"),
-		api.NTPServer:      m("implementation", "chrony"),
-		api.Registry:       m("implementation", "mirror-registry"),
+		api.Proxy:          m("implementation", "squid", "endpoints", endpoints),
+		api.DNSServer:      m("implementation", "dnsmasq", "endpoints", endpoints),
+		api.NTPServer:      m("implementation", "chrony", "endpoints", endpoints),
+		api.Registry:       m("implementation", "mirror-registry", "endpoints", endpoints),
 	}
 	for kind, spec := range services {
 		t.Run(string(kind), func(t *testing.T) {

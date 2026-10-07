@@ -30,6 +30,46 @@ func New() Inspector {
 
 var _ prerequisites.HostInspector = Inspector{}
 
+var _ prerequisites.FIPSInspector = Inspector{}
+
+// fipsFlag is the kernel's FIPS mode flag beneath /proc.
+const fipsFlag = "sys/crypto/fips_enabled"
+
+// FIPSMode reads whether the kernel runs in FIPS mode from its own flag: "1"
+// is enabled, and "0" or a flag the kernel does not provide is disabled.
+// Anything else is evidence it cannot read, which it refuses.
+func (i Inspector) FIPSMode(ctx context.Context) (bool, error) {
+	fs, err := i.view.open(ctx)
+	if err != nil {
+		return false, fipsFailure(ctx)
+	}
+	defer fs.close()
+	proc, err := fs.kernelRoot(ctx, "/proc", unix.PROC_SUPER_MAGIC)
+	if err != nil {
+		return false, fipsFailure(ctx)
+	}
+	defer proc.Close()
+	var stat unix.Stat_t
+	if err := unix.Fstatat(int(proc.Fd()), fipsFlag, &stat, unix.AT_SYMLINK_NOFOLLOW); errors.Is(err, unix.ENOENT) {
+		return false, ctx.Err()
+	}
+	data, err := fs.readKernel(ctx, proc, fipsFlag, 8)
+	if err != nil {
+		return false, fipsFailure(ctx)
+	}
+	switch strings.TrimSuffix(string(data), "\n") {
+	case "1":
+		return true, nil
+	case "0":
+		return false, nil
+	}
+	return false, fipsFailure(ctx)
+}
+
+func fipsFailure(ctx context.Context) error {
+	return inspectionFailure(ctx, "controller.unsupported", "the kernel's FIPS mode flag /proc/"+fipsFlag+" cannot be read as 0 or 1")
+}
+
 // Platform reads only the trusted OS declaration. It does not qualify the
 // release, inspect desired state, or create the Bootwright store.
 func (i Inspector) Platform(ctx context.Context) (prerequisites.Platform, error) {

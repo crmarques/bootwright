@@ -16,6 +16,7 @@ const (
 	boundRefusal     = "this host already retains the 16 bundle areas or resolutions it may hold, so the new execution bundle has no room"
 	boundRemediation = "run bootwright setup --purge-old-bundles to retire the superseded execution bundles first"
 	keptRefusal      = "only client areas and the current execution bundle hold this host's 16 bundle areas or resolutions, and neither is ever retired, so the new execution bundle has no room"
+	keptRemediation  = "no command of this build frees that room, because it never retires a client area; keep using the build whose execution bundle this host holds, or set this build up on another controller host"
 )
 
 // supersede gives a host that completed one setup count superseded execution
@@ -200,7 +201,9 @@ func TestTheBoundRefusalNamesPurgeOldBundles(t *testing.T) {
 }
 
 // When client areas and the current bundle hold every slot, nothing may be
-// retired, and the refusal says so whether or not retirement was asked for.
+// retired, and the refusal says so whether or not retirement was asked for. No
+// command of this build frees that room, so its remedy names none and the
+// result offers no next command (D90).
 func TestTheBoundHeldByClientAreasAndTheCurrentBundleSaysSo(t *testing.T) {
 	for _, purge := range []bool{false, true} {
 		t.Run("purge="+strconv.FormatBool(purge), func(t *testing.T) {
@@ -208,8 +211,14 @@ func TestTheBoundHeldByClientAreasAndTheCurrentBundleSaysSo(t *testing.T) {
 			f.store.state.RetainedDefinitions = slices.DeleteFunc(f.store.state.RetainedDefinitions,
 				func(definition Definition) bool { return definition.CatalogDigest != current })
 			writes := f.store.writes
-			_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: purge})
-			refusal(t, err, keptRefusal, "")
+			report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true, PurgeOldBundles: purge})
+			refusal(t, err, keptRefusal, keptRemediation)
+			if strings.Contains(keptRemediation, "purge") || strings.Contains(keptRemediation, "bootwright") {
+				t.Fatalf("the remedy of a bound no command frees names a command: %q", keptRemediation)
+			}
+			if report == nil || report.Next != "" {
+				t.Fatalf("the refusal offers a next command: %#v", report)
+			}
 			if slices.Contains(f.events, "present") || f.store.writes != writes || len(f.store.retired) != 0 || len(f.store.areas) != MaxRetainedBundles {
 				t.Fatalf("a refused setup acted: events=%v writes=%d retired=%v", f.events, f.store.writes-writes, f.store.retired)
 			}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
-	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -83,7 +82,7 @@ func normalizedContacts(o api.Object, c api.Catalog, network api.Value) api.Valu
 		for _, a := range addresses {
 			exists = exists || a.Get("name").Text() == "fqdn"
 		}
-		if envs := c.OfKind(api.Environment); !exists && len(envs) == 1 {
+		if envs := c.OfKind(api.Environment); !exists && len(envs) == 1 && api.ValidLexical("name", o.Name()) {
 			domain := envs[0].Spec().Get("domains", "machines").Text()
 			if domain == "" {
 				domain = envs[0].Spec().Get("domains", "base").Text()
@@ -102,16 +101,19 @@ func normalizedContacts(o api.Object, c api.Catalog, network api.Value) api.Valu
 func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Value {
 	access := s.Get("access")
 	if installed(o) {
-		if envs := c.OfKind(api.Environment); len(envs) == 1 && envs[0].Spec().Has("remoteMachinesAccessKey", "keyRef") {
-			access = api.MapValue().WithPath(api.StringValue("bootwright"), "ssh", "user").WithPath(envs[0].Spec().Get("remoteMachinesAccessKey", "keyRef"), "ssh", "auth", "privateKeyRef")
+		if key, ok := fleetKey(c); ok {
+			access = api.MapValue().WithPath(api.StringValue("bootwright"), "ssh", "user").WithPath(api.StringValue(key), "ssh", "auth", "privateKeyRef")
 		}
 	} else if s.Get("os", "provided").Bool() && !access.Has("local") && !access.Has("ssh") {
 		access = access.WithPath(api.MapValue(), "ssh", "auth", "operatorIdentity")
 	}
 	if access.Has("ssh") {
 		ssh := access.Get("ssh").Default("port", api.IntegerValue("22"))
-		if !ssh.Has("addressRef") {
-			ssh = ssh.With("addressRef", api.StringValue(sshAddressRef(o, network)))
+		// A name that is not a DNS label derives no fqdn contact, so its session
+		// falls back to none rather than repeat the name's refusal.
+		reference := sshAddressRef(o, network)
+		if _, declared := namedValue(network.Get("addresses"), reference); !ssh.Has("addressRef") && (declared || api.ValidLexical("name", o.Name())) {
+			ssh = ssh.With("addressRef", api.StringValue(reference))
 		}
 		if !ssh.Has("user") && !ssh.Has("auth", "operatorIdentity") && !ssh.Has("auth", "passwordRef") {
 			ssh = ssh.With("user", api.StringValue("root"))
@@ -119,6 +121,20 @@ func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Val
 		access = access.With("ssh", ssh)
 	}
 	return access
+}
+
+// fleetKey is the Environment's fleet key when it names an sshKeyPair Secret,
+// the only key an installed Machine's derived access can use. Any other key is
+// the Environment's own refusal, which a derived reference would only repeat
+// with a remedy admission forbids on an installed Machine.
+func fleetKey(c api.Catalog) (string, bool) {
+	envs := c.OfKind(api.Environment)
+	if len(envs) != 1 {
+		return "", false
+	}
+	key := envs[0].Spec().Get("remoteMachinesAccessKey", "keyRef").Text()
+	secret, found := c.Find(api.Secret, key)
+	return key, found && secret.Spec().Get("type").Text() == "sshKeyPair"
 }
 
 // sshAddressRef names the address a session dials when access authors none.
@@ -204,7 +220,9 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 	if s.Get("access", "rootLogin").Text() == "revoke" && !s.Has("access", "ssh") {
 		issues = appendIssues(issues, invariant("$.spec.access.rootLogin", "root-login revocation requires authored SSH access"))
 	}
-	issues = appendIssues(issues, substrate.ValidateBMCDefaults(s.Get("hardware", "management", "bmc"), "$.spec.hardware.management.bmc", true)...)
+	if !derivesHardware(o, c) {
+		issues = appendIssues(issues, substrate.ValidateBMCDefaults(s.Get("hardware", "management", "bmc"), "$.spec.hardware.management.bmc", true)...)
+	}
 	issues = appendIssues(issues, validateNative(s.Get("network", "inline", "nmstate"), "$.spec.network.inline.nmstate", false)...)
 	issues = appendIssues(issues, validateNative(s.Get("network", "overrides"), "$.spec.network.overrides", true)...)
 	return issues
@@ -218,7 +236,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	s := o.Spec()
-	issues := []api.Issue{}
+	issues := validateName(o)
 	issues = appendIssues(issues, validateServices(o, c)...)
 	if slices.Contains(s.Get("capabilities").Strings(), "ceph-arbiter") && !slices.Contains(s.Get("capabilities").Strings(), "ceph-node") {
 		issues = appendIssues(issues, invariant("$.spec.capabilities", "ceph-arbiter requires ceph-node capability"))
@@ -242,7 +260,22 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = appendIssues(issues, validateAccess(o, c)...)
 	issues = appendIssues(issues, validatePlacementHost(o, c)...)
 	issues = appendIssues(issues, validateHostKey(o, c)...)
+	if variant == substrate.ArmLibvirt {
+		return issues
+	}
 	return appendIssues(issues, validateBMC(s.Get("hardware", "management", "bmc"))...)
+}
+
+// validateName holds every Machine name to the longest block a Machine
+// contributes, os-install-<name>, because a Machine may change lifecycle. A
+// name outside the label grammar is the compiler's own refusal.
+func validateName(o api.Object) []api.Issue {
+	if !api.ValidLexical("name", o.Name()) || len(o.Name()) <= substrate.MachineNameLimit {
+		return []api.Issue{}
+	}
+	return []api.Issue{valueIssue("$.metadata.name",
+		fmt.Sprintf("a Machine name is at most %d bytes, because the block os-install-<name> that installs it is a 63-byte identity", substrate.MachineNameLimit),
+		fmt.Sprintf("rename %s to at most %d bytes, with every reference to it", o.Identity(), substrate.MachineNameLimit))}
 }
 
 func validateProvision(s api.Value) []api.Issue {
@@ -317,8 +350,9 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 			issues = appendIssues(issues, invariant(path+".interface", "interface assignment requires a non-provided Machine with configured network"))
 		}
 		if address.Get("name").Text() == "fqdn" {
-			if address.Has("interface") || !validDNS(address.Get("address").Text()) {
-				issues = appendIssues(issues, invariant(path, "fqdn must be an unassigned DNS contact"))
+			if address.Has("interface") || !api.ValidLexical("dns", address.Get("address").Text()) {
+				issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: path, Message: "fqdn must be an unassigned DNS contact",
+					Remediation: "correct " + path[2:] + " on " + o.Identity() + " to a lowercase DNS name with no interface"})
 			}
 			for _, other := range c.OfKind(api.Machine) {
 				if other.Identity() == o.Identity() {
@@ -336,13 +370,14 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 }
 
 func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, found bool, variant string, configured bool) []api.Issue {
-	s := o.Spec()
-	network := s.Get("network")
 	var issues []api.Issue
 	native, compositionIssues := ComposeNetwork(o, c)
 	issues = appendIssues(issues, compositionIssues...)
 	if found && configured {
 		issues = appendIssues(issues, validateAttachments(o, provider, native)...)
+	}
+	if found && variant == substrate.ArmLibvirt && len(compositionIssues) == 0 {
+		issues = appendIssues(issues, validateDomainInterfaces(o, c, native, configured)...)
 	}
 	if len(compositionIssues) == 0 {
 		address, selectionIssues := selectInstallAddress(o, c, false)
@@ -361,16 +396,50 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 				}
 			}
 			if found && variant == substrate.ArmLibvirt {
-				issues = appendIssues(issues, validateManagedAttachmentContainment(prefix, network, provider)...)
+				issues = appendIssues(issues, validateManagedAttachmentContainment(o, prefix, provider)...)
 			}
 		}
-		if installed(o) && len(selectionIssues) == 0 {
-			if profile, ok := c.Find(api.MachineInstallProfile, s.Get("os", "installProfileRef").Text()); ok && profile.Spec().Has("installer", "anaconda") {
-				issues = appendIssues(issues, validateAnacondaNetwork(address, native, configured)...)
-			}
+		if anacondaInstalled(o, c) && len(selectionIssues) == 0 {
+			issues = appendIssues(issues, validateAnacondaNetwork(address, native, configured)...)
 		}
 	}
 	return issues
+}
+
+func anacondaInstalled(o api.Object, c api.Catalog) bool {
+	profile, ok := c.Find(api.MachineInstallProfile, o.Spec().Get("os", "installProfileRef").Text())
+	return installed(o) && ok && profile.Spec().Has("installer", "anaconda")
+}
+
+// validateDomainInterfaces refuses a non-provided Machine a libvirt domain
+// could not attach: the domain has one interface per available ethernet
+// interface of the composed network configuration, so a Machine with none
+// would be realized unreachable, or refused at plan. A Bootwright-installed
+// Anaconda Machine that selects no configuration already refuses at its install
+// address with the same remedy, so it is refused once.
+func validateDomainInterfaces(o api.Object, c api.Catalog, native api.Value, configured bool) []api.Issue {
+	if provided := o.Spec().Get("os", "provided"); !provided.Present() || provided.Bool() {
+		return nil
+	}
+	if !configured {
+		if anacondaInstalled(o, c) {
+			return nil
+		}
+		return []api.Issue{{Code: "api.invariant", Field: "$.spec.network",
+			Message:     "a Machine a libvirt provider realizes attaches one interface per available ethernet interface of its network configuration, and this Machine selects none",
+			Remediation: "select a network configuration on " + o.Identity() + " with spec.network.configRef or spec.network.inline, with an ethernet interface that is not absent or ignored"}}
+	}
+	if !native.Present() {
+		return nil
+	}
+	for _, iface := range native.Get("interfaces").Items() {
+		if iface.Get("type").Text() == "ethernet" && !unavailableInterface(iface) {
+			return nil
+		}
+	}
+	return []api.Issue{{Code: "api.invariant", Field: configurationPath(o),
+		Message:     "the network configuration presents no available ethernet interface, so the domain would have no interface",
+		Remediation: "declare an ethernet interface that is not absent or ignored in the NMState " + o.Identity() + " selects, or select another configuration"}}
 }
 
 func validateAccess(o api.Object, c api.Catalog) []api.Issue {
@@ -405,18 +474,36 @@ func validateBMC(bmc api.Value) []api.Issue {
 	return issues
 }
 
-// validateManagedAttachmentContainment requires the install address to lie
-// inside the network Bootwright defines for a managed libvirt attachment.
-func validateManagedAttachmentContainment(address netip.Prefix, network api.Value, provider api.Object) []api.Issue {
-	attachment, ok := namedValue(provider.Spec().Get("networkAttachments"), network.Get("attachmentRef").Text())
+// validateManagedAttachmentContainment requires the install address to be a
+// guest's host address on the network Bootwright defines for a managed libvirt
+// attachment: inside its prefix, never the bridge's own host address and, for
+// an IPv4 prefix shorter than /31, never its network or broadcast address.
+func validateManagedAttachmentContainment(o api.Object, address netip.Prefix, provider api.Object) []api.Issue {
+	attachment, ok := namedValue(provider.Spec().Get("networkAttachments"), o.Spec().Get("network", "attachmentRef").Text())
 	if !ok || attachment.Get("libvirt", "management").Text() != "managed" {
 		return nil
 	}
 	managed, err := netip.ParsePrefix(attachment.Get("libvirt", "address").Text())
-	if err != nil || managed.Masked().Contains(address.Addr()) {
+	if err != nil {
 		return nil
 	}
-	return []api.Issue{invariant("$.spec.network.installAddressRef", "install address must lie inside the managed libvirt attachment's network")}
+	reserved := managed.Addr().String()
+	if reservedEnd(managed, managed.Masked().Addr()) != "" {
+		reserved += ", " + managed.Masked().Addr().String() + " and " + broadcastAddress(managed).String()
+	}
+	refuse := func(message string) []api.Issue {
+		return []api.Issue{{Code: "api.invariant", Field: "$.spec.network.installAddressRef", Message: message,
+			Remediation: "assign " + o.Identity() + " an install address inside " + managed.Masked().String() + " other than " + reserved}}
+	}
+	switch end := reservedEnd(managed, address.Addr()); {
+	case !managed.Masked().Contains(address.Addr()):
+		return refuse("install address must lie inside the managed libvirt attachment's network")
+	case address.Addr() == managed.Addr():
+		return refuse("the install address is the managed bridge's own host address on " + provider.Identity())
+	case end != "":
+		return refuse("the install address is the " + end + " address of the managed bridge's prefix on " + provider.Identity())
+	}
+	return nil
 }
 
 // validateHostKey keeps a delivered host key to the one lifecycle that
@@ -493,9 +580,6 @@ func validateBaremetal(o api.Object) []api.Issue {
 			issues = appendIssues(issues, invariant(fmt.Sprintf("$.spec.hardware.nics[%d].macAddress", i), "every bare-metal install NIC requires a MAC"))
 		}
 	}
-	if _, ok := namedValue(s.Get("hardware", "nics"), s.Get("hardware", "boot", "nicRef").Text()); !ok {
-		issues = appendIssues(issues, reference("$.spec.hardware.boot.nicRef", "bare-metal boot requires a declared NIC"))
-	}
 	if !s.Get("hardware", "management", "bmc").Present() {
 		issues = appendIssues(issues, invariant("$.spec.hardware.management.bmc", "bare-metal installation requires a BMC"))
 	}
@@ -512,7 +596,38 @@ func validateBaremetal(o api.Object) []api.Issue {
 	return issues
 }
 
+// derivesHardware is a Machine of a libvirt provider, which derives every
+// interface's MAC and realizes the management controller as its emulated BMC,
+// so it reads neither from the Machine.
+func derivesHardware(o api.Object, c api.Catalog) bool {
+	provider, found := Provider(o, c)
+	return found && substrate.Variant(provider) == substrate.ArmLibvirt
+}
+
+// validateDerivedHardware refuses each MAC and the management controller a
+// libvirt provider's Machine authors, since realization would ignore them.
+func validateDerivedHardware(o api.Object) []api.Issue {
+	issues := []api.Issue{}
+	for i, nic := range o.Spec().Get("hardware", "nics").Items() {
+		if nic.Has("macAddress") {
+			path := fmt.Sprintf("spec.hardware.nics[%d].macAddress", i)
+			issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$." + path,
+				Message:     "a libvirt provider derives every interface's MAC from the context, Machine and interface names, so an authored MAC would be ignored",
+				Remediation: "remove " + path + " from " + o.Identity()})
+		}
+	}
+	if o.Spec().Has("hardware", "management", "bmc") {
+		issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.hardware.management.bmc",
+			Message:     "a libvirt provider realizes this Machine's management controller as its emulated BMC, so an authored one would be ignored",
+			Remediation: "remove spec.hardware.management.bmc from " + o.Identity()})
+	}
+	return issues
+}
+
 func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
+	if variant == substrate.ArmLibvirt {
+		return validateDerivedHardware(o)
+	}
 	issues := []api.Issue{}
 	seen := map[string]bool{}
 	for i, nic := range o.Spec().Get("hardware", "nics").Items() {
@@ -529,20 +644,16 @@ func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 			issues = appendIssues(issues, invariant(path, "vSphere MAC must be in the manual assignment range"))
 		}
 		for _, other := range c.OfKind(api.Machine) {
-			if other.Identity() == o.Identity() {
+			if other.Identity() == o.Identity() || derivesHardware(other, c) {
 				continue
 			}
 			for _, peer := range other.Spec().Get("hardware", "nics").Items() {
 				pm, ok := canonicalMAC(peer.Get("macAddress").Text())
 				if ok && pm == mac {
-					issues = appendIssues(issues, invariant(path, "authored hardware MACs must be unique across Machines"))
+					issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: path, Message: "authored hardware MACs must be unique across Machines",
+						Remediation: "correct " + path[2:] + " on " + o.Identity() + ", a MAC " + other.Identity() + " also declares"})
 				}
 			}
-		}
-	}
-	if ref := o.Spec().Get("hardware", "boot", "nicRef"); ref.Present() {
-		if _, ok := namedValue(o.Spec().Get("hardware", "nics"), ref.Text()); !ok {
-			issues = appendIssues(issues, reference("$.spec.hardware.boot.nicRef", "boot NIC must name a declared hardware NIC"))
 		}
 	}
 	return issues
@@ -555,8 +666,12 @@ func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
 	if network.Has("attachmentRef") && network.Has("interfaceAttachments") {
 		issues = appendIssues(issues, invariant("$.spec.network.interfaceAttachments", "attachmentRef and interfaceAttachments are mutually exclusive"))
 	}
-	if !network.Has("attachmentRef") && !network.Has("interfaceAttachments") {
-		issues = appendIssues(issues, invariant("$.spec.network.attachmentRef", "provider-backed configured networks require an explicit attachment unless the unique matching default applies"))
+	// A bare-metal attachment configures nothing, so bare metal selects none;
+	// one it authors still resolves below.
+	if variant != substrate.ArmBaremetal && !network.Has("attachmentRef") && !network.Has("interfaceAttachments") {
+		issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.network.attachmentRef",
+			Message:     "provider-backed configured networks require an explicit attachment unless the unique matching default applies",
+			Remediation: "set spec.network.attachmentRef on " + o.Identity() + " to an attachment of " + provider.Identity()})
 	}
 	check := func(ref api.Value, path string) {
 		if ref.Present() {
@@ -750,21 +865,4 @@ func providerBMCDefaults(bmc api.Value, provider api.Object) api.Value {
 		defaults = defaults.With("tls", defaults.Get("tls").Without("trustBundleRef"))
 	}
 	return defaults
-}
-
-func validDNS(s string) bool {
-	if len(s) == 0 || len(s) > 253 || strings.HasSuffix(s, ".") {
-		return false
-	}
-	for _, label := range strings.Split(s, ".") {
-		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-		for _, c := range label {
-			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
-				return false
-			}
-		}
-	}
-	return true
 }

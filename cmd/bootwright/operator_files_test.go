@@ -171,7 +171,7 @@ func TestTheRootChildOpensNoOperatorPathItself(t *testing.T) {
 			}
 		}
 	}
-	acquisition, err := localMediaDependencies(nil, nil, controller.Route{}, files).Acquirer.Open(context.Background(), media.Source{Path: image})
+	acquisition, err := localMediaDependencies(nil, nil, nil, nil, controller.Route{}, files).Acquirer.Open(context.Background(), media.Source{Path: image})
 	if err != nil {
 		t.Fatalf("media open: %#v", diagnostics.Of(err))
 	}
@@ -222,7 +222,7 @@ func sameDiagnostic(got, want diagnostics.Diagnostic) bool {
 func TestMediaSourcesOpenThroughTheBoundOpener(t *testing.T) {
 	files := newVirtualOperatorFiles(t)
 	virtual := files.write(t, "image.iso", "installer")
-	deps := localMediaDependencies(nil, nil, controller.Route{}, files)
+	deps := localMediaDependencies(nil, nil, nil, nil, controller.Route{}, files)
 	acquisition, err := deps.Acquirer.Open(context.Background(), media.Source{Path: virtual})
 	if err != nil {
 		t.Fatalf("open: %#v", diagnostics.Of(err))
@@ -231,7 +231,7 @@ func TestMediaSourcesOpenThroughTheBoundOpener(t *testing.T) {
 	if data, err := io.ReadAll(acquisition.Payload); err != nil || string(data) != "installer" {
 		t.Fatalf("payload = %q (%v)", data, err)
 	}
-	unbound := localMediaDependencies(nil, nil, controller.Route{}, nil)
+	unbound := localMediaDependencies(nil, nil, nil, nil, controller.Route{}, nil)
 	_, err = unbound.Acquirer.Open(context.Background(), media.Source{Path: virtual})
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != "the media source opener is not configured" {
 		t.Fatalf("an unbound opener did not refuse: %#v (%v)", reported, err)

@@ -148,6 +148,21 @@ func TestAResolutionWarningReachesTheSetupResult(t *testing.T) {
 	}
 }
 
+// The plan presented before the prompt carries the resolution's warnings, so
+// an operator reads them before approving what they qualify (D91).
+func TestThePresentedSetupPlanCarriesItsResolutionWarnings(t *testing.T) {
+	warning := diagnostics.Diagnostic{Severity: "warning", Code: "controller.unsupported", Message: "the publisher's Index API page is version 1.5, newer than the 1.4 this build reads"}
+	f, r := dynamicFixture(t)
+	r.bootstrapWarnings = []diagnostics.Diagnostic{warning}
+	f.confirmationError = failure("controller.setup", "setup was declined", "")
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err == nil {
+		t.Fatal("the declined setup reported success")
+	}
+	if !slices.Contains(f.events, "present") || !reflect.DeepEqual(f.plan.Warnings, r.bootstrapWarnings) {
+		t.Fatalf("the presented plan carries warnings %#v, want %#v", f.plan.Warnings, r.bootstrapWarnings)
+	}
+}
+
 // A setup that its own dependency resolution stops, before any plan, still
 // reports the warning of what it read and did not refuse.
 func TestAResolutionWarningReachesTheResultOfASetupItStops(t *testing.T) {

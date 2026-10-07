@@ -268,11 +268,10 @@ func TestControllerBindingSurvivesUpdateAndDisposableDeletionRetainsHost(t *test
 	value.Bindings = []prerequisites.ControllerBinding{{Context: record.Name, Machine: scope.Machine, HostDigest: hostDigest}}
 	publishControllerState(t, store, scope, value)
 	err := store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
-		guard := tx.(contexts.ControllerInputGuard)
-		if err := guard.CheckControllerInput(context.Background(), record.Name, "replacement"); err == nil {
+		if err := tx.CheckControllerInput(context.Background(), record.Name, "replacement"); err == nil {
 			t.Fatal("input update transferred a controller binding")
 		}
-		if err := guard.CheckControllerInput(context.Background(), record.Name, scope.Machine); err != nil {
+		if err := tx.CheckControllerInput(context.Background(), record.Name, scope.Machine); err != nil {
 			return err
 		}
 		if _, err := tx.MutationState(context.Background(), record.Name); err != nil {

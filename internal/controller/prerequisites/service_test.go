@@ -24,6 +24,7 @@ type fixture struct {
 	host              testHost
 	bundle            testBundle
 	catalog           testCatalog
+	foundation        testFoundation
 	compiler          testCompiler
 	events            []string
 	scopes            []string
@@ -48,7 +49,7 @@ func newFixture(t *testing.T, platform ...Platform) *fixture {
 	f.store.owner = f
 	f.bundle.owner = f
 	f.bundle.recoverable = true
-	f.service = New(&f.store, &f.compiler, &f.host, &f.catalog, &f.bundle, nil, Options{Confirmer: f, Presenter: f})
+	f.service = New(&f.store, &f.compiler, &f.host, &f.catalog, &f.bundle, nil, Options{Confirmer: f, Presenter: f, Foundation: &f.foundation})
 	wireResolution(t, f)
 	return f
 }
@@ -504,6 +505,26 @@ func (h *testHost) Identity(context.Context) (controller.InstalledHostIdentity, 
 	return h.identity, nil
 }
 
+// testFoundation is the execution foundation inspector: a host holding the
+// foundation this executable pins, unless refusal names where it differs.
+type testFoundation struct {
+	inspections int
+	drift       string
+	refusal     error
+	err         error
+}
+
+// testFoundationBuilds is the foundation the fixture's host holds.
+const testFoundationBuilds = "glibc 2.34-275.el9_8, libgcc 11.5.0-14.el9"
+
+func (f *testFoundation) Inspect(context.Context, Platform) (FoundationInspection, error) {
+	f.inspections++
+	if f.err != nil {
+		return FoundationInspection{}, f.err
+	}
+	return FoundationInspection{Required: testFoundationBuilds, Drift: f.drift, Refusal: f.refusal}, nil
+}
+
 type testCatalog struct {
 	err      error
 	admitted []Platform
@@ -824,7 +845,7 @@ func TestAPendingReceiptIsJudgedWithoutAContext(t *testing.T) {
 			if len(reported) != 1 || reported[0].Code != "preflight.failed" || reported[0].Remediation != setupCommand() {
 				t.Fatalf("a context's preflight judged setup's receipt by its context: %+v", reported)
 			}
-			if report == nil || report.Route != "direct" || !slices.ContainsFunc(report.Checks, func(check Check) bool { return check.ID == "setup-recovery" && check.Status == "not-ready" }) {
+			if report == nil || report.Route != "direct (Machine controller)" || !slices.ContainsFunc(report.Checks, func(check Check) bool { return check.ID == "setup-recovery" && check.Status == "not-ready" }) {
 				t.Fatalf("the pending receipt was not reported for setup to resolve: %+v", report)
 			}
 			f.store.state.Receipt.Context = f.store.scope
@@ -1303,7 +1324,7 @@ func TestContextFreeSetupAcquiresOverTheAmbientRoute(t *testing.T) {
 func TestAnUnsetEnvironmentKeepsDirectContextFreeAcquisition(t *testing.T) {
 	f := ambientFixture(t)
 	report, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
-	if err != nil || report.Route != "direct" {
+	if err != nil || report.Route != "direct (no HTTPS_PROXY)" {
 		t.Fatalf("route = %q err = %v", report.Route, err)
 	}
 	if f.store.state.Receipt.Egress.HTTPSProxy != "" || len(f.store.state.Receipt.Egress.NoProxy) != 0 {
@@ -1328,7 +1349,7 @@ func TestASelectedContextIgnoresTheAmbientRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Route != "direct" {
+	if report.Route != "direct (Machine controller)" {
 		t.Fatalf("a context took the invoking environment's route: %q", report.Route)
 	}
 }

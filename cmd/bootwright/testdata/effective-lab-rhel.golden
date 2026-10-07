@@ -187,7 +187,6 @@ spec:
       port: 8000
       auth:
         credentialsRef: lab-bmc-credentials
-      disableCertificateVerification: false
     machineProfiles:
       - name: rhel
         cpu: 4

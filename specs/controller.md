@@ -55,8 +55,10 @@ project page, never from the project JSON, and refuse a page of any major API
 version but 1. A page of a minor newer than the one the build was checked
 against only adds what the build does not read, so, as
 [PEP 629](https://peps.python.org/pep-0629/) asks of a client, setup reads it
-as the minor it knows, continues and reports a warning with its result
-([owner decision D47](milestones/backlog.md#decisions)). The collection's
+as the minor it knows, continues and reports a warning, before the plan when
+it presents one and otherwise with its result
+([owner decision D47](milestones/backlog.md#decisions),
+[D91](milestones/backlog.md#decisions)). The collection's
 `requires_ansible` names the same `ansible-core` minor, and the embedded
 configuration makes a mismatch an error. No
 Environment declares their versions, because setup reads none. The
@@ -87,6 +89,45 @@ refuses any native transaction that would change them before presenting the
 plan. A dependency release that requires a different foundation needs a
 separately qualified profile. The mechanisms that achieve this are recorded in
 [controller runtime isolation](../.agents/knowledge/controller-runtime-isolation.md).
+
+Every private Python launch, whether setup's, a controller stage's or a
+lifecycle block's in apply or destroy, verifies that foundation byte for byte
+under the native package read lock, and setup and `preflight controller`
+report the same verification as the `execution-foundation` check, after the
+installed host, requiring the exact `glibc` and `libgcc` builds the compiled
+catalog attributes the foundation files to
+([D107](milestones/backlog.md#decisions)). The catalog names, beside each
+admitted release's execution requirement and outside it, the package build
+that provides each pinned file, so the attribution moves no bundle or
+resolution identity. A foundation that differs settles that check not-ready,
+observed at the first path that differs, and refuses with
+`controller.unsupported` before any plan, naming the path, the package build
+that provides it (for a pinned link, the build that provides the file it
+reaches; for a path no package provides, the path alone), and what was found:
+missing, other content, an unsafe owner, mode, type or link count, a link that
+points elsewhere, or a non-empty `/etc/ld.so.preload`. A launch that meets it
+refuses with the same diagnostic, and its remedy holds from every command:
+install exactly that build again with `dnf`, hold it with `dnf versionlock`,
+then repeat the command; a host that must take the update needs a Bootwright
+build whose foundation pins it. No next command is offered. The operator
+guide's [hold procedure](../docs/operator-guide.md#hold-the-execution-foundation)
+keeps a controller on those builds, and
+[development](../docs/development.md#qualified-hosts-and-images) names the
+tool that regenerates a release's record from a qualified host. Qualifying
+vendor-signed builds within the qualified minor, so a z-stream errata needs one
+setup, lands with [B297](milestones/m1.md#b297).
+
+Bootwright's runtime brings its own cryptography: the Go executable and the
+private CPython use their own cryptographic implementations, outside the host's
+FIPS-validated modules, on a FIPS-mode controller as on any other
+([D108](milestones/backlog.md#decisions)). Setup and `preflight controller`
+report the kernel's FIPS mode as the informational `fips-mode` check, with that
+statement when it is enabled; the check never changes readiness, the plan or
+the next command while the kernel's flag reads 0 or 1 or is absent; a flag that
+cannot be read as 0 or 1 refuses with `controller.unsupported`, which
+[B414](milestones/backlog.md#b414) would report as not verified instead.
+Bootwright claims no FIPS compliance; a FIPS-qualified runtime is parked as
+[B331](milestones/backlog.md#b331).
 
 The publisher and platform policies are compiled into the executable; exact
 releases are resolved by explicit setup. Dependency selection follows
@@ -232,13 +273,19 @@ receipt replaces a canceled one whose bundle never held an area, the
 retirement after completion retires that receipt's resolution alone. The
 resolution a [controller stage](#the-controller-stage) retains for the native
 clients a context selects names no area either, but only that stage judges
-which of those are superseded, so setup never retires one. The result names
-the bundles whose areas the command removed, and nothing else.
+which of those are superseded, so setup never retires one. The result counts
+the areas the command removed, and nothing else, and a completed setup whose
+purge removed none says `none`. A `--purge-old-bundles` dry run plans that
+retirement after the setup it previews completes, and a retirement that fails
+after its setup completed names the purge again, which completes it, as its
+remedy and next command.
 
-**A setup at the bound.** A setup never gets stuck at that bound. When it must
-publish a new execution bundle and the host already holds 16 areas or 16
-retained resolutions, it decides before it presents its plan, and decides
-again under the mutation that publishes:
+**A setup at the bound.** When a setup must publish a new execution bundle and
+the host already holds 16 areas or 16 retained resolutions, it decides before
+it presents its plan, and decides again under the mutation that publishes. It
+has an exit in every case but one: a bound that client areas and the current
+execution bundle fill, which this build cannot free
+([B322](milestones/backlog.md#b322)):
 
 - With `--purge-old-bundles` it first retires every superseded execution
   bundle, and every area an interrupted retirement left marked as retiring,
@@ -257,10 +304,16 @@ again under the mutation that publishes:
   retirement after completion follows as usual. Retirement is never undone,
   so a setup that fails after it still leaves that room.
 - Without the flag it refuses with `controller.conflict` before any effect, and
-  names `bootwright setup --purge-old-bundles`.
+  names `bootwright setup --purge-old-bundles` as its remedy and next command.
 - When retiring would free no room, because only client areas and the current
   execution bundle hold the bound, it refuses with `controller.conflict` and
-  says so, with or without the flag.
+  says so, with or without the flag. This build retires no client area, so no
+  command of it frees that room and the result names no next command; the
+  remedy is to keep using the build whose execution bundle the host holds, or
+  to set this build up on another controller host. A controller stage whose
+  client area or retained resolution meets the bound refuses the same way,
+  naming the purge that retires superseded execution bundles
+  ([bounds](contexts/controller-record.md#bounds)).
 
 The receipt may be one whose setup completed, or one whose setup failed or was
 canceled: the next setup replaces either with a new receipt, so both are
@@ -284,34 +337,54 @@ resumption reads is in an area it retires, and no lifecycle operation runs
 while a receipt is pending. A pending receipt whose bundle holds an area needs
 no room and admits no retirement.
 
-A stranded receipt that is [setup's own](#publication-and-interrupted-setup),
-over whatever ambient route it recorded, cannot be resumed when its automation
-or provided execution foundation is not one this executable embeds, or when it
-froze dependencies other than the ones this host now selects, such as another
-platform's, and one whose setup never took effect is abandoned instead: a
-route binds only what a setup acquires, and that one acquired nothing. That
-is the receipt an earlier build left by recording the
-intent of its first action, `execution-bundle`, and then meeting the bound
-reserving that bundle's area: that action holds at most its intent and every
-later action is still planned. With `--purge-old-bundles` setup
-records that receipt `canceled`, observing its intended action as never
-started because the store holds no area for the bundle the receipt names,
-then retires every superseded execution bundle and every area left marked as
-retiring, and sets this host up afresh under this executable from its
-observed state, as the next setup after any canceled receipt does. Once that
-setup completes, the retirement after completion retires the resolution the
-canceled receipt carried, whose bundle never held an area. The one
-plan it presents names the cancellation, the retirement and the fresh setup,
-and the cancellation is durable before anything is retired. Without the flag
-setup refuses with `controller.conflict` before any effect and names
-`bootwright setup --purge-old-bundles`, and preflight refuses the same way.
-Any other stranded receipt this executable cannot resume, such as one with
-another action holding its intent or any action observed, `unknown` included,
-may have taken effect, so it is never abandoned: it refuses with
-`controller.unknown` before any effect, with or without the flag. When it froze
-dependencies other than the ones this host now selects, the refusal says so and
-names the original input to restore; otherwise it refuses as
-[another pending attempt](#publication-and-interrupted-setup) does.
+A pending receipt that is [setup's own](#publication-and-interrupted-setup),
+at the bound or below it and over whatever ambient route it recorded, cannot
+be resumed when its automation or provided execution foundation is not one
+this executable embeds, or when it froze dependencies other than the ones this
+host now selects, such as another platform's after a release upgrade, and one
+whose setup never took effect is canceled instead
+([D55](milestones/backlog.md#decisions),
+[D93](milestones/backlog.md#decisions)): a route binds only what a setup
+acquires, and nothing that one acquired took effect. Two shapes prove it. In
+the first, its first action, `execution-bundle`, holds at most its intent and
+every later action is still planned, as an earlier build leaves it that
+recorded the intent and then met the bound reserving that bundle's area, or
+lost the publication that followed; a bundle area holds private files that
+nothing reads before the receipt seals it. In the second, `execution-bundle`
+was observed `changed` or `unchanged` and the native transaction holds its
+intent with the preparation the receipt's own resolution admits, for a plan of
+at least one action, while the host's installed package inventory, read now
+from a snapshot taken under the native package read lock, still equals that
+preparation's before-state and not its after-state: the installer records the
+preparation before it stages the payloads and is authorized only after them,
+so a refusal in between, such as every Python-side download before
+[B297](milestones/m1.md#b297), leaves this shape. Setup reads that inventory
+through the native inspector, and a composition that cannot read it never
+cancels the second shape. With `--purge-old-bundles` setup records that
+receipt `canceled` under its own ID and plan, observing what it found
+([controller record](contexts/controller-record.md#record-and-receipt)); at
+the bound it then retires every superseded execution bundle and every area
+left marked as retiring; and it sets this host up afresh under this executable
+from its observed state, as the next setup after any canceled receipt does.
+Once that setup completes, the retirement after completion retires what the
+canceled receipt left: its bundle's area when it held one, and otherwise its
+resolution. The one plan it presents names the cancellation, its shape and why
+this executable cannot resume it, the retirement and the fresh setup. Under the
+mutation that records it, setup decides again, reading the inventory again,
+and refuses as controller state that changed after plan confirmation when the
+receipt, its plan, its shape or its inventory moved; the cancellation is
+durable before anything is retired. Without the flag setup refuses with
+`controller.conflict` before any effect, names
+`bootwright setup --purge-old-bundles` as its next command and says the
+receipt is at this host's bound only when it is, and preflight refuses the
+same way. Any other pending receipt this executable cannot resume, such as one
+with another action holding its intent, a native transaction whose inventory
+differs from its before-state, equals its after-state or cannot be read, or any
+action observed `unknown`, may have taken effect, so it is never canceled: it
+refuses with `controller.unknown` before any effect, with or without the flag.
+When it froze dependencies other than the ones this host now selects, the
+refusal says so and names the original input to restore; otherwise it refuses
+as [another pending attempt](#publication-and-interrupted-setup) does.
 
 Retirement records its intent before it removes anything, so an interruption
 leaves an area marked as retiring rather than an area the record still presents
@@ -321,11 +394,11 @@ also retires every area marked as retiring, except the bundle the receipt
 names, and repeating the command once completes an interrupted retirement. A
 stranded receipt stays pending with its resolution retained however its
 retirement or resumption is interrupted, and repeating the command goes on
-from what the interruption left. One being abandoned stays pending and
-stranded until its cancellation is durable; an interruption after that, during
-the retirement or the fresh setup, leaves it canceled, still at the bound
-until the retirement completes, or already replaced by the fresh setup's own
-receipt, and repeating the command completes it from there. A partially
+from what the interruption left. One being canceled stays pending until its
+cancellation is durable; an interruption after that, during the retirement or
+the fresh setup, leaves it canceled, at the bound still there until the
+retirement completes, or already replaced by the fresh setup's own receipt,
+and repeating the command completes it from there. A partially
 removed area is never readable, published into, or counted as retained.
 
 ## Selection and command journeys
@@ -361,9 +434,9 @@ Global SSH flags remain unconsumed.
 
 | Invocation | Required behavior |
 | --- | --- |
-| `bootwright setup --dry-run` | Produce deterministic dependency intent and actions from policy and bounded local file metadata. No stored evidence is read, so this stays below the privilege boundary. No dependency subprocess, network, Secret read, privilege escalation or write. Versions requiring live resolution and readiness facts requiring effects are explicitly unverified. |
+| `bootwright setup --dry-run` | Produce deterministic dependency intent and actions from policy and bounded local file metadata; with `--purge-old-bundles`, plan the retirement that follows the setup's completion. No controller record is read, so this stays below the privilege boundary. No dependency subprocess, network, Secret read, privilege escalation or write. Versions requiring live resolution and readiness facts requiring effects are explicitly unverified. The `state-root` check reports, from an unprivileged look at the state root, an absent root, which setup creates, or a `root:root` `0700` directory on a local filesystem, whose contents setup verifies. A root of another type, owner or mode, one on an unqualified filesystem, and, when the root's owner runs the dry run, one holding state this build cannot read, such as an earlier build's, are not ready: the dry run reports the check beside the store's own refusal and remedy, and exits 1. |
 | `bootwright setup` | Inspect, present the complete bounded local plan, confirm when it contains changes, prepare the host dependencies and verify every required postcondition. Publish no binding and record no context on the receipt. |
-| `bootwright preflight controller` | Read and verify the host prerequisites with bounded local probes. May use the verified privilege boundary for private metadata and disposable local probe scratch. |
+| `bootwright preflight controller` | Read and verify the host prerequisites with bounded local probes, the [execution foundation](#supported-host-and-dependency-selection) among them, and report the host's FIPS mode. May use the verified privilege boundary for private metadata and disposable local probe scratch. |
 | `bootwright preflight controller --context <name>` | Additionally report that context's own target tools, libvirt client, hypervisor and installer-media closures, and host binding as context-scoped checks, by presence only, exactly as [its controller stage](#the-controller-stage) reads them. Contact no publisher and read no repository metadata for them. |
 
 Neither command installs, downloads, refreshes repository metadata, contacts a
@@ -377,7 +450,9 @@ unverified checks visibly labeled; it never reports completed setup. Preflight
 requires positive current evidence for all selected checks; an unbound context
 is a failure that names its controller stage when it has one, and otherwise
 `apply --context <name>`, whose first apply publishes the binding, distinct
-from host mismatch, which names the restored host.
+from host mismatch, which names the restored host. Its binding check observes
+that it is not yet bound and that its first apply binds it, and stays not
+ready rather than pending.
 
 Real setup first resolves dependencies in disposable unprivileged staging.
 This phase may download verified public bootstrap payloads, run wheel-only pip
@@ -689,7 +764,9 @@ Every approved source is HTTPS, so `HTTPS_PROXY` alone selects the route and
 follows the same grammar as a declared external Proxy: an absolute HTTP or
 HTTPS URL, bounded and ASCII, with no `userinfo`, path, query or fragment. A
 credential-bearing endpoint refuses, so this route never carries a secret and
-needs no Secret consumer.
+needs no Secret consumer. The endpoint's host is recorded in lowercase, as the
+setup receipt records it, so every endpoint the route admits is one the
+receipt accepts.
 
 `NO_PROXY` is a comma-separated list of the same bypass entries a declared
 [proxy choice](api/infrastructure-services.md#proxy-choice) carries: a host
@@ -821,10 +898,12 @@ mutation with recovery guidance. Never turn a lost child result into failure
 with a presumed no-effect outcome. Changed input, host identity or dependency
 closure cannot replace an incomplete setup; restore the exact compatible
 executable/dependencies and resolve that receipt first. The one exception is a
-receipt stranded at the bound that this executable cannot resume, whose setup
-never took effect, which `setup --purge-old-bundles`
-[abandons](#supported-host-and-dependency-selection) on the observation that
-its bundle holds no area.
+pending receipt of setup's own, at the bound or below it, that this executable
+cannot resume and whose setup never took effect, which
+`setup --purge-old-bundles` [cancels](#supported-host-and-dependency-selection)
+on what it observes: that the receipt's bundle was never published, or that
+the host's package inventory still equals the before-state its native
+transaction recorded.
 
 Whether a pending receipt is this setup's own is decided without a context,
 because setup records none: a receipt that names one is never setup's, and a
@@ -832,7 +911,7 @@ context's preflight compares neither its own context, nor its controller
 Machine's route with the ambient route the receipt recorded, nor a binding
 action setup never plans. Setup and a context-free preflight read that ambient
 route and still compare it, so setup resumed over another route refuses. A
-stranded receipt setup [abandons](#supported-host-and-dependency-selection) is
+pending receipt setup [cancels](#supported-host-and-dependency-selection) is
 never resumed, so its route is not compared.
 Another pending attempt refuses, naming the executable that recorded it and the
 `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` values it ran with, then
@@ -862,7 +941,7 @@ inspection; no-op repetition revalidates without republishing. A later input
 or Bootwright automation revision may select a new bundle through a fresh setup.
 Preflight reports an incompatible retained bundle without resolving a replacement;
 an incomplete receipt still requires its original compatible executable, unless
-it is one setup abandons at the bound. An
+it is one setup cancels. An
 input update may change a context's controller prerequisite intent, which its
 next controller stage installs, but cannot silently change an established
 controller Machine/host binding. A host prerequisite that loses readiness is
@@ -875,7 +954,13 @@ state follows the
 Both commands are text-only. Order checks and actions by catalog dependency
 order, then stable prerequisite identity. Show the baseline or explicit context
 scope, the resolved acquisition route with what selected it, required/observed
-versions, planned changes, readiness and next safe command. Both commands stream
+versions, planned changes, readiness and next safe command. A direct route
+names what chose it too: `direct (no HTTPS_PROXY)` for an invoking environment
+that names no proxy, and `direct (Machine <name>)` for a context's controller
+Machine. A refused or failed setup's next command is the `bootwright` command
+its remediation names, and it names none when the remediation names none, as
+beside a confirmation refusal, whose remedy repeats the operator's own
+invocation with `--yes`. Both commands stream
 [long-running progress](cli/output.md#long-running-progress): the scope, then
 one `Checks` row per host check as it is verified. Real setup adds one
 `Resolving` step per dependency family it resolves before the plan, and one
@@ -886,13 +971,17 @@ credentials, environment dumps and raw native-tool output are not public
 results. The one private path setup names is the directory of the
 [setup run](cli/output.md#setup-run-output) keeping its controller Ansible's
 output, as a `Logs` field before that Ansible starts and again with the
-result; what that Ansible printed stays in the run. Neither command has JSON
-output, a lifecycle receipt or a private operation log.
+result; what that Ansible printed stays in the run, and a failure of that
+Ansible leads its remedy with the run's `run.output` and that reading it needs
+root. Neither command has JSON output, a lifecycle receipt or a private
+operation log.
 What setup's dependency resolution read but did not refuse, such as a
 publisher page of a newer Index API minor, is a `[WARN]` diagnostic on standard
-error with the result, whether that setup completes or stops; it never changes
-the outcome or exit status, and a setup that reuses a retained resolution reads
-no publisher and reports none.
+error, written once: just before the plan when setup presents one, so before
+its prompt, and otherwise with the result, whether that setup completes or
+stops ([D91](milestones/backlog.md#decisions)). It never changes the outcome or
+exit status, and a setup that reuses a retained resolution reads no publisher
+and reports none.
 
 Each check reports `ready` or `not-ready`, or `unverified` where a dry run
 cannot verify it.

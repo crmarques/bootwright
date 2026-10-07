@@ -118,7 +118,7 @@ func TestArtifactEndpointSelectionAndHTTPContent(t *testing.T) {
 			t.Fatalf("invalid artifact selection accepted: %v", invalid)
 		}
 	}
-	if issues := ValidateArtifactEndpoint(selection, api.Catalog{}, "$.selection", false); len(issues) == 0 {
-		t.Fatal("missing typed service reference accepted")
+	if issues := ValidateArtifactEndpoint(selection, api.Catalog{}, "$.selection", false); len(issues) != 0 {
+		t.Fatalf("an unresolved serverRef, which the schema reference check reports, was reported again: %v", issues)
 	}
 }

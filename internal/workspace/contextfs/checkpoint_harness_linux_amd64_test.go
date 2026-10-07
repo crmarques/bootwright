@@ -844,6 +844,7 @@ func checkpointScenarios() []checkpointScenario {
 		checkpointControllerRecordScenario(),
 		checkpointControllerBundleScenario(),
 		checkpointRetirementScenario(),
+		checkpointSetupRunScenario(),
 		checkpointClientAreaScenario(),
 		checkpointRetainedDependenciesScenario(),
 		checkpointMediaAddScenario(),
@@ -950,6 +951,9 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointSyncDirectory: 7, checkpointBeforeControllerRename: 2,
 			checkpointAfterControllerRename: 2, checkpointAfterControllerBundleRetiring: 1,
 			checkpointBeforeControllerBundleUnlink: 2,
+		},
+		"setup-run": {
+			checkpointSyncDirectory: 3, checkpointMkdir: 1,
 		},
 		"client-area": {
 			checkpointBeforeClientAreaReservation: 1, checkpointCreateFile: 3, checkpointWriteFile: 3,
@@ -1940,16 +1944,22 @@ func checkpointRetainedDependenciesScenario() checkpointScenario {
 }
 
 // checkpointMediaHolds requires exactly the listed images, by name and digest,
-// and a media directory holding nothing else.
+// each holding the bytes its record states, and a media directory holding
+// nothing else.
 func checkpointMediaHolds(ctx context.Context, store *Store, want map[string]string) error {
 	listed := map[string]string{}
+	var images []media.Image
 	if err := store.ReadMedia(ctx, func(view media.View) error {
 		entries, err := view.Entries(ctx)
 		for _, entry := range entries {
 			listed[entry.Name] = entry.SHA256
 		}
+		images = entries
 		return err
 	}); err != nil {
+		return err
+	}
+	if err := checkpointIntactImages(images); err != nil {
 		return err
 	}
 	if len(listed) != len(want) {
@@ -1976,8 +1986,11 @@ func checkpointMediaHolds(ctx context.Context, store *Store, want map[string]str
 
 // checkpointMediaImage reports the digest the store lists for demo.iso, and
 // whether the name is occupied, which it is while an image lacks its record.
+// A listed image whose bytes differ from its record refuses, so a torn
+// publication is never taken for a converged one.
 func checkpointMediaImage(ctx context.Context, store *Store) (string, bool, error) {
 	digest, occupied := "", false
+	var images []media.Image
 	err := store.ReadMedia(ctx, func(view media.View) error {
 		names, err := view.Names(ctx)
 		if err != nil {
@@ -1990,9 +2003,25 @@ func checkpointMediaImage(ctx context.Context, store *Store) (string, bool, erro
 				digest = entry.SHA256
 			}
 		}
+		images = entries
 		return err
 	})
+	if err == nil {
+		err = checkpointIntactImages(images)
+	}
 	return digest, occupied, err
+}
+
+// checkpointIntactImages refuses an image listed with fewer or more bytes
+// than its record states. A media read lists such an image rather than
+// refusing it, so the harness proves that no interruption publishes one.
+func checkpointIntactImages(images []media.Image) error {
+	for _, image := range images {
+		if image.Observed != image.Size {
+			return fmt.Errorf("image %s holds %d bytes, but its record states %d", image.Name, image.Observed, image.Size)
+		}
+	}
+	return nil
 }
 
 // checkpointMediaScenario fills what media publications share: media list and
@@ -2090,8 +2119,12 @@ func checkpointMediaDeleteScenario() checkpointScenario {
 }
 
 // unopenedAcquirer is the source of an add that must publish a retained stage:
-// opening it fails the add.
+// opening it fails the add, while naming its origin opens nothing.
 type unopenedAcquirer struct{}
+
+func (unopenedAcquirer) Origin(source media.Source) (string, error) {
+	return "file://" + source.Path, nil
+}
 
 func (unopenedAcquirer) Open(context.Context, media.Source) (media.Acquisition, error) {
 	return media.Acquisition{}, errors.New("the retained image was acquired again")

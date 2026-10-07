@@ -131,16 +131,18 @@ func TestTheRetainedOperationRefusalsMatchTheirGolden(t *testing.T) {
 	matchesGolden(t, "lifecycle-retained-maximum", withoutIdentities(data), false)
 }
 
-// Evidence the guard cannot read admits no deletion, acknowledged or not, so
-// the exit of a refusal at the bound over it names restoring the store for
-// either verb, never a deletion or the init after one.
-func TestTheRetainedOperationExitOverUnreadableEvidenceNamesNoDeletion(t *testing.T) {
+// Over evidence the guard cannot read only the orphan acknowledgement deletes
+// the context, so the exit of a refusal at the bound over it names, for
+// either verb, that deletion, which cannot list what it abandons, and the
+// init after it, never a destroy.
+func TestTheRetainedOperationExitOverUnreadableEvidenceNamesTheAcknowledgedDeletion(t *testing.T) {
 	h := newHarness(t, "alpha")
 	h.workspace.evidence = []byte(`{`)
 	view := h.workspace.view()
+	want := unlistedDeletion + ", then create it again with bootwright context init --name lab from its original configuration and input"
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
-		if exit := retainedExit(context.Background(), view, h.service.store(view), verb); exit != unreadableEvidenceExit {
-			t.Fatalf("the %s exit over unreadable evidence is %q, want %q", verb, exit, unreadableEvidenceExit)
+		if exit := retainedExit(context.Background(), view, h.service.store(view), verb); exit != want {
+			t.Fatalf("the %s exit over unreadable evidence is %q, want %q", verb, exit, want)
 		}
 	}
 }

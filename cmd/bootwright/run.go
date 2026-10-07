@@ -129,7 +129,7 @@ func interactiveProcess(classification cli.InvocationClass, args []string, stdou
 	// A terminal gets its running progress row rewritten in place within the
 	// width it can erase; a pipe or file receives every row appended.
 	columns := terminalColumns(stdout)
-	controllerPresenter := cli.NewControllerPresenter(stdout, columns)
+	controllerPresenter := cli.NewControllerPresenter(stdout, stderr, columns)
 	lifecycleProgress := cli.NewInvocationProgress(stdout, columns, classification.JSON)
 	// An operation records the build the version command reports, which names
 	// the commit of a build stamped with no version.
@@ -145,6 +145,7 @@ func interactiveProcess(classification cli.InvocationClass, args []string, stdou
 		Presenter:          controllerPresenter,
 		LifecycleProgress:  lifecycleProgress,
 		LifecyclePresenter: cli.NewLifecyclePlanPresenter(stdout),
+		MediaPresenter:     cli.NewMediaChangePresenter(stdout),
 		Executable:         lifecycle.Executable{Version: build.Version, Commit: build.Commit},
 		AmbientRoute:       route,
 	}

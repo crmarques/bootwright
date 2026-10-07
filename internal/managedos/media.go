@@ -23,6 +23,9 @@ const (
 	// MaxMediaName keeps an image's record name, the image name followed by
 	// .json, within one 255-byte file name.
 	MaxMediaName = 250
+	// MaxMediaOrigin bounds each text field of a record, the credential-free
+	// origin among them.
+	MaxMediaOrigin = 512
 )
 
 // MediaEntry is one image of the host-wide installer media store: its name, the
@@ -104,8 +107,15 @@ func ValidMediaEntry(entry MediaEntry) bool {
 	return entry.Source != "" && entry.Added != ""
 }
 
+// ValidMediaOrigin admits the credential-free origin a record can carry: one
+// non-empty text of at most MaxMediaOrigin bytes of valid UTF-8, with no
+// control character and no leading or trailing white space.
+func ValidMediaOrigin(origin string) bool {
+	return origin != "" && safeMediaText(origin)
+}
+
 func safeMediaText(value string) bool {
-	if len(value) > 512 || !utf8.ValidString(value) || strings.TrimSpace(value) != value {
+	if len(value) > MaxMediaOrigin || !utf8.ValidString(value) || strings.TrimSpace(value) != value {
 		return false
 	}
 	return !strings.ContainsFunc(value, func(c rune) bool { return c < 0x20 || c == 0x7f })

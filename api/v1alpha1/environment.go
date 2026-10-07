@@ -7,7 +7,7 @@ func environmentSchema() *Shape {
 		field("resources", nonemptyArray(set(nonempty()))), field("containerClusters", nonemptyArray(set(nonempty()))), field("storageClusters", nonemptyArray(set(nonempty()))),
 		field("remoteMachinesAccessKey", record(required("keyRef", secret("sshKeyPair")))),
 		field("defaults", &Shape{Type: Mapping, KindDefaults: true}),
-		field("downloads", record(field("openshiftClientsMirror", url()), field("virtctlMirror", url()), field("helmMirror", url()))),
+		field("downloads", record(field("openshiftClientsMirror", lexical("mirror-url")), field("virtctlMirror", lexical("mirror-url")), field("helmMirror", lexical("mirror-url")))),
 		field("dependencyVersions", dependencyVersions()),
 		required("controller", record(required("machineRef", ref(Machine)))),
 		field("lifecycle", record(field("rescue", record(required("imageRef", ref(MachineImage)), required("os", record(required("family", enumeration("rhel")), required("version", nonempty()), required("architecture", enumeration("x86_64", "aarch64")))), required("artifactServerEndpoint", artifactEndpoint()))))),

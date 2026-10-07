@@ -67,9 +67,6 @@ spec:
       - name: eth3
         macAddress: 02:00:00:00:00:03
 
-    boot:
-      nicRef: eth0
-
     management:
       bmc:
         address: https://bmc-storage-a-01.example.com/redfish/v1/Systems/1

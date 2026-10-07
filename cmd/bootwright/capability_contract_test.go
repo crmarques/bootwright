@@ -1089,7 +1089,7 @@ func contractArtifactServerPresence(t *testing.T, execution lifecycle.Execution)
 	}
 	fingerprint := ""
 	if request.TLS != nil {
-		certificate, err := artifactserver.ValidateServingCertificate(execution.Material[request.TLS.Secret], nil, time.Now())
+		certificate, err := artifactserver.ValidateServingCertificate(execution.Material[request.TLS.Secret], request.TLS.Secret, execution.Context, nil, time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}

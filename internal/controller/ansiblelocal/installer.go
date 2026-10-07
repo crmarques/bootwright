@@ -3,6 +3,7 @@ package ansiblelocal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 
 	"github.com/crmarques/bootwright/ansible"
@@ -77,7 +78,53 @@ func (installer Installer) Clients(ctx context.Context, installation prerequisit
 	if err != nil {
 		return result, err
 	}
-	return installer.runner(ctx, installation.Launch, request, installation.Release, installation.Publish, installation.Progress, installation.Output)
+	return installer.runner(ctx, installation.Launch, request, installation.Release, installation.Publish, installation.Progress, swallowing(installation.Output))
+}
+
+// swallowing hands the runner an output that never fails, whatever the
+// output it wraps does: os/exec stops copying from a writer that fails, and
+// the Ansible could then block on a full pipe. Retention is troubleshooting
+// material only, so a lost write changes nothing else. A nil output, which
+// keeps nothing, stays nil.
+func swallowing(output prerequisites.RunOutput) prerequisites.RunOutput {
+	if output == nil {
+		return nil
+	}
+	return swallowingOutput{output}
+}
+
+type swallowingOutput struct{ output prerequisites.RunOutput }
+
+func (s swallowingOutput) Write(value []byte) (int, error) {
+	_, _ = s.output.Write(value)
+	return len(value), nil
+}
+
+// readingRunOutput leads a failure of setup's own Ansible with where that
+// Ansible's output is kept and that only root reads it, because what the
+// failure does not say is in that file. A failure of any other kind, or one
+// whose output no run kept, is returned unchanged.
+func readingRunOutput(err error, output prerequisites.RunOutput) error {
+	run, kept := output.(interface{ Location() string })
+	var scoped *prerequisites.ScopedFailure
+	if !kept || run.Location() == "" || !errors.As(err, &scoped) {
+		return err
+	}
+	read := *scoped
+	read.Correction = "Read " + run.Location() + "/run.output as root for what the Ansible printed, then " + sentenceCase(scoped.Correction)
+	if err != error(scoped) {
+		return errors.Join(&read, err)
+	}
+	return &read
+}
+
+// sentenceCase lowers a correction's first letter where it begins a sentence,
+// leaving an initialism such as HTTPS_PROXY as written.
+func sentenceCase(correction string) string {
+	if len(correction) < 2 || correction[0] < 'A' || correction[0] > 'Z' || correction[1] < 'a' || correction[1] > 'z' {
+		return correction
+	}
+	return string(correction[0]+'a'-'A') + correction[1:]
 }
 
 // invoke runs setup's own Ansible, whose output goes to the setup run the
@@ -103,8 +150,8 @@ func (installer Installer) invoke(ctx context.Context, area prerequisites.Bundle
 	}
 	err = installer.ExecutionGuard.WithPython(ctx, area, definition.Execution, func(launch prerequisites.PythonLaunch, release func() error) error {
 		var runErr error
-		result, runErr = installer.runner(ctx, launch, request, release, publish, progress, output)
-		return runErr
+		result, runErr = installer.runner(ctx, launch, request, release, publish, progress, swallowing(output))
+		return readingRunOutput(runErr, output)
 	})
 	return result, err
 }

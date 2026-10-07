@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func fixtureRequest(t *testing.T) Request {
@@ -126,5 +129,46 @@ func TestAbsenceEvidenceProvesRemoval(t *testing.T) {
 	}
 	if err := ValidatePresence(absenceEvidence(testDigest), request, testDigest, testFingerprint); err == nil {
 		t.Fatal("absence evidence proved presence")
+	}
+}
+
+// Readiness proves a listener only through an address it probes. A request an
+// earlier build froze with a wildcard bind and no endpoint, or none for one of
+// its listeners, names nothing an answer could prove, so such a server never
+// reads as complete: everything present is a partial realization instead.
+func TestPresenceRefusesAnUnprobedListener(t *testing.T) {
+	httpsOnly := field("endpoints", api.ListValue(api.MapValue(text("name", "ip-https"), text("listenerRef", "https"), text("addressRef", "ip"))))
+	for name, test := range map[string]struct {
+		server api.Object
+		want   string
+	}{
+		"no endpoint at all":       {artifactServer(text("bindAddress", "0.0.0.0"), field("endpoints", api.ListValue())), "the frozen artifact-server request names no address readiness can probe"},
+		"a listener with no probe": {artifactServer(text("bindAddress", "::"), httpsOnly), "listener http has no address readiness can probe"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			requests, err := Requests(catalogOf(controller(), test.server), "controller", testContext)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := requests[0]
+			var evidence Evidence
+			if err := json.Unmarshal(presenceEvidence(request, testDigest, testFingerprint), &evidence); err != nil {
+				t.Fatal(err)
+			}
+			if evidence.Listeners == nil {
+				evidence.Listeners = []ListenerEvidence{}
+			}
+			data, err := json.Marshal(evidence)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reported := diagnostics.Of(ValidatePresence(data, request, testDigest, testFingerprint))
+			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != test.want {
+				t.Fatalf("presence = %#v, want the refusal %q", reported, test.want)
+			}
+			if err := ValidatePartial(data, request, testDigest, testFingerprint); err != nil {
+				t.Fatalf("a present server readiness cannot prove was not partial: %v", err)
+			}
+		})
 	}
 }

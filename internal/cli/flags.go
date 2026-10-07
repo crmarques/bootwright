@@ -61,9 +61,19 @@ func boolValue(flags *pflag.FlagSet, name string) bool {
 	return value
 }
 
+// arrayValue reads every occurrence of a repeatable flag as given. pflag's
+// typed getter re-parses the flag's printed form, which drops a lone empty
+// occurrence, so validation would never see the empty token it refuses.
 func arrayValue(flags *pflag.FlagSet, name string) []string {
-	value, _ := flags.GetStringArray(name)
-	return value
+	flag := flags.Lookup(name)
+	if flag == nil {
+		return nil
+	}
+	values, ok := flag.Value.(pflag.SliceValue)
+	if !ok {
+		return nil
+	}
+	return values.GetSlice()
 }
 
 func normalizeScalar(flags *pflag.FlagSet, name, value string) {

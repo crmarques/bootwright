@@ -67,6 +67,7 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 	repository := testRepository(root)
 	services := testServices(t, repository, root)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	addSecretInput(t, input, "environment.yaml", strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test"))
 	before, err := repository.View(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +121,7 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 	}
 	err = command.Wait()
 	var exit *exec.ExitError
-	if !errors.As(err, &exit) || exit.ExitCode() != 130 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "runtime.interrupted") {
+	if !errors.As(err, &exit) || exit.ExitCode() != 130 || !strings.HasPrefix(stdout.String(), "Context update plan\n") || strings.Contains(stdout.String(), "[OK]") || !strings.Contains(stderr.String(), "runtime.interrupted") {
 		t.Fatalf("interrupt: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	after, err := repository.View(context.Background())
@@ -147,6 +148,7 @@ func TestInteractiveInterruptHelper(t *testing.T) {
 	deps := testContextWiring(t, root)
 	deps.Repository, deps.Workspace = repository, repository
 	deps.Confirmer, deps.SecretInput = confirmer, secretInputFunc(readStdin)
+	deps.Streams.Out, deps.Streams.Err = os.Stdout, os.Stderr
 	services := assembleServices(deps)
 	os.Exit(runServices(context.Background(), []string{"context", "update", "--name", "alpha", "--input-dir", os.Getenv("BOOTWRIGHT_INTERRUPT_INPUT")}, os.Stdout, os.Stderr, services, invocationHooks{begin: beginSignalOperation}))
 }

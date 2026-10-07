@@ -213,6 +213,67 @@ func (r *Resolver) Check(ctx context.Context, plan prerequisites.NativeResolvedP
 	return decodePresence(plan, data)
 }
 
+var _ prerequisites.NativeInventory = (*Resolver)(nil)
+
+// Inventory reads the digest of the installed package inventory, through the
+// helper's offline inventory operation over a database snapshot taken under
+// the provided host's own read lock. That digest is the one a native
+// resolution records as its before-state, so it proves whether a recorded
+// transaction left the inventory as it found it. It reads no repository.
+func (r *Resolver) Inventory(ctx context.Context, platform prerequisites.Platform) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if r == nil {
+		return "", failure("native dependency inspection is unavailable")
+	}
+	if _, err := databaseDirectory(platform); err != nil {
+		return "", err
+	}
+	stage, err := r.newStage(ctx, platform)
+	if err != nil {
+		return "", err
+	}
+	defer stage.release()
+	bounded, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	data, err := stage.run(bounded, helperRequest{Operation: "inventory", Platform: platform, Egress: prerequisites.SetupEgress{NoProxy: []string{}}, Snapshot: stage.snapshot, Repositories: []repository{}})
+	if err != nil {
+		return "", err
+	}
+	return decodeInventory(data)
+}
+
+// maxInventory is the helper's own bound on installed packages.
+const maxInventory = 32768
+
+// decodeInventory accepts only the inventory operation's exact report: every
+// installed package identity, bounded, the lowercase SHA-256 of that
+// inventory, and, with no plan to compare, roots reported ready.
+func decodeInventory(data []byte) (string, error) {
+	var result struct {
+		Inventory       []prerequisites.NativeIdentity `json:"inventory"`
+		InventorySHA256 string                         `json:"inventorySHA256"`
+		RootsReady      bool                           `json:"rootsReady"`
+	}
+	invalid := func() (string, error) {
+		return "", failure("native inspection returned an invalid package inventory")
+	}
+	if strictDecode(data, &result) != nil || !result.RootsReady || len(result.Inventory) == 0 || len(result.Inventory) > maxInventory {
+		return invalid()
+	}
+	digest, err := hex.DecodeString(result.InventorySHA256)
+	if err != nil || len(digest) != sha256.Size || hex.EncodeToString(digest) != result.InventorySHA256 {
+		return invalid()
+	}
+	for _, installed := range result.Inventory {
+		if installed.Name == "" || len(installed.Name) > 128 || installed.Version == "" || len(installed.Version) > 128 || installed.Release == "" || len(installed.Release) > 128 || installed.Architecture == "" || len(installed.Architecture) > 128 || installed.Epoch < 0 {
+			return invalid()
+		}
+	}
+	return result.InventorySHA256, nil
+}
+
 // decodePresence accepts only a report naming every selected root of the plan
 // in order. Installed identities are bounded display evidence.
 func decodePresence(plan prerequisites.NativeResolvedPlan, data []byte) (prerequisites.NativePresence, error) {

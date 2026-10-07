@@ -602,8 +602,8 @@ records `status` read, so it never offers a command those records refuse:
   records or evidence no index accounts for, which both verbs refuse, only the
   deletion their refusal names,
   `bootwright context delete --name <name> --purge`, with `--allow-orphans`
-  unless the evidence reads pristine, and nothing over evidence the deletion
-  cannot read;
+  unless the evidence reads pristine, which over evidence the guard cannot
+  read abandons what it cannot list;
 - over an apply that has not completed, its continuation, which only
   [finalizes](state-reconciliation.md#lifecycle-unit) an apply whose blocks are
   all `done`, a `failed` one included, unless a lost block record refuses it,
@@ -860,8 +860,9 @@ names what that change needs and costs: `context update` refuses while an
 operation is incomplete, as the
 [mutation guard](state-reconciliation.md#context-mutation-evidence) states; an
 input that drops a Machine another object references, such as a cluster
-member, does not compile; and each update publishes a new input revision, so
-after a completed apply the next apply no longer settles but refuses the
+member, does not compile; and each update that changes the input publishes a
+new input revision, so after a completed apply the next apply no longer
+settles but refuses the
 changed input until a [destroy](state-reconciliation.md#lifecycle-unit). The
 Machine reached locally is the
 [controller Machine](api/environment.md#controller-machine), which leaves the

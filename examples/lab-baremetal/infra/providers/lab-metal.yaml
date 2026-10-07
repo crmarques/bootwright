@@ -21,5 +21,4 @@ spec:
 
   networkAttachments:
     - name: lab-metal
-      baremetal:
-        vlan: 0
+      baremetal: {}

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"io"
 
 	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
 	addonpreflight "github.com/crmarques/bootwright/internal/addons/preflight"
@@ -40,6 +41,10 @@ type dispatchRecord struct {
 	afterCall func()
 	types     []string
 	typeCalls int
+	// mediaChange is the stored image a media spy shows on out before it
+	// answers, as the service does before its confirmation.
+	mediaChange *media.Change
+	out         io.Writer
 }
 
 func (r *dispatchRecord) called(ctx context.Context, path string, request any) error {
@@ -139,7 +144,17 @@ func (s encryptionSpy) Rotate(ctx context.Context, request encryption.Encryption
 type mediaSpy struct{ record *dispatchRecord }
 
 func (s mediaSpy) Add(ctx context.Context, request media.AddMediaRequest) (*media.MutationResult, error) {
+	if err := s.present(ctx); err != nil {
+		return nil, err
+	}
 	return s.record.result.mediaMutation, s.record.called(ctx, "media add", request)
+}
+
+func (s mediaSpy) present(ctx context.Context) error {
+	if s.record.mediaChange == nil {
+		return nil
+	}
+	return NewMediaChangePresenter(s.record.out).PresentMediaChange(ctx, *s.record.mediaChange)
 }
 
 func (s mediaSpy) List(ctx context.Context, request media.ListMediaRequest) (*media.ListResult, error) {
@@ -147,6 +162,9 @@ func (s mediaSpy) List(ctx context.Context, request media.ListMediaRequest) (*me
 }
 
 func (s mediaSpy) Delete(ctx context.Context, request media.DeleteMediaRequest) (*media.MutationResult, error) {
+	if err := s.present(ctx); err != nil {
+		return nil, err
+	}
 	return s.record.result.mediaMutation, s.record.called(ctx, "media delete", request)
 }
 

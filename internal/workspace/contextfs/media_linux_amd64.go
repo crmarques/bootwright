@@ -162,14 +162,16 @@ func (a *mediaArea) Names(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
-// Entries lists every image whose record and bytes are both present. An
-// interrupted publication is occupied but not complete, so it is not listed.
-func (a *mediaArea) Entries(ctx context.Context) ([]managedos.MediaEntry, error) {
+// Entries lists every image whose record and bytes are both present, each with
+// the size its bytes have now. An interrupted publication is occupied but not
+// complete, so it is not listed; an image whose size no longer matches its
+// record is listed with the size observed, so the rest of the store still is.
+func (a *mediaArea) Entries(ctx context.Context) ([]media.Image, error) {
 	names, err := a.Names(ctx)
 	if err != nil {
 		return nil, err
 	}
-	entries := []managedos.MediaEntry{}
+	images := []media.Image{}
 	for _, name := range names {
 		data, err := readBounded(ctx, a.dir, name+".json", managedos.MaxMediaRecord, true)
 		if errors.Is(err, syscall.ENOENT) {
@@ -189,19 +191,15 @@ func (a *mediaArea) Entries(ctx context.Context) ([]managedos.MediaEntry, error)
 		if err != nil {
 			return nil, safeError(err)
 		}
-		if size != entry.Size {
-			return nil, mediaFailure("image "+name+" no longer holds the number of bytes its record published",
-				"replace or delete the image with bootwright media add or bootwright media delete")
-		}
-		entries = append(entries, entry)
+		images = append(images, media.Image{MediaEntry: entry, Observed: size})
 	}
-	return entries, nil
+	return images, nil
 }
 
 // Entry reports the record published for one image when this store can read
-// and decode it, whether or not the image's bytes still match it. It only tells
-// a confirmed entry from a changed one, so a damaged image stays replaceable and
-// deletable, as the refusal that lists it directs.
+// and decode it, whether or not the image's bytes still match it. It only shows
+// and tells a confirmed entry from a changed one, so a damaged image stays
+// replaceable and deletable.
 func (a *mediaArea) Entry(ctx context.Context, name string) (managedos.MediaEntry, bool, error) {
 	if err := a.available(ctx, false); err != nil {
 		return managedos.MediaEntry{}, false, err
@@ -217,15 +215,16 @@ func (a *mediaArea) Entry(ctx context.Context, name string) (managedos.MediaEntr
 	return entry, err == nil, nil
 }
 
-// Retained names every image whose stage is retained beside its record. It is
-// a read: it probes no stage lock and repairs nothing.
-func (a *mediaArea) Retained(ctx context.Context) ([]string, error) {
+// Retained lists every stage retained beside its record, as the entry that
+// record states, sorted by image name. It is a read: it probes no stage lock
+// and repairs nothing.
+func (a *mediaArea) Retained(ctx context.Context) ([]managedos.MediaEntry, error) {
 	if err := a.available(ctx, false); err != nil {
 		return nil, err
 	}
-	names := []string{}
+	kept := []managedos.MediaEntry{}
 	if a.dir == nil {
-		return names, nil
+		return kept, nil
 	}
 	entries, err := directoryNames(a.dir, maxMediaDirectory)
 	if err != nil {
@@ -252,11 +251,11 @@ func (a *mediaArea) Retained(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		if retained {
-			names = append(names, pair.entry.Name)
+			kept = append(kept, pair.entry)
 		}
 	}
-	slices.Sort(names)
-	return names, nil
+	slices.SortFunc(kept, func(x, y managedos.MediaEntry) int { return strings.Compare(x.Name, y.Name) })
+	return kept, nil
 }
 
 func (a *mediaArea) size(name string) (int64, error) {
@@ -283,7 +282,11 @@ func (a *mediaArea) Digest(ctx context.Context, name string) (string, error) {
 		return "", err
 	}
 	if a.dir == nil || !managedos.ValidMediaName(name) {
-		return "", mediaFailure("the media store holds no image with that name", "list the store with bootwright media list")
+		absent := "the media store holds no image with that name"
+		if managedos.ValidMediaName(name) {
+			absent = "the media store holds no image named " + name
+		}
+		return "", mediaFailure(absent, "list the store with bootwright media list")
 	}
 	file, err := openRelative(a.dir, name, syscall.O_RDONLY, 0)
 	if err != nil {
@@ -325,30 +328,38 @@ func hashStream(ctx context.Context, source io.Reader, limit int64) (string, int
 			break
 		}
 		if err != nil {
+			// A source that names its own cause, such as a download's
+			// deadline, keeps it.
+			if len(diagnostics.Of(err)) != 0 {
+				return "", 0, err
+			}
 			return "", 0, mediaFailure("the image could not be read in full", "verify the source and repeat the command")
 		}
 	}
 	return hex.EncodeToString(hash.Sum(nil)), total, nil
 }
 
-// Frozen names every image a context reserves. A media claim is shared, so any
-// number of contexts may hold one and it blocks only deletion and replacement.
-func (a *mediaArea) Frozen(ctx context.Context) ([]string, error) {
+// Reservations maps every image a context reserves to the contexts reserving
+// it. A media claim is shared, so any number of contexts may hold one and it
+// blocks only deletion and replacement.
+func (a *mediaArea) Reservations(ctx context.Context) (map[string][]string, error) {
 	if err := a.available(ctx, false); err != nil {
 		return nil, err
 	}
-	names := []string{}
+	reserved := map[string][]string{}
 	for _, reservation := range a.stored.value.Reservations {
 		for _, key := range reservation.Keys {
 			name, found := strings.CutPrefix(key, "media:")
-			if !found || slices.Contains(names, name) {
+			if !found || slices.Contains(reserved[name], reservation.Context) {
 				continue
 			}
-			names = append(names, name)
+			reserved[name] = append(reserved[name], reservation.Context)
 		}
 	}
-	slices.Sort(names)
-	return names, nil
+	for _, holders := range reserved {
+		slices.Sort(holders)
+	}
+	return reserved, nil
 }
 
 const (

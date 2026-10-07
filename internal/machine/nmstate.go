@@ -33,11 +33,7 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 		return api.Value{}, nil
 	}
 	native := configuration.Get("nmstate")
-	path := "$.spec.network.inline.nmstate"
-	if o.Spec().Get("network").Has("configRef") {
-		path = "$.spec.network.configRef"
-	}
-	issues := validateNative(native, path, false)
+	issues := validateNative(native, configurationPath(o), false)
 	overrides := o.Spec().Get("network", "overrides")
 	if overrides.Present() {
 		issues = appendIssues(issues, validateNative(overrides, "$.spec.network.overrides", true)...)
@@ -65,6 +61,11 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 		prefix, err := netip.ParsePrefix(assignment.Get("address").Text())
 		if err != nil || prefix.Bits() == 0 {
 			issues = appendIssues(issues, invariant(field+".address", "interface assignments require an IP address with a nonzero prefix"))
+			continue
+		}
+		if reservedEnd(prefix, prefix.Addr()) != "" {
+			issues = appendIssues(issues, valueIssue(field+".address", "an IPv4 assignment is a host address of its prefix, never its network or broadcast address",
+				fmt.Sprintf("correct spec.network.addresses[%d].address on %s to a host address inside its prefix", index, o.Identity())))
 			continue
 		}
 		position := interfaceIndex(interfaces, assignment.Get("interface").Text())
@@ -122,6 +123,39 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 		native = native.With("interfaces", api.ListValue(interfaces...))
 	}
 	return native, nil
+}
+
+// configurationPath is the field a Machine's network configuration is
+// refused at: the reference it selects, or the native map it declares inline.
+func configurationPath(o api.Object) string {
+	if o.Spec().Get("network").Has("configRef") {
+		return "$.spec.network.configRef"
+	}
+	return "$.spec.network.inline.nmstate"
+}
+
+// reservedEnd names which end an IPv4 prefix shorter than /31 reserves ip is,
+// network or broadcast, and is empty for any other address or prefix.
+func reservedEnd(prefix netip.Prefix, ip netip.Addr) string {
+	if !prefix.Addr().Is4() || prefix.Bits() >= 31 {
+		return ""
+	}
+	switch ip {
+	case prefix.Masked().Addr():
+		return "network"
+	case broadcastAddress(prefix):
+		return "broadcast"
+	}
+	return ""
+}
+
+// broadcastAddress is the last address of an IPv4 prefix.
+func broadcastAddress(prefix netip.Prefix) netip.Addr {
+	bytes := prefix.Masked().Addr().As4()
+	for bit := prefix.Bits(); bit < 32; bit++ {
+		bytes[bit/8] |= 0x80 >> (bit % 8)
+	}
+	return netip.AddrFrom4(bytes)
 }
 
 func InstallAddress(o api.Object, c api.Catalog) (api.Value, []api.Issue) {

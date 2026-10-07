@@ -98,6 +98,8 @@ type controllerBundleArea struct {
 
 var _ prerequisites.BundleStream = (*controllerBundleArea)(nil)
 
+var _ prerequisites.BundleDiscard = (*controllerBundleArea)(nil)
+
 func (a *controllerBundleArea) close() {
 	for index := len(a.owned) - 1; index >= 0; index-- {
 		a.owned[index].file.Close()
@@ -115,7 +117,7 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 		return nil, nil
 	}
 	if stored.bundles[index].Mode == "retiring" {
-		return nil, controllerFailure("controller.state", "this controller bundle is being retired", "run bootwright setup to complete its retirement")
+		return nil, controllerFailure("controller.state", "this controller bundle is being retired", "run bootwright setup --purge-old-bundles to complete its retirement")
 	}
 	if stored.bundles[index].DirectoryInode == 0 {
 		return nil, controllerFailure("controller.identity", "required controller bundle is not attributable", "run bootwright setup")
@@ -589,6 +591,51 @@ func (a *controllerBundleArea) writeFile(ctx context.Context, parent *directory,
 	}
 	held = ""
 	return nil
+}
+
+// DiscardPartial removes the file at path when it holds fewer than approved
+// bytes. Since writes stage and rename, a final name holds a short file only
+// when a build before them was killed between creating and syncing it, so the
+// exact replay publishes it again. Only the area's writer, which holds the
+// exclusive root lock under a durable intent, may remove one, never in a
+// sealed area, and only the private regular file of exactly the identity it
+// inspected.
+func (a *controllerBundleArea) DiscardPartial(ctx context.Context, path string, approved int64) error {
+	if err := a.available(ctx, false); err != nil {
+		return err
+	}
+	if !a.writable() || a.isSealed() {
+		return state("an incomplete controller bundle file may be removed only from an unsealed bundle by its writer")
+	}
+	parts, err := bundleParts(path)
+	if err != nil {
+		return err
+	}
+	if approved <= 0 || approved > maxBundleFileBytes {
+		return state("controller bundle file bound is invalid")
+	}
+	parent, name, close, err := a.parent(parts)
+	if err != nil {
+		return err
+	}
+	defer close()
+	file, err := openRelative(parent, name, pathHandle, 0)
+	if err != nil {
+		return safeError(err)
+	}
+	identity, err := statHandle(file)
+	file.Close()
+	if err != nil || !privateBundleFile(identity, parent) || identity.Size < 0 || identity.Size >= approved {
+		return state("controller bundle file is not an incomplete write this store may remove")
+	}
+	a.scanned = false
+	if err := unlinkVerified(parent, name, identity, false); err != nil {
+		return err
+	}
+	if err := a.store.syncDirectory(ctx, parent); err != nil {
+		return err
+	}
+	return a.available(ctx, true)
 }
 
 func (a *controllerBundleArea) Entries(ctx context.Context) ([]prerequisites.BundleEntry, error) {

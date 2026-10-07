@@ -105,26 +105,39 @@ func substituteStage(t *testing.T, store *Store, name, data string) {
 	}
 }
 
-// expectMedia asserts the complete entries a read lists, by name and digest.
+// expectMedia asserts the complete entries a read lists, by name and digest,
+// each holding exactly the bytes its record states.
 func expectMedia(t *testing.T, store *Store, want map[string]string) {
 	t.Helper()
-	err := store.ReadMedia(context.Background(), func(view media.View) error {
-		entries, err := view.Entries(context.Background())
-		if err != nil {
-			return err
-		}
-		listed := map[string]string{}
-		for _, entry := range entries {
-			listed[entry.Name] = entry.SHA256
-		}
-		if !maps.Equal(listed, want) {
-			return fmt.Errorf("entries = %+v", entries)
-		}
-		return nil
-	})
-	if err != nil {
+	if err := mediaLists(store, want); err != nil {
 		t.Fatalf("media read: %v", err)
 	}
+}
+
+// mediaLists refuses unless a read lists exactly want, by name and digest,
+// and every listed image holds the bytes its record states: a read lists a
+// short image rather than refusing it, so a record published over short bytes
+// fails here.
+func mediaLists(store *Store, want map[string]string) error {
+	var images []media.Image
+	if err := store.ReadMedia(context.Background(), func(view media.View) error {
+		var err error
+		images, err = view.Entries(context.Background())
+		return err
+	}); err != nil {
+		return err
+	}
+	if err := checkpointIntactImages(images); err != nil {
+		return err
+	}
+	listed := map[string]string{}
+	for _, image := range images {
+		listed[image.Name] = image.SHA256
+	}
+	if !maps.Equal(listed, want) {
+		return fmt.Errorf("entries = %+v", images)
+	}
+	return nil
 }
 
 func addMedia(t *testing.T, store *Store, name, data string, replace bool) {
@@ -160,7 +173,7 @@ func TestMediaPublicationRetainsExactBytesAndTheirRecord(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if len(entries) != 1 || entries[0].Name != "demo.iso" || entries[0].Size != 15 || entries[0].SHA256 != mediaDigest("installer bytes") {
+		if len(entries) != 1 || entries[0].Name != "demo.iso" || entries[0].Size != 15 || entries[0].Observed != 15 || entries[0].SHA256 != mediaDigest("installer bytes") {
 			t.Fatalf("entries = %+v", entries)
 		}
 		digest, err := view.Digest(ctx, "demo.iso")
@@ -193,7 +206,7 @@ func TestMediaReplacementSupersedesBothTheRecordAndTheBytes(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if len(entries) != 1 || entries[0].Size != 12 || entries[0].SHA256 != mediaDigest("second image") {
+		if len(entries) != 1 || entries[0].Size != 12 || entries[0].Observed != 12 || entries[0].SHA256 != mediaDigest("second image") {
 			t.Fatalf("entries = %+v", entries)
 		}
 		return nil
@@ -305,17 +318,45 @@ func TestSharedMediaReservationsAreVisibleAndNeverConflict(t *testing.T) {
 		}
 	}
 	err := store.ReadMedia(ctx, func(view media.View) error {
-		frozen, err := view.Frozen(ctx)
+		reservations, err := view.Reservations(ctx)
 		if err != nil {
 			return err
 		}
-		if !slices.Equal(frozen, []string{"demo.iso"}) {
-			t.Fatalf("frozen = %v", frozen)
+		if len(reservations) != 1 || !slices.Equal(reservations["demo.iso"], []string{"example", "second"}) {
+			t.Fatalf("reservations = %v", reservations)
 		}
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// diagnosedSource serves its bytes, then fails with the cause it names itself.
+type diagnosedSource struct {
+	data  *bytes.Reader
+	cause error
+}
+
+func (s diagnosedSource) Read(buffer []byte) (int, error) {
+	if n, _ := s.data.Read(buffer); n > 0 {
+		return n, nil
+	}
+	return 0, s.cause
+}
+
+func (diagnosedSource) Close() error { return nil }
+
+// A source that names why it failed, such as a download that met its transfer
+// deadline, keeps that cause rather than a generic one.
+func TestAFillKeepsTheSourcesOwnDiagnostic(t *testing.T) {
+	store := mediaFixture(t)
+	stage := claimStage(t, store, "demo.iso")
+	cause := diagnostics.NewFailureWithRemediation("media.store", "the download from images.example did not finish within its 6-hour transfer deadline", "", "copy the image locally")
+	_, err := stage.Fill(context.Background(), diagnosedSource{data: bytes.NewReader([]byte("installer")), cause: cause}, managedos.MaxMediaBytes)
+	want := diagnostics.Of(cause)[0]
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != want.Message || reported[0].Remediation != want.Remediation {
+		t.Fatalf("the fill reported %#v, want the source's own %#v", reported, want)
 	}
 }
 
@@ -368,13 +409,16 @@ type mediaAcquirer struct {
 	opens  atomic.Int32
 }
 
+func (a *mediaAcquirer) Origin(media.Source) (string, error) {
+	if a.origin == "" {
+		return "file:///images/source.iso", nil
+	}
+	return a.origin, nil
+}
+
 func (a *mediaAcquirer) Open(context.Context, media.Source) (media.Acquisition, error) {
 	a.opens.Add(1)
-	origin := a.origin
-	if origin == "" {
-		origin = "file:///images/source.iso"
-	}
-	return media.Acquisition{Payload: a.source(), Origin: origin}, nil
+	return media.Acquisition{Payload: a.source()}, nil
 }
 
 type mediaClock struct{}
@@ -505,7 +549,8 @@ func TestConcurrentMediaAddsOfOneNameRefuseTheSecondBeforeItAcquires(t *testing.
 	}
 	err = store.ReadMedia(ctx, func(view media.View) error {
 		entries, err := view.Entries(ctx)
-		if err == nil && (len(entries) != 2 || entries[0].Name != "demo.iso" || entries[0].SHA256 != mediaDigest("first image")) {
+		if err == nil && (len(entries) != 2 || entries[0].Name != "demo.iso" || entries[0].SHA256 != mediaDigest("first image") ||
+			entries[0].Observed != entries[0].Size || entries[1].Observed != entries[1].Size) {
 			err = fmt.Errorf("entries = %+v", entries)
 		}
 		return err
@@ -977,9 +1022,9 @@ func TestMediaConfirmationsHoldNoRootLock(t *testing.T) {
 	}
 }
 
-// An image whose bytes no longer match its record makes media list refuse and
-// names replacement or deletion as the remedy, so a confirmation reviews that
-// image without listing the store: both still complete.
+// An image whose bytes no longer match its record is listed as a mismatch,
+// and a confirmation reviews that image from its record alone, so its
+// replacement and its deletion both still complete.
 func TestADamagedImageStaysReplaceableAndDeletableWithConfirmation(t *testing.T) {
 	ctx := context.Background()
 	for _, verb := range []string{"add", "delete"} {
@@ -996,8 +1041,8 @@ func TestADamagedImageStaysReplaceableAndDeletableWithConfirmation(t *testing.T)
 			if err := file.Close(); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := mediaService(store, &mediaAcquirer{}).List(ctx, media.ListMediaRequest{}); err == nil {
-				t.Fatal("a damaged image was listed")
+			if listed, err := mediaService(store, &mediaAcquirer{}).List(ctx, media.ListMediaRequest{}); err != nil || len(listed.Media) != 1 || listed.Media[0].Verified != "mismatch" {
+				t.Fatalf("a damaged image was listed as %+v (%#v)", listed, diagnostics.Of(err))
 			}
 			acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("second image") }}
 			service := media.New(store, acquirer, &mediaPrompt{store: store}, mediaClock{})
@@ -1284,7 +1329,7 @@ func TestMediaDeleteDiscardsARetainedStage(t *testing.T) {
 			t.Fatalf("reservation: %#v", diagnostics.Of(err))
 		}
 		_, err := remove(store)
-		expectMediaRefusal(t, err, "reserved by a context operation")
+		expectMediaRefusal(t, err, "image demo.iso is reserved by context example")
 		want := sortedNames(append(retainedFiles("demo.iso"), "demo.iso", "demo.iso.json")...)
 		if entries := mediaDirectory(t, store); !slices.Equal(entries, want) {
 			t.Fatalf("media directory = %v", entries)
@@ -1329,5 +1374,74 @@ func TestATornRetainedRecordLeavesItsStageAbandoned(t *testing.T) {
 	}
 	if entries := mediaDirectory(t, store); len(entries) != 0 {
 		t.Fatalf("media directory = %v", entries)
+	}
+}
+
+// An image shortened after its publication is listed at the size its bytes
+// have now rather than refusing the whole listing, so the listing marks it a
+// mismatch and still lists every other image.
+func TestAShortImageIsListedAsAMismatchNotARefusal(t *testing.T) {
+	ctx := context.Background()
+	store := mediaFixture(t)
+	addMedia(t, store, "demo.iso", "installer bytes", false)
+	addMedia(t, store, "other.iso", "other bytes", false)
+	if err := os.Truncate(filepath.Join(store.options.Root, "media", "demo.iso"), 4); err != nil {
+		t.Fatal(err)
+	}
+	err := store.ReadMedia(ctx, func(view media.View) error {
+		images, err := view.Entries(ctx)
+		if err != nil {
+			return err
+		}
+		observed := map[string][2]int64{}
+		for _, image := range images {
+			observed[image.Name] = [2]int64{image.Size, image.Observed}
+		}
+		if want := map[string][2]int64{"demo.iso": {15, 4}, "other.iso": {11, 11}}; !maps.Equal(observed, want) {
+			t.Fatalf("the record and observed sizes = %v, want %v", observed, want)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("read: %#v", diagnostics.Of(err))
+	}
+	listing, err := media.New(store, &mediaAcquirer{}, nil, mediaClock{}).List(ctx, media.ListMediaRequest{})
+	if err != nil || len(listing.Media) != 2 {
+		t.Fatalf("listing = %+v (%#v)", listing, diagnostics.Of(err))
+	}
+	if demo, other := listing.Media[0], listing.Media[1]; demo.Name != "demo.iso" || demo.Verified != "mismatch" || other.Name != "other.iso" || other.Verified != "" {
+		t.Fatalf("listing = %+v", listing.Media)
+	}
+	checked, err := media.New(store, &mediaAcquirer{}, nil, mediaClock{}).List(ctx, media.ListMediaRequest{Checksums: true})
+	if err != nil || len(checked.Media) != 2 || checked.Media[0].Verified != "mismatch" || checked.Media[0].Computed != mediaDigest("inst") ||
+		checked.Media[1].Verified != "ok" || checked.Media[1].Computed != mediaDigest("other bytes") {
+		t.Fatalf("checked listing = %+v (%#v)", checked, diagnostics.Of(err))
+	}
+}
+
+// A record published over short bytes is torn, and a read lists it rather
+// than refusing, so every helper that proves a publication converged checks
+// the bytes against the record itself: none takes the torn image for the one
+// it published.
+func TestThePublicationChecksRefuseATornImage(t *testing.T) {
+	ctx := context.Background()
+	store := mediaFixture(t)
+	addMedia(t, store, "demo.iso", "installer bytes", false)
+	want := map[string]string{"demo.iso": mediaDigest("installer bytes")}
+	if err := mediaLists(store, want); err != nil {
+		t.Fatalf("an intact image was refused: %v", err)
+	}
+	if err := os.Truncate(filepath.Join(store.options.Root, "media", "demo.iso"), 4); err != nil {
+		t.Fatal(err)
+	}
+	torn := "image demo.iso holds 4 bytes, but its record states 15"
+	if err := mediaLists(store, want); err == nil || err.Error() != torn {
+		t.Errorf("the publication check took a torn image for its publication: %v", err)
+	}
+	if err := checkpointMediaHolds(ctx, store, want); err == nil || err.Error() != torn {
+		t.Errorf("the checkpoint settled check took a torn image for its publication: %v", err)
+	}
+	if digest, _, err := checkpointMediaImage(ctx, store); err == nil || err.Error() != torn {
+		t.Errorf("the checkpoint retry took a torn image for its publication: digest %q (%v)", digest, err)
 	}
 }

@@ -38,7 +38,9 @@ func DecodeEvidence(data []byte) (Evidence, error) {
 // and started no earlier than every file it runs from was last written, the
 // owned root present, and every probe target answering. A daemon keeps what it
 // read at its start, so one started before a file was published runs a
-// configuration the frozen request no longer describes.
+// configuration the frozen request no longer describes. A request naming no
+// address to probe, as a wildcard bind without an endpoint an earlier build
+// froze does, never proves presence, because no answer can prove it.
 func ValidatePresence(data []byte, request Request, digest string) error {
 	evidence, err := DecodeEvidence(data)
 	if err != nil {
@@ -62,6 +64,10 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 	if !evidence.StartedAfterFiles {
 		return Refusal("lifecycle.state", "the managed service started before a file it runs from was last published", "")
 	}
+	targets := request.ProbeTargets()
+	if len(targets) == 0 {
+		return Refusal("lifecycle.state", "the frozen managed service request names no address readiness can probe", "")
+	}
 	answered := make([]string, 0, len(evidence.Answers))
 	for _, answer := range evidence.Answers {
 		if answer.Port != request.Port || answer.Answer == "" {
@@ -70,7 +76,7 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 		answered = append(answered, answer.Address)
 	}
 	slices.Sort(answered)
-	if !slices.Equal(slices.Compact(answered), request.ProbeTargets()) {
+	if !slices.Equal(slices.Compact(answered), targets) {
 		return Refusal("lifecycle.state", "the managed service did not answer on every declared address", "")
 	}
 	return nil

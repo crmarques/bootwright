@@ -1,0 +1,9 @@
+
+Checks
+  [RUNNING]  [1/2] Verify rhel-9.8-x86_64-boot.iso
+  [OK]       [1/2] Verify rhel-9.8-x86_64-boot.iso: matches its record  2s
+  [RUNNING]  [2/2] Verify rhel-9.8-x86_64-dvd.iso
+  [RUNNING]  [2/2] Verify rhel-9.8-x86_64-dvd.iso  still running, 10s
+  [RUNNING]  [2/2] Verify rhel-9.8-x86_64-dvd.iso  still running, 20s
+  [RUNNING]  [2/2] Verify rhel-9.8-x86_64-dvd.iso  still running, 30s
+  [FAIL]     [2/2] Verify rhel-9.8-x86_64-dvd.iso: sha256:0d9b7e5c3a1f9d7b5e3c1a0f8e6d4b2c0a8f6e4d2a1b0f3e5c6a7d9b2e8f1c4a differs from its record  31s

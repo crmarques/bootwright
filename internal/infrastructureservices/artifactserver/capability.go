@@ -102,7 +102,7 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 	}
 	impacts := []string{unit + " " + request.Unit, root + " " + request.ContentRoot}
 	for _, target := range request.ProbeTargets() {
-		impacts = append(impacts, listener+" "+target.Address+":"+formatPort(target.Port))
+		impacts = append(impacts, listener+" "+managedservice.HostPort(target.Address, target.Port))
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)
@@ -272,7 +272,7 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, 
 	if !ok {
 		return Request{}, "", refusal("secret.store", "the bound serving certificate is not available to this attempt", "repeat the operation so its Secret bindings are reopened")
 	}
-	certificate, err := ValidateServingCertificate(material, request.servedAddresses("https"), c.now())
+	certificate, err := ValidateServingCertificate(material, request.TLS.Secret, execution.Context, request.servedAddresses("https"), c.now())
 	if err != nil && verifyCertificate {
 		return Request{}, "", err
 	}

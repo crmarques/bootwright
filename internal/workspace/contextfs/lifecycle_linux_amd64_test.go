@@ -449,7 +449,7 @@ func TestEagerSecretInitializationNeedsNoDesiredInput(t *testing.T) {
 	}
 	_, err = store.ReadInputs(context.Background(), "empty")
 	diagnostics := diagnostics.Of(err)
-	if len(diagnostics) != 1 || diagnostics[0].Code != "context.input" || diagnostics[0].Message != "context has no desired state; run context update --name empty --input-dir <dir>" {
+	if len(diagnostics) != 1 || diagnostics[0].Code != "context.input" || diagnostics[0].Message != "context empty has no desired state" || diagnostics[0].Remediation != "import it with bootwright context update --name empty --input-dir <dir>" {
 		t.Fatalf("missing-input guidance: %#v", diagnostics)
 	}
 	if err := deleteContext(t, store, ready); err != nil {

@@ -2,6 +2,7 @@ package infrastructureservices
 
 import (
 	"fmt"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -23,7 +24,7 @@ func ValidateProxy(selection api.Value, c api.Catalog, field string, externalOnl
 		return issues
 	}
 	if !selection.Has("proxyRef") && !selection.Has("direct") {
-		return []api.Issue{issue(field, "proxy choice requires exactly one proxyRef or direct block")}
+		return []api.Issue{issue(field, "proxy choice requires exactly one proxyRef or direct block", "keep exactly one of proxyRef or direct")}
 	}
 	if selection.Has("direct") {
 		return nil
@@ -31,20 +32,25 @@ func ValidateProxy(selection api.Value, c api.Catalog, field string, externalOnl
 	issues := validateEndpoint(selection, c, api.Proxy, "proxyRef", field)
 	if externalOnly {
 		if proxy, ok := c.Find(api.Proxy, selection.Get("proxyRef").Text()); ok && proxy.Spec().Get("management").Text() != "external" {
-			issues = add(issues, issue(field+".proxyRef", "machine OS installation requires an external Proxy"))
+			issues = add(issues, issue(field+".proxyRef", "machine OS installation requires an external Proxy", "select an external Proxy or direct: {} in "+spelled(field)))
 		}
 	}
 	return issues
+}
+
+// spelled is a field path as a remediation writes it, without its root.
+func spelled(field string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(field, "$"), ".")
 }
 
 // ValidateProxyChoice checks local contradictions without completing partial
 // defaults or resolving references outside the selected graph.
 func ValidateProxyChoice(selection api.Value, field string) []api.Issue {
 	if selection.Has("proxyRef") && selection.Has("direct") {
-		return []api.Issue{issue(field, "proxy choice requires exactly one proxyRef or direct block")}
+		return []api.Issue{issue(field, "proxy choice requires exactly one proxyRef or direct block", "keep exactly one of proxyRef or direct")}
 	}
 	if selection.Has("direct") && (selection.Has("endpointRef") || selection.Has("noProxy")) {
-		return []api.Issue{issue(field, "direct proxy choice forbids endpointRef and noProxy")}
+		return []api.Issue{issue(field, "direct proxy choice forbids endpointRef and noProxy", "remove endpointRef and noProxy, or select a proxyRef")}
 	}
 	return nil
 }
@@ -69,7 +75,7 @@ func ValidateServerSelections(selections api.Value, c api.Catalog, kind api.Kind
 		resolved := normalizeEndpoint(selection, c, kind, "serverRef")
 		key := [2]string{resolved.Get("serverRef").Text(), resolved.Get("endpointRef").Text()}
 		if seen[key] {
-			issues = add(issues, issue(path, "server selections must identify distinct service and endpoint pairs"))
+			issues = add(issues, issue(path, "server selections must identify distinct service and endpoint pairs", "remove the repeated selection"))
 		}
 		seen[key] = true
 	}
@@ -104,24 +110,24 @@ func normalizeEndpoint(selection api.Value, c api.Catalog, kind api.Kind, ref st
 
 func validateEndpoint(selection api.Value, c api.Catalog, kind api.Kind, ref, field string) []api.Issue {
 	if !selection.Has(ref) {
-		return []api.Issue{reference(field+"."+ref, "service selection requires an explicit typed reference")}
+		return []api.Issue{reference(field+"."+ref, "service selection requires an explicit typed reference", "set "+spelled(field+"."+ref))}
 	}
 	service, ok := c.Find(kind, selection.Get(ref).Text())
 	if !ok {
-		return []api.Issue{reference(field+"."+ref, "service reference must resolve to one "+string(kind)+" object")}
+		return []api.Issue{reference(field+"."+ref, "service reference must resolve to one "+string(kind)+" object", "name a declared "+string(kind)+" in "+spelled(field+"."+ref))}
 	}
 	switch service.Spec().Get("management").Text() {
 	case "external":
 		if selection.Has("endpointRef") {
-			return []api.Issue{issue(field+".endpointRef", "external service selections forbid endpointRef")}
+			return []api.Issue{issue(field+".endpointRef", "external service selections forbid endpointRef", "remove endpointRef; an external service is reached at its declared address")}
 		}
 	case "managed":
 		resolved := normalizeEndpoint(selection, c, kind, ref)
 		if !resolved.Has("endpointRef") {
-			return []api.Issue{reference(field+".endpointRef", "managed service selection requires an endpointRef unless exactly one endpoint exists")}
+			return []api.Issue{reference(field+".endpointRef", "managed service selection requires an endpointRef unless exactly one endpoint exists", "set endpointRef to an endpoint of "+service.Identity())}
 		}
 		if !hasNamed(service.Spec().Get("endpoints"), resolved.Get("endpointRef").Text()) {
-			return []api.Issue{reference(field+".endpointRef", "endpoint reference must resolve on the selected service")}
+			return []api.Issue{reference(field+".endpointRef", "endpoint reference must resolve on the selected service", "set endpointRef to an endpoint of "+service.Identity())}
 		}
 	}
 	return nil
@@ -137,12 +143,23 @@ func ValidateArtifactEndpoint(selection api.Value, c api.Catalog, field string, 
 	if !selection.Present() {
 		return nil
 	}
-	service, ok := ArtifactEndpoint(selection, c)
-	if !ok {
-		return []api.Issue{reference(field+".serverRef", "artifact consumer requires an explicit reference to a managed ArtifactServer")}
+	if !selection.Has("serverRef") {
+		return []api.Issue{reference(field+".serverRef", "artifact consumer requires an explicit reference to a managed ArtifactServer", "set "+spelled(field+".serverRef")+" to a managed ArtifactServer")}
+	}
+	service, found := c.Find(api.ArtifactServer, selection.Get("serverRef").Text())
+	if !found {
+		return nil
+	}
+	mode := service.Spec().Get("management").Text()
+	if mode == "external" {
+		return []api.Issue{reference(field+".serverRef", service.Identity()+" is external, and an artifact consumer publishes only into a managed ArtifactServer",
+			"select a managed ArtifactServer in "+spelled(field+".serverRef")+", or declare "+service.Identity()+" with management: managed")}
+	}
+	if mode != "managed" {
+		return nil
 	}
 	if !selection.Has("endpointRef") {
-		return []api.Issue{reference(field+".endpointRef", "artifact consumer requires an explicit endpointRef")}
+		return []api.Issue{reference(field+".endpointRef", "artifact consumer requires an explicit endpointRef", "set endpointRef to an endpoint declared on "+service.Identity())}
 	}
 	for _, endpoint := range service.Spec().Get("endpoints").Items() {
 		if endpoint.Get("name").Text() != selection.Get("endpointRef").Text() {
@@ -151,11 +168,11 @@ func ValidateArtifactEndpoint(selection api.Value, c api.Catalog, field string, 
 		if requireHTTP {
 			for _, listener := range service.Spec().Get("listeners").Items() {
 				if listener.Get("name").Equal(endpoint.Get("listenerRef")) && listener.Get("protocol").Text() != "http" {
-					return []api.Issue{issue(field+".endpointRef", "hosted package content requires an HTTP artifact endpoint")}
+					return []api.Issue{issue(field+".endpointRef", "hosted package content requires an HTTP artifact endpoint", "select an endpoint whose listener uses protocol http")}
 				}
 			}
 		}
 		return nil
 	}
-	return []api.Issue{reference(field+".endpointRef", "artifact endpoint does not exist on the selected ArtifactServer")}
+	return []api.Issue{reference(field+".endpointRef", "artifact endpoint does not exist on the selected ArtifactServer", "set endpointRef to an endpoint declared on "+service.Identity())}
 }

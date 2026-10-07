@@ -83,7 +83,13 @@ func secretIOFailure(message string, err error) (error, bool) {
 }
 
 func (s *Store) SecretContext(ctx context.Context, name string) (secretstore.ContextSnapshot, error) {
+	if !contextName(name) {
+		return secretstore.ContextSnapshot{}, state("no valid current context is selected")
+	}
 	root, err := s.openRoot(ctx, false, nil)
+	if errors.Is(err, syscall.ENOENT) {
+		return secretstore.ContextSnapshot{}, contexts.AbsentContext(name)
+	}
 	if err != nil {
 		return secretstore.ContextSnapshot{}, safeError(err)
 	}
@@ -105,7 +111,7 @@ func (s *Store) SecretContext(ctx context.Context, name string) (secretstore.Con
 		return secretstore.ContextSnapshot{}, err
 	}
 	if record.Mode != contexts.Ready {
-		return secretstore.ContextSnapshot{}, state("context is incomplete; repeat its init or delete command")
+		return secretstore.ContextSnapshot{}, contexts.NotReady(record)
 	}
 	inputs := desiredstate.Sources{}
 	if record.Revision != "" {
@@ -142,7 +148,7 @@ func (s *Store) ReadSecrets(ctx context.Context, expected secretstore.Context, c
 		return err
 	}
 	if record.Mode != contexts.Ready {
-		return state("context is incomplete; repeat its init or delete command")
+		return contexts.NotReady(record)
 	}
 	container, dir, err := openSecretContext(ctx, root, record)
 	if err != nil {
@@ -194,7 +200,7 @@ func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context,
 		return err
 	}
 	if record.Mode != contexts.Ready {
-		return state("context is incomplete; repeat its init or delete command")
+		return contexts.NotReady(record)
 	}
 	registryExpected, err := registryExpectation(ctx, root, registry)
 	if err != nil {
@@ -248,7 +254,7 @@ func namedSecretRecord(registry contexts.Registry, name string) (contexts.Record
 			return record, nil
 		}
 	}
-	return contexts.Record{}, state("requested context does not exist")
+	return contexts.Record{}, contexts.AbsentContext(name)
 }
 
 func exactSecretRecord(registry contexts.Registry, expected secretstore.Context) (contexts.Record, error) {
@@ -858,7 +864,8 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 		if path == secretstore.RecordPath {
 			a.phase = secretUncertain
 		}
-		return secretstore.Uncertain, state("secret state publication has uncertain durability; inspect it before retrying")
+		return secretstore.Uncertain, contexts.StateErrorWithRemediation("secret state publication of context "+a.token.Name+" has uncertain durability",
+			"inspect it with bootwright secret encryption status --context "+a.token.Name+" and bootwright secret check --context "+a.token.Name+" before retrying")
 	}
 	a.forgetExpectation(path)
 	if err := a.rememberPublishedFile(ctx, parent, name, path, data); err != nil {

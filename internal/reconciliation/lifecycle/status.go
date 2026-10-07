@@ -277,16 +277,15 @@ func bindingsHeld(view View, operation operationstore.Operation) (int, error) {
 
 // idleSteps is what status offers beside no operation. Both verbs refuse what
 // no index accounts for and name the deletion the context guard admits, which
-// is offered instead, or nothing over evidence that guard cannot read. An
-// apply claims this host only once its setup completed, so until then setup
-// is the only step; otherwise the first plan and apply.
+// is offered instead: over evidence that guard cannot read, the orphan
+// acknowledgement, which cannot list what it abandons. An apply claims this
+// host only once its setup completed, so until then setup is the only step;
+// otherwise the first plan and apply.
 func idleSteps(view View, unindexed []string) []string {
 	switch {
 	case len(unindexed) != 0:
-		if command, admitted := deletionCommand(view); admitted {
-			return []string{command}
-		}
-		return []string{}
+		command, _ := deletionCommand(view)
+		return []string{command}
 	case !setupComplete(view.Controller()):
 		return []string{"bootwright setup"}
 	}
@@ -304,17 +303,16 @@ func idleSteps(view View, unindexed []string) []string {
 // completed apply admits a removal too, but naming it there reads as an
 // instruction to undo what just succeeded. A completed removal holding a
 // block that is not done is refused by both verbs, which name the deletion
-// the context guard admits, so that deletion is offered instead.
+// the context guard admits, so that deletion is offered instead, the orphan
+// acknowledgement over evidence the guard cannot read.
 func offered(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string, contradicted []string) ([]string, error) {
 	steps := []string{}
 	if operation.State == reconciliation.OperationDone {
 		if operation.Verb != reconciliation.Destroy || len(unfinishedBlocks(frozen, states)) == 0 {
 			return steps, nil
 		}
-		if command, admitted := deletionCommand(view); admitted {
-			steps = append(steps, command)
-		}
-		return steps, nil
+		command, _ := deletionCommand(view)
+		return append(steps, command), nil
 	}
 	refused, err := uncontinuable(ctx, store, operation, frozen)
 	if err != nil {

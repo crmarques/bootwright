@@ -168,6 +168,44 @@ func (t *transaction) Publish(ctx context.Context, name, environment string, sou
 	return "", state("input revision reservation exhausted its collision limit")
 }
 
+// Unchanged reports whether sources, with their Environment directory, freeze
+// exactly the context's selected revision: the manifest a publication would
+// write, its revision aside, equals the selected one, whose frozen bytes still
+// verify. A selected revision that cannot be read or verified is not the
+// unchanged one, so the update replaces it by publishing.
+func (t *transaction) Unchanged(ctx context.Context, name, environment string, sources desiredstate.Sources) (bool, error) {
+	if err := t.available(ctx); err != nil {
+		return false, err
+	}
+	record, err := t.record(name)
+	if err != nil || record.Revision == "" {
+		return false, err
+	}
+	candidate, _, err := prepareManifest(name, environment, sources)
+	if err != nil {
+		return false, err
+	}
+	selected, dir, close, err := openManifest(ctx, t.root, record)
+	defer close()
+	if err != nil {
+		return false, ctx.Err()
+	}
+	candidate.Revision = selected.Revision
+	if !reflect.DeepEqual(candidate, selected) {
+		return false, nil
+	}
+	for index, file := range selected.Files {
+		data, err := readBounded(ctx, dir, blobName(index), file.Size, true)
+		if err != nil || len(data) != file.Size || digest(data) != file.SHA256 {
+			return false, ctx.Err()
+		}
+	}
+	if dir.verify() != nil {
+		return false, ctx.Err()
+	}
+	return true, nil
+}
+
 // openManifest returns a complete, verified immutable manifest and owned
 // handles; close must be called even when later validation fails.
 func openManifest(ctx context.Context, root *directory, record contexts.Record) (manifest, *directory, func(), error) {

@@ -42,8 +42,8 @@ func TestAForeignOperationEntryIsRefusedByName(t *testing.T) {
 	if len(reported) != 1 || reported[0].Code != "context.state" {
 		t.Fatalf("refusal = %#v", reported)
 	}
-	if !strings.Contains(reported[0].Message, foreign) {
-		t.Fatalf("the refusal does not name the entry it refused: %q", reported[0].Message)
+	if !strings.Contains(reported[0].Message, "contexts/example/state/operations/op-leftover") || strings.Contains(reported[0].Message, store.options.Root) {
+		t.Fatalf("the refusal does not name the entry it refused relative to the store: %q", reported[0].Message)
 	}
 }
 
@@ -94,8 +94,8 @@ func TestAFileInPlaceOfAnOperationDirectoryIsRefusedByName(t *testing.T) {
 		return tx.Operations().WriteExclusive(ctx, "op-1/blocks/state.json", []byte("{}\n"))
 	})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || !strings.Contains(reported[0].Message, blocking) {
-		t.Fatalf("the refusal does not name the blocking entry: %#v", reported)
+	if len(reported) != 1 || !strings.Contains(reported[0].Message, "contexts/example/state/operations/op-1") || strings.Contains(reported[0].Message, blocking) {
+		t.Fatalf("the refusal does not name the blocking entry relative to the store: %#v", reported)
 	}
 }
 
@@ -151,8 +151,8 @@ func TestAForeignOperationEntryNamesWhatRefusedIt(t *testing.T) {
 	if len(reported) != 1 || reported[0].Code != "context.state" {
 		t.Fatalf("refusal = %#v", reported)
 	}
-	if !strings.Contains(reported[0].Message, foreign) {
-		t.Fatalf("the refusal does not name the entry it refused: %q", reported[0].Message)
+	if !strings.Contains(reported[0].Message, "contexts/example/state/operations/op-1") || strings.Contains(reported[0].Message, foreign) {
+		t.Fatalf("the refusal does not name the entry it refused relative to the store: %q", reported[0].Message)
 	}
 	if !strings.Contains(reported[0].Message, "permissions") {
 		t.Fatalf("the refusal does not name what refused the entry: %q", reported[0].Message)

@@ -27,6 +27,9 @@ or force path. The one reclaim this contract performs is the
 [housekeeping](#context-mutation-evidence) of operation directories that hold
 nothing. A completed apply must be destroyed before an apply of *changed*
 desired state can start, and an edited input refuses by naming that removal.
+Unchanged input is the context's selected revision and its frozen bytes, which
+a [context update](contexts.md#frozen-input-and-provenance) of identical input
+keeps, so that update leaves a completed apply settled.
 
 A verb whose work durable state already proves performs none of it and
 succeeds: an `apply` repeated over the unchanged input its completed apply
@@ -54,9 +57,9 @@ reading of the evidence however its record is spelled:
 `bootwright context delete --name <name> --purge`, adding `--allow-orphans`
 unless the guard reads the context's evidence as pristine, because only
 pristine evidence admits a [deletion](contexts.md#permanent-deletion) that
-acknowledges no orphan. Evidence the guard cannot read admits no deletion,
-with the acknowledgement or without, so over it the refusal names none and
-names restoring the whole store from a matching backup instead.
+acknowledges no orphan. Over evidence the guard cannot read only the
+acknowledgement deletes the context, so the refusal names it, saying that it
+cannot list what the context may still own.
 
 Before any verb, an operation whose blocks are all `done` but whose record,
 [evidence](#context-mutation-evidence), reservations, Secret bindings or
@@ -111,7 +114,8 @@ spelled otherwise than the record this build publishes, even with the same
 members, is such evidence. Deleting the context is its only exit, so the
 refusal names it as the refusal over a completed destroy holding a block that
 is not `done` does: with `--allow-orphans` unless the guard reads the evidence
-as pristine, and over evidence the guard cannot read no deletion at all.
+as pristine, which over evidence the guard cannot read cannot list what it
+abandons.
 
 Otherwise nothing claims a context holding no operation only while its
 evidence is pristine and it holds no reservation. Running evidence, or a
@@ -244,14 +248,17 @@ recreation/final deletion requires `none` operation and `none` ownership.
 Protected contexts remain named and selectable for status, exact continuation
 and destroy. Recreation never bypasses protected evidence.
 
-Deletion refuses protected evidence by default and names `destroy` as the way
-to release it. An explicit orphan acknowledgement waives that one verdict over
-recognized evidence, and nothing else: the objects the evidence still
-attributes to the context are abandoned in place, so they survive unmanaged and
+Deletion refuses protected evidence by default, naming
+`bootwright status --context <name>` as the inventory of what it owns and
+`destroy` as the way to release it. An explicit orphan acknowledgement waives
+that one verdict, and nothing else: the objects the evidence still attributes
+to the context are abandoned in place, so they survive unmanaged and
 unreferenced, and no further command can discover, continue or remove them
-through Bootwright. Missing, corrupt or unsupported evidence and a live lease
-still refuse under the acknowledgement, because an unreadable record names
-nothing an operator can acknowledge. The acknowledgement replaces no other
+through Bootwright. Over missing, corrupt or unsupported evidence nothing
+proves what the context owns, so an update and a default deletion refuse
+naming status and the acknowledged deletion, and the acknowledgement abandons
+the context saying that its objects cannot be listed. A live lease still
+refuses under the acknowledgement. The acknowledgement replaces no other
 deletion safeguard, performs no remote effect, and there is no recovery-only
 archival mode. The deleted context's host reservations go with it, as
 [permanent deletion](contexts.md#permanent-deletion) states, so the keys they
@@ -408,8 +415,8 @@ complete, synchronized bytes.
 | Durable state | Allowed lifecycle transition |
 | --- | --- |
 | no operation, or completed destroy | start a fresh apply; a `destroy` settles without effect, over no operation first releasing what an interrupted registration left |
-| no operation beside evidence or records no index accounts for | none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, and no deletion over evidence the guard cannot read |
-| completed destroy holding a block that is not `done` | none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, and no deletion over evidence the guard cannot read |
+| no operation beside evidence or records no index accounts for | none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, which cannot list what it abandons over evidence the guard cannot read |
+| completed destroy holding a block that is not `done` | none: `apply` and `destroy` refuse, naming `context delete --purge`, with `--allow-orphans` unless the evidence is pristine, which cannot list what it abandons over evidence the guard cannot read |
 | apply running | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply failed | continue that exact apply, or start a fresh destroy of the blocks it started |
 | apply failed, every block `done` | an `apply` finalizes it, recording it `done` and publishing its projection, or start a fresh destroy of its whole frozen plan |

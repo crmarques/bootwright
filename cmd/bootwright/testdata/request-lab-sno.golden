@@ -1,0 +1,92 @@
+{
+  "libvirtHosts": [
+    {
+      "identity": {
+        "block": "substrate-host-lab-libvirt",
+        "context": "lab",
+        "object": "lab-libvirt"
+      },
+      "networks": [
+        {
+          "address": "198.51.100.1/24",
+          "bridge": "virbr-lab",
+          "forward": "nat",
+          "managed": true,
+          "name": "bootwright-lab-lab-guests"
+        }
+      ],
+      "packages": [
+        "libvirt-client",
+        "libvirt-daemon",
+        "libvirt-daemon-driver-network",
+        "libvirt-daemon-driver-qemu",
+        "libvirt-daemon-driver-storage-core",
+        "qemu-img",
+        "qemu-kvm",
+        "swtpm",
+        "swtpm-tools"
+      ],
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "poolName": "bootwright-lab-lab-libvirt-vmedia",
+      "poolPath": "/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia",
+      "provisioned": false,
+      "services": [
+        "virtqemud.service",
+        "virtnetworkd.service",
+        "virtstoraged.service"
+      ],
+      "uri": "qemu:///system",
+      "version": "substrate-host-libvirt-v3"
+    }
+  ],
+  "libvirtMachines": [
+    {
+      "controller": {
+        "address": "192.0.2.1",
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "http://192.0.2.1:8000/redfish/v1/Systems/99fb0e65-44db-88dc-80ee-660148714293",
+        "image": "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e",
+        "port": 8000,
+        "unit": "bootwright-lab-bmc-sno-01"
+      },
+      "directory": "/var/lib/libvirt/images/bootwright/lab/sno-01",
+      "disks": [
+        {
+          "name": "root",
+          "path": "/var/lib/libvirt/images/bootwright/lab/sno-01/root.qcow2",
+          "sizeGiB": 120,
+          "target": "vda"
+        }
+      ],
+      "domain": "bootwright-lab-sno-01",
+      "identity": {
+        "block": "machine-sno-01",
+        "context": "lab",
+        "object": "sno-01"
+      },
+      "interfaces": [
+        {
+          "bridge": "virbr-lab",
+          "macAddress": "52:54:00:06:3e:11",
+          "name": "enp1s0",
+          "network": "bootwright-lab-lab-guests"
+        }
+      ],
+      "memoryMiB": 16384,
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "poolName": "bootwright-lab-lab-libvirt-vmedia",
+      "poolPath": "/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia",
+      "tpm": true,
+      "uri": "qemu:///system",
+      "uuid": "99fb0e65-44db-88dc-80ee-660148714293",
+      "vcpu": 8,
+      "version": "machine-libvirt-v2"
+    }
+  ]
+}

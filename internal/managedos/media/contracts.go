@@ -29,24 +29,37 @@ type Store interface {
 	MutateMedia(context.Context, func(Transaction) error) error
 }
 
+// Image is one complete image as a view lists it: the record published for it
+// and the size of the bytes the store holds now. Observed differs from the
+// record's Size when the image was shortened or extended after publication.
+type Image struct {
+	managedos.MediaEntry
+	Observed int64
+}
+
 // View is a coherent read of the store taken under its shared lock.
 type View interface {
-	// Entries lists every complete image with its published record.
-	Entries(context.Context) ([]managedos.MediaEntry, error)
+	// Entries lists every complete image with its published record and its
+	// observed size, whether or not that size still matches the record, so
+	// one damaged image never hides the rest of the store.
+	Entries(context.Context) ([]Image, error)
 	// Names lists every occupied name, including an incomplete publication, so
 	// a new image never collides with bytes this store still holds.
 	Names(context.Context) ([]string, error)
 	// Digest reads one image in full and reports its current content digest.
 	Digest(context.Context, string) (string, error)
-	// Frozen names every image a context reserves, in any context.
-	Frozen(context.Context) ([]string, error)
+	// Reservations maps every image a context reserves to the contexts that
+	// reserve it, each sorted and named once.
+	Reservations(context.Context) (map[string][]string, error)
 	// Entry reports the record published for one image, whether or not its
-	// bytes still match it, so a store that refuses to list a damaged image
-	// still confirms its replacement or deletion.
+	// bytes still match it, so a confirmation shows what it would replace or
+	// delete and the hold that acts on it proves that record unchanged.
 	Entry(context.Context, string) (managedos.MediaEntry, bool, error)
-	// Retained names every image whose verified stage a pinned add kept
-	// because its publication met another command's lock.
-	Retained(context.Context) ([]string, error)
+	// Retained lists every verified stage a pinned add kept because its
+	// publication met another command's lock, as the entry it was verified
+	// as, so a replacement's confirmation shows the source of the stage its
+	// pin adopts.
+	Retained(context.Context) ([]managedos.MediaEntry, error)
 }
 
 // Staged is one bounded image written into a stage, with the exact bytes the
@@ -94,16 +107,18 @@ type Transaction interface {
 	Delete(context.Context, string) error
 }
 
-// Acquisition is one opened media source and the credential-free origin the
-// published record retains.
+// Acquisition is one opened media source.
 type Acquisition struct {
 	Payload Payload
-	Origin  string
 }
 
 // Acquirer opens exactly one authorized media source. It performs no retry,
 // follows no redirect and never reads an ambient credential.
 type Acquirer interface {
+	// Origin reports the credential-free origin the published record retains
+	// for a source, refusing what Open would refuse. It opens nothing, so the
+	// origin is decided before anything is confirmed, claimed or acquired.
+	Origin(Source) (string, error)
 	Open(context.Context, Source) (Acquisition, error)
 }
 
@@ -115,6 +130,55 @@ type Source struct {
 
 type Confirmer interface {
 	Confirm(context.Context, string, string) error
+}
+
+// ProgressEvent is one row of a media command's progress. Check marks a proof
+// about an image already stored, and every other event is a step of the
+// change the command makes. Step identifies the step and Label names it;
+// Detail is what a running step is doing or the summary a settled one proved.
+type ProgressEvent struct {
+	Check    bool
+	Step     string
+	Label    string
+	Detail   string
+	Status   string
+	Position int
+	Total    int
+}
+
+// Reporter receives a media command's progress while it runs. Reporting is
+// presentation only: it never changes an effect or an outcome.
+type Reporter interface {
+	ReportProgress(context.Context, ProgressEvent)
+}
+
+// The changes a media confirmation authorizes.
+const (
+	ReplaceChange = "replace"
+	DeleteChange  = "delete"
+)
+
+// Change is what one confirmation would authorize. Stored reports whether the
+// name holds a stored image, and Readable whether its record could be read,
+// which is what Entry then holds. Retained reports that a deletion also
+// removes the stage an interrupted add kept, and NewOrigin is the origin a
+// replacement would record: the source of the retained stage its pin adopts,
+// or else the origin of its own source.
+type Change struct {
+	Action    string
+	Name      string
+	Stored    bool
+	Readable  bool
+	Entry     managedos.MediaEntry
+	Retained  bool
+	NewOrigin string
+}
+
+// Presenter shows the stored image a confirmation would replace or delete
+// before the prompt, so an operator authorizes a change to an image they have
+// seen. A presentation that fails refuses the command without prompting.
+type Presenter interface {
+	PresentMediaChange(context.Context, Change) error
 }
 
 type Clock interface {

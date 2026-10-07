@@ -3,7 +3,6 @@ package artifactserver
 import (
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
-	"strings"
 
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -73,7 +72,7 @@ func DecodeRequest(data []byte) (Request, error) {
 		return Request{}, err
 	}
 	if request.Version != requestVersion {
-		return Request{}, failure("lifecycle.state", "the frozen artifact-server request has an unsupported version", "")
+		return Request{}, refusal("lifecycle.state", "the frozen artifact-server request has an unsupported version", "")
 	}
 	if err := reconciliation.ProveCanonical(data, request, "artifact-server"); err != nil {
 		return Request{}, err
@@ -112,49 +111,20 @@ func (r Request) usesTLS() bool {
 }
 
 // reservationKeys are the exclusive host resources this request claims. A
-// wildcard bind claims every endpoint address at that port as well, because
-// the socket it opens conflicts with each of them.
+// wildcard bind claims every endpoint address at a listener's port as well,
+// because the socket it opens conflicts with each of them.
 func (r Request) reservationKeys() []string {
-	keys := []string{"unit:" + r.Unit, "path:" + r.ContentRoot}
+	var sockets []string
 	for _, listener := range r.Listeners {
-		port := formatPort(listener.Port)
-		keys = append(keys, "socket:"+r.BindAddress+":"+port)
-		if r.BindAddress != "0.0.0.0" && r.BindAddress != "::" {
-			continue
-		}
+		var endpoints []managedservice.Endpoint
 		for _, endpoint := range r.Endpoints {
 			if endpoint.Listener == listener.Name {
-				keys = append(keys, "socket:"+endpoint.Address+":"+port)
+				endpoints = append(endpoints, managedservice.Endpoint{Address: endpoint.Address, Name: endpoint.Name})
 			}
 		}
+		sockets = append(sockets, managedservice.SocketKeys(r.BindAddress, listener.Port, endpoints)...)
 	}
-	slices.Sort(keys)
-	return slices.Compact(keys)
-}
-
-func formatPort(value int) string {
-	if value <= 0 {
-		return "0"
-	}
-	digits := ""
-	for value > 0 {
-		digits = string(rune('0'+value%10)) + digits
-		value /= 10
-	}
-	return digits
-}
-
-func safeSegment(value string) bool {
-	if value == "" || len(value) > 63 || strings.ContainsAny(value, "/\x00 ") {
-		return false
-	}
-	for index, c := range value {
-		alphanumeric := c >= 'a' && c <= 'z' || c >= '0' && c <= '9'
-		if !alphanumeric && !(c == '-' && index != 0 && index != len(value)-1) {
-			return false
-		}
-	}
-	return true
+	return managedservice.ReservationKeys(r.Unit, r.ContentRoot, sockets)
 }
 
 // secretReferences names every declaration this request's execution needs

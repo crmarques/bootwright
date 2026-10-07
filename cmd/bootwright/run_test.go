@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
+	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -104,5 +105,33 @@ func TestAJSONInvocationWritesNoProgress(t *testing.T) {
 	hooks.finish()
 	if want := "\n  Logs  " + location + "\n"; out.String() != want || errOut.Len() != 0 {
 		t.Fatalf("a text invocation reported stdout %q, stderr %q, want stdout %q", out.String(), errOut.String(), want)
+	}
+}
+
+// The media reporter an interactive invocation composes streams through the
+// invocation's own progress, so a JSON media list writes its one document and
+// no check row, and a text one opens Checks with the image being read.
+func TestAJSONMediaListWritesNoProgress(t *testing.T) {
+	ctx := context.Background()
+	list := []string{"media", "list", "--checksums"}
+	verify := media.ProgressEvent{Check: true, Step: "verify", Label: "Verify demo.iso", Status: "running", Position: 1, Total: 1}
+	classification := cli.ClassifyInvocation(append(slices.Clone(list), "--output", "json"))
+	if !classification.JSON {
+		t.Fatalf("classification = %+v, want JSON", classification)
+	}
+	var out, errOut bytes.Buffer
+	process, hooks := interactiveProcess(classification, nil, &out, &errOut, controller.Route{})
+	deps := localMediaDependencies(nil, nil, process.LifecycleProgress, process.MediaPresenter, controller.Route{}, nil)
+	deps.Progress.ReportProgress(ctx, verify)
+	hooks.finish()
+	if out.Len() != 0 || errOut.Len() != 0 {
+		t.Fatalf("a JSON media list reported progress: stdout %q, stderr %q", out.String(), errOut.String())
+	}
+	process, hooks = interactiveProcess(cli.ClassifyInvocation(list), list, &out, &errOut, controller.Route{})
+	deps = localMediaDependencies(nil, nil, process.LifecycleProgress, process.MediaPresenter, controller.Route{}, nil)
+	deps.Progress.ReportProgress(ctx, verify)
+	hooks.finish()
+	if want := "\nChecks\n  [RUNNING]  [1/1] Verify demo.iso\n"; out.String() != want || errOut.Len() != 0 {
+		t.Fatalf("a text media list reported stdout %q, stderr %q, want stdout %q", out.String(), errOut.String(), want)
 	}
 }

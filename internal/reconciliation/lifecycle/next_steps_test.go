@@ -50,7 +50,7 @@ func TestStatusOffersOnlyTheVerbsTheRecordsAllow(t *testing.T) {
 				lose(h, "index.json")
 				h.workspace.evidence = []byte("{")
 			},
-			steps: []string{},
+			steps: []string{"bootwright context delete --name lab --purge --allow-orphans"},
 		},
 		{
 			name: "a completed destroy holding a block not done",

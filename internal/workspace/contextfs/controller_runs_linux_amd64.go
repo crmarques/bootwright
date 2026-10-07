@@ -16,13 +16,20 @@ import (
 )
 
 const (
-	maxSetupRuns         = 8
-	maxSetupRunOutput    = 8 << 20
-	maxControllerEntries = maxControllerStages + 3
-	setupRunsName        = "runs"
-	setupRunOutputName   = "run.output"
-	setupRunPrefix       = "setup-"
-	setupRunDigits       = 6
+	maxSetupRuns = 8
+	// maxSetupRunOutput is what a setup run's writer keeps: the bounded run's
+	// own bound, operationstore.MaxAdapterOutputBytes, so every run's output
+	// shares one (D92).
+	maxSetupRunOutput = 4 << 20
+	// maxAdmittedSetupRunOutput is what admission accepts on every controller
+	// read: an earlier build kept up to 8 MiB, and refusing its run would
+	// refuse the whole controller.
+	maxAdmittedSetupRunOutput = 8 << 20
+	maxControllerEntries      = maxControllerStages + 3
+	setupRunsName             = "runs"
+	setupRunOutputName        = "run.output"
+	setupRunPrefix            = "setup-"
+	setupRunDigits            = 6
 )
 
 // controllerNames lists the controller directory under the bound it had before
@@ -120,7 +127,7 @@ func setupRunOutput(run *directory) (syscall.Stat_t, bool, error) {
 	}
 	stat, err := statHandle(file)
 	file.Close()
-	if err != nil || !private(stat, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || stat.Dev != run.identity.Dev || stat.Size > maxSetupRunOutput {
+	if err != nil || !private(stat, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || stat.Dev != run.identity.Dev || stat.Size > maxAdmittedSetupRunOutput {
 		return syscall.Stat_t{}, false, unsafeSetupRun(path, "it is not a private regular file within its bound")
 	}
 	return stat, true, nil

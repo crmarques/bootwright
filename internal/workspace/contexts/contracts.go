@@ -40,12 +40,6 @@ type ControllerDescriptor struct {
 	DirectoryInode  uint64 `json:"directoryInode"`
 }
 
-// ControllerInputGuard preserves an existing controller Machine binding when
-// replacing admitted input. The capability is transaction-scoped.
-type ControllerInputGuard interface {
-	CheckControllerInput(context.Context, string, string) error
-}
-
 type Record struct {
 	Name                 string `json:"name"`
 	EnvironmentDirectory string `json:"environmentDirectory"`
@@ -90,6 +84,14 @@ type Transaction interface {
 	Configuration(context.Context, string) ([]byte, error)
 	InitializeSecrets(context.Context, string, func(secretstore.Area) error) error
 	Publish(context.Context, string, string, desiredstate.Sources) (string, error)
+	// CheckControllerInput preserves an existing controller Machine binding
+	// when replacing admitted input: it refuses input whose controller Machine
+	// is not the one the context's binding records.
+	CheckControllerInput(context.Context, string, string) error
+	// Unchanged reports whether admitted input, with its Environment
+	// directory, freezes exactly the context's selected revision, so an
+	// update keeps that revision rather than publishing another.
+	Unchanged(context.Context, string, string, desiredstate.Sources) (bool, error)
 	// MutationState acquires and holds the context lease until transaction
 	// completion, then returns bounded Reconciliation-owned evidence bytes.
 	MutationState(context.Context, string) ([]byte, error)
@@ -100,9 +102,14 @@ type Transaction interface {
 	Commit(context.Context, Registry) error
 }
 
+// Disposition is what the guard's reading of the mutation evidence permits:
+// an input update, the context's disposal, and whether that evidence records a
+// completed apply, which refuses changed input until what it owns is taken
+// back.
 type Disposition struct {
 	Update  bool
 	Dispose bool
+	Applied bool
 }
 
 type ContextMutationGuard interface {
@@ -111,6 +118,13 @@ type ContextMutationGuard interface {
 
 type Confirmer interface {
 	Confirm(context.Context, string, string) error
+}
+
+// Presenter shows what an input update or a deletion changes immediately
+// before its ordinary confirmation, so the operator confirms what they read.
+type Presenter interface {
+	PresentUpdate(context.Context, UpdatePlan) error
+	PresentDeletion(context.Context, DeletionPlan) error
 }
 
 // SelectionVersion is the per-user current-context record format. The record
@@ -137,6 +151,7 @@ type Options struct {
 	ConfigurationReader   ConfigurationReader
 	InitializeSecrets     func(context.Context, Record, secretstore.Area) error
 	ValidateConfiguration func(context.Context, Configuration) error
+	Presenter             Presenter
 }
 
 // Inputs acquires an immutable revision for an explicit or current context.
@@ -161,7 +176,7 @@ func (i Inputs) ReadInputs(ctx context.Context, name string) (desiredstate.Sourc
 			return desiredstate.Sources{}, err
 		}
 		if selected.Name == "" {
-			return desiredstate.Sources{}, StateError("no current context is selected; use context use --name <name>")
+			return desiredstate.Sources{}, NoSelection()
 		}
 		name = selected.Name
 	}

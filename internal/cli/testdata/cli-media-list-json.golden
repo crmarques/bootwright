@@ -12,7 +12,12 @@
         "source": "file:///srv/images/rhel-9.8-x86_64-boot.iso",
         "added": "2026-09-20T08:15:00Z",
         "frozen": true,
-        "verified": "ok"
+        "reservedBy": [
+          "lab-rhel",
+          "lab-sno"
+        ],
+        "verified": "ok",
+        "computed": "e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82"
       },
       {
         "name": "rhel-9.8-x86_64-dvd.iso",
@@ -21,7 +26,9 @@
         "source": "https://images.example.test/rhel-9.8-x86_64-dvd.iso",
         "added": "2026-09-21T10:02:41Z",
         "frozen": false,
-        "verified": "ok"
+        "reservedBy": [],
+        "verified": "mismatch",
+        "computed": "0d9b7e5c3a1f9d7b5e3c1a0f8e6d4b2c0a8f6e4d2a1b0f3e5c6a7d9b2e8f1c4a"
       }
     ]
   },

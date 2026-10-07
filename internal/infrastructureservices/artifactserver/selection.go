@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -56,7 +57,7 @@ func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Req
 
 func requestFor(catalog api.Catalog, server api.Object, controllerMachine, contextName string) (Request, error) {
 	name := server.Name()
-	if !safeSegment(name) {
+	if !managedservice.SafeSegment(name) {
 		return Request{}, refusal("lifecycle.state", "the artifact server name is not a safe host identifier", "rename "+server.Identity())
 	}
 	spec := server.Spec()
@@ -68,11 +69,11 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 	if err != nil {
 		return Request{}, err
 	}
-	image, err := imageFor(spec, server.Identity())
+	image, err := managedservice.ImageFor(spec, server.Identity(), defaultImage)
 	if err != nil {
 		return Request{}, err
 	}
-	egress, err := egressFor(catalog, machine)
+	egress, err := managedservice.EgressFor(catalog, machine)
 	if err != nil {
 		return Request{}, err
 	}
@@ -118,52 +119,6 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 
 func BlockID(service string) string { return "artifact-server-" + service }
 
-// machineAddress resolves a Machine-local address reference to the value a
-// consumer receives: the host IP without its prefix, or the DNS name.
-func machineAddress(machine api.Object, reference string) (string, error) {
-	if reference == "" {
-		return "", refusal("api.required", "the address reference is empty", "name an address on "+machine.Identity())
-	}
-	for _, address := range machine.Spec().Get("network", "addresses").Items() {
-		if address.Get("name").Text() != reference {
-			continue
-		}
-		value := address.Get("address").Text()
-		if host, _, found := strings.Cut(value, "/"); found {
-			value = host
-		}
-		if value == "" {
-			return "", refusal("api.value", "the referenced Machine address is empty", "correct the address on "+machine.Identity())
-		}
-		return value, nil
-	}
-	return "", refusal("api.reference", "the address reference does not resolve on its Machine", "name an address declared on "+machine.Identity())
-}
-
-func imageFor(spec api.Value, identity string) (string, error) {
-	reference := spec.Get("image", "local").Text()
-	if reference == "" {
-		reference = spec.Get("image", "public").Text()
-	}
-	if reference == "" {
-		return defaultImage, nil
-	}
-	if !digestPinned(reference) {
-		return "", refusal("api.value", "a managed artifact server image must be pinned by content digest", "set spec.image to a reference ending in @sha256:<digest> on "+identity)
-	}
-	return reference, nil
-}
-
-func digestPinned(reference string) bool {
-	_, digest, found := strings.Cut(reference, "@sha256:")
-	if !found || len(digest) != 64 {
-		return false
-	}
-	return !strings.ContainsFunc(digest, func(c rune) bool {
-		return !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f')
-	})
-}
-
 func listenersFor(spec api.Value, identity string) ([]Listener, error) {
 	items := spec.Get("listeners").Items()
 	if len(items) == 0 {
@@ -193,7 +148,7 @@ func endpointsFor(spec api.Value, machine api.Object, listeners []Listener, iden
 		if !slices.ContainsFunc(listeners, func(candidate Listener) bool { return candidate.Name == listener }) {
 			return nil, refusal("api.reference", "an artifact endpoint names an unknown listener", "correct spec.endpoints on "+identity)
 		}
-		address, err := machineAddress(machine, item.Get("addressRef").Text())
+		address, err := machineref.ResolveAddress(machine, item.Get("addressRef").Text())
 		if err != nil {
 			return nil, err
 		}
@@ -203,41 +158,6 @@ func endpointsFor(spec api.Value, machine api.Object, listeners []Listener, iden
 	return endpoints, nil
 }
 
-// egressFor uses the placement Machine's normalized proxy choice and nothing
-// else: no ambient variable and no fallback to direct access.
-func egressFor(catalog api.Catalog, machine api.Object) (Egress, error) {
-	egress := Egress{NoProxy: []string{}}
-	choice := machine.Spec().Get("proxy")
-	if !choice.Present() || choice.Has("direct") {
-		return egress, nil
-	}
-	reference := choice.Get("proxyRef").Text()
-	proxy, found := catalog.Find(api.Proxy, reference)
-	if !found {
-		return Egress{}, refusal("api.reference", "the placement Machine's proxy does not resolve", "correct spec.proxy on "+machine.Identity())
-	}
-	if proxy.Spec().Get("management").Text() != "external" {
-		return Egress{}, refusal("lifecycle.state", "a managed service host must egress directly or through an already ready external Proxy", "select an external Proxy or direct access on "+machine.Identity())
-	}
-	connection := proxy.Spec().Get("connection")
-	if connection.Has("auth", "proxyAuthRef") || connection.Has("trustBundleRef") {
-		return Egress{}, refusal("lifecycle.state", "proxy authentication and private trust are unsupported for service image acquisition", "select a proxy without authentication or private trust on "+machine.Identity())
-	}
-	egress.HTTPProxy = connection.Get("httpProxy").Text()
-	egress.HTTPSProxy = connection.Get("httpsProxy").Text()
-	if egress.HTTPProxy == "" && egress.HTTPSProxy == "" {
-		return Egress{}, refusal("api.value", "the selected external Proxy declares no proxy URL", "set connection.httpProxy or connection.httpsProxy on "+proxy.Identity())
-	}
-	for _, value := range choice.Get("noProxy").Strings() {
-		egress.NoProxy = append(egress.NoProxy, value)
-	}
-	return egress, nil
-}
-
 func refusal(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
-}
-
-func failure(code, message, remediation string) error {
-	return refusal(code, message, remediation)
 }

@@ -32,7 +32,7 @@ func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 func fixture() (api.Object, api.Catalog) {
 	provider := object(api.InfraProvider, "metal", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc", "tls", m("verify", false), "virtualMedia", m("tls", m("trust", "established"))))), "networkAttachments", list(m("name", "net", "baremetal", m()))))
 	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0"))))))
-	machine := object(api.Machine, "node", m("substrate", m("providerRef", "metal"), "os", m("provided", false, "install", m("rootDeviceHints", m("deviceName", "/dev/sda"))), "hardware", m("nics", list(m("name", "eth0", "macAddress", "02-00-00-00-00-01")), "boot", m("nicRef", "eth0"), "management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1"))), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")))))
+	machine := object(api.Machine, "node", m("substrate", m("providerRef", "metal"), "os", m("provided", false, "install", m("rootDeviceHints", m("deviceName", "/dev/sda"))), "hardware", m("nics", list(m("name", "eth0", "macAddress", "02-00-00-00-00-01")), "management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1"))), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
 	return machine, api.NewCatalog([]api.Object{machine, network, provider, env})
 }
@@ -182,7 +182,7 @@ func TestAnInstalledMachineDialsItsInstallAddress(t *testing.T) {
 	addresses := list(m("name", "ip", "address", "192.0.2.11/24", "interface", "eth0"))
 	spec := node.Spec().WithPath(addresses, "network", "addresses")
 	installed := node.WithSpec(spec.With("os", spec.Get("os").With("installProfileRef", api.StringValue("rhel"))))
-	objects := []api.Object{object(api.MachineInstallProfile, "rhel", m()),
+	objects := []api.Object{object(api.MachineInstallProfile, "rhel", m()), object(api.Secret, "fleet", m("type", "sshKeyPair")),
 		object(api.Environment, "env", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet")))}
 	for _, existing := range fixtures.Objects() {
 		if existing.Kind() != api.Machine && existing.Kind() != api.Environment {

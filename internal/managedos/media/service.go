@@ -17,6 +17,10 @@ import (
 // rule it comes from.
 const MaxMediaName = managedos.MaxMediaName
 
+// MaxMediaOrigin is the longest credential-free origin a record carries,
+// published with the service for the same reason.
+const MaxMediaOrigin = managedos.MaxMediaOrigin
+
 // Service manages the host-wide installer media store. It selects no context:
 // one store serves every context on the host, and a context-scoped artifact
 // server is what publishes derived content to a consumer.
@@ -25,10 +29,37 @@ type Service struct {
 	acquirer  Acquirer
 	confirmer Confirmer
 	clock     Clock
+	progress  Reporter
+	presenter Presenter
 }
 
 func New(store Store, acquirer Acquirer, confirmer Confirmer, clock Clock) Service {
 	return Service{store: store, acquirer: acquirer, confirmer: confirmer, clock: clock}
+}
+
+// Reporting returns the service reporting its progress through progress and
+// showing each change it confirms through presenter. A nil one reports or
+// shows nothing.
+func (s Service) Reporting(progress Reporter, presenter Presenter) Service {
+	s.progress, s.presenter = progress, presenter
+	return s
+}
+
+// report stops at cancellation rather than claiming a step whose outcome is no
+// longer observable.
+func (s Service) report(ctx context.Context, event ProgressEvent, status, detail string) {
+	if s.progress == nil || ctx.Err() != nil {
+		return
+	}
+	event.Status, event.Detail = status, detail
+	s.progress.ReportProgress(ctx, event)
+}
+
+func (s Service) present(ctx context.Context, change Change) error {
+	if s.presenter == nil {
+		return nil
+	}
+	return s.presenter.PresentMediaChange(ctx, change)
 }
 
 func (s Service) available(ctx context.Context) error {
@@ -43,7 +74,9 @@ func (s Service) available(ctx context.Context) error {
 
 // Add acquires one image, proves its bytes and publishes it with its record.
 // Confirmation and every refusal precede acquisition, so a declined
-// replacement never downloads anything, and the prompt holds no root lock.
+// replacement never downloads anything, and the prompt holds no root lock. The
+// origin the record carries is decided first, so a source the record cannot
+// carry is refused before anything is confirmed, claimed or acquired.
 // Acquisition holds none either: an image may take hours to arrive, and every
 // other store command on the host would refuse while it did. Admission is
 // therefore proved again, against the store as it then stands, to claim a stage
@@ -56,7 +89,11 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 	if err != nil {
 		return nil, err
 	}
-	stage, replacing, err := s.claim(ctx, request, expected)
+	origin, err := s.origin(request.Name, source)
+	if err != nil {
+		return nil, err
+	}
+	stage, replacing, err := s.claim(ctx, request, expected, origin)
 	if stage != nil {
 		// Close's own failure is ignored: the outcome to report is the
 		// publication or the refusal that preceded it, and a stage Close could
@@ -66,7 +103,7 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 	if err != nil {
 		return nil, err
 	}
-	entry, err := s.obtain(ctx, stage, request.Name, source, expected)
+	entry, err := s.obtain(ctx, stage, request.Name, source, origin, expected)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +111,8 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 	if err != nil {
 		return nil, err
 	}
+	publication := ProgressEvent{Step: "publish", Label: "Publish " + request.Name, Position: 2, Total: 2}
+	s.report(ctx, publication, "running", "")
 	err = s.store.MutateMedia(ctx, func(tx Transaction) error {
 		if err := revalidate(ctx, tx, request.Name, replacing); err != nil {
 			return err
@@ -81,8 +120,10 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 		return tx.Publish(ctx, entry.Name, stage, record, replacing)
 	})
 	if err != nil {
+		s.report(ctx, publication, "failed", "")
 		return nil, unpublished(ctx, err, stage, record, request.Name, expected)
 	}
+	s.report(ctx, publication, "done", "")
 	outcome := "stored"
 	if replacing {
 		outcome = "replaced"
@@ -112,14 +153,40 @@ func addition(request AddMediaRequest) (Source, string, error) {
 	return source, expected, nil
 }
 
+// origin is the credential-free origin the acquirer will record for the source,
+// refused when a record cannot carry it. The cause is named, never the origin
+// itself, which may be over-long or carry a control character.
+func (s Service) origin(name string, source Source) (string, error) {
+	origin, err := s.acquirer.Origin(source)
+	if err != nil {
+		return "", err
+	}
+	if managedos.ValidMediaOrigin(origin) {
+		return origin, nil
+	}
+	cause := "carries a control character, leading or trailing white space or invalid UTF-8"
+	switch {
+	case origin == "":
+		cause = "is empty"
+	case len(origin) > MaxMediaOrigin:
+		cause = "is longer than " + strconv.Itoa(MaxMediaOrigin) + " bytes"
+	}
+	remedy := "copy the image to a shorter path without control characters and add the copy with --from-file"
+	if source.URL != "" {
+		remedy = "name a URL whose scheme, host and path fit in " + strconv.Itoa(MaxMediaOrigin) + " bytes, because its query is never recorded"
+	}
+	return "", failure("the origin of image "+name+" "+cause+", so its record cannot carry it", remedy)
+}
+
 // observed is what a media confirmation confirms about one name: whether it is
 // occupied, the record published for it and, for a deletion, whether a stage is
-// retained for it.
+// retained for it, or, for a replacement, the origin its record would carry.
 type observed struct {
 	occupied bool
 	listed   bool
 	retained bool
 	entry    managedos.MediaEntry
+	origin   string
 }
 
 func observe(ctx context.Context, view View, name string, occupied bool) (observed, error) {
@@ -127,15 +194,46 @@ func observe(ctx context.Context, view View, name string, occupied bool) (observ
 	return observed{occupied: occupied, listed: listed, entry: entry}, err
 }
 
+func (o observed) change(action, name string) Change {
+	return Change{Action: action, Name: name, Stored: o.occupied, Readable: o.listed, Entry: o.entry, Retained: o.retained, NewOrigin: o.origin}
+}
+
+// replacement observes what an add over a name confirms: the stored image and,
+// when the name is occupied, the origin the replacing record would carry.
+func replacement(ctx context.Context, view View, name string, occupied bool, expected, origin string) (observed, error) {
+	seen, err := observe(ctx, view, name, occupied)
+	if err != nil || !occupied {
+		return seen, err
+	}
+	seen.origin, err = recorded(ctx, view, name, expected, origin)
+	return seen, err
+}
+
+// recorded is the origin an add's record would carry: the source of the
+// name's retained stage when the pin adopts that stage, and otherwise the
+// origin of the add's own source.
+func recorded(ctx context.Context, view View, name, expected, origin string) (string, error) {
+	retained, err := view.Retained(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range retained {
+		if entry.Name == name && expected != "" && entry.SHA256 == expected {
+			return entry.Source, nil
+		}
+	}
+	return origin, nil
+}
+
 // claim admits the add and claims its stage. Without --yes a shared hold
 // admits it first and a replacement is confirmed with no root lock held; the
 // exclusive hold that claims the stage then refuses, claiming nothing, when
 // what that hold observed changed meanwhile, whether or not a prompt ran, since
 // a name occupied since would otherwise be replaced unconfirmed.
-func (s Service) claim(ctx context.Context, request AddMediaRequest, expected string) (Stage, bool, error) {
+func (s Service) claim(ctx context.Context, request AddMediaRequest, expected, origin string) (Stage, bool, error) {
 	var confirmed *observed
 	if !request.SkipConfirmation {
-		seen, err := s.confirmReplacement(ctx, request.Name)
+		seen, err := s.confirmReplacement(ctx, request.Name, expected, origin)
 		if err != nil {
 			return nil, false, err
 		}
@@ -149,7 +247,7 @@ func (s Service) claim(ctx context.Context, request AddMediaRequest, expected st
 			return err
 		}
 		if confirmed != nil {
-			current, err := observe(ctx, tx, request.Name, occupied)
+			current, err := replacement(ctx, tx, request.Name, occupied, expected, origin)
 			if err != nil {
 				return err
 			}
@@ -169,8 +267,9 @@ func (s Service) claim(ctx context.Context, request AddMediaRequest, expected st
 }
 
 // confirmReplacement admits an add under a shared hold and, when it would
-// replace an image, confirms that with no root lock held.
-func (s Service) confirmReplacement(ctx context.Context, name string) (observed, error) {
+// replace an image, shows that image and the origin the replacing record would
+// carry, and confirms its replacement with no root lock held.
+func (s Service) confirmReplacement(ctx context.Context, name, expected, origin string) (observed, error) {
 	var seen observed
 	err := s.store.ReadMedia(ctx, func(view View) error {
 		occupied, err := admissible(ctx, view, name)
@@ -180,10 +279,13 @@ func (s Service) confirmReplacement(ctx context.Context, name string) (observed,
 		if occupied && s.confirmer == nil {
 			return failure("replacing a stored image requires confirmation", "review the image and repeat with --yes")
 		}
-		seen, err = observe(ctx, view, name, occupied)
+		seen, err = replacement(ctx, view, name, occupied, expected, origin)
 		return err
 	})
 	if err != nil || !seen.occupied {
+		return seen, err
+	}
+	if err := s.present(ctx, seen.change(ReplaceChange, name)); err != nil {
 		return seen, err
 	}
 	return seen, s.confirmer.Confirm(ctx, "media replace", name)
@@ -218,12 +320,12 @@ func admissible(ctx context.Context, view View, name string) (bool, error) {
 	if !replacing {
 		return false, nil
 	}
-	frozen, err := view.Frozen(ctx)
+	reservations, err := view.Reservations(ctx)
 	if err != nil {
 		return false, err
 	}
-	if slices.Contains(frozen, name) {
-		return false, frozenFailure(name)
+	if holders := reservations[name]; len(holders) != 0 {
+		return false, frozenFailure(name, holders)
 	}
 	return true, nil
 }
@@ -231,19 +333,25 @@ func admissible(ctx context.Context, view View, name string) (bool, error) {
 // obtain fills a claimed stage from its source, or proves that an adopted stage
 // still holds the bytes it was retained with. Either runs outside every store
 // transaction, so it holds no root lock.
-func (s Service) obtain(ctx context.Context, stage Stage, name string, source Source, expected string) (managedos.MediaEntry, error) {
+func (s Service) obtain(ctx context.Context, stage Stage, name string, source Source, origin, expected string) (managedos.MediaEntry, error) {
 	retained, adopted := stage.Retained()
 	if !adopted {
-		return s.acquire(ctx, stage, name, source, expected)
+		return s.acquire(ctx, stage, name, source, origin, expected)
 	}
+	verification := ProgressEvent{Step: "verify-retained", Label: "Verify the image retained for " + name, Position: 1, Total: 2}
+	s.report(ctx, verification, "running", retained.Source)
 	staged, err := stage.Verify(ctx)
 	if err != nil {
+		s.report(ctx, verification, "failed", "")
 		return managedos.MediaEntry{}, err
 	}
 	if staged.Size != retained.Size || staged.SHA256 != retained.SHA256 || staged.SHA256 != expected {
-		return managedos.MediaEntry{}, failure("the image retained for "+name+" no longer holds the bytes it verified, so it was removed",
+		s.report(ctx, verification, "failed", "")
+		return managedos.MediaEntry{}, failure("the image retained for "+name+" from "+retained.Source+" no longer holds the bytes it verified "+
+			digests(retained.SHA256, staged.SHA256)+", so it was removed",
 			"repeat the command to acquire it again")
 	}
+	s.report(ctx, verification, "done", bytesSummary(staged.Size))
 	return managedos.MediaEntry{Name: name, Size: staged.Size, SHA256: staged.SHA256, Source: retained.Source, Added: s.now()}, nil
 }
 
@@ -266,27 +374,42 @@ func unpublished(ctx context.Context, err error, stage Stage, record []byte, nam
 // acquire fills the stage from the source and proves the bytes against the
 // expected digest. It runs outside every store transaction, so it holds no
 // root lock.
-func (s Service) acquire(ctx context.Context, stage Stage, name string, source Source, expected string) (managedos.MediaEntry, error) {
-	acquisition, err := s.acquirer.Open(ctx, source)
+func (s Service) acquire(ctx context.Context, stage Stage, name string, source Source, origin, expected string) (managedos.MediaEntry, error) {
+	acquisition := ProgressEvent{Step: "acquire", Label: "Acquire " + name, Position: 1, Total: 2}
+	s.report(ctx, acquisition, "running", origin)
+	opened, err := s.acquirer.Open(ctx, source)
 	if err != nil {
+		s.report(ctx, acquisition, "failed", "")
 		return managedos.MediaEntry{}, err
 	}
-	defer acquisition.Payload.Close()
-	staged, err := stage.Fill(ctx, acquisition.Payload, managedos.MaxMediaBytes)
+	defer opened.Payload.Close()
+	staged, err := stage.Fill(ctx, opened.Payload, managedos.MaxMediaBytes)
 	if err != nil {
+		s.report(ctx, acquisition, "failed", "")
 		return managedos.MediaEntry{}, err
 	}
 	if expected != "" && staged.SHA256 != expected {
-		return managedos.MediaEntry{}, failure("the acquired image does not match its expected digest",
-			"verify the source and its published digest, then repeat the command")
+		s.report(ctx, acquisition, "failed", "")
+		return managedos.MediaEntry{}, failure("image "+name+" acquired from "+origin+" does not match its expected digest "+digests(expected, staged.SHA256),
+			"compare both with the publisher's checksum list, then repeat the command with the digest it gives for that image")
 	}
+	s.report(ctx, acquisition, "done", bytesSummary(staged.Size))
 	return managedos.MediaEntry{
 		Name:   name,
 		Size:   staged.Size,
 		SHA256: staged.SHA256,
-		Source: acquisition.Origin,
+		Source: origin,
 		Added:  s.now(),
 	}, nil
+}
+
+func bytesSummary(size int64) string {
+	return strconv.FormatInt(size, 10) + " bytes"
+}
+
+// digests names the digest a check expected and the one it computed.
+func digests(expected, computed string) string {
+	return "(expected sha256:" + expected + ", computed sha256:" + computed + ")"
 }
 
 func (s Service) now() string {
@@ -294,41 +417,46 @@ func (s Service) now() string {
 }
 
 // List reports the store's inventory. Without checksums it reads records and
-// file metadata alone; with them it reads every image in full and marks an
-// entry whose bytes no longer match its record.
+// file metadata alone, and marks an image whose size no longer matches its
+// record; with them it reads every image in full as one check each, reports
+// the digest it computed and marks an image whose bytes no longer match its
+// record. A mismatched image never hides the rest of the store, and whether a
+// context reserves an image is reported apart from whether it verified.
 func (s Service) List(ctx context.Context, request ListMediaRequest) (*ListResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
-	result := &ListResult{Media: []MediaRow{}}
+	result := &ListResult{Media: []MediaRow{}, Checksums: request.Checksums}
 	err := s.store.ReadMedia(ctx, func(view View) error {
-		entries, err := view.Entries(ctx)
+		images, err := view.Entries(ctx)
 		if err != nil {
 			return err
 		}
-		frozen, err := view.Frozen(ctx)
+		reservations, err := view.Reservations(ctx)
 		if err != nil {
 			return err
 		}
-		rows := make([]MediaRow, 0, len(entries))
-		for _, entry := range entries {
+		images = slices.SortedFunc(slices.Values(images), func(x, y Image) int { return strings.Compare(x.Name, y.Name) })
+		rows := make([]MediaRow, 0, len(images))
+		for index, image := range images {
+			reserving := slices.Sorted(slices.Values(reservations[image.Name]))
+			if reserving == nil {
+				reserving = []string{}
+			}
 			row := MediaRow{
-				Name: entry.Name, Size: entry.Size, SHA256: entry.SHA256,
-				Source: entry.Source, Added: entry.Added, Frozen: slices.Contains(frozen, entry.Name),
+				Name: image.Name, Size: image.Size, SHA256: image.SHA256, Source: image.Source, Added: image.Added,
+				Frozen: len(reserving) != 0, ReservedBy: reserving,
+			}
+			if image.Observed != image.Size {
+				row.Verified = "mismatch"
 			}
 			if request.Checksums {
-				digest, err := view.Digest(ctx, entry.Name)
-				if err != nil {
+				if err := s.check(ctx, view, image, index+1, len(images), &row); err != nil {
 					return err
-				}
-				row.Verified = "mismatch"
-				if digest == entry.SHA256 {
-					row.Verified = "ok"
 				}
 			}
 			rows = append(rows, row)
 		}
-		slices.SortFunc(rows, func(x, y MediaRow) int { return strings.Compare(x.Name, y.Name) })
 		result.Media = rows
 		return nil
 	})
@@ -338,11 +466,37 @@ func (s Service) List(ctx context.Context, request ListMediaRequest) (*ListResul
 	return result, nil
 }
 
-// Delete removes one image and its record, and a stage retained for it. An
-// image any context reserves is refused, because a frozen operation still needs
-// exactly those bytes. Without --yes a shared hold admits the deletion, the
-// prompt holds no root lock, and the exclusive hold that deletes refuses when
-// what was confirmed changed meanwhile.
+// check reads one image in full and settles whether its bytes still match its
+// record, reporting the digest it computed.
+func (s Service) check(ctx context.Context, view View, image Image, position, total int, row *MediaRow) error {
+	verification := ProgressEvent{Check: true, Step: "verify", Label: "Verify " + image.Name, Position: position, Total: total}
+	s.report(ctx, verification, "running", "")
+	digest, err := view.Digest(ctx, image.Name)
+	if err != nil {
+		s.report(ctx, verification, "failed", "")
+		return err
+	}
+	row.Computed = digest
+	switch {
+	case digest != image.SHA256:
+		row.Verified = "mismatch"
+		s.report(ctx, verification, "failed", "sha256:"+digest+" differs from its record")
+	case image.Observed != image.Size:
+		row.Verified = "mismatch"
+		s.report(ctx, verification, "failed", bytesSummary(image.Observed)+" differ from its record")
+	default:
+		row.Verified = "ok"
+		s.report(ctx, verification, "ok", "matches its record")
+	}
+	return nil
+}
+
+// Delete removes one image and its record, and a stage retained for it, and
+// reports the record it removed. An image any context reserves is refused,
+// because a frozen operation still needs exactly those bytes. Without --yes a
+// shared hold admits the deletion, the image is shown and the prompt holds no
+// root lock, and the exclusive hold that deletes refuses when what was
+// confirmed changed meanwhile.
 func (s Service) Delete(ctx context.Context, request DeleteMediaRequest) (*MutationResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
@@ -359,6 +513,7 @@ func (s Service) Delete(ctx context.Context, request DeleteMediaRequest) (*Mutat
 		}
 		confirmed = &seen
 	}
+	var deleted observed
 	err := s.store.MutateMedia(ctx, func(tx Transaction) error {
 		current, err := deletable(ctx, tx, request.Name)
 		if err != nil {
@@ -367,12 +522,17 @@ func (s Service) Delete(ctx context.Context, request DeleteMediaRequest) (*Mutat
 		if confirmed != nil && current != *confirmed {
 			return changedFailure(request.Name, "while its deletion was being confirmed")
 		}
+		deleted = current
 		return tx.Delete(ctx, request.Name)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &MutationResult{Name: request.Name, Outcome: "deleted"}, nil
+	result := &MutationResult{Name: request.Name, Outcome: "deleted"}
+	if deleted.listed {
+		result.Size, result.SHA256 = deleted.entry.Size, deleted.entry.SHA256
+	}
+	return result, nil
 }
 
 func (s Service) confirmDeletion(ctx context.Context, name string) (observed, error) {
@@ -390,6 +550,9 @@ func (s Service) confirmDeletion(ctx context.Context, name string) (observed, er
 	if err != nil {
 		return seen, err
 	}
+	if err := s.present(ctx, seen.change(DeleteChange, name)); err != nil {
+		return seen, err
+	}
 	return seen, s.confirmer.Confirm(ctx, "media delete", name)
 }
 
@@ -400,22 +563,23 @@ func deletable(ctx context.Context, view View, name string) (observed, error) {
 	if err != nil {
 		return observed{}, err
 	}
-	retained, err := view.Retained(ctx)
+	listed, err := view.Retained(ctx)
 	if err != nil {
 		return observed{}, err
 	}
-	if !slices.Contains(occupied, name) && !slices.Contains(retained, name) {
-		return observed{}, failure("the media store holds no image with that name", "list the store with bootwright media list")
+	retained := slices.ContainsFunc(listed, func(entry managedos.MediaEntry) bool { return entry.Name == name })
+	if !slices.Contains(occupied, name) && !retained {
+		return observed{}, failure("the media store holds no image named "+name, "list the store with bootwright media list")
 	}
-	frozen, err := view.Frozen(ctx)
+	reservations, err := view.Reservations(ctx)
 	if err != nil {
 		return observed{}, err
 	}
-	if slices.Contains(frozen, name) {
-		return observed{}, frozenFailure(name)
+	if holders := reservations[name]; len(holders) != 0 {
+		return observed{}, frozenFailure(name, holders)
 	}
 	seen, err := observe(ctx, view, name, slices.Contains(occupied, name))
-	seen.retained = slices.Contains(retained, name)
+	seen.retained = retained
 	return seen, err
 }
 
@@ -432,9 +596,17 @@ func changedFailure(name, while string) error {
 		"review the store with bootwright media list, then repeat the command")
 }
 
-func frozenFailure(name string) error {
-	return failure("image "+name+" is reserved by a context operation",
-		"destroy or complete the operation that froze it before changing this image")
+// frozenFailure names each context reserving the image. Only a completed
+// destroy releases a context's reservation; a completed apply keeps it.
+func frozenFailure(name string, contexts []string) error {
+	holders := "context " + contexts[0]
+	destroys := "bootwright destroy --context " + contexts[0]
+	if len(contexts) > 1 {
+		holders = "contexts " + strings.Join(contexts, ", ")
+		destroys = "bootwright destroy --context " + strings.Join(contexts, " and bootwright destroy --context ")
+	}
+	return failure("image "+name+" is reserved by "+holders,
+		"only a completed destroy releases a context's reservation, so repeat this command after "+destroys)
 }
 
 func failure(message, remediation string) error {

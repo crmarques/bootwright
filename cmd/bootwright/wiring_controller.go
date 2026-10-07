@@ -24,6 +24,7 @@ type controllerDependencies struct {
 	Bootstrap       prerequisites.BootstrapResolver
 	Native          prerequisites.NativeResolver
 	NativeInspector prerequisites.NativeInspector
+	Foundation      prerequisites.FoundationInspector
 	Presenter       prerequisites.PlanPresenter
 	Progress        prerequisites.ProgressReporter
 }
@@ -48,6 +49,7 @@ func localControllerDependencies(storage prerequisites.Storage, process processD
 		Bootstrap:       bundlelocal.NewBootstrapResolver(staging),
 		Native:          native,
 		NativeInspector: native,
+		Foundation:      guard,
 		Presenter:       process.Presenter,
 		Progress:        process.Progress,
 	}, native.Close
@@ -63,5 +65,6 @@ func wireController(deps controllerDependencies, compiler prerequisites.Compiler
 		Bootstrap:       deps.Bootstrap,
 		Native:          deps.Native,
 		NativeInspector: deps.NativeInspector,
+		Foundation:      deps.Foundation,
 	})
 }

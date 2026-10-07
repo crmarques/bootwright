@@ -67,8 +67,8 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright secret encryption init` | none | configured implementation and active key | idempotent initialization using Context configuration |
 | `bootwright secret encryption status` | `--output text\|json` default `text` | keyring and encrypted-store status | read confidential metadata |
 | `bootwright secret encryption rotate` | `--yes` false | new active key, retired keys and re-encrypted version and part counts | atomic local key rotation and re-encryption |
-| `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>` or `--from-url <http-or-https-url>`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
-| `bootwright media list` | `--checksums` false; `--output text\|json` default `text` | media names, sizes, and optional computed digests | read local media; `--checksums` reads each image in full |
+| `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>` or `--from-url <https-url>`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
+| `bootwright media list` | `--checksums` false; `--output text\|json` default `text` | media names, sizes, recorded digests and reserving contexts, and with `--checksums` each computed digest and its verification | read local media; `--checksums` reads each image in full |
 | `bootwright media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |
 
 The required controller declaration and context-free setup boundary follow
@@ -108,7 +108,7 @@ The three `media` commands follow the host-wide
 | `bootwright machine start` | required `--name <machine>`; `--output text\|json` default `text` | the power state the Machine's management controller proved once the operation settled | bounded power operation through that controller |
 | `bootwright machine stop` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after a proved stop and a proved start | same |
-| `bootwright setup` | `--dry-run` false; `--yes` false; `--purge-old-bundles` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys), and with `--purge-old-bundles` the [superseded bundles it retired](../controller.md#supported-host-and-dependency-selection) | bounded dependency acquisition over the [context-free route](../controller.md#the-context-free-acquisition-route) and local installation; dry-run only previews; retirement removes only superseded execution bundles, after the setup completes or, [at the bound](../controller.md#supported-host-and-dependency-selection), before it publishes, where a setup an earlier build left pending that never took effect and that this executable cannot resume is first canceled |
+| `bootwright setup` | `--dry-run` false; `--yes` false; `--purge-old-bundles` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys), and with `--purge-old-bundles` the [superseded bundles it retired](../controller.md#supported-host-and-dependency-selection) | bounded dependency acquisition over the [context-free route](../controller.md#the-context-free-acquisition-route) and local installation; dry-run only previews; retirement removes only superseded execution bundles, after the setup completes or, [at the bound](../controller.md#supported-host-and-dependency-selection), before it publishes; a setup left pending, at the bound or below it, that never took effect and that this executable cannot resume is first [canceled](../controller.md#publication-and-interrupted-setup) |
 | `bootwright cluster list` | `--output text\|json` default `text` | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <cluster>` default all unless `--secrets`; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, and optional explicit sensitive values | read local state and optional confidential material |
 | `bootwright cluster rsh` | required `--name <cluster>`; `--node <node>` default first node in canonical name order | bounded handoff for an interactive SSH session to the resolved cluster node | read target and access metadata only |
@@ -327,9 +327,11 @@ requires `--yes`; without it the invocation must use `--dry-run` or fails
 without writing.
 
 `media add --from-url` requires `--sha256`; the digest is optional verification
-for `--from-file`. URL userinfo and an unverifiable digest are rejected.
-Redirects are disabled unless the media-import port explicitly permits them;
-every permitted hop is revalidated under [security](../security.md).
+for `--from-file`. A plain `http://` URL, URL userinfo, a fragment, a control
+character in either source, an origin over 512 bytes as the
+[media store](../managed-os.md#media-store) defines it, and an unverifiable
+digest are rejected. A redirect is never followed: it refuses, naming its
+status and its target.
 
 `<filename.iso>` is one portable ASCII basename of 5 through 250 bytes with an
 exact lowercase `.iso` suffix, so its record name, the image name followed by

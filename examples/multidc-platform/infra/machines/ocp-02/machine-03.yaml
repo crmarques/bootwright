@@ -55,9 +55,6 @@ spec:
       - name: eth2
         macAddress: 02:00:00:00:00:23
 
-    boot:
-      nicRef: eth0
-
     management:
       bmc:
         address: https://bmc-edge-b-03.example.com/redfish/v1/Systems/1

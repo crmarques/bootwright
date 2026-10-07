@@ -18,9 +18,7 @@ spec:
 
   networkAttachments:
     - name: ocp-bare-metal-network
-      baremetal:
-        vlan: 100
+      baremetal: {}
 
     - name: ceph-network
-      baremetal:
-        vlan: 200
+      baremetal: {}

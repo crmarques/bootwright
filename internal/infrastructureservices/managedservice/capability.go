@@ -222,10 +222,21 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 	}
 	impacts := []string{unit + " " + request.Unit, root + " " + request.ContentRoot}
 	for _, address := range request.ProbeTargets() {
-		impacts = append(impacts, listener+" "+address+":"+FormatPort(request.Port))
+		impacts = append(impacts, listener+" "+HostPort(address, request.Port))
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)
+}
+
+// HostPort writes one socket the way a URL and a plan write it: a host holding
+// a colon, which is an IPv6 address, is bracketed, by net.JoinHostPort's own
+// rule, so the colon before the port never reads as part of the address. A
+// reservation key keeps the unbracketed form every listener claims.
+func HostPort(host string, port int) string {
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return host + ":" + FormatPort(port)
 }
 
 func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {

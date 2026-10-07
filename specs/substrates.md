@@ -108,10 +108,16 @@ built-in resolver and DHCP disabled so a managed `DNSServer` may bind the
 bridge address, placed in the host firewall's trusted zone so its guests reach
 the controller's managed services, and carrying ownership metadata naming the
 context and attachment. An `external` attachment is proved present as a link and never
-defined, changed or removed. A network that exists without this context's
-ownership metadata is foreign and refuses; an owned network whose definition
-differs from the frozen request is redefined, and restarted while it runs
-another one.
+defined, changed or removed. On one host, no two providers declare a managed
+attachment of one name, because the context names the one network it defines
+after it, and a bridge a managed attachment defines is named by no other
+attachment of that host, managed or external, of the same provider or another,
+because the bridge goes with the host block that defines it; admission refuses
+either, naming both providers
+([machines](api/machines.md#machine-profiles-and-network-attachments)). A
+network that exists without this context's ownership metadata is foreign and
+refuses; an owned network whose definition differs from the frozen request is
+redefined, and restarted while it runs another one.
 
 The apply reads, for each managed network, both the definition it runs and the
 one libvirt keeps for its next start, and compares each value this contract
@@ -205,13 +211,14 @@ before that bridge's.
 **Domain.** One libvirt domain named `bootwright-<context>-<machine>` with a
 deterministic UUID derived from the context and Machine names, `q35` machine
 type with KVM and BIOS firmware, the selected profile's vCPU count and memory,
-a root disk of `diskGiB` and one disk per `dataDisks[]` entry as `qcow2` images
-beneath `/var/lib/libvirt/images/bootwright/<context>/<machine>/`, one
-interface per effective attachment with a deterministic locally administered
-MAC, an emulated TPM 2.0 when the profile declares `tpm`, a serial console, and
+a root disk of `diskGiB` and one disk per `dataDisks[]` entry, at most seven,
+as `qcow2` images beneath
+`/var/lib/libvirt/images/bootwright/<context>/<machine>/`, one interface per
+effective attachment with a deterministic locally administered MAC, an
+emulated TPM 2.0 when the profile declares `tpm`, a serial console, and
 ownership metadata naming the context and Machine. Each disk is presented on
-the virtio bus, the root disk as `vda` and the data disks as `vdb` onward in
-declared order, and carries no WWN, SCSI address or serial number for a
+the virtio bus, the root disk as `vda` and the data disks as `vdb` through
+`vdh` in declared order, and carries no WWN, SCSI address or serial number for a
 [root-device hint](api/machines.md#bmc-and-root-device-shape) to match. Each
 interface carries the
 same derived address the realized target reports, so a consumer that must
@@ -220,7 +227,11 @@ presents. An interface attaches to the
 libvirt network a managed attachment defines, and to the bridge alone for an
 external one, so the hypervisor holds the dependency on a network this context
 owns and refuses to start a Machine whose network is down rather than starting
-it unreachable. The domain is defined without autostart and left powered off;
+it unreachable. Admission refuses a non-provided Machine whose composed network
+configuration presents no available ethernet interface, which would leave its
+domain without one
+([network configuration](api/machines.md#network-configuration)).
+The domain is defined without autostart and left powered off;
 booting it is the work of whichever consumer installs it. Its boot order is the
 root disk first and optical media second: an empty disk falls through to
 inserted installer media, and once an installer has written that disk the
@@ -250,8 +261,7 @@ endpoint is `http://<bindAddress>:<port>/redfish/v1/Systems/<uuid>`, with an
 IPv6 `bindAddress` bracketed (`http://[fd00::1]:8000/redfish/v1/Systems/<uuid>`),
 so it meets the controller address grammar of
 [machines](api/machines.md#bmc-and-root-device-shape); the plan's listener impact
-prints the socket in the same form. `disableCertificateVerification` selects
-nothing while the emulator serves no TLS. The password file keeps the hash it
+prints the socket in the same form. The password file keeps the hash it
 holds while bcrypt's `checkpw` still verifies the bound password with it,
 because bcrypt salts every hash afresh: hashing the password again would
 rewrite the file and restart the controller on every replay.

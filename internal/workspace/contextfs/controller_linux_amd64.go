@@ -144,10 +144,10 @@ func controllerSnapshot(ctx context.Context, root *directory, registry contexts.
 			continue
 		}
 		if record.Mode != contexts.Ready {
-			return prerequisites.StorageView{}, controllerStored{}, state("controller setup requires a ready context")
+			return prerequisites.StorageView{}, controllerStored{}, contexts.NotReady(record)
 		}
 		if record.Revision == "" {
-			return prerequisites.StorageView{}, controllerStored{}, diagnostics.NewFailure("context.input", "context has no desired state; run context update --name "+record.Name+" --input-dir <dir>", "")
+			return prerequisites.StorageView{}, controllerStored{}, contexts.MissingInput(record.Name)
 		}
 		sources, err := readSnapshot(ctx, root, record)
 		if err != nil {
@@ -157,7 +157,7 @@ func controllerSnapshot(ctx context.Context, root *directory, registry contexts.
 		view.Sources = sources
 		return view, stored, nil
 	}
-	return prerequisites.StorageView{}, controllerStored{}, state("explicit controller context does not exist")
+	return prerequisites.StorageView{}, controllerStored{}, contexts.AbsentContext(name)
 }
 
 func (s *Store) ReadController(ctx context.Context, name string, callback func(prerequisites.StorageView) error) error {
@@ -170,7 +170,7 @@ func (s *Store) ReadController(ctx context.Context, name string, callback func(p
 	root, err := s.openRoot(ctx, false, nil)
 	if errors.Is(err, syscall.ENOENT) {
 		if name != "" {
-			return state("explicit controller context does not exist")
+			return contexts.AbsentContext(name)
 		}
 		active := true
 		defer func() { active = false }()
@@ -249,7 +249,7 @@ func (s *Store) MutateController(ctx context.Context, expected prerequisites.Set
 	if expected.Name == "" && expected != (prerequisites.SetupContext{}) || expected.Name != "" && (!contextName(expected.Name) || !identifier(expected.Revision, "rev-") || !contextName(expected.Machine)) {
 		return state("controller mutation requires exact scope and input evidence")
 	}
-	return s.Transact(ctx, create && expected.Name == "", nil, func(base contexts.Transaction) error {
+	err := s.Transact(ctx, create && expected.Name == "", nil, func(base contexts.Transaction) error {
 		t := base.(*transaction)
 		view, stored, err := controllerSnapshot(ctx, t.root, t.registry, expected.Name)
 		if err != nil {
@@ -288,6 +288,13 @@ func (s *Store) MutateController(ctx context.Context, expected prerequisites.Set
 		}()
 		return callback(tx)
 	})
+	switch {
+	case !errors.Is(err, contexts.ErrNoContexts):
+		return err
+	case expected.Name != "":
+		return contexts.AbsentContext(expected.Name)
+	}
+	return state("context store does not exist")
 }
 
 type controllerTransaction struct {

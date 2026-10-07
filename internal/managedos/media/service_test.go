@@ -18,10 +18,13 @@ import (
 )
 
 type fakeStore struct {
-	entries  []managedos.MediaEntry
-	occupied []string
-	frozen   []string
-	digests  map[string]string
+	entries []managedos.MediaEntry
+	// observed is the size an image's bytes have now, when it differs from
+	// its record.
+	observed     map[string]int64
+	occupied     []string
+	reservations map[string][]string
+	digests      map[string]string
 	// retained is the entry a stage kept for each image, and retainedBytes
 	// what that stage holds now.
 	retained      map[string]managedos.MediaEntry
@@ -32,9 +35,13 @@ type fakeStore struct {
 	replaced   bool
 	deleted    string
 	stageError error
-	stages     int
-	writes     int
-	closed     int
+	// verifyError fails each adopted stage's re-read, and digestError each
+	// full read of a stored image.
+	verifyError error
+	digestError error
+	stages      int
+	writes      int
+	closed      int
 	// kept records each record a stage was retained with.
 	kept [][]byte
 	// mutations counts MutateMedia calls, and busyAt makes that call meet
@@ -71,11 +78,27 @@ func (s *fakeStore) MutateMedia(ctx context.Context, callback func(Transaction) 
 	return callback(s)
 }
 
-func (s *fakeStore) Entries(context.Context) ([]managedos.MediaEntry, error) { return s.entries, nil }
-func (s *fakeStore) Names(context.Context) ([]string, error)                 { return s.occupied, nil }
-func (s *fakeStore) Frozen(context.Context) ([]string, error)                { return s.frozen, nil }
+func (s *fakeStore) Entries(context.Context) ([]Image, error) {
+	images := []Image{}
+	for _, entry := range s.entries {
+		size, changed := s.observed[entry.Name]
+		if !changed {
+			size = entry.Size
+		}
+		images = append(images, Image{MediaEntry: entry, Observed: size})
+	}
+	return images, nil
+}
+
+func (s *fakeStore) Names(context.Context) ([]string, error) { return s.occupied, nil }
+func (s *fakeStore) Reservations(context.Context) (map[string][]string, error) {
+	return s.reservations, nil
+}
 
 func (s *fakeStore) Digest(_ context.Context, name string) (string, error) {
+	if s.digestError != nil {
+		return "", s.digestError
+	}
 	return s.digests[name], nil
 }
 
@@ -88,12 +111,13 @@ func (s *fakeStore) Entry(_ context.Context, name string) (managedos.MediaEntry,
 	return managedos.MediaEntry{}, false, nil
 }
 
-func (s *fakeStore) Retained(context.Context) ([]string, error) {
-	names := []string{}
-	for name := range s.retained {
-		names = append(names, name)
+func (s *fakeStore) Retained(context.Context) ([]managedos.MediaEntry, error) {
+	kept := []managedos.MediaEntry{}
+	for _, entry := range s.retained {
+		kept = append(kept, entry)
 	}
-	return names, nil
+	slices.SortFunc(kept, func(x, y managedos.MediaEntry) int { return strings.Compare(x.Name, y.Name) })
+	return kept, nil
 }
 
 // Stage refuses a name a live stage holds, and adopts an image's retained stage
@@ -170,6 +194,9 @@ func (f *fakeStage) Retained() (managedos.MediaEntry, bool) {
 func (f *fakeStage) Verify(context.Context) (Staged, error) {
 	if f.store.locked || f.adopted == nil {
 		return Staged{}, errors.New("a stage that was not adopted, or under the root lock, was verified")
+	}
+	if f.store.verifyError != nil {
+		return Staged{}, f.store.verifyError
 	}
 	data := f.store.retainedBytes[f.name]
 	sum := sha256.Sum256(data)
@@ -266,20 +293,59 @@ type fakePayload struct{ *bytes.Reader }
 
 func (fakePayload) Close() error { return nil }
 
+// fakeAcquirer reports origin as each source's origin, or the source itself as
+// a URL when origin is empty, and records the source it opened.
 type fakeAcquirer struct {
 	data   string
 	origin string
 	err    error
 	opens  int
+	opened Source
+	// readErr fails the payload once its bytes are read, and onOpen runs as
+	// the source opens.
+	readErr error
+	onOpen  func()
 }
 
-func (a *fakeAcquirer) Open(context.Context, Source) (Acquisition, error) {
+func (a *fakeAcquirer) Origin(source Source) (string, error) {
+	switch {
+	case a.origin != "":
+		return a.origin, nil
+	case source.Path != "":
+		return "file://" + source.Path, nil
+	}
+	return source.URL, nil
+}
+
+func (a *fakeAcquirer) Open(_ context.Context, source Source) (Acquisition, error) {
 	a.opens++
+	a.opened = source
+	if a.onOpen != nil {
+		a.onOpen()
+	}
 	if a.err != nil {
 		return Acquisition{}, a.err
 	}
-	return Acquisition{Payload: fakePayload{bytes.NewReader([]byte(a.data))}, Origin: a.origin}, nil
+	if a.readErr != nil {
+		return Acquisition{Payload: failingPayload{data: bytes.NewReader([]byte(a.data)), err: a.readErr}}, nil
+	}
+	return Acquisition{Payload: fakePayload{bytes.NewReader([]byte(a.data))}}, nil
 }
+
+// failingPayload serves its bytes, then fails.
+type failingPayload struct {
+	data *bytes.Reader
+	err  error
+}
+
+func (p failingPayload) Read(buffer []byte) (int, error) {
+	if n, _ := p.data.Read(buffer); n > 0 {
+		return n, nil
+	}
+	return 0, p.err
+}
+
+func (failingPayload) Close() error { return nil }
 
 type fakeConfirmer struct {
 	calls  int
@@ -289,11 +355,16 @@ type fakeConfirmer struct {
 	store  *fakeStore
 	locked []bool
 	during func(*fakeStore)
+	// log, when set, records each prompt in order.
+	log *[]string
 }
 
 func (c *fakeConfirmer) Confirm(_ context.Context, action, _ string) error {
 	c.calls++
 	c.action = action
+	if c.log != nil {
+		*c.log = append(*c.log, "confirm "+action)
+	}
 	if c.store != nil {
 		c.locked = append(c.locked, c.store.locked)
 	}
@@ -366,7 +437,7 @@ func TestAddRefusesWhatChangedInTheStoreWhileItAcquired(t *testing.T) {
 		change   func(*fakeStore)
 	}{
 		"the replaced image was deleted": {[]string{"demo.iso"}, func(s *fakeStore) { s.occupied = nil }},
-		"the replaced image was frozen":  {[]string{"demo.iso"}, func(s *fakeStore) { s.frozen = []string{"demo.iso"} }},
+		"the replaced image was frozen":  {[]string{"demo.iso"}, func(s *fakeStore) { s.reservations = map[string][]string{"demo.iso": {"example"}} }},
 		"the name was published":         {nil, func(s *fakeStore) { s.occupied = []string{"demo.iso"} }},
 		"the store filled up": {nil, func(s *fakeStore) {
 			for index := range managedos.MaxMediaEntries {
@@ -389,7 +460,7 @@ func TestAddRefusesWhatChangedInTheStoreWhileItAcquired(t *testing.T) {
 }
 
 func TestAddRefusesBeforeAcquiringAnythingItCannotPublish(t *testing.T) {
-	frozen := &fakeStore{occupied: []string{"demo.iso"}, frozen: []string{"demo.iso"}}
+	frozen := &fakeStore{occupied: []string{"demo.iso"}, reservations: map[string][]string{"demo.iso": {"example"}}}
 	full := &fakeStore{}
 	for index := range managedos.MaxMediaEntries {
 		full.occupied = append(full.occupied, string(rune('a'+index%26))+"-full.iso")
@@ -462,7 +533,7 @@ func TestAnEntryThatChangedWhileItWasConfirmedIsRefused(t *testing.T) {
 	republished.SHA256, republished.Added = digestOf("new"), "2026-09-15T10:00:00Z"
 	changes := map[string]func(*fakeStore){
 		"deleted":          func(s *fakeStore) { s.occupied, s.entries = nil, nil },
-		"frozen":           func(s *fakeStore) { s.frozen = []string{"demo.iso"} },
+		"frozen":           func(s *fakeStore) { s.reservations = map[string][]string{"demo.iso": {"example"}} },
 		"digest changed":   func(s *fakeStore) { s.entries = []managedos.MediaEntry{republished} },
 		"record withdrawn": func(s *fakeStore) { s.entries = nil },
 	}
@@ -527,7 +598,10 @@ func TestAPinnedAddRetainsItsStageOnlyWhenItsPublicationMeetsALock(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			store := &fakeStore{busyAt: test.busyAt}
 			if test.frozen {
-				store.duringFill = func(s *fakeStore) { s.occupied = []string{"demo.iso"}; s.frozen = []string{"demo.iso"} }
+				store.duringFill = func(s *fakeStore) {
+					s.occupied = []string{"demo.iso"}
+					s.reservations = map[string][]string{"demo.iso": {"example"}}
+				}
 			}
 			_, err := newService(store, &fakeAcquirer{data: "installer bytes", origin: "file:///images/demo.iso"}, nil).Add(context.Background(), AddMediaRequest{
 				Name: "demo.iso", SourceFile: "/images/demo.iso", SHA256: test.pin, SkipConfirmation: true,
@@ -610,7 +684,8 @@ func TestARetainedStageRefusalPromisesOnlyWhatItsRepetitionDoes(t *testing.T) {
 	_, err = newService(store, acquirer, nil).Add(context.Background(), request)
 	reported = diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "media.store" ||
-		reported[0].Message != "the image retained for demo.iso no longer holds the bytes it verified, so it was removed" ||
+		reported[0].Message != "the image retained for demo.iso from file:///images/demo.iso no longer holds the bytes it verified (expected sha256:"+
+			digestOf("installer bytes")+", computed sha256:"+digestOf("INSTALLER BYTES")+"), so it was removed" ||
 		reported[0].Remediation != "repeat the command to acquire it again" {
 		t.Fatalf("the repetition over a rewritten stage reported %#v", reported)
 	}
@@ -626,7 +701,7 @@ func TestListReportsReservationsAndOptionalVerification(t *testing.T) {
 	entry := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
 	other := managedos.MediaEntry{Name: "alt.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///alt.iso", Added: "2026-09-15T09:00:00Z"}
 	store := &fakeStore{
-		entries: []managedos.MediaEntry{entry, other}, frozen: []string{"demo.iso"},
+		entries: []managedos.MediaEntry{entry, other}, reservations: map[string][]string{"demo.iso": {"example"}},
 		digests: map[string]string{"demo.iso": entry.SHA256, "alt.iso": digestOf("changed")},
 	}
 	service := newService(store, &fakeAcquirer{}, nil)
@@ -650,7 +725,7 @@ func TestListReportsReservationsAndOptionalVerification(t *testing.T) {
 }
 
 func TestDeleteRemovesOnlyAnUnreservedImageTheStoreHolds(t *testing.T) {
-	frozen := &fakeStore{occupied: []string{"demo.iso"}, frozen: []string{"demo.iso"}}
+	frozen := &fakeStore{occupied: []string{"demo.iso"}, reservations: map[string][]string{"demo.iso": {"example"}}}
 	expectMediaFailure(t, mustFail(newService(frozen, &fakeAcquirer{}, nil).Delete(context.Background(), DeleteMediaRequest{Name: "demo.iso", SkipConfirmation: true})))
 	if frozen.deleted != "" {
 		t.Fatal("a reserved image was deleted")
@@ -683,3 +758,590 @@ func TestAnUnconfiguredServiceIsUnavailable(t *testing.T) {
 }
 
 func mustFail(_ *MutationResult, err error) error { return err }
+
+// A record cannot carry an origin over its bound or with a control character,
+// so the add refuses before it confirms, claims or acquires anything, names
+// the cause and never prints the origin itself.
+func refusesTheOriginBeforeAnythingIsClaimed(t *testing.T, origin, cause string) {
+	t.Helper()
+	for _, request := range []AddMediaRequest{
+		{Name: "demo.iso", SourceFile: "/images/demo.iso"},
+		{Name: "demo.iso", SourceURL: "https://example.test/demo.iso?X-Amz-Signature=abc", SHA256: digestOf("installer bytes")},
+	} {
+		store := &fakeStore{occupied: []string{"demo.iso"}}
+		acquirer := &fakeAcquirer{data: "installer bytes", origin: origin}
+		confirmer := &fakeConfirmer{}
+		_, err := newService(store, acquirer, confirmer).Add(context.Background(), request)
+		expectMediaFailure(t, err)
+		reported := diagnostics.Of(err)[0]
+		remedy := "copy the image to a shorter path without control characters and add the copy with --from-file"
+		if request.SourceURL != "" {
+			remedy = "name a URL whose scheme, host and path fit in 512 bytes, because its query is never recorded"
+		}
+		if reported.Message != "the origin of image demo.iso "+cause+", so its record cannot carry it" || reported.Remediation != remedy {
+			t.Fatalf("the refusal of %+v = %#v", request, reported)
+		}
+		if store.stages != 0 || acquirer.opens != 0 || confirmer.calls != 0 {
+			t.Fatalf("the refused origin claimed %d stages, opened %d sources and prompted %d times", store.stages, acquirer.opens, confirmer.calls)
+		}
+	}
+}
+
+func TestAnOverLongOriginRefusesBeforeAnythingIsClaimed(t *testing.T) {
+	origin := "file:///" + strings.Repeat("a", MaxMediaOrigin-len("file:///")+1)
+	if len(origin) != 513 {
+		t.Fatalf("the origin holds %d bytes, want 513", len(origin))
+	}
+	refusesTheOriginBeforeAnythingIsClaimed(t, origin, "is longer than 512 bytes")
+}
+
+func TestAControlCharacterOriginRefusesBeforeAnythingIsClaimed(t *testing.T) {
+	refusesTheOriginBeforeAnythingIsClaimed(t, "file:///images/de\x1b[2Jmo.iso", "carries a control character, leading or trailing white space or invalid UTF-8")
+}
+
+// The record carries the origin the acquirer reports, without the query that
+// may sign the URL; the download itself still requests it.
+func TestTheRecordCarriesTheQueryFreeOrigin(t *testing.T) {
+	store := &fakeStore{}
+	acquirer := &fakeAcquirer{data: "installer bytes", origin: "https://example.test/images/demo.iso"}
+	signed := "https://example.test/images/demo.iso?X-Amz-Signature=abc"
+	if _, err := newService(store, acquirer, nil).Add(context.Background(), AddMediaRequest{
+		Name: "demo.iso", SourceURL: signed, SHA256: digestOf("installer bytes"),
+	}); err != nil {
+		t.Fatalf("add: %#v", diagnostics.Of(err))
+	}
+	entry, err := managedos.DecodeMediaRecord(store.published, "demo.iso")
+	if err != nil || entry.Source != "https://example.test/images/demo.iso" {
+		t.Fatalf("published record = %+v (%v)", entry, err)
+	}
+	if acquirer.opened.URL != signed {
+		t.Fatalf("the download requested %q, want the signed URL", acquirer.opened.URL)
+	}
+}
+
+func TestADigestMismatchNamesBothDigestsAndTheImage(t *testing.T) {
+	store := &fakeStore{}
+	acquirer := &fakeAcquirer{data: "other bytes", origin: "https://example.test/images/demo.iso"}
+	_, err := newService(store, acquirer, nil).Add(context.Background(), AddMediaRequest{
+		Name: "demo.iso", SourceURL: "https://example.test/images/demo.iso", SHA256: digestOf("installer bytes"),
+	})
+	expectMediaFailure(t, err)
+	reported := diagnostics.Of(err)[0]
+	want := "image demo.iso acquired from https://example.test/images/demo.iso does not match its expected digest (expected sha256:" +
+		digestOf("installer bytes") + ", computed sha256:" + digestOf("other bytes") + ")"
+	if reported.Message != want || !strings.Contains(reported.Remediation, "the publisher's checksum list") || store.published != nil {
+		t.Fatalf("the mismatch reported %#v", reported)
+	}
+}
+
+// Only a completed destroy releases a context's reservation, so every refusal
+// of a reserved image names each reserving context and its destroy.
+func TestAReservedImageNamesEveryReservingContextAndItsDestroy(t *testing.T) {
+	reserved := map[string][]string{"demo.iso": {"lab-a", "lab-b"}}
+	refusals := map[string]func() error{
+		"delete": func() error {
+			store := &fakeStore{occupied: []string{"demo.iso"}, reservations: reserved}
+			return mustFail(newService(store, &fakeAcquirer{}, &fakeConfirmer{}).Delete(context.Background(), DeleteMediaRequest{Name: "demo.iso"}))
+		},
+		"replacing add": func() error {
+			store := &fakeStore{occupied: []string{"demo.iso"}, reservations: reserved}
+			return mustFail(newService(store, &fakeAcquirer{data: "installer bytes"}, &fakeConfirmer{}).Add(context.Background(), AddMediaRequest{Name: "demo.iso", SourceFile: "/images/demo.iso"}))
+		},
+		"reserved while acquiring": func() error {
+			store := &fakeStore{occupied: []string{"demo.iso"}, duringFill: func(s *fakeStore) { s.reservations = reserved }}
+			return mustFail(newService(store, &fakeAcquirer{data: "installer bytes"}, nil).Add(context.Background(), AddMediaRequest{Name: "demo.iso", SourceFile: "/images/demo.iso", SkipConfirmation: true}))
+		},
+	}
+	for name, refusal := range refusals {
+		t.Run(name, func(t *testing.T) {
+			err := refusal()
+			expectMediaFailure(t, err)
+			reported := diagnostics.Of(err)[0]
+			if reported.Message != "image demo.iso is reserved by contexts lab-a, lab-b" ||
+				reported.Remediation != "only a completed destroy releases a context's reservation, so repeat this command after "+
+					"bootwright destroy --context lab-a and bootwright destroy --context lab-b" {
+				t.Fatalf("the refusal = %#v", reported)
+			}
+		})
+	}
+	store := &fakeStore{occupied: []string{"demo.iso"}, reservations: map[string][]string{"demo.iso": {"lab-a"}}}
+	err := mustFail(newService(store, &fakeAcquirer{}, nil).Delete(context.Background(), DeleteMediaRequest{Name: "demo.iso", SkipConfirmation: true}))
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != "image demo.iso is reserved by context lab-a" ||
+		!strings.HasSuffix(reported[0].Remediation, "after bootwright destroy --context lab-a") {
+		t.Fatalf("the refusal of one reserving context = %#v", reported)
+	}
+}
+
+func TestDeletingAnAbsentImageNamesIt(t *testing.T) {
+	err := mustFail(newService(&fakeStore{}, &fakeAcquirer{}, nil).Delete(context.Background(), DeleteMediaRequest{Name: "demo.iso", SkipConfirmation: true}))
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != "the media store holds no image named demo.iso" {
+		t.Fatalf("the refusal = %#v", reported)
+	}
+}
+
+// recordingReporter records every progress event, and observe sees each one as
+// it is reported.
+type recordingReporter struct {
+	events  []ProgressEvent
+	observe func(ProgressEvent)
+}
+
+func (r *recordingReporter) ReportProgress(_ context.Context, event ProgressEvent) {
+	r.events = append(r.events, event)
+	if r.observe != nil {
+		r.observe(event)
+	}
+}
+
+// recordingPresenter records every change it shows, in the log it shares with
+// the confirmer, and whether the store's root lock was held at the time.
+type recordingPresenter struct {
+	changes []Change
+	locked  []bool
+	store   *fakeStore
+	log     *[]string
+	err     error
+}
+
+func (p *recordingPresenter) PresentMediaChange(_ context.Context, change Change) error {
+	p.changes = append(p.changes, change)
+	if p.store != nil {
+		p.locked = append(p.locked, p.store.locked)
+	}
+	if p.log != nil {
+		*p.log = append(*p.log, "present "+change.Action)
+	}
+	return p.err
+}
+
+func expectEvents(t *testing.T, got []ProgressEvent, want ...ProgressEvent) {
+	t.Helper()
+	if !slices.Equal(got, want) {
+		t.Fatalf("progress events\n got %+v\nwant %+v", got, want)
+	}
+}
+
+func step(name, label, status, detail string, position int) ProgressEvent {
+	return ProgressEvent{Step: name, Label: label, Detail: detail, Status: status, Position: position, Total: 2}
+}
+
+func check(label, status, detail string, position, total int) ProgressEvent {
+	return ProgressEvent{Check: true, Step: "verify", Label: label, Detail: detail, Status: status, Position: position, Total: total}
+}
+
+// An add reports its acquisition, opened before the source and naming the
+// origin the record carries, never the query, then its publication around the
+// hold that publishes.
+func TestAddReportsAcquisitionThenPublication(t *testing.T) {
+	store := &fakeStore{}
+	acquirer := &fakeAcquirer{data: "installer bytes", origin: "https://example.test/images/demo.iso"}
+	reporter := &recordingReporter{}
+	reporter.observe = func(event ProgressEvent) {
+		if event.Step == "acquire" && event.Status == "running" && acquirer.opens != 0 {
+			t.Errorf("the acquisition was reported after its source opened")
+		}
+		if event.Step == "publish" && event.Status == "running" && store.published != nil {
+			t.Errorf("the publication was reported after it happened")
+		}
+	}
+	_, err := newService(store, acquirer, nil).Reporting(reporter, nil).Add(context.Background(), AddMediaRequest{
+		Name: "demo.iso", SourceURL: "https://example.test/images/demo.iso?X-Amz-Signature=abc", SHA256: digestOf("installer bytes"),
+	})
+	if err != nil {
+		t.Fatalf("add: %#v", diagnostics.Of(err))
+	}
+	expectEvents(t, reporter.events,
+		step("acquire", "Acquire demo.iso", "running", "https://example.test/images/demo.iso", 1),
+		step("acquire", "Acquire demo.iso", "done", "15 bytes", 1),
+		step("publish", "Publish demo.iso", "running", "", 2),
+		step("publish", "Publish demo.iso", "done", "", 2),
+	)
+}
+
+// An adopted stage is re-read, not acquired, so its first step says so and
+// names the origin it was retained from.
+func TestAnAdoptedStageReportsItsVerification(t *testing.T) {
+	retained := managedos.MediaEntry{Name: "demo.iso", Size: 15, SHA256: digestOf("installer bytes"), Source: "https://example.test/demo.iso", Added: "2026-09-14T09:00:00Z"}
+	store := &fakeStore{retained: map[string]managedos.MediaEntry{"demo.iso": retained}, retainedBytes: map[string][]byte{"demo.iso": []byte("installer bytes")}}
+	reporter := &recordingReporter{}
+	if _, err := newService(store, &fakeAcquirer{}, nil).Reporting(reporter, nil).Add(context.Background(), AddMediaRequest{
+		Name: "demo.iso", SourceURL: "https://example.test/demo.iso", SHA256: retained.SHA256,
+	}); err != nil {
+		t.Fatalf("add: %#v", diagnostics.Of(err))
+	}
+	expectEvents(t, reporter.events,
+		step("verify-retained", "Verify the image retained for demo.iso", "running", "https://example.test/demo.iso", 1),
+		step("verify-retained", "Verify the image retained for demo.iso", "done", "15 bytes", 1),
+		step("publish", "Publish demo.iso", "running", "", 2),
+		step("publish", "Publish demo.iso", "done", "", 2),
+	)
+	changed := &fakeStore{retained: map[string]managedos.MediaEntry{"demo.iso": retained}, retainedBytes: map[string][]byte{"demo.iso": []byte("INSTALLER BYTES")}}
+	reporter = &recordingReporter{}
+	_, err := newService(changed, &fakeAcquirer{}, nil).Reporting(reporter, nil).Add(context.Background(), AddMediaRequest{
+		Name: "demo.iso", SourceURL: "https://example.test/demo.iso", SHA256: retained.SHA256,
+	})
+	expectMediaFailure(t, err)
+	expectEvents(t, reporter.events,
+		step("verify-retained", "Verify the image retained for demo.iso", "running", "https://example.test/demo.iso", 1),
+		step("verify-retained", "Verify the image retained for demo.iso", "failed", "", 1),
+	)
+}
+
+// An acquisition that fails settles its own step failed, and nothing is
+// published, so no publication step follows.
+func TestAFailedAcquisitionSettlesItsStepFailed(t *testing.T) {
+	refused := diagnostics.NewFailureWithRemediation("media.store", "the media endpoint images.example answered 404 Not Found", "", "name an image the endpoint serves")
+	for name, acquirer := range map[string]*fakeAcquirer{
+		"the source refused to open": {err: refused},
+		"the source failed mid-read": {data: "installer", readErr: refused},
+		"the digest did not match":   {data: "other bytes"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			acquirer.origin = "https://example.test/images/demo.iso"
+			reporter := &recordingReporter{}
+			_, err := newService(&fakeStore{}, acquirer, nil).Reporting(reporter, nil).Add(context.Background(), AddMediaRequest{
+				Name: "demo.iso", SourceURL: "https://example.test/images/demo.iso", SHA256: digestOf("installer bytes"),
+			})
+			if err == nil {
+				t.Fatal("a failed acquisition succeeded")
+			}
+			expectEvents(t, reporter.events,
+				step("acquire", "Acquire demo.iso", "running", "https://example.test/images/demo.iso", 1),
+				step("acquire", "Acquire demo.iso", "failed", "", 1),
+			)
+		})
+	}
+}
+
+// A publication that meets another command's lock, or finds the name it
+// admitted published or reserved meanwhile, settles its own step failed rather
+// than leaving it running above the refusal, and nothing follows it.
+func TestAFailedPublicationSettlesItsStepFailed(t *testing.T) {
+	for name, test := range map[string]struct {
+		occupied []string
+		busyAt   int
+		change   func(*fakeStore)
+		code     string
+	}{
+		"another command holds the store": {busyAt: 2, code: "lifecycle.lease"},
+		"the name was published meanwhile": {
+			change: func(s *fakeStore) { s.occupied = []string{"demo.iso"} }, code: "media.store",
+		},
+		"the replaced image was reserved meanwhile": {
+			occupied: []string{"demo.iso"}, change: func(s *fakeStore) { s.reservations = map[string][]string{"demo.iso": {"lab-rhel"}} }, code: "media.store",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &fakeStore{occupied: test.occupied, busyAt: test.busyAt, duringFill: test.change}
+			reporter := &recordingReporter{}
+			_, err := newService(store, &fakeAcquirer{data: "installer bytes", origin: "file:///images/demo.iso"}, nil).Reporting(reporter, nil).Add(context.Background(), AddMediaRequest{
+				Name: "demo.iso", SourceFile: "/images/demo.iso", SHA256: digestOf("installer bytes"), SkipConfirmation: true,
+			})
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != test.code || store.published != nil {
+				t.Fatalf("a refused publication reported %#v, published %q", reported, store.published)
+			}
+			expectEvents(t, reporter.events,
+				step("acquire", "Acquire demo.iso", "running", "file:///images/demo.iso", 1),
+				step("acquire", "Acquire demo.iso", "done", "15 bytes", 1),
+				step("publish", "Publish demo.iso", "running", "", 2),
+				step("publish", "Publish demo.iso", "failed", "", 2),
+			)
+		})
+	}
+}
+
+// An adopted stage that cannot be re-read settles its verification failed with
+// the store's own cause, and nothing is published.
+func TestAnAdoptedStageThatCannotBeReadSettlesItsVerificationFailed(t *testing.T) {
+	retained := managedos.MediaEntry{Name: "demo.iso", Size: 15, SHA256: digestOf("installer bytes"), Source: "https://example.test/demo.iso", Added: "2026-09-14T09:00:00Z"}
+	unreadable := errors.New("the retained image could not be read in full")
+	store := &fakeStore{
+		retained: map[string]managedos.MediaEntry{"demo.iso": retained}, retainedBytes: map[string][]byte{"demo.iso": []byte("installer bytes")},
+		verifyError: unreadable,
+	}
+	reporter := &recordingReporter{}
+	_, err := newService(store, &fakeAcquirer{}, nil).Reporting(reporter, nil).Add(context.Background(), AddMediaRequest{
+		Name: "demo.iso", SourceURL: "https://example.test/demo.iso", SHA256: retained.SHA256,
+	})
+	if !errors.Is(err, unreadable) || store.published != nil {
+		t.Fatalf("an unreadable adopted stage reported %v, published %q", err, store.published)
+	}
+	expectEvents(t, reporter.events,
+		step("verify-retained", "Verify the image retained for demo.iso", "running", "https://example.test/demo.iso", 1),
+		step("verify-retained", "Verify the image retained for demo.iso", "failed", "", 1),
+	)
+}
+
+// An image the listing cannot read in full settles its check failed, and the
+// listing refuses with the store's own cause rather than reporting a
+// verification it did not make.
+func TestAnImageThatCannotBeReadSettlesItsCheckFailed(t *testing.T) {
+	entry := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
+	unreadable := errors.New("the image could not be read in full")
+	store := &fakeStore{entries: []managedos.MediaEntry{entry}, digestError: unreadable}
+	reporter := &recordingReporter{}
+	listed, err := newService(store, &fakeAcquirer{}, nil).Reporting(reporter, nil).List(context.Background(), ListMediaRequest{Checksums: true})
+	if !errors.Is(err, unreadable) || listed != nil {
+		t.Fatalf("an unreadable image listed %+v (%v)", listed, err)
+	}
+	expectEvents(t, reporter.events,
+		check("Verify demo.iso", "running", "", 1, 1),
+		check("Verify demo.iso", "failed", "", 1, 1),
+	)
+}
+
+// Reporting stops at cancellation rather than claiming a step whose outcome is
+// no longer observable.
+func TestNothingIsReportedAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reporter := &recordingReporter{}
+	acquirer := &fakeAcquirer{data: "installer bytes", origin: "file:///images/demo.iso", onOpen: cancel}
+	_, _ = newService(&fakeStore{}, acquirer, nil).Reporting(reporter, nil).Add(ctx, AddMediaRequest{Name: "demo.iso", SourceFile: "/images/demo.iso", SkipConfirmation: true})
+	expectEvents(t, reporter.events, step("acquire", "Acquire demo.iso", "running", "file:///images/demo.iso", 1))
+	listing, stop := context.WithCancel(context.Background())
+	defer stop()
+	entry := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
+	store := &fakeStore{entries: []managedos.MediaEntry{entry}, digests: map[string]string{"demo.iso": entry.SHA256}}
+	reporter = &recordingReporter{observe: func(ProgressEvent) { stop() }}
+	_, _ = newService(store, &fakeAcquirer{}, nil).Reporting(reporter, nil).List(listing, ListMediaRequest{Checksums: true})
+	expectEvents(t, reporter.events, check("Verify demo.iso", "running", "", 1, 1))
+}
+
+// Each image read in full is one check, in the listing's name order, which
+// settles with what its digest proved.
+func TestListWithChecksumsReportsOneCheckPerImage(t *testing.T) {
+	demo := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
+	alt := managedos.MediaEntry{Name: "alt.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///alt.iso", Added: "2026-09-15T09:00:00Z"}
+	store := &fakeStore{entries: []managedos.MediaEntry{demo, alt}, digests: map[string]string{"demo.iso": demo.SHA256, "alt.iso": digestOf("changed")}}
+	reporter := &recordingReporter{}
+	listed, err := newService(store, &fakeAcquirer{}, nil).Reporting(reporter, nil).List(context.Background(), ListMediaRequest{Checksums: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectEvents(t, reporter.events,
+		check("Verify alt.iso", "running", "", 1, 2),
+		check("Verify alt.iso", "failed", "sha256:"+digestOf("changed")+" differs from its record", 1, 2),
+		check("Verify demo.iso", "running", "", 2, 2),
+		check("Verify demo.iso", "ok", "matches its record", 2, 2),
+	)
+	if !listed.Checksums || listed.Media[0].Computed != digestOf("changed") || listed.Media[1].Computed != demo.SHA256 {
+		t.Fatalf("listing = %+v", listed)
+	}
+}
+
+// Reading records and file metadata takes no time worth reporting, and neither
+// does a deletion.
+func TestListWithoutChecksumsReportsNothing(t *testing.T) {
+	entry := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
+	store := &fakeStore{entries: []managedos.MediaEntry{entry}, occupied: []string{"demo.iso"}, digests: map[string]string{"demo.iso": entry.SHA256}}
+	reporter := &recordingReporter{}
+	service := newService(store, &fakeAcquirer{}, &fakeConfirmer{}).Reporting(reporter, nil)
+	listed, err := service.List(context.Background(), ListMediaRequest{})
+	if err != nil || listed.Checksums || listed.Media[0].Computed != "" || listed.Media[0].Verified != "" {
+		t.Fatalf("listing = %+v (%v)", listed, err)
+	}
+	if _, err := service.Delete(context.Background(), DeleteMediaRequest{Name: "demo.iso"}); err != nil {
+		t.Fatalf("delete: %#v", diagnostics.Of(err))
+	}
+	expectEvents(t, reporter.events)
+}
+
+// An image whose size no longer matches its record is listed as a mismatch,
+// with or without checksums, and every other image is still listed; with
+// checksums it is read in full like any other and its computed digest shown.
+func TestListMarksAShortEntryAndKeepsTheRest(t *testing.T) {
+	demo := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
+	other := managedos.MediaEntry{Name: "other.iso", Size: 5, SHA256: digestOf("other"), Source: "file:///other.iso", Added: "2026-09-15T09:00:00Z"}
+	store := &fakeStore{
+		entries: []managedos.MediaEntry{demo, other}, observed: map[string]int64{"demo.iso": 2},
+		digests: map[string]string{"demo.iso": demo.SHA256, "other.iso": other.SHA256},
+	}
+	plain, err := newService(store, &fakeAcquirer{}, nil).List(context.Background(), ListMediaRequest{})
+	if err != nil || len(plain.Media) != 2 || plain.Media[0].Verified != "mismatch" || plain.Media[1].Verified != "" || plain.Media[0].Size != 4 {
+		t.Fatalf("plain listing = %+v (%v)", plain, err)
+	}
+	reporter := &recordingReporter{}
+	verified, err := newService(store, &fakeAcquirer{}, nil).Reporting(reporter, nil).List(context.Background(), ListMediaRequest{Checksums: true})
+	if err != nil || len(verified.Media) != 2 || verified.Media[0].Verified != "mismatch" || verified.Media[0].Computed != demo.SHA256 ||
+		verified.Media[1].Verified != "ok" || verified.Media[1].Computed != other.SHA256 {
+		t.Fatalf("verified listing = %+v (%v)", verified, err)
+	}
+	expectEvents(t, reporter.events,
+		check("Verify demo.iso", "running", "", 1, 2),
+		check("Verify demo.iso", "failed", "2 bytes differ from its record", 1, 2),
+		check("Verify other.iso", "running", "", 2, 2),
+		check("Verify other.iso", "ok", "matches its record", 2, 2),
+	)
+}
+
+// Whether a context reserves an image and whether its bytes verified are two
+// facts, and neither hides the other.
+func TestListReportsReservingContextsApartFromVerification(t *testing.T) {
+	demo := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
+	other := managedos.MediaEntry{Name: "other.iso", Size: 5, SHA256: digestOf("other"), Source: "file:///other.iso", Added: "2026-09-15T09:00:00Z"}
+	store := &fakeStore{
+		entries:      []managedos.MediaEntry{demo, other},
+		reservations: map[string][]string{"demo.iso": {"lab-sno", "lab-rhel"}},
+		digests:      map[string]string{"demo.iso": demo.SHA256, "other.iso": digestOf("changed")},
+	}
+	listed, err := newService(store, &fakeAcquirer{}, nil).List(context.Background(), ListMediaRequest{Checksums: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reserved, unreserved := listed.Media[0], listed.Media[1]
+	if !slices.Equal(reserved.ReservedBy, []string{"lab-rhel", "lab-sno"}) || !reserved.Frozen || reserved.Verified != "ok" {
+		t.Fatalf("the reserved image = %+v", reserved)
+	}
+	if unreserved.ReservedBy == nil || len(unreserved.ReservedBy) != 0 || unreserved.Frozen || unreserved.Verified != "mismatch" {
+		t.Fatalf("the unreserved image = %+v", unreserved)
+	}
+}
+
+// A confirmation first shows the stored image it would replace or delete, with
+// no root lock held, and only then prompts.
+func TestConfirmationsPresentTheStoredEntryFirst(t *testing.T) {
+	published := managedos.MediaEntry{Name: "demo.iso", Size: 3, SHA256: digestOf("old"), Source: "https://example.test/old.iso", Added: "2026-09-15T09:00:00Z"}
+	for name, test := range map[string]struct {
+		store  *fakeStore
+		delete bool
+		want   Change
+	}{
+		"replace": {
+			store: &fakeStore{occupied: []string{"demo.iso"}, entries: []managedos.MediaEntry{published}},
+			want:  Change{Action: ReplaceChange, Name: "demo.iso", Stored: true, Readable: true, Entry: published, NewOrigin: "file:///images/demo.iso"},
+		},
+		"delete": {
+			store: &fakeStore{
+				occupied: []string{"demo.iso"}, entries: []managedos.MediaEntry{published},
+				retained: map[string]managedos.MediaEntry{"demo.iso": published},
+			},
+			delete: true,
+			want:   Change{Action: DeleteChange, Name: "demo.iso", Stored: true, Readable: true, Entry: published, Retained: true},
+		},
+		"delete with an unreadable record": {
+			store:  &fakeStore{occupied: []string{"demo.iso"}},
+			delete: true,
+			want:   Change{Action: DeleteChange, Name: "demo.iso", Stored: true},
+		},
+		"delete of a retained stage alone": {
+			store:  &fakeStore{retained: map[string]managedos.MediaEntry{"demo.iso": published}},
+			delete: true,
+			want:   Change{Action: DeleteChange, Name: "demo.iso", Retained: true},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var log []string
+			presenter := &recordingPresenter{store: test.store, log: &log}
+			confirmer := &fakeConfirmer{log: &log}
+			service := newService(test.store, &fakeAcquirer{data: "installer bytes", origin: "file:///images/demo.iso"}, confirmer).Reporting(nil, presenter)
+			var err error
+			want := []string{"present replace", "confirm media replace"}
+			if test.delete {
+				_, err = service.Delete(context.Background(), DeleteMediaRequest{Name: "demo.iso"})
+				want = []string{"present delete", "confirm media delete"}
+			} else {
+				_, err = service.Add(context.Background(), AddMediaRequest{Name: "demo.iso", SourceFile: "/images/demo.iso"})
+			}
+			if err != nil {
+				t.Fatalf("%s: %#v", name, diagnostics.Of(err))
+			}
+			if !slices.Equal(log, want) || len(presenter.changes) != 1 || presenter.changes[0] != test.want || slices.Contains(presenter.locked, true) {
+				t.Fatalf("log %v, changes %+v, locked %v; want %v and %+v", log, presenter.changes, presenter.locked, want, test.want)
+			}
+		})
+	}
+}
+
+// A replacement whose pin adopts the stage a lock-refused add retained
+// publishes that stage with the source it was retained from, so its
+// confirmation shows that source as the new one, not the source the add names;
+// any other pin discards the stage, so it shows the add's own. A retained stage
+// gone once the replacement was confirmed refuses, claiming and acquiring
+// nothing, since the record would then carry a source it did not show.
+func TestAReplacementShowsTheSourceItsRecordWillCarry(t *testing.T) {
+	published := managedos.MediaEntry{Name: "demo.iso", Size: 3, SHA256: digestOf("old"), Source: "file:///old.iso", Added: "2026-09-15T09:00:00Z"}
+	retained := managedos.MediaEntry{Name: "demo.iso", Size: 15, SHA256: digestOf("installer bytes"), Source: "https://mirror-a.example.test/demo.iso", Added: "2026-09-14T09:00:00Z"}
+	named := "https://mirror-b.example.test/demo.iso"
+	fixture := func() *fakeStore {
+		return &fakeStore{
+			occupied: []string{"demo.iso"}, entries: []managedos.MediaEntry{published},
+			retained: map[string]managedos.MediaEntry{"demo.iso": retained}, retainedBytes: map[string][]byte{"demo.iso": []byte("installer bytes")},
+		}
+	}
+	for name, test := range map[string]struct {
+		pin, data, want string
+		opens           int
+	}{
+		"a pin that adopts the retained stage": {pin: retained.SHA256, want: retained.Source},
+		"another pin":                          {pin: digestOf("other bytes"), data: "other bytes", want: named, opens: 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := fixture()
+			presenter := &recordingPresenter{}
+			acquirer := &fakeAcquirer{data: test.data}
+			result, err := newService(store, acquirer, &fakeConfirmer{}).Reporting(nil, presenter).Add(context.Background(), AddMediaRequest{
+				Name: "demo.iso", SourceURL: named, SHA256: test.pin,
+			})
+			if err != nil || result.Outcome != "replaced" || acquirer.opens != test.opens {
+				t.Fatalf("the replacement = %+v (%#v), acquisitions %d", result, diagnostics.Of(err), acquirer.opens)
+			}
+			entry, err := managedos.DecodeMediaRecord(store.published, "demo.iso")
+			if err != nil || len(presenter.changes) != 1 || presenter.changes[0].NewOrigin != test.want || entry.Source != test.want {
+				t.Fatalf("the confirmation showed %+v, the record carries %+v (%v); want the source %s", presenter.changes, entry, err, test.want)
+			}
+		})
+	}
+	store := fixture()
+	acquirer := &fakeAcquirer{data: "installer bytes"}
+	confirmer := &fakeConfirmer{store: store, during: func(s *fakeStore) { delete(s.retained, "demo.iso") }}
+	_, err := newService(store, acquirer, confirmer).Reporting(nil, &recordingPresenter{}).Add(context.Background(), AddMediaRequest{
+		Name: "demo.iso", SourceURL: named, SHA256: retained.SHA256,
+	})
+	expectMediaFailure(t, err)
+	if store.stages != 0 || acquirer.opens != 0 || store.published != nil {
+		t.Fatalf("a replacement whose retained stage went after its confirmation claimed %d stages, acquired %d times or published", store.stages, acquirer.opens)
+	}
+}
+
+// A change that could not be shown is not confirmed: the command refuses
+// without prompting, claiming, acquiring or deleting anything.
+func TestAPresentationFailureRefusesWithoutPrompting(t *testing.T) {
+	refused := errors.New("standard output is closed")
+	published := managedos.MediaEntry{Name: "demo.iso", Size: 3, SHA256: digestOf("old"), Source: "file:///old.iso", Added: "2026-09-15T09:00:00Z"}
+	for _, verb := range []string{"add", "delete"} {
+		t.Run(verb, func(t *testing.T) {
+			store := &fakeStore{occupied: []string{"demo.iso"}, entries: []managedos.MediaEntry{published}}
+			acquirer := &fakeAcquirer{data: "installer bytes"}
+			confirmer := &fakeConfirmer{}
+			service := newService(store, acquirer, confirmer).Reporting(nil, &recordingPresenter{err: refused})
+			var err error
+			if verb == "add" {
+				_, err = service.Add(context.Background(), AddMediaRequest{Name: "demo.iso", SourceFile: "/images/demo.iso"})
+			} else {
+				_, err = service.Delete(context.Background(), DeleteMediaRequest{Name: "demo.iso"})
+			}
+			if !errors.Is(err, refused) || confirmer.calls != 0 || store.stages != 0 || acquirer.opens != 0 || store.deleted != "" {
+				t.Fatalf("err %v, prompts %d, stages %d, acquisitions %d, deleted %q", err, confirmer.calls, store.stages, acquirer.opens, store.deleted)
+			}
+		})
+	}
+}
+
+// A deletion reports the size and digest of the record it removed, whether or
+// not it was confirmed, and only the name when no record could be read.
+func TestADeletionReportsTheRecordItRemoved(t *testing.T) {
+	published := managedos.MediaEntry{Name: "demo.iso", Size: 3, SHA256: digestOf("old"), Source: "file:///old.iso", Added: "2026-09-15T09:00:00Z"}
+	for _, skip := range []bool{false, true} {
+		store := &fakeStore{occupied: []string{"demo.iso"}, entries: []managedos.MediaEntry{published}}
+		result, err := newService(store, &fakeAcquirer{}, &fakeConfirmer{}).Delete(context.Background(), DeleteMediaRequest{Name: "demo.iso", SkipConfirmation: skip})
+		if err != nil || *result != (MutationResult{Name: "demo.iso", Size: 3, SHA256: digestOf("old"), Outcome: "deleted"}) {
+			t.Fatalf("deletion with --yes %t = %+v (%v)", skip, result, err)
+		}
+	}
+	unreadable := &fakeStore{occupied: []string{"demo.iso"}}
+	result, err := newService(unreadable, &fakeAcquirer{}, nil).Delete(context.Background(), DeleteMediaRequest{Name: "demo.iso", SkipConfirmation: true})
+	if err != nil || *result != (MutationResult{Name: "demo.iso", Outcome: "deleted"}) {
+		t.Fatalf("deletion of an unreadable record = %+v (%v)", result, err)
+	}
+}

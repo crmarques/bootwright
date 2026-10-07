@@ -400,11 +400,12 @@ func TestARefusedRegistryReplacementLeavesNoStage(t *testing.T) {
 func TestARefusedSecretReplacementLeavesNoStage(t *testing.T) {
 	refuse := func(*Store, context.CancelFunc) error { return errors.New("refused at the secret rename") }
 	for _, interruption := range []struct {
-		name    string
-		point   checkpoint
-		outcome secretstore.Outcome
-		message string
-		act     func(store *Store, cancel context.CancelFunc) error
+		name        string
+		point       checkpoint
+		outcome     secretstore.Outcome
+		message     string
+		remediation string
+		act         func(store *Store, cancel context.CancelFunc) error
 	}{
 		{name: "refused", point: checkpointBeforeSecretRename, outcome: secretstore.NotCommitted, act: refuse},
 		{name: "cancelled", point: checkpointBeforeSecretRename, outcome: secretstore.NotCommitted, act: func(_ *Store, cancel context.CancelFunc) error {
@@ -414,7 +415,10 @@ func TestARefusedSecretReplacementLeavesNoStage(t *testing.T) {
 		{name: "replaced-destination", point: checkpointBeforeSecretRename, outcome: secretstore.NotCommitted, message: "secret state was replaced or modified before publication", act: func(store *Store, _ context.CancelFunc) error {
 			return substituteSameBytes(store, filepath.Join(store.options.Root, "contexts", checkpointContext, "secrets", secretstore.RecordPath))
 		}},
-		{name: "refused-after-rename", point: checkpointAfterSecretRename, outcome: secretstore.Uncertain, message: "secret state publication has uncertain durability; inspect it before retrying", act: refuse},
+		{name: "refused-after-rename", point: checkpointAfterSecretRename, outcome: secretstore.Uncertain,
+			message:     "secret state publication of context " + checkpointContext + " has uncertain durability",
+			remediation: "inspect it with bootwright secret encryption status --context " + checkpointContext + " and bootwright secret check --context " + checkpointContext + " before retrying",
+			act:         refuse},
 	} {
 		t.Run(interruption.name, func(t *testing.T) {
 			store, token := secretPublicationFixture(t)
@@ -448,8 +452,8 @@ func TestARefusedSecretReplacementLeavesNoStage(t *testing.T) {
 			if outcome != interruption.outcome || replaced == nil {
 				t.Fatalf("the interrupted replacement reported %s (%v)", outcome, replaced)
 			}
-			if reported := diagnostics.Of(replaced); interruption.message != "" && (len(reported) != 1 || reported[0].Message != interruption.message) {
-				t.Fatalf("the interruption was not reported as %q: %v %#v", interruption.message, replaced, reported)
+			if reported := diagnostics.Of(replaced); interruption.message != "" && (len(reported) != 1 || reported[0].Message != interruption.message || reported[0].Remediation != interruption.remediation) {
+				t.Fatalf("the interruption was not reported as %q with remedy %q: %v %#v", interruption.message, interruption.remediation, replaced, reported)
 			}
 			if outcome == secretstore.Uncertain {
 				if reported := diagnostics.Of(later); len(reported) != 1 || reported[0].Message != "secret storage callback has already finished" {

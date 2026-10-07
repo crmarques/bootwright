@@ -104,7 +104,7 @@ func TestControllerSetupReportsItsWarningsOnStandardError(t *testing.T) {
 
 func TestControllerPlanFailureStopsOutputWithoutFallback(t *testing.T) {
 	var errOut bytes.Buffer
-	presenter := NewControllerPresenter(rejectingWriter{}, nil)
+	presenter := NewControllerPresenter(rejectingWriter{}, nil, nil)
 	err := presenter.PresentControllerPlan(context.Background(), *controllerReport("planned", true))
 	record := &dispatchRecord{result: commandResult{controller: controllerReport("incomplete", false)}, err: err}
 	var out bytes.Buffer
@@ -242,7 +242,7 @@ func TestControllerChecksUseContractStatusTokens(t *testing.T) {
 		report := controllerReport("planned", false)
 		report.Checks[0].Status = status
 		var out bytes.Buffer
-		if err := NewControllerPresenter(&out, nil).PresentControllerPlan(context.Background(), *report); err != nil {
+		if err := NewControllerPresenter(&out, nil, nil).PresentControllerPlan(context.Background(), *report); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(out.String(), "  "+token+"  Execution bundle  ") {
@@ -301,7 +301,7 @@ func TestControllerCompletedSetupReportsReadinessOnly(t *testing.T) {
 // them as its own block without repeating it.
 func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 	var out bytes.Buffer
-	presenter := NewControllerPresenter(&out, nil)
+	presenter := NewControllerPresenter(&out, nil, nil)
 	ctx := context.Background()
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Python and Ansible", Status: "running", Step: 1, Steps: 2})
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Python and Ansible", Status: "ok", Detail: "Python 3.14.7, Ansible 2.21.4", Step: 1, Steps: 2})
@@ -337,7 +337,7 @@ func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 // checks.
 func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 	var out bytes.Buffer
-	presenter := NewControllerPresenter(&out, nil)
+	presenter := NewControllerPresenter(&out, nil, nil)
 	ctx := context.Background()
 	report := controllerReport("planned", false)
 	if err := presenter.PresentControllerScope(ctx, prerequisites.InspectionPhase, *report); err != nil {
@@ -367,7 +367,7 @@ func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 // Readiness streams the same checks under its own headline.
 func TestControllerReadinessStreamsUnderItsOwnHeadline(t *testing.T) {
 	var out bytes.Buffer
-	presenter := NewControllerPresenter(&out, nil)
+	presenter := NewControllerPresenter(&out, nil, nil)
 	ctx := context.Background()
 	if err := presenter.PresentControllerScope(ctx, prerequisites.ReadinessPhase, *controllerReport("ready", false)); err != nil {
 		t.Fatal(err)
@@ -396,16 +396,84 @@ func TestRunnerFinishesProgressBeforeTheReadyResult(t *testing.T) {
 }
 
 // A resolution failure has already streamed its rows, so the result adds only
-// its outcome instead of a second headline and an unresolved plan.
+// its outcome instead of a second headline and an unresolved plan, and the
+// next command its service took from the remediation, none when it named none.
 func TestControllerResolutionFailureReportsOutcomeOnly(t *testing.T) {
-	report := controllerReport("planned", false)
-	report.ProgressPresented = true
-	record := &dispatchRecord{result: commandResult{controller: report}, err: diagnostics.NewFailure("controller.setup", "publisher metadata is unavailable", "")}
-	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"setup"})
-	want := "\n  Outcome  planned\n  Next     bootwright setup\n"
-	if code != 1 || out.String() != want || !strings.Contains(errOut.String(), "controller.setup") {
-		t.Fatalf("code=%d out=%q err=%q", code, out.String(), errOut.String())
+	for next, want := range map[string]string{
+		"":                 "\n  Outcome  planned\n",
+		"bootwright setup": "\n  Outcome  planned\n  Next     bootwright setup\n",
+	} {
+		report := controllerReport("planned", false)
+		report.ProgressPresented, report.Next = true, next
+		record := &dispatchRecord{result: commandResult{controller: report}, err: diagnostics.NewFailure("controller.setup", "publisher metadata is unavailable", "")}
+		var out, errOut bytes.Buffer
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"setup"})
+		if code != 1 || out.String() != want || !strings.Contains(errOut.String(), "controller.setup") {
+			t.Fatalf("next %q: code=%d out=%q err=%q", next, code, out.String(), errOut.String())
+		}
+	}
+}
+
+// sequence records what each stream received, in the order the streams
+// received it, so a test can prove which one was written first.
+type sequence struct{ writes []string }
+
+type sequenceStream struct {
+	name     string
+	sequence *sequence
+}
+
+func (s sequenceStream) Write(data []byte) (int, error) {
+	s.sequence.writes = append(s.sequence.writes, s.name+":"+string(data))
+	return len(data), nil
+}
+
+// first is the index of the first write of the stream that contains text.
+func (s *sequence) first(stream, text string) int {
+	for index, write := range s.writes {
+		if strings.HasPrefix(write, stream+":") && strings.Contains(write, text) {
+			return index
+		}
+	}
+	return -1
+}
+
+// A resolution warning qualifies the plan, so it reaches standard error just
+// before the plan and therefore before any prompt; the result does not repeat
+// it after a presented plan, and still prints it for a setup that failed
+// before presenting one (B202, D91).
+func TestTheSetupPlanCarriesItsResolutionWarningsBeforeThePrompt(t *testing.T) {
+	warning := diagnostics.Diagnostic{Severity: "warning", Code: "controller.unsupported", Message: "the publisher's Index API page is version 1.5, newer than the 1.4 this build reads", Remediation: "use a Bootwright build that reads this Index API version"}
+	const printed = "[WARN] controller.unsupported: the publisher's Index API page is version 1.5, newer than the 1.4 this build reads; next: use a Bootwright build that reads this Index API version\n"
+	var streams sequence
+	out, errOut := sequenceStream{"out", &streams}, sequenceStream{"err", &streams}
+	plan := controllerReport("planned", false)
+	plan.Warnings = []diagnostics.Diagnostic{warning}
+	if err := NewControllerPresenter(out, errOut, nil).PresentControllerPlan(context.Background(), *plan); err != nil {
+		t.Fatal(err)
+	}
+	warned, planned := streams.first("err", printed), streams.first("out", "Planned changes")
+	if warned < 0 || planned < 0 || warned > planned {
+		t.Fatalf("the warning did not precede the plan: %q", streams.writes)
+	}
+	if err := NewControllerPresenter(out, nil, nil).PresentControllerPlan(context.Background(), *plan); err == nil {
+		t.Fatal("a plan whose warning has no stream to reach was presented")
+	}
+	run := func(report *prerequisites.Report, err error) string {
+		var out, errOut bytes.Buffer
+		record := &dispatchRecord{result: commandResult{controller: report}, err: err}
+		New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"setup"})
+		return errOut.String()
+	}
+	presented := controllerReport("changed", false)
+	presented.PlanPresented, presented.Warnings = true, []diagnostics.Diagnostic{warning}
+	if errOut := run(presented, nil); errOut != "" {
+		t.Fatalf("the result repeated the presented plan's warning: %q", errOut)
+	}
+	stopped := controllerReport("planned", false)
+	stopped.ProgressPresented, stopped.Warnings = true, []diagnostics.Diagnostic{warning}
+	if errOut := run(stopped, diagnostics.NewFailure("controller.setup", "publisher metadata is unavailable", "")); errOut != printed+"[FAIL] controller.setup: publisher metadata is unavailable\n" {
+		t.Fatalf("a setup that stopped before its plan printed %q", errOut)
 	}
 }
 
@@ -422,7 +490,7 @@ func TestControllerScopeNamesTheAcquisitionRoute(t *testing.T) {
 		{"", "  Scope     baseline\n  Platform  fedora 43/amd64\n"},
 	} {
 		var out bytes.Buffer
-		presenter := NewControllerPresenter(&out, nil)
+		presenter := NewControllerPresenter(&out, nil, nil)
 		report := controllerReport("ready", false)
 		report.Route = test.route
 		if err := presenter.PresentControllerScope(ctx, prerequisites.ReadinessPhase, *report); err != nil {

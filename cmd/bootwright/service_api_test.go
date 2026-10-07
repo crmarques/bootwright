@@ -39,7 +39,7 @@ func TestServiceDefaultsPreserveManagementAndAtomicChoices(t *testing.T) {
       machineRef: service-host
       listeners: [{name: web, protocol: http, port: 8080}]
       endpoints: [{name: web, listenerRef: web, addressRef: service}]
-      image: {public: example.test/artifacts:1}
+      image: {public: example.test/artifacts@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
 `
 		object := "apiVersion: bootwright.io/v1alpha1\nkind: ArtifactServer\nmetadata: {name: external}\nspec:\n  management: external\n  endpoints: [{name: media, url: 'https://artifacts.example.test'}]\n"
 		state, _ := compileAcceptance(t, serviceSources(env, object))
@@ -52,7 +52,7 @@ func TestServiceDefaultsPreserveManagementAndAtomicChoices(t *testing.T) {
 	})
 	t.Run("managed skips external endpoints", func(t *testing.T) {
 		env := serviceEnvironment + "  defaults:\n    ArtifactServer:\n      management: external\n      endpoints: [{name: media, url: 'https://artifacts.example.test'}]\n"
-		object := "apiVersion: bootwright.io/v1alpha1\nkind: ArtifactServer\nmetadata: {name: managed}\nspec:\n  management: managed\n  machineRef: service-host\n  listeners: [{name: web, protocol: http, port: 8080}]\n"
+		object := "apiVersion: bootwright.io/v1alpha1\nkind: ArtifactServer\nmetadata: {name: managed}\nspec:\n  management: managed\n  machineRef: service-host\n  bindAddress: 192.0.2.10\n  listeners: [{name: web, protocol: http, port: 8080}]\n"
 		state, _ := compileAcceptance(t, serviceSources(env, object))
 		if requireObject(t, state.Effective(), api.ArtifactServer, "managed").Spec().Has("endpoints") {
 			t.Fatal("managed service inherited external endpoint representation")

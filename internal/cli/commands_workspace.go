@@ -14,7 +14,7 @@ func workspaceCommands() []commandSpec {
 		available(commandSpec{path: "context use", short: "Select the current context", flags: []flagSpec{nameFlag()}}),
 		available(commandSpec{path: "context list", short: "List contexts"}),
 		available(commandSpec{path: "context current", short: "Show the current context", flags: []flagSpec{boolFlag("short", "Print only the context name")}}),
-		available(commandSpec{path: "context delete", short: "Permanently delete a context and its local files", flags: []flagSpec{nameFlag(), boolFlag("purge", "Acknowledge permanent context data deletion"), boolFlag("allow-orphans", "Delete although the context still owns realized objects"), confirmationFlag()}, long: "Permanently delete a context and its verified local files with --purge=true. --yes skips ordinary confirmation. A context that still owns realized objects refuses deletion: remove them with bootwright destroy first, or abandon them with --allow-orphans. Unreadable lifecycle evidence refuses either way."}),
+		available(commandSpec{path: "context delete", short: "Permanently delete a context and its local files", flags: []flagSpec{nameFlag(), boolFlag("purge", "Acknowledge permanent context data deletion"), boolFlag("allow-orphans", "Delete although the context still owns realized objects"), confirmationFlag()}, long: "Permanently delete a context and its verified local files with --purge=true. --yes skips ordinary confirmation. A context that still owns realized objects refuses deletion: remove them with bootwright destroy first, or abandon them with --allow-orphans. Over lifecycle evidence it cannot read, --allow-orphans abandons the context, whose objects cannot be listed; a live lease refuses either way."}),
 	}
 }
 

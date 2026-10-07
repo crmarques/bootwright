@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // resolvedDefinitionFixture is a complete Fedora resolution under the
@@ -289,4 +290,143 @@ func TestDocumentationThatIsADirectoryOrExecutableIsNotAttributable(t *testing.T
 			}
 		})
 	}
+}
+
+// discardingArea is a pending area with the removal the store's write
+// capability grants, which removes only a file smaller than approved, and
+// records each file it removed.
+type discardingArea struct {
+	*memoryArea
+	discarded []string
+}
+
+func (a *discardingArea) DiscardPartial(_ context.Context, name string, approved int64) error {
+	file, found := a.files[name]
+	if !found || int64(len(file.data)) >= approved {
+		return errors.New("only a file smaller than approved is removed")
+	}
+	delete(a.files, name)
+	a.discarded = append(a.discarded, name)
+	return nil
+}
+
+// shortened is an area an earlier build left with name cut short, as a write
+// killed before its sync leaves it under its final name, and the bytes it
+// was meant to hold. That build published the sources in order before any
+// projected file, so for a source the area holds only the sources before it,
+// and the replay acquires that source and every later one again.
+func shortened(t *testing.T, name string) (*Manager, prerequisites.Definition, *discardingArea, projectedFile) {
+	t.Helper()
+	manager, definition, published := publishedPendingArea(t)
+	complete, found := published.files[name]
+	if !found || len(complete.data) < 2 {
+		t.Fatalf("the published area holds no file %s to cut short", name)
+	}
+	sources := map[string][]byte{}
+	for _, source := range definition.Bootstrap.Sources {
+		sources[sourcePath(source)] = slices.Clone(published.files[sourcePath(source)].data)
+	}
+	if index := slices.IndexFunc(definition.Bootstrap.Sources, func(source prerequisites.DependencySource) bool { return sourcePath(source) == name }); index >= 0 {
+		for path := range published.files {
+			if !slices.ContainsFunc(definition.Bootstrap.Sources[:index], func(source prerequisites.DependencySource) bool { return sourcePath(source) == path }) {
+				delete(published.files, path)
+			}
+		}
+		published.directories = map[string]bool{"sources": true}
+	}
+	published.files[name] = projectedFile{data: slices.Clone(complete.data[:len(complete.data)/2]), executable: complete.executable}
+	area := &discardingArea{memoryArea: published}
+	manager.fetch = func(_ context.Context, source prerequisites.DependencySource, _ prerequisites.SetupEgress) ([]byte, error) {
+		data, approved := sources[sourcePath(source)]
+		if _, held := area.files[sourcePath(source)]; held || !approved {
+			t.Fatalf("acquired %s, which the area holds", source.ID)
+		}
+		return slices.Clone(data), nil
+	}
+	return manager, definition, area, complete
+}
+
+// replayed fails the test unless inspection found the short file recoverable
+// and not ready, and the exact replay removed that one file and published the
+// approved bytes in its place.
+func replayed(t *testing.T, manager *Manager, definition prerequisites.Definition, area *discardingArea, name string, complete projectedFile) {
+	t.Helper()
+	inspection, _, err := inspectFiles(t.Context(), area, mustValidate(t, definition))
+	if err != nil || inspection.Ready || !inspection.Recoverable {
+		t.Fatalf("the short file inspected as %+v (%v); want recoverable and not ready", inspection, err)
+	}
+	published, err := manager.Prepare(t.Context(), area, nil, definition, prerequisites.SetupEgress{}, nil)
+	if err != nil || !published.Ready || !published.Recoverable {
+		t.Fatalf("the exact replay over the short file = %+v (%v)", published, err)
+	}
+	if !slices.Equal(area.discarded, []string{name}) || !slices.Equal(area.files[name].data, complete.data) || area.files[name].executable != complete.executable {
+		t.Fatalf("the replay removed %v and holds %d bytes at %s", area.discarded, len(area.files[name].data), name)
+	}
+	writes := area.writes
+	inspection, err = manager.Inspect(t.Context(), area, definition, true)
+	if err != nil || !inspection.Ready || !inspection.Recoverable {
+		t.Fatalf("the replayed area inspected as %+v (%v)", inspection, err)
+	}
+	if again, err := manager.Prepare(t.Context(), area, nil, definition, prerequisites.SetupEgress{}, nil); err != nil || !again.Ready || area.writes != writes || len(area.discarded) != 1 {
+		t.Fatalf("the next preparation found the replayed area unfinished: %+v (%v), %d writes", again, err, area.writes-writes)
+	}
+}
+
+// A retained source an earlier build left shorter than approved under its
+// final name, which only a write killed before its sync leaves, is removed
+// through the area's write capability and acquired again, and the exact
+// replay completes.
+func TestAnExactReplayOverAShortSourceAnEarlierBuildLeftCompletes(t *testing.T) {
+	_, definition, _ := publishedPendingArea(t)
+	name := sourcePath(definition.Bootstrap.Sources[1])
+	manager, definition, area, complete := shortened(t, name)
+	replayed(t, manager, definition, area, name, complete)
+}
+
+// A projected file left short, the private interpreter among them, is removed
+// and projected again from the sources the area holds, and the exact replay
+// completes without acquiring anything.
+func TestAnExactReplayOverAShortProjectedFileAnEarlierBuildLeftCompletes(t *testing.T) {
+	_, definition, _ := publishedPendingArea(t)
+	name := definition.Bootstrap.PythonExecutable
+	manager, definition, area, complete := shortened(t, name)
+	if !complete.executable {
+		t.Fatalf("%s is not the executable projected file", name)
+	}
+	replayed(t, manager, definition, area, name, complete)
+}
+
+// Only a short file is an earlier build's partial write. A file of its
+// approved size with other bytes is content no write explains, so inspection
+// refuses to recover it and preparation refuses before it removes anything;
+// and an area that offers no removal refuses a short file with a named exit.
+func TestASameSizeFileWithOtherBytesStillRefuses(t *testing.T) {
+	_, definition, _ := publishedPendingArea(t)
+	for name, path := range map[string]string{"a source": sourcePath(definition.Bootstrap.Sources[1]), "a projected file": definition.Bootstrap.PythonExecutable} {
+		t.Run(name, func(t *testing.T) {
+			manager, definition, published := publishedPendingArea(t)
+			file := published.files[path]
+			changed := slices.Clone(file.data)
+			changed[0] ^= 0xff
+			published.files[path] = projectedFile{data: changed, executable: file.executable}
+			area := &discardingArea{memoryArea: published}
+			inspection, _, err := inspectFiles(t.Context(), area, mustValidate(t, definition))
+			if err != nil || inspection.Ready || inspection.Recoverable {
+				t.Fatalf("a same-size file with other bytes inspected as %+v (%v)", inspection, err)
+			}
+			_, err = manager.Prepare(t.Context(), area, nil, definition, prerequisites.SetupEgress{}, nil)
+			if found := diagnostics.Of(err); len(found) != 1 || found[0].Message != "existing bundle content is not attributable to the approved closure" || len(area.discarded) != 0 {
+				t.Fatalf("preparation over other bytes: %#v, removed %v", found, area.discarded)
+			}
+		})
+	}
+	t.Run("an area without the removal", func(t *testing.T) {
+		manager, definition, area, _ := shortened(t, definition.Bootstrap.PythonExecutable)
+		_, err := manager.Prepare(t.Context(), area.memoryArea, nil, definition, prerequisites.SetupEgress{}, nil)
+		if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.unsupported" ||
+			found[0].Message != "the bundle file "+definition.Bootstrap.PythonExecutable+" an earlier build left incomplete cannot be removed, because this bundle area offers no removal" ||
+			found[0].Remediation != "Use an executable whose controller store removes an incomplete bundle file, then rerun bootwright setup." {
+			t.Fatalf("preparation without the removal: %#v (%v)", found, err)
+		}
+	})
 }

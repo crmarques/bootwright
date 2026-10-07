@@ -25,18 +25,35 @@ file for reading, then copies it through that descriptor. A link, FIFO,
 device, directory or socket at the name, and a file the invoking account
 cannot read, are refused naming the path; under a root login, a file root
 cannot read, such as one in a root-squashed network home, is refused with the
-remedy of naming a local copy. `--from-url` performs one bounded download
-with TLS verified, redirects disabled, no `userinfo`, and a size ceiling, and
+remedy of naming a local copy. `--from-url` takes one HTTPS URL and performs
+one bounded download, with TLS verified against the system trust store, no
+redirect followed, no `userinfo`, a size ceiling, a 30-second connection
+timeout, a 60-second response timeout and a transfer deadline of 6 hours, and
 requires `--sha256`. The store is host-wide and precedes
 every context, so that download takes the
 [context-free acquisition route](controller.md#the-context-free-acquisition-route)
 and is direct when the invoking environment names none. The digest is computed while the bytes
 stream, compared with `--sha256` when supplied, and recorded with the image's
 name, size, credential-free origin and time of publication in one canonical
-record beside the image. Publication is atomic and exclusive; replacing an
+record beside the image. The credential-free origin is the file's absolute
+path as a `file://` URL, or the URL's scheme, host and path without its query,
+which may carry a signature. It is an origin of at most 512 bytes with no
+control character; one that is longer or carries a control character is
+refused, naming its cause, before any confirmation, claim or acquisition.
+Publication is atomic and exclusive; replacing an
 existing entry requires ordinary confirmation, and refuses while the entry is
 frozen. A mismatch, an over-bound image, a non-regular source or an interrupted
-transfer publishes nothing.
+transfer publishes nothing. A mismatch names the image, its origin and both
+the expected and the computed digest.
+
+A failed download names its own cause: a redirect, with its status and its
+target without the query; the name that did not resolve; the certificate the
+system trust store refused and, where the verifier says, why; the connection
+or response timeout, or the transfer deadline; or the HTTP status, with the
+remedy that status calls for. No diagnostic carries the URL's query or a
+response body, and a write the media store could not complete, such as one
+into a full filesystem, is reported as the store's failure, never the
+source's.
 
 Acquisition holds no store lock, so a long download blocks no other command;
 [Workspace](contexts.md#media-acquisition) owns how. Every refusal and the
@@ -50,18 +67,25 @@ refuses before it acquires anything. An add whose publication met another
 command's lock keeps the stage it verified against its `--sha256`, so repeating
 it publishes that image without acquiring it again.
 
-`media list` reads only records and file metadata. `--checksums` reads every
-image in full, reports each computed digest, and marks an entry whose bytes no
-longer match its record as failed. `media delete --name <filename.iso>` removes
-the image and its record, and a stage an interrupted add retained for that
-name, after ordinary confirmation, which holds no store lock, and refuses while
-frozen.
+`media list` reads only records and file metadata, and names the contexts
+that reserve each image separately from whether the image verified.
+`--checksums` reads every image in full and reports each computed digest
+beside its record. An entry whose size or computed digest differs from its
+record is listed as a mismatch and never hides the rest of the store; the
+[media results](cli/output.md#media-results) define the row.
+`media delete --name <filename.iso>` removes the image and its record, and a
+stage an interrupted add retained for that name, after ordinary confirmation,
+which holds no store lock, and refuses while frozen. Each confirmation first
+shows the record of the image it would replace or delete.
 
 An entry is frozen while any context holds the shared reservation
 `media:<filename.iso>`, which a lifecycle operation claims at registration for
 every image its plan names and releases only when a completed destroy releases
 that context's reservations. The claim is shared: any number of contexts may
 hold it, and it blocks nothing but deletion and replacement of what it names.
+A completed apply keeps it, so the refusal of a frozen entry's deletion or
+replacement names each context that reserves it and that context's
+`bootwright destroy --context <name>`.
 A plan names an image by name, size and SHA-256; each attempt proves the size
 and digest before the image's first use in an operation and refuses a changed
 entry rather than using it.

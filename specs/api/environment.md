@@ -322,14 +322,20 @@ own expansion limits, canonical output, and immutable source provenance.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `openshiftClientsMirror` | string | no | upstream source | Absolute HTTP(S) base URL for OpenShift client downloads. |
-| `virtctlMirror` | string | no | upstream source | Absolute HTTP(S) base URL for the resolved `virtctl` release. |
-| `helmMirror` | string | no | upstream source | Absolute HTTP(S) base URL for the resolved Helm release. |
+| `openshiftClientsMirror` | string | no | upstream source | Absolute HTTPS base URL for OpenShift client downloads. |
+| `virtctlMirror` | string | no | upstream source | Absolute HTTPS base URL for the resolved `virtctl` release. |
+| `helmMirror` | string | no | upstream source | Absolute HTTPS base URL for the resolved Helm release. |
 
-URLs require scheme and host and reject embedded credentials. These fields
-select download sources; they do not fill attributes on cluster objects. A
-mirror is qualified only over HTTPS on the default port or port 443, without a
-query string or fragment. Helm archives reside directly under the base URL;
+A mirror is an [HTTPS URL](../api.md#graph-validation) of at most 4096 bytes on
+the default port or port 443, because the controller stage appends a release
+path to it and fetches only over HTTPS. Validate refuses `http`, any other
+port, userinfo, a query, a fragment, a bare `?` or `#`, and a percent-escaped
+path, and the stage applies the same rule before it contacts any publisher.
+Recovering a stage block an earlier build froze reads its mirror at that
+build's tolerance as well, so a mirror ending in a bare `?` or `#` never
+strands its operation: the block still observes and destroys, and only a new
+resolution refuses it. These fields select download sources; they do not fill
+attributes on cluster objects. Helm archives reside directly under the base URL;
 OpenShift archives and `virtctl` binaries reside under `<base>/<exact-version>/`.
 The `virtctl` directory and filename include the release's `v` prefix.
 Publisher metadata determines versions and checksums even when a mirror supplies

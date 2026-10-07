@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "media list",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "media": [
+      {
+        "name": "rhel-9.8-x86_64-boot.iso",
+        "size": 1045430272,
+        "sha256": "e8b0f3a61d9c2e47b5a803f6d1c94e27a0b6d3f81c5e9a24d7b0e3f6a19c5d82",
+        "source": "file:///srv/images/rhel-9.8-x86_64-boot.iso",
+        "added": "2026-09-20T08:15:00Z",
+        "frozen": true,
+        "reservedBy": [
+          "lab-rhel",
+          "lab-sno"
+        ]
+      },
+      {
+        "name": "rhel-9.8-x86_64-dvd.iso",
+        "size": 13123217408,
+        "sha256": "4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f",
+        "source": "https://images.example.test/rhel-9.8-x86_64-dvd.iso",
+        "added": "2026-09-21T10:02:41Z",
+        "frozen": false,
+        "reservedBy": []
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

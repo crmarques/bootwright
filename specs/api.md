@@ -289,6 +289,15 @@ characters: printable ASCII other than space, `"`, `<`, `>`, `\`, `^`, the
 backtick, `{`, `|` and `}`, so no whitespace, control or non-ASCII character
 reaches a consumer.
 
+An image reference is a registry `host[:port]`, then `/`-separated repository
+components each matching `[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*`, then either
+`:<tag>`, where the tag matches `[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}` and is not
+`latest`, or `@sha256:<64 hex>`. The component rule is the repository name
+grammar of the
+[OCI distribution specification](https://github.com/opencontainers/distribution-spec/blob/v1.1.0/spec.md#pulling-manifests),
+outside of which a container runtime refuses to pull. Registry and
+registry-base values follow the same host and path rule.
+
 ## Defaults, normalization, and effective state
 
 [Environment kind defaults](api/environment.md#kind-defaults) are applied before
@@ -341,6 +350,9 @@ CIDRs mask host bits; Machine interface-address IP/prefix values retain host
 bits and normalize the host and prefix separately. Digest algorithms and
 hexadecimal digests normalize to lowercase. Set-valued lists sort only where
 their owning schema says so; ordered lists retain authored order.
+Not yet met: ContainerCluster `spec.distribution.release.image` and ClusterAddon
+`spec.olm.catalogSource.image` digests are not yet lowercased; tracked as
+[B411](milestones/backlog.md#b411).
 
 Composed machine and cluster hostnames, Environment defaults, provider and
 component defaults, cluster networking defaults, and other normalized values

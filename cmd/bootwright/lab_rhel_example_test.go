@@ -489,6 +489,13 @@ func (r labResolution) Resolve(context.Context, prerequisites.Platform, controll
 // yet and this host is Fedora, so preflight asks it nothing.
 type labNative struct{ ports *labControllerPorts }
 
+// labFoundation is a host that holds the execution foundation the build pins.
+type labFoundation struct{}
+
+func (labFoundation) Inspect(context.Context, prerequisites.Platform) (prerequisites.FoundationInspection, error) {
+	return prerequisites.FoundationInspection{Required: "glibc 2.34-275.el9_8, libgcc 11.5.0-14.el9"}, nil
+}
+
 func (n labNative) Resolve(context.Context, prerequisites.Platform, prerequisites.NativeRequirements, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
 	n.ports.effects++
 	return prerequisites.NativeResolvedPlan{}, errors.New("unexpected native resolution")
@@ -562,6 +569,7 @@ func labContextServices(t *testing.T) (cli.Services, string, *labControllerPorts
 	options.Controller = controllerDependencies{
 		Storage: repository, Host: ports, Catalog: ports, Bundle: ports, Tools: labToolCatalog{ports},
 		Bootstrap: labResolution{ports}, Native: labNative{ports}, NativeInspector: labNative{ports},
+		Foundation: labFoundation{},
 	}
 	return assembleServices(options), input, ports
 }
@@ -609,7 +617,7 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	// Preflight keeps the context arm: it reports what the example still needs
 	// on this host, including the binding its first apply publishes.
 	report, diagnostics := contextRun(t, services, 1, "preflight", "controller", "--context", "lab-rhel")
-	for _, expected := range []string{"Scope       context lab-rhel", "Controller  controller", "[FAIL]  Controller binding  required controller", "Outcome  not-ready"} {
+	for _, expected := range []string{"Scope       context lab-rhel", "Controller  controller", "[FAIL]  Controller binding    required controller", "Outcome  not-ready"} {
 		if !strings.Contains(report, expected) {
 			t.Fatalf("context preflight lacks %q:\n%s", expected, report)
 		}
