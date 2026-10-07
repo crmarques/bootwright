@@ -78,8 +78,10 @@ func readProtocol(reader io.Reader, messages chan<- protocolMessage) error {
 	return scanner.Err()
 }
 
-// inventory targets exactly one host. The SSH arm pins host-key checking to
-// the bound entry and forbids every ambient identity and password path.
+// inventory targets exactly one host. The SSH arm reads only the job's own
+// client configuration, pins host-key checking to the bound entry, forbids
+// every ambient identity, password, proxy and known-hosts path, and ends a
+// connection whose peer stops answering.
 func inventory(placement machineref.Placement, interpreter string, paths map[string]string) map[string]any {
 	host := map[string]any{"ansible_python_interpreter": interpreter}
 	if placement.Local() {
@@ -93,14 +95,26 @@ func inventory(placement machineref.Placement, interpreter string, paths map[str
 		host["ansible_ssh_private_key_file"] = paths["id"]
 		host["ansible_python_interpreter"] = "/usr/bin/python3"
 		host["ansible_ssh_common_args"] = strings.Join([]string{
+			"-F", paths["ssh_config"],
 			"-o", "UserKnownHostsFile=" + paths["known_hosts"],
+			"-o", "GlobalKnownHostsFile=none",
+			"-o", "KnownHostsCommand=none",
+			"-o", "VerifyHostKeyDNS=no",
+			"-o", "UpdateHostKeys=no",
+			"-o", "CheckHostIP=no",
 			"-o", "StrictHostKeyChecking=yes",
 			"-o", "IdentitiesOnly=yes",
 			"-o", "PasswordAuthentication=no",
 			"-o", "KbdInteractiveAuthentication=no",
 			"-o", "GSSAPIAuthentication=no",
+			"-o", "HostbasedAuthentication=no",
 			"-o", "IdentityAgent=none",
+			"-o", "ForwardAgent=no",
+			"-o", "ProxyCommand=none",
+			"-o", "ProxyJump=none",
 			"-o", "BatchMode=yes",
+			"-o", "ServerAliveInterval=15",
+			"-o", "ServerAliveCountMax=3",
 		}, " ")
 	}
 	return map[string]any{"all": map[string]any{"children": map[string]any{

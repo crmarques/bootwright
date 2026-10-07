@@ -443,6 +443,16 @@ func cliGoldens() []cliGolden {
 		}
 		return &media.ListResult{Media: []media.MediaRow{boot, dvd}, Checksums: checksums}
 	}
+	// The verified image beside one whose record does not decode and one
+	// whose bytes changed while --checksums read them.
+	failed := func() *media.ListResult {
+		listed := stored(true)
+		dvd := listed.Media[1]
+		dvd.Verified, dvd.Failure, dvd.Computed = "failed", "its bytes changed while they were read", ""
+		broken := media.MediaRow{Name: "broken.iso", ReservedBy: []string{}, Verified: "failed", Failure: "its record is malformed, not canonical or names another image"}
+		listed.Media = []media.MediaRow{listed.Media[0], broken, dvd}
+		return listed
+	}
 	// Rows arrive in name order, as inventory.Rows derives them.
 	machines := func(powerRead bool) *inventory.ListResult {
 		result := &inventory.ListResult{Context: "lab", PowerRead: powerRead, Machines: []inventory.MachineRow{
@@ -835,6 +845,8 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-media-list-json", args: "media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored(true) }},
 		{golden: "cli-media-list-unchecked", args: "media list", record: func(r *dispatchRecord) { r.result.mediaList = stored(false) }},
 		{golden: "cli-media-list-unchecked-json", args: "media list --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored(false) }},
+		{golden: "cli-media-list-failed", args: "media list --checksums", record: func(r *dispatchRecord) { r.result.mediaList = failed() }},
+		{golden: "cli-media-list-failed-json", args: "media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = failed() }},
 
 		// Machines. A power verb's service also reports where its run's
 		// output is kept, through a reporter outside this boundary, which a

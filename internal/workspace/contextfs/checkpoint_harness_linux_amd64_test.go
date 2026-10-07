@@ -2012,11 +2012,14 @@ func checkpointMediaImage(ctx context.Context, store *Store) (string, bool, erro
 	return digest, occupied, err
 }
 
-// checkpointIntactImages refuses an image listed with fewer or more bytes
-// than its record states. A media read lists such an image rather than
-// refusing it, so the harness proves that no interruption publishes one.
+// checkpointIntactImages refuses an image listed failed, or with fewer or
+// more bytes than its record states. A media read lists such an image rather
+// than refusing it, so the harness proves that no interruption publishes one.
 func checkpointIntactImages(images []media.Image) error {
 	for _, image := range images {
+		if image.Failure != "" {
+			return fmt.Errorf("image %s is listed failed: %s", image.Name, image.Failure)
+		}
 		if image.Observed != image.Size {
 			return fmt.Errorf("image %s holds %d bytes, but its record states %d", image.Name, image.Observed, image.Size)
 		}

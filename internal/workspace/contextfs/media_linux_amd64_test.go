@@ -176,7 +176,12 @@ func TestMediaPublicationRetainsExactBytesAndTheirRecord(t *testing.T) {
 		if len(entries) != 1 || entries[0].Name != "demo.iso" || entries[0].Size != 15 || entries[0].Observed != 15 || entries[0].SHA256 != mediaDigest("installer bytes") {
 			t.Fatalf("entries = %+v", entries)
 		}
-		digest, err := view.Digest(ctx, "demo.iso")
+		held, err := view.Hold(ctx, "demo.iso")
+		if err != nil {
+			t.Fatalf("hold: %v", err)
+		}
+		defer held.Close()
+		digest, err := held.Digest(ctx)
 		if err != nil || digest != entries[0].SHA256 {
 			t.Fatalf("digest = %q (%v)", digest, err)
 		}

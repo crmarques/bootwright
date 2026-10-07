@@ -4,6 +4,7 @@
     that:
       - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v3'
       - bootwright_substrate_host_request.poolPath.startswith('/var/lib/libvirt/images/bootwright/')
+      - bootwright_substrate_host_request.poolPath | dirname | dirname | dirname == '/var/lib/libvirt/images/bootwright'
       - bootwright_substrate_host_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -74,12 +75,26 @@
   ansible.builtin.assert:
     that:
       - item.state | length == 0 or item.owned
-    fail_msg: a libvirt network of the same name exists without this context's ownership
+    fail_msg: >-
+      a libvirt network named {{ item.name }} exists without this context's
+      ownership; remove or rename it, then repeat the removal
     quiet: true
   loop: '{{ substrate_libvirt_host_before.observation.networks }}'
   loop_control:
     label: '{{ item.name }}'
   when: item.managed
+
+# A same-named pool targeting another directory is not this provider's, and
+# the removal refuses before its first effect rather than stop or undefine it.
+- name: Refuse to remove a same-named pool that targets another directory
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_before.observation.pool | length == 0 or substrate_libvirt_host_before.observation.poolOwned
+    fail_msg: >-
+      a libvirt storage pool named {{ bootwright_substrate_host_request.poolName }}
+      exists and does not target {{ bootwright_substrate_host_request.poolPath }},
+      so it is not this provider's; remove or rename it, then repeat the removal
+    quiet: true
 
 - name: Destroy each owned network
   ansible.builtin.command:
@@ -165,6 +180,27 @@
     state: absent
   register: substrate_libvirt_host_pool_directory
 
+# The pool directory is <prefix>/<context>/<provider>/<pool>, as the validation
+# above requires, so these are the provider's and the context's directories,
+# each removed only once empty and never recursively; the retained prefix
+# itself is never reached.
+- name: Remove the provider's and the context's image directories once empty
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - '{{ item }}'
+  loop:
+    - '{{ bootwright_substrate_host_request.poolPath | dirname }}'
+    - '{{ bootwright_substrate_host_request.poolPath | dirname | dirname }}'
+  environment:
+    LC_ALL: C
+  register: substrate_libvirt_host_parents
+  failed_when:
+    - substrate_libvirt_host_parents.rc != 0
+    - '"Directory not empty" not in substrate_libvirt_host_parents.stderr'
+    - '"No such file or directory" not in substrate_libvirt_host_parents.stderr'
+  changed_when: substrate_libvirt_host_parents.rc == 0
+
 - name: Report pool removal completion
   bootwright.core.substrate_host_protocol:
     phase: group
@@ -198,7 +234,8 @@
       {{ 'changed'
          if (substrate_libvirt_host_pool_directory is changed
              or substrate_libvirt_host_before.observation.pool | length > 0
-             or substrate_libvirt_host_owned_networks | length > 0)
+             or substrate_libvirt_host_owned_networks | length > 0
+             or substrate_libvirt_host_parents is changed)
          else 'unchanged' }}
     digest: '{{ bootwright_substrate_host_digest }}'
     observation: '{{ substrate_libvirt_host_after.observation }}'

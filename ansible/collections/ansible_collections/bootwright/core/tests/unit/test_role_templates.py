@@ -96,6 +96,7 @@ MACHINE = {
               {"name": "data", "path": "/var/lib/libvirt/images/bootwright/%s/rhel-01/data.qcow2" % CONTEXT,
                "sizeGiB": 20, "target": "vdb"}],
     "domain": "bootwright-%s-rhel-01" % CONTEXT,
+    "egress": EGRESS,
     "identity": {"block": "machine-rhel-01", "context": CONTEXT, "object": "rhel-01"},
     "interfaces": [{"bridge": "virbr-lab", "macAddress": "52:54:00:b9:31:5b", "name": "enp1s0",
                     "network": "bootwright-lab-guests"},
@@ -108,7 +109,7 @@ MACHINE = {
     "uri": "qemu:///system",
     "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
     "vcpu": 4,
-    "version": "machine-libvirt-v2",
+    "version": "machine-libvirt-v3",
 }
 
 # Each rendered template with the variables its task sees beside the role's
@@ -168,6 +169,11 @@ def render(role, template, variables):
 
 def test_every_rendered_template_has_a_golden_scope():
     assert rendered_templates() == set(SCOPES)
+
+
+def test_every_template_a_role_carries_is_rendered_by_a_task():
+    carried = {(path.parent.parent.name, path.name) for path in ROLES.glob("*/templates/*.j2")}
+    assert carried == rendered_templates()
 
 
 @pytest.mark.parametrize("role, template", sorted(SCOPES))

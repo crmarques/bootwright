@@ -298,14 +298,16 @@ retained beside it.
 
 | Root lock | Lease | Commands |
 | --- | --- | --- |
-| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, SSH-trust and input reads, [bounded runs](cli/output.md#bounded-run-output), and the reads that precede `setup`, `apply` and `destroy`. |
+| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, SSH-trust and input reads, [bounded runs](cli/output.md#bounded-run-output), and the reads that precede `setup`, `apply` and `destroy`. |
 | exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `setup` (which scopes no context), `media delete`, the admission and publication of `media add`, and the SSH trust that `machine trust` or a confirmed first use records. |
-| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another command's lock; the confirmation prompt of `media add` and `media delete`; and the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt. |
+| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another command's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add` and `media delete`; and the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt. |
 | exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the execution of `apply` and `destroy`. |
 
 A read holds its lock until all stored input or secret-session files have been
 consumed, and a mutator holds its locks until it finishes, except that
-`media add` releases the root lock while it acquires, neither `media add`
+`media add` releases the root lock while it acquires,
+`media list --checksums` releases its shared hold before it reads any image
+in full, neither `media add`
 nor `media delete` holds one while it prompts, and a `secret set` from
 standard input holds none while it reads, then takes the exclusive root lock
 and the lease to write and re-proves its
@@ -477,6 +479,7 @@ Secrets limits additionally bound their trees.
 | The longest deadline a lifecycle adapter request may state | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
 | One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
 | The longest deadline a controller-stage client installation may run under | 2 hours | `clientStageCeiling` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
+| The longest bound native packages are staged under in one controller run, which its deadline adds to the run base: the 2-hour ceiling less that base | 110 minutes | `nativeStagingCeiling` in `internal/controller/ansiblelocal/deadline.go` |
 | Bytes in one installer media image | 32 GiB | `MaxMediaBytes` in `internal/managedos/media.go` |
 | Installer media images one host holds | 64 | `MaxMediaEntries` in `internal/managedos/media.go` |
 | Bytes in an installer media name | 250 | `MaxMediaName` in `internal/managedos/media.go` |

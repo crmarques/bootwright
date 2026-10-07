@@ -84,6 +84,13 @@ type inspection struct {
 	// differs from the one this executable pins. Its remedy restores the host
 	// and no bootwright command settles it, so no next command is offered.
 	foundation error
+	// qualified is the execution foundation setup proved from the RPM
+	// database for vendor-signed builds other than the compiled ones, or none
+	// on a host that holds the compiled builds. preflight marks an inspection
+	// that reports readiness, where a qualification the receipt has not
+	// recorded is not ready.
+	qualified *QualifiedFoundation
+	preflight bool
 }
 
 func (s Service) available(ctx context.Context) error {
@@ -309,6 +316,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	if request.DryRun {
 		return s.preview(ctx, &current.report, request)
 	}
+	ctx = WithLaunchFoundation(ctx, current.qualified)
 	// An executable whose embedded automation moved needs a new bundle, not new
 	// dependencies. The retained closure is reprojected from the sources this
 	// host already holds, so the releases, bytes and signers stay frozen. A
@@ -442,6 +450,9 @@ func (s Service) executeApprovedPlan(ctx context.Context, approved inspection, r
 	for index := range current.report.Checks {
 		current.report.Checks[index].Status = "ready"
 		current.report.Checks[index].Observed = current.report.Checks[index].Required
+		if current.report.Checks[index].ID == "execution-foundation" && current.qualified != nil {
+			current.report.Checks[index].Observed = FoundationSummary(*current.qualified, current.platform)
+		}
 	}
 	return &current.report, nil
 }
@@ -466,6 +477,7 @@ func (s Service) inspect(ctx context.Context, view StorageView, dryRun bool, pha
 	}
 	current, err := s.selectInspection(ctx, view, frozen)
 	current.abandoned = abandoned
+	current.preflight = phase == ReadinessPhase
 	if err != nil {
 		return current, err
 	}
@@ -633,6 +645,7 @@ func (s Service) settleHostChecks(ctx context.Context, view StorageView, current
 	if err := s.settleFoundation(ctx, current, settle, start); err != nil {
 		return err
 	}
+	ctx = WithLaunchFoundation(ctx, current.qualified)
 	if err := s.settleFIPS(ctx, current, settle); err != nil {
 		return err
 	}
@@ -691,7 +704,10 @@ const foundationRequirement = "the glibc and libgcc builds this executable pins"
 // settleFoundation verifies the provided execution foundation the private
 // interpreter runs on. A foundation that differs settles not-ready and its
 // refusal, which names the path, the package build and the remedy, stops the
-// inspection before any plan.
+// inspection before any plan. One the inspector qualified from the RPM
+// database is ready and observed as the qualified builds; while a complete
+// receipt records another foundation, setup plans to record it and preflight
+// reports the check not ready, which setup settles.
 func (s Service) settleFoundation(ctx context.Context, current *inspection, settle func(Check), start func(string, string)) error {
 	start("execution-foundation", "verifying the provided glibc and libgcc files")
 	inspection, err := s.options.Foundation.Inspect(ctx, current.platform)
@@ -700,6 +716,10 @@ func (s Service) settleFoundation(ctx context.Context, current *inspection, sett
 		return err
 	}
 	check := Check{ID: "execution-foundation", Required: inspection.Required, Observed: inspection.Required, Status: "ready", Scope: HostScope}
+	if inspection.Refusal == nil && inspection.Qualified != nil {
+		current.qualified = CloneQualifiedFoundation(inspection.Qualified)
+		check.Observed = FoundationSummary(*current.qualified, current.platform)
+	}
 	if inspection.Refusal != nil {
 		check.Observed, check.Status = "differs", "not-ready"
 		if inspection.Drift != "" {
@@ -708,6 +728,22 @@ func (s Service) settleFoundation(ctx context.Context, current *inspection, sett
 		settle(check)
 		current.foundation = inspection.Refusal
 		return inspection.Refusal
+	}
+	if !current.foundationRecorded() {
+		recorded := current.view.State.Receipt.Foundation
+		if current.qualified != nil {
+			current.report.Actions = append(current.report.Actions, "Re-qualify the execution foundation: "+check.Observed)
+		} else {
+			current.report.Actions = append(current.report.Actions, "Re-qualify the execution foundation: "+inspection.Required+", in place of "+FoundationSummary(*recorded, current.platform))
+		}
+		if current.preflight {
+			check.Status = "not-ready"
+			if recorded == nil {
+				check.Observed += ", which setup has not recorded"
+			} else {
+				check.Observed += ", while setup recorded " + FoundationSummary(*recorded, current.platform)
+			}
+		}
 	}
 	settle(check)
 	return nil
@@ -920,7 +956,16 @@ func (i inspection) toolSummary() string {
 // ready is host readiness: everything context-independent setup owns. It never
 // includes a context's own tools, native closures or binding.
 func (i inspection) ready() bool {
-	return i.bundle.Ready && i.bundle.Sealed && i.dependenciesReady() && i.view.State.Receipt.ID != "" && i.view.State.Receipt.Status == "complete"
+	return i.bundle.Ready && i.bundle.Sealed && i.dependenciesReady() && i.view.State.Receipt.ID != "" && i.view.State.Receipt.Status == "complete" && i.foundationRecorded()
+}
+
+// foundationRecorded reports that a complete receipt records the execution
+// foundation this inspection qualified, none when the host holds the compiled
+// builds, so every launch of its bundle verifies the foundation the host
+// holds. Any other receipt is settled by setup-state.
+func (i inspection) foundationRecorded() bool {
+	receipt := i.view.State.Receipt
+	return receipt.Status != "complete" || receipt.Definition == nil || SameFoundation(receipt.Foundation, i.qualified)
 }
 
 // contextReady adds what one selected context needs on a ready host. Preflight
@@ -1017,7 +1062,7 @@ func (i inspection) sameRoute(receipt SetupReceipt) bool {
 }
 
 func (i inspection) samePlan(other inspection) bool {
-	return i.host.Equal(other.host) && i.view.Context == other.view.Context && i.definition.CatalogDigest == other.definition.CatalogDigest && slices.Equal(i.definition.Sources, other.definition.Sources) && i.bundle == other.bundle && i.runtime == other.runtime && i.bound == other.bound && i.view.State.Receipt.ID == other.view.State.Receipt.ID && i.view.State.Receipt.Status == other.view.State.Receipt.Status && i.route().HTTPProxy == other.route().HTTPProxy && i.route().HTTPSProxy == other.route().HTTPSProxy && slices.Equal(i.route().NoProxy, other.route().NoProxy)
+	return i.host.Equal(other.host) && i.view.Context == other.view.Context && i.definition.CatalogDigest == other.definition.CatalogDigest && slices.Equal(i.definition.Sources, other.definition.Sources) && i.bundle == other.bundle && i.runtime == other.runtime && i.bound == other.bound && i.view.State.Receipt.ID == other.view.State.Receipt.ID && i.view.State.Receipt.Status == other.view.State.Receipt.Status && SameFoundation(i.qualified, other.qualified) && i.route().HTTPProxy == other.route().HTTPProxy && i.route().HTTPSProxy == other.route().HTTPSProxy && slices.Equal(i.route().NoProxy, other.route().NoProxy)
 }
 
 func cloneReport(report Report) Report {

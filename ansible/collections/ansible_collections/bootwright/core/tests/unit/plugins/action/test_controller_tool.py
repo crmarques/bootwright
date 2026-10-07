@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 
 from ansible.plugins.action import ActionBase
+from ansible.utils.display import Display
 from ansible_collections.bootwright.core.plugins.action import controller_tool
 from ansible_collections.bootwright.core.plugins.action.controller_tool import (
     tool_arguments,
@@ -15,14 +16,15 @@ from ansible_collections.bootwright.core.plugins.action.controller_tool import (
 from ansible_collections.bootwright.core.plugins.module_utils import (
     controller_files as files,
 )
+from ansible_collections.bootwright.core.plugins.module_utils import controller_refusal
 
-ARGUMENTS = dict(bundle={}, tool={}, egress={}, inspect_only=False, deadline=205)
+ARGUMENTS = dict(bundle={}, tool={"source": {"id": "tool-oc"}}, egress={}, inspect_only=False, deadline=205)
 RELEASE = "4.21.11"
 
 
 class ToolArguments(unittest.TestCase):
     def test_the_frozen_deadline_is_passed_on_in_seconds(self):
-        self.assertEqual(tool_arguments(ARGUMENTS), ({}, {}, {}, 205, False))
+        self.assertEqual(tool_arguments(ARGUMENTS), ({}, ARGUMENTS["tool"], {}, 205, False))
         self.assertEqual(tool_arguments(dict(ARGUMENTS, deadline=1))[3], 1)
         self.assertEqual(tool_arguments(dict(ARGUMENTS, deadline=7200))[3], 7200)
 
@@ -68,7 +70,7 @@ def run(refusal, channel=None):
     setattr(action, "_task", types.SimpleNamespace(args=ARGUMENTS))
     with mock.patch.object(ActionBase, "run", return_value={}):
         with mock.patch.object(controller_tool, "prepare_tool", side_effect=refusal):
-            with mock.patch.object(controller_tool, "emit", side_effect=emit):
+            with mock.patch.object(controller_refusal, "emit", side_effect=emit):
                 return action.run(), records
 
 
@@ -79,10 +81,19 @@ class NamedRefusal(unittest.TestCase):
         self.assertEqual(result["msg"], "The exact target tool could not be prepared or verified.")
         self.assertEqual(records, [({"phase": "refused", "reason": "release-stamp"}, False)])
 
+    def test_an_acquisition_refusal_names_its_class_and_the_tools_source(self):
+        refusal = files.AcquisitionRefused("acquisition deadline", reason="timeout", detail="Refused: acquisition deadline")
+        with mock.patch.object(Display, "warning") as warning:
+            result, records = run(refusal)
+        warning.assert_called_once_with("controller adapter: Refused: acquisition deadline")
+        self.assertTrue(result["failed"])
+        self.assertEqual(records, [({"phase": "refused", "reason": "timeout", "source": "tool-oc"}, False)])
+
     def test_every_other_refusal_names_nothing(self):
         for name, refusal in (
             ("release too long", too_long),
             ("source integrity", files.Refused("source integrity")),
+            ("unclassified acquisition", files.AcquisitionRefused("artifact path")),
             ("request", ValueError("request")),
             ("operating system", OSError("/private/path")),
         ):

@@ -1,6 +1,7 @@
 """Test bounded native resolution policy without host metadata or package effects."""
 
 import copy
+import io
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -231,3 +232,56 @@ class NativeResolution(unittest.TestCase):
             self.assertTrue(
                 native.verified_files(platform, "/snapshot", [], "/scratch")
             )
+
+
+class Entrypoint(unittest.TestCase):
+    """A refused operation writes exactly two lines and exits 1: its closed
+    class, then its type and the first line of its text, bounded."""
+
+    def entry(self, error):
+        stderr = io.StringIO()
+        with patch.object(native, "main", side_effect=error), patch.object(
+            native.sys, "stderr", stderr
+        ):
+            with self.assertRaises(SystemExit) as exited:
+                native.entry()
+        self.assertEqual(exited.exception.code, 1)
+        return stderr.getvalue()
+
+    def test_the_entrypoint_writes_one_classified_reason(self):
+        self.assertEqual(
+            self.entry(ValueError("native dependency solve")),
+            "refused solver-conflict\nValueError: native dependency solve\n",
+        )
+
+    def test_each_refusal_has_its_class(self):
+        depsolve = type("DepsolveError", (RuntimeError,), {})
+        marking = type("MarkingError", (RuntimeError,), {})
+        for error, expected in (
+            (ValueError("requested native release unavailable"), "missing-candidate"),
+            (ValueError("native root unresolved"), "missing-candidate"),
+            (marking("no match"), "missing-candidate"),
+            (depsolve("conflict"), "solver-conflict"),
+            (ValueError("native package signature"), "signature"),
+            (ValueError("native source integrity"), "signature"),
+            (ValueError("native database lock"), "database"),
+            (ValueError("native database snapshot"), "database"),
+            (ValueError("native database changed"), "database"),
+            (ValueError("native transaction failed"), "transaction"),
+            (ValueError("native vendor hook failed"), "transaction"),
+            (ValueError("native transaction postcondition"), "postcondition"),
+            (ValueError("native inventory changed before transaction"), "postcondition"),
+            (ValueError("native transaction changed"), "postcondition"),
+            (ImportError("No module named dnf"), "foundation"),
+            (KeyError("operation"), "internal"),
+            (ValueError("native request limit"), "internal"),
+        ):
+            with self.subTest(repr(error)):
+                self.assertEqual(self.entry(error).split("\n")[0], "refused " + expected)
+
+    def test_the_detail_is_one_bounded_line_without_control_characters(self):
+        lines = self.entry(RuntimeError("\x1b[31m" + "x" * 400 + "\nsecond line")).split("\n")
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(lines[2], "")
+        self.assertTrue(lines[1].startswith("RuntimeError: [31m"))
+        self.assertEqual(len(lines[1].encode("utf-8")), 200)

@@ -10,6 +10,9 @@ version_added: "0.1.0"
 description:
   - Reports whether the domain is defined, whether it carries this context's
     ownership, every owned disk, and the controller unit and image.
+  - The domain is owned only when its ownership metadata names exactly this
+    context and Machine and its UUID is the request's; a same-named domain of
+    another context, another Machine or another UUID is foreign.
   - A disk is present while anything exists at its path, whatever its image
     reports, and its size is read with the image shared, so a disk a live
     domain holds reports its real size and an unreadable one reports zero.

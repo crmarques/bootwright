@@ -374,11 +374,13 @@ type hostAttachment struct {
 	name     string
 	bridge   string
 	managed  bool
+	prefix   netip.Prefix
 }
 
 // libvirtAttachments lists a provider's libvirt attachments, keeping each name
-// and bridge only when it passes its grammar, so an invalid value yields its
-// grammar refusal and nothing else.
+// and bridge only when it passes its grammar, and a managed attachment's masked
+// prefix only when its address is a host address with its prefix, so an
+// invalid value yields its grammar refusal and nothing else.
 func libvirtAttachments(provider api.Object) []hostAttachment {
 	var found []hostAttachment
 	for index, attachment := range provider.Spec().Get("networkAttachments").Items() {
@@ -390,8 +392,11 @@ func libvirtAttachments(provider api.Object) []hostAttachment {
 		if name := attachment.Get("name").Text(); api.ValidLexical("name", name) {
 			entry.name = name
 		}
-		if bridge := libvirt.Get("bridge").Text(); api.ValidLexical("ifname", bridge) {
+		if bridge := libvirt.Get("bridge").Text(); api.ValidLexical("bridge", bridge) {
 			entry.bridge = bridge
+		}
+		if prefix, err := netip.ParsePrefix(libvirt.Get("address").Text()); entry.managed && err == nil && prefix.Bits() > 0 && prefix.Addr() != prefix.Masked().Addr() {
+			entry.prefix = prefix.Masked()
 		}
 		found = append(found, entry)
 	}
@@ -402,7 +407,9 @@ func libvirtAttachments(provider api.Object) []hostAttachment {
 // both claim: a managed attachment name another provider also manages, since
 // a context names the one network it defines after it, and a bridge a managed
 // attachment defines that another attachment also names, since a bridge name
-// is host-global and goes with the host block that defines it.
+// is host-global and goes with the host block that defines it; and two managed
+// prefixes that overlap, of one provider or two, since the host routes each
+// managed prefix to its own bridge.
 func validateSharedHostNetworks(o api.Object, c api.Catalog) []api.Issue {
 	host := o.Spec().Get("libvirt", "machineRef").Text()
 	if !api.ValidLexical("name", host) {
@@ -435,6 +442,13 @@ func validateSharedHostNetworks(o api.Object, c api.Catalog) []api.Issue {
 						own.bridge, own.index, peer.index, peer.provider.Identity(), host),
 					Remediation: fmt.Sprintf("give spec.networkAttachments[%d] of %s or spec.networkAttachments[%d] of %s its own bridge, or make both external",
 						own.index, o.Identity(), peer.index, peer.provider.Identity())})
+			}
+			if own.managed && peer.managed && own.prefix.IsValid() && peer.prefix.IsValid() && own.prefix.Overlaps(peer.prefix) {
+				issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".libvirt.address",
+					Message: fmt.Sprintf("managed prefix %s of networkAttachments[%d] overlaps managed prefix %s of networkAttachments[%d] of %s on host Machine/%s, and the host routes each managed prefix to its own bridge",
+						own.prefix, own.index, peer.prefix, peer.index, peer.provider.Identity(), host),
+					Remediation: fmt.Sprintf("give spec.networkAttachments[%d].libvirt.address of %s or spec.networkAttachments[%d].libvirt.address of %s a prefix no other managed attachment on host Machine/%s overlaps",
+						own.index, o.Identity(), peer.index, peer.provider.Identity(), host)})
 			}
 		}
 	}

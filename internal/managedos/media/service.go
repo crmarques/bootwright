@@ -417,18 +417,31 @@ func (s Service) now() string {
 }
 
 // List reports the store's inventory. Without checksums it reads records and
-// file metadata alone, and marks an image whose size no longer matches its
-// record; with them it reads every image in full as one check each, reports
-// the digest it computed and marks an image whose bytes no longer match its
-// record. A mismatched image never hides the rest of the store, and whether a
-// context reserves an image is reported apart from whether it verified.
+// file metadata alone under the shared lock, and marks an image whose size no
+// longer matches its record. With them it opens every listed image under that
+// lock, releases it, and then reads each image in full through the handle it
+// opened as one check each, so no other command meets a held lock while it
+// reads; it reports the digest it computed and marks an image whose bytes no
+// longer match its record. An image the store cannot read is listed as failed
+// with its cause. Neither a mismatched nor a failed image hides the rest of
+// the store, and whether a context reserves an image is reported apart from
+// whether it verified. Every handle is released however the listing ends.
 func (s Service) List(ctx context.Context, request ListMediaRequest) (*ListResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
 	result := &ListResult{Media: []MediaRow{}, Checksums: request.Checksums}
+	var images []Image
+	var held []Held
+	defer func() {
+		for _, handle := range held {
+			if handle != nil {
+				handle.Close()
+			}
+		}
+	}()
 	err := s.store.ReadMedia(ctx, func(view View) error {
-		images, err := view.Entries(ctx)
+		listed, err := view.Entries(ctx)
 		if err != nil {
 			return err
 		}
@@ -436,9 +449,9 @@ func (s Service) List(ctx context.Context, request ListMediaRequest) (*ListResul
 		if err != nil {
 			return err
 		}
-		images = slices.SortedFunc(slices.Values(images), func(x, y Image) int { return strings.Compare(x.Name, y.Name) })
+		images = slices.SortedFunc(slices.Values(listed), func(x, y Image) int { return strings.Compare(x.Name, y.Name) })
 		rows := make([]MediaRow, 0, len(images))
-		for index, image := range images {
+		for _, image := range images {
 			reserving := slices.Sorted(slices.Values(reservations[image.Name]))
 			if reserving == nil {
 				reserving = []string{}
@@ -447,31 +460,71 @@ func (s Service) List(ctx context.Context, request ListMediaRequest) (*ListResul
 				Name: image.Name, Size: image.Size, SHA256: image.SHA256, Source: image.Source, Added: image.Added,
 				Frozen: len(reserving) != 0, ReservedBy: reserving,
 			}
-			if image.Observed != image.Size {
+			if image.Failure != "" {
+				row.Verified, row.Failure = "failed", image.Failure
+			} else if image.Observed != image.Size {
 				row.Verified = "mismatch"
-			}
-			if request.Checksums {
-				if err := s.check(ctx, view, image, index+1, len(images), &row); err != nil {
-					return err
-				}
 			}
 			rows = append(rows, row)
 		}
 		result.Media = rows
+		if !request.Checksums {
+			return nil
+		}
+		held = make([]Held, len(rows))
+		for index := range rows {
+			if rows[index].Verified == "failed" {
+				continue
+			}
+			handle, err := view.Hold(ctx, rows[index].Name)
+			reason, unreadable := imageFailureReason(err)
+			switch {
+			case unreadable:
+				rows[index].Verified, rows[index].Failure = "failed", reason
+			case err != nil:
+				return err
+			default:
+				held[index] = handle
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	if !request.Checksums {
+		return result, nil
+	}
+	for index := range result.Media {
+		err := s.check(ctx, held[index], images[index], index+1, len(images), &result.Media[index])
+		if held[index] != nil {
+			held[index].Close()
+			held[index] = nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
 	return result, nil
 }
 
-// check reads one image in full and settles whether its bytes still match its
-// record, reporting the digest it computed.
-func (s Service) check(ctx context.Context, view View, image Image, position, total int, row *MediaRow) error {
+// check reads one held image in full, holding no store lock, and settles
+// whether its bytes still match its record, reporting the digest it computed.
+// An image the store could not read settles failed, naming why, and fails no
+// other check.
+func (s Service) check(ctx context.Context, handle Held, image Image, position, total int, row *MediaRow) error {
 	verification := ProgressEvent{Check: true, Step: "verify", Label: "Verify " + image.Name, Position: position, Total: total}
 	s.report(ctx, verification, "running", "")
-	digest, err := view.Digest(ctx, image.Name)
+	if row.Verified == "failed" {
+		s.report(ctx, verification, "failed", row.Failure)
+		return nil
+	}
+	digest, err := handle.Digest(ctx)
+	if reason, unreadable := imageFailureReason(err); unreadable {
+		row.Verified, row.Failure = "failed", reason
+		s.report(ctx, verification, "failed", reason)
+		return nil
+	}
 	if err != nil {
 		s.report(ctx, verification, "failed", "")
 		return err

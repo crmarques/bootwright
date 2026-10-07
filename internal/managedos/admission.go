@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -141,8 +142,13 @@ func validateCustomizationEntries(custom api.Value) []api.Issue {
 		if gpg && !repo.Has("gpgKeyURL") {
 			issues = add(issues, issue(path+".gpgKeyURL", "GPG checking requires a key URL", "set "+entry+".gpgKeyURL, or set "+entry+".gpgCheck to false"))
 		}
-		if key := repo.Get("gpgKeyURL"); key.Present() && !validMediaURL(key.Text(), true) {
-			issues = add(issues, issue(path+".gpgKeyURL", "GPG key URL must use HTTP(S) or an absolute file URI", "set "+entry+".gpgKeyURL to an https://, http:// or file:/// URL"))
+		if key := repo.Get("gpgKeyURL"); key.Present() && (!validMediaURL(key.Text(), true) || strings.ContainsAny(key.Text(), "\"'\\#")) {
+			issues = add(issues, issue(path+".gpgKeyURL", "GPG key URL must use HTTP(S) or an absolute file URI, with no quote, backslash or '#'",
+				"set "+entry+".gpgKeyURL to an https://, http:// or file:/// URL"))
+		}
+		if name := repo.Get("displayName"); name.Present() && (!utf8.ValidString(name.Text()) || strings.IndexFunc(name.Text(), lineBreak) >= 0) {
+			issues = add(issues, issue(path+".displayName", "a repository display name is one line of UTF-8 text with no control character",
+				"correct "+entry+".displayName to one line of text"))
 		}
 	}
 	return issues
@@ -281,6 +287,11 @@ func validateInstallerSources(o api.Object, c api.Catalog) []api.Issue {
 					break
 				}
 			}
+		}
+	}
+	for i, repo := range anaconda.Get("packageSource", "mirror", "repositories").Items() {
+		if !repositoryID(repo.Get("id").Text()) {
+			issues = add(issues, grammarIssue(fmt.Sprintf("$.spec.installer.anaconda.packageSource.mirror.repositories[%d].id", i), repositoryGrammar))
 		}
 	}
 	if hosted := anaconda.Get("packageSource", "hostedTree"); hosted.Present() {
@@ -522,6 +533,11 @@ func containsReference(value api.Value, key, name string) bool {
 func repositoryID(s string) bool {
 	return api.ValidLexical(repositoryGrammar.rule, s) && !strings.Contains(s, "/")
 }
+
+// lineBreak is any rune that ends or has no meaning in a line of the .repo file
+// the installation writes: every control character and the Unicode line and
+// paragraph separators.
+func lineBreak(r rune) bool  { return unicode.IsControl(r) || r == '\u2028' || r == '\u2029' }
 func hasSpace(s string) bool { return strings.IndexFunc(s, unicode.IsSpace) >= 0 }
 func digits(s string) bool {
 	if s == "" {

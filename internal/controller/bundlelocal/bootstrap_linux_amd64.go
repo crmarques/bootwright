@@ -46,6 +46,7 @@ func resolveBootstrapWheels(ctx context.Context, staging prerequisites.Staging, 
 	if err != nil {
 		return nil, err
 	}
+	requirement := prerequisites.LaunchRequirementFor(ctx, value.Execution)
 	root, stage, err := stageBootstrap(bounded, staging, projected, value, trust)
 	if err != nil {
 		return nil, err
@@ -56,10 +57,10 @@ func resolveBootstrapWheels(ctx context.Context, staging prerequisites.Staging, 
 		return nil, err
 	}
 	defer broker.close()
-	arguments := []string{"--inhibit-cache", "--glibc-hwcaps-mask", "", "--library-path", "/python/lib", "--preload", strings.Join(value.Execution.Preload, ":"), "/" + value.PythonExecutable, "-I", "-B", "-S", "-c", pipBootstrap,
+	arguments := []string{"--inhibit-cache", "--glibc-hwcaps-mask", "", "--library-path", "/python/lib", "--preload", strings.Join(requirement.Preload, ":"), "/" + value.PythonExecutable, "-I", "-B", "-S", "-c", pipBootstrap,
 		"--isolated", "--disable-pip-version-check", "--no-input", "--no-cache-dir", "--proxy", broker.endpoint(), "--cert", "/ca.pem", "--use-deprecated=legacy-certs",
 		"install", "--dry-run", "--ignore-installed", "--only-binary=:all:", "--report", "-", "--quiet", "--index-url", "https://pypi.org/simple", "ansible-core==" + value.AnsibleVersion, "urllib3"}
-	command := exec.CommandContext(bounded, value.Execution.Loader, arguments...)
+	command := exec.CommandContext(bounded, requirement.Loader, arguments...)
 	command.Dir = "/"
 	command.Env = []string{"LC_ALL=C.UTF-8", "LANG=C.UTF-8", "HOME=/home", "TMPDIR=/tmp", "PIP_CONFIG_FILE=/dev/null", "OPENSSL_CONF=/dev/null", "PATH=/nonexistent"}
 	command.SysProcAttr = bootstrapProcessAttributes(root)
@@ -128,8 +129,12 @@ func bootstrapProcessAttributes(root string) *syscall.SysProcAttr {
 	}
 }
 
+// stageBootstrap copies the foundation every launch of setup verifies, which
+// on a host whose builds setup qualified is that foundation, not the compiled
+// one the definition carries.
 func stageBootstrap(ctx context.Context, staging prerequisites.Staging, projected *projection, value prerequisites.BootstrapDefinition, trust []byte) (string, prerequisites.Stage, error) {
-	if !validExecutionRequirement(value.Execution) || value.Execution.PythonExecutable != value.PythonExecutable {
+	requirement := prerequisites.LaunchRequirementFor(ctx, value.Execution)
+	if !validExecutionRequirement(value.Execution) || value.Execution.PythonExecutable != value.PythonExecutable || !validExecutionRequirement(requirement) || requirement.PythonExecutable != value.PythonExecutable {
 		return "", prerequisites.Stage{}, bundleFailure("bootstrap execution foundation is invalid")
 	}
 	root, stage, err := bootstrapStage(ctx, staging)
@@ -167,7 +172,7 @@ func stageBootstrap(ctx context.Context, staging prerequisites.Staging, projecte
 			return fail(bundleFailure("bootstrap staging projection could not be written"))
 		}
 	}
-	for _, file := range value.Execution.Files {
+	for _, file := range requirement.Files {
 		stream, err := os.Open(file.Path)
 		if err != nil {
 			return fail(bundleFailure("provided bootstrap library is unavailable"))
@@ -182,7 +187,7 @@ func stageBootstrap(ctx context.Context, staging prerequisites.Staging, projecte
 			return fail(bundleFailure("bootstrap library staging failed"))
 		}
 	}
-	for _, link := range value.Execution.Links {
+	for _, link := range requirement.Links {
 		name := strings.TrimPrefix(link.Path, "/")
 		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(name)), 0755); err != nil {
 			return fail(err)
@@ -191,7 +196,7 @@ func stageBootstrap(ctx context.Context, staging prerequisites.Staging, projecte
 			return fail(bundleFailure("bootstrap library alias staging failed"))
 		}
 	}
-	if err := qualifyBootstrapELF(projected, value.Execution, root); err != nil {
+	if err := qualifyBootstrapELF(projected, requirement, root); err != nil {
 		return fail(err)
 	}
 	if err := write("ca.pem", trust, 0444); err != nil {

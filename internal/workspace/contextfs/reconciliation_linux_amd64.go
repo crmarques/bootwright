@@ -466,9 +466,12 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 			retained = append(retained, reservation)
 		}
 	}
-	if held, taken := prerequisites.ConflictingContext(retained, next); taken {
-		return diagnostics.NewFailureWithRemediation("controller.conflict",
-			"context "+held.Context+" already holds a "+held.Class+" reservation this context needs", "", held.Remediation)
+	if conflicts := prerequisites.Conflicts(retained, next); len(conflicts) > 0 {
+		found := make([]diagnostics.Diagnostic, 0, len(conflicts))
+		for _, conflict := range conflicts {
+			found = append(found, prerequisites.ConflictDiagnostic(conflict))
+		}
+		return &diagnostics.Failure{Diagnostics: found}
 	}
 	combined := append(retained, next...)
 	slices.SortFunc(combined, func(x, y prerequisites.HostReservation) int {

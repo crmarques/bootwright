@@ -53,7 +53,8 @@ or response timeout, or the transfer deadline; or the HTTP status, with the
 remedy that status calls for. No diagnostic carries the URL's query or a
 response body, and a write the media store could not complete, such as one
 into a full filesystem, is reported as the store's failure, never the
-source's.
+source's. A cancellation during a copy or download is reported as the
+cancellation, never as a source that could not be read in full.
 
 Acquisition holds no store lock, so a long download blocks no other command;
 [Workspace](contexts.md#media-acquisition) owns how. Every refusal and the
@@ -69,9 +70,17 @@ it publishes that image without acquiring it again.
 
 `media list` reads only records and file metadata, and names the contexts
 that reserve each image separately from whether the image verified.
-`--checksums` reads every image in full and reports each computed digest
+`--checksums` opens every listed image under the shared root lock, releases
+it, and then reads each image in full through the descriptor it opened, so no
+other command refuses as busy while it reads; it reports each computed digest
 beside its record. An entry whose size or computed digest differs from its
-record is listed as a mismatch and never hides the rest of the store; the
+record is listed as a mismatch. An entry whose record cannot be read safely or
+does not decode, whose file is unsafe or cannot be opened, or whose bytes could
+not be read in full is listed as failed, naming why. So is one whose file
+status (inode, size, link count, modification and change times) at the end of
+its read differs from that when it was opened, or that was deleted or replaced
+meanwhile. Neither kind of entry hides the rest of the store; only a
+cancellation or a store the listing cannot read at all fails the command. The
 [media results](cli/output.md#media-results) define the row.
 `media delete --name <filename.iso>` removes the image and its record, and a
 stage an interrupted add retained for that name, after ordinary confirmation,
@@ -86,9 +95,16 @@ hold it, and it blocks nothing but deletion and replacement of what it names.
 A completed apply keeps it, so the refusal of a frozen entry's deletion or
 replacement names each context that reserves it and that context's
 `bootwright destroy --context <name>`.
-A plan names an image by name, size and SHA-256; each attempt proves the size
-and digest before the image's first use in an operation and refuses a changed
-entry rather than using it.
+A plan names an image by name, size and SHA-256, frozen from the store's
+record. Before registration it refuses an image the store does not hold,
+naming `bootwright media add --name <filename.iso>`; one the store lists as
+failed, naming its cause, or whose record names no SHA-256 and positive size,
+naming `bootwright media delete` and `media add`; one whose bytes no longer
+have the size its record names; and one whose MachineImage `checksum` declares
+another digest than the record. Each apply attempt reads the size and SHA-256
+again before the image's first use and refuses a changed entry through a named
+refusal for its Machine, whose remedy takes the context back, imports the
+image again and applies.
 
 ## Installation
 
@@ -122,7 +138,14 @@ through it. A profile selecting
 `initialPassword`, `diskEncryption`, an enabled `fips`, a top-level
 `subscription`, `fromSubscription`, `mirror` or `templateClone` refuses before
 registration. These shapes carry secret bytes or effects this contract does not
-prove. Every refusal names the Machine that selects the installation, with the
+prove. A profile enabling `ssh.passwordAuthentication` refuses too, because no
+password can be set while `initialPassword` is refused. A Machine whose
+profile configures a repository refuses while its effective proxy names a
+Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, because
+a `.repo` file carries a proxy URL and nothing else; it refuses the same way,
+saying the Proxy declares no proxy URL, when that Proxy declares neither URL.
+A credentialed Proxy reaches nothing when no repository is configured, and is
+accepted then. Every refusal names the Machine that selects the installation, with the
 reason and remedy the [refusal table](#refusal-table) states. A Machine whose
 installation delivers private material refuses
 `disable-verification` virtual-media trust before registration, ahead of its
@@ -175,12 +198,45 @@ sudo; the root disk `rootDeviceHints.deviceName` names cleared and partitioned, 
 automatic partitioning when a Machine its substrate created names none; the
 `minimal` environment, the profile's packages, and `qemu-guest-agent` on a
 Machine whose identity channel is the guest agent; the profile's enabled and
-disabled services; SELinux and firewall as selected; the profile's configured
-repositories; and a `%post` that writes the install marker, establishes the
-host key its identity channel requires, writes the sudoers and SSH daemon
-drop-ins, and removes every retained copy of the Kickstart. The marker is
-bounded JSON naming the context, Machine, profile, image digest and the
-request digest, and its content is frozen with the plan.
+disabled services; SELinux and firewall as selected; and a `%post` that writes
+the install marker, establishes the host key its identity channel requires,
+writes the regional formats and the configured repositories, writes the
+sudoers and SSH daemon drop-ins, and removes every retained copy of the
+Kickstart. The marker is
+bounded JSON naming the context, Machine, profile, boot image name and the
+request digest, which covers the frozen size and SHA-256 of every image, and
+its content is frozen with the plan.
+
+`lang` carries the language alone. When `localization.formats` differs from
+the language, the `%post` writes `/etc/locale.conf` with `LANG` set to the
+language and `LC_TIME`, `LC_NUMERIC`, `LC_MONETARY`, `LC_PAPER`,
+`LC_MEASUREMENT`, `LC_ADDRESS`, `LC_TELEPHONE`, `LC_NAME` and
+`LC_IDENTIFICATION` set to the formats locale, and `%packages` adds
+`glibc-langpack-<code>`, `<code>` being the formats locale up to its first
+`_`, `.` or `@`, lowercased. No langpack is added for a `C` or `POSIX` locale or
+one sharing the language's code, and a code that is not two or three ASCII
+letters refuses at plan. Formats equal to the language, the admission default,
+render nothing. `additionalLocales` gains no langpack beyond what
+`lang --addsupport` installs.
+
+Configured repositories are the installed system's own and never install
+sources: the packages come from the install source alone, and no `repo`
+directive is rendered. The `%post` writes each, in ID order, as
+`/etc/yum.repos.d/bootwright-<id>.repo` with mode 0644, holding its `[<id>]`
+section, `name` (its `displayName`), `baseurl`, `enabled` and `gpgcheck` as
+`1` or `0`, `gpgkey` when `gpgKeyURL` is set and `proxy` when the installed
+system reaches it through one; a disabled repository is written with
+`enabled=0`. The proxy is the Machine's effective proxy choice: none for
+`direct` or an absent choice; otherwise the selected external Proxy's
+`httpsProxy` for an `https` base URL and `httpProxy` for an `http` one, each
+falling back to the other when only one is declared. A repository on the host
+of the installation's own installer image or package tree URL is reached
+directly, because the installation fetches only its artifact endpoints and
+those are exempt, as is one whose host a `noProxy` entry of the choice covers:
+`*` covers every host, a `.domain` or `*.domain` suffix the domain and its
+subdomains, an IP address or CIDR block the IP literals it equals or contains,
+and any other entry the host it names, its `:port` ignored, all compared
+without case. The `.repo` file is the only place the proxy is written.
 
 Each selected DNS or NTP address is a managed server's endpoint address, or
 an external server's declared `address`. The `network` line carries nothing
@@ -194,10 +250,12 @@ available interface that is not `ethernet`, an `mtu` other than 1500, or a
 route that is not `absent` other than the line's own default route. That route
 is the first IPv4 `0.0.0.0/0` route whose `next-hop-interface` is absent or is
 the install interface and whose `next-hop-address` is the gateway the line
-carries, the next hop of the first default route the network template
-declares. Search domains, a disabled IPv6 family, an `mtu` of 1500 and a
-`table-id` or `metric` on the default route are accepted although the line
-does not carry them, as the lab-rhel example declares them: 1500 is the MTU
+carries, the next hop of the first composed route that is not `absent`,
+whose destination is a zero-prefix IPv4 CIDR and whose next hop is an IPv4
+address, read after `spec.network.overrides` merge into the template. Search
+domains, a disabled IPv6 family, an `mtu` of 1500 and a `table-id` or
+`metric` on the default route are accepted although the line does not carry
+them, as the lab-rhel example declares them: 1500 is the MTU
 the installed system takes by default, and the installed system applies none
 of the others until post-install network convergence
 ([B326](milestones/m4.md#b326)).
@@ -222,10 +280,17 @@ the per-Machine installer image at `os/<machine>/install.iso`, built by
 `mkksiso` from the frozen boot media with the derived Kickstart implanted and
 the media check removed from every boot entry; and, for `hostedTree`, the DVD's
 complete tree at `os/<profile>/tree/`, copied once from the frozen image with
-its `.treeinfo` and repositories intact, identified by the DVD's digest, and
-published by atomic rename so a fetching installer never sees a partial tree.
+its `.treeinfo` and repositories intact, and published by atomic rename so a
+fetching installer never sees a partial tree. The tree carries
+`.bootwright-tree-identity`, holding the frozen DVD's SHA-256, written before
+the rename; a published tree whose identity is not that digest, or that has
+none, is withdrawn, its `.treeinfo` first, and extracted again. Evidence
+reports the identity, and completion requires it to be the frozen digest.
 The tree is extracted beside that path, at `os/<profile>/tree.staging`, and the
-image is built in a work area outside the served root. An attempt stopped part
+image is built in a work area outside the served root, `work` beneath
+`/var/lib/bootwright-install`, a parent only root may enter (owner root, mode
+0700) that an apply and an observation create and prove, refusing a link or
+any other owner or mode, before the work area, and that a removal leaves. An attempt stopped part
 way leaves either behind, and a removal stopped part way leaves the tree's
 directory without its `.treeinfo`, which is never a complete tree and which the
 rename cannot replace. An apply therefore clears its work area before its first
@@ -241,7 +306,12 @@ installs on the controller, where every installation publishes.
 **Boot.** Immediately before it inserts anything, the block proves the exact
 target through its substrate's own proof: that the machine it is about to
 overwrite is the one the desired state names, and that the machine is powered
-off. The proof runs at that moment rather than at planning time, because a plan
+off. Before that proof it fetches the first byte of the published image, and
+of the tree's `.treeinfo` when it hosts one, through the listener the
+consumer uses: with a `Range` request, through no proxy, following no
+redirect, and verifying an `https` listener against the serving certificate
+bound to the operation. A fetch answered with neither 200 nor 206 refuses,
+naming the URL and the status, and no machine is given media. The proof runs at that moment rather than at planning time, because a plan
 proves intent and only an observation taken before the effect proves the
 target. It fails closed, and no authorization relaxes it: `data-loss`
 acknowledges that an installation destroys data and never selects what to
@@ -291,7 +361,9 @@ of the reads that hour allows for.
 marker it returns matching the frozen marker byte for byte, the machine's SSH
 host public key established through that same channel, an SSH connection to the
 selected install address accepting that exact key and the fleet identity for the
-`bootwright` account, the virtual media ejected, and the Machine reported
+`bootwright` account, through a generated client configuration that keeps only
+the host crypto policy, with no ambient known hosts, proxy, control or identity
+directive and with `ServerAliveInterval=15` and `ServerAliveCountMax=3`, the virtual media ejected, and the Machine reported
 powered on. The evidence records the marker digest, the host public key, the
 address and whether that connection was accepted; a later consumer that
 connects to the Machine binds that key, never a first-use answer from the
@@ -302,7 +374,10 @@ complete one. A Machine that holds the marker and has not accepted the
 connection yet is converging rather than failed.
 
 **Replay.** A Machine whose guest already answers with the frozen marker
-reports `completed` with the same evidence and boots nothing. The only
+reports `completed` with the same evidence, outcome `unchanged`, and boots
+nothing; an apply that booted the installer reports `changed`. The answer is
+the first identity read's, frozen before the boot, never the marker the
+installer has written by completion. The only
 differences it converges are its own published content and an ejection it did
 not complete, each performed again for a guest already holding that marker. A
 guest that
@@ -451,6 +526,7 @@ for each other interface-assigned address in declared order, then
 then `mtu <value> on <name>` for each available interface whose `mtu` is not
 1500, both in composed order, then `route <destination>` for each route that
 is not `absent`, other than the line's own default route, in declared order.
+`<proxy>` is the `Proxy` the Machine's effective `spec.proxy` selects.
 `<server>` is the selected `ArtifactServer` and `<server host>` the Machine its
 `spec.machineRef` names; `<provider>` is the Machine's `InfraProvider` and
 `<provider host>` the Machine its `spec.libvirt.machineRef` names.
@@ -470,7 +546,9 @@ is not `absent`, other than the line's own default route, in declared order.
 | A subscription | a profile's `spec.subscription` | `the install profile selects spec.subscription, which carries secret bytes or effects this executable does not prove` | `remove spec.subscription from <profile>` |
 | An initial password | a profile's `spec.customizations.ssh.initialPassword` | `the install profile selects spec.customizations.ssh.initialPassword, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.ssh.initialPassword from <profile>` |
 | Disk encryption | a profile's `spec.customizations.security.diskEncryption` | `the install profile selects spec.customizations.security.diskEncryption, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.security.diskEncryption from <profile>` |
+| Password authentication | a profile's `spec.customizations.ssh.passwordAuthentication: true` | `the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused` | `set spec.customizations.ssh.passwordAuthentication to false on <profile>` |
 | FIPS | a profile's `spec.customizations.security.fips.enabled: true` | `the install profile enables FIPS, which carries effects this executable does not prove` | `disable spec.customizations.security.fips on <profile>` |
+| A credentialed proxy | a Machine's effective `spec.proxy` naming a Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, while its profile configures a repository | `the installed system's repositories would reach <proxy> through a credential or private trust anchor, which an installation cannot carry` | `select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of <machine> or of <profile>` |
 | An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A package tree server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation extracts and publishes its package tree on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint on <profile>` |
 | A Machine off the artifact server's host | a virtual Machine whose provider's `spec.libvirt.machineRef` is not the image server's `spec.machineRef` | `an emulated controller is reached over plain HTTP with its credential and fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on` | `<machine> is booted through a controller on <provider host> and <server> is placed on <server host>; place <provider> on <server host>` |

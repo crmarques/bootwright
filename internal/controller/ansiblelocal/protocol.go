@@ -18,6 +18,7 @@ type protocolMessage struct {
 	Outcome     string                           `json:"outcome,omitempty"`
 	Evidence    json.RawMessage                  `json:"evidence,omitempty"`
 	Reason      string                           `json:"reason,omitempty"`
+	Source      string                           `json:"source,omitempty"`
 }
 
 func strictJSON(data []byte, target any, fields ...string) bool {
@@ -116,6 +117,13 @@ func readProtocol(reader io.Reader, messages chan<- protocolMessage) error {
 			fields = append(fields, "outcome", "evidence")
 		case "refused":
 			fields = append(fields, "reason")
+			// An acquisition refusal names the source it was acquiring.
+			var raw map[string]json.RawMessage
+			if json.Unmarshal(data, &raw) == nil {
+				if _, named := raw["source"]; named {
+					fields = append(fields, "source")
+				}
+			}
 		default:
 			return errors.New("protocol phase")
 		}

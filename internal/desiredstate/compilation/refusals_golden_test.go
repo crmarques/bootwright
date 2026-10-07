@@ -18,6 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/storage"
@@ -37,6 +38,7 @@ func refusalCompiler() compilation.Compiler {
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
 		compilation.Rules{Normalize: managedos.Normalize, ValidateAuthored: managedos.ValidateAuthored, ValidatePartial: managedos.ValidatePartial, Validate: managedos.Validate},
 		compilation.Rules{Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
+		compilation.Rules{Normalize: machine.Normalize, NormalizationOrigins: machine.NormalizationOrigins, ValidateAuthored: machine.ValidateAuthored, ValidatePartial: machine.ValidatePartial, Validate: machine.Validate},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate})
 }
 
@@ -71,6 +73,8 @@ func refusalRows() []refusalRow {
 		{"kind defaults key three edits from a kind", environmentYAML + "  defaults:\n    Mach: {}\n", ""},
 		{"referenced Secret that does not decode", environmentYAML + "  remoteMachinesAccessKey: {keyRef: probe}\n", refusalSecret + "  type: sshKeyPair\n  extra: x\n"},
 		{"referenced Secret whose type is not a string", environmentYAML + "  remoteMachinesAccessKey: {keyRef: probe}\n", refusalSecret + "  type: 1\n"},
+		{"network selection without a configured network", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  network:\n    installAddressRef: ip\n    addresses: [{name: ip, address: 192.0.2.9/24, interface: eth0}]\n"},
+		{"interface assignment on an OS-ready Machine", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  network:\n    addresses: [{name: ip, address: 192.0.2.9/24, interface: eth0}]\n"},
 		{"selected cluster that does not decode", environmentYAML + "  containerClusters: [probe]\n", undecodableCluster},
 	}
 }

@@ -49,8 +49,7 @@ func TestExampleRequestsKeepTheirBytes(t *testing.T) {
 			derive(t, "the libvirt host requests", err)
 			found.LibvirtMachines, err = libvirt.MachineRequests(catalog, controllerMachine, contextName)
 			derive(t, "the libvirt machine requests", err)
-			found.Installations, _, err = installation.Requests(catalog, controllerMachine, contextName)
-			derive(t, "the installation requests", err)
+			found.Installations = plannedInstallations(t, "lab-rhel", controllerMachine, contextName)
 			return found
 		},
 		"lab-sno": func(t *testing.T) exampleRequests {

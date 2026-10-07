@@ -106,16 +106,48 @@ that provides it (for a pinned link, the build that provides the file it
 reaches; for a path no package provides, the path alone), and what was found:
 missing, other content, an unsafe owner, mode, type or link count, a link that
 points elsewhere, or a non-empty `/etc/ld.so.preload`. A launch that meets it
-refuses with the same diagnostic, and its remedy holds from every command:
-install exactly that build again with `dnf`, hold it with `dnf versionlock`,
-then repeat the command; a host that must take the update needs a Bootwright
+refuses with the same diagnostic, and its remedy holds from every command: if
+`dnf` updated `glibc` or `libgcc` within the qualified OS release, run
+`bootwright setup` to qualify the new builds; otherwise install exactly that
+build again with `dnf`, hold it with `dnf versionlock`, then repeat the
+command; a host that must take an upstream or minor update needs a Bootwright
 build whose foundation pins it. No next command is offered. The operator
 guide's [hold procedure](../docs/operator-guide.md#hold-the-execution-foundation)
 keeps a controller on those builds, and
 [development](../docs/development.md#qualified-hosts-and-images) names the
-tool that regenerates a release's record from a qualified host. Qualifying
-vendor-signed builds within the qualified minor, so a z-stream errata needs one
-setup, lands with [B297](milestones/m1.md#b297).
+tool that regenerates a release's record from a qualified host.
+
+A z-stream errata needs one setup ([D107](milestones/backlog.md#decisions)).
+When the compiled foundation differs at a file a pinned build provides, setup
+and `preflight controller` read that package's installed instances from a
+snapshot of the host's RPM database, under the same read lock, and qualify the
+host's builds only when each package has exactly one x86_64 instance (an i686
+instance is ignored), of the compiled build's upstream version, signed by the
+platform's vendor key (the low 64 bits of the RHEL 9 or Fedora 43 profile's
+signer, every present signature naming it), with SHA-256 file digests. The
+qualified requirement is the compiled one with each pinned file's digest
+replaced by the RPM database's digest for that path, and the versioned
+`libgcc_s` file, the `libgcc_s.so.1` link and their preload entry taken from
+the build's file list and link targets; it is then verified byte for byte
+exactly as a launch verifies. Another OS minor stays an unadmitted release.
+Another upstream version, an unsigned or foreign-signed build, a missing or
+second x86_64 instance, or a file whose bytes differ from its RPM digest
+refuses with `controller.unsupported` naming the package build, what
+disqualified it and the reinstall remedy. A
+qualified foundation settles the check ready, observed as the qualified builds
+(for example `glibc 2.34-276.el9_8, libgcc 11.5.0-15.el9 (vendor-signed,
+qualified within rhel 9.8)`). While a complete receipt records another
+foundation, setup plans `Re-qualify the execution foundation`, with no host or
+bundle effect, and publishes a new complete receipt that records the qualified
+requirement as its `foundation`, bound into its plan digest; the next setup is
+unchanged. `preflight controller` over such a receipt reports the check
+not-ready with next command `bootwright setup`. A host holding the compiled
+builds records nothing, so every digest and receipt stays as it was. Every
+launch stays byte-exact against the receipt's requirement, the recorded
+foundation when there is one and the definition's otherwise, and never reads
+the RPM database; setup's own launches verify the foundation its inspection
+qualified. Neither the catalog, a resolution's execution requirement nor any
+bundle or resolution identity moves.
 
 Bootwright's runtime brings its own cryptography: the Go executable and the
 private CPython use their own cryptographic implementations, outside the host's
@@ -358,7 +390,7 @@ from a snapshot taken under the native package read lock, still equals that
 preparation's before-state and not its after-state: the installer records the
 preparation before it stages the payloads and is authorized only after them,
 so a refusal in between, such as every Python-side download before
-[B297](milestones/m1.md#b297), leaves this shape. Setup reads that inventory
+[B297](milestones/delivered.md#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation), leaves this shape. Setup reads that inventory
 through the native inspector, and a composition that cannot read it never
 cancels the second shape. With `--purge-old-bundles` setup records that
 receipt `canceled` under its own ID and plan, observing what it found
@@ -503,10 +535,12 @@ or other operator mutation outside that coordination is unsupported
 interference; native transaction checks still apply, and a differing final
 inventory is an unknown outcome requiring recovery, never success.
 
-The `controller-prerequisites-v4` Ansible adapter receives one frozen request
-with platform, exact package/tool sources, each tool source's acquisition
-deadline in seconds, two scoped bundle identities, declared egress and optional
-retained preparation. The first names the approved
+The `controller-prerequisites-v5` Ansible adapter receives one frozen request
+with platform, exact package/tool sources, an acquisition deadline in seconds
+for each native package and then each tool source, in that order, the
+`nativeStaging` bound in seconds that every native package is staged under
+together, two scoped bundle identities, declared egress and optional retained
+preparation. The first names the approved
 execution bundle the fixed automation is read from; the second is the only area
 the request may publish into, and its writability is the adapter's authority to
 change anything at all. Setup passes the same area for both, because it
@@ -538,10 +572,32 @@ fails, so its diagnostic's remedy names the release-stamp check and asks for a
 the same release and mirror reuse the retained source and refuse again, so
 restoring sources cannot help. No downloaded tool
 is ever executed, so the stamp is read, never asked of the tool. Inventory,
-request, downloads, expanded members and callback frames have fixed bounds,
-and a native package download a fixed 5-minute deadline. A native package
-streams into its own file in disposable scratch the same way, chunk by chunk,
-and is proved by its digest before the transaction may name it.
+request, downloads, expanded members and callback frames have fixed bounds. A
+native package streams into its own file in disposable scratch the same way,
+chunk by chunk, under its own acquisition deadline, and every package of the
+run under the `nativeStaging` bound, the acquisition deadline of their
+declared bytes together, held to the controller stage's 2-hour ceiling less the
+run's 10-minute base; each is proved by its digest before the transaction may
+name it. One connection pool serves each route, direct or through the proxy,
+for every package of a run and for one tool's source.
+
+An adapter that refuses names one closed class to Go in a
+[`refused` record](architecture.md#the-adapter-result-protocol) before it
+fails, and never the exception's text. An acquisition names `dns`,
+`certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`,
+`integrity`, `trust` or `storage`, with the `source` it was acquiring. The
+native helper writes exactly two lines to its standard error, `refused
+<class>` and the exception's type and first line of text, bounded at 200
+bytes, and exits 1; its classes are `solver-conflict`, `missing-candidate`,
+`signature`, `database`, `transaction`, `postcondition`, `foundation`,
+`timeout` and `internal`, and the inventory and package adapters carry the
+class in the record. Go maps each class to its diagnostic and remedy, naming
+the source's host for an acquisition, and for `storage` the directory that
+source was being written into: the run's scratch for a native package, the
+publication bundle for a tool; `internal` keeps the generic adapter
+failure, and a refusal after Go authorized the native transaction is
+`controller.unknown`. The raw first line reaches only the private setup run
+or controller-stage attempt output, never a record or a diagnostic.
 
 Go publishes only the pinned private Python/Ansible runtime and embedded
 repository automation needed to start Ansible. All host-package and target-CLI
@@ -649,12 +705,15 @@ retained or naming another area, an area that does not exist, or one without
 the file answers that the executable is not installed and names
 `apply --stage controller`, and no search path is ever consulted instead.
 
-Each client source has an acquisition deadline of 2 minutes plus its declared
-bytes at 512 KiB/s, rounded up to a whole second. A client installation's run
-deadline is the controller run's 10 minutes plus the acquisition deadline of
-every source it selects, and a closure whose deadline would pass the controller
-stage's 2-hour ceiling is refused before Ansible starts, so the ceiling never
-shortens a run it admits. The
+Each client source and each native package has an acquisition deadline of 2
+minutes plus its declared bytes at 512 KiB/s, rounded up to a whole second.
+Native staging is bounded by the acquisition deadline of every native package's
+declared bytes together, held to the 2-hour ceiling less the 10-minute run
+base. A run's deadline is the controller run's 10 minutes plus its native
+staging bound plus the acquisition deadline of every tool source it selects,
+held to the controller stage's 2-hour ceiling; a closure with tools whose
+deadline would pass that ceiling is refused before Ansible starts, so the
+ceiling never shortens a run it admits. The
 [bounds table](contexts.md#storage-locking-and-publication) names both
 constants.
 
@@ -723,7 +782,9 @@ unknown, which setup, an apply and context deletion share.
 With a context, the controller Machine's normalized
 [proxy choice](api/machines.md#machine-proxy) is the sole route selection: the
 controller stage and context preflight support direct access and qualified
-unauthenticated external proxies using the qualified system trust store. That
+unauthenticated external proxies using the qualified system trust store, whose
+`tls-ca-bundle.pem` the adapter reads as its certificate blocks only, ignoring
+the `# <label>` lines `update-ca-trust` writes, which may hold UTF-8. That
 route follows the [context-free route's grammar](#the-context-free-acquisition-route):
 admission refuses an endpoint or bypass entry outside it, and controller
 selection proves it again, naming the Proxy or Machine field that breaks it
@@ -895,7 +956,10 @@ receipt. If no effect occurred, it may retry the same action. Positive proof
 of the requested postcondition permits completion without repeating an install.
 Contradictory or incomplete proof leaves the action unknown and blocks further
 mutation with recovery guidance. Never turn a lost child result into failure
-with a presumed no-effect outcome. Changed input, host identity or dependency
+with a presumed no-effect outcome. Setup's own action whose adapter failed after
+publishing its preparation but before Go acknowledged a native record is
+recorded failed, because the adapter cannot start its transaction before that
+acknowledgement, and the next setup replaces it. Changed input, host identity or dependency
 closure cannot replace an incomplete setup; restore the exact compatible
 executable/dependencies and resolve that receipt first. The one exception is a
 pending receipt of setup's own, at the bound or below it, that this executable

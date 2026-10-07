@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -214,65 +213,11 @@ func selectInstallAddress(o api.Object, c api.Catalog, required bool) (api.Value
 }
 
 func mergeNative(base, override api.Value, path string) (api.Value, []api.Issue) {
-	if base.Type() == api.Mapping && override.Type() == api.Mapping {
-		result := base
-		issues := []api.Issue{}
-		for _, field := range override.Fields() {
-			value := field.Value
-			if previous := base.Get(field.Name); previous.Present() {
-				var nested []api.Issue
-				value, nested = mergeNative(previous, value, path)
-				issues = appendIssues(issues, nested...)
-			}
-			result = result.With(field.Name, value)
-		}
-		return result, issues
-	}
-	if base.Type() != api.Sequence || override.Type() != api.Sequence {
-		return override, nil
-	}
-	left, right := base.Items(), override.Items()
-	style := listMergeStyle(append(slices.Clone(left), right...))
-	if style == "invalid" {
+	merged, ok := substrate.MergeNative(base, override)
+	if !ok {
 		return api.Value{}, []api.Issue{invariant(path, "native list merging requires uniformly named maps or uniformly unnamed maps")}
 	}
-	result := slices.Clone(left)
-	issues := []api.Issue{}
-	for index, value := range right {
-		position := index
-		if style == "named" {
-			position = interfaceIndex(result, value.Get("name").Text())
-		}
-		if position < 0 || position >= len(result) {
-			result = append(result, value)
-			continue
-		}
-		merged, nested := mergeNative(result[position], value, path)
-		result[position] = merged
-		issues = appendIssues(issues, nested...)
-	}
-	return api.ListValue(result...), issues
-}
-
-func listMergeStyle(items []api.Value) string {
-	named, unnamed := false, false
-	for _, item := range items {
-		if item.Type() != api.Mapping {
-			return "invalid"
-		}
-		if item.Get("name").Type() == api.String && item.Get("name").Text() != "" {
-			named = true
-		} else {
-			unnamed = true
-		}
-	}
-	if named && unnamed {
-		return "invalid"
-	}
-	if named {
-		return "named"
-	}
-	return "positional"
+	return merged, nil
 }
 
 func validateNative(native api.Value, path string, partial bool) []api.Issue {

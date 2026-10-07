@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v5'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v6'
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -26,6 +26,34 @@
 - name: Read the machine through a work area this observation leaves as it found it
   when: not (managedos_install_anaconda_observes_removal | bool)
   block:
+    # The parent stays whatever the reads answer: a removal leaves it too.
+    - name: Create the root-only parent of the work area
+      ansible.builtin.file:
+        path: '{{ managedos_install_anaconda_work_parent }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      changed_when: false
+
+    - name: Read the parent of the work area
+      ansible.builtin.stat:
+        path: '{{ managedos_install_anaconda_work_parent }}'
+        follow: false
+      register: managedos_install_anaconda_work_parent_stat
+
+    - name: Refuse a work area parent that is not a root-only directory
+      ansible.builtin.assert:
+        that:
+          - managedos_install_anaconda_work_parent_stat.stat.isdir | default(false)
+          - not (managedos_install_anaconda_work_parent_stat.stat.islnk | default(true))
+          - managedos_install_anaconda_work_parent_stat.stat.uid | default(-1) == 0
+          - managedos_install_anaconda_work_parent_stat.stat.mode | default('') == '0700'
+        fail_msg: >-
+          {{ managedos_install_anaconda_work_parent }} is not a directory only root
+          may enter, so the machine was not read through it; remove it and observe again
+        quiet: true
+
     - name: Create the work directory an identity read may need
       ansible.builtin.file:
         path: '{{ managedos_install_anaconda_work }}'

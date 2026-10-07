@@ -1,7 +1,9 @@
 {
   "address": "198.51.100.41/24",
   "bootMedia": {
-    "name": "rhel-9.8-x86_64-boot.iso"
+    "name": "rhel-9.8-x86_64-boot.iso",
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "size": 1105199104
   },
   "budgets": {
     "identity": {
@@ -68,5 +70,5 @@
   },
   "tlsCertificateRef": "lab-artifacts-tls",
   "user": "bootwright",
-  "version": "os-install-anaconda-v5"
+  "version": "os-install-anaconda-v6"
 }

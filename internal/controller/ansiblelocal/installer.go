@@ -24,7 +24,7 @@ func New(execution prerequisites.PythonExecutionGuard) Installer {
 	return Installer{ExecutionGuard: execution, runner: run}
 }
 
-const requestVersion = "controller-prerequisites-v4"
+const requestVersion = "controller-prerequisites-v5"
 
 type capabilityRequest struct {
 	Version           string                            `json:"version"`
@@ -37,6 +37,7 @@ type capabilityRequest struct {
 	Native            *prerequisites.NativeResolvedPlan `json:"native"`
 	Tools             []prerequisites.ToolDefinition    `json:"tools"`
 	Acquisition       []toolAcquisition                 `json:"acquisition"`
+	NativeStaging     int64                             `json:"nativeStaging"`
 	Egress            prerequisites.SetupEgress         `json:"egress"`
 	Preparation       *prerequisites.NativePreparation  `json:"preparation,omitempty"`
 }
@@ -148,7 +149,7 @@ func (installer Installer) invoke(ctx context.Context, area prerequisites.Bundle
 	if err != nil {
 		return result, err
 	}
-	err = installer.ExecutionGuard.WithPython(ctx, area, definition.Execution, func(launch prerequisites.PythonLaunch, release func() error) error {
+	err = installer.ExecutionGuard.WithPython(ctx, area, prerequisites.LaunchRequirementFor(ctx, definition.Execution), func(launch prerequisites.PythonLaunch, release func() error) error {
 		var runErr error
 		result, runErr = installer.runner(ctx, launch, request, release, publish, progress, swallowing(output))
 		return readingRunOutput(runErr, output)
@@ -208,10 +209,16 @@ func (installer Installer) request(ctx context.Context, execution, target prereq
 	if request.Tools == nil {
 		request.Tools = []prerequisites.ToolDefinition{}
 	}
-	request.Acquisition = make([]toolAcquisition, 0, len(request.Tools))
+	// One acquisition deadline per native package, in request order, then
+	// one per tool; native staging bounds the packages together.
+	request.Acquisition = make([]toolAcquisition, 0, len(request.Packages)+len(request.Tools))
+	for _, item := range request.Packages {
+		request.Acquisition = append(request.Acquisition, toolAcquisition{Source: item.Source.ID, Seconds: int64(acquisitionDeadline(item.Source.Bytes).Seconds())})
+	}
 	for _, tool := range request.Tools {
 		request.Acquisition = append(request.Acquisition, toolAcquisition{Source: tool.Source.ID, Seconds: int64(acquisitionDeadline(tool.Source.Bytes).Seconds())})
 	}
+	request.NativeStaging = int64(nativeStaging(request.Packages).Seconds())
 	if !validSHA(request.Identity) || preparation != nil && !validPreparation(*preparation, request) {
 		return capabilityRequest{}, failure("controller.identity", "the frozen Ansible request or recovery proof is invalid")
 	}

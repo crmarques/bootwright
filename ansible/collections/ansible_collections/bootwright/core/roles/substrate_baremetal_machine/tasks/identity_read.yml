@@ -18,22 +18,69 @@
   changed_when: false
   no_log: true
 
+# ssh reads this file in place of the system and personal configuration, so no
+# ambient known hosts, proxy, control socket, agent or identity reaches the
+# connection; only the host crypto policy is kept, and an absent policy file
+# is skipped. The keepalives end a connection whose peer stopped answering.
+- name: Write the one-connection client configuration
+  ansible.builtin.copy:
+    content: "Include /etc/crypto-policies/back-ends/openssh.config\n"
+    dest: '{{ substrate_baremetal_machine_identity_work }}/ssh_config'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
 - name: Read the install marker over that pinned connection
   ansible.builtin.command:
     argv:
       - /usr/bin/ssh
+      - -F
+      - '{{ substrate_baremetal_machine_identity_work }}/ssh_config'
       - -o
       - 'UserKnownHostsFile={{ substrate_baremetal_machine_identity_work }}/known_hosts'
+      - -o
+      - GlobalKnownHostsFile=none
+      - -o
+      - KnownHostsCommand=none
+      - -o
+      - VerifyHostKeyDNS=no
+      - -o
+      - UpdateHostKeys=no
+      - -o
+      - CheckHostIP=no
       - -o
       - StrictHostKeyChecking=yes
       - -o
       - IdentitiesOnly=yes
       - -o
+      - IdentityAgent=none
+      - -o
       - PasswordAuthentication=no
+      - -o
+      - KbdInteractiveAuthentication=no
+      - -o
+      - GSSAPIAuthentication=no
+      - -o
+      - HostbasedAuthentication=no
+      - -o
+      - ForwardAgent=no
+      - -o
+      - ProxyCommand=none
+      - -o
+      - ProxyJump=none
+      - -o
+      - ControlMaster=no
+      - -o
+      - ControlPath=none
       - -o
       - BatchMode=yes
       - -o
       - ConnectTimeout=10
+      - -o
+      - ServerAliveInterval=15
+      - -o
+      - ServerAliveCountMax=3
       - -i
       - '{{ substrate_baremetal_machine_identity_file }}'
       - >-
@@ -68,5 +115,11 @@
 - name: Remove the one-connection known-hosts file
   ansible.builtin.file:
     path: '{{ substrate_baremetal_machine_identity_work }}/known_hosts'
+    state: absent
+  changed_when: false
+
+- name: Remove the one-connection client configuration
+  ansible.builtin.file:
+    path: '{{ substrate_baremetal_machine_identity_work }}/ssh_config'
     state: absent
   changed_when: false

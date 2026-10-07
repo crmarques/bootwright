@@ -89,6 +89,8 @@ A reservation key is one of:
 | `path:<absolute path>` | One owned directory tree. |
 | `bridge:<name>` | One host bridge, whichever network defines it. |
 | `libvirt-network:<name>` | One libvirt network definition. |
+| `libvirt-pool:<name>` | One libvirt storage pool definition. |
+| `prefix:<masked prefix>` | One managed libvirt network's routed prefix, IPv4 or IPv6, written masked (`prefix:198.51.100.0/24`); it conflicts with every held prefix it overlaps, identical or nested, because the host routes each to its own bridge. |
 | `libvirt-domain:<name>` | One libvirt domain definition. |
 | `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its normalized management-controller endpoint and exact ComputerSystem, so two contexts never drive one server. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. |
 | `media:<filename.iso>` | A shared claim on one image of the [media store](managed-os.md#media-store); it conflicts with nothing and blocks only that image's deletion or replacement while any context holds it. |
@@ -103,16 +105,20 @@ Every key is exclusive except the class marked shared. Reservations are
 published under the root lock before the operation's first effect and released
 by a completed destroy, or by a destroy that finds them held by no operation
 because the registration that published them was
-[interrupted](state-reconciliation.md#lifecycle-unit). An exclusive key held by
-another context refuses `controller.conflict`, naming the holding context and
-the key class without private paths. Its remedy is to destroy or continue that
-context first, or, for a `socket:` or `bridge:` key this context's own
-declaration chooses, to give its service another bind address or port or its
-managed libvirt attachment another bridge. A context's own keys are replaced
-by its own apply. An interrupted apply leaves its reservation in place; the same
-context's next apply replaces it, and another context's apply keeps refusing
-until that operation is continued or destroyed. A failed registration likewise
-leaves its reservations held, and its context protected by running
+[interrupted](state-reconciliation.md#lifecycle-unit). A requested exclusive
+claim that conflicts with claims another context holds refuses with one
+`controller.conflict` diagnostic per held claim it conflicts with. Each names the holding context; the held key
+for `socket:`, `bridge:` and `prefix:` keys, and only the class for any other,
+so no private path prints; the holder's object; and this context's object. Its
+remedy is `bootwright destroy --context <holder>`, because only a completed
+destroy releases a key, or the field of this context's declaration that
+chooses the key (`TestEachConflictingHeldClaimIsItsOwnDiagnostic`). A
+context's own keys are replaced by its own apply. An interrupted apply leaves
+its reservation in place, and the same context's next apply replaces it.
+Continuing the holder, even to completion, keeps its keys held, so another
+context's apply keeps refusing until the holder is destroyed
+(`TestEveryConflictingClaimIsNamedAndAContinuationKeepsRefusing`). A failed
+registration likewise leaves its reservations held, and its context protected by running
 [evidence](state-reconciliation.md#context-mutation-evidence), until a destroy
 releases them, or the context's next apply releases them as it finishes the
 removal they sit beside or replaces them.

@@ -62,6 +62,9 @@
         }
       ],
       "domain": "bootwright-lab-rhel-01",
+      "egress": {
+        "noProxy": []
+      },
       "identity": {
         "block": "machine-rhel-01",
         "context": "lab",
@@ -86,14 +89,16 @@
       "uri": "qemu:///system",
       "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
       "vcpu": 4,
-      "version": "machine-libvirt-v2"
+      "version": "machine-libvirt-v3"
     }
   ],
   "installations": [
     {
       "address": "198.51.100.11",
       "bootMedia": {
-        "name": "rhel-9.8-x86_64-boot.iso"
+        "name": "rhel-9.8-x86_64-boot.iso",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "size": 1105199104
       },
       "budgets": {
         "identity": {
@@ -119,6 +124,7 @@
         "profile": "rhel-9-8"
       },
       "image": {
+        "certificateRef": "artifact-server-tls",
         "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/rhel-01/install.iso",
         "url": "https://192.0.2.1:8443/os/rhel-01/install.iso"
       },
@@ -150,10 +156,12 @@
         "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
       },
       "treeMedia": {
-        "name": "rhel-9.8-x86_64-dvd.iso"
+        "name": "rhel-9.8-x86_64-dvd.iso",
+        "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v5"
+      "version": "os-install-anaconda-v6"
     }
   ]
 }

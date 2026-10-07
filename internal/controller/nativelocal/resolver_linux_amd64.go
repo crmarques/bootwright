@@ -723,6 +723,14 @@ func (s *nativeStage) run(ctx context.Context, request helperRequest) ([]byte, e
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+		// The helper's first line names its refusal's class; its second,
+		// the exception's own text, is never read.
+		first, _, _ := bytes.Cut(diagnostic.Bytes(), []byte("\n"))
+		if class, named := bytes.CutPrefix(first, []byte("refused ")); named {
+			if refusal, mapped := prerequisites.AdapterRefusal(string(class), "", "", false); mapped {
+				return nil, refusal
+			}
+		}
 		return nil, failure("the provided native package solver refused its isolated dependency operation")
 	}
 	return slices.Clone(output.Bytes()), nil

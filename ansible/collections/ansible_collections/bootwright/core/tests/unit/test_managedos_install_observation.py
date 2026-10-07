@@ -84,7 +84,9 @@ def machine_reads():
              if READ in task
              or task.get("ansible.builtin.include_tasks") in ("identity.yml", "reachable.yml")
              or (task.get("ansible.builtin.file") or {}).get("state") == "directory"]
-    assert len(found) == 4
+    # The work area's root-only parent and the work area itself, the identity
+    # and fleet-account reads, and the controller read.
+    assert len(found) == 5
     return found
 
 
@@ -153,9 +155,12 @@ def test_a_removal_observation_publishes_the_content_left_and_nothing_of_the_mac
 @pytest.mark.parametrize("observes", [None, "removal"], ids=["unscoped", "removal"])
 def test_the_observation_reports_what_a_killed_apply_left(tmp_path, monkeypatch, observes):
     tree = tmp_path / "public" / "os" / "rhel-9-8" / "tree"
-    work = tmp_path / "var" / "tmp" / "bootwright-install"
+    parent = tmp_path / "var" / "lib" / "bootwright-install"
+    work = parent / "work"
     (tree.parent / "tree.staging" / "Packages").mkdir(parents=True)
-    work.mkdir(parents=True)
+    # The role creates the root-only parent before the work area beneath it.
+    parent.mkdir(parents=True, mode=0o700)
+    work.mkdir()
     variables = scope(observes, managedos_install_anaconda_controller={"changed": False, "media": "", "power": "Off"})
     variables["bootwright_os_install_request"].update({
         "image": {"path": str(tmp_path / "public" / "os" / "rhel-01" / "install.iso")},

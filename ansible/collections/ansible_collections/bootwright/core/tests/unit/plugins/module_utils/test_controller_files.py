@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import hashlib
 import io
 import os
 from pathlib import Path
+import socket
+import ssl
 import tarfile
 import tempfile
 import tracemalloc
@@ -18,6 +21,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 EGRESS = {"httpProxy": "", "httpsProxy": "", "noProxy": []}
 DEADLINE = 600
+DOWNLOAD = 300
 RELEASE = "4.20.8"
 
 
@@ -214,7 +218,7 @@ class ControllerFilesTests(unittest.TestCase):
             with mock.patch.object(
                 files.os, "write", side_effect=OSError("injected interruption")
             ):
-                with self.assertRaises(OSError):
+                with self.assertRaises(files.Refused):
                     files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
         self.assertEqual(self.left(), [])
 
@@ -392,7 +396,7 @@ class ControllerFilesTests(unittest.TestCase):
                 os.environ, HTTPS_PROXY="http://attacker.example.test", NO_PROXY="*"
             ):
                 descriptor, path = self.sink()
-                files.download(source, egress, descriptor)
+                files.download(source, egress, descriptor, DOWNLOAD, files.Routes())
                 self.assertEqual(path.read_bytes(), body)
         self.assertEqual(observed[0][0], (egress["httpsProxy"],))
         self.assertIs(observed[0][1]["ssl_context"], trust)
@@ -427,7 +431,7 @@ class ControllerFilesTests(unittest.TestCase):
                 files, "trusted_roots", return_value=object()
             ):
                 with self.assertRaises(files.Refused) as error:
-                    files.download(source, EGRESS, self.sink()[0])
+                    files.download(source, EGRESS, self.sink()[0], DOWNLOAD, files.Routes())
             self.assertEqual(
                 str(error.exception),
                 "approved source acquisition was refused or incomplete",
@@ -436,7 +440,7 @@ class ControllerFilesTests(unittest.TestCase):
             files, "_download", side_effect=OSError("sensitive source or proxy detail")
         ):
             with self.assertRaises(files.Refused) as error:
-                files.download(source, EGRESS, self.sink()[0])
+                files.download(source, EGRESS, self.sink()[0], DOWNLOAD, files.Routes())
         self.assertNotIn("sensitive", str(error.exception))
 
     def test_bundle_and_archive_capacity_bounds_precede_publication(self):
@@ -507,7 +511,7 @@ class ControllerFilesTests(unittest.TestCase):
         for name, prepare in (
             ("acquisition", lambda: files.prepare_tool(self.location, definition, EGRESS, DEADLINE)),
             ("projection", lambda: files.prepare_tool(location, clients, EGRESS, DEADLINE)),
-            ("native package", lambda: files.download(definition["source"], EGRESS, descriptor)),
+            ("native package", lambda: files.download(definition["source"], EGRESS, descriptor, DOWNLOAD, files.Routes())),
         ):
             with self.subTest(name), serve(streamed()):
                 tracemalloc.start()
@@ -535,10 +539,11 @@ class ControllerFilesTests(unittest.TestCase):
                 with self.assertRaises(files.Refused) as refused:
                     files.prepare_tool(location, tool(data), EGRESS, 10)
             self.assertEqual(str(refused.exception), "acquisition deadline")
+            self.assertEqual(refused.exception.reason, "timeout")
             self.assertEqual(self.left(root), [])
             with serve(body(data, advance=advance)):
                 with self.assertRaises(files.Refused):
-                    files.download(tool(data)["source"], EGRESS, self.sink()[0])
+                    files.download(tool(data)["source"], EGRESS, self.sink()[0], DOWNLOAD, files.Routes())
         self.assertEqual(
             (self.root / tool(data)["files"][0]["path"]).read_bytes(), data
         )
@@ -549,8 +554,8 @@ class ControllerFilesTests(unittest.TestCase):
         data = bytes(3 * files.CHUNK)
         handler = files.signal.getsignal(files.signal.SIGALRM)
         for prior, tool_armed, download_armed in (
-            (0.0, 1000, files.DOWNLOAD_SECONDS),
-            (500.0, 500.0, files.DOWNLOAD_SECONDS),
+            (0.0, 1000, DOWNLOAD),
+            (500.0, 500.0, DOWNLOAD),
             (50.0, 50.0, 50.0),
         ):
             now, armed = [1000.0], []
@@ -569,7 +574,7 @@ class ControllerFilesTests(unittest.TestCase):
             ), mock.patch.object(files.signal, "setitimer", record):
                 for path, expected in (
                     (lambda: files.prepare_tool(location, tool(data), EGRESS, 1000), tool_armed),
-                    (lambda: files.download(tool(data)["source"], EGRESS, self.sink()[0]), download_armed),
+                    (lambda: files.download(tool(data)["source"], EGRESS, self.sink()[0], DOWNLOAD, files.Routes()), download_armed),
                 ):
                     del armed[:]
                     with serve(body(data, advance=advance)):
@@ -702,6 +707,190 @@ class ControllerFilesTests(unittest.TestCase):
         with self.assertRaises(files.Refused) as refused:
             files.prepare_tool(location, definition, EGRESS, DEADLINE, inspect_only=True)
         self.assertEqual(str(refused.exception), "openshift client release")
+
+
+def trust_root(parent, bundle, mode=0o644):
+    """A root holding etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem laid out
+    as update-ca-trust lays it out, with bundle as its content."""
+    directory = Path(parent)
+    for name in ("etc", "pki", "ca-trust", "extracted", "pem"):
+        directory = directory / name
+        directory.mkdir()
+        directory.chmod(0o755)
+    target = directory / "tls-ca-bundle.pem"
+    target.write_bytes(bundle)
+    target.chmod(mode)
+    return str(parent)
+
+
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "tls-ca-bundle-utf8.pem"
+
+
+class TrustedRoots(unittest.TestCase):
+    """The system trust store loads its certificate blocks whatever its labels
+    hold, unmocked: update-ca-trust writes a '# <label>' line before each,
+    and a label may hold UTF-8 (fixture copied from Fedora 43's
+    /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem)."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="bootwright-trust-test-", dir="/tmp")
+        self.addCleanup(temporary.cleanup)
+        self.parent = temporary.name
+
+    def trusted(self, bundle, mode=0o644):
+        root = trust_root(self.parent, bundle, mode)
+        with mock.patch.object(files, "TRUST_ROOT", root), mock.patch.object(
+            files, "TRUST_OWNER", os.geteuid()
+        ):
+            return files.trusted_roots()
+
+    def test_trusted_roots_loads_a_bundle_with_a_utf8_label(self):
+        bundle = FIXTURE.read_bytes()
+        self.assertIn("Főtanúsítvány".encode("utf-8"), bundle)
+        context = self.trusted(bundle)
+        self.assertIsInstance(context, ssl.SSLContext)
+        self.assertEqual(context.cert_store_stats()["x509_ca"], 2)
+
+    def test_trusted_roots_refuses_a_bundle_without_certificates(self):
+        with self.assertRaises(files.Refused) as refused:
+            self.trusted(b"# ISRG Root X1\n# only labels\n")
+        self.assertEqual(str(refused.exception), "system TLS trust")
+
+    def test_trusted_roots_refuses_a_group_writable_bundle(self):
+        with self.assertRaises(files.Refused) as refused:
+            self.trusted(FIXTURE.read_bytes(), mode=0o664)
+        self.assertEqual(str(refused.exception), "system TLS trust")
+
+    def test_trusted_roots_refuses_another_owner(self):
+        trust_root(self.parent, FIXTURE.read_bytes())
+        with mock.patch.object(files, "TRUST_ROOT", self.parent), mock.patch.object(
+            files, "TRUST_OWNER", os.geteuid() + 1
+        ):
+            with self.assertRaises(files.Refused):
+                files.trusted_roots()
+
+    def test_download_uses_the_loaded_system_trust(self):
+        data = b"publisher bytes"
+        observed = []
+        stream = io.BytesIO(data)
+        response = types.SimpleNamespace(
+            status=200,
+            headers={"Content-Length": str(len(data))},
+            close=lambda: None,
+            read=lambda amount, decode_content: stream.read(amount),
+        )
+        manager = types.SimpleNamespace(request=lambda *args, **kwargs: response, clear=lambda: None)
+
+        def pool(**kwargs):
+            observed.append(kwargs)
+            return manager
+
+        library = types.SimpleNamespace(PoolManager=pool, Timeout=lambda **kwargs: kwargs)
+        root = trust_root(self.parent, FIXTURE.read_bytes())
+        descriptor, path = tempfile.mkstemp(prefix="bootwright-download-", dir="/tmp")
+        self.addCleanup(os.unlink, path)
+        self.addCleanup(os.close, descriptor)
+        with mock.patch.dict("sys.modules", urllib3=library), mock.patch.object(
+            files, "TRUST_ROOT", root
+        ), mock.patch.object(files, "TRUST_OWNER", os.geteuid()):
+            with files.Routes() as routes:
+                files.download(tool(data)["source"], EGRESS, descriptor, DOWNLOAD, routes)
+        self.assertEqual(Path(path).read_bytes(), data)
+        self.assertEqual(len(observed), 1)
+        context = observed[0]["ssl_context"]
+        self.assertIsInstance(context, ssl.SSLContext)
+        self.assertEqual(context.cert_store_stats()["x509_ca"], 2)
+
+
+# Stand-ins named and nested as urllib3 2.x names and nests its exceptions:
+# a NameResolutionError is a NewConnectionError, which is a
+# ConnectTimeoutError, which is its TimeoutError.
+HTTPError = type("HTTPError", (Exception,), {})
+LibraryTimeout = type("TimeoutError", (HTTPError,), {})
+ConnectTimeoutError = type("ConnectTimeoutError", (LibraryTimeout,), {})
+ReadTimeoutError = type("ReadTimeoutError", (LibraryTimeout,), {})
+NewConnectionError = type("NewConnectionError", (ConnectTimeoutError,), {})
+NameResolutionError = type("NameResolutionError", (NewConnectionError,), {})
+ProxyError = type("ProxyError", (HTTPError,), {})
+ProtocolError = type("ProtocolError", (HTTPError,), {})
+LibrarySSLError = type("SSLError", (HTTPError,), {})
+
+
+def caused(error, cause, context=False):
+    try:
+        try:
+            raise cause
+        except Exception as inner:  # pylint: disable=broad-except
+            if context:
+                raise error
+            raise error from inner
+    except Exception as outer:  # pylint: disable=broad-except
+        return outer
+
+
+class Classify(unittest.TestCase):
+    """Each acquisition failure has one closed class, read from the error, its
+    cause or its context, by the most specific type name along each MRO."""
+
+    def test_each_class(self):
+        for error, expected in (
+            (NameResolutionError("private host"), "dns"),
+            (socket.gaierror(-2, "Name or service not known"), "dns"),
+            (ssl.SSLCertVerificationError("unknown authority"), "certificate"),
+            (LibrarySSLError("handshake"), "certificate"),
+            (ConnectTimeoutError("connect"), "timeout"),
+            (ReadTimeoutError("read"), "timeout"),
+            (TimeoutError("socket"), "timeout"),
+            (files.Refused("acquisition deadline"), "timeout"),
+            (ProxyError("proxy refused"), "proxy"),
+            (NewConnectionError("refused"), "unreachable"),
+            (ProtocolError("aborted"), "unreachable"),
+            (ConnectionRefusedError(111, "refused"), "unreachable"),
+            (files.Refused("source response"), "status"),
+            (files.Refused("response headers"), "status"),
+            (files.Refused("redirect origin"), "redirect"),
+            (files.Refused("redirect count"), "redirect"),
+            (files.Refused("source size"), "integrity"),
+            (files.Refused("stream size"), "integrity"),
+            (files.Refused("source integrity"), "integrity"),
+            (files.Refused("system TLS trust"), "trust"),
+            (files.Refused("system TLS trust changed"), "trust"),
+            (files.Refused("artifact write"), "storage"),
+            (OSError(errno.ENOSPC, "No space left on device"), "storage"),
+            (OSError(errno.EDQUOT, "Disk quota exceeded"), "storage"),
+            (caused(files.Refused("wrapped"), NameResolutionError("private host")), "dns"),
+            (caused(files.Refused("wrapped"), ProxyError("proxy"), context=True), "proxy"),
+            (ValueError("request"), None),
+            (OSError("private path"), None),
+            (files.Refused("relative path"), None),
+        ):
+            with self.subTest(repr(error)):
+                self.assertEqual(files.classify(error), expected)
+
+    def test_a_refused_download_carries_its_class_and_never_its_text(self):
+        source = tool(b"publisher bytes")["source"]
+
+        def failing(*_args, **_kwargs):
+            raise NameResolutionError("private.example.test could not be resolved\nsecond line")
+
+        manager = types.SimpleNamespace(request=failing, clear=lambda: None)
+        library = types.SimpleNamespace(PoolManager=lambda **kwargs: manager, Timeout=lambda **kwargs: kwargs)
+        descriptor, path = tempfile.mkstemp(prefix="bootwright-download-", dir="/tmp")
+        self.addCleanup(os.unlink, path)
+        self.addCleanup(os.close, descriptor)
+        with mock.patch.dict("sys.modules", urllib3=library), mock.patch.object(
+            files, "trusted_roots", return_value=object()
+        ):
+            with self.assertRaises(files.AcquisitionRefused) as refused:
+                files.download(source, EGRESS, descriptor, DOWNLOAD, files.Routes())
+        self.assertEqual(str(refused.exception), "approved source acquisition was refused or incomplete")
+        self.assertEqual(refused.exception.reason, "dns")
+        self.assertEqual(
+            refused.exception.detail, "NameResolutionError: private.example.test could not be resolved"
+        )
+        long = files.detail(ValueError("\x1b[31m" + "x" * 400))
+        self.assertEqual(len(long.encode()), files.MAX_DETAIL)
+        self.assertNotIn("\x1b", long)
 
 
 if __name__ == "__main__":

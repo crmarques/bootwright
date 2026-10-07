@@ -49,7 +49,7 @@ func fleetMaterial() map[string]secrets.Material {
 
 func execution(t *testing.T, digest string) (lifecycle.Execution, Request) {
 	t.Helper()
-	request, _ := onlyRequest(t, labCatalog())
+	request := pinnedRequest(t, labCatalog())
 	canonical, err := request.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -67,12 +67,22 @@ func completeEvidence(request Request, digest, marker string) json.RawMessage {
 	data, _ := json.Marshal(Evidence{
 		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: marker,
 		Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: request.Tree != nil,
+		TreeIdentity: treeIdentity(request),
 	})
 	return data
 }
 
+// treeIdentity is the identity a tree extracted from the request's frozen
+// image carries, and none when it hosts no tree.
+func treeIdentity(request Request) string {
+	if request.TreeMedia == nil {
+		return ""
+	}
+	return request.TreeMedia.SHA256
+}
+
 func TestPlanContributesOneInstallationBlockPerMachine(t *testing.T) {
-	plan, err := New(nil).Plan(context.Background(), planInput(reconciliation.Apply))
+	plan, err := New(nil).WithMedia(labMedia()).Plan(context.Background(), planInput(reconciliation.Apply))
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("plan = %+v (%v)", plan, err)
 	}
@@ -122,7 +132,7 @@ func realizing(references []reconciliation.ObjectRef) []reconciliation.BlockDefi
 // The block waits for its Machine and for every service the guest uses, named
 // by API object rather than by another capability's block identity.
 func TestPlanRequiresTheMachineAndEveryServiceItUses(t *testing.T) {
-	plan, _ := New(nil).Plan(context.Background(), planInput(reconciliation.Apply))
+	plan, _ := New(nil).WithMedia(labMedia()).Plan(context.Background(), planInput(reconciliation.Apply))
 	want := []reconciliation.ObjectRef{
 		{Kind: "Machine", Object: "rhel-01"},
 		{Kind: "ArtifactServer", Object: "lab-artifacts"},
@@ -140,7 +150,7 @@ func TestPlanRequiresTheMachineAndEveryServiceItUses(t *testing.T) {
 // claim rather than a claim each: two of them would be a duplicate identity the
 // store refuses at registration.
 func TestPlanFreezesEveryMediaEntryUnderOneClaim(t *testing.T) {
-	plan, _ := New(nil).Plan(context.Background(), planInput(reconciliation.Apply))
+	plan, _ := New(nil).WithMedia(labMedia()).Plan(context.Background(), planInput(reconciliation.Apply))
 	var media []prerequisites.HostReservation
 	for _, reservation := range plan.Reservations {
 		if reservation.Shared {
@@ -160,7 +170,7 @@ func TestPlanFreezesEveryMediaEntryUnderOneClaim(t *testing.T) {
 	if !slices.Equal(media[0].Keys, want) {
 		t.Fatalf("media claims = %v", media[0].Keys)
 	}
-	if !slices.Equal(plan.Secrets, []string{"bootwright-machine-key", "lab-bmc-credentials"}) {
+	if !slices.Equal(plan.Secrets, []string{"bootwright-machine-key", "lab-artifacts-tls", "lab-bmc-credentials"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}
 }
@@ -169,7 +179,7 @@ func TestPlanFreezesEveryMediaEntryUnderOneClaim(t *testing.T) {
 // claim belongs to the context rather than to a Machine.
 func TestTwoInstallationsShareOneMediaClaim(t *testing.T) {
 	catalog := labCatalog(api.NewObject(api.Machine, "rhel-02", api.Value{}, guest().Spec()))
-	plan, err := New(nil).Plan(context.Background(), lifecycle.PlanInput{
+	plan, err := New(nil).WithMedia(labMedia()).Plan(context.Background(), lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
 		Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
 	})
@@ -202,7 +212,7 @@ func TestTwoInstallationsShareOneMediaClaim(t *testing.T) {
 // An installation that publishes no package tree shares nothing, so it never
 // waits for another Machine's installation.
 func TestAnInstallationWithoutATreeNamesNoExclusiveResource(t *testing.T) {
-	plan, err := New(nil).Plan(context.Background(), planInput(reconciliation.Apply))
+	plan, err := New(nil).WithMedia(labMedia()).Plan(context.Background(), planInput(reconciliation.Apply))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -619,5 +629,80 @@ func TestUnsupportedReadsTheCompiledStateOrNothing(t *testing.T) {
 	}}
 	if !slices.Equal(unsupported, want) {
 		t.Fatalf("unsupported = %+v, want %+v", unsupported, want)
+	}
+}
+
+// refusingRunner names one refusal, as the adapter does before it fails, and
+// answers the diagnostic its caller remedies that refusal with.
+type refusingRunner struct{ reason string }
+
+func (r refusingRunner) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+	named, ok := request.Refusals[r.reason]
+	if !ok {
+		return lifecycle.RunResult{}, errors.New("the refusal breaks the protocol")
+	}
+	return lifecycle.RunResult{}, named
+}
+
+// A store entry changed after the plan froze it is refused by the attempt
+// before its first use, and that refusal reaches the operator naming the
+// Machine, the image and the way back.
+func TestAnApplyNamesAChangedStoreEntry(t *testing.T) {
+	call, _ := execution(t, strings.Repeat("1", 64))
+	call.Context = "lab-b"
+	_, err := New(refusingRunner{reason: "media-changed-tree"}).Apply(context.Background(), call)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Kind != "Machine" || reported[0].Object.Name != "rhel-01" {
+		t.Fatalf("diagnostics = %#v (%v)", reported, err)
+	}
+	if !strings.Contains(reported[0].Message, dvdImageName) {
+		t.Fatalf("the message %q does not name the DVD", reported[0].Message)
+	}
+	want := "take this context back with bootwright destroy --context lab-b, import the image again with bootwright media add --name " +
+		dvdImageName + " --from-file <path>, or --from-url <url> --sha256 <digest>, then run bootwright apply --context lab-b"
+	if reported[0].Remediation != want {
+		t.Fatalf("remediation = %q", reported[0].Remediation)
+	}
+}
+
+// An https publication is fetched through its listener before any machine is
+// given it, verified against the certificate its server presents, so the
+// request names that certificate, the operation freezes it and an apply binds
+// its public half. An http publication names none.
+func TestAnHttpsPublicationBindsItsServingCertificate(t *testing.T) {
+	call, request := execution(t, "digest")
+	if request.Image.CertificateRef != "lab-artifacts-tls" {
+		t.Fatalf("the https image names certificate %q", request.Image.CertificateRef)
+	}
+	if request.Tree == nil || request.Tree.CertificateRef != "" {
+		t.Fatalf("the http tree = %+v", request.Tree)
+	}
+	if !slices.Contains(request.SecretReferences(), "lab-artifacts-tls") {
+		t.Fatalf("secret references = %v", request.SecretReferences())
+	}
+	runner := &fakeRunner{err: errors.New("stop")}
+	_, _ = New(runner).Apply(context.Background(), call)
+	if len(runner.requests) != 1 {
+		t.Fatalf("runs = %d", len(runner.requests))
+	}
+	want := lifecycle.MaterialFile{Name: "image-ca", Part: secrets.CertificatePart, Secret: "lab-artifacts-tls", Variable: "imageCertificate"}
+	if !slices.Contains(runner.requests[0].Materials, want) {
+		t.Fatalf("materials = %+v", runner.requests[0].Materials)
+	}
+	for _, file := range runner.requests[0].Materials {
+		if file.Name == "tree-ca" {
+			t.Fatalf("the http tree bound a certificate: %+v", file)
+		}
+	}
+	secured := request
+	tree := *request.Tree
+	tree.CertificateRef = "tree-tls"
+	secured.Tree = &tree
+	if !slices.Contains(secured.SecretReferences(), "tree-tls") {
+		t.Fatalf("secret references = %v", secured.SecretReferences())
+	}
+	treeFile := lifecycle.MaterialFile{Name: "tree-ca", Part: secrets.CertificatePart, Secret: "tree-tls", Variable: "treeCertificate"}
+	if !slices.Contains(publicationCertificates(secured), treeFile) {
+		t.Fatalf("an https tree bound %+v", publicationCertificates(secured))
 	}
 }

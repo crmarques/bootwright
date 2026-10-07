@@ -187,10 +187,27 @@ dnf versionlock add glibc libgcc
 subscription-manager release --set=9.8
 ```
 
-Before a host update that would move either package, destroy the contexts this
-host runs, or let their operations complete, because every `apply` and
-`destroy` runs the private interpreter, and set the host up afterwards with a
-Bootwright build whose execution foundation pins the new builds
+A z-stream errata of either package within the release Bootwright admits needs
+one `setup`: release the hold, update, run `bootwright setup`, which qualifies
+the vendor-signed builds from the RPM database and records them on its receipt
+with no other host or bundle effect, then hold the new builds. Until that setup
+runs, `preflight controller` reports the check not ready with next command
+`bootwright setup`, and an `apply` or `destroy` refuses before its private
+interpreter runs:
+
+```sh
+dnf versionlock delete glibc libgcc
+dnf update glibc libgcc
+bootwright setup
+dnf versionlock add glibc libgcc
+```
+
+The hold still keeps a controller off another upstream version or minor
+release. Before a host update that would move either package that way, destroy
+the contexts this host runs, or let their operations complete, because every
+`apply` and `destroy` runs the private interpreter, and set the host up
+afterwards with a Bootwright build whose execution foundation pins the new
+builds
 ([controller](../specs/controller.md#supported-host-and-dependency-selection)).
 
 When a pinned file differs, `setup` and `preflight controller` refuse with
@@ -199,7 +216,11 @@ the same way before its private interpreter runs, naming the file, the
 package build that provides it and what was found, for
 example `the provided execution foundation differs at /usr/lib64/libc.so.6,
 from glibc 2.42-16.fc43, which holds other content than this build pins`.
-Restore that build and hold it, then repeat the command:
+When `dnf` updated the package within the release, run `bootwright setup`
+first, as above; setup refuses a build another key signed, another upstream
+version, a second x86_64 instance or a file that differs from its RPM digest,
+naming the build. Otherwise restore that build and hold it, then repeat the
+command:
 
 ```sh
 dnf install glibc-2.42-16.fc43

@@ -1902,7 +1902,7 @@ ones. Tracked elsewhere:
 `--ssh-id-file` ([B283](#x40--machine-commands-status-secrets-and-validate-refusals)); `status` over a revision a new rule
 refuses ([B226](backlog.md#b226)); a bind-time refusal naming its Secret
 ([B285](#x40--machine-commands-status-secrets-and-validate-refusals)); the emulator's URI rendered as data
-([B295](m1.md#b295)); the FIPS key types of the bare-metal README
+([B295](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); the FIPS key types of the bare-metal README
 ([B73](m4.md#b73)); a cancellation inside a binding's publication, which
 bounded runs lose with [B337](#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs); and a context whose reservation
 is damaged or that owns live objects, now clauses of
@@ -2364,11 +2364,11 @@ the stage reaches still name setup's retry ([B379](m1.md#b379)); lifecycle
 resolution, controller-client, pre-boot, agent-install and one context-store
 remedy still lack an exact command, its context or the plan's tokens
 ([B380](m1.md#b380)); two Machine network admission refusals keep a slogan
-remedy ([B381](m1.md#b381)); managed-service shape refusals still come at
+remedy ([B381](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); managed-service shape refusals still come at
 plan with no object or table row ([B382](m1.md#b382)); the proxy grammar
 holds only the controller's route ([B383](m1.md#b383)); and the libvirt roles'
 running-guest refusals and the substrates spec name `machine stop` without
-`--context` ([B384](m1.md#b384)). Under D116 these eight join M1 on X46. An
+`--context` ([B384](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)). Under D116 these eight join M1 on X46. An
 interactive sudo refusal before a session still exits 1
 ([B390](backlog.md#b390)). A bounded run that a build before X41 started
 holds no run lock, so retention could retire its directory if 16 newer runs
@@ -2376,7 +2376,7 @@ of its context opened beside it, which no later build can change. Tracked
 elsewhere: the uninitialized-store refusal the bounded read shares with a
 binding ([B361](m1.md#b361)); container-cluster admission remedies
 ([B313](m3.md#b313)); content the install line still drops, search domains
-and IPv6 policy among it ([B338](m1.md#b338), [B326](m4.md#b326)); RHEL 9.8's
+and IPv6 policy among it ([B338](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation), [B326](m4.md#b326)); RHEL 9.8's
 `rpm` output and the snapshot read as the helper account
 ([B335](backlog.md#b335), and the RHEL 9.8 controller run D60 plans); the
 glibc and libgcc builds a RHEL 9.8 controller must hold, and building on a
@@ -2582,7 +2582,7 @@ unusable.
 The review raised seven findings, six confirmed, all in X42's scope and two
 of them blocking; the seventh, a bridge grammar admitting a trailing `+` that
 firewalld reads as a wildcard, was not confirmed as X42's, since it predates
-X42, and became [B410](m1.md#b410). The first fix round fixed five and part
+X42, and became [B410](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation). The first fix round fixed five and part
 of the sixth: abandoning a context over unreadable evidence deleted its
 keyring without naming the custodied kubeconfig's export (blocking); a
 missing evidence file in a present context directory had no exit and named
@@ -2626,10 +2626,10 @@ execution-failure remedy that an rpm lock conflict, an unsafe root or an
 unverified bundle location still gives when reached from apply or destroy
 ([B379](m1.md#b379)); a receipt that this build leaves pending after a native
 action refused before authorizing, which only the build that moves the
-automation digest can cancel (D93, [B297](m1.md#b297)); realization reading
+automation digest can cancel (D93, [B297](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); realization reading
 the uncomposed template, so an override that adds the only ethernet interface
-passes validate and refuses at plan ([B338](m1.md#b338)); overlapping managed
-prefixes across contexts ([B295](m1.md#b295)); a managed service's egress
+passes validate and refuses at plan ([B338](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); overlapping managed
+prefixes across contexts ([B295](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); a managed service's egress
 through a managed or authenticated Proxy, refused only at plan
 ([B382](m1.md#b382)); the RHEL 9.8 foundation record, for the RHEL 9.8
 controller run D60 plans to confirm ([B335](backlog.md#b335) beside it); and a
@@ -2643,14 +2643,263 @@ refusals name absolute paths, and setup's store backstops name no remedy
 ([B401](m1.md#b401)); the dry run's state-root inspection follows a
 symbolic-link ancestor the store refuses ([B402](m1.md#b402)); a setup action
 whose adapter failed before any native record stays unknown
-([B403](m1.md#b403)); a `contextStore` serving certificate is proved only
+([B403](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); a `contextStore` serving certificate is proved only
 after registration, and missing material names no Secret
 ([B404](m1.md#b404)); the `metadata.name` grammar refusal names no object or
 remedy ([B405](m1.md#b405)); a managed service's name can outgrow its block
 identity ([B406](m1.md#b406)); overlapping managed prefixes on one host in one
-context are admitted ([B407](m1.md#b407)); a mid-body media cancellation is
+context are admitted ([B407](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); a mid-body media cancellation is
 misnamed, and one unreadable media entry hides the listing
-([B408](m1.md#b408)); `media list --checksums` holds the root lock while it
-hashes ([B409](m1.md#b409)); and a bridge name may end in firewalld's
-wildcard ([B410](m1.md#b410)). Under D48 (D116) the other follow-ups were
+([B408](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); `media list --checksums` holds the root lock while it
+hashes ([B409](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); and a bridge name may end in firewalld's
+wildcard ([B410](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)). Under D48 (D116) the other follow-ups were
 parked: B411 to B419.
+
+### X43 — Libvirt roles, managed-OS installation, network composition and controller automation
+
+**Owner:** Substrate, Managed OS, Machine, Controller setup and Workspace, with
+State reconciliation. Integrated on local `main` on 2026-10-07 as one commit,
+the first slice to move request versions and the automation digest.
+**Items:** B200, B264, B234, B295, B17, B296, B338, B297, B343, B384, B407,
+B410, B381, B403, B408, B409. **Decisions:** D56, D61, D66, D79, D93, D95 to
+D98, D107, D116. **Partly delivered:** [B270](m1.md#b270), its emulated BMC
+unit.
+
+**Outcome, B295, B407 and B410:** a libvirt provider host now also claims its
+virtual-media pool and every managed network's masked prefix, so a second
+context whose pool name collides, or whose prefix is identical to, nested in
+or encloses a held one, IPv4 or IPv6, refuses before any effect instead of
+adopting the pool or routing the prefix to a second bridge. Every conflicting
+held claim is its own `controller.conflict` diagnostic naming the holding
+context, the held socket, bridge or prefix (only the class of a path, unit,
+libvirt or BMC key), the holder's object, this context's object and the field
+that chose the key, with `bootwright destroy --context <holder>` first or that
+field as the remedy; a holder's completed continuation still refuses, and the
+single class-only diagnostic and its remedy that could not work are gone.
+Admission refuses two managed attachments on one host, of one provider or two,
+whose prefixes overlap, naming both providers (B407, D95). A libvirt bridge
+name takes a new `bridge` grammar, the interface-name grammar without `+`,
+which firewalld reads as a wildcard while the managed network puts its bridge
+in zone `trusted`; the NMState interface fields keep the interface-name
+grammar (B410).
+
+**Outcome, B264, B200, B234 and B384:** the libvirt host role owns exactly what
+it defined. A same-named network is this context's only when its metadata names
+this context and the attachment, and a same-named pool is this provider's only
+when its definition targets the frozen directory, so another context's network
+or pool is foreign and refuses, naming it, on apply and on destroy before any
+network or pool is defined, stopped or removed (B264). An external attachment
+is proved as a bridge device. Each network and the pool start before they are
+set to autostart, so a failed start leaves no definition that starts with the
+host; the observation reads autostart, and a replay that finds one off
+switches it on again and reports the change (B200). Host evidence gains
+`autostart`, `poolAutostart` and `poolOwned`, and presence refuses a managed
+network or pool not set to autostart and a pool that does not target its
+frozen directory. A destroy removes the provider's and the context's
+directories beneath the libvirt image root with a plain `rmdir` once each is
+empty, never recursively, and proves the pool path sits exactly three levels
+below the retained prefix. The running-guest refusals name
+`bootwright machine stop --context <context> --name <machine>` (B384, D66),
+and the substrates spec quotes what the code emits. The unused pool template
+is removed, a test holds that every role template is rendered by a task, and a
+structure rule holds that every rescue ends in an unconditional failure
+(B234).
+
+**Outcome, B295 and B264 for the Machine role:** the libvirt machine request
+freezes the provider host Machine's normalized egress, so the emulated BMC's
+image pull takes exactly that route with every spelling of the proxy variables
+and no ambient one, and a managed or authenticated proxy refuses with
+`lifecycle.state`; the pull runs only when the pinned image is absent. A
+same-named domain is this Machine's only when its metadata names this context
+and Machine and its UUID is the frozen one, so another context's or Machine's
+domain refuses before any effect on apply and on destroy. The emulator's
+configuration renders every request string as JSON data (D61). A machine
+destroy removes the context's empty directories with `rmdir`, never
+recursively, and its refusal to remove a domain that is not shut off names
+`machine stop --context`.
+
+**Outcome, B270 in part:** the emulated BMC unit stops with SIGINT, because the
+emulator runs as process 1 and has no SIGTERM handler, so podman waited out its
+timeout and killed it and the unit stayed failed. Its template golden holds the
+stop signal. The proxy unit's half is X24's ([B20](m1.md#b20)); B270 keeps its
+row, narrowed to the proxy, and the proof that no unit stays failed after a
+destroy needs a host.
+
+**Outcome, B296, B17 and B343:** a plan freezes each image an installation
+uses at the host media store's record, its SHA-256 and size, read once through
+a port bound to the context store under the lifecycle's shared lock. Before
+registration the plan refuses an image the store does not hold, one whose bytes
+no longer have their recorded size and one the store lists as failed, each
+naming the store's cause and a `bootwright media add` remedy that carries its
+source flag; a declared MachineImage checksum is compared with the record,
+never frozen in its place (D96). Each apply attempt proves every image's size
+and digest before it extracts or builds from it. The published package tree
+carries its DVD's digest, so a tree another DVD published is withdrawn and
+extracted again. A fresh installation reports `changed` and a replay
+`unchanged`. Every `ssh` the collection runs and the runner's SSH arm read a
+generated configuration that holds only the host crypto-policy include, take
+no ambient known hosts, proxy, control socket, agent or identity, and carry
+`ServerAliveInterval=15` and `ServerAliveCountMax=3`. The work area moved under
+a root-only 0700 parent beneath the Bootwright state area, proved before use
+(B17, D98); per-invocation scratch stays B303. The apply fetches one byte of
+the installer image and of the tree's `.treeinfo` through the listener before
+the boot block and refuses naming the URL and status, and an HTTPS publication
+freezes and binds its serving certificate. The Kickstart renders what it used
+to validate and drop (D97): formats other than the language write the locale
+file and add the langpack package; repositories are written in the `%post` as
+repo files with name, base URL, enablement, `gpgcheck`, `gpgkey` and proxy; the
+Machine's own proxy, else the profile's, reaches each repository by scheme
+except the artifact endpoint and the `noProxy` matches, while a credentialed or
+URL-less proxy refuses when a repository is configured;
+`passwordAuthentication: true` refuses; and the architecture is `x86_64`. The
+guard refuses an empty package source, an entry starting with `-` and a
+repository ID that is empty or holds a slash, and admission refuses a mirror
+repository ID, display name or key URL the guard would refuse (B343).
+
+**Outcome, B338 and B381:** realization and installation compose
+`spec.network.overrides` into the template, through one deterministic merge now
+beneath the substrate and machine packages, so an override that adds, removes
+or reroutes an interface is realized on the libvirt domain and in the
+Kickstart, ethernet interfaces whose state is `absent` or `ignore` are
+skipped, and the install gateway is the next hop of the first composed
+non-absent route with a zero-prefix IPv4 destination and an IPv4 next hop. An
+override that cannot merge yields one refusal that does not echo its keys. The
+two Machine admission refusals that required a configured network name the
+step, selecting `spec.network.configRef` or `spec.network.inline` or removing
+the selection or interface, and an OS-ready Machine is told only to remove it
+(B381).
+
+**Outcome, B297 and B403:** every Python-side download works on Fedora 43 and
+RHEL 9, whose system trust bundle carries UTF-8 labels: the loader reads only
+the certificate blocks and refuses an empty bundle or a TLS failure as a
+system-trust refusal. A refusal carries one closed class instead of a sentence
+that blamed the host: the helper writes the class and one bounded detail line,
+the adapters carry the class and its source in a refused record, Go maps each
+class to a diagnostic and remedy naming the source's host, and raw lines reach
+only the private setup run output; a native class after an authorized
+transaction reports `controller.unknown`. Native packages each download under
+their own acquisition deadline and together under a staging bound that scales
+with their declared bytes under the two-hour ceiling, with one connection pool
+per route. A setup run that fails after publishing its preparation but before
+any native record was acknowledged is recorded failed with its intent, so the
+next setup replaces it (B403). Setup qualifies a vendor-signed z-stream glibc
+or libgcc of the qualified minor against the RPM database (D107): it reads each
+installed instance with its signatures and file digests, qualifies one x86_64
+instance per package of the compiled upstream version, derives the launch
+requirement in the compiled shape and verifies it byte for byte, and records it
+on the receipt, which gains an omitted-when-empty foundation member bound into
+the plan digest. A host holding the compiled builds records nothing new, every
+launch stays byte-exact, another upstream version or minor, an unsigned or
+foreign-signed build and a file differing from its digest still refuse naming
+the build, and a launch's drift remedy opens with the one `bootwright setup`
+that qualifies a dnf update. A fresh bootstrap resolution qualifies against the
+same qualified foundation. A storage refusal names the filesystem its source
+was filling, the staging scratch for a package and the client bundle area for a
+tool.
+
+**Outcome, B408 and B409:** a media copy or download canceled mid-body reports
+the cancellation. One unreadable media entry, a record that cannot be read
+safely or decoded or an image file the store refuses as unsafe, no longer
+refuses the whole `media list`: it is a row in the state `failed`, shown with
+`-` for size, digest and added time, a Failed group naming each image and its
+reason and one remedy line, and in JSON without size, digest, source or added
+and with a `reason`; the listing stays `OK`. `media list --checksums` reads the
+entries under the shared root lock and hashes each image through a descriptor
+it holds after the lock is released, so every exclusive command proceeds while
+it hashes, and an image whose status changed or that was unlinked meanwhile is
+listed failed. The contexts spec's lock table says so.
+
+**Review:** the lanes integrated without a conflict or an integration fix. The
+review raised seven findings, six distinct, all confirmed and in scope, two of
+them, one defect reported twice, blocking: a plan pinned an image the store
+listed as failed with an empty digest and size 0 (B296 against B408); a fresh
+bootstrap resolution on a z-stream host still qualified against the compiled
+digests, so setup refused the host D107 qualifies (B297); and, as minor
+findings, media remedies naming `media add` without the source flag the command
+requires, a cross-context BMC conflict that printed an internal slug with no
+object or field, a storage refusal that named the staging scratch for a tool
+source, and the agent media request's content moving without its version. One
+fix round fixed every finding but the version gap, each with a regression test that fails with the
+fix reverted; the plan now refuses a failed image or a record with a malformed
+digest or no size naming the store's cause, every media remedy comes from one
+helper that names `--from-file` or `--from-url` with its digest, the resolution
+qualifies against the launch requirement and records the compiled one, the
+conflict maps the physical-server key to its Machine and the BMC address field,
+and the storage refusal names the area. The version gap, that
+`cluster-media-agent-v5` encodes different content since X43, was not fixed:
+two lenses called it a version-discipline gap and one not real, since the
+version only selects the decoder and a frozen request still decodes and
+destroys what it froze; it is parked as [B434](backlog.md#b434). The check
+after the round found no gap.
+
+**Gates:** on the integrated lanes, `make check-offline tidy-check
+modules-check vulncheck docs-check race` passed, and so did the four
+`./scripts/ansible-check` suites, units (198 passed), sanity, integration and
+lint (no failures or warnings under the production profile), as did
+`./scripts/check-commits` and `git diff --check`; the fix round's `make
+check-offline docs-check` and the seven touched packages passed, and on the
+squashed commit, whose code is the fix round's, `make docs-check`,
+`./scripts/check-commits` and `git diff --check` passed. The adversarial review, by reviewers that
+did not write the diff, is the independent review the safety-class items name.
+The native opt-in integration targets and every effect on a host are unrun:
+the emulator's clean stop, `-F` with the crypto-policy include on RHEL 9's
+OpenSSH, a 206 answer from the managed listener, root writing the tree identity
+into an extracted tree, the cost of hashing a full DVD on every apply, the
+errata qualification on a RHEL 9.8 or Fedora 43 host and a classified warning
+reaching the retained run output are in-tree only
+([B433](backlog.md#b433)). No real-host run.
+
+**Digest effects:** the first slice to move them. The libvirt machine request
+moves from `machine-libvirt-v2` to `machine-libvirt-v3` and freezes the
+provider host's egress, so its content digest, its request goldens and its
+template goldens move; the libvirt host request and its version are unchanged,
+while host evidence gains three members. The installation request moves from
+`os-install-anaconda-v5` to `os-install-anaconda-v6`: media carry a size and
+always a SHA-256, an HTTPS publication freezes its certificate reference, the
+Kickstart version moves to `kickstart-anaconda-v5`, and the installation
+content digest and every plan digest of a context with an installed Machine
+move. The automation digest moves through the libvirt host and machine roles
+and plugins, the managed-OS role and plugins and the controller adapter roles
+and plugins, so every plan digest moves with it; a running emulated controller
+restarts once on the next apply. The controller capability request, never
+persisted, moves from `controller-prerequisites-v4` to `controller-prerequisites-v5`
+and strands nothing. A setup receipt written on an errata host may carry a
+foundation member that an earlier build refuses through strict decoding. Two
+changes move content without a version: the libvirt machine request's
+interfaces and the installation request's gateway for a Machine whose overrides
+change interfaces or routes, whose template declares an absent or ignored
+ethernet interface or whose first default route is absent, and the OpenShift
+agent media request's AgentConfig interfaces and `networkConfig` MAC addresses
+for a node Machine with such overrides, whose version stayed
+`cluster-media-agent-v5` and whose content digest re-plans its block as
+changed ([B434](backlog.md#b434)). No setup record format, media record
+format or example plan golden moves. Contexts applied before X43 hold no
+prefix or pool reservation until their next apply. **Before a build that
+contains X43 touches a host, destroy every live context with the build that
+applied it, then run `setup` once, with `--purge-old-bundles` when the host is
+at its bundle bound.**
+
+**Operator-visible effects:** `validate` and `plan` refuse more: overlapping
+managed prefixes on one host, a bridge name ending in `+`, a Machine whose
+install profile asks for what the Kickstart now renders and refuses, an image
+the store lacks, lists as failed or whose bytes changed, and a proxy that has
+credentials while a repository is configured. A conflict between contexts names
+both objects and the field. `media list` shows failed rows, and a checksum
+listing no longer blocks other commands. Setup on a host whose glibc or libgcc
+dnf updated needs one `bootwright setup`, and its refusals name a cause class
+and a remedy instead of blaming the host.
+
+**Constraints left behind:** [B270](m1.md#b270) keeps the proxy unit's stop
+([B20](m1.md#b20), X24). A Machine and an InfraProvider of one name share a
+directory, and the Machine's destroy can remove the provider's pool
+([B420](m1.md#b420)); the 64-key reservation bound meets an unbounded
+attachment list ([B421](m1.md#b421)); the install profile still admits fields
+it ignores and repository IDs dnf refuses ([B422](m1.md#b422)); two Machine
+refusals keep the slogan remedy ([B423](m1.md#b423)); a zero-prefix default
+route spelled otherwise is refused ([B424](m1.md#b424)); a controller-stage
+install or a canceled setup that failed before any native record is still
+`unknown` ([B425](m1.md#b425)); and the failed media row of a directory has no
+working remedy ([B426](m1.md#b426)). The installation request's SSH placement arm,
+whose material the role writes only on the controller, is unreachable since D82
+and is [B387](backlog.md#b387)'s removal. Under D116 those seven join M1 on X46; the rest,
+B427 to B434, were parked under D48.

@@ -219,7 +219,9 @@ type bundle struct {
 }
 
 // approvedBundle opens the execution bundle the retained controller setup
-// approved for this context, with the requirement its runtime must satisfy.
+// approved for this context, with the requirement its runtime must satisfy:
+// the execution foundation that setup qualified and recorded, or the
+// definition's own.
 func approvedBundle(ctx context.Context, view View) (bundle, error) {
 	receipt := view.Controller().State.Receipt
 	if receipt.Definition == nil {
@@ -240,5 +242,5 @@ func approvedBundle(ctx context.Context, view View) (bundle, error) {
 	if err != nil {
 		return bundle{}, err
 	}
-	return bundle{context: view.Identity().Name, area: area, location: location, requirement: receipt.Definition.Execution}, nil
+	return bundle{context: view.Identity().Name, area: area, location: location, requirement: prerequisites.LaunchRequirement(receipt)}, nil
 }

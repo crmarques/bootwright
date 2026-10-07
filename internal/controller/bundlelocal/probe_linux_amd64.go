@@ -19,7 +19,7 @@ func probeBundle(ctx context.Context, guard prerequisites.PythonExecutionGuard, 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return guard.WithPython(ctx, area, definition.Execution, func(launch prerequisites.PythonLaunch, _ func() error) error {
+	return guard.WithPython(ctx, area, prerequisites.LaunchRequirementFor(ctx, definition.Execution), func(launch prerequisites.PythonLaunch, _ func() error) error {
 		return runImportProbe(ctx, area, launch, definition)
 	})
 }

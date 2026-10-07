@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import errno
 import functools
 import gzip
 import hashlib
@@ -26,7 +27,14 @@ MAX_ENTRIES = 4096
 MAX_BUNDLE = 8 << 30
 MAX_DEADLINE = 7200
 CHUNK = 64 << 10
-DOWNLOAD_SECONDS = 300
+MAX_TRUSTED_ROOTS = 4096
+MAX_DETAIL = 200
+# The system trust store's root and owner, which a test points at a fixture.
+TRUST_ROOT = "/"
+TRUST_OWNER = 0
+CERTIFICATE = re.compile(
+    rb"-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+?-----END CERTIFICATE-----"
+)
 AT_EMPTY_PATH = 0x1000
 # A released oc names its release in its bytes: the version, NUL-terminated,
 # overwrites the head of this marker. An unstamped oc carries it whole.
@@ -57,6 +65,92 @@ class Unreleased(Refused):
     """The release-stamp check found an oc that does not name its frozen
     release. It is the one refusal Go remedies by name, because the same
     release and mirror reuse the retained source and refuse again."""
+
+
+class AcquisitionRefused(Refused):
+    """An approved source was not acquired, with the closed class of what
+    refused it, the source the caller was acquiring and one bounded line of
+    the underlying exception. Only the class and source reach Go; the line
+    reaches only the private run output."""
+
+    def __init__(self, message, reason=None, source=None, detail=""):
+        super().__init__(message)
+        self.reason = reason
+        self.source = source
+        self.detail = detail
+
+
+# Each refusal this module raises that names an acquisition class.
+REFUSAL_CLASSES = {
+    "acquisition deadline": "timeout",
+    "source response": "status",
+    "response headers": "status",
+    "redirect origin": "redirect",
+    "redirect count": "redirect",
+    "source size": "integrity",
+    "stream size": "integrity",
+    "source integrity": "integrity",
+    "system TLS trust": "trust",
+    "system TLS trust changed": "trust",
+    "artifact write": "storage",
+}
+
+# Transport exceptions by type name, matched along each MRO in order, because
+# urllib3 is an unpinned 2.x whose classes are not imported here: its
+# NameResolutionError is a NewConnectionError, which is a ConnectTimeoutError,
+# so the most specific name decides.
+TYPE_CLASSES = {
+    "NameResolutionError": "dns",
+    "gaierror": "dns",
+    "SSLCertVerificationError": "certificate",
+    "SSLError": "certificate",
+    "ProxyError": "proxy",
+    "NewConnectionError": "unreachable",
+    "ProtocolError": "unreachable",
+    "ConnectionError": "unreachable",
+    "ConnectTimeoutError": "timeout",
+    "ReadTimeoutError": "timeout",
+    "TimeoutError": "timeout",
+    "timeout": "timeout",
+}
+
+
+def classify(error):
+    """The acquisition class of error, its cause or its context, or None."""
+    pending, seen = [error], set()
+    while pending:
+        current = pending.pop(0)
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, AcquisitionRefused) and current.reason:
+            return current.reason
+        if isinstance(current, Refused) and current.args and current.args[0] in REFUSAL_CLASSES:
+            return REFUSAL_CLASSES[current.args[0]]
+        if isinstance(current, OSError) and current.errno in (errno.ENOSPC, errno.EDQUOT):
+            return "storage"
+        for kind in type(current).__mro__:
+            if kind.__name__ in TYPE_CLASSES:
+                return TYPE_CLASSES[kind.__name__]
+        pending.extend((current.__cause__, current.__context__))
+    return None
+
+
+def detail(error):
+    """One bounded line naming error's type and the first line of its text,
+    with control characters removed, for the private run output only."""
+    text = str(error).split("\n", 1)[0]
+    line = "".join(
+        character
+        for character in type(error).__name__ + ": " + text
+        if not (ord(character) < 32 or 127 <= ord(character) < 160)
+    )
+    return line.encode("utf-8")[:MAX_DETAIL].decode("utf-8", "ignore")
+
+
+def refused(error, message):
+    """The AcquisitionRefused that replaces error, keeping message."""
+    return AcquisitionRefused(message, reason=classify(error), detail=detail(error))
 
 
 def canonical(value):
@@ -190,21 +284,25 @@ def proxy_for(egress, target):
 
 
 def trusted_roots():
-    descriptor = os.open("/", DIRECTORY_FLAGS)
+    """The system trust store's certificate blocks as one TLS client context.
+
+    update-ca-trust writes a '# <label>' line before each certificate, and a
+    label may hold UTF-8, so only the certificate blocks are read."""
+    descriptor = os.open(TRUST_ROOT, DIRECTORY_FLAGS)
     try:
         for name in ("etc", "pki", "ca-trust", "extracted", "pem"):
             child = os.open(name, DIRECTORY_FLAGS, dir_fd=descriptor)
             os.close(descriptor)
             descriptor = child
             observed = os.fstat(descriptor)
-            if observed.st_uid != 0 or observed.st_mode & 0o022:
+            if observed.st_uid != TRUST_OWNER or observed.st_mode & 0o022:
                 raise Refused("system TLS trust")
         handle = os.open("tls-ca-bundle.pem", FILE_FLAGS, dir_fd=descriptor)
         try:
             before = os.fstat(handle)
             if (
                 not stat.S_ISREG(before.st_mode)
-                or before.st_uid != 0
+                or before.st_uid != TRUST_OWNER
                 or before.st_mode & 0o022
                 or not 0 < before.st_size <= 8 << 20
             ):
@@ -216,9 +314,17 @@ def trusted_roots():
             os.close(handle)
     finally:
         os.close(descriptor)
+    blocks = CERTIFICATE.findall(data)
+    if not blocks or len(blocks) > MAX_TRUSTED_ROOTS:
+        raise Refused("system TLS trust")
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
-    context.load_verify_locations(cadata=data.decode("ascii"))
+    try:
+        context.load_verify_locations(
+            cadata="\n".join(block.decode("ascii") for block in blocks) + "\n"
+        )
+    except ssl.SSLError:
+        raise Refused("system TLS trust") from None
     return context
 
 
@@ -254,21 +360,75 @@ def alarm(seconds):
             )
 
 
-def download(source, egress, descriptor):
+def seconds_bound(seconds):
+    if (
+        not isinstance(seconds, int)
+        or isinstance(seconds, bool)
+        or not 0 < seconds <= MAX_DEADLINE
+    ):
+        raise Refused("acquisition deadline")
+    return seconds
+
+
+class Routes:
+    """One connection pool per route for the acquisitions it spans.
+
+    The system trust is read once, when the first route opens, and every
+    manager is cleared on exit, so a staging loop or a tool opens one pool for
+    each route its sources take rather than one for every hop."""
+
+    def __init__(self):
+        self.trust = None
+        self.managers = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exception):
+        managers, self.managers = self.managers, {}
+        for manager in managers.values():
+            manager.clear()
+        return False
+
+    def manager(self, route):
+        """The manager for route, a proxy URL or None for a direct one."""
+        if route not in self.managers:
+            import urllib3  # Included in the immutable execution closure.
+
+            if self.trust is None:
+                self.trust = trusted_roots()
+            arguments = dict(
+                ssl_context=self.trust,
+                retries=False,
+                timeout=urllib3.Timeout(connect=15, read=30),
+            )
+            self.managers[route] = (
+                urllib3.ProxyManager(route, proxy_ssl_context=self.trust, **arguments)
+                if route
+                else urllib3.PoolManager(**arguments)
+            )
+        return self.managers[route]
+
+
+def download(source, egress, descriptor, seconds, routes):
     """Stream only exact approved bytes into descriptor, each chunk written
-    before the next is read, using explicit routing and system trust.
+    before the next is read, using explicit routing and system trust, under
+    the acquisition deadline its request froze for it, in seconds.
 
     What the descriptor holds is proved only when this returns; a refused
     download leaves its caller a partial file to discard."""
     try:
-        with alarm(DOWNLOAD_SECONDS):
-            _download(source, egress, descriptor)
-    except Exception:
-        raise Refused("approved source acquisition was refused or incomplete") from None
+        seconds_bound(seconds)
+        with alarm(seconds):
+            _download(source, egress, descriptor, seconds, routes)
+    except Exception as error:
+        raise refused(
+            error, "approved source acquisition was refused or incomplete"
+        ) from None
 
 
-def _download(source, egress, descriptor):
-    deadline = time.monotonic() + DOWNLOAD_SECONDS
+def _download(source, egress, descriptor, seconds, routes):
+    deadline = time.monotonic() + seconds
 
     def store(response):
         digest = stream_copy(
@@ -280,10 +440,10 @@ def _download(source, egress, descriptor):
         if digest != source["sha256"]:
             raise Refused("source integrity")
 
-    respond(source, egress, deadline, store)
+    respond(source, egress, deadline, store, routes)
 
 
-def respond(source, egress, deadline, consume):
+def respond(source, egress, deadline, consume, routes):
     """Route one approved source and hand its checked response to consume.
 
     Every redirect, header, status and declared length is checked here, once,
@@ -292,9 +452,6 @@ def respond(source, egress, deadline, consume):
     current = source["url"]
     original = endpoint(current)
     proxy_for(egress, original)
-    import urllib3  # Included in the immutable execution closure.
-
-    trust = trusted_roots()
     for _redirect_index in range(6):
         if time.monotonic() > deadline:
             raise Refused("acquisition deadline")
@@ -304,17 +461,7 @@ def respond(source, egress, deadline, consume):
             and parsed.hostname not in REDIRECT_HOSTS
         ):
             raise Refused("redirect origin")
-        route = proxy_for(egress, parsed)
-        arguments = dict(
-            ssl_context=trust,
-            retries=False,
-            timeout=urllib3.Timeout(connect=15, read=30),
-        )
-        manager = (
-            urllib3.ProxyManager(route, proxy_ssl_context=trust, **arguments)
-            if route
-            else urllib3.PoolManager(**arguments)
-        )
+        manager = routes.manager(proxy_for(egress, parsed))
         response = None
         try:
             response = manager.request(
@@ -351,7 +498,6 @@ def respond(source, egress, deadline, consume):
         finally:
             if response is not None:
                 response.close()
-            manager.clear()
     raise Refused("redirect count")
 
 
@@ -431,12 +577,13 @@ class ReleaseStamp:
             raise Unreleased("openshift client release")
 
 
-def acquire(bundle, source, egress, seconds):
+def acquire(bundle, source, egress, seconds, routes):
     """Stream one approved tool source into the bundle under its own deadline.
 
-    Both the alarm and the transfer check use this source's deadline, never the
-    fixed one download keeps. Only a complete, digest-verified source gains a
-    name; an interrupted one stays an unlinked file the kernel reclaims."""
+    Both the alarm and the transfer check use this source's deadline. Only a
+    complete, digest-verified source gains a name; an interrupted one stays an
+    unlinked file the kernel reclaims. A refused transfer keeps its message
+    and gains the class of what refused it."""
     source_identity(source)
     name = "sources/" + source["id"]
     bundle.writable()
@@ -455,8 +602,16 @@ def acquire(bundle, source, egress, seconds):
                 raise Refused("source integrity")
             bundle.link(name, staged, source["bytes"], digest)
 
-    with alarm(seconds):
-        respond(source, egress, deadline, store)
+    try:
+        with alarm(seconds):
+            respond(source, egress, deadline, store, routes)
+    except Unreleased:
+        raise
+    except Exception as error:
+        message = "approved source acquisition was refused or incomplete"
+        if isinstance(error, Refused) and error.args:
+            message = error.args[0]
+        raise refused(error, message) from None
 
 
 def identity(value):
@@ -1050,7 +1205,8 @@ def prepare_tool(location, tool, egress, deadline, inspect_only=False):
             for file in files:
                 if bundle.present(file["path"], MAX_SOURCE, 0o700):
                     raise Refused("unattributed target without retained source")
-            acquire(bundle, tool["source"], egress, deadline)
+            with Routes() as routes:
+                acquire(bundle, tool["source"], egress, deadline, routes)
             changed = True
         manifest, published = project(bundle, tool, inspect_only)
         return {

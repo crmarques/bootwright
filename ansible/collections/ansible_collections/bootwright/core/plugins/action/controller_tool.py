@@ -1,26 +1,22 @@
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
-from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
-    emit,
-)
+from ansible.utils.display import Display
 from ansible_collections.bootwright.core.plugins.module_utils.controller_files import (
     MAX_DEADLINE,
-    Unreleased,
     prepare_tool,
+)
+from ansible_collections.bootwright.core.plugins.module_utils.controller_refusal import (
+    name,
 )
 
 
-def name_refusal(error):
-    """Name to the runner the one refusal with a remedy of its own, an oc the
-    release-stamp check refused, before the task fails. Without the record
-    the run still fails, only with the generic remedy."""
-    if not isinstance(error, Unreleased):
-        return
-    try:
-        emit({"phase": "refused", "reason": "release-stamp"})
-    except (OSError, ValueError):
-        pass
+def source_id(args):
+    """The frozen tool's source, which an acquisition refusal names, or None
+    when the arguments do not hold one."""
+    tool = args.get("tool")
+    source = tool.get("source") if isinstance(tool, dict) else None
+    return source.get("id") if isinstance(source, dict) else None
 
 
 def tool_arguments(args):
@@ -56,8 +52,9 @@ class ActionModule(ActionBase):
             return result
         except Exception as error:
             # Exceptions can include source/proxy paths. Evidence and diagnostics
-            # cross the public boundary only through the enclosing fixed role.
-            name_refusal(error)
+            # cross the public boundary only through the enclosing fixed role;
+            # the record carries a class and the source, never their text.
+            name(error, source_id(self._task.args), Display().warning)
             return dict(
                 result,
                 failed=True,

@@ -39,3 +39,33 @@ def test_a_refusal_the_installation_does_not_name_is_never_published(reason, mon
     result, published = run(args, monkeypatch)
     assert result == {"failed": True, "msg": "the installation capability result could not be published"}
     assert not published
+
+
+# A store entry the attempt finds changed since the plan froze it is named by
+# which image it is, each with the diagnostic Go gave it (selection.go).
+@pytest.mark.parametrize("reason", ["media-changed-boot", "media-changed-tree"])
+def test_each_changed_store_entry_is_named_to_the_runner(reason, monkeypatch):
+    result, published = run({"phase": "refused", "reason": reason}, monkeypatch)
+    assert result == {"changed": False}
+    assert published == [{"phase": "refused", "reason": reason}]
+
+
+DIGEST = "1" * 64
+IDENTITY = "fedcba9876543210" * 4
+
+
+def test_presence_carries_the_tree_identity_the_inspection_read():
+    for observed, carried in ((IDENTITY, IDENTITY), ("", ""), (None, "")):
+        evidence = protocol.presence({"power": "On", "observation": {"tree": True, "treeIdentity": observed}}, DIGEST)
+        assert evidence["treeIdentity"] == carried
+
+
+@pytest.mark.parametrize("identity", ["abc", IDENTITY.upper(), IDENTITY + "0", 7], ids=repr)
+def test_a_malformed_tree_identity_is_never_published(identity):
+    with pytest.raises(ValueError, match="tree identity"):
+        protocol.presence({"power": "On", "observation": {"treeIdentity": identity}}, DIGEST)
+
+
+def test_a_removal_reports_no_tree_identity():
+    evidence = protocol.absence({"observation": {"treeIdentity": IDENTITY}}, DIGEST)
+    assert evidence["treeIdentity"] == ""

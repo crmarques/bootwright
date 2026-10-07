@@ -56,6 +56,7 @@ func provider() api.Object {
 func artifactServer(fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
 		text("management", "managed"), text("machineRef", "controller"), text("bindAddress", "192.0.2.1"),
+		field("tls", api.MapValue(text("secretRef", "lab-artifacts-tls"))),
 		field("listeners", api.ListValue(
 			api.MapValue(text("name", "https"), text("protocol", "https"), number("port", "8443")),
 			api.MapValue(text("name", "http"), text("protocol", "http"), number("port", "8080")),

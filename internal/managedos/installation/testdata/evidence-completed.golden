@@ -12,6 +12,7 @@
   "request": "1111111111111111111111111111111111111111111111111111111111111111",
   "tree": true,
   "treeContent": true,
+  "treeIdentity": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
   "treeStaging": false,
   "work": false
 }

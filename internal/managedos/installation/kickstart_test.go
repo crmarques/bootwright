@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -411,5 +412,121 @@ func TestAVirtualInstallationRendersNoPhysicalProof(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "--device=eno1") {
 		t.Fatal("a virtual installation does not address its interface by name")
+	}
+}
+
+// profileCustomizedWith is the lab profile with one customization group
+// replaced.
+func profileCustomizedWith(group string, value api.Value) api.Object {
+	customizations := installProfile().Spec().Get("customizations")
+	return installProfile(field("customizations", customizations.With(group, value)))
+}
+
+func localizedProfile(formats string) api.Object {
+	return profileCustomizedWith("localization", api.MapValue(
+		text("language", "en_US.UTF-8"), text("formats", formats), text("keyboard", "us"), text("timezone", "Etc/UTC"),
+	))
+}
+
+// The lang directive carries the language alone, so formats that differ are
+// written to locale.conf for every regional category, and the langpack that
+// provides them is installed.
+func TestFormatsRenderTheirRegionalCategoriesAndLangpack(t *testing.T) {
+	kickstart := kickstartOf(t, labCatalog(localizedProfile("pt_BR.UTF-8")))
+	const block = `cat > /etc/locale.conf <<'BOOTWRIGHT_LOCALE_EOF'
+LANG=en_US.UTF-8
+LC_TIME=pt_BR.UTF-8
+LC_NUMERIC=pt_BR.UTF-8
+LC_MONETARY=pt_BR.UTF-8
+LC_PAPER=pt_BR.UTF-8
+LC_MEASUREMENT=pt_BR.UTF-8
+LC_ADDRESS=pt_BR.UTF-8
+LC_TELEPHONE=pt_BR.UTF-8
+LC_NAME=pt_BR.UTF-8
+LC_IDENTIFICATION=pt_BR.UTF-8
+BOOTWRIGHT_LOCALE_EOF
+chmod 0644 /etc/locale.conf
+`
+	if !strings.Contains(kickstart, block) {
+		t.Fatalf("the kickstart has no locale block:\n%s", kickstart)
+	}
+	if strings.Index(kickstart, block) < strings.Index(kickstart, "%post --erroronfail") ||
+		strings.Index(kickstart, block) > strings.Index(kickstart, "install -d -m 0750 /etc/sudoers.d") {
+		t.Fatalf("the locale block is not in the %%post before the sudoers drop-in:\n%s", kickstart)
+	}
+	packages := kickstart[strings.Index(kickstart, "%packages"):]
+	packages = packages[:strings.Index(packages, "%end")]
+	if !strings.Contains(packages, "\nglibc-langpack-pt\n") {
+		t.Fatalf("%%packages installs no glibc-langpack-pt:\n%s", packages)
+	}
+}
+
+// Formats equal to the language, the admission default, add nothing: the
+// language already sets every category.
+func TestFormatsEqualToTheLanguageRenderNothing(t *testing.T) {
+	for _, formats := range []string{"en_US.UTF-8", "en_GB.UTF-8", "C.UTF-8"} {
+		kickstart := kickstartOf(t, labCatalog(localizedProfile(formats)))
+		if strings.Contains(kickstart, "glibc-langpack") {
+			t.Fatalf("formats %s installed a langpack:\n%s", formats, kickstart)
+		}
+		if formats == "en_US.UTF-8" && strings.Contains(kickstart, "/etc/locale.conf") {
+			t.Fatalf("formats equal to the language wrote locale.conf:\n%s", kickstart)
+		}
+	}
+}
+
+// A formats locale whose language code no glibc langpack can be named for
+// refuses rather than installing a system without its formats.
+func TestAFormatsLocaleWithNoLangpackCodeRefuses(t *testing.T) {
+	for _, formats := range []string{"p_BR.UTF-8", "portu_BR.UTF-8", "p1_BR"} {
+		_, _, err := Requests(labCatalog(localizedProfile(formats)), "controller", testContext)
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Code != "api.value" ||
+			reported[0].Message != "the formats locale names no language a glibc langpack provides" ||
+			reported[0].Remediation != "correct spec.customizations.localization.formats of the install profile" {
+			t.Fatalf("formats %s: refusal = %#v", formats, reported)
+		}
+	}
+}
+
+// Configured repositories are the installed system's own: the %post writes
+// each as a .repo file with its name, GPG settings and enabled state, and no
+// install-time repo directive makes any of them an install source.
+func TestRepositoriesAreWrittenAsRepoFilesInPost(t *testing.T) {
+	kickstart := kickstartOf(t, labCatalog(profileCustomizedWith("repositories", api.MapValue(field("configure", api.ListValue(
+		api.MapValue(text("id", "extras"), text("baseURL", "https://mirror.example.test/extras"), text("displayName", "Extra packages"),
+			text("gpgKeyURL", "https://mirror.example.test/RPM-GPG-KEY")),
+		api.MapValue(text("id", "debug"), text("baseURL", "http://mirror.example.test/debug"), field("enabled", api.BoolValue(false)),
+			field("gpgCheck", api.BoolValue(false))),
+	))))))
+	const want = `cat > '/etc/yum.repos.d/bootwright-debug.repo' <<'BOOTWRIGHT_REPOSITORY_EOF'
+[debug]
+name=debug
+baseurl=http://mirror.example.test/debug
+enabled=0
+gpgcheck=0
+BOOTWRIGHT_REPOSITORY_EOF
+chmod 0644 '/etc/yum.repos.d/bootwright-debug.repo'
+cat > '/etc/yum.repos.d/bootwright-extras.repo' <<'BOOTWRIGHT_REPOSITORY_EOF'
+[extras]
+name=Extra packages
+baseurl=https://mirror.example.test/extras
+enabled=1
+gpgcheck=1
+gpgkey=https://mirror.example.test/RPM-GPG-KEY
+BOOTWRIGHT_REPOSITORY_EOF
+chmod 0644 '/etc/yum.repos.d/bootwright-extras.repo'
+install -d -m 0750 /etc/sudoers.d
+`
+	if !strings.Contains(kickstart, want) {
+		t.Fatalf("the kickstart does not write the .repo files:\n%s", kickstart)
+	}
+	if strings.Index(kickstart, want) < strings.Index(kickstart, "%post --erroronfail") {
+		t.Fatalf("the .repo files are written outside the %%post:\n%s", kickstart)
+	}
+	for _, line := range strings.Split(kickstart, "\n") {
+		if strings.HasPrefix(line, "repo ") {
+			t.Fatalf("the kickstart renders an install-time %q", line)
+		}
 	}
 }

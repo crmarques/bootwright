@@ -337,8 +337,9 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 		issues = appendIssues(issues, invariant("$.spec.network.overrides", "network overrides require configRef"))
 	}
 	for _, key := range []string{"attachmentRef", "interfaceAttachments", "interfaceBinding", "installAddressRef"} {
-		if network.Has(key) && !configured {
-			issues = appendIssues(issues, invariant("$.spec.network."+key, "network selections and bindings require a configured network"))
+		if network.Has(key) && !configured && !provided.Bool() {
+			issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.network." + key, Message: "network selections and bindings require a configured network",
+				Remediation: "select a network configuration on " + o.Identity() + " with spec.network.configRef or spec.network.inline, or remove spec.network." + key})
 		}
 	}
 	if network.Has("inline") {
@@ -347,7 +348,11 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 	for i, address := range network.Get("addresses").Items() {
 		path := fmt.Sprintf("$.spec.network.addresses[%d]", i)
 		if address.Has("interface") && (!configured || provided.Bool()) {
-			issues = appendIssues(issues, invariant(path+".interface", "interface assignment requires a non-provided Machine with configured network"))
+			remediation := "select a network configuration on " + o.Identity() + " with spec.network.configRef or spec.network.inline, or remove " + path[2:] + ".interface"
+			if provided.Bool() {
+				remediation = "remove " + path[2:] + ".interface from " + o.Identity() + "; an OS-ready Machine declares contacts only"
+			}
+			issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".interface", Message: "interface assignment requires a non-provided Machine with configured network", Remediation: remediation})
 		}
 		if address.Get("name").Text() == "fqdn" {
 			if address.Has("interface") || !api.ValidLexical("dns", address.Get("address").Text()) {

@@ -147,18 +147,19 @@ snapshot and the publisher key import that verifies package signatures.
 Each release's record also attributes every pinned file to the package build
 that provides it, outside the execution requirement, so no bundle identity
 reads it: glibc 2.42-16.fc43 and libgcc 15.3.1-1.fc43 on Fedora 43, and glibc
-2.34-275.el9_8 and libgcc 11.5.0-14.el9 on RHEL 9.8. A controller must hold
+2.34-275.el9_8 and libgcc 11.5.0-14.el9 on RHEL 9.8. A controller holds
 exactly those builds, as the operator guide's
-[hold procedure](operator-guide.md#hold-the-execution-foundation) keeps them;
-a host with any other build is refused, naming the file and its build, before
-the private interpreter runs. To qualify other builds, run
+[hold procedure](operator-guide.md#hold-the-execution-foundation) keeps them,
+or vendor-signed builds of the same upstream versions within the release that
+setup qualified from the RPM database and recorded on its receipt; a host with
+any other build is refused, naming the file and its build, before the private
+interpreter runs. To qualify other builds, run
 `scripts/foundation-catalog` unprivileged on a host of that release holding
 them: it prints the release's native record, files with their digests, the
 links that reach them, the preload list and each file's package build from
 `rpm -qf`, which replaces that release's record in the catalog.
 `TestTheFoundationCatalogToolRoundTrips` holds the tool to what the guard
-verifies. Qualifying vendor-signed builds within the qualified minor lands
-with [B297](../specs/milestones/m1.md#b297).
+verifies.
 
 Setup's private runtime is qualified for `ansible-core` 2.21 at its latest
 stable patch, on controller CPython 3.12, 3.13 or 3.14 at the latest patch of

@@ -446,3 +446,58 @@ func TestKickstartBoundCustomizationsHaveAGrammar(t *testing.T) {
 		t.Fatalf("valid Kickstart-bound customizations were refused: %v", issues)
 	}
 }
+
+// A mirror repository ID follows the configured-repository ID rule before the
+// mirror arm is supported, so the arm cannot later carry an ID its Kickstart
+// directive could not.
+func TestAMirrorRepositoryIDIsAKickstartToken(t *testing.T) {
+	mirror := func(id string) []api.Issue {
+		o := anaconda()
+		o = o.WithSpec(o.Spec().WithPath(m("baseURL", "https://mirror.example.test/os",
+			"repositories", list(m("id", "base", "baseURL", "https://mirror.example.test/base"), m("id", id, "baseURL", "https://mirror.example.test/x"))),
+			"installer", "anaconda", "packageSource", "mirror"))
+		return Validate(o, api.Catalog{})
+	}
+	const field = "$.spec.installer.anaconda.packageSource.mirror.repositories[1].id"
+	for _, id := range []string{"a b", "x/y"} {
+		issues := mirror(id)
+		if len(issues) != 1 || issues[0].Code != "api.value" || issues[0].Field != field ||
+			issues[0].Message != repositoryGrammar.message || !strings.Contains(issues[0].Remediation, strings.TrimPrefix(field, "$.")) {
+			t.Fatalf("mirror repository ID %q: refusal = %#v, want one api.value at %s", id, issues, field)
+		}
+	}
+	if issues := mirror("extras"); len(issues) != 0 {
+		t.Fatalf("mirror repository ID extras was refused: %#v", issues)
+	}
+}
+
+// A repository's display name and GPG key URL are written into the .repo file
+// the installation renders, so admission refuses what the renderer's guard
+// would: a display name of more than one line, and a key URL holding a quote,
+// a backslash or '#'.
+func TestARepositoryDisplayNameAndKeyURLAreWhatTheRepoFileCarries(t *testing.T) {
+	configure := func(entry api.Value) []api.Issue {
+		o := anaconda()
+		o = o.WithSpec(o.Spec().With("customizations", m("repositories", m("configure", list(entry)))))
+		return Validate(o, api.Catalog{})
+	}
+	for name, test := range map[string]struct {
+		entry api.Value
+		field string
+	}{
+		"a two-line name":    {m("id", "extras", "baseURL", "https://mirror.example.test/x", "gpgCheck", false, "displayName", "a\nb"), "$.spec.customizations.repositories.configure[0].displayName"},
+		"a separator name":   {m("id", "extras", "baseURL", "https://mirror.example.test/x", "gpgCheck", false, "displayName", "a b"), "$.spec.customizations.repositories.configure[0].displayName"},
+		"a quoted key URL":   {m("id", "extras", "baseURL", "https://mirror.example.test/x", "gpgKeyURL", `https://mirror.example.test/"key`), "$.spec.customizations.repositories.configure[0].gpgKeyURL"},
+		"a key URL with '#'": {m("id", "extras", "baseURL", "https://mirror.example.test/x", "gpgKeyURL", "https://mirror.example.test/key#"), "$.spec.customizations.repositories.configure[0].gpgKeyURL"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if issues := configure(test.entry); len(issues) != 1 || issues[0].Field != test.field || issues[0].Remediation == "" {
+				t.Fatalf("refusal = %#v, want one at %s", issues, test.field)
+			}
+		})
+	}
+	if issues := configure(m("id", "extras", "baseURL", "https://mirror.example.test/x", "displayName", "Extra packages #1",
+		"gpgKeyURL", "file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release")); len(issues) != 0 {
+		t.Fatalf("a valid repository was refused: %#v", issues)
+	}
+}

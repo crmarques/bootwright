@@ -37,6 +37,9 @@ func localControllerDependencies(storage prerequisites.Storage, process processD
 	staging := nativelocal.NewStaging(nativelocal.StagingParent)
 	native := nativelocal.New(bundlelocal.FetchMetadata, staging)
 	guard := bundlelocal.ExecutionGuard{}
+	if builds, reads := any(native).(prerequisites.FoundationBuildReader); reads {
+		guard.Builds = builds
+	}
 	installer := ansiblelocal.New(guard)
 	return controllerDependencies{
 		Storage:         storage,

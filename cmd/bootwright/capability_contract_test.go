@@ -326,7 +326,7 @@ func (f *contractFindings) record(row contractRow, property, message string) {
 // everything as completion. A failed or empty probe never reads as quiescent.
 func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 	runner := &contractRunner{}
-	resolver := buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner)
+	resolver := buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{})
 	examples := map[string]contractExample{}
 	findings := &contractFindings{failures: map[string][]string{}}
 	for _, row := range contractRows() {
@@ -972,7 +972,7 @@ func contractBareMetalPresence(t *testing.T, execution lifecycle.Execution) map[
 // contractInstallationPresence proves an installation finished: the frozen
 // marker for this block's digest, the frozen address answering on a host key
 // as the fleet account, the media ejected, the machine running and every
-// publication its boot needs present.
+// publication its boot needs present, its tree extracted from the frozen DVD.
 func contractInstallationPresence(t *testing.T, execution lifecycle.Execution) map[string]any {
 	t.Helper()
 	request, err := installation.DecodeRequest(execution.Block.Request)
@@ -983,17 +983,22 @@ func contractInstallationPresence(t *testing.T, execution lifecycle.Execution) m
 	if err != nil {
 		t.Fatal(err)
 	}
-	return map[string]any{
+	presence := map[string]any{
 		"postcondition": true, "marker": string(marker), "address": request.Address,
 		"hostKey": "ssh-ed25519 contract-host-key", "reachable": true,
 		"power": "On", "image": true, "tree": request.Tree != nil,
 	}
+	if request.TreeMedia != nil {
+		presence["treeIdentity"] = request.TreeMedia.SHA256
+	}
+	return presence
 }
 
 // contractHostPresence proves a provider host realized: the closure present,
 // every frozen driver daemon active and enabled, the URI answering, the pool
-// active beside its directory and every frozen network present, managed ones
-// active and owned. The directory is always reported, because the adapter
+// active, set to autostart and targeting its directory beside it, and every
+// frozen network present, managed ones active, owned and set to autostart. The
+// directory is always reported, because the adapter
 // publishes no evidence without it.
 func contractHostPresence(t *testing.T, execution lifecycle.Execution) map[string]any {
 	t.Helper()
@@ -1009,12 +1014,12 @@ func contractHostPresence(t *testing.T, execution lifecycle.Execution) map[strin
 	for _, network := range request.Networks {
 		networks = append(networks, map[string]any{
 			"name": network.Name, "managed": network.Managed, "answered": network.Managed, "bridge": true, "state": "active", "owned": network.Managed,
-			"definition": network.Managed,
+			"definition": network.Managed, "autostart": network.Managed,
 		})
 	}
 	return map[string]any{
 		"postcondition": true, "hypervisor": true, "services": services, "uri": true, "pool": "active", "poolAnswered": true, "networks": networks,
-		"directory": true,
+		"directory": true, "poolAutostart": true, "poolOwned": true,
 	}
 }
 
@@ -1262,7 +1267,7 @@ func TestEveryBindingJoinsTheCapabilityContractSuite(t *testing.T) {
 		}
 		rows[row.binding()] = true
 	}
-	for _, binding := range buildCapabilities(systemClock{}, controllerDependencies{}).Bindings() {
+	for _, binding := range buildCapabilities(systemClock{}, controllerDependencies{}, nil).Bindings() {
 		if !rows[binding] {
 			t.Errorf("%s/%s is offered by this build but has no row in the capability contract suite", binding.Kind, binding.Implementation)
 		}

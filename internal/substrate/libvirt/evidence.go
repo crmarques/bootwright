@@ -26,7 +26,15 @@ type HostEvidence struct {
 	// URI answering proves only that the hypervisor did, and a storage driver
 	// that is silent reports no pool either, so an empty Pool means absent
 	// only while PoolAnswered is true. Evidence without it decodes as silent.
-	PoolAnswered  bool              `json:"poolAnswered"`
+	PoolAnswered bool `json:"poolAnswered"`
+	// PoolAutostart is whether the pool starts with the host. Evidence
+	// without it decodes as a pool not set to autostart.
+	PoolAutostart bool `json:"poolAutostart"`
+	// PoolOwned is whether the pool's definition targets the frozen
+	// directory. A pool carries no ownership metadata, so a same-named pool
+	// targeting another directory is foreign. Evidence without it decodes as
+	// a pool that is not this provider's.
+	PoolOwned     bool              `json:"poolOwned"`
 	Postcondition bool              `json:"postcondition"`
 	Request       string            `json:"request"`
 	Services      []ServiceEvidence `json:"services"`
@@ -50,7 +58,10 @@ type NetworkEvidence struct {
 	// Answered is true. An external network is never read, so it is never
 	// answered for. Evidence without the field decodes as silent.
 	Answered bool `json:"answered"`
-	Bridge   bool `json:"bridge"`
+	// Autostart is whether a managed network starts with the host. Evidence
+	// without it decodes as a network not set to autostart.
+	Autostart bool `json:"autostart"`
+	Bridge    bool `json:"bridge"`
 	// Definition is whether a managed network runs, and keeps for its next
 	// start, everything its frozen entry sets. Defining an active network
 	// changes only the definition it next starts from, so a redefinition is
@@ -102,7 +113,8 @@ type DiskEvidence struct {
 // ValidateHostPresence accepts evidence only when it proves the exact frozen
 // request is realized: the closure present, the daemon active, the declared URI
 // answering, every managed network owned, active and carrying its frozen
-// definition, every external bridge present, and the pool active.
+// definition and set to autostart, every external bridge present, and the pool
+// active, set to autostart and targeting its frozen directory.
 func ValidateHostPresence(data []byte, request HostRequest, digest string) error {
 	evidence, err := decodeHostEvidence(data, digest)
 	if err != nil {
@@ -122,6 +134,12 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 	}
 	if !evidence.PoolAnswered || evidence.Pool != "active" {
 		return refusal("lifecycle.state", "the provider's virtual-media pool is not active", "")
+	}
+	if !evidence.PoolOwned {
+		return refusal("lifecycle.state", "the provider's virtual-media pool does not target its frozen directory", "")
+	}
+	if !evidence.PoolAutostart {
+		return refusal("lifecycle.state", "the provider's virtual-media pool does not start with the host", "")
 	}
 	return matchNetworks(evidence.Networks, request.Networks)
 }
@@ -189,6 +207,9 @@ func matchNetworks(observed []NetworkEvidence, frozen []Network) error {
 		}
 		if !entry.Definition {
 			return refusal("lifecycle.state", "a managed libvirt network does not carry its frozen definition", "")
+		}
+		if !entry.Autostart {
+			return refusal("lifecycle.state", "a managed libvirt network does not start with the host", "")
 		}
 	}
 	return nil
@@ -294,7 +315,7 @@ func unremoved(evidence HostEvidence, request HostRequest) error {
 	if !evidence.URI {
 		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
 	}
-	if !evidence.PoolAnswered || evidence.Pool != "active" || evidence.Directory == nil || !*evidence.Directory {
+	if !evidence.PoolAnswered || evidence.Pool != "active" || !evidence.PoolOwned || evidence.Directory == nil || !*evidence.Directory {
 		return refusal("lifecycle.state", "the provider host no longer holds its active pool and its directory", "")
 	}
 	sorted, err := pairNetworks(evidence.Networks, request.Networks)
@@ -331,8 +352,11 @@ func ValidateHostPartial(data []byte, digest string) error {
 
 // holdsOwned requires the evidence to report the pool, its directory or one of
 // this context's managed networks, and no managed network defined without
-// this context's ownership.
+// this context's ownership nor a same-named pool targeting another directory.
 func holdsOwned(evidence HostEvidence) error {
+	if evidence.Pool != "" && !evidence.PoolOwned {
+		return refusal("lifecycle.state", "a virtual-media pool of the same name targets another directory than this provider's", "")
+	}
 	present := evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory)
 	for _, network := range evidence.Networks {
 		if !network.Managed || (network.State == "" && !network.Owned) {

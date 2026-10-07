@@ -815,11 +815,69 @@ def main():
         destination.write(encoded)
 
 
-if __name__ == "__main__":
+# The closed class each refusal this helper and native_apply raise names, by
+# its message, then by the maintained DNF exception's type name.
+REFUSAL_CLASSES = {
+    "native dependency solve": "solver-conflict",
+    "requested native release unavailable": "missing-candidate",
+    "native root unresolved": "missing-candidate",
+    "native package signature": "signature",
+    "native source integrity": "signature",
+    "native database lock": "database",
+    "native database snapshot": "database",
+    "native database changed": "database",
+    "native transaction failed": "transaction",
+    "native vendor hook failed": "transaction",
+    "native transaction postcondition": "postcondition",
+    "native inventory changed": "postcondition",
+    "native inventory changed before transaction": "postcondition",
+    "native transaction changed": "postcondition",
+}
+TYPE_CLASSES = {
+    "DepsolveError": "solver-conflict",
+    "MarkingError": "missing-candidate",
+    "PackageNotFoundError": "missing-candidate",
+}
+
+
+def refusal_class(error):
+    if isinstance(error, ImportError):
+        return "foundation"
+    message = error.args[0] if error.args else None
+    if isinstance(message, str) and message in REFUSAL_CLASSES:
+        return REFUSAL_CLASSES[message]
+    for kind in type(error).__mro__:
+        if kind.__name__ in TYPE_CLASSES:
+            return TYPE_CLASSES[kind.__name__]
+    return "internal"
+
+
+def refusal_detail(error):
+    """The exception's type name and the first line of its text, without
+    control characters, in at most 200 bytes."""
+    line = type(error).__name__ + ": " + str(error).split("\n", 1)[0]
+    line = "".join(
+        character
+        for character in line
+        if not (ord(character) < 32 or 127 <= ord(character) < 160)
+    )
+    return line.encode("utf-8")[:200].decode("utf-8", "ignore")
+
+
+def entry():
+    """Run main, and on a refusal write exactly two lines: 'refused <class>'
+    and one bounded detail line, then exit 1."""
     try:
         main()
-    except Exception:
-        sys.stderr.write("native dependency operation refused\n")
+    except Exception as error:
+        sys.stderr.write(
+            "refused " + refusal_class(error) + "\n" + refusal_detail(error) + "\n"
+        )
+        sys.stderr.flush()
         # Standalone bounded entrypoint uses its exit status as the protocol result.
         # pylint: disable-next=ansible-bad-function
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    entry()

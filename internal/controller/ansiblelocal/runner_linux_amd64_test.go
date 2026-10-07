@@ -118,7 +118,7 @@ func runnerFixture(t *testing.T, mode string) (prerequisites.PythonLaunch, capab
 		t.Fatal(err)
 	}
 	launch := prerequisites.PythonLaunch{Loader: "/qualified/loader", Arguments: []string{"--inhibit-cache", "/qualified/python"}, Directory: bundle, Environment: []string{"LANG=C.UTF-8"}}
-	request := capabilityRequest{Operation: "setup", Identity: strings.Repeat("a", 64), Bundle: bundleLocation{Path: bundle, Writable: true}, Packages: []prerequisites.NativePackage{}, Tools: []prerequisites.ToolDefinition{}}
+	request := capabilityRequest{Operation: "setup", Identity: strings.Repeat("a", 64), Bundle: bundleLocation{Path: bundle, Writable: true}, PublicationBundle: bundleLocation{Path: bundle, Writable: true}, Packages: []prerequisites.NativePackage{}, Tools: []prerequisites.ToolDefinition{}}
 	boundary := processBoundary{owner: os.Geteuid(), jobParent: t.TempDir(), scratchParent: t.TempDir(), command: func(path string, arguments ...string) *exec.Cmd {
 		// -u belongs to the boundary: without it the child holds its output
 		// back until it exits, and nothing can be followed while it runs.
@@ -422,8 +422,11 @@ func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
 			if len(found) != 1 || found[0].Code != check.code || found[0].Message != check.message {
 				t.Fatalf("the run reported %+v (%v), want %s %q", found, err, check.code, check.message)
 			}
+			// Setup's own run, which carries no tool, records failed until
+			// Go acknowledges a native record; with a tool it is unknown
+			// once prepared.
 			outcome := "failed"
-			if check.published {
+			if check.published && len(request.Tools) > 0 {
 				outcome = "unknown"
 			}
 			if result.Outcome != outcome || published != check.published {
@@ -482,21 +485,48 @@ func clientTools(sizes ...int64) []prerequisites.ToolDefinition {
 	return tools
 }
 
+func nativePackages(sizes ...int64) []prerequisites.NativePackage {
+	packages := make([]prerequisites.NativePackage, 0, len(sizes))
+	for index, size := range sizes {
+		packages = append(packages, prerequisites.NativePackage{Source: prerequisites.DependencySource{ID: "native-" + strconv.Itoa(index), Bytes: size}})
+	}
+	return packages
+}
+
+// A run's deadline is its base plus the bound its native packages are staged
+// under and each tool's acquisition deadline. Native staging alone is held
+// within the ceiling, so a large native closure is admitted at the ceiling,
+// while one with tools past it is refused before Ansible starts.
 func TestAClientStageDeadlineIsDerivedFromItsSources(t *testing.T) {
 	for name, check := range map[string]struct {
-		tools []prerequisites.ToolDefinition
-		want  time.Duration
+		packages []prerequisites.NativePackage
+		tools    []prerequisites.ToolDefinition
+		want     time.Duration
+		refused  bool
 	}{
-		"no tools":         {nil, runTimeout},
-		"two tools":        {clientTools(1, 44_433_552), runTimeout + 121*time.Second + 205*time.Second},
-		"past the ceiling": {clientTools(1<<30, 1<<30, 1<<30, 1<<30), clientStageCeiling},
+		"no tools":                           {nil, nil, runTimeout, false},
+		"two tools":                          {nil, clientTools(1, 44_433_552), runTimeout + 121*time.Second + 205*time.Second, false},
+		"past the ceiling":                   {nil, clientTools(1<<30, 1<<30, 1<<30, 1<<30), clientStageCeiling, true},
+		"native only":                        {nativePackages(100 << 20), nil, runTimeout + 320*time.Second, false},
+		"4 GiB native":                       {nativePackages(1<<30, 1<<30, 1<<30, 1<<30), nil, clientStageCeiling, false},
+		"native plus tools past the ceiling": {nativePackages(1<<30, 1<<30, 1<<30), clientTools(1 << 30), clientStageCeiling, true},
 	} {
-		if got := runDeadline(capabilityRequest{Tools: check.tools}); got != check.want {
+		request := capabilityRequest{Packages: check.packages, Tools: check.tools}
+		if got := runDeadline(request); got != check.want {
 			t.Errorf("%s: runDeadline = %s, want %s", name, got, check.want)
+		}
+		if err := requireClientStageCeiling(request); (err != nil) != check.refused {
+			t.Errorf("%s: the ceiling check returned %v, want refused %v", name, err, check.refused)
 		}
 	}
 	if runTimeout != 600*time.Second || clientStageCeiling != 7_200*time.Second {
 		t.Fatalf("runTimeout %s and clientStageCeiling %s changed; the exact seconds above assume 10 minutes and 2 hours", runTimeout, clientStageCeiling)
+	}
+	if got := nativeStaging(nativePackages(1<<30, 1<<30, 1<<30, 1<<30)); got != nativeStagingCeiling {
+		t.Errorf("4 GiB of native packages stage under %s, want the ceiling %s the adapter admits", got, nativeStagingCeiling)
+	}
+	if nativeStagingCeiling != clientStageCeiling-runTimeout {
+		t.Fatalf("nativeStagingCeiling %s is not the stage ceiling %s less the run base %s", nativeStagingCeiling, clientStageCeiling, runTimeout)
 	}
 }
 
@@ -566,7 +596,9 @@ func TestRunnerBoundsDrainWhenDescendantRetainsResultChannel(t *testing.T) {
 	if !errors.As(err, &classified) || len(classified.Diagnostics) == 0 || !strings.Contains(classified.Diagnostics[0].Message, "retained the result channel") {
 		t.Fatalf("retained channel was not reported: %s %v", result.Outcome, err)
 	}
-	if result.Outcome != "unknown" {
+	// Setup's own run acknowledged no native record, so nothing it did is
+	// left to resolve: it is failed, never a proved outcome.
+	if result.Outcome != "failed" {
 		t.Fatalf("retained channel claimed a proved outcome: %s", result.Outcome)
 	}
 	if elapsed > 10*time.Second {

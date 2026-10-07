@@ -81,7 +81,7 @@ func (c *labSessionClient) IdentityFile(context.Context, string) (string, error)
 // apply with the fleet key and the proved host key, and no trust prompt.
 func TestLabRHELInstalledGuestSessionDialsTheInstallAddress(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	capability, ok := buildCapabilities(systemClock{}, exampleControllerPorts(t)).Resolve(installation.Kind, installation.Implementation)
+	capability, ok := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}).Resolve(installation.Kind, installation.Implementation)
 	if !ok {
 		t.Fatal("the installation capability does not resolve")
 	}

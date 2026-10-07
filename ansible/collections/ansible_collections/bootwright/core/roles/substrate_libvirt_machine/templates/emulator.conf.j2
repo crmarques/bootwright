@@ -1,11 +1,13 @@
 {#- This machine's own management controller. It exposes exactly this domain as
     its one ComputerSystem, so a guest is managed through the same Redfish
-    system, virtual-media and power resources a physical server presents. -#}
-SUSHY_EMULATOR_LISTEN_IP = '{{ bootwright_substrate_machine_request.controller.address }}'
+    system, virtual-media and power resources a physical server presents. Every
+    request string is rendered through to_json, whose JSON string is a valid
+    Python string literal, so a value is always data and never code. -#}
+SUSHY_EMULATOR_LISTEN_IP = {{ bootwright_substrate_machine_request.controller.address | to_json }}
 SUSHY_EMULATOR_LISTEN_PORT = {{ bootwright_substrate_machine_request.controller.port }}
-SUSHY_EMULATOR_LIBVIRT_URI = '{{ bootwright_substrate_machine_request.uri }}'
-SUSHY_EMULATOR_ALLOWED_INSTANCES = ['{{ bootwright_substrate_machine_request.uuid }}']
-SUSHY_EMULATOR_STORAGE_POOL = '{{ bootwright_substrate_machine_request.poolName }}'
+SUSHY_EMULATOR_LIBVIRT_URI = {{ bootwright_substrate_machine_request.uri | to_json }}
+SUSHY_EMULATOR_ALLOWED_INSTANCES = [{{ bootwright_substrate_machine_request.uuid | to_json }}]
+SUSHY_EMULATOR_STORAGE_POOL = {{ bootwright_substrate_machine_request.poolName | to_json }}
 SUSHY_EMULATOR_AUTH_FILE = '/etc/sushy/htpasswd'
 SUSHY_EMULATOR_IGNORE_BOOT_DEVICE = False
 SUSHY_EMULATOR_VMEDIA_VERIFY_SSL = False

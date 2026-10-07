@@ -1,6 +1,8 @@
 package installation
 
 import (
+	"net/netip"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -43,6 +45,20 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 	if err != nil {
 		return Installation{}, err
 	}
+	language := orDefault(customizations.Get("localization", "language").Text(), "en_US.UTF-8")
+	formats := customizations.Get("localization", "formats").Text()
+	langpacks, err := formatsLangpack(language, formats)
+	if err != nil {
+		return Installation{}, err
+	}
+	if reason, remediation := refusedProxy(catalog, machine, profile); reason != "" {
+		return Installation{}, refusal("lifecycle.unsupported", reason, remediation)
+	}
+	repositories := repositoriesFor(customizations)
+	route := proxyRouteFor(catalog, machine, profile)
+	for index := range repositories {
+		repositories[index].Proxy = route.proxyFor(repositories[index].BaseURL, request)
+	}
 	installation := Installation{
 		Address:          address,
 		AdditionalLocale: customizations.Get("localization", "additionalLocales").Strings(),
@@ -50,20 +66,20 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		EnabledServices:  SortedUnique(append(customizations.Get("services", "enabled").Strings(), "sshd")),
 		ExcludeDocs:      customizations.Get("packages", "excludeDocs").Bool(),
 		Firewall:         firewallChoice(customizations),
-		Formats:          customizations.Get("localization", "formats").Text(),
+		Formats:          formats,
 		Gateway:          substrate.DefaultGateway(template),
 		Hostname:         hostname,
 		Interface:        iface,
 		Keyboard:         orDefault(customizations.Get("localization", "keyboard").Text(), "us"),
-		Language:         orDefault(customizations.Get("localization", "language").Text(), "en_US.UTF-8"),
+		Language:         language,
 		HostKeyPath:      HostKeyPath,
 		MarkerPath:       MarkerPath,
 		Nameservers:      nameservers,
 		NTPServers:       timeSources,
-		Packages:         SortedUnique(append(customizations.Get("packages", "install").Strings(), identityPackages(request.Target)...)),
+		Packages:         SortedUnique(append(append(customizations.Get("packages", "install").Strings(), identityPackages(request.Target)...), langpacks...)),
 		PackageSource:    source,
 		Prefix:           prefix,
-		Repositories:     repositoriesFor(customizations),
+		Repositories:     repositories,
 		RootDevice:       machine.Spec().Get("os", "install", "rootDeviceHints", "deviceName").Text(),
 		SELinux:          customizations.Get("security", "selinux", "mode").Text(),
 		Timezone:         orDefault(customizations.Get("localization", "timezone").Text(), "UTC"),
@@ -197,15 +213,47 @@ func timeAddresses(catalog api.Catalog, machine, profile api.Object, needs *Requ
 	return addresses, nil
 }
 
+// formatsLangpack is the glibc langpack the formats locale needs beyond the
+// language's own: none when formats is the language, a C or POSIX locale or a
+// locale of the language's own code.
+func formatsLangpack(language, formats string) ([]string, error) {
+	if formats == "" || formats == language {
+		return nil, nil
+	}
+	code := localeCode(formats)
+	if code == "c" || code == "posix" || code == localeCode(language) {
+		return nil, nil
+	}
+	if len(code) < 2 || len(code) > 3 || strings.IndexFunc(code, func(r rune) bool { return r < 'a' || r > 'z' }) >= 0 {
+		return nil, refusal("api.value", "the formats locale names no language a glibc langpack provides",
+			"correct spec.customizations.localization.formats of the install profile")
+	}
+	return []string{"glibc-langpack-" + code}, nil
+}
+
+// localeCode is a locale's language code: everything before its territory,
+// codeset or modifier, lowercased.
+func localeCode(locale string) string {
+	if index := strings.IndexAny(locale, "_.@"); index >= 0 {
+		locale = locale[:index]
+	}
+	return strings.ToLower(locale)
+}
+
 func repositoriesFor(customizations api.Value) []Repository {
 	var repositories []Repository
 	for _, entry := range customizations.Get("repositories", "configure").Items() {
-		enabled := true
+		enabled, gpgCheck := true, true
 		if value := entry.Get("enabled"); value.Type() == api.Boolean {
 			enabled = value.Bool()
 		}
+		if value := entry.Get("gpgCheck"); value.Type() == api.Boolean {
+			gpgCheck = value.Bool()
+		}
+		id := entry.Get("id").Text()
 		repositories = append(repositories, Repository{
-			BaseURL: entry.Get("baseURL").Text(), Enabled: enabled, ID: entry.Get("id").Text(),
+			BaseURL: entry.Get("baseURL").Text(), Enabled: enabled, GPGCheck: gpgCheck,
+			GPGKeyURL: entry.Get("gpgKeyURL").Text(), ID: id, Name: orDefault(entry.Get("displayName").Text(), id),
 		})
 	}
 	slices.SortFunc(repositories, func(x, y Repository) int { return strings.Compare(x.ID, y.ID) })
@@ -239,4 +287,137 @@ func orDefault(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// effectiveProxy is the proxy choice a Machine's installed system uses: its own
+// spec.proxy, or the profile's when it declares none, which is what admission
+// normalizes it to.
+func effectiveProxy(machine, profile api.Object) api.Value {
+	if choice := machine.Spec().Get("proxy"); choice.Present() {
+		return choice
+	}
+	return profile.Spec().Get("proxy")
+}
+
+// refusedProxy says why the installed system's repositories cannot be given
+// the proxy its Machine selects, or nothing when they can. A .repo file
+// carries a proxy URL and nothing else, so a Proxy that needs a credential or
+// a private trust anchor, or that declares no URL, is refused while a
+// repository would use it; with no repository it carries nothing.
+func refusedProxy(catalog api.Catalog, machine, profile api.Object) (reason, remediation string) {
+	if len(profile.Spec().Get("customizations", "repositories", "configure").Items()) == 0 {
+		return "", ""
+	}
+	choice := effectiveProxy(machine, profile)
+	proxy, found := catalog.Find(api.Proxy, choice.Get("proxyRef").Text())
+	if choice.Has("direct") || !found {
+		return "", ""
+	}
+	remediation = "select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of " +
+		machine.Identity() + " or of " + profile.Identity()
+	connection := proxy.Spec().Get("connection")
+	if connection.Has("auth", "proxyAuthRef") || connection.Has("trustBundleRef") {
+		return "the installed system's repositories would reach " + proxy.Identity() +
+			" through a credential or private trust anchor, which an installation cannot carry", remediation
+	}
+	if connection.Get("httpProxy").Text() == "" && connection.Get("httpsProxy").Text() == "" {
+		return "the installed system's repositories would be reached through " + proxy.Identity() +
+			", which declares no proxy URL", remediation
+	}
+	return "", ""
+}
+
+// proxyRoute is the credential-free proxy the installed system's repositories
+// are reached through, and the entries that bypass it.
+type proxyRoute struct {
+	httpProxy, httpsProxy string
+	noProxy               []string
+}
+
+// proxyRouteFor reads the Machine's effective proxy choice: direct access, an
+// absent choice or an unresolved Proxy route nothing.
+func proxyRouteFor(catalog api.Catalog, machine, profile api.Object) proxyRoute {
+	choice := effectiveProxy(machine, profile)
+	proxy, found := catalog.Find(api.Proxy, choice.Get("proxyRef").Text())
+	if choice.Has("direct") || !found {
+		return proxyRoute{}
+	}
+	connection := proxy.Spec().Get("connection")
+	return proxyRoute{
+		httpProxy:  connection.Get("httpProxy").Text(),
+		httpsProxy: connection.Get("httpsProxy").Text(),
+		noProxy:    choice.Get("noProxy").Strings(),
+	}
+}
+
+// proxyFor is the proxy one repository's base URL is fetched through. The
+// installation's own artifact endpoints are exempt, as is every host a
+// noProxy entry matches; otherwise the scheme's proxy is used, or the other
+// one when the Proxy declares only that.
+func (r proxyRoute) proxyFor(baseURL string, request Request) string {
+	if r.httpProxy == "" && r.httpsProxy == "" {
+		return ""
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(parsed.Hostname())
+	for _, artifact := range artifactURLs(request) {
+		if endpoint, err := url.Parse(artifact); err == nil && strings.ToLower(endpoint.Hostname()) == host {
+			return ""
+		}
+	}
+	for _, entry := range r.noProxy {
+		if noProxyMatches(entry, host) {
+			return ""
+		}
+	}
+	if parsed.Scheme == "https" {
+		return orDefault(r.httpsProxy, r.httpProxy)
+	}
+	return orDefault(r.httpProxy, r.httpsProxy)
+}
+
+func artifactURLs(request Request) []string {
+	urls := []string{request.Image.URL}
+	if request.Tree != nil {
+		urls = append(urls, request.Tree.URL)
+	}
+	return urls
+}
+
+// noProxyMatches reports whether one bypass entry covers a lowercase host
+// without brackets: '*' covers every host, a '.domain' or '*.domain' suffix
+// the domain and its subdomains, an IP or CIDR the IP literals it equals or
+// contains, and any other entry the host it names, its port ignored.
+func noProxyMatches(entry, host string) bool {
+	entry = strings.ToLower(strings.TrimSpace(entry))
+	if entry == "*" {
+		return true
+	}
+	if prefix, err := netip.ParsePrefix(strings.Trim(entry, "[]")); err == nil {
+		address, err := netip.ParseAddr(host)
+		return err == nil && prefix.Contains(address.Unmap())
+	}
+	if address, err := netip.ParseAddr(strings.Trim(entry, "[]")); err == nil {
+		literal, err := netip.ParseAddr(host)
+		return err == nil && literal.Unmap() == address.Unmap()
+	}
+	if strings.HasPrefix(entry, "[") {
+		if end := strings.Index(entry, "]"); end > 0 {
+			entry = entry[1:end]
+		}
+	} else if strings.Count(entry, ":") == 1 {
+		entry, _, _ = strings.Cut(entry, ":")
+	}
+	if address, err := netip.ParseAddr(entry); err == nil {
+		literal, err := netip.ParseAddr(host)
+		return err == nil && literal.Unmap() == address.Unmap()
+	}
+	entry = strings.TrimPrefix(entry, "*")
+	if suffix, found := strings.CutPrefix(entry, "."); found {
+		return host == suffix || strings.HasSuffix(host, entry)
+	}
+	return host == entry
 }

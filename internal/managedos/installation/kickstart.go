@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v4"
+const kickstartVersion = "kickstart-anaconda-v5"
 
 // hostKeySource is the key the installation republishes. Ed25519 is the type
 // the identity operation binds, and generating it here rather than at first
@@ -46,11 +46,17 @@ const (
 	AuthorizedKeyToken = "@@BOOTWRIGHT_AUTHORIZED_KEY@@"
 )
 
-// Repository is one repository the installed system configures.
+// Repository is one repository the installed system configures. The %post
+// writes it as a .repo file, so it is never an install source; Proxy is the
+// proxy the installed system reaches it through, or empty for direct access.
 type Repository struct {
-	BaseURL string
-	Enabled bool
-	ID      string
+	BaseURL   string
+	Enabled   bool
+	GPGCheck  bool
+	GPGKeyURL string
+	ID        string
+	Name      string
+	Proxy     string
 }
 
 // Installation is everything the Kickstart is derived from. Every field comes
@@ -138,11 +144,7 @@ func RenderKickstart(input Installation) (string, error) {
 	lines = append(lines, storageLines(input)...)
 	lines = append(lines, "")
 	lines = append(lines, securityLines(input)...)
-	lines = append(lines, "", servicesLine(input))
-	for _, repository := range input.Repositories {
-		lines = append(lines, repositoryLine(repository))
-	}
-	lines = append(lines, "")
+	lines = append(lines, "", servicesLine(input), "")
 	lines = append(lines, packagesSection(input)...)
 	lines = append(lines, "")
 	lines = append(lines, postSection(input)...)
@@ -150,13 +152,17 @@ func RenderKickstart(input Installation) (string, error) {
 }
 
 // kickstartShape is how a value is interpolated: as one token, as one element
-// of a comma-joined list, or as the package-source directive.
+// of a comma-joined list, as the package-source directive, as one %packages
+// entry, as a repository ID that also names a file, or as one whole line.
 type kickstartShape int
 
 const (
 	kickstartToken kickstartShape = iota
 	kickstartListElement
 	kickstartPackageSource
+	kickstartPackage
+	kickstartRepositoryID
+	kickstartLine
 )
 
 // kickstartFields is every string an Installation carries, the value class a
@@ -187,7 +193,7 @@ var kickstartFields = []struct {
 	{"the install marker path", "the product-owned install marker path", kickstartToken, func(i Installation) []string { return []string{i.MarkerPath} }},
 	{"a name server", "the DNS server selections of the Machine's network configuration", kickstartListElement, func(i Installation) []string { return i.Nameservers }},
 	{"a time source", "the NTP server selections of the install profile or of spec.os.install.ntp on the Machine", kickstartListElement, func(i Installation) []string { return i.NTPServers }},
-	{"a package entry", "spec.customizations.packages.install of the install profile", kickstartToken, func(i Installation) []string { return i.Packages }},
+	{"a package entry", "spec.customizations.packages.install of the install profile", kickstartPackage, func(i Installation) []string { return i.Packages }},
 	{"the package source", "spec.installer.anaconda.packageSource of the install profile", kickstartPackageSource, func(i Installation) []string { return []string{i.PackageSource} }},
 	{"the root device", "spec.os.install.rootDeviceHints.deviceName of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootDevice} }},
 	{"the SELinux mode", "spec.customizations.security.selinux.mode of the install profile", kickstartToken, func(i Installation) []string { return []string{i.SELinux} }},
@@ -197,8 +203,17 @@ var kickstartFields = []struct {
 	{"a repository base URL", "spec.customizations.repositories.configure[].baseURL of the install profile", kickstartToken, func(i Installation) []string {
 		return repositoryValues(i, func(r Repository) string { return r.BaseURL })
 	}},
-	{"a repository ID", "spec.customizations.repositories.configure[].id of the install profile", kickstartToken, func(i Installation) []string {
+	{"a repository ID", "spec.customizations.repositories.configure[].id of the install profile", kickstartRepositoryID, func(i Installation) []string {
 		return repositoryValues(i, func(r Repository) string { return r.ID })
+	}},
+	{"a repository GPG key URL", "spec.customizations.repositories.configure[].gpgKeyURL of the install profile", kickstartToken, func(i Installation) []string {
+		return repositoryValues(i, func(r Repository) string { return r.GPGKeyURL })
+	}},
+	{"a repository name", "spec.customizations.repositories.configure[].displayName of the install profile", kickstartLine, func(i Installation) []string {
+		return repositoryValues(i, func(r Repository) string { return r.Name })
+	}},
+	{"a repository proxy", "spec.connection of the Proxy the Machine's spec.proxy selects", kickstartToken, func(i Installation) []string {
+		return repositoryValues(i, func(r Repository) string { return r.Proxy })
 	}},
 }
 
@@ -208,6 +223,10 @@ var kickstartFields = []struct {
 func guardKickstartValues(input Installation) error {
 	for _, field := range kickstartFields {
 		for _, value := range field.read(input) {
+			if value == "" && kickstartRequired(field.shape) {
+				return refusal("api.value", field.class+" is empty, which its Kickstart directive cannot carry",
+					"correct "+field.source)
+			}
 			if !kickstartCarries(field.shape, value) {
 				return refusal("api.value", field.class+" holds a character a Kickstart directive cannot carry",
 					"correct "+field.source)
@@ -217,12 +236,19 @@ func guardKickstartValues(input Installation) error {
 	return nil
 }
 
+// kickstartRequired is a shape whose directive renders nothing, or something
+// else, when its value is empty: the package source, a %packages entry and a
+// repository ID, which names its section and its file.
+func kickstartRequired(shape kickstartShape) bool {
+	return shape == kickstartPackageSource || shape == kickstartPackage || shape == kickstartRepositoryID
+}
+
 func kickstartCarries(shape kickstartShape, value string) bool {
 	if !utf8.ValidString(value) || strings.IndexFunc(value, kickstartLineBreak) >= 0 {
 		return false
 	}
 	if value == "" {
-		return true
+		return !kickstartRequired(shape)
 	}
 	switch shape {
 	case kickstartPackageSource:
@@ -230,6 +256,12 @@ func kickstartCarries(shape kickstartShape, value string) bool {
 		return value == "cdrom" || found && tree != "" && oneKickstartToken(tree, false)
 	case kickstartListElement:
 		return oneKickstartToken(value, true)
+	case kickstartPackage:
+		return !strings.HasPrefix(value, "-") && oneKickstartToken(value, false)
+	case kickstartRepositoryID:
+		return value != "." && value != ".." && !strings.Contains(value, "/") && oneKickstartToken(value, false)
+	case kickstartLine:
+		return true
 	}
 	return oneKickstartToken(value, false)
 }
@@ -357,16 +389,6 @@ func servicesLine(input Installation) string {
 	return strings.Join(fields, " ")
 }
 
-// repositoryLine installs one configured repository into the installed system.
-// A disabled declaration configures nothing, because Anaconda has no form for
-// a repository it must not use.
-func repositoryLine(repository Repository) string {
-	if !repository.Enabled {
-		return ""
-	}
-	return strings.Join([]string{"repo", "--name=" + repository.ID, "--baseurl=" + repository.BaseURL, "--install"}, " ")
-}
-
 func packagesSection(input Installation) []string {
 	header := "%packages"
 	if input.ExcludeDocs {
@@ -380,9 +402,10 @@ func packagesSection(input Installation) []string {
 	return append(lines, "%end")
 }
 
-// postSection writes the install marker, the account's passwordless escalation,
-// the daemon policy and the guest agent's RPC filter, then removes every
-// retained copy of the Kickstart so the installed system keeps none.
+// postSection writes the install marker, the regional formats, the configured
+// repositories, the account's passwordless escalation, the daemon policy and
+// the guest agent's RPC filter, then removes every retained copy of the
+// Kickstart so the installed system keeps none.
 func postSection(input Installation) []string {
 	lines := []string{
 		"%post --erroronfail",
@@ -394,6 +417,10 @@ func postSection(input Installation) []string {
 		"chmod 0444 " + input.MarkerPath,
 	}
 	lines = append(lines, identityLines(input)...)
+	lines = append(lines, localeLines(input)...)
+	for _, repository := range input.Repositories {
+		lines = append(lines, repositoryFileLines(repository)...)
+	}
 	lines = append(lines, []string{
 		"install -d -m 0750 /etc/sudoers.d",
 		"printf '%s\\n' '" + input.User + " ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/60-bootwright",
@@ -406,6 +433,56 @@ func postSection(input Installation) []string {
 		"rm -f /root/anaconda-ks.cfg /root/original-ks.cfg /run/install/ks.cfg",
 		"%end",
 	)
+}
+
+// formatCategories are the locale categories the formats locale sets, the set
+// the regional-formats choice covers on an installed RHEL system.
+var formatCategories = []string{
+	"LC_TIME", "LC_NUMERIC", "LC_MONETARY", "LC_PAPER", "LC_MEASUREMENT",
+	"LC_ADDRESS", "LC_TELEPHONE", "LC_NAME", "LC_IDENTIFICATION",
+}
+
+// localeLines write the regional formats beside the language, because the lang
+// directive carries the language alone. Formats equal to the language set
+// nothing the language did not already set.
+func localeLines(input Installation) []string {
+	if input.Formats == "" || input.Formats == input.Language {
+		return nil
+	}
+	lines := []string{"cat > /etc/locale.conf <<'BOOTWRIGHT_LOCALE_EOF'", "LANG=" + input.Language}
+	for _, category := range formatCategories {
+		lines = append(lines, category+"="+input.Formats)
+	}
+	return append(lines, "BOOTWRIGHT_LOCALE_EOF", "chmod 0644 /etc/locale.conf")
+}
+
+// repositoryFileLines write one configured repository as the installed
+// system's own .repo file. A disabled repository is written disabled, so it is
+// configured but not used.
+func repositoryFileLines(repository Repository) []string {
+	path := "'/etc/yum.repos.d/bootwright-" + repository.ID + ".repo'"
+	lines := []string{
+		"cat > " + path + " <<'BOOTWRIGHT_REPOSITORY_EOF'",
+		"[" + repository.ID + "]",
+		"name=" + repository.Name,
+		"baseurl=" + repository.BaseURL,
+		"enabled=" + repoFlag(repository.Enabled),
+		"gpgcheck=" + repoFlag(repository.GPGCheck),
+	}
+	if repository.GPGKeyURL != "" {
+		lines = append(lines, "gpgkey="+repository.GPGKeyURL)
+	}
+	if repository.Proxy != "" {
+		lines = append(lines, "proxy="+repository.Proxy)
+	}
+	return append(lines, "BOOTWRIGHT_REPOSITORY_EOF", "chmod 0644 "+path)
+}
+
+func repoFlag(value bool) string {
+	if value {
+		return "1"
+	}
+	return "0"
 }
 
 // identityLines establish whatever the machine's own identity channel needs in

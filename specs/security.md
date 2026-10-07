@@ -336,6 +336,14 @@ it. Only operation-required facts and the least authorized local and
 remote privilege are available. No environment or adapter default grants
 privilege escalation.
 
+Every `ssh` client an adapter runs, and the runner's SSH arm, reads only a
+configuration generated for that run, which includes the host crypto-policy
+backend and nothing else. It takes no system or personal configuration, no
+known hosts but the one entry the request binds, no proxy, control socket,
+agent, forwarding or ambient identity, and carries `ServerAliveInterval=15` and
+`ServerAliveCountMax=3`, so a peer that stops answering ends the connection
+rather than the run's deadline.
+
 The application request fixes exact targets and authorization before adapter
 execution. The adapter cannot widen targets, privileges, retries, or effects.
 Live remote identity, host-key or certificate identity, ownership, power state,

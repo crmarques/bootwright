@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix="bootwright-prerequisites-") as area:
     bundle.mkdir(mode=0o700)
     identity = os.stat(bundle)
     request = {
-        "version": "controller-prerequisites-v4",
+        "version": "controller-prerequisites-v5",
         "operation": "setup",
         "identity": "a" * 64,
         "platform": {
@@ -67,6 +67,7 @@ with tempfile.TemporaryDirectory(prefix="bootwright-prerequisites-") as area:
         "native": None,
         "tools": [],
         "acquisition": [],
+        "nativeStaging": 0,
         "egress": {"httpProxy": "", "httpsProxy": "", "noProxy": []},
     }
     inventory = {

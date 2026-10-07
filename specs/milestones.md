@@ -17,7 +17,7 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X43 |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X24 |
 | [M2](milestones/m2.md) | Native input files for `openshift-install` and the cephadm and ceph CLIs | none | not started | define B51 |
 | [M3](milestones/m3.md) | Provision and destroy OpenShift clusters on bare metal | M1 | in progress | B61's operator gate |
 | [M4](milestones/m4.md) | Provision and destroy IBM Ceph clusters on bare metal | M1, M2, M3 | in progress | X45 after X24, on the owner's request (D60) |
@@ -25,19 +25,19 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Provision and destroy OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M7](milestones/m7.md) | Add-ons ACM, Argo CD and GitLab | M5 | not started | nothing until M5 |
 
-No slice is active; X42 is delivered, and X43 is next under D56.
+No slice is active; X43 is delivered, and X24 is next under D56.
 
-- **Next for agents:** open and deliver X43; X24, M4's X45 (D60),
-  X46 and X44 follow in that
-  order.
-- **Next for operator:** for [lab-sno](../examples/lab-sno/README.md) and
-  [B61](milestones/m3.md#b61), on a clean build that contains X21, first destroy
-  every context applied before X21 with the build that applied it (X21 and X29
-  to X32 move request and record versions, the keyring format and the
-  automation digest), then run `setup`, then run lab-sno and record it as the
-  [operator guide](../docs/operator-guide.md) describes. Before a build that
-  contains X43 touches a host, destroy every live context with the build that
-  applied it. After X44, run M1's closing lab-rhel run (D59);
+- **Next for agents:** open and deliver X24; M4's X45 (D60), X46 and X44
+  follow in that order.
+- **Next for operator:** before a build that contains X43 touches a host,
+  destroy every live context with the build that applied it, then run `setup`
+  once: X21, X29 to X32 and X43 moved request and record versions, the keyring
+  format, the automation digest and, for X43, the Kickstart version and the
+  agent media request's content. X24 moves them again, so no host run falls
+  between. Then, on a clean build, run
+  [lab-sno](../examples/lab-sno/README.md) for [B61](milestones/m3.md#b61) and
+  record it as the [operator guide](../docs/operator-guide.md) describes. After
+  X44, run M1's closing lab-rhel run (D59);
   [B73](milestones/m4.md#b73)'s rehearsal follows X45.
 
 ## Scope rules

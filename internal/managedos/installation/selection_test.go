@@ -119,21 +119,30 @@ func TestOnlyStoreMediaIsSupported(t *testing.T) {
 	expectRefusal(t, err, "lifecycle.state")
 }
 
-// A declared checksum is canonicalized and frozen, so an attempt proves the
-// entry it uses is the entry the graph named.
-func TestADeclaredChecksumIsFrozenInCanonicalForm(t *testing.T) {
+// A declared checksum is canonicalized and compared with the store's record,
+// never frozen in its place: the request freezes the record alone.
+func TestADeclaredChecksumIsComparedNotFrozen(t *testing.T) {
 	pinned := api.NewObject(api.MachineImage, "rhel-9-8-boot", api.Value{}, api.MapValue(
 		text("bootMedia", "local-media:rhel-9.8-x86_64-boot.iso"),
 		text("checksum", "SHA256:"+strings.Repeat("A", 64)),
 	))
 	request, _ := onlyRequest(t, labCatalog(pinned))
-	if request.BootMedia.SHA256 != strings.Repeat("a", 64) {
-		t.Fatalf("checksum = %q", request.BootMedia.SHA256)
+	if request.BootMedia.SHA256 != "" || request.BootMedia.declared != strings.Repeat("a", 64) {
+		t.Fatalf("boot media = %+v", request.BootMedia)
+	}
+	records := labRecords()
+	records[bootImageName] = MediaRecord{SHA256: strings.Repeat("a", 64), Size: 7, Observed: 7}
+	frozen, err := pinMedia(labCatalog(pinned), request, records)
+	if err != nil || frozen.BootMedia.SHA256 != strings.Repeat("a", 64) || frozen.BootMedia.Size != 7 {
+		t.Fatalf("frozen boot media = %+v (%v)", frozen.BootMedia, diagnostics.Of(err))
+	}
+	if _, err := pinMedia(labCatalog(pinned), request, labRecords()); err == nil {
+		t.Fatal("a record differing from the declared checksum was frozen")
 	}
 	malformed := api.NewObject(api.MachineImage, "rhel-9-8-boot", api.Value{}, api.MapValue(
 		text("bootMedia", "local-media:rhel-9.8-x86_64-boot.iso"), text("checksum", "abc"),
 	))
-	_, _, err := Requests(labCatalog(malformed), "controller", testContext)
+	_, _, err = Requests(labCatalog(malformed), "controller", testContext)
 	expectRefusal(t, err, "api.value")
 }
 
@@ -415,11 +424,14 @@ func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
 		catalog api.Catalog
 		code    string
 	}{
-		"no fleet key":  {labCatalog(noKey), "api.required"},
-		"no address":    {labCatalog(noAddress), "api.reference"},
-		"no interface":  {labCatalog(noInterface), "api.value"},
-		"no fqdn":       {labCatalog(noFQDN), "api.required"},
-		"absent server": {catalogOf(environment(), controller(), provider(), networkConfig(), bootImage(), installProfile(), guest()), "api.reference"},
+		"no fleet key": {labCatalog(noKey), "api.required"},
+		"no address":   {labCatalog(noAddress), "api.reference"},
+		"no interface": {labCatalog(noInterface), "api.value"},
+		"no fqdn":      {labCatalog(noFQDN), "api.required"},
+		// An https publication is verified against its server's certificate
+		// before any machine is given it, so a server declaring none refuses.
+		"no serving certificate": {labCatalog(artifactServer(field("tls", api.MapValue()))), "api.required"},
+		"absent server":          {catalogOf(environment(), controller(), provider(), networkConfig(), bootImage(), installProfile(), guest()), "api.reference"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, _, err := Requests(test.catalog, "controller", testContext)
@@ -484,7 +496,7 @@ func TestTheMarkerNamesTheRequestItProves(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v6"} {
+	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v7"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)
@@ -493,5 +505,75 @@ func TestAFrozenRequestOfAnyOtherVersionRefuses(t *testing.T) {
 		if len(reported) == 0 || !strings.Contains(reported[0].Message, version) {
 			t.Fatalf("the refusal did not name %q: %v", version, err)
 		}
+	}
+}
+
+// No password can be set while initialPassword is refused, so a profile that
+// enables password authentication would install a system that cannot honor
+// it; it refuses before registration through the Machine.
+func TestPasswordAuthenticationTrueRefuses(t *testing.T) {
+	profile := installProfile(field("customizations", installProfile().Spec().Get("customizations").With("ssh", api.MapValue(
+		field("passwordAuthentication", api.BoolValue(true)),
+	))))
+	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
+		Reason:      "the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused",
+		Remediation: "set spec.customizations.ssh.passwordAuthentication to false on MachineInstallProfile/rhel-9-8"}}
+	if refused := Refusals(labCatalog(profile)); !slices.Equal(refused, want) {
+		t.Fatalf("refusals = %+v, want %+v", refused, want)
+	}
+	if unsupported := Unsupported(labCatalog(profile)); !slices.Equal(unsupported, []string{"Machine/rhel-01"}) {
+		t.Fatalf("unsupported = %v", unsupported)
+	}
+	disabled := installProfile(field("customizations", installProfile().Spec().Get("customizations").With("ssh", api.MapValue(
+		field("passwordAuthentication", api.BoolValue(false)),
+	))))
+	if unsupported := Unsupported(labCatalog(disabled)); len(unsupported) != 0 {
+		t.Fatalf("passwordAuthentication false reported %v", unsupported)
+	}
+}
+
+// A .repo file carries a proxy URL and nothing else, so a Proxy that needs a
+// credential or a private trust anchor refuses while a repository would reach
+// it, both before registration and in the request builder.
+func TestAProxyWithCredentialsRefusesWhileRepositoriesUseIt(t *testing.T) {
+	remediation := "select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of Machine/rhel-01 or of MachineInstallProfile/rhel-9-8"
+	credentialed := "the installed system's repositories would reach Proxy/corporate through a credential or private trust anchor, which an installation cannot carry"
+	for name, test := range map[string]struct {
+		proxy  api.Object
+		reason string
+	}{
+		"auth": {externalProxy("corporate", text("httpsProxy", "http://proxy.example.test:3128"),
+			field("auth", api.MapValue(text("proxyAuthRef", "proxy-credentials")))), credentialed},
+		"trust bundle": {externalProxy("corporate", text("httpsProxy", "http://proxy.example.test:3128"),
+			text("trustBundleRef", "corporate-ca")), credentialed},
+		"no URL": {externalProxy("corporate"),
+			"the installed system's repositories would be reached through Proxy/corporate, which declares no proxy URL"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog := labCatalog(test.proxy, proxiedGuest(), repositoryProfile("https://mirror.example.test/a"))
+			want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01", Reason: test.reason, Remediation: remediation}}
+			if refused := Refusals(catalog); !slices.Equal(refused, want) {
+				t.Fatalf("refusals = %+v, want %+v", refused, want)
+			}
+			_, _, err := Requests(catalog, "controller", testContext)
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Message != test.reason || reported[0].Remediation != remediation {
+				t.Fatalf("the request builder refused %#v", reported)
+			}
+		})
+	}
+}
+
+// With no configured repository the installed system reaches nothing through
+// the proxy, so a credentialed one carries nothing and is accepted.
+func TestAProxyWithCredentialsIsAcceptedWithoutRepositories(t *testing.T) {
+	proxy := externalProxy("corporate", text("httpsProxy", "http://proxy.example.test:3128"), text("trustBundleRef", "corporate-ca"))
+	catalog := labCatalog(proxy, proxiedGuest())
+	if refused := Refusals(catalog); len(refused) != 0 {
+		t.Fatalf("refusals = %+v", refused)
+	}
+	request, _ := onlyRequest(t, catalog)
+	if strings.Contains(request.Kickstart, "proxy") {
+		t.Fatalf("the kickstart names a proxy:\n%s", request.Kickstart)
 	}
 }

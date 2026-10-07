@@ -23,6 +23,7 @@ import (
 type Capability struct {
 	runner     Runner
 	identities Identities
+	media      MediaRecords
 }
 
 func New(runner Runner) Capability { return Capability{runner: runner} }
@@ -34,10 +35,18 @@ func (c Capability) WithIdentities(identities Identities) Capability {
 	return c
 }
 
+// WithMedia returns a copy that freezes each image an installation uses at the
+// record the host media store publishes for it.
+func (c Capability) WithMedia(records MediaRecords) Capability {
+	c.media = records
+	return c
+}
+
 const variablePrefix = "bootwright_os_install"
 
-// Plan derives one block per Bootwright-installed Machine. It reads no host,
-// endpoint or Secret material and performs no effect.
+// Plan derives one block per Bootwright-installed Machine. It reads the host
+// media store's records, to freeze each image at its record, and no other host,
+// endpoint or Secret material, and performs no effect.
 func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	if err := ctx.Err(); err != nil {
 		return lifecycle.CapabilityPlan{}, err
@@ -45,9 +54,24 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if input.State == nil {
 		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
 	}
-	requests, requirements, err := Requests(input.State.Effective(), input.Controller, input.Context.Name)
+	catalog := input.State.Effective()
+	requests, requirements, err := Requests(catalog, input.Controller, input.Context.Name)
 	if err != nil {
 		return lifecycle.CapabilityPlan{}, err
+	}
+	if len(requests) != 0 {
+		if c.media == nil {
+			return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "this executable has no media store reader, so it cannot pin installation media", "")
+		}
+		records, err := c.media.MediaRecords(ctx)
+		if err != nil {
+			return lifecycle.CapabilityPlan{}, err
+		}
+		for index, request := range requests {
+			if requests[index], err = pinMedia(catalog, request, records); err != nil {
+				return lifecycle.CapabilityPlan{}, err
+			}
+		}
 	}
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
 	digest := ContentDigest()
@@ -363,6 +387,10 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if operation == "apply" {
 		// Only an apply proves its target before it boots it.
 		refusals = substrate.PreBootRefusals(request.Target.Substrate, execution.Context, request.Identity.Object, request.Target.Controller.Endpoint)
+		if refusals == nil {
+			refusals = map[string]error{}
+		}
+		maps.Copy(refusals, mediaRefusals(execution.Context, request))
 		key, err := authorizedKey(execution, request)
 		if err != nil {
 			return lifecycle.RunResult{}, err
@@ -405,12 +433,31 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		materials = append(materials,
 			lifecycle.MaterialFile{Name: "artifact-ca", Part: secrets.CertificatePart, Secret: request.TLSCertificateRef, Variable: "artifactCertificate"})
 	}
+	// An apply fetches the image and the tree through their listener before
+	// any machine is given them, verifying an https one against its serving
+	// certificate; only the public half is bound.
+	if operation == "apply" {
+		materials = append(materials, publicationCertificates(request)...)
+	}
 	// The deadline follows the budgets this request froze, not this build's.
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
 		Refusals: refusals, Deadline: request.Deadline(),
 	}))
+}
+
+func publicationCertificates(request Request) []lifecycle.MaterialFile {
+	var materials []lifecycle.MaterialFile
+	if request.Image.CertificateRef != "" {
+		materials = append(materials,
+			lifecycle.MaterialFile{Name: "image-ca", Part: secrets.CertificatePart, Secret: request.Image.CertificateRef, Variable: "imageCertificate"})
+	}
+	if request.Tree != nil && request.Tree.CertificateRef != "" {
+		materials = append(materials,
+			lifecycle.MaterialFile{Name: "tree-ca", Part: secrets.CertificatePart, Secret: request.Tree.CertificateRef, Variable: "treeCertificate"})
+	}
+	return materials
 }
 
 // pinValues carries the identity a physical target's own Machine block proved

@@ -104,7 +104,7 @@ func lineDiff(want, got string) string {
 // checked against, and the golden must decode as this build's request.
 func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 	request := Request{
-		Address: "198.51.100.41/24", BootMedia: Media{Name: "rhel-9.8-x86_64-boot.iso"}, Budgets: installationBudgets,
+		Address: "198.51.100.41/24", BootMedia: Media{Name: bootImageName, SHA256: bootDigest, Size: 1105199104}, Budgets: installationBudgets,
 		FleetKeyRef: "bootwright-machine-key", HostKeyPath: HostKeyPath, Hostname: "metal-01.lab.example.test",
 		Identity:   Identity{Block: BlockID("metal-01"), Context: testContext, Object: "metal-01", Profile: "rhel-9-8"},
 		Image:      Publication{Path: "/srv/public/os/metal-01/install.iso", URL: "https://artifacts.lab.example.test/public/os/metal-01/install.iso"},
@@ -151,9 +151,11 @@ func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 // The frozen request is what a plan's digest covers and what the adapter
 // reads, Kickstart included, so every byte of it is contract. Each request is
 // compared with its golden and still decodes as the version this build writes.
-// The checksummed case declares its boot media digest in the prefixed,
-// uppercase form admission accepts, so its golden pins the canonical form the
-// request freezes; a hosted tree declares no digest. The site-services case
+// Each is frozen at the fixture's store records, as a plan freezes it, so its
+// golden carries every image's recorded size and SHA-256. The checksummed case
+// declares its boot media digest in the prefixed, uppercase form admission
+// accepts, which matches the record and so freezes exactly what the plain case
+// freezes; a hosted tree declares no digest. The site-services case
 // resolves names and time through external services at their declared
 // addresses. The SSH-placed case puts the artifact server on a host declaring
 // every field a placement freezes. That shape is refused before registration,
@@ -178,7 +180,7 @@ func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 		"lab-rhel-ssh-placed": sshPlaced, "lab-rhel-site-services": siteServicesCatalog(),
 	} {
 		t.Run(name, func(t *testing.T) {
-			request, _ := onlyRequest(t, catalog)
+			request := pinnedRequest(t, catalog)
 			canonical, err := request.Canonical()
 			if err != nil {
 				t.Fatalf("freezing: %v", diagnostics.Of(err))
@@ -198,7 +200,7 @@ func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 // request, whose profile hosts a package tree, and the reading that run's
 // resolution takes accepts exactly those bytes.
 func TestEvidenceMatchesItsGoldens(t *testing.T) {
-	request, _ := onlyRequest(t, labCatalog())
+	request := pinnedRequest(t, labCatalog())
 	digest := strings.Repeat("1", 64)
 	marker, err := MarkerFor(request, digest)
 	if err != nil {
@@ -210,11 +212,12 @@ func TestEvidenceMatchesItsGoldens(t *testing.T) {
 	}{
 		// presence() after an apply: the guest answers with the frozen marker
 		// on its own key, runs with its media ejected, and the image and the
-		// whole tree are published.
+		// whole tree, extracted from the frozen DVD, are published.
 		"completed": {
 			Evidence{
 				Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: string(marker),
 				Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: true, TreeContent: true,
+				TreeIdentity: dvdDigest,
 			},
 			func(data []byte) error { return ValidatePresence(data, request, digest, string(marker)) },
 		},

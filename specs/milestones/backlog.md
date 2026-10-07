@@ -122,6 +122,14 @@ Alias cell.
 | [B417](#b417) | new, 2026-10-06 (X42) | enabling | Each test's owner | Tests X42 left narrower than they read | Found in X42; parked under D48 (D116) |
 | [B418](#b418) | new, 2026-10-06 (X42) | enabling | Each spec's owner | Wording X42 left | Found in X42; parked under D48 (D116) |
 | [B419](#b419) | new, 2026-10-06 (X42) | enabling | Desired state, with Machine and Infrastructure services | Validate diagnostics X42 left | Found in X42; parked under D48 (D116) |
+| [B427](#b427) | new, 2026-10-07 (X43) | enabling | Managed OS | Configured repositories can serve the installation's own package set | Found in X43; parked under D48 (D116); D97 made them installed-system configuration, so install-time use needs its own decision |
+| [B428](#b428) | new, 2026-10-07 (X43) | enabling | Managed OS | A replay that publishes nothing skips the tree image's digest | Found in X43; parked under D48 (D116); the cost is unmeasured on a host |
+| [B429](#b429) | new, 2026-10-07 (X43) | enabling | Controller setup | The qualified foundation reaches every guard typed, and Go-run helper failures keep their raw line | Found in X43; parked under D48 (D116) |
+| [B430](#b430) | new, 2026-10-07 (X43) | defect | Managed OS | Media trust by `import-certificate` serves a guest-agent Machine whose server declares a certificate | Found in X43; parked under D48 (D116); media trust by `import-certificate` is in no M1 journey (lab-rhel declares none); it fails safe |
+| [B431](#b431) | new, 2026-10-07 (X43) | enabling | Each test's owner | Tests and dead code X43 left | Found in X43; parked under D48 (D116) |
+| [B432](#b432) | new, 2026-10-07 (X43) | enabling | Each spec's owner | Wording X43 left | Found in X43; parked under D48 (D116) |
+| [B433](#b433) | new, 2026-10-07 (X43) | enabling | State reconciliation, with Controller setup and Managed OS | Host observations of what X43 proved only in-tree | Found in X43; parked under D48 (D116); each needs a host run, which M1's closing run (D59) and the native opt-in targets provide |
+| [B434](#b434) | new, 2026-10-07 (X43) | enabling | State reconciliation and Container cluster | One rule for a request version and the content derived within one shape | Found in X43; parked under D48 (D116); it needs a decision and moves a digest, so a digest window |
 
 ### B96
 
@@ -628,6 +636,107 @@ Wording X42 left: the contexts spec's bounds table lacks the 512-byte media orig
 ### B419
 
 Validate diagnostics X42 left: a derived fqdn over 253 bytes, from a valid Machine name under a long Environment domain, refuses at an address the operator never wrote as an unassigned DNS contact, without naming the derivation; an unresolved `proxyRef`, `serverRef` or `registryRef` of a DNS, NTP or registry selection, and an absent artifact `serverRef`, each get two diagnostics on one field; other kinds' rules still add their own diagnostics when a Machine name is invalid; and a Machine's `network.attachmentRef` and `interfaceAttachments[].attachmentRef` take any non-empty value, although every attachment name is now a DNS label (found in X42). **Exit evidence:** each refusal once, naming what the operator wrote, in the validate refusals golden.
+
+### B427
+
+D97 renders configured repositories as installed-system configuration written
+by the `%post`, so the Kickstart's `%packages` can no longer install from them
+during the installation as the earlier install-time repository directive let it
+(found in X43). **Exit evidence:** the owner's decision on install-time use of
+a configured repository with GPG verification and, under it, the Kickstart
+golden and the refusal or rendering it implies.
+
+### B428
+
+Every apply, an installed Machine's replay included, hashes the boot image and
+the full DVD before it starts, although a replay that publishes nothing needs
+neither the tree image's digest nor its extraction (found in X43). **Exit
+evidence:** the replay either skipping the tree image's digest, with a test,
+or the managed-OS spec recording the cost, once a host run measures it.
+
+### B429
+
+The setup guards still reach the qualified foundation through a context value
+and an interface assertion: the native resolver's unsupported-platform build
+has no `FoundationBuilds` stub, so the composition root assigns the port
+through an assertion to keep the darwin build vetted, and a launch over a
+receipt-recorded foundation names the package "as setup qualified it" and
+remedies it with `dnf reinstall` without the exact build, because the guard
+signature carries no builds. Native helper failures during plan-time
+resolution, presence or inventory run from Go keep no run output, so only the
+classified reason reaches the operator and the raw first line is discarded
+(found in X43). **Exit evidence:** the stub and a typed port without the
+assertion, a refusal that names the exact qualified build, and the raw line
+retained in a run output, each with a test.
+
+### B430
+
+The managed-OS installation refuses `import-certificate` media trust unless a
+delivered-key channel sets the serving certificate, so a guest-agent Machine
+whose server declares a certificate refuses although the image's certificate
+reference could anchor it (found in X43, older than it). **Exit evidence:**
+the trust accepted over the certificate the server declares, or the refusal
+naming why not, with a test.
+
+### B431
+
+Tests and dead code X43 left: the mutation that removes the media reader from a
+plan test fails through a nil-interface panic instead of an assertion; the
+media store contract holds no clause for a failed entry, so the in-memory
+doubles are not held to the contextfs behaviour; the media shelf double keeps an
+unused `Digest` method beside the held-image method; and the Kickstart renderer
+treats a Proxy reference that does not resolve, or a managed Proxy, as no proxy
+because admission refuses both first, so an admission that ever lets one
+through would fetch repositories directly instead of refusing; and the controller
+prerequisites argument spec types `nativeStaging` as raw because the role-spec
+test does not know `int`, so the integer check lives only in the Python frozen
+request and the role's tasks (found in X43). **Exit evidence:** each covered or
+removed by a test that fails when its guard is removed, and `nativeStaging`
+typed `int` with the role-spec test taught the type.
+
+### B432
+
+Wording X43 left: the libvirt evidence's refusal that a realized domain does
+not carry this context's ownership, and the substrates spec's matching
+sentence, do not name the case where the ownership holds but the UUID is not
+the frozen one; the correction wording the controller refusals gained for the
+status, redirect, integrity, storage, missing-candidate, signature, database,
+transaction, postcondition, foundation and native-timeout classes was chosen by
+the lane and is unreviewed under the CLI contract; and the
+infrastructure-services spec's SSH-host paragraph says no SSH configuration is
+consulted, while every ssh now reads the generated configuration the security
+spec describes (found in X43). **Exit evidence:** each corrected or confirmed, with the golden or test that pins it.
+
+### B433
+
+X43 proved these only in-tree: the emulated BMC unit stopping cleanly on
+SIGINT; the generated `-F` configuration with the crypto-policy include on
+RHEL 9's OpenSSH and ansible-core's handling of an omitted `ca_path`; a 206
+answer from the managed listener to the one-byte fetch; root writing the tree
+identity into an extracted tree whose directories keep the ISO's read-only
+modes; the cost of hashing a full DVD on every apply; the errata qualification
+and the RPM database read on a RHEL 9.8 or Fedora 43 host, including preflight
+without access to the staging parent; a classified warning from the action
+plugin reaching the retained setup run output; and the native opt-in
+integration targets that drive the host package manager (found in X43).
+**Exit evidence:** each observed on a host, recorded in the
+[acceptance ledger](../../docs/acceptance.md) with the build commit, or
+withdrawn by the owner.
+
+### B434
+
+The OpenShift agent media request, `cluster-media-agent-v5`, encodes different
+AgentConfig interfaces and `networkConfig` MAC addresses since X43 for a node
+Machine whose `spec.network.overrides` add an ethernet interface or whose
+template marks one `absent` or `ignore`. The request shape and decoder are
+unchanged, so the version did not move, and the content digest re-plans such a
+block as changed. The review's lenses split on it: the version selects the
+decoder, so nothing is misread, and every such node is on a libvirt provider
+whose machine request X43 moved anyway (found in X43). **Exit evidence:** a
+decision in the state-reconciliation spec's request-versions rule on whether a
+version must also move for derived-content changes within one shape and, if it
+must, `cluster-media-agent-v6` with its golden in a digest-window slice, and a
+test that pins an override-added interface in the AgentConfig.
 
 ## Retired
 

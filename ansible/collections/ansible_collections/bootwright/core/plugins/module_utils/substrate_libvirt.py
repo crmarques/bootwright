@@ -139,6 +139,36 @@ def listed(runner, uri, command, name):
     return name in [line.strip() for line in output.splitlines()]
 
 
+def info_field(text, key):
+    """The stripped value one `virsh net-info` or `pool-info` line gives for `key`, or "".
+
+    Each line is a label, a colon and the value padded with spaces
+    (cmdNetworkInfo in tools/virsh-network.c and cmdPoolInfo in
+    tools/virsh-pool.c, https://gitlab.com/libvirt/libvirt), so a line is split
+    on its first colon only.
+    """
+    for line in str(text).splitlines():
+        label, separator, value = line.partition(":")
+        if separator and label.strip() == key:
+            return value.strip()
+    return ""
+
+
+def names_owner(root, context, key, value):
+    """Whether a definition's ownership metadata names exactly this context and `key` as `value`.
+
+    A same-named object whose metadata names another context, or another
+    attachment of this one, belongs to that owner and is foreign here.
+    """
+    owner = root.find("./metadata/{%s}owner" % OWNERSHIP)
+    if owner is None or not context:
+        return False
+    return (
+        (owner.findtext("{%s}context" % OWNERSHIP) or "").strip() == context
+        and (owner.findtext("{%s}%s" % (OWNERSHIP, key)) or "").strip() == value
+    )
+
+
 def same_address(element, host, prefix):
     """Whether one `ip` element holds exactly this host address and prefix."""
     try:
@@ -221,17 +251,19 @@ def network_state(runner, uri, name, frozen=None, context=""):
     true only when the driver returned the definition, or completed a listing
     that does not name the network, because only that proves it absent.
     """
-    unanswered = {"answered": False, "definition": False, "drifted": False, "state": "", "owned": False, "bridge": "", "uuid": ""}
+    unanswered = {
+        "answered": False, "autostart": False, "definition": False, "drifted": False, "state": "",
+        "owned": False, "bridge": "", "uuid": "",
+    }
     code, output = virsh(runner, uri, "net-dumpxml", name)
     if code != 0:
         return dict(unanswered, answered=listed(runner, uri, "net-list", name) is False)
-    owned, bridge, uuid = False, "", ""
+    bridge, uuid = "", ""
     try:
         root = ElementTree.fromstring(output)
     except ElementTree.ParseError:
         return unanswered
-    for metadata in root.findall("./metadata/"):
-        owned = owned or metadata.tag.startswith("{" + OWNERSHIP + "}")
+    owned = names_owner(root, context, "attachment", name)
     element = root.find("./bridge")
     if element is not None:
         bridge = element.get("name") or ""
@@ -240,12 +272,13 @@ def network_state(runner, uri, name, frozen=None, context=""):
         uuid = (element.text or "").strip()
     code, active = virsh(runner, uri, "net-info", name)
     state = "active" if code == 0 and "Active:         yes" in active else "inactive"
+    autostart = code == 0 and info_field(active, "Autostart") == "yes"
     runs = frozen is not None and carries_definition(root, frozen, context)
     definition = runs and keeps_definition(runner, uri, name, frozen, context)
     drifted = frozen is not None and owned and state == "active" and not runs
     return {
-        "answered": True, "definition": definition, "drifted": drifted, "state": state,
-        "owned": owned, "bridge": bridge, "uuid": uuid,
+        "answered": True, "autostart": autostart, "definition": definition, "drifted": drifted,
+        "state": state, "owned": owned, "bridge": bridge, "uuid": uuid,
     }
 
 
@@ -303,19 +336,45 @@ def network_guests(runner, uri, network, bridge, context):
 
 
 def bridge_present(name):
-    return os.path.isdir("/sys/class/net/" + str(name))
+    """Whether the host carries a bridge device of that name.
+
+    The kernel gives every bridge device a `bridge` directory of attributes
+    beneath its sysfs entry (Documentation/ABI/stable/sysfs-class-net and
+    net/bridge/br_sysfs_br.c, https://git.kernel.org/pub/scm/linux/kernel/git/
+    torvalds/linux.git), which no other kind of interface carries.
+    """
+    return os.path.isdir("/sys/class/net/" + str(name) + "/bridge")
 
 
-def pool_state(runner, uri, name):
-    """Report the pool's state and whether the storage driver answered for it.
+def pool_target(runner, uri, name):
+    """The target path one pool's definition names, or None when it cannot be read."""
+    code, output = virsh(runner, uri, "pool-dumpxml", name)
+    if code != 0:
+        return None
+    try:
+        return (ElementTree.fromstring(output).findtext("./target/path") or "").strip()
+    except ElementTree.ParseError:
+        return None
+
+
+def pool_state(runner, uri, name, path):
+    """Report the pool's state, autostart and ownership, and whether the storage driver answered for it.
 
     The storage driver is a daemon of its own too, so a pool it did not answer
-    for reports no state without being absent, exactly as a network does.
+    for reports no state without being absent, exactly as a network does. A
+    pool carries no metadata of its own, so it is this provider's exactly when
+    its definition targets the frozen directory `path`.
     """
     code, output = virsh(runner, uri, "pool-info", name)
     if code != 0:
-        return {"answered": listed(runner, uri, "pool-list", name) is False, "state": ""}
-    return {"answered": True, "state": "active" if "State:          running" in output else "inactive"}
+        answered = listed(runner, uri, "pool-list", name) is False
+        return {"answered": answered, "state": "", "autostart": False, "owned": False}
+    return {
+        "answered": True,
+        "state": "active" if "State:          running" in output else "inactive",
+        "autostart": info_field(output, "Autostart") == "yes",
+        "owned": pool_target(runner, uri, name) == str(path),
+    }
 
 
 def domain_listed(runner, uri, name):
@@ -323,12 +382,14 @@ def domain_listed(runner, uri, name):
     return listed(runner, uri, "list", name)
 
 
-def domain_metadata(runner, uri, name):
+def domain_metadata(runner, uri, name, context="", machine="", uuid=""):
     """Report one domain's ownership and identity without changing it.
 
     `answered` separates a hypervisor that says it defines no such domain from
     one that did not answer, because only the first proves the domain absent.
-    A domain that is not present and not answered for may be running.
+    A domain that is not present and not answered for may be running. `owned`
+    holds only when the ownership names exactly this context and Machine and
+    the domain's UUID is the frozen one; any other same-named domain is foreign.
     """
     code, output, err = virsh_reason(runner, uri, "dumpxml", name)
     if code != 0:
@@ -338,15 +399,14 @@ def domain_metadata(runner, uri, name):
         root = ElementTree.fromstring(output)
     except ElementTree.ParseError:
         return {"answered": True, "present": True, "owned": False, "uuid": ""}
-    owned = False
-    for metadata in root.findall("./metadata/"):
-        owned = owned or metadata.tag.startswith("{" + OWNERSHIP + "}")
     element = root.find("./uuid")
+    observed = (element.text or "").strip() if element is not None else ""
+    owned = bool(machine and uuid) and observed == uuid and names_owner(root, context, "machine", machine)
     return {
         "answered": True,
         "present": True,
         "owned": owned,
-        "uuid": (element.text or "").strip() if element is not None else "",
+        "uuid": observed,
     }
 
 
@@ -494,6 +554,10 @@ def observe_host(runner, request):
     managed network that runs another definition than its frozen entry, which
     only a restart converges, with the `guests` a restart would cut off and
     whether the hypervisor answered for them all; evidence never carries it.
+    Each managed network answered for reports `autostart`, whether it starts
+    with the host, and `owned` only when its metadata names this context and
+    that network. `poolAutostart` is whether the pool starts with the host and
+    `poolOwned` whether it targets the frozen directory.
     """
     networks, drifted = [], []
     answers = uri_answers(runner, request["uri"])
@@ -501,15 +565,18 @@ def observe_host(runner, request):
     for network in request.get("networks") or []:
         entry = {"name": network["name"], "managed": bool(network["managed"]), "bridge": bridge_present(network["bridge"])}
         entry["answered"], entry["definition"], entry["state"], entry["owned"], entry["uuid"] = False, False, "", False, ""
+        entry["autostart"] = False
         if entry["managed"] and answers:
             state = network_state(runner, request["uri"], network["name"], network, context)
             entry["answered"], entry["definition"], entry["state"] = state["answered"], state["definition"], state["state"]
-            entry["owned"], entry["uuid"] = state["owned"], state["uuid"]
+            entry["owned"], entry["uuid"], entry["autostart"] = state["owned"], state["uuid"], state["autostart"]
             if state["drifted"]:
                 guests = network_guests(runner, request["uri"], network["name"], state["bridge"], context)
                 drifted.append({"name": network["name"], "guests": guests or [], "guestsAnswered": guests is not None})
         networks.append(entry)
-    pool = pool_state(runner, request["uri"], request["poolName"]) if answers else {"answered": False, "state": ""}
+    pool = {"answered": False, "state": "", "autostart": False, "owned": False}
+    if answers:
+        pool = pool_state(runner, request["uri"], request["poolName"], request["poolPath"])
     services = []
     for service in request.get("services") or []:
         services.append({
@@ -524,6 +591,8 @@ def observe_host(runner, request):
         "networks": networks,
         "pool": pool["state"],
         "poolAnswered": pool["answered"],
+        "poolAutostart": pool["autostart"],
+        "poolOwned": pool["owned"],
         "services": services,
         "uri": answers,
     }
@@ -539,7 +608,9 @@ def observe_machine(runner, request, read=None):
     socket; `read` reads the kernel's socket tables, as `listening` does.
     """
     controller = request["controller"]
-    metadata = domain_metadata(runner, request["uri"], request["domain"])
+    identity = request["identity"]
+    metadata = domain_metadata(
+        runner, request["uri"], request["domain"], identity["context"], identity["object"], request["uuid"])
     disks = []
     for disk in request.get("disks") or []:
         disks.append({

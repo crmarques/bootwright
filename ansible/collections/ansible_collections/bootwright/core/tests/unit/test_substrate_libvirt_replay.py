@@ -99,13 +99,13 @@ EXTERNAL = {"name": "bootwright-lab-uplink", "bridge": "br0", "managed": False}
 
 def network(**observed):
     """What libvirt_host_inspect reports for the managed network once its driver runs."""
-    entry = {"answered": True, "bridge": True, "definition": True, "managed": True, "name": MANAGED["name"],
+    entry = {"answered": True, "autostart": True, "bridge": True, "definition": True, "managed": True, "name": MANAGED["name"],
              "owned": True, "state": "active", "uuid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00"}
     entry.update(observed)
     return entry
 
 
-UPLINK = {"answered": False, "bridge": True, "definition": False, "managed": False, "name": EXTERNAL["name"],
+UPLINK = {"answered": False, "autostart": False, "bridge": True, "definition": False, "managed": False, "name": EXTERNAL["name"],
           "owned": False, "state": "", "uuid": ""}
 
 
@@ -114,15 +114,18 @@ def drifted(*guests, answered=True):
     return {"name": MANAGED["name"], "guests": list(guests), "guestsAnswered": answered}
 
 
-def host_scope(observed, restarts=()):
+def host_scope(observed, restarts=(), pool_autostart=True):
     """The role's defaults, the frozen request and the tasks a replay leaves unchanged."""
     variables = defaults("substrate_libvirt_host")
     variables.update(
         bootwright_substrate_host_request={"identity": {"context": "lab"}, "networks": [MANAGED, EXTERNAL],
+                                           "poolName": "bootwright-lab-host-vmedia",
+                                           "poolPath": "/var/lib/libvirt/images/bootwright/lab/host/vmedia",
                                            "uri": "qemu:///system"},
         bootwright_substrate_host_digest=DIGEST,
         substrate_libvirt_host_running={"observation": {"drifted": list(restarts), "networks": [observed, UPLINK],
-                                                        "pool": "active"}},
+                                                        "pool": "active", "poolAutostart": pool_autostart,
+                                                        "poolOwned": True}},
         substrate_libvirt_host_packages={"changed": False, "skipped": True},
         substrate_libvirt_host_daemon={"changed": False, "skipped": True},
         substrate_libvirt_host_pool_directory={"changed": False},
@@ -144,7 +147,22 @@ def refusals(tasks, variables):
     return refused
 
 
-def host_attempt(observed, restarts=()):
+def autostart(tasks, variables):
+    """The networks the network autostart task sets and whether the pool's runs,
+    registered as each task reports them: every item it runs is a change."""
+    networks = only(tasks, lambda task: "net-autostart" in argv_of(task), "autostarts a network")
+    pool = only(tasks, lambda task: "pool-autostart" in argv_of(task), "autostarts the pool")
+    templar = Templar(loader=LOADER, variables=variables)
+    names = [entry["name"] for entry in templar.template(networks["loop"])]
+    runs = all(templar.evaluate_conditional(condition) for condition in conditions(pool))
+    changed = templar.evaluate_conditional(trust_as_template(str(networks["changed_when"])))
+    variables["substrate_libvirt_host_autostart"] = {"changed": bool(names) and changed, "results": names}
+    variables["substrate_libvirt_host_pool_autostart"] = (
+        {"changed": templar.evaluate_conditional(trust_as_template(str(pool["changed_when"])))} if runs else {"changed": False, "skipped": True})
+    return names, runs
+
+
+def host_attempt(observed, restarts=(), pool_autostart=True):
     """What an apply does over this observation: the refusals it makes, else the
     networks it defines, stops and starts, and the outcome it publishes."""
     tasks = load("substrate_libvirt_host", "apply.yml")
@@ -156,10 +174,11 @@ def host_attempt(observed, restarts=()):
         lambda task: (task.get("bootwright.core.substrate_host_protocol") or {}).get("phase") == "completed",
         "publishes the completion",
     )
-    variables = host_scope(observed, restarts)
+    variables = host_scope(observed, restarts, pool_autostart)
     refused = refusals(tasks, variables)
     if refused:
         return refused
+    autostart(tasks, variables)
     templar = Templar(loader=LOADER, variables=variables)
     defined, stopped, started = ([entry["name"] for entry in templar.template(task["loop"])] for task in (define, stop, start))
     assert started == [MANAGED["name"]]
@@ -194,13 +213,28 @@ def test_a_drifted_network_a_machine_still_runs_on_refuses_naming_them():
     assert len(refused) == 1
     assert refused[0].startswith("network %s runs a definition other than the one the request froze" % MANAGED["name"])
     assert "disconnect Machine rhel-01, domain workstation, which still run on it" in refused[0]
-    assert "bootwright machine stop --name <machine>" in refused[0]
+    assert "bootwright machine stop --context lab --name <machine>" in refused[0]
 
 
 def test_a_drifted_network_its_hypervisor_did_not_answer_for_refuses():
     refused = host_attempt(network(definition=False), [drifted(answered=False)])
     assert len(refused) == 1
     assert "the hypervisor at qemu:///system did not answer which domains run on it" in refused[0]
+
+
+# A network or pool whose autostart was switched off is gone after the host
+# restarts, so a replay that finds it off sets it again and reports the change,
+# and one that finds it on sets nothing and reports none.
+@pytest.mark.parametrize("network_on, pool_on, networks, pool, outcome", [
+    (True, True, [], False, "unchanged"),
+    (False, True, [MANAGED["name"]], False, "changed"),
+    (True, False, [], True, "changed"),
+], ids=["both on", "network off", "pool off"])
+def test_a_replay_re_enables_an_autostart_and_reports_the_change(network_on, pool_on, networks, pool, outcome):
+    tasks = load("substrate_libvirt_host", "apply.yml")
+    variables = host_scope(network(autostart=network_on), pool_autostart=pool_on)
+    assert autostart(tasks, variables) == (networks, pool)
+    assert host_attempt(network(autostart=network_on), pool_autostart=pool_on) == ([], [], outcome)
 
 
 # The machine's controller credential.

@@ -2,13 +2,14 @@
 - name: Validate the frozen controller request
   ansible.builtin.assert:
     that:
-      - bootwright_controller_request.version == 'controller-prerequisites-v4'
+      - bootwright_controller_request.version == 'controller-prerequisites-v5'
       - bootwright_controller_request.operation in ['setup', 'recover']
       - bootwright_controller_request.platform.os in ['rhel', 'fedora']
       - bootwright_controller_request.platform.architecture == 'amd64'
       - bootwright_controller_request.packages | length <= 512
       - bootwright_controller_request.tools | length <= 128
-      - bootwright_controller_request.acquisition | length == bootwright_controller_request.tools | length
+      - bootwright_controller_request.acquisition | length == bootwright_controller_request.packages | length + bootwright_controller_request.tools | length
+      - bootwright_controller_request.nativeStaging is integer
       - bootwright_controller_request.bundle.path is string
       - bootwright_controller_request.bundle.device | int > 0
       - bootwright_controller_request.bundle.inode | int > 0

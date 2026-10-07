@@ -24,7 +24,7 @@ const rpmQueryFormat = "%{NAME}\t%{EPOCH}\t%{VERSION}\t%{RELEASE}\t%{ARCH}\t%{RS
 
 // vendorKeyID is the key ID rpm prints for a signature of the RHEL 9 profile's
 // vendor key: the low 64 bits of that key's fingerprint, as rpm's pgpsig
-// format prints a signer.
+// format prints a signer. vendorKeyFor gives it for any qualified platform.
 var vendorKeyID = rhel9Signer[len(rhel9Signer)-16:]
 
 // operatorQuery is what one rpm query printed and how it exited.
@@ -97,7 +97,13 @@ func operatorNames(names []string) bool {
 // native helper's environment and, as root, the unprivileged identity the
 // snapshot was granted to.
 func queryRPM(ctx context.Context, snapshot, name string) (operatorQuery, error) {
-	command := exec.CommandContext(ctx, "/usr/bin/rpm", "--dbpath", filepath.Join(snapshot, "var", "lib", "rpm"), "-q", "--queryformat", rpmQueryFormat, "--", name)
+	return queryRPMFormat(ctx, snapshot, name, rpmQueryFormat, 64<<10)
+}
+
+// queryRPMFormat asks the same rpm about one package with a fixed query format,
+// keeping at most limit bytes of its standard output.
+func queryRPMFormat(ctx context.Context, snapshot, name, format string, limit int) (operatorQuery, error) {
+	command := exec.CommandContext(ctx, "/usr/bin/rpm", "--dbpath", filepath.Join(snapshot, "var", "lib", "rpm"), "-q", "--queryformat", format, "--", name)
 	command.Dir = "/"
 	command.Env = helperEnvironment(filepath.Join(filepath.Dir(snapshot), "home"))
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -111,7 +117,7 @@ func queryRPM(ctx context.Context, snapshot, name string) (operatorQuery, error)
 		}
 		return syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
 	}
-	output := &boundedBuffer{limit: 64 << 10}
+	output := &boundedBuffer{limit: limit}
 	diagnostic := &boundedBuffer{limit: 64 << 10}
 	command.Stdout, command.Stderr = output, diagnostic
 	err := command.Run()

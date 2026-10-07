@@ -3,8 +3,11 @@
 # state, and no value selects an executable, a role or a task file.
 # The area the installer image is built in. An attempt killed part way leaves
 # it behind, so an apply clears it before its first write and a removal takes
-# it back; the inspection reports it for both.
-managedos_install_anaconda_work: /var/tmp/bootwright-install
+# it back; the inspection reports it for both. It lives beneath a parent only
+# root may enter, which an apply and an observation create and prove before
+# the area itself, and which a removal leaves.
+managedos_install_anaconda_work_parent: /var/lib/bootwright-install
+managedos_install_anaconda_work: '{{ managedos_install_anaconda_work_parent }}/work'
 managedos_install_anaconda_media: /var/lib/bootwright/media
 # The executables this block needs, proved by path. The controller stage
 # installs the packages that provide them.
@@ -23,13 +26,33 @@ managedos_install_anaconda_image_dir: '{{ bootwright_os_install_request.image.pa
 managedos_install_anaconda_staged_tree: >-
   {{ (bootwright_os_install_request.tree.path ~ '.staging')
      if bootwright_os_install_request.tree is defined else '' }}
-# Every store entry this installation reads, so each is proved present before
-# the first attempt to use one.
+# Every store entry this installation reads, with the size and SHA-256 the
+# operation froze, so each attempt proves both before the entry's first use:
+# the boot image, then the tree.
 managedos_install_anaconda_required_media: >-
-  {{ [managedos_install_anaconda_boot_media] + ([managedos_install_anaconda_tree_media]
-     if bootwright_os_install_request.treeMedia is defined else []) }}
+  {{ [{'path': managedos_install_anaconda_boot_media,
+       'size': bootwright_os_install_request.bootMedia.size,
+       'sha256': bootwright_os_install_request.bootMedia.sha256}]
+     + ([{'path': managedos_install_anaconda_tree_media,
+          'size': bootwright_os_install_request.treeMedia.size,
+          'sha256': bootwright_os_install_request.treeMedia.sha256}]
+        if bootwright_os_install_request.treeMedia is defined else []) }}
+# Whether the boot image, and the tree image, still have the size and SHA-256
+# the operation froze, read from the stat of each required entry in order.
+managedos_install_anaconda_boot_media_unchanged: >-
+  {{ managedos_install_anaconda_media_present.results[0].stat.exists | default(false)
+     and managedos_install_anaconda_media_present.results[0].stat.isreg | default(false)
+     and managedos_install_anaconda_media_present.results[0].stat.size | default(-1) == managedos_install_anaconda_media_present.results[0].item.size
+     and managedos_install_anaconda_media_present.results[0].stat.checksum | default('') == managedos_install_anaconda_media_present.results[0].item.sha256 }}
+managedos_install_anaconda_tree_media_unchanged: >-
+  {{ managedos_install_anaconda_media_present.results[1].stat.exists | default(false)
+     and managedos_install_anaconda_media_present.results[1].stat.isreg | default(false)
+     and managedos_install_anaconda_media_present.results[1].stat.size | default(-1) == managedos_install_anaconda_media_present.results[1].item.size
+     and managedos_install_anaconda_media_present.results[1].stat.checksum | default('') == managedos_install_anaconda_media_present.results[1].item.sha256 }}
 # A machine that already holds exactly the marker this operation froze is
-# installed: the attempt boots nothing and reports the same evidence.
+# installed: the attempt boots nothing and reports the same evidence. This is
+# read only by the apply's set_fact right after the first identity read, which
+# freezes the answer; a later read would see the marker the installer wrote.
 managedos_install_anaconda_installed: >-
   {{ managedos_install_anaconda_answered | default(false)
      and managedos_install_anaconda_marker | default('') == bootwright_os_install_material.marker }}
@@ -38,7 +61,7 @@ managedos_install_anaconda_installed: >-
 managedos_install_anaconda_observes_removal: >-
   {{ bootwright_os_install_material.observes | default('') == 'removal' }}
 # A hosted tree is extracted and published only when the profile uses one and
-# this installation has not published it yet.
+# no tree extracted from the image this operation froze is published yet.
 managedos_install_anaconda_publish_tree: >-
   {{ bootwright_os_install_request.tree is defined
      and not managedos_install_anaconda_before.observation.tree }}

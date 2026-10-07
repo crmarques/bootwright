@@ -17,19 +17,25 @@ type Identity struct {
 	Profile string `json:"profile"`
 }
 
-// Media names one entry of the host-wide media store. SHA256 is the digest the
-// graph declares, when it declares one; the attempt always records the digest
-// and size it actually used in its evidence.
+// Media names one entry of the host-wide media store. SHA256 and Size are the
+// store record's, frozen at plan; each attempt proves the entry still has both
+// before its first use. declared is the digest the MachineImage declares, in
+// canonical form, which the plan compares with the record and never encodes.
 type Media struct {
-	Name   string `json:"name"`
-	SHA256 string `json:"sha256,omitempty"`
+	Name     string `json:"name"`
+	SHA256   string `json:"sha256"`
+	Size     int64  `json:"size"`
+	declared string
 }
 
 // Publication is one piece of content this block owns beneath the selected
 // artifact server's served root, and the URL a consumer fetches it at.
+// CertificateRef names the serving certificate an https URL is verified
+// against before any machine is given the content, and nothing for http.
 type Publication struct {
-	Path string `json:"path"`
-	URL  string `json:"url"`
+	CertificateRef string `json:"certificateRef,omitempty"`
+	Path           string `json:"path"`
+	URL            string `json:"url"`
 }
 
 // Controller is the Redfish endpoint this Machine is booted through, the
@@ -252,6 +258,10 @@ func (r Request) SecretReferences() []string {
 	}
 	if r.TLSCertificateRef != "" {
 		references = append(references, r.TLSCertificateRef)
+	}
+	references = append(references, r.Image.CertificateRef)
+	if r.Tree != nil {
+		references = append(references, r.Tree.CertificateRef)
 	}
 	out := make([]string, 0, len(references))
 	for _, reference := range references {

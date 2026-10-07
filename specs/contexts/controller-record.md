@@ -57,7 +57,15 @@ outright. The host contains the confidential
 [`linux-installed-v1` tuple](../controller.md#host-identity-and-shared-prerequisites).
 The receipt fixes its ID, catalog digest, plan digest, explicit egress, source
 closure, full resolved dependency definition, ordered actions and status; it
-carries no context, because setup selects none. Sources bind a stable ID to its
+carries no context, because setup selects none. An optional `foundation`,
+present only when setup qualified vendor-signed builds other than the compiled
+ones, records the
+[qualified execution foundation](../controller.md#supported-host-and-dependency-selection)
+as `execution` (the definition's execution requirement in the same shape, with
+an empty interpreter path) and `packages` (each build's name, build and the
+files it provides); it is bound into the plan digest and refused unless it has
+its definition's shape. An earlier build refuses a record whose receipt
+carries it, through strict decoding. Sources bind a stable ID to its
 original credential-free URL, SHA-256 and exact byte count. Bindings contain the context
 name, Machine name and the private host digest, ordered by context name;
 sources are ordered by source ID. Reusing a source ID with different bytes or

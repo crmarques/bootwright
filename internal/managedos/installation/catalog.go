@@ -17,7 +17,7 @@ const Implementation = "os-install-anaconda-v1"
 // same kind through another implementation, so a block resolves by both.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v5"
+const requestVersion = "os-install-anaconda-v6"
 
 // installationBudgets are the waits every installation this build plans
 // freezes. The installer takes minutes to write a disk; a physical server adds

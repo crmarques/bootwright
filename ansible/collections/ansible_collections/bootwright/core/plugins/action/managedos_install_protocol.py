@@ -13,10 +13,13 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 )
 
 PHASES = ("loaded", "group", "refused", "completed")
-# The refusals of the target's pre-boot proof this installation names to its
-# runner before the run fails, each one the runner reports as the
-# installation's own diagnostic for its Machine (internal/substrate, preboot.go).
+# The refusals this installation names to its runner before the run fails,
+# each one the runner reports as the installation's own diagnostic for its
+# Machine: those of the target's pre-boot proof (internal/substrate,
+# preboot.go), and those of a store entry that no longer has the size and
+# SHA-256 the operation froze (internal/managedos/installation, selection.go).
 REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
+MEDIA_REFUSALS = ("media-changed-boot", "media-changed-tree")
 GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 OUTCOMES = ("changed", "unchanged")
 POWER_STATES = ("", "On", "Off")
@@ -34,6 +37,14 @@ HEX = set("0123456789abcdef")
 def digest(value):
     if not isinstance(value, str) or len(value) != 64 or set(value) - HEX:
         raise ValueError("digest")
+    return value
+
+
+def tree_identity(value):
+    """The digest of the image the published tree was extracted from, or ''."""
+    value = value or ""
+    if value != "" and (not isinstance(value, str) or len(value) != 64 or set(value) - HEX):
+        raise ValueError("tree identity")
     return value
 
 
@@ -63,6 +74,7 @@ def presence(arguments, request_digest):
         "request": digest(request_digest),
         "tree": bool(observation.get("tree")),
         "treeContent": bool(observation.get("treeContent")),
+        "treeIdentity": tree_identity(observation.get("treeIdentity")),
         "treeStaging": bool(observation.get("treeStaging")),
         "work": bool(observation.get("work")),
     }
@@ -117,6 +129,7 @@ def absence(arguments, request_digest):
         "request": digest(request_digest),
         "tree": False,
         "treeContent": False,
+        "treeIdentity": "",
         "treeStaging": False,
         "work": False,
     }
@@ -154,7 +167,7 @@ class ActionModule(ActionBase):
                 return {"changed": False}
             if phase == "refused":
                 reason = arguments.get("reason")
-                if reason not in REFUSALS:
+                if reason not in REFUSALS + MEDIA_REFUSALS:
                     raise ValueError("refusal reason")
                 emit({"phase": "refused", "reason": reason})
                 return {"changed": False}

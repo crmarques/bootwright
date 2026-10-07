@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -627,5 +628,91 @@ func TestThreadChurnNeverSignalsARunningAdapter(t *testing.T) {
 		if _, err := runner.execute(context.Background(), job, scratch, nil, "apply.yml", request); err != nil {
 			t.Fatalf("a thread ending elsewhere in the invocation signaled its adapter: %v", err)
 		}
+	}
+}
+
+// An SSH placement's job holds a client configuration of its own that keeps
+// only the host crypto policy, private to root; a local placement runs no ssh
+// and its job holds none.
+func TestAnSSHPlacementsJobHoldsItsOwnClientConfiguration(t *testing.T) {
+	job := t.TempDir()
+	paths := map[string]string{}
+	if err := writeSSHConfig(job, sshRequest(), paths); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(job, "ssh_config")
+	if paths["ssh_config"] != target {
+		t.Fatalf("ssh_config path = %q", paths["ssh_config"])
+	}
+	info, err := os.Stat(target)
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("ssh_config = %v (%v)", info, err)
+	}
+	if content, err := os.ReadFile(target); err != nil || string(content) != "Include /etc/crypto-policies/back-ends/openssh.config\n" {
+		t.Fatalf("ssh_config content = %q (%v)", content, err)
+	}
+	local := t.TempDir()
+	paths = map[string]string{}
+	if err := writeSSHConfig(local, localRequest(), paths); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := paths["ssh_config"]; present {
+		t.Fatal("a local placement was given an ssh configuration")
+	}
+	if entries, _ := os.ReadDir(local); len(entries) != 0 {
+		t.Fatalf("a local placement's job holds %v", entries)
+	}
+}
+
+// A run on an SSH placement hands its adapter a job holding that client
+// configuration, and an inventory whose SSH arm reads it first.
+func TestARunOnAnSSHPlacementHandsItsAdapterTheGeneratedConfiguration(t *testing.T) {
+	capture := t.TempDir()
+	runner := sweepingRunner(t, nil)
+	runner.command = func(_ string, arguments ...string) *exec.Cmd {
+		job := ""
+		if at := slices.Index(arguments, "-i"); at >= 0 && at+1 < len(arguments) {
+			job = filepath.Dir(arguments[at+1])
+		}
+		return exec.Command("/bin/sh", "-c", `cp -p "$1/ssh_config" "$1/inventory.json" "$2/" || exit 9; `+
+			`printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
+			`printf '{"phase":"completed","outcome":"changed","evidence":{}}\n' >&3`, "sh", job, capture)
+	}
+	var output bytes.Buffer
+	request := adapterRequest(t, &output)
+	placement := sshRequest().Placement
+	request.Placement = placement
+	request.Materials = lifecycle.Materials(placement)
+	request.Material = sshRequest().Material
+	if _, err := runner.Run(context.Background(), request); err != nil {
+		t.Fatalf("the run on an SSH placement failed: %v (%s)", err, output.String())
+	}
+	info, err := os.Stat(filepath.Join(capture, "ssh_config"))
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("the job's ssh_config = %v (%v)", info, err)
+	}
+	if content, err := os.ReadFile(filepath.Join(capture, "ssh_config")); err != nil || string(content) != "Include /etc/crypto-policies/back-ends/openssh.config\n" {
+		t.Fatalf("the job's ssh_config content = %q (%v)", content, err)
+	}
+	encoded, err := os.ReadFile(filepath.Join(capture, "inventory.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var written struct {
+		All struct {
+			Children struct {
+				Target struct {
+					Hosts map[string]map[string]any `json:"hosts"`
+				} `json:"bootwright_target"`
+			} `json:"children"`
+		} `json:"all"`
+	}
+	if err := json.Unmarshal(encoded, &written); err != nil {
+		t.Fatal(err)
+	}
+	arguments, _ := written.All.Children.Target.Hosts[placement.Machine]["ansible_ssh_common_args"].(string)
+	fields := strings.Fields(arguments)
+	if len(fields) < 2 || fields[0] != "-F" || filepath.Base(fields[1]) != "ssh_config" || !strings.HasPrefix(filepath.Base(filepath.Dir(fields[1])), jobPrefix) {
+		t.Fatalf("the SSH arm's arguments do not start with the job's configuration: %q", arguments)
 	}
 }

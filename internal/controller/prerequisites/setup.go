@@ -23,6 +23,7 @@ func newReceipt(i inspection) (SetupReceipt, error) {
 	if i.definition.Bootstrap != nil {
 		definition := CloneDefinition(i.definition)
 		receipt.Definition = &definition
+		receipt.Foundation = CloneQualifiedFoundation(i.qualified)
 	}
 	digest, err := SetupPlanDigest(i.host, receipt)
 	if err != nil {
@@ -83,6 +84,7 @@ func retainedArea(ctx context.Context, tx StorageTransaction, current inspection
 }
 
 func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *inspection) error {
+	ctx = WithLaunchFoundation(ctx, current.qualified)
 	state := current.view.State
 	// The receipt is the authority on what actually happened, so progress is
 	// taken from it however this attempt ends.

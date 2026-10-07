@@ -17,7 +17,41 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
+
+// The helper writes its refusal's class on its first line and the exception's
+// own text on its second. The class is mapped to its diagnostic and remedy;
+// the second line never reaches either, and a failure naming no class keeps
+// the generic refusal.
+func TestTheResolverMapsTheHelpersClass(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("the stub helper runs unprivileged")
+	}
+	const generic = "the provided native package solver refused its isolated dependency operation"
+	for name, check := range map[string]struct{ stderr, message string }{
+		"a classified refusal": {`refused missing-candidate\nMarkingError: private repository detail\n`, "the approved repositories offer no package satisfying a requested dependency version"},
+		"an internal refusal":  {`refused internal\nKeyError: private detail\n`, generic},
+		"no class":             {`Traceback private detail\n`, generic},
+	} {
+		t.Run(name, func(t *testing.T) {
+			work := t.TempDir()
+			interpreter := filepath.Join(t.TempDir(), "python3")
+			if err := os.WriteFile(interpreter, []byte("#!/bin/sh\nprintf '"+check.stderr+"' >&2\nexit 1\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			stage := &nativeStage{work: work, script: filepath.Join(work, "helper.py"), interpreter: interpreter}
+			_, err := stage.run(context.Background(), helperRequest{Operation: "resolve"})
+			found := diagnostics.Of(err)
+			if len(found) != 1 || found[0].Code != "controller.setup" || found[0].Message != check.message {
+				t.Fatalf("the helper's refusal reported %+v (%v), want %q", found, err, check.message)
+			}
+			if strings.Contains(found[0].Message+found[0].Remediation, "private") {
+				t.Fatalf("the helper's own text reached the diagnostic: %+v", found[0])
+			}
+		})
+	}
+}
 
 func TestRepositoryMetadataRequiresExactBoundedPublisherMembers(t *testing.T) {
 	for _, corrupt := range []bool{false, true} {

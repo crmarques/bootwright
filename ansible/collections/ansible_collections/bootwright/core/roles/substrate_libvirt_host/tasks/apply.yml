@@ -136,18 +136,35 @@
   ansible.builtin.assert:
     that:
       - item.state | length == 0 or item.owned
-    fail_msg: a libvirt network of the same name exists without this context's ownership
+    fail_msg: >-
+      a libvirt network named {{ item.name }} exists without this context's
+      ownership; remove or rename it, then repeat the apply
     quiet: true
   loop: '{{ substrate_libvirt_host_running.observation.networks }}'
   loop_control:
     label: '{{ item.name }}'
   when: item.managed
 
+# A pool carries no ownership metadata, so the directory it targets is what
+# makes it this provider's. A same-named pool targeting another directory is
+# foreign and the apply refuses before it defines, stops or starts anything.
+- name: Refuse a same-named pool that targets another directory
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_running.observation.pool | length == 0 or substrate_libvirt_host_running.observation.poolOwned
+    fail_msg: >-
+      a libvirt storage pool named {{ bootwright_substrate_host_request.poolName }}
+      exists and does not target {{ bootwright_substrate_host_request.poolPath }},
+      so it is not this provider's; remove or rename it, then repeat the apply
+    quiet: true
+
 - name: Prove every external bridge this provider requires is present
   ansible.builtin.assert:
     that:
       - item.bridge
-    fail_msg: an external attachment names a bridge this host does not carry
+    fail_msg: >-
+      external attachment network {{ item.name }} names a bridge device this
+      host does not carry
     quiet: true
   loop: '{{ substrate_libvirt_host_running.observation.networks }}'
   loop_control:
@@ -181,8 +198,9 @@
       network {{ item.name }} runs a definition other than the one the request
       froze, and restarting it to apply that one would disconnect
       {{ item.guests | join(', ') }}, which still run on it; stop each Machine
-      with bootwright machine stop --name <machine>, and any other domain
-      named, then repeat the apply
+      with bootwright machine stop --context
+      {{ bootwright_substrate_host_request.identity.context }} --name <machine>,
+      and any other domain named, then repeat the apply
     quiet: true
   loop: '{{ substrate_libvirt_host_restarted }}'
   loop_control:
@@ -243,19 +261,6 @@
     label: '{{ item.name }}'
   changed_when: true
 
-- name: Autostart each managed network
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/virsh
-      - --connect
-      - '{{ bootwright_substrate_host_request.uri }}'
-      - net-autostart
-      - '{{ item.name }}'
-  loop: '{{ substrate_libvirt_host_managed }}'
-  loop_control:
-    label: '{{ item.name }}'
-  changed_when: false
-
 - name: Start each managed network
   ansible.builtin.command:
     argv:
@@ -272,6 +277,24 @@
     - substrate_libvirt_host_started.rc != 0
     - '"already active" not in substrate_libvirt_host_started.stderr'
   changed_when: substrate_libvirt_host_started.rc == 0
+
+# Only a network that started is set to autostart, so a start that fails leaves
+# no definition that starts with the host. A replay sets it again on each
+# network the running observation did not report set to autostart, which is
+# also how an attempt interrupted between the two converges.
+- name: Autostart each managed network once it runs
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - net-autostart
+      - '{{ item.name }}'
+  loop: '{{ substrate_libvirt_host_autostarted }}'
+  loop_control:
+    label: '{{ item.name }}'
+  register: substrate_libvirt_host_autostart
+  changed_when: true
 
 - name: Remove the private definition directory
   ansible.builtin.file:
@@ -316,16 +339,6 @@
   when: substrate_libvirt_host_running.observation.pool | length == 0
   changed_when: substrate_libvirt_host_running.observation.pool | length == 0
 
-- name: Autostart the virtual-media pool
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/virsh
-      - --connect
-      - '{{ bootwright_substrate_host_request.uri }}'
-      - pool-autostart
-      - '{{ bootwright_substrate_host_request.poolName }}'
-  changed_when: false
-
 - name: Start the virtual-media pool
   ansible.builtin.command:
     argv:
@@ -339,6 +352,18 @@
     - substrate_libvirt_host_pool_started.rc != 0
     - '"already active" not in substrate_libvirt_host_pool_started.stderr'
   changed_when: substrate_libvirt_host_pool_started.rc == 0
+
+- name: Autostart the virtual-media pool once it runs
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/virsh
+      - --connect
+      - '{{ bootwright_substrate_host_request.uri }}'
+      - pool-autostart
+      - '{{ bootwright_substrate_host_request.poolName }}'
+  register: substrate_libvirt_host_pool_autostart
+  when: not substrate_libvirt_host_running.observation.poolAutostart
+  changed_when: true
 
 - name: Report pool definition completion
   bootwright.core.substrate_host_protocol:
@@ -362,7 +387,9 @@
              or substrate_libvirt_host_pool_directory is changed
              or substrate_libvirt_host_running.observation.pool != 'active'
              or substrate_libvirt_host_incomplete_networks | length > 0
-             or substrate_libvirt_host_redefined | length > 0)
+             or substrate_libvirt_host_redefined | length > 0
+             or substrate_libvirt_host_autostart is changed
+             or substrate_libvirt_host_pool_autostart is changed)
          else 'unchanged' }}
     digest: '{{ bootwright_substrate_host_digest }}'
     observation: '{{ substrate_libvirt_host_after.observation }}'

@@ -15,9 +15,10 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
 
 DIGEST = "a" * 64
 
-# One managed network the host carries as frozen: answered for, owned, active
-# and running, as it keeps for its next start, the definition its entry sets.
-CARRIED = {"answered": True, "bridge": True, "definition": True, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}
+# One managed network the host carries as frozen: answered for, owned, active,
+# set to autostart and running, as it keeps for its next start, the definition
+# its entry sets.
+CARRIED = {"answered": True, "autostart": True, "bridge": True, "definition": True, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}
 
 
 def host_observation(**overrides):
@@ -27,6 +28,8 @@ def host_observation(**overrides):
         "networks": [dict(CARRIED)],
         "pool": "active",
         "poolAnswered": True,
+        "poolAutostart": True,
+        "poolOwned": True,
         "services": [{"enabled": True, "name": "virtnetworkd.service", "state": "active"}],
         "uri": True,
     }
@@ -43,18 +46,24 @@ def test_a_provider_host_postcondition_needs_every_proof():
         {"uri": False},
         {"pool": ""},
         {"poolAnswered": False},
+        {"poolAutostart": False},
+        {"poolOwned": False},
+        {"networks": [dict(CARRIED, autostart=False)]},
         {"networks": [dict(CARRIED, owned=False)]},
         {"networks": [dict(CARRIED, state="inactive")]},
         {"networks": [dict(CARRIED, answered=False)]},
         {"networks": [dict(CARRIED, definition=False)]},
-        {"networks": [{"answered": False, "bridge": False, "definition": False, "managed": False, "name": "n", "owned": False,
+        {"networks": [{"answered": False, "autostart": False, "bridge": False, "definition": False, "managed": False, "name": "n", "owned": False,
                        "state": "", "uuid": ""}]},
     ):
         assert not substrate_host_protocol.presence(host_observation(**overrides), DIGEST)["postcondition"]
 
 
 def forgotten_network():
-    return {"answered": True, "bridge": False, "definition": False, "managed": True, "name": "n", "owned": False, "state": "", "uuid": ""}
+    return {
+        "answered": True, "autostart": False, "bridge": False, "definition": False, "managed": True, "name": "n", "owned": False,
+        "state": "", "uuid": "",
+    }
 
 
 # `managed` echoes the request and stays true after removal, so an absence proof
@@ -73,7 +82,8 @@ def test_a_provider_host_removal_names_what_is_still_defined():
 
 
 def test_an_unmanaged_network_never_blocks_a_removal():
-    foreign = {"answered": False, "bridge": True, "definition": False, "managed": False, "name": "n", "owned": False, "state": "active", "uuid": ""}
+    foreign = {"answered": False, "autostart": False, "bridge": True, "definition": False, "managed": False, "name": "n", "owned": False,
+               "state": "active", "uuid": ""}
     removed = host_observation(pool="", networks=[foreign], directory=False)
     assert substrate_host_protocol.absence(removed, DIGEST)["postcondition"]
 
@@ -81,6 +91,12 @@ def test_an_unmanaged_network_never_blocks_a_removal():
 def test_an_unmet_provider_host_realization_names_what_is_unproved():
     complete = substrate_host_protocol.presence(host_observation(), DIGEST)
     assert substrate_host_protocol.unproved(complete) == []
+    for overrides, unmet in (
+        ({"poolAutostart": False}, ["pool"]),
+        ({"poolOwned": False}, ["pool"]),
+        ({"networks": [dict(CARRIED, autostart=False)]}, ["networks"]),
+    ):
+        assert substrate_host_protocol.unproved(substrate_host_protocol.presence(host_observation(**overrides), DIGEST)) == unmet
     bare = substrate_host_protocol.presence(
         host_observation(
             hypervisor=False, uri=False, pool="", networks=[forgotten_network()],
@@ -101,7 +117,8 @@ def test_a_provider_host_removal_proves_only_what_it_owns():
     external = substrate_host_protocol.absence(
         host_observation(
             pool="", directory=False,
-            networks=[{"answered": False, "bridge": True, "definition": False, "managed": False, "name": "n", "owned": False, "state": "", "uuid": ""}],
+            networks=[{"answered": False, "autostart": False, "bridge": True, "definition": False, "managed": False, "name": "n",
+                       "owned": False, "state": "", "uuid": ""}],
         ),
         DIGEST,
     )
@@ -111,7 +128,7 @@ def test_a_provider_host_removal_proves_only_what_it_owns():
 def test_a_networks_identity_is_observed_but_never_reported_as_evidence():
     """Go rejects an evidence field it does not know, so the UUID stays here."""
     evidence = substrate_host_protocol.presence(host_observation(), DIGEST)
-    assert set(evidence["networks"][0]) == {"answered", "bridge", "definition", "managed", "name", "owned", "state"}
+    assert set(evidence["networks"][0]) == {"answered", "autostart", "bridge", "definition", "managed", "name", "owned", "state"}
     # An observation that does not carry the identity is refused rather than
     # silently shaped into evidence, because a definition without it collides.
     with pytest.raises(ValueError):
@@ -432,7 +449,10 @@ def test_a_provider_host_absence_needs_an_answer_and_no_directory(monkeypatch):
     assert host_action(dict(arguments, observation=HOST_GONE)).run(task_vars={}) == {"changed": False}
     evidence = published[0]["evidence"]
     assert (evidence["absent"], evidence["postcondition"], evidence["uri"], evidence["directory"]) == (True, True, True, False)
-    assert evidence["networks"] == [{"answered": True, "bridge": False, "definition": False, "managed": True, "name": "n", "owned": False, "state": ""}]
+    assert evidence["networks"] == [{
+        "answered": True, "autostart": False, "bridge": False, "definition": False, "managed": True, "name": "n", "owned": False,
+        "state": "",
+    }]
     assert (evidence["hypervisor"], evidence["services"]) == (True, [{"enabled": True, "name": "virtnetworkd.service", "state": "active"}])
 
 

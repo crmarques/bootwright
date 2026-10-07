@@ -43,7 +43,7 @@ func isInstallation(binding lifecycle.CapabilityBinding) bool {
 func baremetalPlan(t *testing.T, verb reconciliation.Verb) ([]reconciliation.BlockDefinition, []prerequisites.HostReservation) {
 	t.Helper()
 	input := baremetalInput(t, verb)
-	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	var definitions []reconciliation.BlockDefinition
 	var claims []prerequisites.HostReservation
 	for _, binding := range resolver.Bindings() {
@@ -87,7 +87,7 @@ func TestLabBaremetalExampleRefusesItsInstallation(t *testing.T) {
 		t.Fatalf("example discovery: got %d files, want %d", len(sources.Files), baremetalExampleFiles)
 	}
 	input := baremetalInput(t, reconciliation.Apply)
-	capability, ok := buildCapabilities(systemClock{}, exampleControllerPorts(t)).Resolve(installation.Kind, installation.Implementation)
+	capability, ok := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}).Resolve(installation.Kind, installation.Implementation)
 	if !ok {
 		t.Fatal("the installation capability does not resolve")
 	}

@@ -40,6 +40,9 @@ func TestAnApplyRemediesItsTargetsPreBootRefusalsByName(t *testing.T) {
 					if len(want[substrate.RefusalMachineRunning]) != 1 || request.Target.Controller.Endpoint == "" {
 						t.Fatalf("the %s proof names %v at %q", arm, want, request.Target.Controller.Endpoint)
 					}
+					for reason, err := range mediaRefusals("lab-b", request) {
+						want[reason] = diagnostics.Of(err)
+					}
 				}
 				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("the run names %#v, want %#v", got, want)

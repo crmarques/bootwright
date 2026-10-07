@@ -15,19 +15,22 @@ type mediaListPresentation struct {
 	Media []mediaRowPresentation `json:"media"`
 }
 
-// mediaRowPresentation is one image of the media JSON result. ReservedBy is
-// always present; Verified and Computed only when a verification or a
-// computed digest exists.
+// mediaRowPresentation is one image of the media JSON result. Name, Frozen and
+// ReservedBy are always present; Size, SHA256, Source and Added whenever the
+// image's record could be read; Verified and Computed only when a
+// verification or a computed digest exists; Reason exactly when the image
+// failed.
 type mediaRowPresentation struct {
 	Name       string   `json:"name"`
-	Size       int64    `json:"size"`
-	SHA256     string   `json:"sha256"`
-	Source     string   `json:"source"`
-	Added      string   `json:"added"`
+	Size       *int64   `json:"size,omitempty"`
+	SHA256     string   `json:"sha256,omitempty"`
+	Source     string   `json:"source,omitempty"`
+	Added      string   `json:"added,omitempty"`
 	Frozen     bool     `json:"frozen"`
 	ReservedBy []string `json:"reservedBy"`
 	Verified   string   `json:"verified,omitempty"`
 	Computed   string   `json:"computed,omitempty"`
+	Reason     string   `json:"reason,omitempty"`
 }
 
 func (mediaListPresentation) documentedResult() {}
@@ -73,15 +76,30 @@ func writeMediaList(out io.Writer, command string, result *media.ListResult, jso
 		headers = []string{"NAME", "SIZE", "DIGEST", "COMPUTED", "ADDED", "RESERVED", "STATE"}
 	}
 	rows := make([][]string, 0, len(result.Media))
+	failed := []field{}
 	for _, row := range result.Media {
-		cells := []string{row.Name, strconv.FormatInt(row.Size, 10), "sha256:" + row.SHA256}
+		size, digest, added := "-", "-", "-"
+		if row.SHA256 != "" {
+			size, digest, added = strconv.FormatInt(row.Size, 10), "sha256:"+row.SHA256, row.Added
+		}
+		cells := []string{row.Name, size, digest}
 		if result.Checksums {
 			cells = append(cells, mediaDigest(row.Computed))
 		}
-		cells = append(cells, row.Added, displayValue(strings.Join(row.ReservedBy, ",")), mediaStateToken(row))
+		cells = append(cells, added, displayValue(strings.Join(row.ReservedBy, ",")), mediaStateToken(row))
 		rows = append(rows, cells)
+		if row.Verified == "failed" {
+			failed = append(failed, field{Label: row.Name, Value: row.Failure})
+		}
 	}
 	text.table(headers, rows)
+	if len(failed) != 0 {
+		text.section("Failed")
+		text.fields(failed...)
+		text.section("")
+		text.lines([]string{"Remove a failed image with bootwright media delete --name <name> or replace it with " +
+			"bootwright media add --name <name> --from-file <path>, or --from-url <url> --sha256 <digest>; repeat bootwright media list --checksums for one that changed while it was read."})
+	}
 	return text.writeTo(out)
 }
 
@@ -93,12 +111,15 @@ func mediaDigest(digest string) string {
 }
 
 // mediaStateToken reports whether an image's bytes were just proved to match
-// its record, were found not to, or were not read. Whether a context reserves
-// the image is its own column, so it never hides the verification.
+// its record, were found not to, could not be read, or were not read. Whether
+// a context reserves the image is its own column, so it never hides the
+// verification.
 func mediaStateToken(row media.MediaRow) string {
 	switch row.Verified {
 	case "mismatch":
 		return "mismatch"
+	case "failed":
+		return "failed"
 	case "ok":
 		return "verified"
 	}
@@ -112,12 +133,18 @@ func displayMediaList(result *media.ListResult) mediaListPresentation {
 		for _, name := range row.ReservedBy {
 			reserving = append(reserving, escapeDisplayLine(name))
 		}
-		rows = append(rows, mediaRowPresentation{
-			Name: escapeDisplayLine(row.Name), Size: row.Size, SHA256: escapeDisplayLine(row.SHA256),
+		presented := mediaRowPresentation{
+			Name: escapeDisplayLine(row.Name), SHA256: escapeDisplayLine(row.SHA256),
 			Source: escapeDisplayLine(row.Source), Added: escapeDisplayLine(row.Added),
 			Frozen: row.Frozen, ReservedBy: reserving,
 			Verified: escapeDisplayLine(row.Verified), Computed: escapeDisplayLine(row.Computed),
-		})
+			Reason: escapeDisplayLine(row.Failure),
+		}
+		if row.SHA256 != "" {
+			size := row.Size
+			presented.Size = &size
+		}
+		rows = append(rows, presented)
 	}
 	return mediaListPresentation{Media: rows}
 }

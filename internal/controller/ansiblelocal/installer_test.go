@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
@@ -44,8 +45,8 @@ func TestTheRequestCarriesEachToolsAcquisitionDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []toolAcquisition{{Source: "tool-openshift-clients", Seconds: 205}, {Source: "tool-kubectl", Seconds: 121}}
-	if request.Version != "controller-prerequisites-v4" || !slices.Equal(request.Acquisition, want) {
-		t.Fatalf("request = %s with acquisition %v, want controller-prerequisites-v4 with %v", request.Version, request.Acquisition, want)
+	if request.Version != "controller-prerequisites-v5" || !slices.Equal(request.Acquisition, want) || request.NativeStaging != 0 {
+		t.Fatalf("request = %s with acquisition %v and staging %d, want controller-prerequisites-v5 with %v and none", request.Version, request.Acquisition, request.NativeStaging, want)
 	}
 	definition.Tools = nil
 	request, err = New(unusedExecution{t}).request(context.Background(), area, nil, "setup", prerequisites.Platform{}, definition, prerequisites.SetupEgress{}, nil)
@@ -55,6 +56,58 @@ func TestTheRequestCarriesEachToolsAcquisitionDeadline(t *testing.T) {
 	encoded, err := json.Marshal(request)
 	if err != nil || !strings.Contains(string(encoded), `"acquisition":[]`) {
 		t.Fatalf("a request without tools encodes %s (%v), want \"acquisition\":[]", encoded, err)
+	}
+}
+
+// Each native package carries its own acquisition deadline, in the request's
+// package order and before the tools', and the request freezes the bound its
+// packages are staged under together, from their declared bytes.
+func TestRequestFreezesNativeAcquisition(t *testing.T) {
+	platform := prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
+	repository := "https://packages.example.test/fedora"
+	plan := prerequisites.NativeResolvedPlan{
+		Format: "bootwright.native-plan-v1", Platform: platform, Solver: "dnf5", SolverVersion: "5.2.0",
+		Requests: controller.DefaultDependencyVersions(), Requirements: prerequisites.NativeRequirements{ContainerRuntime: true}, Roots: []prerequisites.NativeRoot{}, Packages: []prerequisites.NativePackage{},
+		Repositories: []prerequisites.NativeRepository{{ID: "base", BaseURL: repository, MetadataSHA256: strings.Repeat("d", 64)}},
+		Actions:      []prerequisites.NativeAction{}, BeforeSHA256: strings.Repeat("e", 64), AfterSHA256: strings.Repeat("e", 64),
+	}
+	for _, key := range []string{"nmstate", "openssh", "podman"} {
+		for _, name := range prerequisites.NativeRootNames()[key] {
+			identity := prerequisites.NativeIdentity{Name: name, Version: "1.2.3", Release: "1.fc43", Architecture: "x86_64"}
+			bytes := int64(1)
+			if len(plan.Packages) == 0 {
+				bytes = 100 << 20
+			}
+			plan.Roots = append(plan.Roots, prerequisites.NativeRoot{Key: key, Requested: "latest", Package: identity})
+			plan.Packages = append(plan.Packages, prerequisites.NativePackage{Name: name, Version: identity.Version, Release: identity.Release, Architecture: identity.Architecture, Signer: strings.Repeat("f", 40),
+				Source: prerequisites.DependencySource{ID: "native-" + name, URL: repository + "/" + name + ".rpm", SHA256: strings.Repeat("a", 64), Bytes: bytes}})
+		}
+	}
+	plan, err := prerequisites.CanonicalNativePlan(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	area := authorityArea{location: prerequisites.BundleLocation{Path: "/bundle", Writable: true}}
+	definition := prerequisites.Definition{CatalogDigest: strings.Repeat("a", 64), Native: &plan, NativeRequirements: plan.Requirements,
+		Tools: []prerequisites.ToolDefinition{{Kind: "kubectl", Source: prerequisites.DependencySource{ID: "tool-kubectl", Bytes: 1}}}}
+	request, err := New(unusedExecution{t}).request(context.Background(), area, nil, "setup", platform, definition, prerequisites.SetupEgress{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, total := []toolAcquisition{}, int64(0)
+	for _, item := range request.Packages {
+		seconds := int64(121)
+		if item.Source.Bytes == 100<<20 {
+			seconds = 320
+		}
+		want, total = append(want, toolAcquisition{Source: item.Source.ID, Seconds: seconds}), total+item.Source.Bytes
+	}
+	want = append(want, toolAcquisition{Source: "tool-kubectl", Seconds: 121})
+	if len(request.Packages) < 2 || !slices.Equal(request.Acquisition, want) {
+		t.Fatalf("acquisition = %v, want %v", request.Acquisition, want)
+	}
+	if staging := int64(acquisitionDeadline(total).Seconds()); request.NativeStaging != staging || staging != 321 {
+		t.Fatalf("native staging = %d, want %d seconds for %d bytes", request.NativeStaging, staging, total)
 	}
 }
 

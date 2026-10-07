@@ -162,10 +162,23 @@ func (a *mediaArea) Names(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
+// The causes a listing gives for one image it cannot read. Each fails that
+// image alone.
+const (
+	recordUnreadable  = "its record cannot be read safely"
+	recordUndecodable = "its record is malformed, not canonical or names another image"
+	imageUnsafe       = "its file type, owner, permissions or links are unsafe"
+	imageUnopenable   = "its file cannot be opened"
+	imageUnreadable   = "its bytes could not be read in full or exceed the media store's size limit"
+	imageChanged      = "its bytes changed while they were read"
+	imageReplaced     = "it was deleted or replaced while it was read"
+)
+
 // Entries lists every image whose record and bytes are both present, each with
 // the size its bytes have now. An interrupted publication is occupied but not
 // complete, so it is not listed; an image whose size no longer matches its
-// record is listed with the size observed, so the rest of the store still is.
+// record is listed with the size observed, and one whose record or file cannot
+// be read is listed with the cause, so the rest of the store still is.
 func (a *mediaArea) Entries(ctx context.Context) ([]media.Image, error) {
 	names, err := a.Names(ctx)
 	if err != nil {
@@ -178,22 +191,52 @@ func (a *mediaArea) Entries(ctx context.Context) ([]media.Image, error) {
 			continue
 		}
 		if err != nil {
-			return nil, safeError(err)
+			if err := a.storeFailure(ctx); err != nil {
+				return nil, err
+			}
+			images = append(images, media.Image{MediaEntry: managedos.MediaEntry{Name: name}, Failure: recordUnreadable})
+			continue
 		}
 		entry, err := managedos.DecodeMediaRecord(data, name)
 		if err != nil {
-			return nil, err
+			if err := a.storeFailure(ctx); err != nil {
+				return nil, err
+			}
+			images = append(images, media.Image{MediaEntry: managedos.MediaEntry{Name: name}, Failure: recordUndecodable})
+			continue
 		}
 		size, err := a.size(name)
 		if errors.Is(err, syscall.ENOENT) {
 			continue
 		}
 		if err != nil {
-			return nil, safeError(err)
+			if err := a.storeFailure(ctx); err != nil {
+				return nil, err
+			}
+			images = append(images, media.Image{MediaEntry: entry, Failure: imageUnsafe})
+			continue
 		}
 		images = append(images, media.Image{MediaEntry: entry, Observed: size})
 	}
 	return images, nil
+}
+
+// imageFailure is the cause this store gives for one image it cannot read.
+// The media service tells it from every other refusal and lists that image
+// failed with its reason, so it never refuses the rest of a listing.
+type imageFailure struct{ reason string }
+
+func (e imageFailure) Error() string { return e.reason }
+
+func (imageFailure) Is(target error) bool { return target == media.ErrImageFailed }
+
+// storeFailure is what fails a whole listing: cancellation, or a media
+// directory that was replaced or closed.
+func (a *mediaArea) storeFailure(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return a.available(ctx, false)
 }
 
 // Entry reports the record published for one image when this store can read
@@ -275,37 +318,77 @@ func privateMediaFile(stat syscall.Stat_t, parent *directory) bool {
 	return stat.Dev == parent.identity.Dev && private(stat, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid)
 }
 
-// Digest reads one image in full. Media is far larger than any record, so the
-// bytes are hashed as they stream and never held in memory.
-func (a *mediaArea) Digest(ctx context.Context, name string) (string, error) {
+// Hold opens one listed image under the shared root lock and proves its file
+// safe. The descriptor outlives the read, so the image is read in full after
+// the lock is released. The image is opened without blocking, so a FIFO
+// planted at its name cannot stall the open while the lock is held. Under the
+// shared lock only an actor other than Bootwright removes an image, so a
+// missing file is that image's failure, not the listing's.
+func (a *mediaArea) Hold(ctx context.Context, name string) (media.Held, error) {
 	if err := a.available(ctx, false); err != nil {
-		return "", err
+		return nil, err
 	}
 	if a.dir == nil || !managedos.ValidMediaName(name) {
 		absent := "the media store holds no image with that name"
 		if managedos.ValidMediaName(name) {
 			absent = "the media store holds no image named " + name
 		}
-		return "", mediaFailure(absent, "list the store with bootwright media list")
+		return nil, mediaFailure(absent, "list the store with bootwright media list")
 	}
-	file, err := openRelative(a.dir, name, syscall.O_RDONLY, 0)
+	file, err := openRelative(a.dir, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return "", safeError(err)
+		if err := a.storeFailure(ctx); err != nil {
+			return nil, err
+		}
+		return nil, imageFailure{reason: imageUnopenable}
 	}
-	defer file.Close()
 	before, err := statHandle(file)
 	if err != nil || !privateMediaFile(before, a.dir) {
-		return "", state("media file type, owner, permissions or links is unsafe")
+		file.Close()
+		return nil, imageFailure{reason: imageUnsafe}
 	}
-	digest, size, err := hashStream(ctx, file, managedos.MaxMediaBytes)
+	return &mediaHeld{file: file, before: before}, nil
+}
+
+// mediaHeld is one image a listing opened under the shared lock. It keeps no
+// reference to the area, whose callback has ended by the time it is read.
+type mediaHeld struct {
+	file   *os.File
+	before syscall.Stat_t
+	closed bool
+}
+
+// Digest reads the held image in full. Media is far larger than any record, so
+// the bytes are hashed as they stream and never held in memory. The status of
+// the descriptor at the end of the read must equal the one it had when it was
+// opened, so a write, a truncation or an unlink meanwhile fails the image.
+func (h *mediaHeld) Digest(ctx context.Context) (string, error) {
+	digest, size, err := hashStream(ctx, h.file, managedos.MaxMediaBytes)
 	if err != nil {
-		return "", err
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return "", imageFailure{reason: imageUnreadable}
 	}
-	after, err := statHandle(file)
-	if err != nil || !sameFile(before, after) || size != after.Size {
-		return "", state("media file changed while it was being read")
+	after, err := statHandle(h.file)
+	switch {
+	case err != nil:
+		return "", imageFailure{reason: imageChanged}
+	case after.Nlink == 0:
+		return "", imageFailure{reason: imageReplaced}
+	case !sameFile(h.before, after) || size != after.Size:
+		return "", imageFailure{reason: imageChanged}
 	}
 	return digest, nil
+}
+
+// Close releases the descriptor once.
+func (h *mediaHeld) Close() error {
+	if h.closed {
+		return nil
+	}
+	h.closed = true
+	return h.file.Close()
 }
 
 func hashStream(ctx context.Context, source io.Reader, limit int64) (string, int64, error) {
@@ -328,8 +411,12 @@ func hashStream(ctx context.Context, source io.Reader, limit int64) (string, int
 			break
 		}
 		if err != nil {
-			// A source that names its own cause, such as a download's
-			// deadline, keeps it.
+			// A cancellation is reported as the cancellation, and a source
+			// that names its own cause, such as a download's deadline,
+			// keeps it.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return "", 0, ctxErr
+			}
 			if len(diagnostics.Of(err)) != 0 {
 				return "", 0, err
 			}

@@ -198,7 +198,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 // a capability cannot prove.
 func TestLabRHELExampleIsRealizableInFull(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	if unsupported := lifecycle.Unrealizable(state.Effective(), claimedKinds(resolver)); len(unsupported) != 0 {
 		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
 	}
@@ -262,7 +262,7 @@ func TestAnUndeclaredInstallAddressIsRefusedOnlyWhereItIsAuthored(t *testing.T) 
 
 func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	input := lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: state, Controller: "controller",
 		Context: lifecycle.ContextIdentity{Name: "lab-rhel"},
@@ -345,7 +345,7 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 // Blocks that reused the apply's wording made a destroy read as an install.
 func TestLabRHELExampleDestroyPlanDescribesOnlyRemoval(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	input := lifecycle.PlanInput{
 		Verb: reconciliation.Destroy, State: state, Controller: "controller",
 		Context: lifecycle.ContextIdentity{Name: "lab-rhel"},
@@ -389,7 +389,7 @@ func TestLabRHELExampleDestroyPlanDescribesOnlyRemoval(t *testing.T) {
 // one block that removes nothing promises nothing.
 func TestLabRHELExampleDestroyRetainsTheSharedClients(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	capability, ok := resolver.Resolve(clients.Kind, clients.Implementation)
 	if !ok {
 		t.Fatal("this build offers no controller prerequisites capability")
@@ -410,7 +410,7 @@ func TestLabRHELExampleDestroyRetainsTheSharedClients(t *testing.T) {
 // must already carry the graph's own clients, records and upstream sources.
 func TestLabRHELRequestsCarryTheirDerivedIntent(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	requests := map[string]managedservice.Request{}
 	for kind, definition := range map[string]managedservice.Definition{
 		"Proxy": proxy.Definition(), "DNSServer": dnsserver.Definition(), "NTPServer": ntpserver.Definition(),
@@ -642,7 +642,7 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 // complete before any effect.
 func TestLabRHELExamplePlansOneControllerPrerequisitesBlock(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	capability, ok := resolver.Resolve(clients.Kind, clients.Implementation)
 	if !ok {
 		t.Fatal("this build offers no controller prerequisites capability")

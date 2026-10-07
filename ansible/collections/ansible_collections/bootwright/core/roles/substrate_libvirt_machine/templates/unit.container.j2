@@ -4,7 +4,10 @@
     The emulator uploads inserted media into the provider's pool through the
     libvirt socket, so beside its own configuration and password file that
     socket directory is the only host path it mounts, and connecting to it is
-    why its SELinux confinement is disabled. -#}
+    why its SELinux confinement is disabled. The emulator runs as PID 1 with no
+    SIGTERM handler, so SIGTERM would wait for podman's timeout and SIGKILL and
+    leave the unit failed; Python's SIGINT handler ends werkzeug's server, so
+    the unit stops it with SIGINT and stops cleanly. -#}
 [Unit]
 Description=Bootwright management controller for {{ bootwright_substrate_machine_request.identity.object }}
 After=network-online.target libvirtd.service
@@ -17,6 +20,7 @@ User=0
 SecurityLabelDisable=true
 Entrypoint=/usr/local/bin/sushy-emulator
 Exec=--config /etc/sushy/conf.py
+StopSignal=SIGINT
 Volume={{ substrate_libvirt_machine_state }}/conf.py:/etc/sushy/conf.py:ro
 Volume={{ substrate_libvirt_machine_state }}/htpasswd:/etc/sushy/htpasswd:ro
 Volume=/run/libvirt:/run/libvirt:rw

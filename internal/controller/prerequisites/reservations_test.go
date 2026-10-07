@@ -26,9 +26,9 @@ func TestAWildcardSocketConflictsWithEveryAddressAtItsPort(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			held := []HostReservation{{Context: "other", Kind: "proxy", Service: "a", Keys: []string{test.held}, Shared: test.heldShared}}
 			wanted := []HostReservation{{Context: "lab", Kind: "proxy", Service: "b", Keys: []string{test.wanted}, Shared: test.wantedShared}}
-			owner, conflict := ConflictingContext(held, wanted)
-			if conflict != test.conflict || conflict && owner.Context != "other" {
-				t.Fatalf("conflict = %t naming %+v, want %t", conflict, owner, test.conflict)
+			conflicts := Conflicts(held, wanted)
+			if len(conflicts) > 0 != test.conflict || len(conflicts) > 0 && conflicts[0].Held.Context != "other" {
+				t.Fatalf("conflicts = %+v, want %t", conflicts, test.conflict)
 			}
 		})
 	}
@@ -78,35 +78,8 @@ func TestAConflictNamesTheFirstHolderInStoredOrder(t *testing.T) {
 		{Context: "bravo", Kind: "proxy", Service: "b", Keys: []string{"socket:192.0.2.2:3128"}},
 	}
 	wanted := []HostReservation{{Context: "lab", Kind: "proxy", Service: "c", Keys: []string{"socket:0.0.0.0:3128"}}}
-	if owner, conflict := ConflictingContext(held, wanted); !conflict || owner.Context != "alpha" {
-		t.Fatalf("conflict = %t naming %+v, want alpha", conflict, owner)
-	}
-}
-
-// A conflict names the class of the key another context holds, never the key
-// itself, because a path key carries a private path. Its remedy is that
-// context's removal or continuation, and for a key this context's own
-// declaration chooses, another choice of it.
-func TestAConflictNamesTheHeldKeyClassAndItsRemedy(t *testing.T) {
-	for _, test := range []struct {
-		key, class, remediation string
-	}{
-		{"socket:0.0.0.0:3128", "socket", "destroy or continue context alpha first, or give this context's service another bind address or port"},
-		{"bridge:virbr-lab", "bridge", "destroy or continue context alpha first, or give this context's managed libvirt attachment another bridge"},
-		{"path:/var/lib/bootwright-services/alpha/proxy", "path", "destroy or continue context alpha first"},
-		{"unit:bootwright-alpha-proxy", "unit", "destroy or continue context alpha first"},
-		{"bmc:192.0.2.10:443/1", "bmc", "destroy or continue context alpha first"},
-	} {
-		t.Run(test.class, func(t *testing.T) {
-			held := []HostReservation{{Context: "alpha", Kind: "proxy", Service: "a", Keys: []string{"unit:bootwright-alpha-other", test.key}}}
-			wanted := []HostReservation{{Context: "lab", Kind: "proxy", Service: "b", Keys: []string{test.key}}}
-			owner, conflict := ConflictingContext(held, wanted)
-			if !conflict || owner.Context != "alpha" || owner.Class != test.class {
-				t.Fatalf("conflict = %t naming %+v, want alpha's %s", conflict, owner, test.class)
-			}
-			if remediation := owner.Remediation; remediation != test.remediation {
-				t.Fatalf("remediation = %q, want %q", remediation, test.remediation)
-			}
-		})
+	conflicts := Conflicts(held, wanted)
+	if len(conflicts) != 2 || conflicts[0].Held.Context != "alpha" || conflicts[1].Held.Context != "bravo" {
+		t.Fatalf("conflicts = %+v, want alpha then bravo", conflicts)
 	}
 }

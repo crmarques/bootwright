@@ -246,7 +246,7 @@ func hostEvidence(request HostRequest, digest string) json.RawMessage {
 	for _, network := range request.Networks {
 		entry := NetworkEvidence{Bridge: true, Managed: network.Managed, Name: network.Name}
 		if network.Managed {
-			entry.Answered, entry.Definition, entry.Owned, entry.State = true, true, true, "active"
+			entry.Answered, entry.Autostart, entry.Definition, entry.Owned, entry.State = true, true, true, true, "active"
 		}
 		networks = append(networks, entry)
 	}
@@ -256,7 +256,7 @@ func hostEvidence(request HostRequest, digest string) json.RawMessage {
 	}
 	data, _ := json.Marshal(HostEvidence{
 		Directory: observed(true), Hypervisor: true, Networks: networks, Pool: "active", PoolAnswered: true,
-		Postcondition: true, Request: digest, Services: services, URI: true,
+		PoolAutostart: true, PoolOwned: true, Postcondition: true, Request: digest, Services: services, URI: true,
 	})
 	return data
 }
@@ -378,7 +378,7 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 			},
 			absent:  encode(HostEvidence{Absent: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}),
 			present: hostEvidence(hosts[0], "digest"),
-			partial: encode(HostEvidence{Pool: "active", PoolAnswered: true, Request: "digest", URI: true}),
+			partial: encode(HostEvidence{Pool: "active", PoolAnswered: true, PoolOwned: true, Request: "digest", URI: true}),
 			silent:  encode(HostEvidence{Directory: observed(false), Hypervisor: true, Request: "digest"}),
 			foreign: encode(HostEvidence{Absent: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "other", URI: true}),
 		},
@@ -481,16 +481,18 @@ func TestAHostRemovalReadsWhatItTakesBackNotWhatTheApplyProves(t *testing.T) {
 // carries, as presence() in
 // ansible/collections/ansible_collections/bootwright/core/plugins/action/substrate_host_protocol.py
 // computes it from an observation: the closure, the URI, the pool answered for
-// and active, every driver daemon active and enabled, and every declared
-// bridge present with each managed network answered for, owned, active and
-// carrying its frozen definition. The pool directory plays no part in it.
+// active, set to autostart and targeting its frozen directory, every driver
+// daemon active and enabled, and every declared bridge present with each
+// managed network answered for, owned, active, set to autostart and carrying
+// its frozen definition. The pool directory plays no part in it.
 func publishedPostcondition(evidence HostEvidence) bool {
-	complete := evidence.Hypervisor && evidence.URI && evidence.PoolAnswered && evidence.Pool == "active"
+	complete := evidence.Hypervisor && evidence.URI && evidence.PoolAnswered && evidence.Pool == "active" &&
+		evidence.PoolAutostart && evidence.PoolOwned
 	for _, service := range evidence.Services {
 		complete = complete && service.State == "active" && service.Enabled
 	}
 	for _, network := range evidence.Networks {
-		realized := network.Answered && network.Owned && network.State == "active" && network.Definition
+		realized := network.Answered && network.Owned && network.State == "active" && network.Autostart && network.Definition
 		complete = complete && network.Bridge && (!network.Managed || realized)
 	}
 	return complete

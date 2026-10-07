@@ -10,6 +10,7 @@ User=0
 SecurityLabelDisable=true
 Entrypoint=/usr/local/bin/sushy-emulator
 Exec=--config /etc/sushy/conf.py
+StopSignal=SIGINT
 Volume=/var/lib/bootwright-substrate/lab-rhel/rhel-01/conf.py:/etc/sushy/conf.py:ro
 Volume=/var/lib/bootwright-substrate/lab-rhel/rhel-01/htpasswd:/etc/sushy/htpasswd:ro
 Volume=/run/libvirt:/run/libvirt:rw

@@ -3,6 +3,8 @@ package libvirt
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func hostRequest(t *testing.T) HostRequest {
@@ -151,6 +153,55 @@ func TestHostRemovalUnfinishedReadsWhatRemainsNotThePostcondition(t *testing.T) 
 }
 
 func observed(value bool) *bool { return &value }
+
+// A managed network and the pool that do not start with the host are gone
+// after it restarts, and a same-named pool targeting another directory is not
+// this provider's, so presence refuses each with its own diagnostic, and a pool
+// that is not this provider's proves neither a partial realization nor a
+// removal that took nothing back.
+func TestHostPresenceRequiresAutostartAndItsOwnPool(t *testing.T) {
+	request := hostRequest(t)
+	complete := func() HostEvidence {
+		var evidence HostEvidence
+		if err := json.Unmarshal(hostEvidence(request, "digest"), &evidence); err != nil {
+			t.Fatal(err)
+		}
+		return evidence
+	}
+	for name, test := range map[string]struct {
+		damage func(*HostEvidence)
+		want   string
+	}{
+		"network autostart off": {func(e *HostEvidence) { e.Networks[0].Autostart = false }, "a managed libvirt network does not start with the host"},
+		"pool autostart off":    {func(e *HostEvidence) { e.PoolAutostart = false }, "the provider's virtual-media pool does not start with the host"},
+		"pool foreign":          {func(e *HostEvidence) { e.PoolOwned = false }, "the provider's virtual-media pool does not target its frozen directory"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			evidence := complete()
+			test.damage(&evidence)
+			if got := refusedWith(ValidateHostPresence(encode(t, evidence), request, "digest")); got != test.want {
+				t.Fatalf("presence read %q, want %q", got, test.want)
+			}
+		})
+	}
+	foreign := HostEvidence{Request: "digest", Pool: "active", Directory: observed(true)}
+	if got := refusedWith(ValidateHostPartial(encode(t, foreign), "digest")); got != "a virtual-media pool of the same name targets another directory than this provider's" {
+		t.Fatalf("a foreign pool read as partial: %q", got)
+	}
+	unowned := complete()
+	unowned.PoolOwned = false
+	if err := ValidateHostUnremoved(encode(t, unowned), request, "digest"); err == nil {
+		t.Fatal("a foreign pool read as a removal that took nothing back")
+	}
+}
+
+func refusedWith(err error) string {
+	reported := diagnostics.Of(err)
+	if err == nil || len(reported) == 0 {
+		return ""
+	}
+	return reported[0].Message
+}
 
 // Removal is accepted only when it positively proves the owned objects are
 // gone, never merely that they were not observed: the networks and pool
@@ -355,9 +406,9 @@ func TestMachineRemovalUnfinishedReadsWhatRemainsNotThePostcondition(t *testing.
 // removes.
 func TestHostPartialRequiresSomethingThisContextOwns(t *testing.T) {
 	for name, evidence := range map[string]HostEvidence{
-		"pool alone":                  {Request: "digest", Pool: "active"},
+		"pool alone":                  {Request: "digest", Pool: "active", PoolOwned: true},
 		"owned network":               {Request: "digest", Networks: []NetworkEvidence{{Managed: true, Name: "n", Owned: true, State: "inactive"}}},
-		"network and pool":            {Request: "digest", Pool: "inactive", Networks: []NetworkEvidence{{Managed: true, Name: "n", Owned: true, State: "active"}}},
+		"network and pool":            {Request: "digest", Pool: "inactive", PoolOwned: true, Networks: []NetworkEvidence{{Managed: true, Name: "n", Owned: true, State: "active"}}},
 		"directory alone":             {Request: "digest", URI: true, Directory: observed(true)},
 		"silent uri with a directory": {Request: "digest", Directory: observed(true)},
 	} {

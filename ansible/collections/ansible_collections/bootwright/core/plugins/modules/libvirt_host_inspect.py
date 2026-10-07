@@ -40,6 +40,10 @@ observation:
       network's answered key and the poolAnswered key whether the network
       and storage drivers answered for them, and the directory key whether
       anything exists at the pool directory's path.
+    - Each managed network's autostart key and the poolAutostart key are
+      whether it starts with the host, each network's owned key whether its
+      metadata names this context and that network, and the poolOwned key
+      whether the pool targets the frozen directory.
   returned: always
   type: dict
 """

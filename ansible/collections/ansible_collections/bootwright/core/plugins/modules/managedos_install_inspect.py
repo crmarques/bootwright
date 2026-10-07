@@ -15,6 +15,10 @@ description:
     present by anything at its path, because a removal withdraws the marker
     before the rest of the tree, so one stopped part way leaves the rest
     without it.
+  - Reports the identity the published tree carries, the digest of the image
+    it was extracted from, and counts the tree complete only when that
+    identity is the digest the request froze, so a tree extracted from another
+    image is extracted again.
   - Reports the staging tree beside it and the installer work area, which an
     attempt killed part way leaves behind and a removal takes back.
   - Performs no change and is safe to repeat.
@@ -47,7 +51,10 @@ EXAMPLES = r"""
 
 RETURN = r"""
 observation:
-  description: Whether each published path, the staging tree and the work area exist.
+  description:
+    - Whether each published path, the staging tree and the work area exist.
+    - C(treeIdentity) is the digest the published tree's identity file holds,
+      64 lowercase hexadecimal characters, or empty when it holds none.
   returned: always
   type: dict
 """
@@ -59,6 +66,28 @@ from ansible.module_utils.basic import AnsibleModule
 # TREE_MARKER is what makes a published tree complete: it is renamed into place
 # last, so a fetching installer never sees a partial tree.
 TREE_MARKER = ".treeinfo"
+# TREE_IDENTITY holds the digest of the image the tree was extracted from,
+# written into the staged tree before the rename publishes it.
+TREE_IDENTITY = ".bootwright-tree-identity"
+HEX = frozenset("0123456789abcdef")
+
+
+def tree_identity(path):
+    """The digest a tree's identity file holds, or '' when it holds none."""
+    try:
+        descriptor = os.open(os.path.join(path, TREE_IDENTITY), os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        return ""
+    try:
+        data = os.read(descriptor, 65)
+    except OSError:
+        return ""
+    finally:
+        os.close(descriptor)
+    value = data.decode("ascii", "replace").strip()
+    if len(value) != 64 or set(value) - HEX:
+        return ""
+    return value
 
 
 def observe(request, staging, work):
@@ -66,12 +95,17 @@ def observe(request, staging, work):
     and each remnant of an attempt that did not finish."""
     tree = request.get("tree")
     private = request.get("private")
+    identity = tree_identity(tree["path"]) if tree else ""
+    frozen = (request.get("treeMedia") or {}).get("sha256", "")
     return {
         "image": os.path.isfile(request["image"]["path"]),
         # Material that only needed to exist for one boot must not outlive it,
         # so a subtree still present is unfinished work rather than a state.
         "private": bool(private) and os.path.isdir(private["path"]),
-        "tree": bool(tree) and os.path.isfile(os.path.join(tree["path"], TREE_MARKER)),
+        # A tree is complete only when it was extracted from the image this
+        # operation froze; one from another image is extracted again.
+        "tree": bool(tree) and os.path.isfile(os.path.join(tree["path"], TREE_MARKER)) and identity == frozen,
+        "treeIdentity": identity,
         # A removal withdraws the marker before the rest of the tree, so one
         # stopped part way leaves the rest without it: content still to take
         # back, though no complete tree.

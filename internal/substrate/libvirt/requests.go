@@ -1,10 +1,12 @@
 package libvirt
 
 import (
-	machineref "github.com/crmarques/bootwright/internal/machine"
-	"github.com/crmarques/bootwright/internal/reconciliation"
+	"net/netip"
 	"slices"
 
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -83,23 +85,25 @@ type Controller struct {
 
 // MachineRequest is the complete frozen intent for one virtual machine and its
 // management controller. It names the credential declaration its controller
-// answers with, never any material.
+// answers with, never any material. Egress is the provider host Machine's
+// normalized proxy choice the controller image is acquired through.
 type MachineRequest struct {
-	Controller Controller           `json:"controller"`
-	Directory  string               `json:"directory"`
-	Disks      []Disk               `json:"disks"`
-	Domain     string               `json:"domain"`
-	Identity   Identity             `json:"identity"`
-	Interfaces []Interface          `json:"interfaces"`
-	MemoryMiB  int                  `json:"memoryMiB"`
-	Placement  machineref.Placement `json:"placement"`
-	PoolName   string               `json:"poolName"`
-	PoolPath   string               `json:"poolPath"`
-	TPM        bool                 `json:"tpm"`
-	URI        string               `json:"uri"`
-	UUID       string               `json:"uuid"`
-	VCPU       int                  `json:"vcpu"`
-	Version    string               `json:"version"`
+	Controller Controller            `json:"controller"`
+	Directory  string                `json:"directory"`
+	Disks      []Disk                `json:"disks"`
+	Domain     string                `json:"domain"`
+	Egress     managedservice.Egress `json:"egress"`
+	Identity   Identity              `json:"identity"`
+	Interfaces []Interface           `json:"interfaces"`
+	MemoryMiB  int                   `json:"memoryMiB"`
+	Placement  machineref.Placement  `json:"placement"`
+	PoolName   string                `json:"poolName"`
+	PoolPath   string                `json:"poolPath"`
+	TPM        bool                  `json:"tpm"`
+	URI        string                `json:"uri"`
+	UUID       string                `json:"uuid"`
+	VCPU       int                   `json:"vcpu"`
+	Version    string                `json:"version"`
 }
 
 func (r HostRequest) Canonical() ([]byte, error) {
@@ -136,12 +140,15 @@ func DecodeMachineRequest(data []byte) (MachineRequest, error) {
 // ReservationKeys are the exclusive host resources each request claims before
 // its first effect, so a second context refuses rather than taking them.
 func (r HostRequest) ReservationKeys() []string {
-	keys := []string{"path:" + r.PoolPath}
+	keys := []string{"path:" + r.PoolPath, "libvirt-pool:" + r.PoolName}
 	for _, network := range r.Networks {
 		if !network.Managed {
 			continue
 		}
 		keys = append(keys, "bridge:"+network.Bridge, "libvirt-network:"+network.Name)
+		if prefix, err := netip.ParsePrefix(network.Address); err == nil {
+			keys = append(keys, "prefix:"+prefix.Masked().String())
+		}
 	}
 	slices.Sort(keys)
 	return slices.Compact(keys)

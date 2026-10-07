@@ -196,6 +196,15 @@ func TestAnInterfaceNameIsALinuxInterfaceName(t *testing.T) {
 		[]string{strings.Repeat("e", 16), "eth0/1", "eth0:1", ".", "..", "eth0\n%post", "eth 0", "\u00ebth0", "eth0'", `eth0"`})
 }
 
+// A bridge name is an interface name without the `+` firewalld reads as an
+// interface wildcard, because a managed network puts its bridge in zone
+// trusted by name, which would pull every matching interface into that zone.
+func TestABridgeNameRefusesFirewalldsWildcard(t *testing.T) {
+	lexicalRows(t, "bridge",
+		[]string{strings.Repeat("b", 15), "virbr0", "virbr-lab", "br_lab.10"},
+		[]string{"virbr+", "+", "a+b", strings.Repeat("b", 16), ".", "..", "eth0/1", "eth 0"})
+}
+
 const lexicalDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 // A repository path component follows the OCI distribution grammar, so

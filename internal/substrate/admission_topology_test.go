@@ -145,6 +145,69 @@ func TestAManagedBridgeBelongsToOneAttachmentOnItsHost(t *testing.T) {
 	}
 }
 
+// The host routes each managed prefix to its own bridge, so two managed
+// attachments on one host, of one provider or two, whose prefixes overlap,
+// identical or nested, IPv4 or IPv6, are refused naming both providers.
+func TestOneHostNeverOverlapsTwoManagedPrefixes(t *testing.T) {
+	const field = "$.spec.networkAttachments[0].libvirt.address"
+	host, other := topologyHost("host"), topologyHost("other")
+	for name, test := range map[string]struct {
+		own, peer         string
+		ownMask, peerMask string
+	}{
+		"identical IPv4": {"198.51.100.1/24", "198.51.100.2/24", "198.51.100.0/24", "198.51.100.0/24"},
+		"nested IPv4":    {"198.51.100.1/24", "198.51.100.129/25", "198.51.100.0/24", "198.51.100.128/25"},
+		"identical IPv6": {"fd00:1::1/64", "fd00:1::2/64", "fd00:1::/64", "fd00:1::/64"},
+		"nested IPv6":    {"fd00:1::1/48", "fd00:1:0:5::1/64", "fd00:1::/48", "fd00:1:0:5::/64"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			a := topologyProvider("a", "host", "8000", topologyProfile(), managedAttachment("guests", "virbr-a", test.own))
+			b := topologyProvider("b", "host", "8001", topologyProfile(), managedAttachment("storage", "virbr-b", test.peer))
+			catalog := api.NewCatalog([]api.Object{a, b, host})
+			for _, pair := range []struct {
+				own, peer         api.Object
+				ownMask, peerMask string
+			}{{a, b, test.ownMask, test.peerMask}, {b, a, test.peerMask, test.ownMask}} {
+				issues := Validate(pair.own, catalog)
+				refused := issuesAt(issues, field)
+				message := fmt.Sprintf("managed prefix %s of networkAttachments[0] overlaps managed prefix %s of networkAttachments[0] of %s on host Machine/host, and the host routes each managed prefix to its own bridge",
+					pair.ownMask, pair.peerMask, pair.peer.Identity())
+				remediation := fmt.Sprintf("give spec.networkAttachments[0].libvirt.address of %s or spec.networkAttachments[0].libvirt.address of %s a prefix no other managed attachment on host Machine/host overlaps",
+					pair.own.Identity(), pair.peer.Identity())
+				if len(issues) != 1 || len(refused) != 1 || refused[0].Code != "api.invariant" || refused[0].Message != message || refused[0].Remediation != remediation {
+					t.Fatalf("%s beside %s: %v", pair.own.Identity(), pair.peer.Identity(), issues)
+				}
+			}
+		})
+	}
+	for name, peer := range map[string]struct {
+		attachment api.Value
+		host       string
+	}{
+		"disjoint IPv4":          {managedAttachment("storage", "virbr-b", "198.51.100.129/25"), "host"},
+		"IPv4 beside IPv6":       {managedAttachment("storage", "virbr-b", "fd00:1::1/64"), "host"},
+		"another host":           {managedAttachment("storage", "virbr-b", "198.51.100.2/25"), "other"},
+		"an external attachment": {externalAttachment("storage", "virbr-b"), "host"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			a := topologyProvider("a", "host", "8000", topologyProfile(), managedAttachment("guests", "virbr-a", "198.51.100.1/25"))
+			b := topologyProvider("b", peer.host, "8001", topologyProfile(), peer.attachment)
+			for _, provider := range []api.Object{a, b} {
+				if issues := Validate(provider, api.NewCatalog([]api.Object{a, b, host, other})); len(issues) != 0 {
+					t.Fatalf("%s was refused: %v", provider.Identity(), issues)
+				}
+			}
+		})
+	}
+	both := topologyProvider("a", "host", "8000", topologyProfile(),
+		managedAttachment("guests", "virbr-a", "198.51.100.1/24"), managedAttachment("storage", "virbr-b", "198.51.100.129/25"))
+	refused := issuesAt(Validate(both, api.NewCatalog([]api.Object{both, host})), "$.spec.networkAttachments[1].libvirt.address")
+	if len(refused) != 1 || !strings.HasPrefix(refused[0].Message,
+		"managed prefix 198.51.100.128/25 of networkAttachments[1] overlaps managed prefix 198.51.100.0/24 of networkAttachments[0] of InfraProvider/a on host Machine/host") {
+		t.Fatalf("one provider overlapping its own managed prefixes: %v", refused)
+	}
+}
+
 func TestTheEmulatedBMCRangeCountsOnlyRealizedMachines(t *testing.T) {
 	machine := func(name, provider string, provided bool) api.Object {
 		return obj(api.Machine, name, m("substrate", m("providerRef", provider), "os", m("provided", provided)))

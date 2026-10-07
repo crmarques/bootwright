@@ -481,6 +481,38 @@ func TestACanceledDownloadReportsTheCancellation(t *testing.T) {
 	}
 }
 
+// A download canceled while its body streams passes the cancellation through
+// unchanged, so the store reports it as the cancellation.
+func TestADownloadCanceledMidBodyReportsTheCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	served := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Length", "1000000")
+		io.WriteString(writer, strings.Repeat("x", 1000))
+		writer.(http.Flusher).Flush()
+		<-request.Context().Done()
+	}))
+	defer served.Close()
+	acquisition, err := trusting(t, served, nil).Open(ctx, media.Source{URL: served.URL + "/image.iso"})
+	if err != nil {
+		t.Fatalf("open: %#v", diagnostics.Of(err))
+	}
+	defer acquisition.Payload.Close()
+	buffer := make([]byte, 64)
+	if n, err := acquisition.Payload.Read(buffer); n == 0 || err != nil {
+		t.Fatalf("the first read = %d (%v)", n, err)
+	}
+	cancel()
+	for range 1000 {
+		if _, err = acquisition.Payload.Read(buffer); err != nil {
+			break
+		}
+	}
+	if !errors.Is(err, context.Canceled) || len(diagnostics.Of(err)) != 0 {
+		t.Fatalf("a download canceled mid-body reported %v (%#v)", err, diagnostics.Of(err))
+	}
+}
+
 // The record names the image without the query, which may carry a signature,
 // while the download still requests it.
 func TestTheRecordedOriginDropsTheQuery(t *testing.T) {

@@ -56,6 +56,48 @@ type fakeStore struct {
 	afterRead  func(*fakeStore)
 	// live names every image a stage that is still open holds.
 	live map[string]bool
+	// failures lists an image the store cannot read, by name, with its cause.
+	failures map[string]string
+	// holdError fails the hold of an image. holdLocked and hashLocked record
+	// whether the root lock was held at each hold and each full read, and
+	// heldClosed counts every handle released.
+	holdError  map[string]error
+	holdLocked []bool
+	hashLocked []bool
+	heldClosed int
+}
+
+// failedImage is the cause a store gives for one image it cannot read.
+type failedImage struct{ reason string }
+
+func (e failedImage) Error() string      { return e.reason }
+func (failedImage) Is(target error) bool { return target == ErrImageFailed }
+func imageFailed(reason string) error    { return failedImage{reason: reason} }
+
+// fakeHeld is one image a listing held.
+type fakeHeld struct {
+	store  *fakeStore
+	name   string
+	closed bool
+}
+
+func (h *fakeHeld) Digest(ctx context.Context) (string, error) {
+	h.store.hashLocked = append(h.store.hashLocked, h.store.locked)
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if h.store.digestError != nil {
+		return "", h.store.digestError
+	}
+	return h.store.digests[h.name], nil
+}
+
+func (h *fakeHeld) Close() error {
+	if !h.closed {
+		h.closed = true
+		h.store.heldClosed++
+	}
+	return nil
 }
 
 func (s *fakeStore) ReadMedia(ctx context.Context, callback func(View) error) error {
@@ -87,6 +129,9 @@ func (s *fakeStore) Entries(context.Context) ([]Image, error) {
 		}
 		images = append(images, Image{MediaEntry: entry, Observed: size})
 	}
+	for name, failure := range s.failures {
+		images = append(images, Image{MediaEntry: managedos.MediaEntry{Name: name}, Failure: failure})
+	}
 	return images, nil
 }
 
@@ -95,11 +140,12 @@ func (s *fakeStore) Reservations(context.Context) (map[string][]string, error) {
 	return s.reservations, nil
 }
 
-func (s *fakeStore) Digest(_ context.Context, name string) (string, error) {
-	if s.digestError != nil {
-		return "", s.digestError
+func (s *fakeStore) Hold(_ context.Context, name string) (Held, error) {
+	s.holdLocked = append(s.holdLocked, s.locked)
+	if err := s.holdError[name]; err != nil {
+		return nil, err
 	}
-	return s.digests[name], nil
+	return &fakeHeld{store: s, name: name}, nil
 }
 
 func (s *fakeStore) Entry(_ context.Context, name string) (managedos.MediaEntry, bool, error) {
@@ -1072,22 +1118,140 @@ func TestAnAdoptedStageThatCannotBeReadSettlesItsVerificationFailed(t *testing.T
 	)
 }
 
-// An image the listing cannot read in full settles its check failed, and the
-// listing refuses with the store's own cause rather than reporting a
-// verification it did not make.
+// An image the listing cannot read in full settles its check failed with the
+// store's cause and is listed failed, rather than refusing the listing or
+// reporting a verification it did not make.
 func TestAnImageThatCannotBeReadSettlesItsCheckFailed(t *testing.T) {
 	entry := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
-	unreadable := errors.New("the image could not be read in full")
-	store := &fakeStore{entries: []managedos.MediaEntry{entry}, digestError: unreadable}
+	changed := "its bytes changed while they were read"
+	store := &fakeStore{entries: []managedos.MediaEntry{entry}, digestError: imageFailed(changed)}
 	reporter := &recordingReporter{}
 	listed, err := newService(store, &fakeAcquirer{}, nil).Reporting(reporter, nil).List(context.Background(), ListMediaRequest{Checksums: true})
-	if !errors.Is(err, unreadable) || listed != nil {
+	if err != nil || len(listed.Media) != 1 {
 		t.Fatalf("an unreadable image listed %+v (%v)", listed, err)
+	}
+	if row := listed.Media[0]; row.Verified != "failed" || row.Failure != changed || row.Computed != "" {
+		t.Fatalf("the unreadable image = %+v", row)
 	}
 	expectEvents(t, reporter.events,
 		check("Verify demo.iso", "running", "", 1, 1),
-		check("Verify demo.iso", "failed", "", 1, 1),
+		check("Verify demo.iso", "failed", changed, 1, 1),
 	)
+}
+
+// Checksums hold every image under the root lock and read each in full only
+// after that lock is released, releasing every handle.
+func TestListWithChecksumsHashesWithNoRootLockHeld(t *testing.T) {
+	demo := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
+	alt := managedos.MediaEntry{Name: "alt.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///alt.iso", Added: "2026-09-15T09:00:00Z"}
+	store := &fakeStore{entries: []managedos.MediaEntry{demo, alt}, digests: map[string]string{"demo.iso": demo.SHA256, "alt.iso": alt.SHA256}}
+	listed, err := newService(store, &fakeAcquirer{}, nil).List(context.Background(), ListMediaRequest{Checksums: true})
+	if err != nil || listed.Media[0].Verified != "ok" || listed.Media[1].Verified != "ok" {
+		t.Fatalf("listing = %+v (%v)", listed, err)
+	}
+	if !slices.Equal(store.holdLocked, []bool{true, true}) || !slices.Equal(store.hashLocked, []bool{false, false}) || store.heldClosed != 2 {
+		t.Fatalf("holds under lock %v, reads under lock %v, closed %d", store.holdLocked, store.hashLocked, store.heldClosed)
+	}
+}
+
+// An image the store cannot read is listed failed beside the others, with or
+// without checksums; checksums neither hold nor read it but still settle its
+// check failed with the cause.
+func TestListReportsAFailedImageBesideTheOthers(t *testing.T) {
+	good := managedos.MediaEntry{Name: "good.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///good.iso", Added: "2026-09-15T09:00:00Z"}
+	malformed := "its record is malformed, not canonical or names another image"
+	store := &fakeStore{
+		entries: []managedos.MediaEntry{good}, failures: map[string]string{"bad.iso": malformed},
+		digests: map[string]string{"good.iso": good.SHA256},
+	}
+	plain, err := newService(store, &fakeAcquirer{}, nil).List(context.Background(), ListMediaRequest{})
+	if err != nil || len(plain.Media) != 2 {
+		t.Fatalf("plain listing = %+v (%v)", plain, err)
+	}
+	if bad := plain.Media[0]; bad.Name != "bad.iso" || bad.Verified != "failed" || bad.Failure != malformed || bad.SHA256 != "" {
+		t.Fatalf("the failed image = %+v", bad)
+	}
+	if plain.Media[1].Verified != "" || plain.Media[1].Failure != "" {
+		t.Fatalf("the good image = %+v", plain.Media[1])
+	}
+	reporter := &recordingReporter{}
+	verified, err := newService(store, &fakeAcquirer{}, nil).Reporting(reporter, nil).List(context.Background(), ListMediaRequest{Checksums: true})
+	if err != nil || len(verified.Media) != 2 || verified.Media[0].Verified != "failed" || verified.Media[1].Verified != "ok" {
+		t.Fatalf("verified listing = %+v (%v)", verified, err)
+	}
+	if len(store.holdLocked) != 1 {
+		t.Fatalf("held %d images, want only the good one", len(store.holdLocked))
+	}
+	expectEvents(t, reporter.events,
+		check("Verify bad.iso", "running", "", 1, 2),
+		check("Verify bad.iso", "failed", malformed, 1, 2),
+		check("Verify good.iso", "running", "", 2, 2),
+		check("Verify good.iso", "ok", "matches its record", 2, 2),
+	)
+}
+
+// A store failure while an image is read refuses the listing, and every
+// handle the listing held is still released.
+func TestAStoreFailureWhileHashingRefusesTheListing(t *testing.T) {
+	demo := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
+	alt := managedos.MediaEntry{Name: "alt.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///alt.iso", Added: "2026-09-15T09:00:00Z"}
+	broken := errors.New("the media store could not be read")
+	store := &fakeStore{entries: []managedos.MediaEntry{demo, alt}, digestError: broken}
+	listed, err := newService(store, &fakeAcquirer{}, nil).List(context.Background(), ListMediaRequest{Checksums: true})
+	if !errors.Is(err, broken) || listed != nil {
+		t.Fatalf("a store failure listed %+v (%v)", listed, err)
+	}
+	if len(store.holdLocked) != 2 || store.heldClosed != len(store.holdLocked) {
+		t.Fatalf("held %d images, closed %d", len(store.holdLocked), store.heldClosed)
+	}
+}
+
+// A canceled checksum listing refuses with the cancellation and releases every
+// handle it held.
+func TestACanceledChecksumListingClosesEveryHeldImage(t *testing.T) {
+	demo := managedos.MediaEntry{Name: "demo.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///demo.iso", Added: "2026-09-15T09:00:00Z"}
+	alt := managedos.MediaEntry{Name: "alt.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///alt.iso", Added: "2026-09-15T09:00:00Z"}
+	store := &fakeStore{entries: []managedos.MediaEntry{demo, alt}, digests: map[string]string{"demo.iso": demo.SHA256, "alt.iso": alt.SHA256}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reporter := &recordingReporter{observe: func(event ProgressEvent) {
+		if event.Status == "running" {
+			cancel()
+		}
+	}}
+	listed, err := newService(store, &fakeAcquirer{}, nil).Reporting(reporter, nil).List(ctx, ListMediaRequest{Checksums: true})
+	if !errors.Is(err, context.Canceled) || listed != nil {
+		t.Fatalf("a canceled listing listed %+v (%v)", listed, err)
+	}
+	if len(store.holdLocked) != 2 || store.heldClosed != 2 {
+		t.Fatalf("held %d images, closed %d", len(store.holdLocked), store.heldClosed)
+	}
+}
+
+// A hold the store refuses for the whole store refuses the listing and
+// releases what was already held; one that concerns that image alone lists it
+// failed.
+func TestAHoldFailureClosesWhatWasHeld(t *testing.T) {
+	a := managedos.MediaEntry{Name: "a.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///a.iso", Added: "2026-09-15T09:00:00Z"}
+	b := managedos.MediaEntry{Name: "b.iso", Size: 4, SHA256: digestOf("data"), Source: "file:///b.iso", Added: "2026-09-15T09:00:00Z"}
+	broken := errors.New("the media directory was replaced")
+	store := &fakeStore{
+		entries: []managedos.MediaEntry{a, b}, holdError: map[string]error{"b.iso": broken},
+		digests: map[string]string{"a.iso": a.SHA256, "b.iso": b.SHA256},
+	}
+	listed, err := newService(store, &fakeAcquirer{}, nil).List(context.Background(), ListMediaRequest{Checksums: true})
+	if !errors.Is(err, broken) || listed != nil || store.heldClosed != 1 || len(store.hashLocked) != 0 {
+		t.Fatalf("a refused hold listed %+v (%v), closed %d, read %d", listed, err, store.heldClosed, len(store.hashLocked))
+	}
+	unopenable := "its file cannot be opened"
+	store = &fakeStore{
+		entries: []managedos.MediaEntry{a, b}, holdError: map[string]error{"b.iso": imageFailed(unopenable)},
+		digests: map[string]string{"a.iso": a.SHA256, "b.iso": b.SHA256},
+	}
+	listed, err = newService(store, &fakeAcquirer{}, nil).List(context.Background(), ListMediaRequest{Checksums: true})
+	if err != nil || listed.Media[0].Verified != "ok" || listed.Media[1].Verified != "failed" || listed.Media[1].Failure != unopenable || store.heldClosed != 1 {
+		t.Fatalf("an unopenable image listed %+v (%v), closed %d", listed, err, store.heldClosed)
+	}
 }
 
 // Reporting stops at cancellation rather than claiming a step whose outcome is

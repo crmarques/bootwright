@@ -586,3 +586,43 @@ def test_a_frozen_proxy_route_sets_every_spelling_of_its_variables():
                         % (label(path), names[-1], upper, lower)
                     )
     assert not problems, "\n".join(problems)
+
+
+def rescue_problems(where, tasks):
+    """Why a rescue in one file might complete and let the run continue past the failure it caught."""
+    problems = []
+    for task, _names in walk(tasks):
+        if "rescue" not in task:
+            continue
+        rescue = [child for child in task.get("rescue") or [] if isinstance(child, dict)]
+        if not rescue or not unconditional_fail(rescue[-1]):
+            problems.append(
+                "%s: the rescue of block %r does not end in an unconditional ansible.builtin.fail, so a failure "
+                "it catches can complete" % (where, task.get("name"))
+            )
+    return problems
+
+
+def test_every_rescue_ends_in_a_fail_nothing_skips():
+    problems = []
+    for path in task_files():
+        problems.extend(rescue_problems(label(path), load(path)))
+    assert not problems, "\n".join(problems)
+
+
+RESCUED = {"name": "Run the effect", "ansible.builtin.command": {"argv": ["/usr/bin/true"]}}
+
+
+@pytest.mark.parametrize("last", [
+    {"name": "Refuse", "ansible.builtin.fail": {"msg": "failed"}, "when": "item is defined"},
+    {"name": "Report", "ansible.builtin.debug": {"msg": "failed"}},
+    {"name": "Refuse", "ansible.builtin.fail": {"msg": "failed"}, "ignore_errors": True},
+], ids=["conditional fail", "debug", "tolerated fail"])
+def test_the_rescue_rule_rejects(last):
+    tasks = [{"name": "Guarded", "block": [RESCUED], "rescue": [{"name": "Collect", "ansible.builtin.debug": {}}, last]}]
+    assert rescue_problems("fixture", tasks)
+
+
+def test_the_rescue_rule_accepts():
+    tasks = [{"name": "Guarded", "block": [RESCUED], "rescue": [{"name": "Refuse", "ansible.builtin.fail": {"msg": "failed"}}]}]
+    assert not rescue_problems("fixture", tasks)

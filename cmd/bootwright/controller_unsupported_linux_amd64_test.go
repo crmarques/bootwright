@@ -48,7 +48,7 @@ func TestUnsupportedControllerShapesRefuseBeforeRegistration(t *testing.T) {
 			body := strings.Replace(string(sources.Files[index].Bytes()), test.old, test.new, 1)
 			sources.Files[index] = desiredstate.NewSourceFile(sources.Files[index].Path(), []byte(body))
 			state, _ := compileAcceptance(t, sources)
-			capability, ok := buildCapabilities(systemClock{}, exampleControllerPorts(t)).Resolve(clients.Kind, clients.Implementation)
+			capability, ok := buildCapabilities(systemClock{}, exampleControllerPorts(t), nil).Resolve(clients.Kind, clients.Implementation)
 			if !ok {
 				t.Fatal("the controller stage capability does not resolve")
 			}

@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -40,6 +41,31 @@ type lifecycleDependencies struct {
 	// Capabilities substitutes the implementation set an operation may run.
 	// Production leaves it empty and uses this build's own capabilities.
 	Capabilities lifecycle.CapabilityResolver
+	// Media is the host media store a plan freezes installation media from.
+	Media media.Store
+}
+
+// storeMediaRecords reads the host media store's records for the installation
+// capability. A plan reads it while it holds the shared root lock, which the
+// store's own shared read is compatible with.
+type storeMediaRecords struct{ store media.Store }
+
+func (r storeMediaRecords) MediaRecords(ctx context.Context) (map[string]installation.MediaRecord, error) {
+	records := map[string]installation.MediaRecord{}
+	err := r.store.ReadMedia(ctx, func(view media.View) error {
+		entries, err := view.Entries(ctx)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			records[entry.Name] = installation.MediaRecord{SHA256: entry.SHA256, Size: entry.Size, Observed: entry.Observed, Failure: entry.Failure}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
 }
 
 // automationDigest is the content identity of the embedded collection this
@@ -124,8 +150,8 @@ func operationPlaybook() map[string]string {
 
 // buildCapabilities lists what this executable can realize, in the API's own
 // kind order, so a plan's block order never depends on wiring order.
-func buildCapabilities(clock systemClock, controller controllerDependencies) capabilityResolver {
-	return buildCapabilitiesWith(clock, controller, ansiblerunner.New(operationPlaybook()))
+func buildCapabilities(clock systemClock, controller controllerDependencies, records installation.MediaRecords) capabilityResolver {
+	return buildCapabilitiesWith(clock, controller, ansiblerunner.New(operationPlaybook()), records)
 }
 
 // capabilityRunner is the port every runner-driven capability declares, so
@@ -136,7 +162,8 @@ type capabilityRunner interface {
 
 // buildCapabilitiesWith binds every capability over one runner. Production
 // passes the Ansible runner; the capability contract suite passes its own.
-func buildCapabilitiesWith(clock systemClock, controller controllerDependencies, runner capabilityRunner) capabilityResolver {
+// records is the reader the installation capability freezes its images from.
+func buildCapabilitiesWith(clock systemClock, controller controllerDependencies, runner capabilityRunner, records installation.MediaRecords) capabilityResolver {
 	resolver := capabilityResolver{{
 		kind: clients.Kind, implementation: clients.Implementation,
 		capability: clients.New(controller.Tools, controller.Native, controller.NativeInspector, controller.ClientInstaller),
@@ -148,7 +175,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: baremetal.NewMachine(runner),
 	}, {
 		kind: installation.Kind, implementation: installation.Implementation,
-		capability: installation.New(runner).WithIdentities(provedIdentities{}),
+		capability: installation.New(runner).WithIdentities(provedIdentities{}).WithMedia(records),
 	}, {
 		kind: libvirt.HostKind, implementation: libvirt.HostImplementation,
 		capability: libvirt.NewHost(runner),
@@ -171,12 +198,22 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	})
 }
 
+// lifecycleMedia is the media store reader the installation capability plans
+// through, and none when no store is wired, so planning an installation
+// refuses rather than freezing unproved media.
+func lifecycleMedia(deps lifecycleDependencies) installation.MediaRecords {
+	if deps.Media == nil {
+		return nil
+	}
+	return storeMediaRecords{store: deps.Media}
+}
+
 func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies, compiler compilation.Compiler, binder *custody.Service) lifecycle.Service {
 	if deps.Workspace == nil || deps.Inputs == nil || deps.Host == nil || deps.Guard == nil {
 		return lifecycle.Service{}
 	}
 	clock := systemClock{}
-	var capabilities lifecycle.CapabilityResolver = buildCapabilities(clock, controller)
+	var capabilities lifecycle.CapabilityResolver = buildCapabilities(clock, controller, lifecycleMedia(deps))
 	if deps.Capabilities != nil {
 		capabilities = deps.Capabilities
 	}

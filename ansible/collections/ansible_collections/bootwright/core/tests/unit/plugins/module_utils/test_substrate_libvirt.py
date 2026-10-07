@@ -28,7 +28,9 @@ OWNED_NETWORK = """<network>
   <uuid>4c0a4300-aa43-458c-86d7-ac2256d1fc00</uuid>
   <bridge name="virbr-lab"/>
   <metadata>
-    <bw:owner xmlns:bw="https://bootwright.io/substrate/v1"><bw:context>lab</bw:context></bw:owner>
+    <bw:owner xmlns:bw="https://bootwright.io/substrate/v1">
+      <bw:context>lab</bw:context><bw:attachment>bootwright-lab-guests</bw:attachment>
+    </bw:owner>
   </metadata>
 </network>"""
 
@@ -37,11 +39,12 @@ FOREIGN_NETWORK = """<network>
   <bridge name="virbr-lab"/>
 </network>"""
 
+DOMAIN_UUID = "1ab52b3c-0000-8000-8000-000000000000"
 OWNED_DOMAIN = """<domain type="kvm">
   <name>bootwright-lab-rhel-01</name>
   <uuid>1ab52b3c-0000-8000-8000-000000000000</uuid>
   <metadata>
-    <bw:owner xmlns:bw="https://bootwright.io/substrate/v1"><bw:machine>rhel-01</bw:machine></bw:owner>
+    <bw:owner xmlns:bw="https://bootwright.io/substrate/v1"><bw:context>lab</bw:context><bw:machine>rhel-01</bw:machine></bw:owner>
   </metadata>
 </domain>"""
 
@@ -109,24 +112,26 @@ def test_a_stopped_unit_that_still_exists_is_still_reported():
 def test_a_network_without_this_contexts_metadata_is_foreign():
     owned = runner_for({
         "net-dumpxml bootwright-lab-guests": (0, OWNED_NETWORK, ""),
-        "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
+        "net-info bootwright-lab-guests": (0, "Active:         yes\nAutostart:      yes\n", ""),
     })
-    assert network_state(owned, "qemu:///system", "bootwright-lab-guests") == {
-        "answered": True, "definition": False, "drifted": False, "state": "active", "owned": True, "bridge": "virbr-lab",
-        "uuid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
+    assert network_state(owned, "qemu:///system", "bootwright-lab-guests", context="lab") == {
+        "answered": True, "autostart": True, "definition": False, "drifted": False, "state": "active", "owned": True,
+        "bridge": "virbr-lab", "uuid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
     }
+    assert network_state(owned, "qemu:///system", "bootwright-lab-guests", context="other")["owned"] is False
     foreign = runner_for({
         "net-dumpxml bootwright-lab-guests": (0, FOREIGN_NETWORK, ""),
         "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
     })
-    assert network_state(foreign, "qemu:///system", "bootwright-lab-guests")["owned"] is False
+    assert network_state(foreign, "qemu:///system", "bootwright-lab-guests", context="lab")["owned"] is False
 
 
 def test_an_absent_or_malformed_network_reports_no_state():
     assert network_state(runner_for({}), "qemu:///system", "gone")["state"] == ""
     malformed = runner_for({"net-dumpxml gone": (0, "not xml", "")})
     assert network_state(malformed, "qemu:///system", "gone") == {
-        "answered": False, "definition": False, "drifted": False, "state": "", "owned": False, "bridge": "", "uuid": "",
+        "answered": False, "autostart": False, "definition": False, "drifted": False, "state": "", "owned": False, "bridge": "",
+        "uuid": "",
     }
 
 
@@ -145,7 +150,8 @@ POOL_UNDEFINED = (1, "", "error: failed to get pool 'p'\nerror: Storage pool not
 def test_a_network_or_pool_is_absent_only_when_its_driver_answered_for_it():
     undefined = runner_for({"net-dumpxml bootwright-lab-guests": NETWORK_UNDEFINED, "net-list --all --name": (0, "default\n\n", "")})
     assert network_state(undefined, "qemu:///system", "bootwright-lab-guests") == {
-        "answered": True, "definition": False, "drifted": False, "state": "", "owned": False, "bridge": "", "uuid": "",
+        "answered": True, "autostart": False, "definition": False, "drifted": False, "state": "", "owned": False, "bridge": "",
+        "uuid": "",
     }
     for name, answers in {
         "driver silent": {"net-dumpxml bootwright-lab-guests": NETWORK_DRIVER_SILENT,
@@ -155,17 +161,24 @@ def test_a_network_or_pool_is_absent_only_when_its_driver_answered_for_it():
         "listing truncated": {"net-dumpxml bootwright-lab-guests": NETWORK_UNDEFINED, "net-list --all --name": (0, "x" * MAX_OUTPUT, "")},
     }.items():
         state = network_state(runner_for(answers), "qemu:///system", "bootwright-lab-guests")
-        assert state == {"answered": False, "definition": False, "drifted": False, "state": "", "owned": False, "bridge": "", "uuid": ""}, name
-    assert pool_state(runner_for({"pool-info p": POOL_UNDEFINED, "pool-list --all --name": (0, "default\n\n", "")}), "qemu:///system", "p") == {
-        "answered": True, "state": "",
-    }
+        assert state == {
+            "answered": False, "autostart": False, "definition": False, "drifted": False, "state": "", "owned": False,
+            "bridge": "", "uuid": "",
+        }, name
+    undefined = runner_for({"pool-info p": POOL_UNDEFINED, "pool-list --all --name": (0, "default\n\n", "")})
+    assert pool_state(undefined, "qemu:///system", "p", "/pool") == {"answered": True, "state": "", "autostart": False, "owned": False}
     for name, answers in {
         "driver silent": {"pool-info p": POOL_UNDEFINED, "pool-list --all --name": (1, "", "error: Failed to list pools\n")},
         "listed after all": {"pool-info p": POOL_UNDEFINED, "pool-list --all --name": (0, "p\n\n", "")},
     }.items():
-        assert pool_state(runner_for(answers), "qemu:///system", "p") == {"answered": False, "state": ""}, name
-    running = runner_for({"pool-info p": (0, "Name:           p\nState:          running\n", "")})
-    assert pool_state(running, "qemu:///system", "p") == {"answered": True, "state": "active"}
+        assert pool_state(runner_for(answers), "qemu:///system", "p", "/pool") == {
+            "answered": False, "state": "", "autostart": False, "owned": False,
+        }, name
+    running = runner_for({
+        "pool-info p": (0, "Name:           p\nState:          running\nAutostart:      yes\n", ""),
+        "pool-dumpxml p": (0, "<pool type='dir'><name>p</name><target><path>/pool</path></target></pool>", ""),
+    })
+    assert pool_state(running, "qemu:///system", "p", "/pool") == {"answered": True, "state": "active", "autostart": True, "owned": True}
 
 
 # The uri answering proves only that the hypervisor did: with the network driver
@@ -494,10 +507,10 @@ def test_the_observation_names_what_runs_on_each_drifted_network_alone(tmp_path)
 
 def test_a_domain_reports_its_identity_and_ownership():
     owned = runner_for({"dumpxml bootwright-lab-rhel-01": (0, OWNED_DOMAIN, "")})
-    assert domain_metadata(owned, "qemu:///system", "bootwright-lab-rhel-01") == {
+    assert domain_metadata(owned, "qemu:///system", "bootwright-lab-rhel-01", "lab", "rhel-01", DOMAIN_UUID) == {
         "answered": True, "present": True, "owned": True, "uuid": "1ab52b3c-0000-8000-8000-000000000000",
     }
-    assert domain_metadata(runner_for({}), "qemu:///system", "gone") == {
+    assert domain_metadata(runner_for({}), "qemu:///system", "gone", "lab", "gone", DOMAIN_UUID) == {
         "answered": False, "present": False, "owned": False, "uuid": "",
     }
 
@@ -569,7 +582,7 @@ OTHER_DOMAINS = (0, "bootwright-lab-rhel-02\n\n", "")
 
 def test_a_domain_the_hypervisor_does_not_define_is_told_apart_from_no_answer():
     undefined = runner_for({"dumpxml bootwright-lab-rhel-01": LOOKUP_REFUSED, "list --all --name": OTHER_DOMAINS})
-    assert domain_metadata(undefined, "qemu:///system", "bootwright-lab-rhel-01") == {
+    assert domain_metadata(undefined, "qemu:///system", "bootwright-lab-rhel-01", "lab", "rhel-01", DOMAIN_UUID) == {
         "answered": True, "present": False, "owned": False, "uuid": "",
     }
     for name, answers in {
@@ -579,7 +592,7 @@ def test_a_domain_the_hypervisor_does_not_define_is_told_apart_from_no_answer():
         "listing truncated": {"dumpxml bootwright-lab-rhel-01": LOOKUP_REFUSED, "list --all --name": (0, "x" * (1 << 20), "")},
         "another failure": {"dumpxml bootwright-lab-rhel-01": (1, "", "error: internal error\n"), "list --all --name": OTHER_DOMAINS},
     }.items():
-        metadata = domain_metadata(runner_for(answers), "qemu:///system", "bootwright-lab-rhel-01")
+        metadata = domain_metadata(runner_for(answers), "qemu:///system", "bootwright-lab-rhel-01", "lab", "rhel-01", DOMAIN_UUID)
         assert metadata == {"answered": False, "present": False, "owned": False, "uuid": ""}, name
 
 
@@ -588,7 +601,9 @@ def machine_request(disks=None):
         "controller": {"address": "192.0.2.1", "port": 8000, "unit": "bootwright-lab-bmc-rhel-01"},
         "disks": disks or [],
         "domain": "bootwright-lab-rhel-01",
+        "identity": {"block": "substrate-machine-rhel-01", "context": "lab", "object": "rhel-01"},
         "uri": "qemu:///system",
+        "uuid": DOMAIN_UUID,
     }
 
 
@@ -607,6 +622,27 @@ def test_a_machine_observation_reports_whether_the_hypervisor_answered():
     })
     observation = observe_machine(defined, machine_request(), reader())
     assert (observation["answered"], observation["domain"], observation["state"]) == (True, "bootwright-lab-rhel-01", "running")
+
+
+# The observation decides ownership from the request's own context, Machine and
+# UUID: this context's domain is owned, and the same domain read under another
+# context or another frozen UUID is not.
+def test_a_machine_observation_owns_exactly_the_requests_domain():
+    answers = {
+        "dumpxml bootwright-lab-rhel-01": (0, OWNED_DOMAIN, ""),
+        "domstate bootwright-lab-rhel-01": (0, "running\n", ""),
+    }
+    observation = observe_machine(runner_for(answers), machine_request(), reader())
+    assert (observation["owned"], observation["uuid"]) == (True, DOMAIN_UUID)
+    other_context = machine_request()
+    other_context["identity"] = dict(other_context["identity"], context="other")
+    assert observe_machine(runner_for(answers), other_context, reader())["owned"] is False
+    other_machine = machine_request()
+    other_machine["identity"] = dict(other_machine["identity"], object="rhel-02")
+    assert observe_machine(runner_for(answers), other_machine, reader())["owned"] is False
+    other_uuid = dict(machine_request(), uuid="2bc63c4d-0000-8000-8000-000000000000")
+    observation = observe_machine(runner_for(answers), other_uuid, reader())
+    assert (observation["owned"], observation["uuid"]) == (False, DOMAIN_UUID)
 
 
 # The kernel's layout of /proc/net/tcp and tcp6: a header, then one line per

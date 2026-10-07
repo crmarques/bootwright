@@ -85,3 +85,49 @@ def test_nothing_left_reports_no_staging_tree_and_no_work_area(tmp_path):
     observed = inspect(tmp_path)
     assert observed["treeStaging"] is False
     assert observed["work"] is False
+
+
+FROZEN = "fedcba9876543210" * 4
+
+
+def published(root, identity):
+    """The observation of a published tree carrying identity, or no identity
+    file when it is None, for a request that froze FROZEN."""
+    tree = root / "os" / "rhel-9-8" / "tree"
+    (tree / "BaseOS").mkdir(parents=True)
+    (tree / ".treeinfo").write_text("[general]\n")
+    if identity is not None:
+        (tree / ".bootwright-tree-identity").write_text(identity)
+    frozen = dict(request(root), treeMedia={"name": "rhel-9.8-x86_64-dvd.iso", "sha256": FROZEN})
+    return observe(frozen, "", str(root / "work"))
+
+
+# A tree carries the digest of the DVD it was extracted from, and is complete
+# only when that is the digest the request froze.
+def test_the_tree_identity_is_reported_and_completes_only_the_frozen_tree(tmp_path):
+    observed = published(tmp_path, FROZEN + "\n")
+    assert (observed["tree"], observed["treeIdentity"]) == (True, FROZEN)
+
+
+def test_a_tree_from_another_image_is_present_but_not_complete(tmp_path):
+    other = "0123456789abcdef" * 4
+    observed = published(tmp_path, other + "\n")
+    assert (observed["tree"], observed["treeContent"], observed["treeIdentity"]) == (False, True, other)
+
+
+def test_a_malformed_identity_reads_as_none(tmp_path):
+    for index, identity in enumerate([None, "", "abc\n", FROZEN.upper(), FROZEN + "0", "g" * 64]):
+        observed = published(tmp_path / str(index), identity)
+        assert (observed["tree"], observed["treeIdentity"]) == (False, ""), identity
+
+
+def test_an_identity_reached_through_a_link_reads_as_none(tmp_path):
+    target = tmp_path / "elsewhere"
+    target.write_text(FROZEN + "\n")
+    tree = tmp_path / "os" / "rhel-9-8" / "tree"
+    tree.mkdir(parents=True)
+    (tree / ".treeinfo").write_text("[general]\n")
+    (tree / ".bootwright-tree-identity").symlink_to(target)
+    frozen = dict(request(tmp_path), treeMedia={"name": "rhel-9.8-x86_64-dvd.iso", "sha256": FROZEN})
+    observed = observe(frozen, "", str(tmp_path / "work"))
+    assert (observed["tree"], observed["treeIdentity"]) == (False, "")

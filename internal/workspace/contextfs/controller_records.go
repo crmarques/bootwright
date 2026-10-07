@@ -112,6 +112,7 @@ func cloneControllerState(value prerequisites.HostState) prerequisites.HostState
 		definition := prerequisites.CloneDefinition(*value.Receipt.Definition)
 		value.Receipt.Definition = &definition
 	}
+	value.Receipt.Foundation = prerequisites.CloneQualifiedFoundation(value.Receipt.Foundation)
 	value.Receipt.Egress.NoProxy = slices.Clone(value.Receipt.Egress.NoProxy)
 	value.Receipt.Sources = slices.Clone(value.Receipt.Sources)
 	value.Receipt.Actions = slices.Clone(value.Receipt.Actions)
@@ -289,6 +290,9 @@ func validateRetainedDefinitions(value prerequisites.HostState) error {
 	r := value.Receipt
 	if r.Definition != nil && !slices.ContainsFunc(value.RetainedDefinitions, func(item prerequisites.Definition) bool { return prerequisites.SameDefinition(item, *r.Definition) }) {
 		return state("controller receipt lacks its retained resolution")
+	}
+	if r.Foundation != nil && (r.Definition == nil || prerequisites.ValidateQualifiedFoundation(*r.Foundation, r.Definition.Execution) != nil) {
+		return state("controller receipt execution foundation is invalid")
 	}
 	return nil
 }

@@ -2,7 +2,7 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_machine_request.version == 'machine-libvirt-v2'
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v3'
       - bootwright_substrate_machine_request.directory.startswith('/var/lib/libvirt/images/bootwright/')
       - bootwright_substrate_machine_request.controller.image is search('@sha256:[0-9a-f]{64}$')
       - bootwright_substrate_machine_request.controller.port | int > 0
@@ -32,7 +32,12 @@
     that:
       - substrate_libvirt_machine_before.observation.domain | length == 0
         or substrate_libvirt_machine_before.observation.owned
-    fail_msg: a libvirt domain of the same name exists without this context's ownership
+    fail_msg: >-
+      a libvirt domain named {{ bootwright_substrate_machine_request.domain }}
+      exists without this context's ownership of Machine
+      {{ bootwright_substrate_machine_request.identity.object }} under UUID
+      {{ bootwright_substrate_machine_request.uuid }}; remove or rename it, then
+      repeat the apply
     quiet: true
 
 - name: Refuse an owned disk whose size is not the size the profile froze
@@ -149,15 +154,36 @@
   register: substrate_libvirt_machine_configuration
 
 
+- name: Check whether the pinned controller image is already present
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - image
+      - exists
+      - '{{ bootwright_substrate_machine_request.controller.image }}'
+  register: substrate_libvirt_machine_image_present
+  failed_when: false
+  changed_when: false
+
+# The frozen egress route is the only one this pull may take. A native tool
+# may read either spelling of a proxy variable, and an empty one lets the
+# other win, so both spellings carry the same route and none is ambient.
 - name: Acquire the pinned controller image
   ansible.builtin.command:
     argv:
       - /usr/bin/podman
       - pull
       - '{{ bootwright_substrate_machine_request.controller.image }}'
+  environment:
+    HTTP_PROXY: '{{ bootwright_substrate_machine_request.egress.httpProxy | default("") }}'
+    HTTPS_PROXY: '{{ bootwright_substrate_machine_request.egress.httpsProxy | default("") }}'
+    NO_PROXY: '{{ bootwright_substrate_machine_request.egress.noProxy | default([], true) | join(",") }}'
+    http_proxy: '{{ bootwright_substrate_machine_request.egress.httpProxy | default("") }}'
+    https_proxy: '{{ bootwright_substrate_machine_request.egress.httpsProxy | default("") }}'
+    no_proxy: '{{ bootwright_substrate_machine_request.egress.noProxy | default([], true) | join(",") }}'
   register: substrate_libvirt_machine_pull
-  when: substrate_libvirt_machine_before.observation.controller | length == 0
-  changed_when: substrate_libvirt_machine_before.observation.controller | length == 0
+  when: substrate_libvirt_machine_image_present.rc != 0
+  changed_when: substrate_libvirt_machine_image_present.rc != 0
 
 - name: Observe the controller's authentication file
   ansible.builtin.stat:

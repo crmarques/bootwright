@@ -1,8 +1,12 @@
 """Read-only inventory through the supplied native package manager."""
 
 from ansible.plugins.action import ActionBase
+from ansible.utils.display import Display
 from ansible_collections.bootwright.core.plugins.module_utils.controller_native import (
     inspection,
+)
+from ansible_collections.bootwright.core.plugins.module_utils.controller_refusal import (
+    name,
 )
 
 
@@ -21,7 +25,8 @@ class ActionModule(ActionBase):
             if set(observed) != {"inventory", "inventorySHA256", "rootsReady"}:
                 raise ValueError("native inventory result")
             return dict(result, **observed)
-        except (KeyError, TypeError, ValueError, OSError):
+        except (KeyError, TypeError, ValueError, OSError) as error:
+            name(error, warn=Display().warning)
             return dict(
                 result,
                 failed=True,

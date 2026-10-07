@@ -62,6 +62,9 @@
         }
       ],
       "domain": "bootwright-lab-sno-01",
+      "egress": {
+        "noProxy": []
+      },
       "identity": {
         "block": "machine-sno-01",
         "context": "lab",
@@ -86,7 +89,7 @@
       "uri": "qemu:///system",
       "uuid": "99fb0e65-44db-88dc-80ee-660148714293",
       "vcpu": 8,
-      "version": "machine-libvirt-v2"
+      "version": "machine-libvirt-v3"
     }
   ]
 }

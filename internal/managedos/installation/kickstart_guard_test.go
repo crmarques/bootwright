@@ -14,7 +14,11 @@ import (
 // repository, so every string an Installation carries has a value to replace.
 func guardedInstallation() Installation {
 	input := physicalInstallation()
-	input.Repositories = []Repository{{BaseURL: "https://mirror.example.test/extras", Enabled: true, ID: "extras"}}
+	input.Repositories = []Repository{{
+		BaseURL: "https://mirror.example.test/extras", Enabled: true, GPGCheck: true,
+		GPGKeyURL: "https://mirror.example.test/RPM-GPG-KEY", ID: "extras", Name: "Extra packages",
+		Proxy: "http://proxy.example.test:3128",
+	}}
 	return input
 }
 
@@ -88,7 +92,7 @@ func TestEveryKickstartValueRefusesALineBreak(t *testing.T) {
 	for _, field := range fields {
 		names = append(names, field.name)
 	}
-	for _, required := range []string{"Address", "Channel", "Formats", "Gateway", "PackageSource", "EnabledServices", "Packages", "Repositories.BaseURL", "Repositories.ID"} {
+	for _, required := range []string{"Address", "Channel", "Formats", "Gateway", "PackageSource", "EnabledServices", "Packages", "Repositories.BaseURL", "Repositories.GPGKeyURL", "Repositories.ID", "Repositories.Name", "Repositories.Proxy"} {
 		if !slices.Contains(names, required) {
 			t.Fatalf("the walk did not visit %s: %v", required, names)
 		}
@@ -111,14 +115,15 @@ func TestEveryKickstartValueRefusesALineBreak(t *testing.T) {
 	}
 }
 
-// Every value but the package source is one Kickstart token: shlex splits on
+// Every value but the package source and a repository's name is one Kickstart
+// token: shlex splits on
 // whitespace, reads quotes and backslashes and ends the line at '#', and a
 // leading '%' opens or closes a section. An element of a comma-joined list
 // also refuses the comma.
 func TestASingleTokenKickstartValueRefusesSeparatorsAndSections(t *testing.T) {
 	listed := []string{"AdditionalLocale", "DisabledServices", "EnabledServices", "Nameservers", "NTPServers"}
 	for _, field := range kickstartStrings(t) {
-		if field.name == "PackageSource" {
+		if field.name == "PackageSource" || field.name == "Repositories.Name" {
 			continue
 		}
 		for _, value := range []string{"a b", "a\u00a0b", "%post", "a#b", "a'b", `a"b`, `a\b`} {
@@ -148,5 +153,69 @@ func TestASingleTokenKickstartValueRefusesSeparatorsAndSections(t *testing.T) {
 			t.Fatalf("the package source %q was refused: %v", source, err)
 		}
 		requireLine(t, rendered, source)
+	}
+}
+
+func expectEmptyRefusal(t *testing.T, input Installation, class string) {
+	t.Helper()
+	rendered, err := RenderKickstart(input)
+	reported := diagnostics.Of(err)
+	if rendered != "" || len(reported) != 1 || reported[0].Code != "api.value" ||
+		reported[0].Message != class+" is empty, which its Kickstart directive cannot carry" ||
+		!strings.HasPrefix(reported[0].Remediation, "correct ") {
+		t.Fatalf("an empty %s rendered %q with %#v, want the guard's empty-value refusal", class, rendered, reported)
+	}
+}
+
+// An empty package source renders no install source line at all, so the
+// installer would prompt for one; the guard refuses it like admission would.
+func TestTheGuardRefusesAnEmptyPackageSource(t *testing.T) {
+	input := guardedInstallation()
+	input.PackageSource = ""
+	expectEmptyRefusal(t, input, "the package source")
+	input = guardedInstallation()
+	input.Packages = []string{""}
+	expectEmptyRefusal(t, input, "a package entry")
+	input = guardedInstallation()
+	input.Repositories[0].ID = ""
+	expectEmptyRefusal(t, input, "a repository ID")
+}
+
+// A %packages entry starting with '-' excludes a package instead of
+// installing it, which admission's package grammar already refuses.
+func TestTheGuardRefusesAPackageEntryStartingWithADash(t *testing.T) {
+	input := guardedInstallation()
+	input.Packages = []string{"-chrony"}
+	expectGuardRefusal(t, input, "a package entry starting with a dash")
+	input.Packages = []string{"chrony-tools"}
+	if _, err := RenderKickstart(input); err != nil {
+		t.Fatalf("a package with an inner dash was refused: %v", err)
+	}
+}
+
+// A repository's name is the one line after name= in its .repo file, so it may
+// hold spaces and '#' but never a line break.
+func TestARepositoryNameIsOneLine(t *testing.T) {
+	input := guardedInstallation()
+	input.Repositories[0].Name = "Extra packages #1 (Bootwright's)"
+	rendered, err := RenderKickstart(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireLine(t, rendered, "name=Extra packages #1 (Bootwright's)")
+	for _, value := range []string{"a\nb", "a\u2028b", "a\x00b"} {
+		input = guardedInstallation()
+		input.Repositories[0].Name = value
+		expectGuardRefusal(t, input, fmt.Sprintf("a repository name holding %q", value))
+	}
+}
+
+// A repository ID names its section and its file beneath /etc/yum.repos.d, so
+// it holds no slash and is never a directory reference.
+func TestARepositoryIDHoldsNoSlash(t *testing.T) {
+	for _, value := range []string{"x/y", "../x", ".", ".."} {
+		input := guardedInstallation()
+		input.Repositories[0].ID = value
+		expectGuardRefusal(t, input, fmt.Sprintf("a repository ID %q", value))
 	}
 }

@@ -76,8 +76,8 @@ func uncarriedNetwork(catalog api.Catalog, machine api.Object, composed api.Valu
 			uncarried = append(uncarried, "mtu "+mtu.Text()+" on "+declared.Get("name").Text())
 		}
 	}
-	// The line carries the gateway of the first default route the network
-	// template declares, so only a route that is exactly that one is carried.
+	// The line carries the gateway DefaultGateway reads from the composed
+	// network, so only a route that is exactly that one is carried.
 	gateway := ""
 	if template, err := substrate.NetworkTemplate(catalog, machine); err == nil {
 		gateway = substrate.DefaultGateway(template)

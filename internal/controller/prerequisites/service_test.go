@@ -894,6 +894,10 @@ type testRuntimeInstaller struct {
 	entered           int
 	beforePreparation error
 	recoveryError     error
+	// failedAfterPreparation records the preparation even for a failed
+	// result, as setup's own run does when its adapter fails before Go
+	// acknowledges a native record.
+	failedAfterPreparation bool
 	// outputs is what each run was given to keep its output in, and started
 	// runs as each Ansible run starts, before it prints anything.
 	outputs []RunOutput
@@ -928,7 +932,7 @@ func (r *testRuntimeInstaller) Prepare(ctx context.Context, area BundleArea, pla
 	if area == nil || !r.owner.bundle.ready || !slices.ContainsFunc(r.owner.store.state.Receipt.Actions, func(a SetupAction) bool { return a.ID == "container-runtime" && a.Phase == "intent" }) {
 		return ActionResult{}, errors.New("runtime without qualified bundle and durable intent")
 	}
-	if r.result.Outcome != "failed" {
+	if r.result.Outcome != "failed" || r.failedAfterPreparation {
 		if r.beforePreparation != nil {
 			return ActionResult{}, r.beforePreparation
 		}
@@ -1008,6 +1012,37 @@ func TestDefiniteNativeRefusalPreservesBundleAndPermitsFreshAttempt(t *testing.T
 	_, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
 	if err != nil || f.bundle.prepares != 1 || r.calls != 2 || f.store.state.Receipt.ID == first || f.store.state.Receipt.Status != "complete" {
 		t.Fatalf("native retry=%v", err)
+	}
+}
+
+// Setup's own run whose adapter failed after its preparation was published,
+// but before Go acknowledged a native record, authorized no transaction: the
+// runner reports it failed with its intent recorded, the receipt is failed
+// with the action observed failed beside its preparation, and the next setup
+// replaces it rather than recovering it.
+func TestASetupFailedBeforeNativeAuthorizationIsReplacedByTheNextSetup(t *testing.T) {
+	f, r := explicitRuntimeFixture(t)
+	r.failedAfterPreparation = true
+	r.err = &ScopedFailure{Code: "controller.setup", Message: "cdn.example.test could not be resolved by this host's configured resolver", Correction: "Make cdn.example.test resolvable", Routable: true}
+	r.result = ActionResult{Outcome: "failed", Evidence: object(map[string]any{"intentRecorded": true, "postcondition": false})}
+	_, err := f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if code(err) != "controller.setup" || f.store.state.Receipt.Status != "failed" || r.entered != 1 {
+		t.Fatalf("setup failed before native authorization = %v, receipt %q, entered %d", err, f.store.state.Receipt.Status, r.entered)
+	}
+	index := slices.IndexFunc(f.store.state.Receipt.Actions, func(a SetupAction) bool { return a.ID == "container-runtime" })
+	if index < 0 {
+		t.Fatal("the receipt holds no native runtime action")
+	}
+	action := f.store.state.Receipt.Actions[index]
+	if action.Phase != "observed" || action.Outcome != "failed" || len(action.Preparation) == 0 {
+		t.Fatalf("the native action is %s/%s with preparation %s, want observed failed with its preparation", action.Phase, action.Outcome, action.Preparation)
+	}
+	first := f.store.state.Receipt.ID
+	r.err, r.failedAfterPreparation = nil, false
+	r.result = ActionResult{Outcome: "changed", Evidence: object(map[string]any{"nativePostcondition": "verified"})}
+	_, err = f.service.Setup(context.Background(), SetupRequest{SkipConfirmation: true})
+	if err != nil || r.recovers != 0 || r.calls != 2 || f.store.state.Receipt.ID == first || f.store.state.Receipt.Status != "complete" {
+		t.Fatalf("the next setup = %v, recovers %d, calls %d, receipt %q", err, r.recovers, r.calls, f.store.state.Receipt.Status)
 	}
 }
 

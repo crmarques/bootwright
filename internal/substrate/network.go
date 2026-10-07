@@ -23,19 +23,30 @@ func NetworkSpec(catalog api.Catalog, machine api.Object) (api.Value, error) {
 	return config.Spec(), nil
 }
 
-// NetworkTemplate is the native NMState map of that configuration.
+// NetworkTemplate is the native NMState map of that configuration with the
+// Machine's overrides merged in, as admission composes it.
 func NetworkTemplate(catalog api.Catalog, machine api.Object) (api.Value, error) {
 	spec, err := NetworkSpec(catalog, machine)
 	if err != nil {
 		return api.Value{}, err
 	}
-	return spec.Get("nmstate"), nil
+	template := spec.Get("nmstate")
+	overrides := machine.Spec().Get("network", "overrides")
+	if !overrides.Present() {
+		return template, nil
+	}
+	merged, ok := MergeNative(template, overrides)
+	if !ok {
+		return api.Value{}, refusal("api.invariant", "the Machine's network overrides do not merge into its network template", "make each list in spec.network.overrides on "+machine.Identity()+" and the list it merges into uniformly named or uniformly unnamed maps")
+	}
+	return merged, nil
 }
 
-// EthernetInterfaces reads the physical interfaces of the network
-// configuration a Machine selects, in its declared order. It is the one reader
-// of that list, so the interfaces a substrate realizes and the interfaces a
-// consumer names are always the same set in the same order.
+// EthernetInterfaces reads the ethernet interfaces of the composed network
+// configuration a Machine selects that are neither absent nor ignored, in
+// their declared order. It is the one reader of that list, so the interfaces a
+// substrate realizes and the interfaces a consumer names are always the same
+// set in the same order.
 func EthernetInterfaces(catalog api.Catalog, machine api.Object) ([]string, error) {
 	template, err := NetworkTemplate(catalog, machine)
 	if err != nil {
@@ -43,7 +54,8 @@ func EthernetInterfaces(catalog api.Catalog, machine api.Object) ([]string, erro
 	}
 	var names []string
 	for _, item := range template.Get("interfaces").Items() {
-		if item.Get("type").Text() != "ethernet" {
+		state := item.Get("state").Text()
+		if item.Get("type").Text() != "ethernet" || state == "absent" || state == "ignore" {
 			continue
 		}
 		name := item.Get("name").Text()
@@ -53,18 +65,26 @@ func EthernetInterfaces(catalog api.Catalog, machine api.Object) ([]string, erro
 		names = append(names, name)
 	}
 	if len(names) == 0 {
-		return nil, refusal("api.value", "the Machine's network template declares no ethernet interface", "declare one on "+machine.Identity())
+		return nil, refusal("api.value", "the Machine's network template declares no ethernet interface that is not absent or ignored", "declare one on "+machine.Identity())
 	}
 	return names, nil
 }
 
-// DefaultGateway reads the next hop of the default route the template declares,
-// which is the gateway a static installation configures. A template without one
-// installs without a default route rather than inventing one.
+// DefaultGateway is the authored next hop of the first route that is not
+// absent, whose destination is a zero-prefix IPv4 CIDR and whose next hop is an
+// IPv4 address; a template without one installs without a default route.
 func DefaultGateway(template api.Value) string {
 	for _, route := range template.Get("routes", "config").Items() {
-		if route.Get("destination").Text() == "0.0.0.0/0" {
-			return route.Get("next-hop-address").Text()
+		if route.Get("state").Text() == "absent" {
+			continue
+		}
+		destination, err := netip.ParsePrefix(route.Get("destination").Text())
+		if err != nil || destination.Bits() != 0 || !destination.Addr().Is4() {
+			continue
+		}
+		hop := route.Get("next-hop-address").Text()
+		if next, err := netip.ParseAddr(hop); err == nil && next.Is4() {
+			return hop
 		}
 	}
 	return ""

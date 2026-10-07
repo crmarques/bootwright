@@ -39,6 +39,7 @@ func Verify(t *testing.T, within Within) {
 		check func(*testing.T, media.Store)
 	}{
 		{"a published image is an entry the view reads back", aPublishedImageIsAnEntryTheViewReadsBack},
+		{"a held image is read after its read ends", aHeldImageIsReadAfterItsReadEnds},
 		{"a live stage holds its name", aLiveStageHoldsItsName},
 		{"a closed stage never published or retained leaves nothing", aClosedStageLeavesNothing},
 		{"a stage is filled within its limit", aStageIsFilledWithinItsLimit},
@@ -66,6 +67,24 @@ func aPublishedImageIsAnEntryTheViewReadsBack(t *testing.T, store media.Store) {
 	succeeds(t, publish(store, image, stage, original, false), "a publication")
 	closes(t, stage)
 	holds(t, store, []managedos.MediaEntry{entry(image, original)}, nil)
+}
+
+func aHeldImageIsReadAfterItsReadEnds(t *testing.T, store media.Store) {
+	stage := claim(t, store, image, "")
+	fill(t, stage, original)
+	succeeds(t, publish(store, image, stage, original, false), "a publication")
+	closes(t, stage)
+	ctx := context.Background()
+	var held media.Held
+	succeeds(t, store.ReadMedia(ctx, func(view media.View) error {
+		var err error
+		held, err = view.Hold(ctx, image)
+		return err
+	}), "a hold")
+	if sum, err := held.Digest(ctx); err != nil || sum != digest(original) {
+		t.Fatalf("the held image read after its read ended = %s (%v), want %s", sum, err, digest(original))
+	}
+	succeeds(t, held.Close(), "releasing a held image")
 }
 
 func aLiveStageHoldsItsName(t *testing.T, store media.Store) {
@@ -257,6 +276,9 @@ func holds(t *testing.T, store media.Store, entries []managedos.MediaEntry, reta
 		}
 		listed := make([]managedos.MediaEntry, 0, len(images))
 		for _, image := range images {
+			if image.Failure != "" {
+				t.Fatalf("image %s is listed failed: %s", image.Name, image.Failure)
+			}
 			if image.Observed != image.Size {
 				t.Fatalf("image %s is observed at %d bytes, want the %d its record states", image.Name, image.Observed, image.Size)
 			}
@@ -277,8 +299,14 @@ func holds(t *testing.T, store media.Store, entries []managedos.MediaEntry, reta
 			if err != nil || !found || published != stored {
 				t.Fatalf("the record of %s = %+v %t (%v), want %+v", stored.Name, published, found, err, stored)
 			}
-			if sum, err := view.Digest(ctx, stored.Name); err != nil || sum != stored.SHA256 {
-				t.Fatalf("the digest of %s = %s (%v), want %s", stored.Name, sum, err, stored.SHA256)
+			held, err := view.Hold(ctx, stored.Name)
+			if err != nil {
+				t.Fatalf("the image %s could not be held: %v", stored.Name, err)
+			}
+			sum, err := held.Digest(ctx)
+			closed := held.Close()
+			if err != nil || closed != nil || sum != stored.SHA256 {
+				t.Fatalf("the digest of %s = %s (%v, released: %v), want %s", stored.Name, sum, err, closed, stored.SHA256)
 			}
 		}
 		if !slices.Equal(slices.Sorted(slices.Values(names)), slices.Sorted(slices.Values(want))) {

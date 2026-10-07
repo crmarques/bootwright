@@ -42,6 +42,10 @@ func refusedProfile(profile api.Object) (reason, remediation string) {
 				"remove " + field + " from " + profile.Identity()
 		}
 	}
+	if spec.Get("customizations", "ssh", "passwordAuthentication").Bool() {
+		return "the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused",
+			"set spec.customizations.ssh.passwordAuthentication to false on " + profile.Identity()
+	}
 	if spec.Get("customizations", "security", "fips", "enabled").Bool() {
 		return "the install profile enables FIPS, which carries effects this executable does not prove",
 			"disable spec.customizations.security.fips on " + profile.Identity()
@@ -90,6 +94,10 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 			}
 		}
 		if reason, remediation := refusedProfile(profile); reason != "" {
+			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
+			continue
+		}
+		if reason, remediation := refusedProxy(catalog, machine, profile); reason != "" {
 			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 			continue
 		}
@@ -272,9 +280,91 @@ func storeMedia(reference, checksum, field, identity string) (Media, error) {
 		if !ok {
 			return Media{}, refusal("api.value", "the declared media checksum is not a SHA-256 digest", "correct the checksum on "+identity)
 		}
-		media.SHA256 = digest
+		media.declared = digest
 	}
 	return media, nil
+}
+
+// pinMedia freezes the store record of every image a request names, refusing
+// one the store does not hold, one whose bytes no longer have the recorded
+// size and one whose record differs from the digest its MachineImage declares.
+func pinMedia(catalog api.Catalog, request Request, records map[string]MediaRecord) (Request, error) {
+	profile, _ := catalog.Find(api.MachineInstallProfile, request.Identity.Profile)
+	image, _ := catalog.Find(api.MachineImage, profile.Spec().Get("installer", "anaconda", "imageRef").Text())
+	boot, err := pinned(request.BootMedia, records, image.Identity(), "spec.bootMedia", image.Identity())
+	if err != nil {
+		return Request{}, err
+	}
+	request.BootMedia = boot
+	if request.TreeMedia != nil {
+		tree, err := pinned(*request.TreeMedia, records, profile.Identity(), "spec.installer.anaconda.packageSource.hostedTree.fromMedia", image.Identity())
+		if err != nil {
+			return Request{}, err
+		}
+		request.TreeMedia = &tree
+	}
+	return request, nil
+}
+
+// pinned is one image frozen at its store record. owner and field name where
+// the image is declared, and image the MachineImage whose checksum a declared
+// digest came from.
+func pinned(media Media, records map[string]MediaRecord, owner, field, image string) (Media, error) {
+	record, ok := records[media.Name]
+	if !ok {
+		return Media{}, refusal("lifecycle.state", "the host media store holds no image "+media.Name+", which "+owner+" names in "+field,
+			"import it with "+mediaAdd(media.Name, "")+", then repeat the command")
+	}
+	if record.Failure != "" {
+		return Media{}, refusal("lifecycle.state", "the host media store cannot read its image "+media.Name+", which "+owner+" names in "+field+": "+record.Failure,
+			"inspect it with bootwright media list, remove it with bootwright media delete --name "+media.Name+
+				", import it again with "+mediaAdd(media.Name, "")+", then repeat the command")
+	}
+	if digest, ok := managedos.NormalizeMediaDigest(record.SHA256); !ok || digest == "" || digest != record.SHA256 || record.Size <= 0 {
+		return Media{}, refusal("lifecycle.state", "the host media store's record of "+media.Name+" names no SHA-256 and size a plan can freeze",
+			"inspect it with bootwright media list, remove it with bootwright media delete --name "+media.Name+
+				", import it again with "+mediaAdd(media.Name, "")+", then repeat the command")
+	}
+	if record.Observed != record.Size {
+		return Media{}, refusal("lifecycle.state", "the host media store's image "+media.Name+" no longer has the size its record names",
+			"compare it with bootwright media list --checksums and import it again with "+mediaAdd(media.Name, ""))
+	}
+	if media.declared != "" && media.declared != record.SHA256 {
+		return Media{}, refusal("lifecycle.state", "the host media store's image "+media.Name+" has SHA-256 "+record.SHA256+", not the "+
+			media.declared+" spec.checksum declares on "+image,
+			"import the declared image with "+mediaAdd(media.Name, media.declared)+", or correct spec.checksum on "+image)
+	}
+	media.SHA256, media.Size = record.SHA256, record.Size
+	return media, nil
+}
+
+// mediaAdd is the import command a remedy names: media add always takes one
+// source, and a digest the remedy knows verifies either.
+func mediaAdd(name, digest string) string {
+	if digest == "" {
+		return "bootwright media add --name " + name + " --from-file <path>, or --from-url <url> --sha256 <digest>"
+	}
+	return "bootwright media add --name " + name + " --from-file <path> --sha256 " + digest + ", or --from-url <url> --sha256 " + digest
+}
+
+// mediaRefusals are the diagnostics an apply names for a store entry that no
+// longer has the size and SHA-256 its operation froze, which the attempt
+// proves before the entry's first use.
+func mediaRefusals(contextName string, request Request) map[string]error {
+	refused := func(name string) error {
+		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+			Severity: "error", Code: "lifecycle.state",
+			Message: "the media store's image " + name + " no longer has the size and SHA-256 this operation froze, so nothing was published or booted",
+			Remediation: "take this context back with bootwright destroy --context " + contextName + ", import the image again with " +
+				mediaAdd(name, "") + ", then run bootwright apply --context " + contextName,
+			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object},
+		}}}
+	}
+	refusals := map[string]error{"media-changed-boot": refused(request.BootMedia.Name)}
+	if request.TreeMedia != nil {
+		refusals["media-changed-tree"] = refused(request.TreeMedia.Name)
+	}
+	return refusals
 }
 
 type hostedTree struct {
@@ -306,7 +396,17 @@ func publicationFor(catalog api.Catalog, selection api.Value, contextName, objec
 	if err != nil {
 		return api.Object{}, Publication{}, err
 	}
-	return server, Publication{Path: published.Path, URL: published.URL}, nil
+	publication := Publication{Path: published.Path, URL: published.URL}
+	// An https publication is fetched through its listener before any machine
+	// is given it, verified against the certificate its server presents.
+	if strings.HasPrefix(published.URL, "https://") {
+		publication.CertificateRef = server.Spec().Get("tls", "secretRef").Text()
+		if publication.CertificateRef == "" {
+			return api.Object{}, Publication{}, refusal("api.required", "the selected artifact server declares no serving certificate to verify",
+				"set spec.tls.secretRef on "+server.Identity())
+		}
+	}
+	return server, publication, nil
 }
 
 // targetFor reads the realized machine this installation acts on. Everything

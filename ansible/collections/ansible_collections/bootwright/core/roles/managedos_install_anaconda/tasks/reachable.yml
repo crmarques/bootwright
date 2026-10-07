@@ -16,22 +16,69 @@
     mode: '0600'
   changed_when: false
 
+# ssh reads this file in place of the system and personal configuration, so no
+# ambient known hosts, proxy, control socket, agent or identity reaches the
+# connection; only the host crypto policy is kept, and an absent policy file
+# is skipped. The keepalives end a connection whose peer stopped answering.
+- name: Write the one-connection client configuration
+  ansible.builtin.copy:
+    content: "Include /etc/crypto-policies/back-ends/openssh.config\n"
+    dest: '{{ managedos_install_anaconda_work }}/ssh_config'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
 - name: Try the fleet account on that exact key
   ansible.builtin.command:
     argv:
       - /usr/bin/ssh
+      - -F
+      - '{{ managedos_install_anaconda_work }}/ssh_config'
       - -o
       - 'UserKnownHostsFile={{ managedos_install_anaconda_work }}/known_hosts'
+      - -o
+      - GlobalKnownHostsFile=none
+      - -o
+      - KnownHostsCommand=none
+      - -o
+      - VerifyHostKeyDNS=no
+      - -o
+      - UpdateHostKeys=no
+      - -o
+      - CheckHostIP=no
       - -o
       - StrictHostKeyChecking=yes
       - -o
       - IdentitiesOnly=yes
       - -o
+      - IdentityAgent=none
+      - -o
       - PasswordAuthentication=no
+      - -o
+      - KbdInteractiveAuthentication=no
+      - -o
+      - GSSAPIAuthentication=no
+      - -o
+      - HostbasedAuthentication=no
+      - -o
+      - ForwardAgent=no
+      - -o
+      - ProxyCommand=none
+      - -o
+      - ProxyJump=none
+      - -o
+      - ControlMaster=no
+      - -o
+      - ControlPath=none
       - -o
       - BatchMode=yes
       - -o
       - ConnectTimeout=10
+      - -o
+      - ServerAliveInterval=15
+      - -o
+      - ServerAliveCountMax=3
       - -i
       - '{{ bootwright_os_install_material.fleetIdentity }}'
       - '{{ bootwright_os_install_request.user }}@{{ bootwright_os_install_request.address }}'
@@ -49,5 +96,11 @@
 - name: Remove the one-connection known-hosts file
   ansible.builtin.file:
     path: '{{ managedos_install_anaconda_work }}/known_hosts'
+    state: absent
+  changed_when: false
+
+- name: Remove the one-connection client configuration
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_work }}/ssh_config'
     state: absent
   changed_when: false

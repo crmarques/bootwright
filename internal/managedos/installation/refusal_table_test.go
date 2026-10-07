@@ -93,6 +93,11 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 			field("initialPassword", api.MapValue(text("secretRef", "root-password")))))))), "Machine/rhel-01", onProfile},
 		"Disk encryption": {labCatalog(installProfile(field("customizations", customizations.With("security", api.MapValue(
 			field("diskEncryption", api.MapValue(text("recoveryPassphraseRef", "luks")))))))), "Machine/rhel-01", onProfile},
+		"Password authentication": {labCatalog(installProfile(field("customizations", customizations.With("ssh", api.MapValue(
+			field("passwordAuthentication", api.BoolValue(true))))))), "Machine/rhel-01", onProfile},
+		"A credentialed proxy": {labCatalog(externalProxy("corporate", text("httpsProxy", "http://proxy.example.test:3128"),
+			text("trustBundleRef", "corporate-ca")), proxiedGuest(), repositoryProfile("https://mirror.example.test/a")), "Machine/rhel-01",
+			map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8", "<proxy>": "Proxy/corporate"}},
 		"FIPS": {labCatalog(installProfile(field("customizations", customizations.With("security", api.MapValue(
 			field("fips", api.MapValue(field("enabled", api.BoolValue(true))))))))), "Machine/rhel-01", onProfile},
 		"A DHCP-only install": {labCatalog(unselected), "Machine/rhel-01", onGuest},

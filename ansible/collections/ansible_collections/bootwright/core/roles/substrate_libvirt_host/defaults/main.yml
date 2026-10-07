@@ -45,3 +45,14 @@ substrate_libvirt_host_network_uuids: >-
   {{ substrate_libvirt_host_running.observation.networks
      | selectattr('managed')
      | items2dict(key_name='name', value_name='uuid') }}
+# The managed networks the running observation did not report set to
+# autostart. Each is set to autostart once it runs, so a replay re-enables an
+# autostart switched off and reports the change, and sets none it finds on.
+substrate_libvirt_host_autostarted: >-
+  {{ substrate_libvirt_host_managed
+     | rejectattr('name', 'in', substrate_libvirt_host_running.observation.networks
+                  | selectattr('managed')
+                  | selectattr('autostart')
+                  | map(attribute='name')
+                  | list)
+     | list }}

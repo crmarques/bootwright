@@ -169,6 +169,37 @@ func TestInventoryPinsTheSSHIdentityAndHostKey(t *testing.T) {
 	}
 }
 
+// Every ssh the SSH arm starts reads only the job's generated configuration and
+// takes no ambient known hosts, proxy, agent or forwarding, and a peer that
+// stops answering ends the connection instead of hanging the run.
+func TestTheSSHArmUsesAGeneratedConfigurationAndKeepalives(t *testing.T) {
+	paths := map[string]string{"id": "/job/id", "known_hosts": "/job/known_hosts", "ssh_config": "/job/ssh_config"}
+	value := inventory(sshRequest().Placement, "/interpreter", paths)
+	host := value["all"].(map[string]any)["children"].(map[string]any)["bootwright_target"].(map[string]any)["hosts"].(map[string]any)["services"].(map[string]any)
+	arguments := strings.Fields(host["ansible_ssh_common_args"].(string))
+	if len(arguments) < 2 || arguments[0] != "-F" || arguments[1] != "/job/ssh_config" {
+		t.Fatalf("ssh arguments = %q, not led by the generated configuration", arguments)
+	}
+	options := map[string]bool{}
+	for index := 2; index < len(arguments); index += 2 {
+		if arguments[index] != "-o" || index+1 >= len(arguments) {
+			t.Fatalf("ssh arguments = %q, not -o pairs after -F", arguments)
+		}
+		options[arguments[index+1]] = true
+	}
+	for _, required := range []string{
+		"UserKnownHostsFile=/job/known_hosts", "GlobalKnownHostsFile=none", "KnownHostsCommand=none",
+		"VerifyHostKeyDNS=no", "UpdateHostKeys=no", "CheckHostIP=no", "StrictHostKeyChecking=yes",
+		"IdentitiesOnly=yes", "IdentityAgent=none", "PasswordAuthentication=no", "KbdInteractiveAuthentication=no",
+		"GSSAPIAuthentication=no", "HostbasedAuthentication=no", "ForwardAgent=no", "ProxyCommand=none",
+		"ProxyJump=none", "BatchMode=yes", "ServerAliveInterval=15", "ServerAliveCountMax=3",
+	} {
+		if !options[required] {
+			t.Fatalf("ssh arguments = %q, missing %q", arguments, required)
+		}
+	}
+}
+
 func TestProtocolAcceptsOnlyItsBoundedPhases(t *testing.T) {
 	valid := strings.Join([]string{
 		`{"phase":"loaded"}`,

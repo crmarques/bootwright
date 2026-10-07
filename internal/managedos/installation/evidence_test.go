@@ -191,3 +191,30 @@ func TestAMachineThatHoldsTheMarkerWithoutAnsweringIsPartial(t *testing.T) {
 		t.Fatalf("an installed machine that has not answered yet was refused: %v", err)
 	}
 }
+
+// A package tree extracted from another DVD than the one this operation froze
+// is not this installation's tree, however complete it is.
+func TestPresenceRequiresTheTreeTheOperationFroze(t *testing.T) {
+	request := pinnedRequest(t, labCatalog())
+	marker, err := MarkerFor(request, "digest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	complete := Evidence{
+		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: string(marker),
+		Postcondition: true, Power: "On", Reachable: true, Request: "digest", Tree: true, TreeContent: true,
+		TreeIdentity: dvdDigest,
+	}
+	if err := ValidatePresence(encode(t, complete), request, "digest", string(marker)); err != nil {
+		t.Fatalf("the frozen tree was refused: %v", err)
+	}
+	for name, identity := range map[string]string{"another image": bootDigest, "no identity": ""} {
+		t.Run(name, func(t *testing.T) {
+			other := complete
+			other.TreeIdentity = identity
+			if err := ValidatePresence(encode(t, other), request, "digest", string(marker)); err == nil {
+				t.Fatal("a tree extracted from another image was accepted")
+			}
+		})
+	}
+}

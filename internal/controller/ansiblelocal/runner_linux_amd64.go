@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,20 +43,21 @@ const (
 )
 
 // runTimeout bounds one controller Ansible run: setup, its recovery or the base
-// of a controller-stage client installation, which adds each source's
-// acquisition deadline up to clientStageCeiling.
+// of a controller-stage client installation, which adds its native staging and
+// each tool source's acquisition deadline up to clientStageCeiling.
 const runTimeout = 10 * time.Minute
 
 const clientStageCeiling = 2 * time.Hour
 
-// runDeadline is how long one run may take. A fixed deadline cut short a client
-// installation whose sources alone outlast it; a closure past the ceiling is
-// refused before Ansible starts, so the clamp never shortens an admitted run.
+// runDeadline is how long one run may take. A fixed deadline cut short a run
+// whose sources alone outlast it; native staging is held within the ceiling,
+// and a closure with tools past it is refused before Ansible starts, so the
+// clamp never shortens an admitted run.
 func runDeadline(request capabilityRequest) time.Duration {
-	if len(request.Tools) == 0 {
+	if len(request.Packages) == 0 && len(request.Tools) == 0 {
 		return runTimeout
 	}
-	return min(runTimeout+acquisitionTotal(request), clientStageCeiling)
+	return min(runTimeout+nativeStaging(request.Packages)+acquisitionTotal(request), clientStageCeiling)
 }
 
 func acquisitionTotal(request capabilityRequest) time.Duration {
@@ -67,7 +69,7 @@ func acquisitionTotal(request capabilityRequest) time.Duration {
 }
 
 func requireClientStageCeiling(request capabilityRequest) error {
-	if runTimeout+acquisitionTotal(request) <= clientStageCeiling {
+	if len(request.Tools) == 0 || runTimeout+nativeStaging(request.Packages)+acquisitionTotal(request) <= clientStageCeiling {
 		return nil
 	}
 	var bytes int64
@@ -168,7 +170,7 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, request 
 	}
 	childOutput.Close()
 	childInput.Close()
-	run := &protocolRun{request: request, release: release, publish: publish, report: report, result: result, prepared: request.Operation == "recover", preparation: request.Preparation}
+	run := &protocolRun{request: request, scratch: boundary.scratchParent, release: release, publish: publish, report: report, result: result, prepared: request.Operation == "recover", preparation: request.Preparation}
 	run.published = run.prepared
 	return run.supervise(ctx, command, output, input, boundary)
 }
@@ -217,12 +219,18 @@ func ansibleCommand(boundary processBoundary, launch prerequisites.PythonLaunch,
 
 type protocolRun struct {
 	request capabilityRequest
+	// scratch is the directory a package source stages under, which a
+	// storage refusal for it names.
+	scratch string
 	release func() error
 	publish func(context.Context, prerequisites.NativePreparation) error
 	report  func(string)
 	result  prerequisites.ActionResult
 
 	loaded, prepared, completed, canceled bool
+	// refused marks an internal refusal, which keeps the generic failure but
+	// is still the last record the adapter may write.
+	refused bool
 	// prepared and native are the protocol's position; published and
 	// nativeAuthorized are the effects a record read before the failed exit
 	// has. One read after it still moves the position, so a later record is
@@ -347,7 +355,7 @@ func (run *protocolRun) judge(ctx context.Context, message protocolMessage) {
 	// published, authorized, reported or acknowledged for it. A valid
 	// one leaves that failure, except the named refusal, which
 	// replaces it.
-	valid := !run.completed && (run.operationErr == nil || run.exited) && !run.canceled
+	valid := !run.completed && !run.refused && (run.operationErr == nil || run.exited) && !run.canceled
 	switch message.Phase {
 	case "loaded":
 		valid = valid && !run.loaded && message.Preparation == nil && message.Outcome == "" && len(message.Evidence) == 0
@@ -399,10 +407,26 @@ func (run *protocolRun) judge(ctx context.Context, message protocolMessage) {
 	case "refused":
 		// The adapter names the one refusal with a remedy of its own
 		// before it fails, for the tool it is installing.
-		valid = valid && run.loaded && run.prepared && run.continuations > 0 &&
-			message.Reason == "release-stamp" && request.Tools[run.continuations-1].Kind == "openshift-clients"
-		if valid {
-			run.operationErr, run.exited = prerequisites.UnreleasedClient(request.Tools[run.continuations-1]), false
+		if message.Reason == "release-stamp" {
+			valid = valid && run.loaded && run.prepared && run.continuations > 0 &&
+				message.Reason == "release-stamp" && request.Tools[run.continuations-1].Kind == "openshift-clients"
+			if valid {
+				run.operationErr, run.exited = prerequisites.UnreleasedClient(request.Tools[run.continuations-1]), false
+			}
+			break
+		}
+		// Any other refusal names its class, and an acquisition the
+		// source it was acquiring. An internal native refusal has no
+		// remedy of its own, so it leaves the generic failure.
+		host, area, acquiring := run.refusedSource(message.Source)
+		valid = valid && run.loaded && acquiring
+		if valid && message.Reason == "internal" && message.Source == "" {
+			run.refused = true
+		} else if valid {
+			var refusal error
+			if refusal, valid = prerequisites.AdapterRefusal(message.Reason, host, area, run.nativeAuthorized); valid {
+				run.operationErr, run.exited = refusal, false
+			}
 		}
 	default:
 		valid = false
@@ -418,11 +442,41 @@ func (run *protocolRun) judge(ctx context.Context, message protocolMessage) {
 	}
 }
 
+// refusedSource is the URL host of the source a classified refusal names and
+// the directory that source was being written into: the run's scratch for a
+// package, the publication bundle for a tool. Both are empty for a native
+// refusal, which names none. An acquisition refusal names
+// the native package being staged, between prepared and native, or the tool
+// being installed; any other source is not one this run is acquiring.
+func (run *protocolRun) refusedSource(source string) (string, string, bool) {
+	if source == "" {
+		return "", "", true
+	}
+	address, area := "", ""
+	if run.prepared && !run.native && run.continuations == 0 {
+		for _, item := range run.request.Packages {
+			if item.Source.ID == source {
+				address, area = item.Source.URL, run.scratch
+			}
+		}
+	}
+	if run.continuations > 0 && run.request.Tools[run.continuations-1].Source.ID == source {
+		address, area = run.request.Tools[run.continuations-1].Source.URL, run.request.PublicationBundle.Path
+	}
+	parsed, err := url.Parse(address)
+	if address == "" || err != nil || parsed.Hostname() == "" {
+		return "", "", false
+	}
+	return parsed.Hostname(), area, true
+}
+
 func (run *protocolRun) acknowledge(ctx context.Context, message protocolMessage, input *os.File) {
 	if ctx.Err() != nil {
 		run.canceled = true
 	}
-	if run.operationErr != nil || run.canceled {
+	// A refused record is the adapter's last and waits for nothing, so it is
+	// never acknowledged: the closed channel ends the protocol.
+	if run.operationErr != nil || run.canceled || message.Phase == "refused" {
 		input.Close()
 	} else if message.Phase != "completed" {
 		if _, err := input.Write([]byte("proceed\n")); err != nil {
@@ -439,12 +493,26 @@ func (run *protocolRun) outcome(ctx context.Context) (prerequisites.ActionResult
 		if run.operationErr == nil {
 			run.operationErr = failure("controller.unknown", "the Ansible operation has no complete result")
 		}
+		// Setup's own run that failed before Go acknowledged a native record
+		// authorized nothing: the adapter cannot start its transaction before
+		// that acknowledgement, so the preparation it published records a
+		// failure the next setup replaces.
+		if run.published && !run.nativeAuthorized && ownSetup(run.request) {
+			return actionResult("failed", true), run.operationErr
+		}
 		if run.published {
 			return actionResult("unknown", true), run.operationErr
 		}
 		return run.result, run.operationErr
 	}
 	return run.result, nil
+}
+
+// ownSetup is setup's own run: it publishes into the bundle it executes and
+// carries no tools. A recovery is recover, and a client installation passes a
+// separate area.
+func ownSetup(request capabilityRequest) bool {
+	return request.Operation == "setup" && len(request.Tools) == 0 && request.PublicationBundle == request.Bundle
 }
 
 func countNoun(count int, noun string) string {

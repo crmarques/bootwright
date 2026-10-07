@@ -16,7 +16,7 @@ class FrozenRequest(unittest.TestCase):
 
     def request(self):
         return dict(
-            version="controller-prerequisites-v4",
+            version="controller-prerequisites-v5",
             operation="setup",
             identity="a" * 64,
             platform={},
@@ -26,10 +26,11 @@ class FrozenRequest(unittest.TestCase):
             native=None,
             tools=[dict(source=dict(id="tool-oc")), dict(source=dict(id="tool-kubectl"))],
             acquisition=[dict(source="tool-oc", seconds=205), dict(source="tool-kubectl", seconds=121)],
+            nativeStaging=0,
             egress={},
         )
 
-    def test_a_v4_request_whose_deadlines_match_its_tools_is_accepted(self):
+    def test_a_v5_request_whose_deadlines_match_its_tools_is_accepted(self):
         request = self.request()
         self.assertIs(frozen_request(request), request)
         empty = dict(request, tools=[], acquisition=[])
@@ -40,7 +41,7 @@ class FrozenRequest(unittest.TestCase):
         missing = dict(request)
         del missing["acquisition"]
         changes = {
-            "controller-prerequisites-v3": dict(request, version="controller-prerequisites-v3"),
+            "controller-prerequisites-v4": dict(request, version="controller-prerequisites-v4"),
             "missing": missing,
             "reordered": dict(request, acquisition=list(reversed(request["acquisition"]))),
             "short": dict(request, acquisition=request["acquisition"][:1]),
@@ -51,6 +52,31 @@ class FrozenRequest(unittest.TestCase):
             "extra key": dict(request, acquisition=[request["acquisition"][0], dict(source="tool-kubectl", seconds=121, bytes=1)]),
         }
         for name, changed in changes.items():
+            with self.subTest(name):
+                with self.assertRaises((KeyError, TypeError, ValueError)):
+                    frozen_request(changed)
+
+    def test_frozen_request_requires_native_acquisition(self):
+        """A request with native packages carries one deadline per package,
+        before the tools', and a staging bound that is zero exactly when it
+        stages no package."""
+        packages = [dict(source=dict(id="native-one")), dict(source=dict(id="native-two"))]
+        native = [dict(source="native-one", seconds=320), dict(source="native-two", seconds=121)]
+        request = dict(self.request(), packages=packages, acquisition=native + self.request()["acquisition"], nativeStaging=321)
+        self.assertIs(frozen_request(request), request)
+        missing = dict(request)
+        del missing["nativeStaging"]
+        for name, changed in {
+            "no native entries": dict(request, acquisition=self.request()["acquisition"]),
+            "tools first": dict(request, acquisition=self.request()["acquisition"] + native),
+            "packages reordered": dict(request, acquisition=list(reversed(native)) + self.request()["acquisition"]),
+            "no staging": dict(request, nativeStaging=0),
+            "staging without packages": dict(self.request(), nativeStaging=1),
+            "staging past the ceiling": dict(request, nativeStaging=7201),
+            "staging as text": dict(request, nativeStaging="321"),
+            "staging as bool": dict(request, nativeStaging=True),
+            "staging missing": missing,
+        }.items():
             with self.subTest(name):
                 with self.assertRaises((KeyError, TypeError, ValueError)):
                     frozen_request(changed)

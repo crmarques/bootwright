@@ -60,6 +60,6 @@ def test_the_unit_mounts_its_own_files_and_the_libvirt_socket_directory_alone():
 
 def test_the_controller_reaches_the_pool_by_name_through_its_libvirt_connection():
     configuration = render("emulator.conf.j2")
-    assert settings(configuration, "SUSHY_EMULATOR_LIBVIRT_URI") == [" 'qemu:///system'"]
-    assert settings(configuration, "SUSHY_EMULATOR_STORAGE_POOL") == [" '%s'" % REQUEST["poolName"]]
+    assert settings(configuration, "SUSHY_EMULATOR_LIBVIRT_URI") == [' "qemu:///system"']
+    assert settings(configuration, "SUSHY_EMULATOR_STORAGE_POOL") == [' "%s"' % REQUEST["poolName"]]
     assert REQUEST["poolPath"] not in configuration

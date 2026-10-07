@@ -133,7 +133,7 @@ materializes `0`, which admission refuses at that profile's size.
 | Arm | Exact fields | Rule |
 | --- | --- | --- |
 | `baremetal` | none | Names a physical network a Machine may select; it configures nothing. A VLAN interface is [B74](../milestones/m4.md#b74)'s. |
-| `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `bridge` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. On one host, no two providers declare a managed attachment of one name, and a bridge a managed attachment defines is named by no other attachment, of the same provider or another; each refuses at admission, naming both providers. |
+| `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `bridge` is 1 to 15 bytes of letters, digits, `_`, `.` or `-`, and neither `.` nor `..`; a `+` is refused because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. On one host, no two providers declare a managed attachment of one name, a bridge a managed attachment defines is named by no other attachment, of the same provider or another, and no two managed attachments, of one provider or two, declare overlapping prefixes, IPv4 or IPv6; each refuses at admission, naming both providers. |
 
 ## Machine
 
@@ -302,7 +302,10 @@ A configured network selects exactly one of `configRef` and `inline`.
 `inline` has precisely the [NetworkConfig spec](#networkconfig) shape;
 `overrides` is forbidden with it. Contact-only Machines need neither form.
 Attachments, bindings, interface assignments, and an install-address selection
-require a configured network. OS-ready Machines declare only contacts, not
+require a configured network. Each refuses at its own field with the remedy to
+select a network configuration with `network.configRef` or `network.inline` or
+to remove the selection or the interface; an OS-ready Machine, which declares
+contacts only, is told to remove it. OS-ready Machines declare only contacts, not
 network configuration. The retired `network.config`,
 `networkConfigRef`, `interfaceAddresses`, and top-level `spec.addresses`
 forms are rejected; they are not aliases.
@@ -327,10 +330,6 @@ refuses at `network`, and one whose configuration presents none at
 `network.configRef` or `network.inline.nmstate`. A Bootwright-installed
 Anaconda Machine that selects no configuration refuses only at
 `network.installAddressRef`, as below.
-
-Not yet met: realization still reads the uncomposed template, so it ignores
-`network.overrides` and also attaches `absent` and `ignore` ethernet
-interfaces; tracked as [B338](../milestones/m1.md#b338).
 
 `network.addresses[]` has exactly these fields:
 
@@ -542,7 +541,7 @@ optional. Validation is lexical only.
 | --- | --- | --- | --- |
 | `spec.os.family` | string | yes | `rhel`, accepted case-insensitively and normalized to lowercase `rhel` in effective state. |
 | `spec.os.version` | string | yes | Non-empty; when it has a numeric major, the major is at least `9`. |
-| `spec.os.architecture` | string | yes | Non-empty architecture name. |
+| `spec.os.architecture` | string | yes | `x86_64`. |
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
 | `spec.installer.templateClone` | object | union | A [refused arm](#refused-arms). |
 | `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhat-rhel`. |
@@ -571,7 +570,8 @@ The optional package-source arms are exact:
 
 - `mirror` has required HTTP(S) `baseURL` and optional `repositories[]`, each
   with required `id` and HTTP(S) `baseURL`. Each `baseURL` holds no fragment
-  and no quote.
+  and no quote, and each `id` follows the
+  [configured-repository ID rule](#customizations).
 - `fromSubscription` has required `entitlementRef` to a `redhat-rhel`
   `Entitlement`. It cannot be combined with top-level `subscription` because it
   already registers during installation.
@@ -593,6 +593,17 @@ of Machines consuming this profile. They use the shared
 [NTP selection list](infrastructure-services.md#dns-and-ntp-selection-lists).
 A profile's proxy must be external to avoid requiring its own managed service
 before the installation that creates that service's host.
+
+The installation itself fetches only its own artifact endpoints, the installer
+image and the hosted package tree, and those are reached directly. The
+effective proxy therefore reaches only the installed system's configured
+repositories: it is written, without credentials, into their `.repo` files,
+except for a repository on an artifact endpoint's host or one a `noProxy` entry
+covers, as the
+[derived installation](../managed-os.md#installation) states. A Machine whose
+profile configures a repository refuses while its effective proxy names a
+Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, or one
+with no proxy URL; with no configured repository such a Proxy is accepted.
 
 Machine proxy precedence and applicability belong to
 [the Machine proxy field](#machine-proxy). Profile proxy policy is inherited
@@ -616,11 +627,11 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 | --- | --- | --- | --- | --- |
 | `hostname.source` | string | no | — | `machineName`; permitted only when the machine is not cluster-bound. |
 | `localization.language` | string | no | `en_US.UTF-8` | Kickstart token. |
-| `localization.formats` | string | no | effective language | Kickstart token. |
+| `localization.formats` | string | no | effective language | Kickstart token; when it differs from the language it is written for every regional category with its `glibc-langpack`. |
 | `localization.keyboard` | string | no | `us` | Kickstart token. |
 | `localization.timezone` | string | no | `UTC` | Kickstart token. |
 | `localization.additionalLocales` | array of strings | no | `[]` | Unique Kickstart tokens. |
-| `ssh.passwordAuthentication` | boolean | no | `false` | Enables SSH password authentication. |
+| `ssh.passwordAuthentication` | boolean | no | `false` | `true` is refused until a password can be set, because `initialPassword` is refused. |
 | `ssh.initialPassword.secretRef` | string | no | — | `usernamePassword` `Secret`. |
 | `storage.rootDevice.source` | string | no | — | `machineRootDeviceHints`. |
 | `packages.environment` | string | no | — | `minimal` when set. |
@@ -647,9 +658,14 @@ Each `repositories.configure[]` entry has required `id` and HTTP(S) `baseURL`
 with no fragment and no quote, optional `displayName` defaulting to `id`,
 `enabled` defaulting `true`, `gpgCheck` defaulting `true`, and optional
 `gpgKeyURL`. IDs are unique, printable ASCII with no whitespace, quote, slash,
-backslash, `#` or comma, and do not start with `%`; subscription repository
-IDs follow the same rule. `gpgKeyURL` accepts HTTP(S) or
-`file:///`; it is required while GPG checking is enabled. A subscription
+backslash, `#` or comma, and do not start with `%`; subscription and Anaconda
+mirror repository IDs follow the same rule. `displayName` is one line of UTF-8
+text with no control character. `gpgKeyURL` accepts HTTP(S) or `file:///`
+with no quote, backslash or `#`; it is required while GPG checking is enabled.
+The installation writes each entry as the installed system's own
+`/etc/yum.repos.d/bootwright-<id>.repo` file, with `name`, `baseurl`,
+`enabled`, `gpgcheck`, `gpgkey` and the effective proxy; a configured
+repository is never an install source. A subscription
 repository block sets at least one of `enable` and `disable` and requires a
 registration entitlement from either top-level `subscription` or Anaconda
 `fromSubscription`.
@@ -736,6 +752,16 @@ the assigned IP's family, and a `next-hop-interface` equal to that assignment's
 interface. Route metrics do not resolve ambiguity. The existing
 [installation-address selection](#network-configuration) then chooses a unique
 eligible address or refuses; declaration order provides no fallback.
+
+Realization and installation read the same composed map, without the injected
+addresses and MACs: a libvirt domain attaches one interface per composed
+`ethernet` interface whose `state` is neither `absent` nor `ignore`. The
+gateway a managed-OS installation carries is the `next-hop-address` of the
+first composed route that is not `absent`, whose destination is a zero-prefix
+IPv4 CIDR and whose next hop is an IPv4 address. The installation refuses every
+other route, and a default route through another interface, before
+registration ([managed OS](../managed-os.md#installation)), so the carried
+gateway is the install interface's.
 
 The fully composed NMState map is internal compiler evidence. Canonical
 effective inspection preserves the normalized template, references, overrides,

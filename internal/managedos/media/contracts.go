@@ -32,22 +32,56 @@ type Store interface {
 // Image is one complete image as a view lists it: the record published for it
 // and the size of the bytes the store holds now. Observed differs from the
 // record's Size when the image was shortened or extended after publication.
+// Failure is the cause the store gives for an image it lists but cannot read
+// (its record, or its file). When Failure is set, MediaEntry carries only Name
+// unless the record decoded, and Observed is meaningless.
 type Image struct {
 	managedos.MediaEntry
 	Observed int64
+	Failure  string
+}
+
+// ErrImageFailed marks the cause a store gives for one listed image it cannot
+// read. It fails that image alone, never the rest of a listing. The store's
+// error matches it with errors.Is, and its own text, unwrapped, is the reason.
+var ErrImageFailed = errors.New("the media store cannot read this image")
+
+// imageFailureReason reports the reason a store gave for one image it cannot
+// read, and whether err is such a cause at all.
+func imageFailureReason(err error) (string, bool) {
+	if err == nil || !errors.Is(err, ErrImageFailed) {
+		return "", false
+	}
+	return err.Error(), true
+}
+
+// Held is one stored image a read opened. Using it takes no lock.
+type Held interface {
+	// Digest reads the held image in full and reports its content digest. It
+	// refuses with an error matching ErrImageFailed when the file changed, or
+	// was deleted or replaced, while it was read, and with the cancellation
+	// when ctx ends.
+	Digest(context.Context) (string, error)
+	// Close releases the handle. It takes no context, so a canceled listing
+	// still releases it.
+	Close() error
 }
 
 // View is a coherent read of the store taken under its shared lock.
 type View interface {
 	// Entries lists every complete image with its published record and its
 	// observed size, whether or not that size still matches the record, so
-	// one damaged image never hides the rest of the store.
+	// one damaged image never hides the rest of the store. An image whose
+	// record or file the store cannot read is listed with its Failure.
 	Entries(context.Context) ([]Image, error)
 	// Names lists every occupied name, including an incomplete publication, so
 	// a new image never collides with bytes this store still holds.
 	Names(context.Context) ([]string, error)
-	// Digest reads one image in full and reports its current content digest.
-	Digest(context.Context, string) (string, error)
+	// Hold opens one listed image under the store's shared lock and proves its
+	// file safe. The handle outlives the read, so the image is read in full
+	// with no root lock held. A cause that concerns that image alone matches
+	// ErrImageFailed.
+	Hold(context.Context, string) (Held, error)
 	// Reservations maps every image a context reserves to the contexts that
 	// reserve it, each sorted and named once.
 	Reservations(context.Context) (map[string][]string, error)

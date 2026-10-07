@@ -2,8 +2,9 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_machine_request.version == 'machine-libvirt-v2'
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v3'
       - bootwright_substrate_machine_request.directory.startswith('/var/lib/libvirt/images/bootwright/')
+      - bootwright_substrate_machine_request.directory | dirname | dirname == '/var/lib/libvirt/images/bootwright'
       - bootwright_substrate_machine_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -43,7 +44,12 @@
     that:
       - substrate_libvirt_machine_before.observation.domain | length == 0
         or substrate_libvirt_machine_before.observation.owned
-    fail_msg: a libvirt domain of the same name exists without this context's ownership
+    fail_msg: >-
+      a libvirt domain named {{ bootwright_substrate_machine_request.domain }}
+      exists without this context's ownership of Machine
+      {{ bootwright_substrate_machine_request.identity.object }} under UUID
+      {{ bootwright_substrate_machine_request.uuid }}; remove or rename it, then
+      repeat the removal
     quiet: true
 
 # Removing a running machine takes its memory and disks out from under whatever
@@ -56,7 +62,8 @@
       - substrate_libvirt_machine_before.observation.domain | length == 0
         or substrate_libvirt_machine_before.observation.state == 'shut off'
     fail_msg: >-
-      the machine is not shut off; stop it with bootwright machine stop --name
+      the machine is not shut off; stop it with bootwright machine stop --context
+      {{ bootwright_substrate_machine_request.identity.context }} --name
       {{ bootwright_substrate_machine_request.identity.object }} and repeat the removal
     quiet: true
 
@@ -97,6 +104,23 @@
     path: '{{ substrate_libvirt_machine_state }}'
     state: absent
   register: substrate_libvirt_machine_state_removed
+
+# The context's controller-state directory goes once no other machine's state
+# remains, never recursively; one that still holds another, or is already
+# gone, is left as it is.
+- name: Remove the context's empty controller-state directory
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - '{{ substrate_libvirt_machine_state | dirname }}'
+  environment:
+    LC_ALL: C
+  register: substrate_libvirt_machine_state_parent
+  failed_when:
+    - substrate_libvirt_machine_state_parent.rc != 0
+    - "'Directory not empty' not in substrate_libvirt_machine_state_parent.stderr"
+    - "'No such file or directory' not in substrate_libvirt_machine_state_parent.stderr"
+  changed_when: substrate_libvirt_machine_state_parent.rc == 0
 
 - name: Report controller removal completion
   bootwright.core.substrate_machine_protocol:
@@ -148,6 +172,22 @@
     state: absent
   register: substrate_libvirt_machine_disks_removed
 
+# The context's disk directory goes once no other machine's disks or the
+# provider's pool remain, never recursively.
+- name: Remove the context's empty disk directory
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - '{{ bootwright_substrate_machine_request.directory | dirname }}'
+  environment:
+    LC_ALL: C
+  register: substrate_libvirt_machine_disks_parent
+  failed_when:
+    - substrate_libvirt_machine_disks_parent.rc != 0
+    - "'Directory not empty' not in substrate_libvirt_machine_disks_parent.stderr"
+    - "'No such file or directory' not in substrate_libvirt_machine_disks_parent.stderr"
+  changed_when: substrate_libvirt_machine_disks_parent.rc == 0
+
 - name: Report disk removal completion
   bootwright.core.substrate_machine_protocol:
     phase: group
@@ -182,6 +222,8 @@
          if (substrate_libvirt_machine_unit_removed is changed
              or substrate_libvirt_machine_state_removed is changed
              or substrate_libvirt_machine_disks_removed is changed
+             or substrate_libvirt_machine_state_parent is changed
+             or substrate_libvirt_machine_disks_parent is changed
              or substrate_libvirt_machine_before.observation.domain | length > 0)
          else 'unchanged' }}
     digest: '{{ bootwright_substrate_machine_digest }}'

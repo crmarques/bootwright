@@ -81,21 +81,83 @@ func foundationBuilds(packages []foundationPackage) string {
 	return strings.Join(builds, ", ")
 }
 
+// described names a package build, or, for a build only setup's
+// qualification names, the package as setup qualified it.
+func (pkg foundationPackage) described() string {
+	if pkg.Build == "" {
+		return pkg.Name + " as setup qualified it"
+	}
+	return pkg.Name + " " + pkg.Build
+}
+
+// upstreamVersion is the version a compiled build pins, without its release.
+func (pkg foundationPackage) upstreamVersion() string {
+	index := strings.LastIndex(pkg.Build, "-")
+	if index <= 0 {
+		return ""
+	}
+	return pkg.Build[:index]
+}
+
 // compiledAttribution is the package attribution of the compiled record whose
 // execution requirement is the one given, apart from the interpreter path a
-// resolution adds, and none when no compiled record carries it.
+// resolution adds. A requirement setup qualified in that record's shape keeps
+// its package names and files under the paths it pins, but no build, which
+// only the receipt names; one in no compiled record's shape has none.
 func compiledAttribution(requirement prerequisites.ExecutionRequirement) []foundationPackage {
+	native, exact, found := compiledNativeFor(requirement)
+	if !found {
+		return nil
+	}
+	if exact {
+		return native.Packages
+	}
+	renamed := make(map[string]string, len(native.Execution.Files))
+	for index, file := range native.Execution.Files {
+		renamed[file.Path] = requirement.Files[index].Path
+	}
+	packages := make([]foundationPackage, 0, len(native.Packages))
+	for _, pkg := range native.Packages {
+		files := make([]string, 0, len(pkg.Files))
+		for _, name := range pkg.Files {
+			files = append(files, renamed[name])
+		}
+		packages = append(packages, foundationPackage{Name: pkg.Name, Files: files})
+	}
+	return packages
+}
+
+// compiledNativeFor is the compiled record whose execution requirement is the
+// one given, exactly or in its shape, apart from the interpreter path.
+func compiledNativeFor(requirement prerequisites.ExecutionRequirement) (native nativeRecord, exact, found bool) {
 	record, err := compiledCatalog()
 	if err != nil {
-		return nil
+		return nativeRecord{}, false, false
 	}
 	requirement.PythonExecutable = ""
 	for _, native := range record.Native {
 		if equalExecution(native.Execution, requirement) {
-			return native.Packages
+			return native, true, true
 		}
 	}
-	return nil
+	for _, native := range record.Native {
+		if sameFoundationShape(native.Execution, requirement) {
+			return native, false, true
+		}
+	}
+	return nativeRecord{}, false, false
+}
+
+func sameFoundationShape(compiled, requirement prerequisites.ExecutionRequirement) bool {
+	if compiled.Loader != requirement.Loader || compiled.LockPath != requirement.LockPath || len(compiled.Files) != len(requirement.Files) {
+		return false
+	}
+	for index, file := range compiled.Files {
+		if !prerequisites.FoundationPathShape(file.Path, requirement.Files[index].Path) {
+			return false
+		}
+	}
+	return true
 }
 
 func cloneExecution(value prerequisites.ExecutionRequirement) prerequisites.ExecutionRequirement {

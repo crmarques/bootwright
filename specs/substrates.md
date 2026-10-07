@@ -107,17 +107,26 @@ declared host address and prefix, forwarding as `forward` selects, with the
 built-in resolver and DHCP disabled so a managed `DNSServer` may bind the
 bridge address, placed in the host firewall's trusted zone so its guests reach
 the controller's managed services, and carrying ownership metadata naming the
-context and attachment. An `external` attachment is proved present as a link and never
-defined, changed or removed. On one host, no two providers declare a managed
+context and attachment. An `external` attachment is proved present as a bridge
+device, a `/sys/class/net/<name>/bridge` directory rather than any interface of
+that name, and is never defined, changed or removed. On one host, no two providers declare a managed
 attachment of one name, because the context names the one network it defines
 after it, and a bridge a managed attachment defines is named by no other
 attachment of that host, managed or external, of the same provider or another,
-because the bridge goes with the host block that defines it; admission refuses
-either, naming both providers
+because the bridge goes with the host block that defines it; and no two
+managed attachments on one host, of one provider or two, declare overlapping
+prefixes, IPv4 or IPv6, identical or nested, because the host routes each
+managed prefix to its own bridge (`TestOneHostNeverOverlapsTwoManagedPrefixes`).
+Admission refuses each, naming both providers
 ([machines](api/machines.md#machine-profiles-and-network-attachments)). A
-network that exists without this context's ownership metadata is foreign and
-refuses; an owned network whose definition differs from the frozen request is
-redefined, and restarted while it runs another one.
+network is this context's only when its ownership metadata names this context
+and the attachment's network. A same-named network with none, or naming another
+context or another attachment, is foreign and refuses, naming it, on apply and
+on destroy before any network or pool is defined, stopped or removed; an owned
+network whose definition differs from the frozen request is redefined, and
+restarted while it runs another one. Each managed network is started before it
+is set to autostart, so a start that fails leaves no definition that starts
+with the host.
 
 The apply reads, for each managed network, both the definition it runs and the
 one libvirt keeps for its next start, and compares each value this contract
@@ -133,16 +142,19 @@ hypervisor answers for every domain that is not shut off and none is plugged
 into it. When one is, the apply refuses before it defines, stops or starts
 anything, naming the network and each such domain, a Machine of this context by
 its name and any other domain by its own, with
-`bootwright machine stop --name <machine>` as the remedy before the apply is
-repeated; when the hypervisor does not answer which domains run on it, the
+`bootwright machine stop --context <context> --name <machine>` as the remedy
+before the apply is repeated; when the hypervisor does not answer which domains run on it, the
 apply refuses the same way and names the connection. Either refusal is the
 adapter's own: the operator receives `lifecycle.state` and finds the names in
 the adapter output retained beside the attempt's log.
 
 **Virtual-media pool.** One directory pool `bootwright-<context>-<provider>-vmedia`
 beneath `/var/lib/libvirt/images/bootwright/<context>/<provider>/vmedia`,
-active and set to autostart, is the only location the provider's emulated BMCs
-may fetch media into.
+targeting exactly that directory, active and set to autostart, is the only
+location the provider's emulated BMCs may fetch media into. It is started
+before it is set to autostart. A pool carries no ownership metadata, so a
+same-named pool targeting another directory is foreign and refuses, naming it,
+on apply and on destroy before any effect.
 
 The networks and pool this block owns are used by the Machines of its own
 context, so its quiescence is derived from theirs under the
@@ -150,22 +162,31 @@ context, so its quiescence is derived from theirs under the
 observed on the host.
 
 **Reservations.** `bridge:<name>` for every managed attachment, because a
-bridge name is host-global; `libvirt-network:<name>` for every managed network;
-`path:` for the pool directory.
+bridge name is host-global; `prefix:<masked prefix>` for every managed
+attachment, because the host routes its prefix to that bridge;
+`libvirt-network:<name>` for every managed network; `libvirt-pool:<name>` for
+the pool and `path:` for its directory
+(`TestHostReservationsClaimEveryManagedNetworkAndThePool`).
 
 **Evidence.** Completion requires the hypervisor present by package name, every
 driver daemon active and enabled to start with the host, the `uri` answering,
 every managed network active with its ownership metadata, running and keeping
-the frozen definition, every external bridge present, and the pool active.
-Replay reports `completed` with no change when live state matches. The
-differences it converges, each reported as a change, are an owned network whose
-definition differs, which is redefined under the identity it already holds and
-restarted while it runs another definition and nothing runs on it, and a
-missing network or pool, which is defined again.
+the frozen definition and set to autostart, every external bridge present, and
+the pool active, set to autostart and targeting the frozen directory. Replay
+reports `completed` with no change when live state matches. The differences it
+converges, each reported as a change, are an owned network whose definition
+differs, which is redefined under the identity it already holds and restarted
+while it runs another definition and nothing runs on it, a missing network or
+pool, which is defined again, and a network or the pool whose autostart was
+switched off, which is set to autostart again.
 The inverse refuses before its first effect when the `uri` does not answer,
 or when the network driver did not answer for a managed network or the storage
-driver for the pool, then destroys and undefines the networks and pool this
-context owns, removes the pool directory, and proves each absent: the networks
+driver for the pool, or when a same-named network or pool is foreign, then
+destroys and undefines the networks and pool this context owns, removes the
+pool directory, then removes the provider's and the context's directories
+beneath `/var/lib/libvirt/images/bootwright` each only once it is empty, never
+recursively, retaining `/var/lib/libvirt/images/bootwright` itself, and proves
+each absent: the networks
 and pool through a `uri` that answers and the driver that owns each, and the
 directory by its path. It leaves packages, foreign networks and external
 bridges untouched. Observation is read-only against the frozen request and
@@ -238,9 +259,11 @@ inserted installer media, and once an installer has written that disk the
 machine boots it again without anything having to change the domain between the
 two boots. That order holds for the domain as realized: after an eject, the
 emulated controller leaves the disk as the only bootable device until the
-machine block redefines the domain. A same-name domain without this
-context's metadata is foreign and refuses; an owned domain whose root disk size
-differs from the profile refuses rather than resizing.
+machine block redefines the domain. A same-name domain whose ownership
+metadata does not name this context and Machine, or whose UUID is not the
+frozen one, is foreign and refuses on apply and on destroy before any effect;
+an owned domain whose root disk size differs from the profile refuses rather
+than resizing.
 
 **Emulated BMC.** Each realized Machine has its own management controller: one
 sushy-tools container, digest-pinned in the substrate catalog and qualified as
@@ -266,6 +289,15 @@ holds while bcrypt's `checkpw` still verifies the bound password with it,
 because bcrypt salts every hash afresh: hashing the password again would
 rewrite the file and restart the controller on every replay.
 
+The pinned image is pulled only when the host does not already hold it, through
+the provider host Machine's normalized [proxy choice](api/machines.md#machine-proxy)
+with every spelling of the proxy variables set to that route and no ambient
+one, under the rule a managed service's image acquisition follows: a managed or
+authenticated proxy refuses. The unit stops the emulator with `SIGINT`, the
+signal its Python runtime handles as PID 1, so the unit stops cleanly instead
+of waiting for the kill and failing. Its configuration renders every request
+value as a quoted literal, so no value is ever read as code.
+
 **Reservations.** `libvirt-domain:<name>`, `unit:` for the BMC unit,
 `socket:<bindAddress>:<port>` for its listener, and `path:` for the Machine's
 disk directory. The socket key never brackets the address: it is the form a
@@ -287,7 +319,10 @@ next one. An owned domain whose root disk size differs refuses rather than
 resizing.
 The inverse refuses a domain that is not shut off, as Quiescence states. It then
 stops and removes the BMC unit, container and state, undefines the domain,
-deletes the disks this context owns and proves each absent, and it proves
+deletes the disks this context owns and proves each absent. After the disks
+and the state it removes the context's directories beneath
+`/var/lib/libvirt/images/bootwright` and `/var/lib/bootwright-substrate` when
+each is empty, never recursively, and retains both prefixes. It proves
 nothing listens on the controller's socket before that reservation is released.
 A disk is present while anything exists at its path, whatever its image
 reports. Because the deleted disks may hold an installed operating system, the
@@ -348,7 +383,7 @@ removal would delete. A hypervisor that will not answer is never read as a
 domain that is not defined: the management controller's power state is then
 the second opinion, `Off` quiescent, `On` in use and anything else unproved,
 and a Machine neither can account for is treated as in use. The refusal names
-`bootwright machine stop --name <machine>`, and the inverse refuses a domain
+`bootwright machine stop --context <context> --name <machine>`, and the inverse refuses a domain
 that is not shut off rather than forcing it, under the
 [removal gate](state-reconciliation.md#quiescence-before-removal).
 
@@ -640,12 +675,19 @@ operator then receives the installation's `lifecycle.state` diagnostic, whose
 object is the Machine, instead of the adapter's failure: `hardware-mismatch`,
 a physical machine whose declaration names no MAC, whose complete inventory
 lacks a declared MAC or reports no system identity, or whose inventory was not
-read in full, remedied by correcting its `spec.hardware.management.bmc.address`
-or `spec.hardware.nics`; `identity-mismatch`, a physical machine answering as
-another system than its pin, remedied by correcting that address or destroying
-and applying the context so the machine is proved again; and `machine-running`,
-on either arm, remedied by `bootwright machine stop --name <machine>` before
-the apply is repeated. A read the controller did not answer names none,
+read in full, remedied by running `bootwright apply --context <context>` once
+the machine reports the declared hardware in full or, to correct the
+declaration instead, by taking the context back with
+`bootwright destroy --context <context>`, correcting
+`spec.hardware.management.bmc.address` or `spec.hardware.nics`, importing that
+input with `bootwright context update --name <context> --input-dir <directory>`
+and running `bootwright apply --context <context>`; `identity-mismatch`, a
+physical machine answering as another system than its pin, remedied by the same
+destroy, correcting that address if it names another controller, the same
+context update and apply, so the machine is proved again; and
+`machine-running`, on either arm, remedied by stopping it with
+`bootwright machine stop --context <context> --name <machine>`, then running
+`bootwright apply --context <context>`. A read the controller did not answer names none,
 because the controller's own message in the retained output is the reason.
 
 A Redfish client speaks to one endpoint and follows no redirect, uses no

@@ -111,8 +111,10 @@ func applicationDependencies() map[string][]string {
 		// the controller evidence its host was prepared with, and most also the
 		// compiler that produced their input and the operation store's log
 		// record.
-		"internal/controller/clients":                    {"internal/controller/prerequisites", "internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
-		"internal/substrate/libvirt":                     capabilityDependencies(),
+		"internal/controller/clients": {"internal/controller/prerequisites", "internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
+		// The emulated BMC's image acquisition uses the host Machine's egress
+		// exactly as a managed service's does.
+		"internal/substrate/libvirt":                     append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
 		"internal/substrate/baremetal":                   {"internal/controller/prerequisites", "internal/reconciliation/lifecycle", "internal/reconciliation/operationstore"},
 		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/containercluster/agentinstall":         append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),

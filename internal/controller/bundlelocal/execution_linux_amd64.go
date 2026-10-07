@@ -22,15 +22,22 @@ import (
 
 // ExecutionGuard verifies the provided ELF foundation before any private
 // Python process can run. Its zero value fixes the installed host root and
-// owner; the private view exists only for synthetic filesystem tests.
-type ExecutionGuard struct{ view executionView }
+// owner; the private view exists only for synthetic filesystem tests. Builds,
+// when set, lets an inspection qualify vendor-signed builds within the
+// qualified minor from the RPM database; no launch ever reads it.
+type ExecutionGuard struct {
+	Builds prerequisites.FoundationBuildReader
+	view   executionView
+}
 
 type executionView struct {
 	root  string
 	owner uint32
-	// packages attributes a synthetic foundation's files in tests; nil reads
-	// the attribution of the compiled record the requirement matches.
+	// packages attributes a synthetic foundation's files in tests, and
+	// platform names its release; unset, both come from the compiled record
+	// the requirement matches.
 	packages []foundationPackage
+	platform prerequisites.Platform
 }
 
 var _ prerequisites.FoundationInspector = ExecutionGuard{}
@@ -86,8 +93,22 @@ func (guard ExecutionGuard) inspectRecord(ctx context.Context, native nativeReco
 		if ctx.Err() != nil {
 			return prerequisites.FoundationInspection{}, ctx.Err()
 		}
-		inspection.Drift = driftOf(err).path
-		inspection.Refusal = foundationRefusal(view, requirement, err)
+		drift := driftOf(err)
+		inspection.Drift = drift.path
+		if guard.Builds == nil || !qualifiable(view, requirement, drift) {
+			inspection.Refusal = foundationRefusal(view, requirement, err, guard.Builds == nil)
+			return inspection, nil
+		}
+		platform := prerequisites.Platform{OS: native.OS, Release: native.Release, Architecture: "amd64"}
+		qualified, refusal, err := guard.qualify(ctx, platform, root, view, requirement, drift)
+		if err != nil {
+			return prerequisites.FoundationInspection{}, err
+		}
+		if refusal != nil {
+			inspection.Refusal = refusal
+			return inspection, nil
+		}
+		inspection.Drift, inspection.Qualified = "", qualified
 	}
 	return inspection, nil
 }
@@ -151,7 +172,7 @@ func (guard ExecutionGuard) WithPython(ctx context.Context, area prerequisites.B
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return foundationRefusal(view, requirement, err)
+		return foundationRefusal(view, requirement, err, true)
 	}
 	launch, bundle, err := openBundleLaunch(ctx, area, requirement, view.owner)
 	if err != nil {
@@ -547,8 +568,9 @@ func driftOf(err error) foundationDrift {
 // command met it: the private Python guard before any launch, or the check
 // setup and preflight report. It names the path, the package build that
 // provides it on a qualified host, the condition, and a remedy that holds
-// from every command.
-func foundationRefusal(view executionView, requirement prerequisites.ExecutionRequirement, err error) error {
+// from every command. Where setup can still qualify an update of that build,
+// the remedy first names setup.
+func foundationRefusal(view executionView, requirement prerequisites.ExecutionRequirement, err error, qualifiable bool) error {
 	drift := driftOf(err)
 	if drift.path == "" {
 		return executionFailure("controller.unsupported", "the provided execution foundation cannot be verified")
@@ -556,7 +578,7 @@ func foundationRefusal(view executionView, requirement prerequisites.ExecutionRe
 	message := "the provided execution foundation differs at " + drift.path + ","
 	pkg, attributed := foundationOwner(view, requirement, drift.path)
 	if attributed {
-		message += " from " + pkg.Name + " " + pkg.Build + ","
+		message += " from " + pkg.described() + ","
 	}
 	message += " which " + drift.condition
 	remedy := "Restore " + drift.path + " as this host's release provides it, then repeat this command; a host that must keep the change needs a Bootwright build whose execution foundation pins it."
@@ -564,10 +586,32 @@ func foundationRefusal(view executionView, requirement prerequisites.ExecutionRe
 	case drift.path == preloadConfiguration:
 		remedy = "Empty or remove " + preloadConfiguration + ", then repeat this command."
 	case attributed:
-		build := pkg.Name + "-" + pkg.Build
-		remedy = "Install exactly " + pkg.Name + " " + pkg.Build + " again with dnf (dnf install " + build + ", or dnf reinstall " + build + " while that build is installed), hold it with dnf versionlock add " + build + ", then repeat this command; a host that must take the update needs a Bootwright build whose execution foundation pins it."
+		remedy = foundationRemedy(pkg)
+		if platform, known := foundationPlatform(view, requirement); qualifiable && known {
+			remedy = "If dnf updated glibc or libgcc within " + platform.OS + " " + platform.Release + ", run bootwright setup to qualify the new builds; otherwise " + strings.ToLower(remedy[:1]) + remedy[1:]
+		}
 	}
 	return diagnostics.NewFailureWithRemediation("controller.unsupported", message, "", remedy)
+}
+
+// foundationPlatform is the release whose foundation a requirement pins.
+func foundationPlatform(view executionView, requirement prerequisites.ExecutionRequirement) (prerequisites.Platform, bool) {
+	if view.platform.OS != "" {
+		return view.platform, true
+	}
+	native, _, found := compiledNativeFor(requirement)
+	return prerequisites.Platform{OS: native.OS, Release: native.Release, Architecture: "amd64"}, found
+}
+
+// foundationRemedy reinstalls and holds the package build that provides a
+// path, or, for a build only setup's qualification names, that package's
+// build as setup qualified it.
+func foundationRemedy(pkg foundationPackage) string {
+	if pkg.Build == "" {
+		return "Install the " + pkg.Name + " build setup qualified again with dnf (dnf reinstall " + pkg.Name + "), hold it with dnf versionlock add " + pkg.Name + ", then repeat this command; a host that must take another build needs a Bootwright build whose execution foundation pins it."
+	}
+	build := pkg.Name + "-" + pkg.Build
+	return "Install exactly " + pkg.Name + " " + pkg.Build + " again with dnf (dnf install " + build + ", or dnf reinstall " + build + " while that build is installed), hold it with dnf versionlock add " + build + ", then repeat this command; a host that must take the update needs a Bootwright build whose execution foundation pins it."
 }
 
 // foundationOwner is the package build that provides a foundation path: the
@@ -611,4 +655,232 @@ func (reader executionReader) Read(data []byte) (int, error) {
 
 func executionFailure(code, message string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", "Restore the qualified host execution foundation before retrying setup or preflight.")
+}
+
+// qualifiable reports a drift that an update of the package build providing
+// the path could explain: other content, a missing file or a link that points
+// elsewhere, at a path a foundation package provides. An unsafe mode, a race
+// or a preload is never a package update.
+func qualifiable(view executionView, requirement prerequisites.ExecutionRequirement, drift foundationDrift) bool {
+	if drift.path == "" || drift.path == preloadConfiguration || drift.condition == driftUnsafe || drift.condition == driftChanged {
+		return false
+	}
+	_, attributed := foundationOwner(view, requirement, drift.path)
+	return attributed
+}
+
+// qualify proves, from the RPM database, the foundation the host's installed
+// builds provide in the compiled requirement's shape, and verifies it byte for
+// byte under the read lock the caller holds. Each build must be the one
+// x86_64 instance of its package, of the compiled upstream version, signed by
+// the platform's vendor key and recording SHA-256 file digests; each pinned
+// file takes that build's digest, and the versioned libgcc file, its link and
+// its preload entry take that build's file and link target. Its refusal names
+// the package build and what disqualified it; the error is reserved for a
+// reading that could not run.
+func (guard ExecutionGuard) qualify(ctx context.Context, platform prerequisites.Platform, root *os.File, view executionView, compiled prerequisites.ExecutionRequirement, drift foundationDrift) (*prerequisites.QualifiedFoundation, error, error) {
+	owner, _ := foundationOwner(view, compiled, drift.path)
+	refuse := func(reason string, remedied foundationPackage) error {
+		message := "the provided execution foundation differs at " + drift.path + ", from " + owner.described() + ", which " + drift.condition + ", and " + reason
+		return diagnostics.NewFailureWithRemediation("controller.unsupported", message, "", foundationRemedy(remedied))
+	}
+	names := make([]string, 0, len(view.packages))
+	for _, pkg := range view.packages {
+		names = append(names, pkg.Name)
+	}
+	installed, err := guard.Builds.FoundationBuilds(ctx, platform, names)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
+		}
+		return nil, nil, err
+	}
+	proof := foundationProof{renamed: map[string]string{}, digests: map[string]string{}, provided: map[string]map[string]prerequisites.InstalledBuildFile{}}
+	qualified := &prerequisites.QualifiedFoundation{}
+	for _, pkg := range view.packages {
+		record, files, reason := qualifyBuild(pkg, installed, platform)
+		if reason != "" {
+			return nil, refuse(reason, pkg), nil
+		}
+		proof.provided[pkg.Name] = files
+		for index, name := range pkg.Files {
+			proof.renamed[name], proof.digests[record.Files[index]] = record.Files[index], files[record.Files[index]].SHA256
+		}
+		qualified.Packages = append(qualified.Packages, record)
+	}
+	var reason string
+	var remedied foundationPackage
+	qualified.Execution, reason, remedied = proof.requirement(view, compiled, qualified.Packages)
+	if reason != "" {
+		return nil, refuse(reason, remedied), nil
+	}
+	unpythoned := compiled
+	unpythoned.PythonExecutable = ""
+	if !validExecutionRequirement(qualified.Execution) || prerequisites.ValidateQualifiedFoundation(*qualified, unpythoned) != nil {
+		return nil, refuse("the installed builds do not provide a foundation in the shape this build pins", owner), nil
+	}
+	refusal, err := verifyQualified(ctx, root, view.owner, qualified)
+	if err != nil || refusal != nil {
+		return nil, refusal, err
+	}
+	return qualified, nil, nil
+}
+
+// qualifyBuild selects the one x86_64 instance of a pinned package and admits
+// it only at the compiled upstream version, signed by the vendor key and with
+// SHA-256 file digests, returning the files it provides under the pinned
+// paths, or the reason it does not qualify.
+func qualifyBuild(pkg foundationPackage, installed []prerequisites.InstalledBuild, platform prerequisites.Platform) (prerequisites.FoundationBuild, map[string]prerequisites.InstalledBuildFile, string) {
+	var instances []prerequisites.InstalledBuild
+	for _, build := range installed {
+		if build.Name == pkg.Name && build.Architecture == "x86_64" {
+			instances = append(instances, build)
+		}
+	}
+	switch {
+	case len(instances) == 0:
+		return prerequisites.FoundationBuild{}, nil, pkg.Name + " has no x86_64 instance installed"
+	case len(instances) > 1:
+		return prerequisites.FoundationBuild{}, nil, "more than one x86_64 instance of " + pkg.Name + " is installed"
+	}
+	build := instances[0]
+	record := prerequisites.FoundationBuild{Name: pkg.Name, Build: build.Version + "-" + build.Release, Files: []string{}}
+	described := pkg.Name + " " + record.Build
+	switch {
+	case build.Epoch != 0 || build.Version != pkg.upstreamVersion():
+		return record, nil, described + " is not upstream version " + pkg.upstreamVersion() + ", which this build pins"
+	case !build.Signed:
+		return record, nil, described + " is not signed by the " + platform.OS + " vendor key"
+	case build.DigestAlgorithm != 8:
+		return record, nil, described + " does not record SHA-256 file digests"
+	}
+	files, consistent := usrMergedFiles(build.Files)
+	if !consistent {
+		return record, nil, described + " lists one foundation path twice"
+	}
+	for _, name := range pkg.Files {
+		found := name
+		if prerequisites.VersionedLibgcc(name) {
+			found = ""
+			for candidate, file := range files {
+				if prerequisites.VersionedLibgcc(candidate) && file.LinkTo == "" && file.SHA256 != "" {
+					if found != "" {
+						return record, nil, described + " provides more than one versioned libgcc_s library"
+					}
+					found = candidate
+				}
+			}
+		}
+		if file, listed := files[found]; found == "" || !listed || file.LinkTo != "" || file.SHA256 == "" {
+			return record, nil, described + " does not provide " + name + " as a file"
+		}
+		record.Files = append(record.Files, found)
+	}
+	return record, files, ""
+}
+
+// foundationProof is what the qualified builds proved: where each pinned file
+// stands now, the digest each qualified file must hold and every file each
+// package provides.
+type foundationProof struct {
+	renamed, digests map[string]string
+	provided         map[string]map[string]prerequisites.InstalledBuildFile
+}
+
+// requirement is the compiled requirement under the proved files: each file
+// at its qualified path with its RPM digest, each link to a moved file at the
+// target its package records, and each preload entry renamed. It returns the
+// reason and the package to reinstall when a package does not link a moved
+// file as the compiled requirement does.
+func (proof foundationProof) requirement(view executionView, compiled prerequisites.ExecutionRequirement, builds []prerequisites.FoundationBuild) (prerequisites.ExecutionRequirement, string, foundationPackage) {
+	requirement := prerequisites.ExecutionRequirement{Loader: compiled.Loader, LockPath: compiled.LockPath}
+	for _, file := range compiled.Files {
+		name := proof.renamed[file.Path]
+		requirement.Files = append(requirement.Files, prerequisites.InstalledFile{Path: name, SHA256: proof.digests[name]})
+	}
+	for _, link := range compiled.Links {
+		destination := linkTarget(link)
+		moved, renames := proof.renamed[destination]
+		if !renames || moved == destination {
+			requirement.Links = append(requirement.Links, link)
+			continue
+		}
+		pkg, _ := foundationOwner(view, compiled, destination)
+		listed, found := proof.provided[pkg.Name][link.Path]
+		if !found || listed.LinkTo == "" || linkTarget(prerequisites.InstalledLink{Path: link.Path, Target: listed.LinkTo}) != moved {
+			build := ""
+			for _, record := range builds {
+				if record.Name == pkg.Name {
+					build = record.Build
+				}
+			}
+			return requirement, pkg.Name + " " + build + " does not link " + link.Path + " to " + path.Base(moved), pkg
+		}
+		requirement.Links = append(requirement.Links, prerequisites.InstalledLink{Path: link.Path, Target: listed.LinkTo})
+	}
+	for _, name := range compiled.Preload {
+		requirement.Preload = append(requirement.Preload, proof.renamed[name])
+	}
+	return requirement, "", foundationPackage{}
+}
+
+// verifyQualified verifies a qualified foundation byte for byte, exactly as a
+// launch would, and refuses a path that differs naming the qualified build
+// that provides it.
+func verifyQualified(ctx context.Context, root *os.File, owner uint32, qualified *prerequisites.QualifiedFoundation) (error, error) {
+	fs := executionFilesystem{root: root, owner: owner, links: make(map[string]string, len(qualified.Execution.Links))}
+	for _, link := range qualified.Execution.Links {
+		fs.links[link.Path] = link.Target
+	}
+	err := fs.verify(ctx, qualified.Execution)
+	if err == nil {
+		return nil, nil
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	found := driftOf(err)
+	qualifiedView := executionView{packages: qualifiedPackages(qualified.Packages)}
+	pkg, attributed := foundationOwner(qualifiedView, qualified.Execution, found.path)
+	if !attributed {
+		return foundationRefusal(qualifiedView, qualified.Execution, err, false), nil
+	}
+	condition := found.condition
+	if condition == driftContent {
+		condition = "holds other content than the RPM database records for that build"
+	}
+	message := "the provided execution foundation differs at " + found.path + ", from " + pkg.described() + ", which " + condition
+	return diagnostics.NewFailureWithRemediation("controller.unsupported", message, "", foundationRemedy(pkg)), nil
+}
+
+// usrMergedFiles is a build's file list under the paths a foundation pins:
+// rpm lists a file under /lib64 where the package installs it, which the
+// pinned /lib64 link makes /usr/lib64. A path listed both ways is refused.
+func usrMergedFiles(files map[string]prerequisites.InstalledBuildFile) (map[string]prerequisites.InstalledBuildFile, bool) {
+	merged := make(map[string]prerequisites.InstalledBuildFile, len(files))
+	for name, file := range files {
+		if rest, found := strings.CutPrefix(name, "/lib64/"); found {
+			name = "/usr/lib64/" + rest
+		}
+		if _, duplicate := merged[name]; duplicate {
+			return nil, false
+		}
+		merged[name] = file
+	}
+	return merged, true
+}
+
+func qualifiedPackages(builds []prerequisites.FoundationBuild) []foundationPackage {
+	packages := make([]foundationPackage, 0, len(builds))
+	for _, build := range builds {
+		packages = append(packages, foundationPackage{Name: build.Name, Build: build.Build, Files: slices.Clone(build.Files)})
+	}
+	return packages
+}
+
+func linkTarget(link prerequisites.InstalledLink) string {
+	if path.IsAbs(link.Target) {
+		return path.Clean(link.Target)
+	}
+	return path.Join(path.Dir(link.Path), link.Target)
 }

@@ -378,10 +378,10 @@ func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {
 			}})
 		})
 	}
-	for _, test := range []struct{ held, wanted string }{
-		{"socket:0.0.0.0:3128", "socket:192.0.2.9:3128"},
-		{"socket:192.0.2.9:3128", "socket:0.0.0.0:3128"},
-		{"socket::::3128", "socket:192.0.2.9:3128"},
+	for _, test := range []struct{ held, wanted, heldText, wantedText string }{
+		{"socket:0.0.0.0:3128", "socket:192.0.2.9:3128", "0.0.0.0:3128", "192.0.2.9:3128"},
+		{"socket:192.0.2.9:3128", "socket:0.0.0.0:3128", "192.0.2.9:3128", "0.0.0.0:3128"},
+		{"socket::::3128", "socket:192.0.2.9:3128", "[::]:3128", "192.0.2.9:3128"},
 	} {
 		if err := reserve(record.Name, test.held); err != nil {
 			t.Fatalf("reserving %s failed: %#v", test.held, diagnostics.Of(err))
@@ -389,8 +389,10 @@ func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {
 		err := reserve("second", test.wanted)
 		want := diagnostics.Diagnostic{
 			Severity: "error", Code: "controller.conflict",
-			Message:     "context " + record.Name + " already holds a socket reservation this context needs",
-			Remediation: "destroy or continue context " + record.Name + " first, or give this context's service another bind address or port",
+			Message: "context " + record.Name + " holds socket " + test.heldText + " for Proxy/lab-proxy, which conflicts with socket " +
+				test.wantedText + " that Proxy/lab-proxy of this context claims",
+			Object:      &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "Proxy", Name: "lab-proxy"},
+			Remediation: "run bootwright destroy --context " + record.Name + " first, or change spec.bindAddress or spec.port on Proxy/lab-proxy",
 		}
 		if reported := diagnostics.Of(err); len(reported) != 1 || !reflect.DeepEqual(reported[0], want) {
 			t.Fatalf("%s beside %s = %#v, want %#v", test.wanted, test.held, reported, want)
@@ -398,6 +400,57 @@ func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {
 	}
 	if err := reserve("second", "socket:192.0.2.9:3129"); err != nil {
 		t.Fatalf("a socket at another port was refused: %#v", diagnostics.Of(err))
+	}
+}
+
+// Every claim another context holds that this context's claims conflict with
+// is its own diagnostic. A continuation of the holder that completes publishes
+// the same claims again, so only the holder's release, which a completed
+// destroy makes, lets this context reserve.
+func TestEveryConflictingClaimIsNamedAndAContinuationKeepsRefusing(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	_, sources := fixture(t)
+	publish(t, store, "second", sources)
+	reserveFixture(t, store, record)
+	claims := func(name string) []prerequisites.HostReservation {
+		return []prerequisites.HostReservation{
+			{Context: name, Kind: "substrate-host", Service: "lab-libvirt", Keys: []string{"bridge:virbr-lab", "prefix:198.51.100.0/24"}},
+			{Context: name, Kind: "substrate-machine", Service: "rhel-01", Keys: []string{"socket:192.0.2.1:8000"}},
+		}
+	}
+	reserve := func(name string) error {
+		return store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error { return tx.Reserve(ctx, claims(name)) })
+	}
+	if err := reserve(record.Name); err != nil {
+		t.Fatalf("the holder could not reserve: %#v", diagnostics.Of(err))
+	}
+	refusesThree := func(stage string) {
+		t.Helper()
+		reported := diagnostics.Of(reserve("second"))
+		if len(reported) != 3 {
+			t.Fatalf("%s: diagnostics = %#v, want one per conflicting claim", stage, reported)
+		}
+		for index, prefix := range []string{
+			"context " + record.Name + " holds bridge virbr-lab for InfraProvider/lab-libvirt",
+			"context " + record.Name + " holds managed network prefix 198.51.100.0/24 for InfraProvider/lab-libvirt",
+			"context " + record.Name + " holds socket 192.0.2.1:8000 for Machine/rhel-01",
+		} {
+			if reported[index].Code != "controller.conflict" || !strings.HasPrefix(reported[index].Message, prefix) {
+				t.Fatalf("%s: diagnostic %d = %#v, want %q", stage, index, reported[index], prefix)
+			}
+		}
+	}
+	refusesThree("while the holder holds")
+	if err := reserve(record.Name); err != nil {
+		t.Fatalf("the holder's continuation could not reserve again: %#v", diagnostics.Of(err))
+	}
+	refusesThree("after the holder's continuation")
+	if err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error { return tx.ReleaseReservations(ctx) }); err != nil {
+		t.Fatal(err)
+	}
+	if err := reserve("second"); err != nil {
+		t.Fatalf("a released claim still refused: %#v", diagnostics.Of(err))
 	}
 }
 

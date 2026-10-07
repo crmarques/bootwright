@@ -30,7 +30,7 @@ func TestBoundPlaybooksCoverExactlyTheOfferedCapabilities(t *testing.T) {
 		implementation, _, _ := strings.Cut(key, "/")
 		implementations[implementation] = true
 	}
-	for _, offered := range buildCapabilities(systemClock{}, controllerDependencies{}).Bindings() {
+	for _, offered := range buildCapabilities(systemClock{}, controllerDependencies{}, nil).Bindings() {
 		// The controller stage runs no playbook of its own: it crosses the
 		// installer the Controller context owns.
 		if offered.Implementation == "controller-prerequisites" {

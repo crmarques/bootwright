@@ -32,9 +32,13 @@ host, performing each file task and each native command the way the tool does:
 - a block runs its always tasks after its own whether or not one failed, and
   its condition holds for every task inside it.
 
+- the copy module writes the tree's identity into the staged tree; the
+  rendered Kickstart it also writes is a write this does not depend on.
+
 An included task file is a read these tests stand in for. Every other task,
 the looped proofs of the tooling and the media an apply uses among them, is a
-proof or a read this does not depend on, and is passed over. Rendering the
+proof or a read this does not depend on, and is passed over: the media read
+answers each entry unchanged. Rendering the
 task files needs Ansible's controller (DataLoader and Templar), which
 ansible-test does not offer to unit tests under tests/unit/plugins.
 """
@@ -63,10 +67,14 @@ FILE = "ansible.builtin.file"
 COMMAND = "ansible.builtin.command"
 INCLUDE = "ansible.builtin.include_tasks"
 STAT = "ansible.builtin.stat"
-MODELLED = (INSPECT, PROTOCOL, FILE, COMMAND, INCLUDE, STAT)
+COPY = "ansible.builtin.copy"
+MODELLED = (INSPECT, PROTOCOL, FILE, COMMAND, INCLUDE, STAT, COPY)
+BOOT = {"name": "rhel-9.8-x86_64-boot.iso", "sha256": "b" * 64, "size": 1105199104}
+DVD = {"name": "rhel-9.8-x86_64-dvd.iso", "sha256": "d" * 64, "size": 13107200000}
 BUILD = "Build this machine's own installer image"
-# What the extraction writes: the DVD's marker and one repository.
-EXTRACTED = {".treeinfo", "BaseOS"}
+# What an apply publishes: the DVD's marker and one repository the extraction
+# writes, and the identity of the DVD the apply records beside them.
+EXTRACTED = {".treeinfo", "BaseOS", ".bootwright-tree-identity"}
 
 
 class Killed(Exception):
@@ -95,19 +103,26 @@ class Host:
         self.tree = root / "public" / "os" / "rhel-9-8" / "tree"
         self.staging = self.tree.parent / "tree.staging"
         self.image = root / "public" / "os" / "rhel-01" / "install.iso"
-        self.work = root / "var" / "tmp" / "bootwright-install"
+        self.parent = root / "var" / "lib" / "bootwright-install"
+        self.work = self.parent / "work"
         self.variables = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
         self.variables.update({
             "bootwright_os_install_digest": DIGEST,
             "bootwright_os_install_material": {},
             "bootwright_os_install_request": {
                 "address": "198.51.100.11",
-                "bootMedia": {"name": "rhel-9.8-x86_64-boot.iso"},
+                "bootMedia": dict(BOOT),
                 "image": {"path": str(self.image)},
                 "tree": {"path": str(self.tree)},
-                "treeMedia": {"name": "rhel-9.8-x86_64-dvd.iso"},
+                "treeMedia": dict(DVD),
             },
             "managedos_install_anaconda_media": str(root / "media"),
+            "managedos_install_anaconda_media_present": {"results": [
+                {"item": {"size": media["size"], "sha256": media["sha256"]},
+                 "stat": {"exists": True, "isreg": True, "size": media["size"], "checksum": media["sha256"]}}
+                for media in (BOOT, DVD)
+            ]},
+            "managedos_install_anaconda_work_parent": str(self.parent),
             "managedos_install_anaconda_work": str(self.work),
         })
         self.emitted = []
@@ -142,6 +157,8 @@ class Host:
                 continue
             module = next((candidate for candidate in MODELLED if candidate in task), None)
             if module is None or "loop" in task:
+                continue
+            if module == COPY and not str(task[COPY].get("dest", "")).endswith("/.bootwright-tree-identity"):
                 continue
             templar = Templar(loader=LOADER, variables=self.variables)
             if not all(templar.evaluate_conditional(condition) for condition in conditions):
@@ -192,6 +209,11 @@ class Host:
             path.unlink()
         else:
             return {"changed": False}
+        return {"changed": True}
+
+    def copy(self, arguments):
+        path = self.inside(arguments["dest"])
+        path.write_text(arguments["content"])
         return {"changed": True}
 
     def include_tasks(self, name):
@@ -267,14 +289,16 @@ def test_an_apply_clears_its_own_remnant_before_it_publishes(tmp_path, monkeypat
     assert (host.work / "install.iso").read_bytes() == b"built"
 
 
-# The clearing is decided by the marker the rename publishes last, so a tree
-# already published whole is left exactly as it is.
+# The clearing is decided by the marker the rename publishes last and the
+# identity it carries, so a tree already published whole from the frozen DVD
+# is left exactly as it is.
 def test_an_apply_over_a_published_tree_leaves_it_alone(tmp_path, monkeypatch):
     host = Host(tmp_path, monkeypatch)
     (host.tree / "AppStream").mkdir(parents=True)
     (host.tree / ".treeinfo").write_text("[general]\n")
+    (host.tree / ".bootwright-tree-identity").write_text(DVD["sha256"] + "\n")
     host.run("apply.yml", through=BUILD)
-    assert {entry.name for entry in host.tree.iterdir()} == {".treeinfo", "AppStream"}
+    assert {entry.name for entry in host.tree.iterdir()} == {".treeinfo", "AppStream", ".bootwright-tree-identity"}
 
 
 # The completion evidence is read after the work area is removed, so it never
@@ -315,6 +339,7 @@ def published_tree(host):
     for repository in ("AppStream", "BaseOS"):
         (host.tree / repository / "Packages").mkdir(parents=True)
     (host.tree / ".treeinfo").write_text("[general]\n")
+    (host.tree / ".bootwright-tree-identity").write_text(DVD["sha256"] + "\n")
 
 
 # A removal killed while it deleted the tree leaves the entries the directory
@@ -354,6 +379,8 @@ def test_a_removal_leaves_no_directory_the_apply_created(tmp_path, monkeypatch):
     assert not os.path.lexists(host.tree.parent)
     assert not os.path.lexists(host.image.parent)
     assert not os.path.lexists(host.work)
+    # The root-only parent of the work area is shared, so a removal leaves it.
+    assert host.parent.is_dir()
     assert host.completion()["outcome"] == "changed"
 
 

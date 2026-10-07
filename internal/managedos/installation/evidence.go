@@ -33,6 +33,9 @@ type Evidence struct {
 	// back, though no complete tree.
 	Tree        bool `json:"tree"`
 	TreeContent bool `json:"treeContent"`
+	// TreeIdentity is the digest of the image the published tree was
+	// extracted from, empty when none.
+	TreeIdentity string `json:"treeIdentity"`
 	// TreeStaging is anything at the path the tree is extracted at before its
 	// rename: an apply killed while it extracted leaves a partial tree there,
 	// beneath the served root. Work is the area the installer image is built
@@ -56,7 +59,8 @@ func (e Evidence) left() bool {
 
 // ValidatePresence accepts evidence only when it proves the guest holds exactly
 // the frozen marker, answered on its own host key at the selected address, has
-// its media ejected and is running.
+// its media ejected and is running, and that its package tree was extracted
+// from the image this operation froze.
 func ValidatePresence(data []byte, request Request, digest, marker string) error {
 	evidence, err := decodeEvidence(data, digest)
 	if err != nil {
@@ -88,6 +92,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	}
 	if !evidence.Image || (request.Tree != nil && !evidence.Tree) {
 		return refusal("lifecycle.state", "the installation did not publish everything its boot needs", "")
+	}
+	if request.TreeMedia != nil && evidence.TreeIdentity != request.TreeMedia.SHA256 {
+		return refusal("lifecycle.state", "the published package tree was extracted from another image than the one this operation froze", "")
 	}
 	return nil
 }

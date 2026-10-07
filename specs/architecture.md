@@ -722,7 +722,7 @@ phases:
 | `continue` | controller | adapter → runner | `phase` | before each tool installation | one per frozen tool, in order, after `prepared`; at most 128 | Acknowledgement EOF fails the adapter before that tool. |
 | `group` | lifecycle | adapter → runner | `phase`, `group`, `status` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, non-empty `evidence` | none | last, once | Absent when the channel closes, the run has no result. |
-| `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp` | none | last, once, in place of `completed`, while an `openshift-clients` tool is being installed | The run fails with the [release-stamp refusal](controller.md#selection-and-command-journeys) instead of the generic adapter failure, even when the adapter's failed exit is read first. |
+| `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp`, an acquisition class with `source`, or a native class | none | last, once, in place of `completed`: `release-stamp` while an `openshift-clients` tool is being installed; an acquisition class (`dns`, `certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`, `integrity`, `trust`, `storage`) naming the native package being staged, between `prepared` and `native`, or the tool being installed; a native class (`solver-conflict`, `missing-candidate`, `signature`, `database`, `transaction`, `postcondition`, `foundation`, `timeout`, `internal`) after `loaded` | The run fails with the [release-stamp refusal](controller.md#selection-and-command-journeys), or the diagnostic Go gives the [class](controller.md#selection-and-command-journeys), naming the source's host, instead of the generic adapter failure, even when the adapter's failed exit is read first; `internal` keeps the generic failure, and a native class after an authorized `native` is `controller.unknown`. |
 | `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason instead of the generic adapter failure, even when the adapter's failed exit is read first; the adapter is left to end on its own. |
 
 `outcome` is `changed` or `unchanged`, and the controller runner refuses
@@ -737,9 +737,11 @@ Both runners refuse a malformed or oversized record, an unknown, repeated or
 out-of-order phase, a record after `completed`, and more records than their
 bound: 64 for the lifecycle runner, 132 for the controller runner (`loaded`,
 `prepared`, `native`, `completed` or `refused`, and a `continue` per tool). The
-controller runner also refuses a `refused` record with another reason or for
-another tool kind, and the lifecycle runner a `refused` record whose reason the
-run's request does not name. Both runners judge a record they read after the
+controller runner also refuses a `refused` record with a reason outside its
+classes, `release-stamp` for another tool kind, an acquisition class without a
+source or naming a source the run is not then acquiring, and any record after
+`refused`, and the lifecycle runner a `refused` record whose reason the run's
+request does not name. Both runners judge a record they read after the
 adapter's failed exit as if they had read that record first, so a record they
 refuse, or one they cannot read, fails the run as a protocol breach rather than
 as the failed exit, whichever of the two they read first: a lifecycle attempt
@@ -756,10 +758,10 @@ adapter's process group.
 The controller runner kills nothing on a refusal: the adapter fails at its next
 acknowledgement, and an authorized native transaction first runs to its end. A
 deadline or a cancellation kills the adapter's process group, sparing only an
-authorized native transaction. A controller run's deadline is 10 minutes; a
-client installation adds each source's
+authorized native transaction. A controller run's deadline is 10 minutes
+plus its native staging bound and each tool source's
 [acquisition deadline](controller.md#the-controller-stage), held to a ceiling of
-2 hours, and a client closure past that ceiling is refused before Ansible
+2 hours, and a closure with tools past that ceiling is refused before Ansible
 starts. A lifecycle run's is the one its request states, which its capability
 derives from the wait budgets that request froze plus a margin for the rest of
 the run, held to a ceiling of 6 hours; a request that states none keeps 2
@@ -773,7 +775,11 @@ A lifecycle attempt is then `unknown` after a refusal, a deadline, a lost result
 or a zero exit without `completed`; `failed` after a non-zero exit that broke no
 protocol rule; and `canceled` when the operator cancels. The controller runner
 reports `failed` for any failure before `prepared` is published, since no
-host-wide effect was yet permitted, and `unknown` after it or on cancellation.
+host-wide effect was yet permitted, and for setup's own run, which publishes
+into the bundle it executes and carries no tool, until Go acknowledges a
+`native` record, since the adapter starts no transaction before that
+acknowledgement; it reports `unknown` after that, after `prepared` for any
+other run, and on cancellation.
 
 A lifecycle run on the controller may also declare output files: each is a
 named path under a private `outputs/` directory of its job, passed to the

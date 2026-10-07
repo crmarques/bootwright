@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -134,12 +135,17 @@ func MachineRequests(catalog api.Catalog, controllerMachine, contextName string)
 		if err != nil {
 			return nil, err
 		}
+		host, _ := catalog.Find(api.Machine, provider.Spec().Get("libvirt", "machineRef").Text())
+		egress, err := managedservice.EgressFor(catalog, host)
+		if err != nil {
+			return nil, err
+		}
 		base, ok := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "port").Int64()
 		if !ok || base < 1 {
 			return nil, refusal("api.value", "the provider declares no emulated controller port", "set spec.libvirt.bmcEmulationDefaults.port on "+provider.Identity())
 		}
 		for ordinal, machine := range substrate.HostedMachines(catalog, provider.Name()) {
-			request, err := machineRequestFor(catalog, provider, machine, placement, contextName, int(base)+ordinal)
+			request, err := machineRequestFor(catalog, provider, machine, placement, egress, contextName, int(base)+ordinal)
 			if err != nil {
 				return nil, err
 			}
@@ -150,7 +156,7 @@ func MachineRequests(catalog api.Catalog, controllerMachine, contextName string)
 	return requests, nil
 }
 
-func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placement machineref.Placement, contextName string, port int) (MachineRequest, error) {
+func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placement machineref.Placement, egress managedservice.Egress, contextName string, port int) (MachineRequest, error) {
 	name := machine.Name()
 	if !substrate.SafeSegment(name) {
 		return MachineRequest{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
@@ -189,6 +195,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 		Directory:  substrate.DiskDirectory(contextName, name),
 		Disks:      disks,
 		Domain:     substrate.DomainName(contextName, name),
+		Egress:     egress,
 		Identity:   Identity{Block: MachineBlockID(name), Context: contextName, Object: name},
 		Interfaces: interfaces,
 		MemoryMiB:  int(memory),

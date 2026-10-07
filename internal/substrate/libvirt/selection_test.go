@@ -69,7 +69,7 @@ func TestAnExternalAttachmentFreezesNoManagedNetworkFields(t *testing.T) {
 	}
 	keys := requests[0].ReservationKeys()
 	if slices.ContainsFunc(keys, func(key string) bool {
-		return strings.HasPrefix(key, "bridge:") || strings.HasPrefix(key, "libvirt-network:")
+		return strings.HasPrefix(key, "bridge:") || strings.HasPrefix(key, "libvirt-network:") || strings.HasPrefix(key, "prefix:")
 	}) {
 		t.Fatalf("an external attachment claimed a host resource: %v", keys)
 	}
@@ -102,7 +102,8 @@ func TestAManagedAttachmentWiresTheDomainToItsLibvirtNetwork(t *testing.T) {
 
 func TestHostReservationsClaimEveryManagedNetworkAndThePool(t *testing.T) {
 	requests, _ := HostRequests(labCatalog(), "controller", testContext)
-	want := []string{"bridge:virbr-lab", "libvirt-network:bootwright-lab-lab-guests", "path:/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia"}
+	want := []string{"bridge:virbr-lab", "libvirt-network:bootwright-lab-lab-guests", "libvirt-pool:bootwright-lab-lab-libvirt-vmedia",
+		"path:/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia", "prefix:198.51.100.0/24"}
 	if !slices.Equal(requests[0].ReservationKeys(), want) {
 		t.Fatalf("keys = %v", requests[0].ReservationKeys())
 	}
@@ -254,8 +255,33 @@ func TestAnIPv6ControllerIsBracketedAndClaimsTheSharedSocketKey(t *testing.T) {
 	held := []prerequisites.HostReservation{{Context: "other", Kind: "proxy", Service: "proxy",
 		Keys: managedservice.ReservationKeys("bootwright-other-proxy", "/var/lib/bootwright-services/other/proxy", service)}}
 	wanted := []prerequisites.HostReservation{{Context: testContext, Kind: "substrate-machine", Service: "rhel-01", Keys: requests[0].ReservationKeys()}}
-	if owner, conflict := prerequisites.ConflictingContext(held, wanted); !conflict || owner.Context != "other" || owner.Class != "socket" {
-		t.Fatalf("conflict = %v with %+v", conflict, owner)
+	conflicts := prerequisites.Conflicts(held, wanted)
+	if len(conflicts) != 1 || conflicts[0].Held.Context != "other" || conflicts[0].HeldKey != service[0] || conflicts[0].WantedKey != service[0] {
+		t.Fatalf("conflicts = %+v", conflicts)
+	}
+}
+
+// Two contexts' managed networks on one host whose prefixes overlap would each
+// route that prefix to their own bridge, so the second refuses on the prefix
+// even though its bridge, network, pool and path all differ.
+func TestTwoContextsOverlappingManagedPrefixesConflict(t *testing.T) {
+	hostOf := func(contextName, bridge string) HostRequest {
+		t.Helper()
+		attached := provider(field("networkAttachments", api.ListValue(api.MapValue(
+			text("name", "lab-guests"),
+			field("libvirt", api.MapValue(text("bridge", bridge), text("management", "managed"), text("address", "198.51.100.1/24"), text("forward", "nat"))),
+		))))
+		requests, err := HostRequests(catalogOf(controller(), attached, networkConfig(), guest("rhel-01")), "controller", contextName)
+		if err != nil || len(requests) != 1 {
+			t.Fatalf("requests = %d (%v)", len(requests), err)
+		}
+		return requests[0]
+	}
+	held := []prerequisites.HostReservation{{Context: "other", Kind: "substrate-host", Service: "lab-libvirt", Keys: hostOf("other", "virbr-a").ReservationKeys()}}
+	wanted := []prerequisites.HostReservation{{Context: "lab", Kind: "substrate-host", Service: "lab-libvirt", Keys: hostOf("lab", "virbr-b").ReservationKeys()}}
+	conflicts := prerequisites.Conflicts(held, wanted)
+	if len(conflicts) != 1 || conflicts[0].HeldKey != "prefix:198.51.100.0/24" || conflicts[0].WantedKey != "prefix:198.51.100.0/24" {
+		t.Fatalf("conflicts = %+v, want exactly the one prefix", conflicts)
 	}
 }
 
@@ -405,4 +431,34 @@ func TestFrozenRequestsRoundTripExactly(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The emulated BMC's image is acquired through the provider host Machine's own
+// proxy choice, under the rule a managed service's image acquisition follows.
+func TestTheEmulatorPullEgressesThroughItsHostMachinesProxyChoice(t *testing.T) {
+	requests, err := MachineRequests(labCatalog(), "controller", testContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := requests[0].Egress; got.HTTPProxy != "" || got.HTTPSProxy != "" || got.NoProxy == nil || len(got.NoProxy) != 0 {
+		t.Fatalf("a direct host froze egress %#v", got)
+	}
+	proxied := func(management string) api.Catalog {
+		host := controller()
+		spec := host.Spec().With("proxy", api.MapValue(text("proxyRef", "lab-proxy"),
+			field("noProxy", api.StringList("192.0.2.0/24", "lab.example.test"))))
+		proxy := api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(text("management", management),
+			field("connection", api.MapValue(text("httpProxy", "http://proxy.example.test:3128")))))
+		return catalogOf(api.NewObject(api.Machine, "controller", api.Value{}, spec), proxy, provider(), networkConfig(), guest("rhel-01"))
+	}
+	requests, err = MachineRequests(proxied("external"), "controller", testContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := managedservice.Egress{HTTPProxy: "http://proxy.example.test:3128", NoProxy: []string{"192.0.2.0/24", "lab.example.test"}}
+	if got := requests[0].Egress; got.HTTPProxy != want.HTTPProxy || got.HTTPSProxy != "" || !slices.Equal(got.NoProxy, want.NoProxy) {
+		t.Fatalf("egress = %#v, want %#v", got, want)
+	}
+	_, err = MachineRequests(proxied("managed"), "controller", testContext)
+	expectRefusal(t, err, "lifecycle.state")
 }

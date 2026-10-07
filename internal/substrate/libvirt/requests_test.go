@@ -26,14 +26,32 @@ func TestAFrozenHostRequestOfAnyOtherVersionRefuses(t *testing.T) {
 }
 
 // A machine request earlier builds froze, whose placement could still name an
-// escalation Secret, refuses by its version, and so does any other.
+// escalation Secret or which carried no egress, refuses by its version, and so
+// does any other.
 func TestAFrozenMachineRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"machine-libvirt-v1", "machine-libvirt-v3", ""} {
+	for _, version := range []string{"machine-libvirt-v1", "machine-libvirt-v2", "machine-libvirt-v4", ""} {
 		_, err := DecodeMachineRequest([]byte(`{"version":"` + version + `"}`))
 		if reported := diagnostics.Of(err); err == nil || len(reported) == 0 || !strings.Contains(reported[0].Message, "unsupported version") {
 			t.Fatalf("version %q was not refused by its version: %v", version, err)
 		}
 	}
+}
+
+// A canonical request the previous build froze, with no egress, refuses by its
+// version before anything reads it.
+func TestAFrozenMachineRequestOfTheEgresslessVersionRefuses(t *testing.T) {
+	requests, err := MachineRequests(labCatalog(), "controller", testContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	earlier := requests[0]
+	earlier.Version = "machine-libvirt-v2"
+	data, err := earlier.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = DecodeMachineRequest(data)
+	expectRefusal(t, err, "lifecycle.state")
 }
 
 func TestAFrozenHostRequestOfThisVersionRoundTrips(t *testing.T) {

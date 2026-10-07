@@ -31,11 +31,13 @@ type MutationResult struct {
 }
 
 // MediaRow is one stored image as a listing presents it. Size and SHA256 are
-// its record. ReservedBy names the contexts that reserve it, sorted, and Frozen
-// is true exactly when one does. Verified is `mismatch` when the bytes held no
-// longer have the recorded size or, with checksums, the recorded digest; it is
-// `ok` only when checksums proved both, and empty otherwise. Computed is the
-// digest checksums computed, and empty without them.
+// its record, and empty when that record could not be read. ReservedBy names
+// the contexts that reserve it, sorted, and Frozen is true exactly when one
+// does. Verified is `mismatch` when the bytes held no longer have the recorded
+// size or, with checksums, the recorded digest; `failed` when the store could
+// not read the image's record, its file or its bytes, and Failure names why;
+// `ok` only when checksums proved both size and digest, and empty otherwise.
+// Computed is the digest checksums computed, and empty without them.
 type MediaRow struct {
 	Name       string
 	Size       int64
@@ -46,6 +48,7 @@ type MediaRow struct {
 	ReservedBy []string
 	Verified   string
 	Computed   string
+	Failure    string
 }
 
 // ListResult is the store's inventory in name order. Checksums reports that

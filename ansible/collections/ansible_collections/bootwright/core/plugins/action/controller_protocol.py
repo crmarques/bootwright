@@ -97,7 +97,9 @@ def preparation(request, observed):
 
 def frozen_request(request):
     """The frozen request's shape: its exact keys, version, operation, identity
-    and tools, and one acquisition deadline per tool, in the tools' order."""
+    and tools, one acquisition deadline per native package then per tool, in
+    their order, and the native staging bound, zero exactly when no package is
+    staged."""
     required = {
         "version",
         "operation",
@@ -109,22 +111,35 @@ def frozen_request(request):
         "native",
         "tools",
         "acquisition",
+        "nativeStaging",
         "egress",
     }
     if not required <= set(request) or set(request) - required - {"preparation"}:
         raise ValueError("request")
     if (
-        request["version"] != "controller-prerequisites-v4"
+        request["version"] != "controller-prerequisites-v5"
         or request["operation"] not in ("setup", "recover")
         or re.fullmatch(r"[a-f0-9]{64}", request["identity"]) is None
     ):
         raise ValueError("request")
-    tools, acquisition = request["tools"], request["acquisition"]
+    packages, tools = request["packages"], request["tools"]
+    acquisition, staging = request["acquisition"], request["nativeStaging"]
     if not isinstance(tools, list) or len(tools) > 128:
         raise ValueError("tools")
+    if not isinstance(packages, list) or len(packages) > 512:
+        raise ValueError("packages")
+    if (
+        not isinstance(staging, int)
+        or isinstance(staging, bool)
+        or not 0 <= staging <= 7200
+        or (staging == 0) != (not packages)
+    ):
+        raise ValueError("native staging")
     if not isinstance(acquisition, list) or [
         entry["source"] for entry in acquisition
-    ] != [tool["source"]["id"] for tool in tools]:
+    ] != [package["source"]["id"] for package in packages] + [
+        tool["source"]["id"] for tool in tools
+    ]:
         raise ValueError("acquisition")
     for entry in acquisition:
         seconds = entry["seconds"]

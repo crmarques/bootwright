@@ -123,7 +123,7 @@ func (c *BootstrapCatalog) Resolve(ctx context.Context, platform prerequisites.P
 	if err := projected.automation(ctx); err != nil {
 		return prerequisites.BootstrapDefinition{}, warnings, err
 	}
-	if err := c.qualify(projected, value.Execution); err != nil {
+	if err := c.qualify(projected, prerequisites.LaunchRequirementFor(ctx, value.Execution)); err != nil {
 		return prerequisites.BootstrapDefinition{}, warnings, err
 	}
 	value.ProjectionSHA256, value.FileCount, value.ExpandedBytes = projected.identity(), len(projected.files), projected.bytes

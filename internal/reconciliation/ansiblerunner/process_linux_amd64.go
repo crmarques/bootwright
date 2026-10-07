@@ -109,6 +109,9 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
+	if err := writeSSHConfig(job, request, paths); err != nil {
+		return lifecycle.RunResult{}, err
+	}
 	values, err := variables(request, paths)
 	if err != nil {
 		return lifecycle.RunResult{}, err
@@ -152,12 +155,16 @@ const (
 	requestName     = "request.json"
 	localTemp       = "local"
 	remoteTemp      = "remote"
+	sshConfigName   = "ssh_config"
 	maxMaterialName = 255
+	// cryptoPolicyConfig is the host crypto-policy backend the SSH arm's
+	// generated client configuration includes, and the only one it reads.
+	cryptoPolicyConfig = "/etc/crypto-policies/back-ends/openssh.config"
 )
 
 // jobEntries are every name the runner itself gives an entry of a job. A
 // material file is written into the job too, so it may take none of them.
-var jobEntries = []string{lockName, holderName, recordName, outputsDirectory, interpreterName, inventoryName, requestName, localTemp, remoteTemp}
+var jobEntries = []string{lockName, holderName, recordName, outputsDirectory, interpreterName, inventoryName, requestName, localTemp, remoteTemp, sshConfigName}
 
 // checkMaterials refuses a material list before anything is written: each file
 // is written once and its value cleared, so a name listed twice would be
@@ -222,6 +229,21 @@ func (r Runner) materialize(job string, request lifecycle.RunRequest) (map[strin
 		paths[file.Name] = target
 	}
 	return paths, nil
+}
+
+// writeSSHConfig gives the SSH arm a client configuration of its own, so ssh
+// reads neither the system nor a personal configuration and keeps only the
+// host crypto policy. A local placement runs no ssh and gets none.
+func writeSSHConfig(job string, request lifecycle.RunRequest, paths map[string]string) error {
+	if request.Placement.Local() {
+		return nil
+	}
+	target := filepath.Join(job, sshConfigName)
+	if err := os.WriteFile(target, []byte("Include "+cryptoPolicyConfig+"\n"), 0600); err != nil {
+		return failure("lifecycle.state", "the frozen adapter invocation could not be materialized", "")
+	}
+	paths[sshConfigName] = target
+	return nil
 }
 
 func writeJSON(job, name string, value any) error {

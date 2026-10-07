@@ -225,7 +225,7 @@ func TestLabSNOExampleRefusesAHintItsCreatedDiskCannotMatch(t *testing.T) {
 // through.
 func TestLabSNOExamplePlansTheWholeGraph(t *testing.T) {
 	state, _ := compileAcceptance(t, snoExampleSources(t))
-	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	input := lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: state, Controller: "controller",
 		Context: lifecycle.ContextIdentity{Name: "lab-sno"},

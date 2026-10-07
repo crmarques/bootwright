@@ -42,10 +42,46 @@ type FoundationInspector interface {
 // and, for one that differs, the first path that differs and the refusal that
 // names that path, the package build that provides it, what was found and the
 // remedy. Its error is reserved for an inspection that could not run.
+//
+// Qualified is set when the compiled foundation differs but the host holds
+// vendor-signed builds of the same upstream versions within the qualified
+// minor whose files match the RPM database byte for byte: it is the
+// requirement those builds prove, and Refusal is nil.
 type FoundationInspection struct {
-	Required string
-	Drift    string
-	Refusal  error
+	Required  string
+	Drift     string
+	Refusal   error
+	Qualified *QualifiedFoundation
+}
+
+// FoundationBuildReader reads, from a snapshot of the host's package database,
+// each installed instance of the named foundation packages: its identity,
+// whether a signature of the platform's vendor key covers it, its file digest
+// algorithm and the digest or link target rpm records for each file. Only a
+// foundation inspection reads it; no launch ever does.
+type FoundationBuildReader interface {
+	FoundationBuilds(context.Context, Platform, []string) ([]InstalledBuild, error)
+}
+
+// InstalledBuild is one installed package instance as the RPM database
+// records it. DigestAlgorithm is rpm's FILEDIGESTALGO, 8 for SHA-256.
+type InstalledBuild struct {
+	Name            string
+	Epoch           int
+	Version         string
+	Release         string
+	Architecture    string
+	Signed          bool
+	DigestAlgorithm int
+	Files           map[string]InstalledBuildFile
+}
+
+// InstalledBuildFile is what rpm records for one file of a build: its digest,
+// empty for a directory or a link, and its link target, empty for anything
+// but a link.
+type InstalledBuildFile struct {
+	SHA256 string
+	LinkTo string
 }
 
 // DependencyCatalog is pure: Admit refuses a platform whose provided execution

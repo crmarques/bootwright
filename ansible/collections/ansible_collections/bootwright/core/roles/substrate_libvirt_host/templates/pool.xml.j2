@@ -1,9 +1,0 @@
-{#- The only location this provider's emulated controllers may fetch media
-    into. It is a plain directory pool beneath libvirt's own image tree, so a
-    staged image carries the labels the hypervisor expects. -#}
-<pool type="dir">
-  <name>{{ bootwright_substrate_host_request.poolName }}</name>
-  <target>
-    <path>{{ bootwright_substrate_host_request.poolPath }}</path>
-  </target>
-</pool>

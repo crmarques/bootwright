@@ -65,7 +65,7 @@ func siteServicesCatalog() api.Catalog {
 
 func planRequires(t *testing.T, catalog api.Catalog) []reconciliation.ObjectRef {
 	t.Helper()
-	plan, err := New(nil).Plan(context.Background(), lifecycle.PlanInput{
+	plan, err := New(nil).WithMedia(labMedia()).Plan(context.Background(), lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
 		Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
 	})
@@ -175,18 +175,13 @@ func TestAnotherInstallerIsRefusedBeforeItsNetwork(t *testing.T) {
 }
 
 // The installation reads the network the Machine composes, so content only an
-// override declares is refused as surely as content the template declares,
-// and so is an override that moves the default route off the gateway the
-// install line carries from the template.
+// override declares is refused as surely as content the template declares.
 func TestOverrideContentIsRefused(t *testing.T) {
 	for name, test := range map[string]struct {
 		overrides api.Value
 		network   string
 	}{
 		"an mtu": {api.MapValue(field("interfaces", api.ListValue(api.MapValue(text("name", "enp1s0"), number("mtu", "9000"))))), "mtu 9000 on enp1s0"},
-		"a gateway": {api.MapValue(field("routes", api.MapValue(field("config", api.ListValue(api.MapValue(
-			text("destination", "0.0.0.0/0"), text("next-hop-address", "198.51.100.254"),
-		)))))), "route 0.0.0.0/0"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			overridden := guest(field("network", guest().Spec().Get("network").With("overrides", test.overrides)))
@@ -337,7 +332,7 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 // tooling list it once named must leave its input, and every frozen plan,
 // unchanged.
 func TestTheContentDigestIsPinned(t *testing.T) {
-	if digest := ContentDigest(); digest != "baa9f83642dd29429c139775e84d1afe3911a0d419b1ccc3d251383598297ae0" {
+	if digest := ContentDigest(); digest != "cb670a606d4ffc541676436d33ecb98ec7f14e6189ccd0ac24c79c9482670d42" {
 		t.Fatalf("content digest = %s", digest)
 	}
 }

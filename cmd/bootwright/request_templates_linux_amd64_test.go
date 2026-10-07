@@ -58,7 +58,7 @@ func templatedRefusals(t *testing.T, example string, edits []exampleEdit, added 
 		}
 		return named, nil, false
 	}
-	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	input := lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: state, Controller: "controller",
 		Context: lifecycle.ContextIdentity{Name: example},

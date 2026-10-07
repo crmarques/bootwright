@@ -123,6 +123,7 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 			Host: hostlinux.New(), Guard: bundlelocal.ExecutionGuard{}, Selection: account,
 			Presenter: process.LifecyclePresenter, Progress: process.LifecycleProgress,
 			Confirmer: process.Confirmer, Executable: process.Executable,
+			Media: repository,
 		},
 	}, release
 }

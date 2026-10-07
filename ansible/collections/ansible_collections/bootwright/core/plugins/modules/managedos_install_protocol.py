@@ -26,10 +26,12 @@ options:
     required: false
   reason:
     description:
-      - The refusal of the target's pre-boot proof a refused phase names to the
-        runner before the run fails, which the runner reports as the
-        installation's own diagnostic for its Machine. One of
-        C(hardware-mismatch), C(identity-mismatch) or C(machine-running).
+      - The refusal a refused phase names to the runner before the run fails,
+        which the runner reports as the installation's own diagnostic for its
+        Machine. One of the target's pre-boot refusals C(hardware-mismatch),
+        C(identity-mismatch) or C(machine-running), or C(media-changed-boot)
+        or C(media-changed-tree) for a store entry that no longer has the size
+        and SHA-256 the operation froze.
     type: str
     required: false
   outcome:
@@ -41,7 +43,11 @@ options:
     type: str
     required: false
   observation:
-    description: The bounded observation of published content.
+    description:
+      - The bounded observation of published content.
+      - Its C(treeIdentity) is the digest of the image the published tree was
+        extracted from, empty or 64 lowercase hexadecimal characters, which the
+        evidence carries unchanged.
     type: dict
     required: false
   marker:
