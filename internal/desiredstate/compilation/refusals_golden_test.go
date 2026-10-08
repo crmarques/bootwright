@@ -81,13 +81,30 @@ func refusalRows() []refusalRow {
 		{"OS-ready Machine with installation declarations", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true, installProfileRef: rhel}\n"},
 		{"OS-ready Machine with a network configuration", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  network: {configRef: net}\n"},
 		{"non-provided Machine without a provider", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: false}\n"},
+		{"controller that is not OS-ready", environmentYAML, ""},
+		{"controller without local access", environmentYAML, ""},
+		{"controller without the container-runtime capability", environmentYAML, ""},
+		{"a second local Machine", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  access: {local: true}\n"},
+		{"rescue on another RHEL version", environmentYAML + "  lifecycle:\n    rescue:\n      imageRef: probe\n      os: {family: rhel, version: '8.10', architecture: x86_64}\n      artifactServerEndpoint: {serverRef: artifacts, endpointRef: http}\n", "apiVersion: bootwright.io/v1alpha1\nkind: MachineImage\nmetadata: {name: probe}\nspec:\n  bootMedia: local-media:rhel-8.10-x86_64-boot.iso\n"},
 	}
+}
+
+const refusalControllerHead = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n"
+
+var refusalControllers = map[string]string{
+	"controller that is not OS-ready":                     refusalControllerHead + "  capabilities: [container-runtime]\n  os: {provided: false}\n  access: {local: true}\n",
+	"controller without local access":                     refusalControllerHead + "  capabilities: [container-runtime]\n  os: {provided: true}\n",
+	"controller without the container-runtime capability": refusalControllerHead + "  os: {provided: true}\n  access: {local: true}\n",
 }
 
 func refusalSources(row refusalRow) desiredstate.Sources {
 	files := []desiredstate.SourceFile{}
 	if row.environment != "" {
-		files = append(files, desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(row.environment+controllerYAML)))
+		controller, replaced := refusalControllers[row.name]
+		if !replaced {
+			controller = controllerYAML
+		}
+		files = append(files, desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(row.environment+controller)))
 	}
 	if row.probe != "" {
 		files = append(files, desiredstate.NewSourceFile(strictYAMLProbePath, []byte(row.probe)))

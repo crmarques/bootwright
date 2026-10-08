@@ -161,7 +161,10 @@ one. Every `api.reference` check against a selected document that fails
 decoding is another: while a selected document of a referenced kind and name
 does not decode, a reference field naming it, and an Environment cluster
 selection entry naming it, add no diagnostic, so the document's own
-diagnostics are the only ones. The same holds for checks that refuse at a
+diagnostics are the only ones. A reference field that a domain invariant of
+its own object refuses, such as an OS-ready Machine's `os.installProfileRef` or
+`network.configRef`, is not also refused as an unresolved reference: the
+invariant is the field's only diagnostic. The same holds for checks that refuse at a
 containing field: while a selected add-on, add-on profile or add-on input
 target fails decoding, the selection, input, configuration and capability
 checks of a `ClusterAddonProfile` or `ClusterAddonBinding` that name it or

@@ -27,7 +27,9 @@ func TestParserStageErrorsNameTheirAuthoredLine(t *testing.T) {
 		{"mapping key inside a sequence", "x:\n  - a\n  b: c\n", "YAML syntax error: did not find expected '-' indicator", atOrBelow, 1, 2},
 		{"scanner tab indent", "spec:\n\ttype: opaque\n", "YAML syntax error: found character that cannot start any token", atLine, 1, 2},
 		{"scanner mis-indented key", "a: b\nkind: Secret\n  name: probe\n", mapping, atLine, 1, 3},
-		{"scanner error on the first line", "a: b: c\n", mapping, atLine, 1, 0},
+		{"scanner error on the first line", "a: b: c\n", mapping, atLine, 1, 1},
+		{"scanner bad token on the first line", "a: @b\n", "YAML syntax error: found character that cannot start any token", atLine, 1, 1},
+		{"scanner unknown escape on the first line", "k: \"\\q\"\n", "YAML syntax error: found unknown escape character", atLine, 1, 1},
 		{"composer alias without an anchor", "a: &x 1\nb: *y\n", "YAML syntax error: an alias names an anchor the document does not define", "write the value out in full instead of an anchor or alias", 1, 0},
 	} {
 		t.Run(row.name, func(t *testing.T) {

@@ -54,3 +54,17 @@ func TestReusedFleetKeyNamesTheProvidedMachine(t *testing.T) {
 		t.Fatalf("reused fleet key refusal = %+v", issue)
 	}
 }
+
+func TestAnOSReadyMachineWithAnInstallProfileNeedsNoFleetKey(t *testing.T) {
+	env := api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue())
+	osReady := fleetMachine("probe", api.MapValue(api.FieldValue{Name: "os", Value: api.MapValue(
+		api.FieldValue{Name: "provided", Value: api.BoolValue(true)},
+		api.FieldValue{Name: "installProfileRef", Value: api.StringValue("rhel")},
+	)}))
+	unset := fleetMachine("bare", api.MapValue(api.FieldValue{Name: "os", Value: api.MapValue(
+		api.FieldValue{Name: "installProfileRef", Value: api.StringValue("rhel")},
+	)}))
+	if issues := environment.Validate(env, api.NewCatalog([]api.Object{env, osReady, unset})); len(issues) != 0 {
+		t.Fatalf("issues = %+v, want none", issues)
+	}
+}

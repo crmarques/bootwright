@@ -178,7 +178,9 @@ one lifecycle:
 
 - `provided: true` is OS-ready. `installProfileRef`, `os.install`, and network
   configuration are absent; `network.addresses` may declare contacts. Access
-  is operator-authored or defaults to SSH operator identity.
+  is operator-authored or defaults to SSH operator identity. An OS-ready
+  Machine that sets `installProfileRef` is refused once, at that field; it
+  needs no fleet key, and a reference it may not declare is not resolved.
 - `provided: false` with `installProfileRef` is Bootwright-installed. The
   machine references a `MachineInstallProfile`, must not author `access`, and
   effective access is derived.

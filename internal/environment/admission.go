@@ -30,11 +30,6 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 	}
 	spec := object.Spec()
 	issues := fleetKeyIssues(spec.Get("remoteMachinesAccessKey", "keyRef"), catalog)
-	add := func(field, message string) {
-		if len(issues) < 999 {
-			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec." + field, Message: message})
-		}
-	}
 	issues = append(issues, validateController(object, catalog)...)
 	if rescue := spec.Get("lifecycle", "rescue"); rescue.Present() {
 		// The schema keeps the declaration for a later journey; until one
@@ -44,14 +39,10 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 				Message:     "no rescue journey exists yet, so no lifecycle can use a rescue declaration",
 				Remediation: "remove spec.lifecycle.rescue from " + object.Identity()})
 		}
-		if version := rescue.Get("os", "version").Text(); version != "" && !strings.HasPrefix(version, "9.") {
-			add("lifecycle.rescue.os.version", "rescue requires a RHEL 9 version")
-		}
-		if image, ok := catalog.Find(api.MachineImage, rescue.Get("imageRef").Text()); ok {
-			media := image.Spec().Get("bootMedia").Text()
-			if strings.HasPrefix(media, "http") && !image.Spec().Has("checksum") {
-				add("lifecycle.rescue.imageRef", "remote rescue media requires a checksum")
-			}
+		if version := rescue.Get("os", "version").Text(); version != "" && !strings.HasPrefix(version, "9.") && len(issues) < 999 {
+			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec.lifecycle.rescue.os.version",
+				Message:     "rescue requires a RHEL 9 version",
+				Remediation: "set spec.lifecycle.rescue.os.version to a RHEL 9 version, 9.<minor>"})
 		}
 		for _, problem := range validateRescueArtifactEndpoint(rescue.Get("artifactServerEndpoint"), catalog) {
 			problem.Field = "$.spec.lifecycle.rescue.artifactServerEndpoint" + strings.TrimPrefix(problem.Field, "$")
@@ -71,7 +62,7 @@ func fleetKeyIssues(fleetKey api.Value, catalog api.Catalog) []api.Issue {
 			subject = machine.Identity()
 		}
 		installs := machine.Spec().Has("os", "installProfileRef")
-		if installs && !fleetKey.Present() {
+		if provided := machine.Spec().Get("os", "provided"); installs && provided.Present() && !provided.Bool() && !fleetKey.Present() {
 			installing++
 			if named {
 				names = append(names, machine.Name())
@@ -107,25 +98,25 @@ func validateController(environment api.Object, catalog api.Catalog) []api.Issue
 		return nil // Required-field and typed-reference checks own absence.
 	}
 	issues := []api.Issue{}
-	add := func(message string) {
+	add := func(message, remediation string) {
 		if len(issues) < 999 {
-			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec.controller.machineRef", Message: message})
+			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec.controller.machineRef", Message: message, Remediation: remediation})
 		}
 	}
 	if !controller.Spec().Get("os", "provided").Bool() {
-		add("controller must reference an OS-ready Machine with os.provided: true")
+		add("controller must reference an OS-ready Machine with os.provided: true", "set spec.os.provided to true on "+controller.Identity()+", or set spec.controller.machineRef to an OS-ready Machine")
 	}
 	if !controller.Spec().Get("access", "local").Bool() || controller.Spec().Has("access", "ssh") {
-		add("controller must reference the local Machine with access.local: true and no SSH access")
+		add("controller must reference the local Machine with access.local: true and no SSH access", "give "+controller.Identity()+" access.local: true and no spec.access.ssh")
 	}
 	if !slices.ContainsFunc(controller.Spec().Get("capabilities").Items(), func(capability api.Value) bool {
 		return capability.Text() == "container-runtime"
 	}) {
-		add("controller Machine must declare the container-runtime capability")
+		add("controller Machine must declare the container-runtime capability", "add container-runtime to spec.capabilities on "+controller.Identity())
 	}
 	for _, machine := range catalog.OfKind(api.Machine) {
 		if machine.Name() != name && api.ValidLexical("name", machine.Name()) && machine.Spec().Get("access", "local").Bool() {
-			add("only the controller Machine may declare local access; Machine/" + machine.Name() + " also declares access.local: true")
+			add("only the controller Machine may declare local access; Machine/"+machine.Name()+" also declares access.local: true", "remove spec.access.local from "+machine.Identity())
 		}
 	}
 	for _, kind := range []api.Kind{api.ContainerCluster, api.StorageCluster} {
@@ -139,7 +130,7 @@ func validateController(environment api.Object, catalog api.Catalog) []api.Issue
 			}
 			for _, node := range nodes.Items() {
 				if node.Get("machineRef").Text() == name {
-					add("controller must remain outside cluster node membership; it is a node of " + cluster.Identity())
+					add("controller must remain outside cluster node membership; it is a node of "+cluster.Identity(), "remove "+controller.Identity()+" from the nodes of "+cluster.Identity()+", or set spec.controller.machineRef to a Machine outside cluster membership")
 					break
 				}
 			}
@@ -157,16 +148,16 @@ func validateRescueArtifactEndpoint(selection api.Value, catalog api.Catalog) []
 	if !ok || len(issues) != 0 {
 		return issues
 	}
-	issue := func(message string) []api.Issue {
-		return []api.Issue{{Code: "api.invariant", Field: "$.serverRef", Message: message}}
+	issue := func(message, remediation string) []api.Issue {
+		return []api.Issue{{Code: "api.invariant", Field: "$.serverRef", Message: message, Remediation: remediation}}
 	}
 	spec := component.Spec()
 	if retention := spec.Get("retention").Text(); retention != "" && retention != "persistent" {
-		return issue("rescue requires a persistent artifact server")
+		return issue("rescue requires a persistent artifact server", "set spec.retention to persistent on "+component.Identity())
 	}
 	machine, found := catalog.Find(api.Machine, spec.Get("machineRef").Text())
 	if found && !machine.Spec().Get("os", "provided").Bool() {
-		return issue("rescue artifact server requires an OS-ready Machine")
+		return issue("rescue artifact server requires an OS-ready Machine", "set spec.machineRef on "+component.Identity()+" to a Machine with os.provided: true")
 	}
 	return issues
 }

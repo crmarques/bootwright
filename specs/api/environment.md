@@ -213,8 +213,8 @@ skips this filtering and retains every resource-selected object.
 ## Remote-machine access and install defaults
 
 `spec.remoteMachinesAccessKey.keyRef` is a plain reference to an `sshKeyPair`
-`Secret`. It is required as soon as a selected `Machine` sets
-`os.installProfileRef`. A managed-OS install authorizes its public half for the
+`Secret`. It is required as soon as a selected `Machine` with
+`os.provided: false` sets `os.installProfileRef`. A managed-OS install authorizes its public half for the
 product-owned `bootwright` account and uses its private half for that account;
 an already provided machine keeps its own `Machine.spec.access`.
 
@@ -363,6 +363,13 @@ execution. This is the sole local-access Machine in the
 retained graph and cannot be a node of a selected ContainerCluster or
 StorageCluster. Other retained Machines must not declare local access.
 
+Each controller violation is refused with `api.invariant` at
+`spec.controller.machineRef` and names its remedy on the Machine it concerns:
+set `os.provided` to true, give the controller `access.local: true` and no
+`access.ssh`, add `container-runtime` to its capabilities, remove
+`access.local` from the other Machine, or remove the controller from the
+cluster's nodes; or select another controller Machine.
+
 The controller is retained even when no service consumes it or cluster
 selection excludes every other use. Its declaration must still be in the
 selected resource universe; a reference does not load excluded files. The
@@ -465,7 +472,7 @@ contains exactly these required fields in order:
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `imageRef` | string | `MachineImage` containing RHEL 9 Anaconda boot media; a remote image requires its checksum. |
+| `imageRef` | string | `MachineImage` containing RHEL 9 Anaconda boot media. |
 | `os` | object | Exact `{family: rhel, version: 9.<minor>[.<patch>...], architecture}` tuple. |
 | `artifactServerEndpoint` | object | Required `{serverRef, endpointRef}` selecting a persistent managed ArtifactServer directly; both references are required. |
 

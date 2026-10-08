@@ -258,7 +258,10 @@ func (r *run) validateEffective(catalog api.Catalog) bool {
 				Remediation: "rename it to a lowercase DNS label of at most 63 characters, letters a-z, digits and '-', starting and ending with a letter or digit, and rename every reference to it",
 			})
 		}
+		start := len(r.ds.items)
 		validateShape(record, record.object.Spec(), api.Schema(record.object.Kind()), "$.spec", false, true, catalog, r.ds)
+		end := len(r.ds.items)
+		refused := map[string]bool{}
 		for _, rules := range r.compiler.rules {
 			if r.ds.stopped() {
 				return false
@@ -267,9 +270,13 @@ func (r *run) validateEffective(catalog api.Catalog) bool {
 				continue
 			}
 			for _, issue := range rules.Validate(record.object, catalog) {
+				if issue.Code == "" || issue.Code == "api.invariant" {
+					refused[issue.Field] = true
+				}
 				r.ds.issue(record, issue)
 			}
 		}
+		r.ds.retractReferences(start, end, refused)
 	}
 	return true
 }

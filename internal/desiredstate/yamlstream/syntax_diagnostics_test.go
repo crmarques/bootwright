@@ -10,7 +10,11 @@ import (
 )
 
 func TestSyntaxDiagnosticsSeparateEncodingFromYAML(t *testing.T) {
-	const yamlRemedy = "correct the YAML at that line; indent with spaces, not tabs"
+	const (
+		yamlRemedy = "correct the YAML at that line; indent with spaces, not tabs"
+		ctl        = "remove the control character at that line and column"
+		ctlMessage = "YAML syntax error: control characters are not allowed"
+	)
 	for _, row := range []struct {
 		name, data, message, remediation string
 		document, line, column           int
@@ -18,6 +22,10 @@ func TestSyntaxDiagnosticsSeparateEncodingFromYAML(t *testing.T) {
 		{"invalid byte", "a: b\né€z\xff\n", "input is not valid UTF-8", "save the file as UTF-8", 0, 2, 4},
 		{"invalid first byte", "\xfe", "input is not valid UTF-8", "save the file as UTF-8", 0, 1, 1},
 		{"mis-indented key", "apiVersion: bootwright.io/v1alpha1\nkind: Secret\n  name: probe\n", "YAML syntax error: mapping values are not allowed in this context", yamlRemedy, 1, 3, 0},
+		{"control character on the first line", "a: \x01\n", ctlMessage, ctl, 0, 1, 4},
+		{"DEL on a later line", "a: b\nc: d\x7f\n", ctlMessage, ctl, 0, 2, 5},
+		{"control character in a second document", "a: b\n---\nc: \x01\n", ctlMessage, ctl, 0, 3, 4},
+		{"C1 control after a multibyte rune", "é: \u0080\n", ctlMessage, ctl, 0, 1, 4},
 		{"tab indent", "spec:\n\ttype: opaque\n", "YAML syntax error: found character that cannot start any token", yamlRemedy, 1, 2, 0},
 		{"YAML 1.2 directive", "%YAML 1.2\n---\nvalue: true\n", "a %YAML 1.2 directive is not accepted", "remove the directive", 1, 1, 0},
 		{"unknown anchor", "value: *zz-authored-sentinel\n", "YAML syntax error: an alias names an anchor the document does not define", "write the value out in full instead of an anchor or alias", 1, 0, 0},

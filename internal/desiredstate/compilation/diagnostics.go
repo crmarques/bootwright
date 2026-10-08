@@ -59,6 +59,23 @@ func (d *diagnosticSink) add(item diagnostics.Diagnostic) bool {
 	return true
 }
 
+// retractReferences drops the unresolved-reference diagnostics a record's
+// schema pass produced at fields its own object's invariants then refused, so
+// the invariant is the field's only diagnostic.
+func (d *diagnosticSink) retractReferences(start, end int, refused map[string]bool) {
+	if len(refused) == 0 {
+		return
+	}
+	kept := d.items[:start]
+	for i, item := range d.items[start:] {
+		if start+i < end && item.Code == "api.reference" && refused[item.Field] {
+			continue
+		}
+		kept = append(kept, item)
+	}
+	d.items = kept
+}
+
 func (d *diagnosticSink) issue(record *objectRecord, issue api.Issue) bool {
 	if issue.Code == "api.reference" && record != nil && d.namesUndecodable(record.object, issue.Field) {
 		return !d.stopped()

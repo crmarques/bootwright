@@ -96,6 +96,10 @@ func (p *parseSession) parseFile(file desiredstate.SourceFile) error {
 		}
 		if err != nil {
 			message, remediation := syntaxFailure(err)
+			if reason, _, _ := syntaxReason(err); reason == controlCharacterReason {
+				line, column := controlCharacterPosition(data)
+				return p.addSyntax(file.Path(), 0, line, column, message, remediation)
+			}
 			return p.addSyntax(file.Path(), index, syntaxLine(err), 0, message, remediation)
 		}
 		p.documentNum++
@@ -128,10 +132,29 @@ func (p *parseSession) addSyntax(path string, document, line, column int, messag
 }
 
 func invalidUTF8Position(data []byte) (int, int) {
+	return runePosition(data, func(r rune, size int) bool { return r == utf8.RuneError && size <= 1 })
+}
+
+const controlCharacterReason = "control characters are not allowed"
+
+func controlCharacterPosition(data []byte) (int, int) {
+	return runePosition(data, func(r rune, _ int) bool { return !yamlCharacter(r) })
+}
+
+func yamlCharacter(r rune) bool {
+	switch {
+	case r == 0x09, r == 0x0A, r == 0x0D, r >= 0x20 && r <= 0x7E, r == 0x85,
+		r >= 0xA0 && r <= 0xD7FF, r >= 0xE000 && r <= 0xFFFD, r >= 0x10000 && r <= 0x10FFFF:
+		return true
+	}
+	return false
+}
+
+func runePosition(data []byte, stop func(rune, int) bool) (int, int) {
 	line, column := 1, 1
 	for len(data) > 0 {
 		r, size := utf8.DecodeRune(data)
-		if r == utf8.RuneError && size <= 1 {
+		if stop(r, size) {
 			break
 		}
 		if r == '\n' {
@@ -177,6 +200,8 @@ func syntaxReason(err error) (string, int, bool) {
 func syntaxFailure(err error) (string, string) {
 	reason, _, _ := syntaxReason(err)
 	switch {
+	case reason == controlCharacterReason:
+		return "YAML syntax error: " + controlCharacterReason, "remove the control character at that line and column"
 	case reason == "found incompatible YAML document":
 		return "a %YAML 1.2 directive is not accepted", "remove the directive"
 	case strings.HasPrefix(reason, "unknown anchor "):
@@ -253,15 +278,23 @@ func limitFailure(resource string, ceiling int, path string, document int, node 
 	}}}
 }
 
+var unlocatedReasonPrefixes = []string{
+	"unknown anchor ", "anchor '", "document contains excessive aliasing",
+	"attempted to go past the end of stream", "cannot decode node with unknown kind",
+	"input error: ", controlCharacterReason,
+}
+
 func syntaxLine(err error) int {
 	reason, line, located := syntaxReason(err)
-	if !parserStageProblems[reason] {
+	switch {
+	case located && parserStageProblems[reason]:
+		return line + 1
+	case located:
 		return line
+	case slices.ContainsFunc(unlocatedReasonPrefixes, func(prefix string) bool { return strings.HasPrefix(reason, prefix) }):
+		return 0
 	}
-	if !located {
-		return 1
-	}
-	return line + 1
+	return 1
 }
 
 type contextReader struct {

@@ -169,9 +169,12 @@ directive-free and accepted-directive streams.
 A syntax failure names the parser's reason and line, and is reported
 separately from invalid UTF-8. The line is the authored 1-based line where the
 parser locates the failure: for a parser-stage failure, the start of its
-enclosing block when the parser names one, otherwise the offending token. A
-reason the parser does not locate, such as an alias naming no anchor, names no
-line. Invalid UTF-8 names the line and column of the first invalid byte. An `input.limit` message names its resource and inclusive
+enclosing block when the parser names one, otherwise the offending token; a
+scanner or parser failure the parser reports without a line lies on the first
+line and names line 1. A character YAML does not admit, such as a control
+character, names the line and column of the first such character, as invalid
+UTF-8 does, and no document. A reason the composer reports without a position,
+such as an alias naming no anchor, names no line. Invalid UTF-8 names the line and column of the first invalid byte. An `input.limit` message names its resource and inclusive
 ceiling. Syntax failure metadata is bounded to one record per acquired file.
 Apply the returned-diagnostic ceiling after resource selection; syntax errors
 from excluded files do not consume that allowance. Structural limits remain
