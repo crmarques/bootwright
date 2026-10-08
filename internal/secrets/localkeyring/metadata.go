@@ -1,10 +1,11 @@
 package localkeyring
 
 import (
-	"context"
 	"io"
 	"slices"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
@@ -71,11 +72,11 @@ func openMetadata(record secretstore.Record, key []byte) ([]byte, error) {
 	return openEnvelope(data, key, indexAAD(record.Context, record.Selector, wrapped.KeyID), "index", wrapped.KeyID, record.Generation, indexMaximum)
 }
 
-func cleanupFailure(ctx context.Context, err error) error {
+func cleanupFailure(contextName string, err error) error {
 	if err == nil {
 		return nil
 	}
-	return secretstore.Failure("store.conflict", "secret metadata committed; cleanup is incomplete; retry secret encryption init")
+	return diagnostics.NewFailureWithRemediation("secret.store.conflict", "secret metadata committed; cleanup is incomplete", "", "complete it with "+secrets.Command(contextName, "encryption init"))
 }
 
 func decodeMetadataPayload(payload []byte, wrapped *metadataEnvelope) error {

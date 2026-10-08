@@ -66,8 +66,9 @@ supplied by an [Environment kind default](environment.md#kind-defaults), with
 declared type, as `bootwright secret set --name <n> --context <context>`
 followed by the type's flags. A name that is not a valid object name prints as
 `<name>`. `<context>` is the context the invocation reads: the one `validate`
-names, or the selected one when `validate` reads no file; `validate -f`, which
-reads no context, prints the placeholder:
+names, or the selected one when `validate` reads no file; the one a `secret`
+command acts on; and the one `context init` or `context update` names.
+`validate -f`, which reads no context, prints the placeholder:
 
 | Secret type | Remedy after `bootwright secret set --name <n> --context <context>` |
 | --- | --- |
@@ -80,7 +81,8 @@ reads no context, prints the placeholder:
 A kind default that supplies the arm is refused twice. The Environment is
 refused at `$.spec.defaults.Secret.source.file`, with the remedy to replace the
 arm in that default with `source: {contextStore: {}}`, then run
-`bootwright secret set --name <name> --context <context>` with the file flags
+`bootwright secret set --name <name> --context <context>`, its `<context>`
+named as above, with the file flags
 of its type for each
 Secret that inherits it; when the default declares a type, the remedy names
 that type's flags from the table. Each Secret that inherits the arm is refused

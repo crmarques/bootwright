@@ -2,6 +2,7 @@ package enrollment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"slices"
@@ -743,6 +744,132 @@ func TestEveryHostKeyRemedyNamesTheContext(t *testing.T) {
 			if reported := diagnostics.Of(err); len(reported) != 1 || !strings.Contains(reported[0].Remediation, test.want) {
 				t.Fatalf("refusal = %+v (%v), want a remedy naming %q", reported, err, test.want)
 			}
+		})
+	}
+}
+
+// divergentStore is a stored file only a hand edit produces: Encode refuses
+// to write it.
+func divergentStore(t *testing.T, records ...trust.Record) []byte {
+	t.Helper()
+	data, err := json.Marshal(trust.Store{FormatVersion: trust.FormatVersion, Hosts: records})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+// A stored file that pins one endpoint to two keys refuses its readers with a
+// remedy, and the machine trust that remedy names repairs it into a store
+// every reader accepts, removing each record nothing reads any more.
+func TestAStoredDivergentPinIsRepairedByTheMachineTrustItsRefusalNames(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		records []trust.Record
+		remedy  string
+		request EnrollRequest
+		check   func(*testing.T, *harness, *Report)
+	}{
+		{
+			name:    "both in use",
+			records: []trust.Record{storedRecord("node-a", "192.0.2.10", 22, otherKey), storedRecord("node-b", "192.0.2.10", 22, publicKey)},
+			remedy:  "re-trust node-a and node-b with bootwright machine trust --context lab --machines node-a,node-b --replace node-a,node-b",
+			request: EnrollRequest{Machines: []string{"node-a", "node-b"}, Replace: []string{"node-a", "node-b"}},
+			check: func(t *testing.T, h *harness, _ *Report) {
+				after, _ := trust.Decode(h.trust.data)
+				a, _ := after.Find("node-a")
+				b, _ := after.Find("node-b")
+				if len(after.Hosts) != 2 || a.PublicKey != publicKey || a.Address != "192.0.2.10" || b.Address != "192.0.2.11" || b.Port != 2222 {
+					t.Fatalf("records = %+v", after.Hosts)
+				}
+			},
+		},
+		{
+			name:    "one in use",
+			records: []trust.Record{storedRecord("declared", "192.0.2.10", 22, otherKey), storedRecord("node-a", "192.0.2.10", 22, publicKey)},
+			remedy: "re-trust node-a with bootwright machine trust --context lab --machines node-a --replace node-a; " +
+				"its confirmed write removes the record of declared, which no longer uses this context's SSH trust",
+			request: EnrollRequest{Machines: []string{"node-a"}, Replace: []string{"node-a"}},
+			check: func(t *testing.T, h *harness, report *Report) {
+				row := HostReport{
+					Machine: "declared", Address: "192.0.2.10", Port: 22, Action: ActionRemove, KeyType: "ssh-ed25519",
+					Fingerprint: trust.HostKey{Type: "ssh-ed25519", PublicKey: otherKey}.Fingerprint(),
+					Reason:      "declares an explicit knownHostsRef, so it no longer uses this context's SSH trust; the trust store pinned its endpoint to divergent keys",
+				}
+				if action(report, "node-a").Action != ActionReuse || !reflect.DeepEqual(action(report, "declared"), row) || report.Recorded != 1 {
+					t.Fatalf("report = %+v", report)
+				}
+				after, _ := trust.Decode(h.trust.data)
+				if len(after.Hosts) != 1 || after.Hosts[0].Machine != "node-a" {
+					t.Fatalf("records = %+v", after.Hosts)
+				}
+			},
+		},
+		{
+			name:    "none in use",
+			records: []trust.Record{storedRecord("declared", "192.0.2.10", 22, otherKey), storedRecord("retired", "192.0.2.10", 22, publicKey)},
+			remedy: "repair it with bootwright machine trust --context lab; its confirmed write removes the records of declared and retired, " +
+				"which no longer use this context's SSH trust",
+			request: EnrollRequest{},
+			check: func(t *testing.T, h *harness, _ *Report) {
+				after, _ := trust.Decode(h.trust.data)
+				for _, name := range []string{"declared", "retired"} {
+					if _, found := after.Find(name); found {
+						t.Fatalf("%s remains: %+v", name, after.Hosts)
+					}
+				}
+			},
+		},
+		{
+			name:    "none in use at an endpoint no Machine declares",
+			records: []trust.Record{storedRecord("declared", "192.0.2.99", 22, otherKey), storedRecord("retired", "192.0.2.99", 22, publicKey)},
+			remedy: "repair it with bootwright machine trust --context lab; its confirmed write removes the records of declared and retired, " +
+				"which no longer use this context's SSH trust",
+			request: EnrollRequest{},
+			check: func(t *testing.T, h *harness, _ *Report) {
+				after, _ := trust.Decode(h.trust.data)
+				if len(after.Hosts) != 2 {
+					t.Fatalf("records = %+v", after.Hosts)
+				}
+				for _, name := range []string{"declared", "retired"} {
+					if _, found := after.Find(name); found {
+						t.Fatalf("%s remains: %+v", name, after.Hosts)
+					}
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			data := divergentStore(t, test.records...)
+			_, err := trust.Decode(data)
+			var pin *trust.DivergentPin
+			if !errors.As(err, &pin) {
+				t.Fatalf("a reader accepted the stored file: %v", err)
+			}
+			if reported := diagnostics.Of(pin.Retrust("lab", nil, usingMachines(catalog()))); len(reported) != 1 || reported[0].Remediation != test.remedy {
+				t.Fatalf("refusal = %+v", reported)
+			}
+			dry := newHarness(t)
+			dry.trust.data = data
+			preview := test.request
+			preview.DryRun = true
+			if report, err := enroll(t, dry, preview); err != nil || len(dry.trust.written) != 0 || report.Pending == 0 {
+				t.Fatalf("dry run = %+v, %v, wrote %d", report, err, len(dry.trust.written))
+			} else if test.name == "one in use" && action(report, "declared").Action != ActionRemove {
+				t.Fatalf("the dry run did not show the removal: %+v", report.Hosts)
+			}
+			h := newHarness(t)
+			h.trust.data = data
+			request := test.request
+			request.SkipConfirmation = true
+			report, err := enroll(t, h, request)
+			if err != nil || len(h.trust.written) != 1 {
+				t.Fatalf("repair = %+v, %v, wrote %d", report, err, len(h.trust.written))
+			}
+			if _, err := trust.Decode(h.trust.data); err != nil {
+				t.Fatalf("the repaired store does not read: %v", err)
+			}
+			test.check(t, h, report)
 		})
 	}
 }

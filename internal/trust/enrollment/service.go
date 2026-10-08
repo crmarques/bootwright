@@ -63,9 +63,9 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 	if err != nil {
 		return nil, err
 	}
-	records, err := trust.Decode(data)
+	records, err := trust.DecodeForRepair(data)
 	if err != nil {
-		return nil, retrust(err, selected, nil, effective.Effective)
+		return nil, err
 	}
 	observed, err := s.observe(ctx, chosen)
 	if err != nil {
@@ -77,6 +77,9 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 	uses := usingMachines(effective.Effective)
 	writing := map[string]bool{}
 	var removed []HostReport
+	for _, stale := range pending.DropDivergentUnused(uses) {
+		removed = append(removed, repairRemoval(stale, exempt(stale.Machine)))
+	}
 	for index, entry := range chosen {
 		host, record, err := evaluate(entry, observed[index], records, slices.Contains(request.Replace, entry.name), selected, s.now())
 		if err != nil {
@@ -95,7 +98,7 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 	report.Hosts = append(report.Hosts, removed...)
 	report.Pending += len(removed)
 	if err := pending.Validate(); err != nil {
-		return nil, retrust(err, selected, func(name string) bool { return writing[name] }, effective.Effective)
+		return nil, retrust(err, selected, func(name string) bool { return writing[name] }, uses)
 	}
 	if request.DryRun || report.Pending == 0 {
 		return report, nil
@@ -173,6 +176,16 @@ func evaluate(entry candidate, observed observation, records trust.Store, replac
 // holds its endpoint and nothing reads the record any more: its Machine is no
 // longer declared, or exemption says why it no longer uses this store.
 func removal(stale trust.Record, exemption, successor string) HostReport {
+	return removalRow(stale, exemption, successor+" now uses its address")
+}
+
+// repairRemoval reports a record the write removes because the stored file
+// pinned its endpoint to divergent keys and nothing reads the record any more.
+func repairRemoval(stale trust.Record, exemption string) HostReport {
+	return removalRow(stale, exemption, "the trust store pinned its endpoint to divergent keys")
+}
+
+func removalRow(stale trust.Record, exemption, cause string) HostReport {
 	reason := "no longer declared"
 	if exemption != "" {
 		reason = exemption + ", so it no longer uses this context's SSH trust"
@@ -180,7 +193,7 @@ func removal(stale trust.Record, exemption, successor string) HostReport {
 	return HostReport{
 		Machine: stale.Machine, Address: stale.Address, Port: stale.Port, Action: ActionRemove,
 		KeyType: stale.KeyType, Fingerprint: stale.HostKey().Fingerprint(),
-		Reason: reason + "; " + successor + " now uses its address",
+		Reason: reason + "; " + cause,
 	}
 }
 
@@ -195,10 +208,10 @@ func usingMachines(catalog api.Catalog) func(string) bool {
 
 // retrust names the re-trust that settles a pin the write would leave
 // divergent, in this context.
-func retrust(err error, contextName string, writing func(string) bool, catalog api.Catalog) error {
+func retrust(err error, contextName string, writing, uses func(string) bool) error {
 	var pin *trust.DivergentPin
 	if errors.As(err, &pin) {
-		return pin.Retrust(contextName, writing, exemptMachines(catalog))
+		return pin.Retrust(contextName, writing, uses)
 	}
 	return err
 }

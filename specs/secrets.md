@@ -420,8 +420,10 @@ remove only previously observed objects after revalidating their identities,
 parents and context. Sync every affected directory. Preserve current/bound
 versions, required recovery evidence and identity reservations. A failed or
 uncertain metadata publication never authorizes postpublication cleanup.
-Cleanup failure after commit reports the committed outcome and directs an
-explicit `secret encryption init` retry; inspection reports retained artifacts
+Cleanup failure, before or after commit, refuses with `secret.store.conflict`
+naming `bootwright secret encryption init --context <name>` of the store's
+context as what completes it; after commit it also reports the committed
+outcome; inspection reports retained artifacts
 without writing. Cleanup can run at the physical ceiling without first creating
 another file. Publication still reserves room for new material and metadata.
 

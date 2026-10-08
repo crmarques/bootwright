@@ -47,7 +47,13 @@ type Store struct {
 // Decode reads the context's trust records. Absent material is an empty store
 // rather than a failure, because a context that has trusted nothing yet is
 // ordinary rather than damaged.
-func Decode(data []byte) (Store, error) {
+func Decode(data []byte) (Store, error) { return decode(data, true) }
+
+// DecodeForRepair reads the records as Decode does, except that a store that
+// pins one endpoint to divergent keys is returned for machine trust to repair.
+func DecodeForRepair(data []byte) (Store, error) { return decode(data, false) }
+
+func decode(data []byte, pins bool) (Store, error) {
 	store := Store{FormatVersion: FormatVersion, Hosts: []Record{}}
 	if len(bytes.TrimSpace(data)) == 0 {
 		return store, nil
@@ -69,7 +75,7 @@ func Decode(data []byte) (Store, error) {
 	if store.Hosts == nil {
 		store.Hosts = []Record{}
 	}
-	if err := store.Validate(); err != nil {
+	if err := store.validate(pins); err != nil {
 		return Store{}, err
 	}
 	store.sort()
@@ -98,7 +104,9 @@ func (s Store) Encode() ([]byte, error) {
 // accepts any known_hosts entry matching a host, so two records pinning one
 // address to different keys would weaken the pin from "exactly this key" to
 // "either key"; that is enforced here, at the one point that writes.
-func (s Store) Validate() error {
+func (s Store) Validate() error { return s.validate(true) }
+
+func (s Store) validate(pins bool) error {
 	if len(s.Hosts) > MaxHosts {
 		return failure("the SSH trust store exceeds its record limit", "")
 	}
@@ -116,7 +124,7 @@ func (s Store) Validate() error {
 		machines[record.Machine] = true
 		token := HostToken(record.Address, record.Port)
 		existing, seen := pinned[token]
-		if seen && existing.HostKey() != record.HostKey() {
+		if pins && seen && existing.HostKey() != record.HostKey() {
 			return divergentPin(token, existing.Machine, record.Machine)
 		}
 		pinned[token] = record
@@ -124,10 +132,8 @@ func (s Store) Validate() error {
 	return nil
 }
 
-// DivergentPin is the refusal of a store that would pin one endpoint to two
-// keys. The store knows no context, so it names both Machines and the
-// endpoint, and a caller that knows the context names the re-trust that
-// settles it.
+// DivergentPin is the refusal of a store that pins, or would pin, one endpoint
+// to two keys. Every reader refuses such a store; machine trust repairs it.
 type DivergentPin struct {
 	Endpoint string
 	Machines [2]string
@@ -148,39 +154,74 @@ func (e *DivergentPin) message() string {
 	return "the SSH trust store pins " + e.Endpoint + " to divergent keys for " + e.Machines[0] + " and " + e.Machines[1]
 }
 
-// Retrust restates the refusal for one context, naming the re-trust of the
-// Machine whose record a refused write did not make: the record that diverges
-// from what its endpoint presents now. writing reports the Machines the
-// refused write records, and is nil for a store that was read. exempt reports
-// why a Machine no longer uses this store. A confirmed takeover write drops
-// such a Machine's record before it validates (D117), so an exempt record
-// reaches this refusal only from a stored file that already pins one endpoint
-// to two keys, and the remedy is the takeover write that drops it.
-func (e *DivergentPin) Retrust(contextName string, writing func(string) bool, exempt func(string) string) error {
-	message, other := e.message(), e.Machines[0]
+// Retrust restates the refusal for one context, naming the machine trust that
+// settles it. writing reports the Machines a refused write records, nil for a
+// stored file; uses reports the Machines that read this store, nil for all.
+func (e *DivergentPin) Retrust(contextName string, writing, uses func(string) bool) error {
+	message, written, other := e.message(), "", ""
 	for index, name := range e.Machines {
 		if writing != nil && writing(name) {
-			other = e.Machines[1-index]
+			written, other = name, e.Machines[1-index]
 			message = "trusting " + name + " at " + e.Endpoint +
 				" would pin it to a key that diverges from the one this context trusts there for " + other
 			break
 		}
 	}
-	reason := exemption(exempt, other)
-	if reason == "" {
-		return failure(message, "re-trust "+other+" with bootwright machine trust --context "+contextName+
-			" --machines "+other+" --replace "+other)
+	command := "bootwright machine trust --context " + contextName
+	if written != "" && (uses == nil || uses(other)) {
+		return failure(message, "re-trust "+other+" with "+command+" --machines "+other+" --replace "+other)
 	}
-	return failure(message+"; "+other+" no longer uses this context's SSH trust ("+reason+"), so nothing reads that record",
-		"trust the Machine that now uses "+e.Endpoint+" with bootwright machine trust --context "+contextName+
-			"; its confirmed write removes the record of "+other)
+	var used, unused []string
+	for _, name := range e.Machines {
+		if uses == nil || uses(name) {
+			used = append(used, name)
+		} else {
+			unused = append(unused, name)
+		}
+	}
+	slices.Sort(used)
+	slices.Sort(unused)
+	switch len(unused) {
+	case 0:
+		list := strings.Join(used, ",")
+		return failure(message, "re-trust "+used[0]+" and "+used[1]+" with "+command+" --machines "+list+" --replace "+list)
+	case 1:
+		return failure(message, "re-trust "+used[0]+" with "+command+" --machines "+used[0]+" --replace "+used[0]+
+			"; its confirmed write removes the record of "+unused[0]+", which no longer uses this context's SSH trust")
+	default:
+		return failure(message, "repair it with "+command+"; its confirmed write removes the records of "+
+			unused[0]+" and "+unused[1]+", which no longer use this context's SSH trust")
+	}
 }
 
-func exemption(exempt func(string) string, machine string) string {
-	if exempt == nil {
-		return ""
+// DropDivergentUnused removes, at each endpoint the store pins to more than one
+// key, the record of every Machine uses reports false for, and returns what it
+// removed in Machine order. A nil uses removes nothing.
+func (s *Store) DropDivergentUnused(uses func(machine string) bool) []Record {
+	if uses == nil {
+		return nil
 	}
-	return exempt(machine)
+	keys := map[string]HostKey{}
+	divergent := map[string]bool{}
+	for _, record := range s.Hosts {
+		token := HostToken(record.Address, record.Port)
+		if key, seen := keys[token]; seen && key != record.HostKey() {
+			divergent[token] = true
+		}
+		keys[token] = record.HostKey()
+	}
+	kept := make([]Record, 0, len(s.Hosts))
+	var removed []Record
+	for _, record := range s.Hosts {
+		if divergent[HostToken(record.Address, record.Port)] && !uses(record.Machine) {
+			removed = append(removed, record)
+			continue
+		}
+		kept = append(kept, record)
+	}
+	s.Hosts = kept
+	slices.SortFunc(removed, byMachine)
+	return removed
 }
 
 func (s Store) Find(machine string) (Record, bool) {

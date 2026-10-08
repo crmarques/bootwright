@@ -1,7 +1,9 @@
 package trust
 
 import (
+	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -211,32 +213,98 @@ func TestSupersedeRemovesARecordItsMachineNoLongerUses(t *testing.T) {
 	}
 }
 
-// An exempt Machine's record reaches the divergent-pin refusal only from a
-// stored file, since a confirmed takeover drops it first, so the remedy is
-// that takeover rather than an input edit.
-func TestAnExemptPinRemedyIsTheTakeoverWriteThatDropsIt(t *testing.T) {
-	for _, reason := range []string{"host key comes from its installation evidence", ExemptReachedLocally, "declares an explicit knownHostsRef"} {
-		store := Store{FormatVersion: FormatVersion, Hosts: []Record{record(t, "node-b", "192.0.2.10", 2), record(t, "node-a", "192.0.2.10", 1)}}
-		var pin *DivergentPin
-		if err := store.Validate(); !errors.As(err, &pin) {
-			t.Fatalf("a divergent pin did not refuse: %v", err)
+// A stored file that pins one endpoint to two keys, which only a hand edit
+// produces, is refused by every reader, and read only by machine trust, which
+// repairs it; every other defect still refuses that repair read.
+func TestAStoredDivergentPinRefusesReadersButDecodesForRepair(t *testing.T) {
+	encode := func(hosts ...Record) []byte {
+		data, err := json.Marshal(Store{FormatVersion: FormatVersion, Hosts: hosts})
+		if err != nil {
+			t.Fatal(err)
 		}
-		exempt := func(name string) string {
-			if name == "node-b" {
-				return reason
-			}
-			return ""
+		return data
+	}
+	divergent := encode(record(t, "node-b", "192.0.2.10", 2), record(t, "node-a", "192.0.2.10", 1))
+	var pin *DivergentPin
+	if _, err := Decode(divergent); !errors.As(err, &pin) || pin.Endpoint != "192.0.2.10" {
+		t.Fatalf("a reader accepted a divergent pin: %v", err)
+	}
+	store, err := DecodeForRepair(divergent)
+	if err != nil || len(store.Hosts) != 2 || store.Hosts[0].Machine != "node-a" || store.Hosts[1].Machine != "node-b" {
+		t.Fatalf("the repair read = %+v, %v", store.Hosts, err)
+	}
+	unknown := record(t, "node-c", "192.0.2.12", 3)
+	unknown.KeyType = "ssh-dss"
+	for name, data := range map[string][]byte{
+		"duplicate machine": encode(record(t, "node-a", "192.0.2.10", 1), record(t, "node-a", "192.0.2.11", 2)),
+		"unknown key type":  encode(unknown),
+		"trailing content":  append(slices.Clone(divergent), []byte("{}")...),
+		"another version":   []byte(`{"formatVersion":2,"hosts":[]}`),
+	} {
+		if store, err := DecodeForRepair(data); err == nil {
+			t.Errorf("the repair read accepted %s as %+v", name, store)
 		}
-		reported := diagnostics.Of(pin.Retrust("lab", func(name string) bool { return name == "node-a" }, exempt))
-		want := "trusting node-a at 192.0.2.10 would pin it to a key that diverges from the one this context trusts there for node-b; " +
-			"node-b no longer uses this context's SSH trust (" + reason + "), so nothing reads that record"
-		remedy := "trust the Machine that now uses 192.0.2.10 with bootwright machine trust --context lab; its confirmed write removes the record of node-b"
-		if len(reported) != 1 || reported[0].Code != "trust.identity" || reported[0].Message != want || reported[0].Remediation != remedy {
-			t.Fatalf("refusal = %+v", reported)
+	}
+}
+
+// Only a record of a Machine nothing reads, at an endpoint pinned to more than
+// one key, is dropped; an unread record at a single-key endpoint stays.
+func TestDropDivergentUnusedRemovesOnlyUnreadRecordsAtDivergentEndpoints(t *testing.T) {
+	hosts := []Record{
+		record(t, "b", "192.0.2.10", 1), record(t, "a", "192.0.2.10", 4), record(t, "c", "192.0.2.10", 2),
+		record(t, "d", "192.0.2.11", 3), record(t, "e", "192.0.2.11", 3),
+	}
+	uses := func(name string) bool { return name == "b" || name == "c" || name == "e" }
+	store := Store{FormatVersion: FormatVersion, Hosts: slices.Clone(hosts)}
+	removed := store.DropDivergentUnused(uses)
+	if len(removed) != 1 || removed[0].Machine != "a" {
+		t.Fatalf("removed = %+v", removed)
+	}
+	for _, name := range []string{"b", "c", "d", "e"} {
+		if _, found := store.Find(name); !found {
+			t.Fatalf("%s was removed: %+v", name, store.Hosts)
 		}
-		read := diagnostics.Of(pin.Retrust("lab", nil, exempt))
-		if len(read) != 1 || read[0].Remediation != remedy || strings.Contains(read[0].Remediation, "context update") {
-			t.Fatalf("refusal of a stored pin = %+v", read)
+	}
+	untouched := Store{FormatVersion: FormatVersion, Hosts: slices.Clone(hosts)}
+	if removed := untouched.DropDivergentUnused(nil); len(removed) != 0 || len(untouched.Hosts) != len(hosts) {
+		t.Fatalf("a nil predicate removed %+v", removed)
+	}
+}
+
+// A stored divergent pin names the machine trust that repairs it: re-trusting
+// each Machine that still uses the store, whose confirmed write removes the
+// record of each that no longer does.
+func TestAStoredPinNamesTheMachineTrustThatRepairsIt(t *testing.T) {
+	store := Store{FormatVersion: FormatVersion, Hosts: []Record{record(t, "node-b", "192.0.2.10", 2), record(t, "node-a", "192.0.2.10", 1)}}
+	var pin *DivergentPin
+	if err := store.Validate(); !errors.As(err, &pin) {
+		t.Fatalf("a divergent pin did not refuse: %v", err)
+	}
+	only := func(names ...string) func(string) bool {
+		return func(name string) bool { return slices.Contains(names, name) }
+	}
+	oneUsed := "re-trust node-a with bootwright machine trust --context lab --machines node-a --replace node-a; " +
+		"its confirmed write removes the record of node-b, which no longer uses this context's SSH trust"
+	for name, test := range map[string]struct {
+		writing, uses func(string) bool
+		remedy        string
+	}{
+		"both used": {nil, only("node-a", "node-b"),
+			"re-trust node-a and node-b with bootwright machine trust --context lab --machines node-a,node-b --replace node-a,node-b"},
+		"every Machine uses a nil predicate": {nil, nil,
+			"re-trust node-a and node-b with bootwright machine trust --context lab --machines node-a,node-b --replace node-a,node-b"},
+		"one used": {nil, only("node-a"), oneUsed},
+		"none used": {nil, only(),
+			"repair it with bootwright machine trust --context lab; its confirmed write removes the records of node-a and node-b, which no longer use this context's SSH trust"},
+		"written over an unused record": {only("node-a"), only("node-a"), oneUsed},
+	} {
+		reported := diagnostics.Of(pin.Retrust("lab", test.writing, test.uses))
+		if len(reported) != 1 || reported[0].Code != "trust.identity" || reported[0].Remediation != test.remedy {
+			t.Errorf("%s: refusal = %+v", name, reported)
 		}
+	}
+	written := diagnostics.Of(pin.Retrust("lab", only("node-a"), only("node-a")))
+	if len(written) != 1 || written[0].Message != "trusting node-a at 192.0.2.10 would pin it to a key that diverges from the one this context trusts there for node-b" {
+		t.Fatalf("refusal of a write = %+v", written)
 	}
 }

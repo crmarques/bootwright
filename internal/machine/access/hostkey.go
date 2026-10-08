@@ -174,7 +174,7 @@ func (s Service) records(ctx context.Context, contextName string, machines decla
 func retrust(err error, contextName, writing string, machines declaredTrust) error {
 	var pin *trust.DivergentPin
 	if errors.As(err, &pin) {
-		return pin.Retrust(contextName, func(name string) bool { return name == writing }, machines.exempt)
+		return pin.Retrust(contextName, func(name string) bool { return name == writing }, machines.uses)
 	}
 	return err
 }

@@ -385,7 +385,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		s.keys[publication.id] = publication.value
 	}
 	if err := s.collectArtifacts(ctx); err != nil {
-		return cleanupFailure(ctx, err)
+		return cleanupFailure(s.context.Name, err)
 	}
 	return nil
 }

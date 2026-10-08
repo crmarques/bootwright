@@ -1,12 +1,14 @@
 package secrets
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func Normalize(object api.Object, _ api.Catalog) (api.Object, []api.Issue) {
@@ -125,6 +127,31 @@ func SSHComment(value string) bool {
 	return utf8.ValidString(value) && !strings.ContainsAny(value, `"\`) && strings.IndexFunc(value, func(r rune) bool {
 		return unicode.IsControl(r) || r == '\u2028' || r == '\u2029'
 	}) < 0
+}
+
+// FileSourceContextPlaceholder is the context flag a retired file-source
+// remedy carries until the invocation that reports it names its context.
+const FileSourceContextPlaceholder = "--context <context>"
+
+// NameFileSourceContext fills, in a copy of err, the context placeholder of
+// each retired file-source remedy with contextName.
+func NameFileSourceContext(err error, contextName string) error {
+	var failure *diagnostics.Failure
+	if contextName == "" || !errors.As(err, &failure) || !slices.ContainsFunc(failure.Diagnostics, retiredFileSource) {
+		return err
+	}
+	named := &diagnostics.Failure{Diagnostics: slices.Clone(failure.Diagnostics), Usage: failure.Usage}
+	for index, d := range named.Diagnostics {
+		if retiredFileSource(d) {
+			named.Diagnostics[index].Remediation = strings.ReplaceAll(d.Remediation, FileSourceContextPlaceholder, "--context "+contextName)
+		}
+	}
+	return named
+}
+
+func retiredFileSource(d diagnostics.Diagnostic) bool {
+	return (d.Field == "$.spec.source.file" || d.Field == "$.spec.defaults.Secret.source.file") &&
+		strings.Contains(d.Remediation, FileSourceContextPlaceholder)
 }
 
 func fileSourceRemedy(name, kind string, kindDefault bool) string {

@@ -237,7 +237,7 @@ func TestInitializationCleanupFailureReportsCommittedStore(t *testing.T) {
 		return err
 	})
 	diagnostics := diagnostics.Of(err)
-	if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, "committed") || !strings.Contains(diagnostics[0].Message, "secret encryption init") {
+	if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, "committed") || !strings.Contains(diagnostics[0].Remediation, "secret encryption init") {
 		t.Fatal("initialization cleanup failure concealed committed state", err)
 	}
 	if err := h.view(func(s secretstore.StoreSession) error {
@@ -249,6 +249,60 @@ func TestInitializationCleanupFailureReportsCommittedStore(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestACleanupFailureNamesTheInitOfItsContext(t *testing.T) {
+	check := func(t *testing.T, err error, message string, committed bool, name string) {
+		t.Helper()
+		found := diagnostics.Of(err)
+		want := "complete it with bootwright secret encryption init --context " + name
+		if len(found) != 1 || found[0].Code != "secret.store.conflict" || found[0].Remediation != want {
+			t.Fatalf("cleanup refusal did not name the init of its context: %#v", found)
+		}
+		if committed && !strings.Contains(found[0].Message, "committed") || !committed && found[0].Message != message {
+			t.Fatalf("cleanup refusal message: %q", found[0].Message)
+		}
+	}
+	t.Run("initialization", func(t *testing.T) {
+		h := newUninitializedIntegrationStore(t)
+		err := h.workspace.MutateSecrets(context.Background(), h.context, func(area secretstore.Area) error {
+			s, err := h.implementation.Initialize(context.Background(), h.context, failingPruneArea{area}, nil)
+			if s != nil {
+				s.Close()
+			}
+			return err
+		})
+		check(t, err, "", true, h.context.Name)
+	})
+	h := newIntegrationStore(t)
+	declaration := declaration("credential", "opaque", "contextStore")
+	old := opaque("synthetic-old")
+	defer old.Clear()
+	if err := h.mutate(func(s secretstore.StoreSession) error {
+		_, err := s.PutBatch(context.Background(), []secretstore.Put{{Declaration: declaration, Material: old}})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	replace := func(value string) error {
+		material := opaque(value)
+		defer material.Clear()
+		return h.workspace.MutateSecrets(context.Background(), h.context, func(area secretstore.Area) error {
+			s, err := h.implementation.Open(context.Background(), h.context, failingPruneArea{area}, readTestSelector(t, area), nil)
+			if err != nil {
+				return err
+			}
+			defer s.Close()
+			_, err = s.PutBatch(context.Background(), []secretstore.Put{{Declaration: declaration, Material: material}})
+			return err
+		})
+	}
+	t.Run("publication", func(t *testing.T) {
+		check(t, replace("synthetic-replacement"), "", true, h.context.Name)
+	})
+	t.Run("before publication", func(t *testing.T) {
+		check(t, replace("synthetic-second"), "secret cleanup is incomplete", false, h.context.Name)
+	})
 }
 
 func TestCleanupFailurePreservesCommittedMaterialAndExplicitRetry(t *testing.T) {

@@ -233,7 +233,7 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 	session := &session{implementation: i, context: selected, area: area, selector: selector, selectorData: slices.Clone(selectorData), index: index, keys: map[string][]byte{attempt.KeyID: key}}
 	if err := session.collectArtifacts(ctx); err != nil {
 		session.Close()
-		return nil, false, marker, cleanupFailure(ctx, err)
+		return nil, false, marker, cleanupFailure(selected.Name, err)
 	}
 	return session, false, marker, nil
 }

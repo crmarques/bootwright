@@ -821,7 +821,9 @@ locally, installed by Bootwright, declaring no SSH access or declaring a
 `knownHostsRef`), holds the endpoint, the confirmed write replaces that record,
 which standard error names, with why, before the prompt; a record of a Machine
 that still uses context trust and pins the endpoint to another key fails
-`trust.identity` before anything is asked. Without a terminal an unproved key fails `trust.identity` and names
+`trust.identity` before anything is asked; a stored file that already pins an
+endpoint to two keys fails `trust.identity` naming the repair of
+[host-key trust](#host-key-trust). Without a terminal an unproved key fails `trust.identity` and names
 `machine trust`. Recording requires that explicit confirmation, so an
 observation by itself trusts nothing. The session pins exactly the proved key
 and its algorithm, so a Machine presenting another key fails to connect; a
@@ -883,6 +885,17 @@ one endpoint to two keys, because a Machine that still uses this context's
 trust holds it with another, fails `trust.identity` before it is shown, in a
 dry run too, naming both Machines, the endpoint and the re-trust of the other
 Machine.
+
+A stored trust file that already pins one endpoint to two keys, which only a
+hand edit produces, is refused by every reader, an SSH session included, with
+`trust.identity` naming both Machines, the endpoint and the repair: `machine
+trust` with `--machines` and `--replace` naming each of the two Machines that
+still uses context trust, or plain `machine trust` when neither does. Only
+`machine trust` reads such a file: at each endpoint pinned to two keys, its
+plan removes the record of every Machine the context no longer declares or
+that no longer uses context trust, as a `remove` row naming why and that the
+store pinned the endpoint to divergent keys, and the plan must leave every
+endpoint pinned to one key or it refuses as above and writes nothing.
 
 With pending writes and no `--yes`, the plan is written to standard output
 before the one [ordinary confirmation](#ordinary-confirmation): every Machine's

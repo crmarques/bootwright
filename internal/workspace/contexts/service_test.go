@@ -371,6 +371,37 @@ func (p presenter) PresentDeletion(ctx context.Context, plan contexts.DeletionPl
 	return p.r.step(ctx, "present")
 }
 
+// The retired file-source remedy context init or context update reports names
+// the context it names, before any transaction.
+func TestInitAndUpdateNameTheirContextInTheRetiredFileSourceRemedy(t *testing.T) {
+	input := sourceFixture("/synthetic/input")
+	input.Files = append(input.Files, desiredstate.NewSourceFile("/synthetic/input/secret.yaml", []byte("apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: material\nspec:\n  type: token\n  source: {file: {path: secrets/token}}\n")))
+	for name, invoke := range map[string]func() (*repository, error){
+		"init": func() (*repository, error) {
+			r := newRepository(t)
+			_, err := service(t, r, input).Init(context.Background(), contexts.InitRequest{Name: "example", InputDirectory: "/synthetic/input"})
+			return r, err
+		},
+		"update": func() (*repository, error) {
+			r := existingRepository(t)
+			_, err := service(t, r, input).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
+			return r, err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r, err := invoke()
+			named := false
+			for _, d := range diagnostics.Of(err) {
+				named = named || d.Code == "api.field" && d.Field == "$.spec.source.file" &&
+					strings.Contains(d.Remediation, "bootwright secret set --name material --context example --value-file <path>") && !strings.Contains(d.Remediation, "<context>")
+			}
+			if !named || slices.Contains(r.calls, "transaction") {
+				t.Fatalf("the retired file source was not refused naming its context before a transaction: %v %#v %v", err, diagnostics.Of(err), r.calls)
+			}
+		})
+	}
+}
+
 func sourceFixture(directory string) desiredstate.Sources {
 	return desiredstate.Sources{Roots: []string{directory}, Files: []desiredstate.SourceFile{
 		desiredstate.NewSourceFile(filepath.Join(directory, "environment.yaml"), []byte(environmentInput)),

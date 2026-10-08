@@ -164,7 +164,7 @@ func (s *session) collectArtifacts(ctx context.Context) error {
 	}
 	if len(paths) != 0 {
 		if err := s.area.Prune(ctx, s.selectorData, paths); err != nil {
-			return areaFailure(ctx, "store.conflict", "secret cleanup is incomplete; retry secret encryption init", err)
+			return cleanupIncomplete(ctx, s.context.Name, err)
 		}
 	}
 	s.retained, s.cleanup = 0, false

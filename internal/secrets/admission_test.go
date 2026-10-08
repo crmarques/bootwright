@@ -1,10 +1,14 @@
 package secrets
 
 import (
+	"errors"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func generatedSecret(kind, parameter, value string) api.Object {
@@ -72,5 +76,40 @@ func TestTheRetiredFileSourceRemedyNamesTheContext(t *testing.T) {
 		if len(issues) != 1 || issues[0].Field != "$.spec.source.file" || !strings.Contains(issues[0].Remediation, "--context <context>") {
 			t.Errorf("%s gave %#v", name, issues)
 		}
+	}
+}
+
+// Only a retired file-source remedy has its context placeholder filled, in a
+// copy; any other diagnostic, and the Secret name placeholder, stay as given.
+func TestNameFileSourceContextFillsOnlyTheRetiredSourceRemedy(t *testing.T) {
+	failure := &diagnostics.Failure{Usage: true, Diagnostics: []diagnostics.Diagnostic{
+		{Code: "api.field", Field: "$.spec.source.file", Remediation: "run bootwright secret set --name token --context <context> --value-file <path>"},
+		{Code: "api.field", Field: "$.spec.other", Remediation: "run bootwright secret list --context <context>"},
+		{Code: "api.field", Field: "$.spec.defaults.Secret.source.file", Remediation: "run bootwright secret set --name <name> --context <context> with the file flags of its type"},
+	}}
+	given := slices.Clone(failure.Diagnostics)
+	var named *diagnostics.Failure
+	if !errors.As(NameFileSourceContext(failure, "lab"), &named) || named == failure || !named.Usage {
+		t.Fatal("the filled refusal is not a copy of the failure")
+	}
+	want := []string{
+		"run bootwright secret set --name token --context lab --value-file <path>",
+		"run bootwright secret list --context <context>",
+		"run bootwright secret set --name <name> --context lab with the file flags of its type",
+	}
+	for index, d := range named.Diagnostics {
+		if d.Remediation != want[index] {
+			t.Errorf("%s remedy %q, want %q", d.Field, d.Remediation, want[index])
+		}
+	}
+	if !reflect.DeepEqual(failure.Diagnostics, given) {
+		t.Fatal("the input failure was changed", failure.Diagnostics)
+	}
+	if NameFileSourceContext(failure, "") != error(failure) {
+		t.Fatal("an unnamed context changed the refusal")
+	}
+	plain := errors.New("synthetic")
+	if NameFileSourceContext(plain, "lab") != plain {
+		t.Fatal("an error with no diagnostics changed")
 	}
 }

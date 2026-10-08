@@ -318,11 +318,25 @@ func areaFailure(ctx context.Context, code, message string, err error) error {
 	if err != nil && ctx.Err() != nil {
 		return ctx.Err()
 	}
-	var failure *diagnostics.Failure
-	if errors.As(err, &failure) && len(failure.Diagnostics) == 1 && (failure.Diagnostics[0].Code == "secret.store" || strings.HasPrefix(failure.Diagnostics[0].Code, "secret.store.")) {
+	if areaReported(err) {
 		return err
 	}
 	return secretstore.Failure(code, message)
+}
+
+func areaReported(err error) bool {
+	var failure *diagnostics.Failure
+	return errors.As(err, &failure) && len(failure.Diagnostics) == 1 && (failure.Diagnostics[0].Code == "secret.store" || strings.HasPrefix(failure.Diagnostics[0].Code, "secret.store."))
+}
+
+func cleanupIncomplete(ctx context.Context, contextName string, err error) error {
+	if err != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if areaReported(err) {
+		return err
+	}
+	return diagnostics.NewFailureWithRemediation("secret.store.conflict", "secret cleanup is incomplete", "", "complete it with "+secrets.Command(contextName, "encryption init"))
 }
 
 // publicationFailure names, for a publication that may have happened, the
