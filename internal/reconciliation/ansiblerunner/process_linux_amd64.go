@@ -221,7 +221,7 @@ func (r Runner) materialize(job string, request lifecycle.RunRequest) (map[strin
 		// Every bound part is private to this invocation and to root alone.
 		if err := os.WriteFile(target, value, 0600); err != nil {
 			clear(value)
-			return nil, failure("lifecycle.state", "bound Secret material could not be prepared for the adapter", bindingRemediation)
+			return nil, failure("lifecycle.state", "bound Secret material could not be prepared for the adapter", lifecycle.ReopenBindings(request.Context, request.Repeat))
 		}
 		clear(value)
 		paths[file.Name] = target

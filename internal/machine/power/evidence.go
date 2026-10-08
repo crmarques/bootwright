@@ -36,19 +36,31 @@ func validate(data []byte, request Request, digest string) (Evidence, error) {
 	if evidence.Machine != request.Identity.Object {
 		return Evidence{}, failure("lifecycle.state", "the power evidence names another Machine", "")
 	}
+	command := powerCommand(request.Identity.Context, request)
+	reread := "once its controller answers, read its power state with bootwright machine list --context " + request.Identity.Context +
+		" --power-status, and repeat " + command + " if it is not " + expected(request.Verb)
 	if !evidence.Postcondition {
-		return Evidence{}, failure("lifecycle.unknown", "the management controller did not prove the power state this operation asked for",
-			"read the machine's power state again once its controller answers")
+		return Evidence{}, failure("lifecycle.unknown", "the management controller did not prove the power state this operation asked for", reread)
 	}
 	if !slices.Contains([]string{machine.PowerOn, machine.PowerOff}, evidence.Power) {
-		return Evidence{}, failure("lifecycle.unknown", "the management controller reported no usable power state",
-			"read the machine's power state again once its controller answers")
+		return Evidence{}, failure("lifecycle.unknown", "the management controller reported no usable power state", reread)
 	}
 	if evidence.Power != expected(request.Verb) {
-		return Evidence{}, failure("lifecycle.unknown", "the machine did not reach the power state this operation asked for",
-			"repeat the operation, or stop it with --force when the guest does not answer a graceful request")
+		return Evidence{}, failure("lifecycle.unknown", "the machine did not reach the power state this operation asked for", unreached(command, request))
 	}
 	return evidence, nil
+}
+
+// unreached is the remedy of a request whose machine did not reach its state:
+// repeating it, or, for a graceful stop or restart the guest may ignore,
+// cutting its power. A start has no --force, and a forced request already
+// cuts it, so each names only its own repetition.
+func unreached(command string, request Request) string {
+	remedy := "repeat " + command
+	if request.Verb != Start && !request.Force {
+		remedy += ", or cut its power with " + command + " --force when the guest does not answer a graceful request"
+	}
+	return remedy
 }
 
 // expected is the state each verb converges to. A restart ends powered on, so

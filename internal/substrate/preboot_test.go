@@ -22,20 +22,34 @@ const preBootEndpoint = "https://metal-bmc.lab.example.test/redfish/v1/Systems/1
 // remedy never stops or proves another context's machine of the same name.
 // The refusing apply stays incomplete and continues its frozen plan, and the
 // context's input cannot change under it, so a corrected declaration is named
-// only after the destroy that takes the context back.
+// only after the destroy that takes the context back. A remedy that continues
+// the refusing apply names its continuation with every token its frozen plan
+// consumes, while the apply after a destroy plans anew and names its own.
 func TestEachPreBootRefusalNamesTheMachineWhatWasRefusedAndTheRemedy(t *testing.T) {
+	for _, continuation := range []string{"bootwright apply --context lab-b --authorize data-loss", ""} {
+		t.Run("continuation="+continuation, func(t *testing.T) {
+			eachPreBootRefusal(t, continuation)
+		})
+	}
+}
+
+func eachPreBootRefusal(t *testing.T, continuation string) {
 	object := &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: "metal-01"}
 	refusal := func(message, remediation string) []diagnostics.Diagnostic {
 		return []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: message, Remediation: remediation, Object: object}}
 	}
+	next := continuation
+	if next == "" {
+		next = "bootwright apply --context lab-b"
+	}
 	running := refusal("Machine/metal-01 is running, and its installation erases its disk, so no media was inserted into it and it was not booted",
-		"stop it with bootwright machine stop --context lab-b --name metal-01, then run bootwright apply --context lab-b")
+		"stop it with bootwright machine stop --context lab-b --name metal-01, then run "+next)
 	for arm, want := range map[string]map[string][]diagnostics.Diagnostic{
 		ArmLibvirt: {RefusalMachineRunning: running},
 		ArmBaremetal: {
 			RefusalHardwareMismatch: refusal("the machine answering at "+preBootEndpoint+" does not report every hardware address Machine/metal-01 declares, "+
 				"or its inventory could not be read in full, so no media was inserted into it and it was not booted",
-				"once the machine reports the hardware Machine/metal-01 declares in full, run bootwright apply --context lab-b; to correct that declaration instead, "+
+				"once the machine reports the hardware Machine/metal-01 declares in full, run "+next+"; to correct that declaration instead, "+
 					"take this context back with bootwright destroy --context lab-b, correct spec.hardware.management.bmc.address or spec.hardware.nics on Machine/metal-01 "+
 					"and import that input with bootwright context update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
 			RefusalIdentityMismatch: refusal("the management controller at "+preBootEndpoint+" answers as another system than the one this operation proved "+
@@ -49,7 +63,7 @@ func TestEachPreBootRefusalNamesTheMachineWhatWasRefusedAndTheRemedy(t *testing.
 		"":         nil,
 	} {
 		t.Run(arm, func(t *testing.T) {
-			found := PreBootRefusals(arm, "lab-b", "metal-01", preBootEndpoint)
+			found := PreBootRefusals(arm, "lab-b", continuation, "metal-01", preBootEndpoint)
 			got := map[string][]diagnostics.Diagnostic{}
 			for reason, err := range found {
 				got[reason] = diagnostics.Of(err)
@@ -87,7 +101,7 @@ func TestEachArmsPreBootEntryPointNamesExactlyTheseRefusals(t *testing.T) {
 			t.Fatalf("%s names %q, which does not clear the refusal before and after its checks", path, named)
 		}
 		reasons := slices.DeleteFunc(slices.Clone(named), func(reason string) bool { return reason == "" })
-		if want := slices.Sorted(maps.Keys(PreBootRefusals(arm, "lab", "metal-01", preBootEndpoint))); !reflect.DeepEqual(slices.Sorted(slices.Values(reasons)), want) {
+		if want := slices.Sorted(maps.Keys(PreBootRefusals(arm, "lab", "", "metal-01", preBootEndpoint))); !reflect.DeepEqual(slices.Sorted(slices.Values(reasons)), want) {
 			t.Fatalf("%s names %q, want each of %q once", path, reasons, want)
 		}
 	}

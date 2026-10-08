@@ -36,10 +36,13 @@ func (p *pinsByName) PinnedIdentity(name string, proved []lifecycle.BlockEvidenc
 // pins that reached the adapter.
 const mixedRunContext = "lab-b"
 
+// mixedRunContinuation is the continuation the lifecycle hands the attempt.
+const mixedRunContinuation = "bootwright apply --context lab-b --authorize data-loss"
+
 func mixedRun(t *testing.T, operation string, capability InstallCapability) (map[string]string, *fakeRunner, error) {
 	t.Helper()
 	execution, request := installExecution(t, singleNodeCatalog(), testDigest)
-	execution.Context = mixedRunContext
+	execution.Context, execution.Continuation = mixedRunContext, mixedRunContinuation
 	request.Nodes = []Node{
 		{Machine: "metal-01", Name: "master-0", Physical: true, Substrate: "baremetal"},
 		request.Nodes[0],

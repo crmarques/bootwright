@@ -341,7 +341,7 @@ func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle
 func ToolPath(ctx context.Context, execution lifecycle.Execution, tool Tool, executable string) (string, error) {
 	if execution.LocateTool == nil {
 		return "", refusal("controller.state", "the retained controller areas are unavailable",
-			"run bootwright setup, then apply --stage controller")
+			"run bootwright setup, then bootwright apply --context "+execution.Context+" --stage controller")
 	}
 	return execution.LocateTool(ctx, controllerscope.InstalledTool{
 		Kind: tool.Kind, Compatibility: tool.Compatibility, Version: tool.Version, Executable: executable,
@@ -354,12 +354,12 @@ func publicHalf(execution lifecycle.Execution, reference string) (string, error)
 	material, ok := execution.Material[reference]
 	if !ok {
 		return "", refusal("secret.store", "the bound cluster administration key is not available to this attempt",
-			"repeat the operation so its Secret bindings are reopened")
+			lifecycle.ReopenBindings(execution.Context, execution.Continuation))
 	}
 	value, ok := material.Part(secrets.PublicKeyPart)
 	if !ok || len(value) == 0 {
 		return "", refusal("secret.part", "the bound cluster administration key carries no public half",
-			"repeat the operation so its Secret bindings are reopened")
+			lifecycle.ReopenBindings(execution.Context, execution.Continuation))
 	}
 	return strings.TrimRight(string(value), "\n"), nil
 }

@@ -929,7 +929,13 @@ operation and a lifecycle mutation never run against the same host at once.
 A request is not evidence: the result reports the state the controller proved
 once the operation settled, together with the state before it and whether
 anything changed. A state that never arrived within the bounded window is
-`lifecycle.unknown` with exit `1`, never a success. What the adapter printed is
+`lifecycle.unknown` with exit `1`, never a success. Its remedy names the exact
+commands: a controller that proved no usable state is read again with
+`bootwright machine list --context <context> --power-status` once it answers,
+and the same request repeated if the Machine is not in the state it asked for;
+a Machine that did not reach that state repeats the same request, and a
+graceful stop or restart also names it with `--force` for a guest that does not
+answer (`TestPowerEvidenceRemediesNameTheExactCommand`). What the adapter printed is
 [retained and named for the run](cli/output.md#bounded-run-output). Stopping
 asks the operating system to shut down and polls it to off; `--force` cuts the
 power instead, and is a separate request rather than a fallback. Restarting

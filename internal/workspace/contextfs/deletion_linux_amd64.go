@@ -8,6 +8,7 @@ import (
 	"errors"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -174,13 +175,13 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 		}
 		file, err := openRelative(dir, name, pathHandle, 0)
 		if err != nil {
-			return state("context traversal entry cannot be verified")
+			return unverifiedEntryRefusal(dir, name, "context traversal entry cannot be verified", storeCauseText(err))
 		}
-		identity, err := statHandle(file)
+		identity, statErr := statHandle(file)
 		file.Close()
 		kind := identity.Mode & syscall.S_IFMT
-		if err != nil || identity.Dev != dir.identity.Dev || !private(identity, kind, dir.identity.Uid, dir.identity.Gid) || (kind != syscall.S_IFDIR && kind != syscall.S_IFREG) || !contextEntryAllowed(path, name, kind == syscall.S_IFDIR) {
-			return state("context traversal contains unknown or unsafe state")
+		if reason := unsafeEntryReason(dir, path, name, identity, statErr); reason != "" {
+			return unverifiedEntryRefusal(dir, name, "context traversal contains unknown or unsafe state", reason)
 		}
 		if kind == syscall.S_IFDIR {
 			if err := s.checkpoint(ctx, checkpointBeforeContextSubtree); err != nil {
@@ -413,7 +414,7 @@ func (t *transaction) removeContextDirectory(ctx context.Context, record context
 		}
 		remaining := maxContextEntries
 		if err := t.store.walkContextTree(ctx, dir, "", inspectContextTree, &remaining); err != nil {
-			return err
+			return deletionDamage(ctx, record.Name, err)
 		}
 		if err := t.markDeleting(ctx, record); err != nil {
 			return err
@@ -424,7 +425,7 @@ func (t *transaction) removeContextDirectory(ctx context.Context, record context
 	}
 	remaining := maxContextEntries
 	if err := t.store.walkContextTreeWithRemovalGuard(ctx, dir, "", removeContextTree, &remaining, func(ctx context.Context) error { return t.checkControllerRecovery(ctx, record.Name) }); err != nil {
-		return err
+		return deletionDamage(ctx, record.Name, err)
 	}
 	if err := t.store.checkpoint(ctx, checkpointBeforeContextRmdir); err != nil {
 		return err
@@ -568,3 +569,69 @@ func (e *lostContext) Error() string { return e.failure.Error() }
 func (e *lostContext) Unwrap() error { return e.failure }
 
 func (e *lostContext) Is(target error) bool { return target == contexts.ErrLostContext }
+
+// unverifiedEntry is the walk's refusal of one entry it cannot verify as its
+// context's own, carrying that entry relative to the state root and why, so a
+// deletion names both with its exit; every other caller reports it as is.
+type unverifiedEntry struct {
+	entry, reason string
+	failure       error
+}
+
+func (e *unverifiedEntry) Error() string { return e.failure.Error() }
+
+func (e *unverifiedEntry) Unwrap() error { return e.failure }
+
+func unverifiedEntryRefusal(dir *directory, name, prefix, reason string) error {
+	entry := storeEntry(dir, name)
+	message := prefix + ": " + entry
+	if reason != "" {
+		message += ": " + reason
+	}
+	return &unverifiedEntry{entry: entry, reason: reason, failure: state(message)}
+}
+
+// unsafeEntryReason is why the walk refuses one entry of a context's tree, or
+// empty when it admits it: a kind other than a directory or regular file,
+// another filesystem, a regular file with other links, another owner or mode,
+// or a name outside the context's layout.
+func unsafeEntryReason(dir *directory, path, name string, identity syscall.Stat_t, statErr error) string {
+	kind := identity.Mode & syscall.S_IFMT
+	switch {
+	case statErr != nil:
+		return "it cannot be read: " + storeCauseText(statErr)
+	case kind != syscall.S_IFDIR && kind != syscall.S_IFREG:
+		return "it is " + fileKind(identity.Mode)
+	case identity.Dev != dir.identity.Dev:
+		return "it is on another filesystem than its context"
+	case kind == syscall.S_IFREG && identity.Nlink != 1:
+		return "it is a regular file with " + strconv.FormatUint(uint64(identity.Nlink), 10) + " links"
+	case !private(identity, kind, dir.identity.Uid, dir.identity.Gid):
+		return "it is " + fileKind(identity.Mode) + " owned by " + ownerText(identity.Uid, identity.Gid) + " with mode " + modeText(identity.Mode)
+	case !contextEntryAllowed(path, name, kind == syscall.S_IFDIR):
+		return "it is not part of a context's layout"
+	}
+	return ""
+}
+
+// deletionEntryRemediation is the exit of an entry the deletion walk cannot
+// verify: removing that entry by hand, which the deletion never does, then
+// repeating the deletion, or restoring the whole store.
+func deletionEntryRemediation(name, entry string) string {
+	return "remove " + entry + " beneath the state root, which this deletion never removes because it cannot verify it as the context's own, then repeat bootwright context delete --name " +
+		name + " --purge, adding --allow-orphans when the deletion abandons what the context owns; or " + restoreStoreRemediation
+}
+
+// deletionDamage names the context and the entry of a walk refusal with its
+// exit; any other error passes unchanged.
+func deletionDamage(ctx context.Context, name string, err error) error {
+	var unverified *unverifiedEntry
+	if !errors.As(err, &unverified) {
+		return err
+	}
+	var cause error
+	if unverified.reason != "" {
+		cause = state(unverified.reason)
+	}
+	return contextDamage(ctx, name, unverified.entry, cause, deletionEntryRemediation(name, unverified.entry))
+}

@@ -387,7 +387,7 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 			return lifecycle.RunResult{}, err
 		}
 		maps.Copy(values, pins)
-		refusals = preBootRefusals(execution.Context, request)
+		refusals = preBootRefusals(execution.Context, execution.Continuation, request)
 	}
 	// The attempt adds the placement's identity and host key, so only the
 	// nodes' own credentials are listed here.
@@ -414,11 +414,12 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 
 // preBootRefusals names what each node's pre-boot proof may refuse under that
 // node's position, the one its boot names it by, so a refusal reports the
-// Machine it refused and the commands of the context it runs in.
-func preBootRefusals(contextName string, request InstallRequest) map[string]error {
+// Machine it refused, the commands of the context it runs in and the
+// continuation of the refusing apply.
+func preBootRefusals(contextName, continuation string, request InstallRequest) map[string]error {
 	refusals := map[string]error{}
 	for index, node := range request.Nodes {
-		for reason, refused := range substrate.PreBootRefusals(node.Substrate, contextName, node.Machine, node.Controller.Endpoint) {
+		for reason, refused := range substrate.PreBootRefusals(node.Substrate, contextName, continuation, node.Machine, node.Controller.Endpoint) {
 			refusals[nodeRefusal(reason, index)] = refused
 		}
 	}

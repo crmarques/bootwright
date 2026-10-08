@@ -251,7 +251,13 @@ composition. Reject unsafe existing objects without chmod/chown repair. A root
 of another type, owner or mode refuses naming the type, the `uid:gid` owner and
 the octal mode it holds and the `root:root` `0700` directory it must be, and
 says that nothing repairs it, with the guidance below for a root another build
-created.
+created; a root that is itself a symbolic link is such a root
+(`TestAStateRootThatIsALinkIsRefusedAsARootOfAnotherType`). An ancestor of the
+root that is a symbolic link or not a directory refuses `context.state` naming
+that absolute path and its type, that the store reaches its root only through
+directories and never follows a link, and the repair: replace that path with a
+directory, such as the one a link there names or a mount of that storage, then
+repeat the command (`TestAStateRootBehindALinkNamesTheAncestorAndItsExit`).
 
 A host whose `/var/lib/bootwright` holds a store an earlier Bootwright build
 created is not a supported controller for this build until that build's
@@ -732,7 +738,17 @@ exit: remove that entry beneath the state root, which leaves the evidence
 missing, then `bootwright context delete --name <name> --purge
 --allow-orphans`, or restore the whole store from a matching backup. The
 deletion never removes an entry it cannot verify as its own
-(`TestUnsafeEvidenceIsRefusedNamingItsContextEntryAndExit`). A live
+(`TestUnsafeEvidenceIsRefusedNamingItsContextEntryAndExit`). Any other entry
+the deletion's walk cannot verify as its context's own, beneath `secrets/` or
+`desired-state/` among others, refuses `--purge`, with or without
+`--allow-orphans`, with `context.state` naming the context, the entry relative
+to the state root and why: its type, another filesystem, a regular file's link
+count, its owner and mode, a name outside the context's layout, or the
+kernel's answer. Its exit is to remove that entry beneath the state root, then
+repeat `bootwright context delete --name <name> --purge`, adding
+`--allow-orphans` when the deletion abandons what the context owns, or to
+restore the whole store from a matching backup
+(`TestTheDeletionWalkNamesItsContextEntryAndExit`). A live
 lease refuses under it exactly as it does without it, before the guard reads
 anything. A ready context whose directory is gone from a `contexts`
 container that still verifies is lost: what it owned cannot be listed, so its

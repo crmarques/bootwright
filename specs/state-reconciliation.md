@@ -1313,6 +1313,17 @@ The material that created an effect is the material that proves it gone, and a
 declaration edited or rotated afterwards never silently changes which version a
 removal presents.
 
+An attempt that cannot read a bound Secret or the part it needs, in the Ansible
+runner, a managed-OS installation or an agent installation, refuses naming the
+exact command that repeats its operation and so reopens its bindings: the
+continuation the lifecycle handed the attempt, with `--context` and every
+`--authorize` token its frozen plan consumes, or, when the attempt carries
+none, `bootwright status --context <name>` and the command it names
+(`TestABindingRefusalNamesTheCommandThatReopensIt`). A fresh removal that
+cannot prove what its effects left behind names, after each effect's own
+diagnostic, `bootwright destroy --context <name>` with the removal plan's
+`--authorize` tokens.
+
 Nothing stands in for a frozen binding. A continuation, or a fresh removal,
 whose operation names a binding the context's keyring no longer lists refuses
 `lifecycle.state` before it is authorized, presented or confirmed, and before

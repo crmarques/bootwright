@@ -38,6 +38,16 @@ func resolutionRemedy(contextName string, verb reconciliation.Verb, frozen recon
 	return "repeat " + continuation + " to perform it"
 }
 
+// ReopenBindings is the remedy of bound Secret material an attempt could not
+// read: the exact command that repeats the operation, which reopens its Secret
+// bindings, or, when the attempt carries none, status's next command.
+func ReopenBindings(contextName, repeat string) string {
+	if repeat != "" {
+		return "repeat " + repeat + ", which reopens this operation's Secret bindings"
+	}
+	return "run " + contextCommand(contextName, "status") + " and repeat the command it names, which reopens this operation's Secret bindings"
+}
+
 // reviewStatus is the remedy of a refusal over records that contradict what
 // their operation did: reading what the context holds.
 func reviewStatus(contextName string) string {

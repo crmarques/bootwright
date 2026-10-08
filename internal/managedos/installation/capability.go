@@ -419,7 +419,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	var refusals map[string]error
 	if operation == "apply" {
 		// Only an apply proves its target before it boots it.
-		refusals = substrate.PreBootRefusals(request.Target.Substrate, execution.Context, request.Identity.Object, request.Target.Controller.Endpoint)
+		refusals = substrate.PreBootRefusals(request.Target.Substrate, execution.Context, execution.Continuation, request.Identity.Object, request.Target.Controller.Endpoint)
 		if refusals == nil {
 			refusals = map[string]error{}
 		}
@@ -539,11 +539,11 @@ func authorizedKey(execution lifecycle.Execution, request Request) (string, erro
 func publicHalf(execution lifecycle.Execution, reference, subject string) (string, error) {
 	material, ok := execution.Material[reference]
 	if !ok {
-		return "", refusal("secret.store", "the bound "+subject+" is not available to this attempt", "repeat the operation so its Secret bindings are reopened")
+		return "", refusal("secret.store", "the bound "+subject+" is not available to this attempt", lifecycle.ReopenBindings(execution.Context, execution.Continuation))
 	}
 	value, ok := material.Part(secrets.PublicKeyPart)
 	if !ok || len(value) == 0 {
-		return "", refusal("secret.part", "the bound "+subject+" carries no public half", "repeat the operation so its Secret bindings are reopened")
+		return "", refusal("secret.part", "the bound "+subject+" carries no public half", lifecycle.ReopenBindings(execution.Context, execution.Continuation))
 	}
 	return strings.TrimRight(string(value), "\n"), nil
 }

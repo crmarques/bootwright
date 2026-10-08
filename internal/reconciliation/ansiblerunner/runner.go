@@ -99,11 +99,11 @@ func materialBytes(request lifecycle.RunRequest) (map[string][]byte, error) {
 	for _, file := range request.Materials {
 		bound, ok := request.Material[file.Secret]
 		if !ok {
-			return nil, failure("secret.store", "a bound Secret this operation needs is not available to this attempt", bindingRemediation)
+			return nil, failure("secret.store", "a bound Secret this operation needs is not available to this attempt", lifecycle.ReopenBindings(request.Context, request.Repeat))
 		}
 		value, ok := bound.Part(file.Part)
 		if !ok || len(value) == 0 || len(value) > maxMaterialBytes {
-			return nil, failure("secret.part", "a bound Secret does not carry the part this operation needs", bindingRemediation)
+			return nil, failure("secret.part", "a bound Secret does not carry the part this operation needs", lifecycle.ReopenBindings(request.Context, request.Repeat))
 		}
 		out[file.Name] = slices.Clone(value)
 	}
@@ -114,10 +114,7 @@ func materialBytes(request lifecycle.RunRequest) (map[string][]byte, error) {
 // remediation was wrong for every failure that had nothing to do with Secrets.
 // A failure the adapter's own output explains names what its request says,
 // because only the caller knows where that output is named.
-const (
-	bindingRemediation = "repeat the operation so its Secret bindings are reopened"
-	setupRemediation   = "run bootwright setup"
-)
+const setupRemediation = "run bootwright setup"
 
 func failure(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)

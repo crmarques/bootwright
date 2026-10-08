@@ -712,7 +712,7 @@ operator then receives the installation's `lifecycle.state` diagnostic, whose
 object is the Machine, instead of the adapter's failure: `hardware-mismatch`,
 a physical machine whose declaration names no MAC, whose complete inventory
 lacks a declared MAC or reports no system identity, or whose inventory was not
-read in full, remedied by running `bootwright apply --context <context>` once
+read in full, remedied by running the refusing apply's continuation once
 the machine reports the declared hardware in full or, to correct the
 declaration instead, by taking the context back with
 `bootwright destroy --context <context>`, correcting
@@ -724,8 +724,13 @@ destroy, correcting that address if it names another controller, the same
 context update and apply, so the machine is proved again; and
 `machine-running`, on either arm, remedied by stopping it with
 `bootwright machine stop --context <context> --name <machine>`, then running
-`bootwright apply --context <context>`. A read the controller did not answer names none,
-because the controller's own message in the retained output is the reason.
+the refusing apply's continuation. That continuation is the exact command the
+lifecycle hands the attempt, `bootwright apply --context <context>` with every
+`--authorize` token its frozen plan consumes, and the plain apply when the
+attempt carries none; the apply after a destroy plans anew and names its own
+(`TestEachPreBootRefusalNamesTheMachineWhatWasRefusedAndTheRemedy`). A read the
+controller did not answer names none, because the controller's own message in
+the retained output is the reason.
 
 A Redfish client speaks to one endpoint and follows no redirect, uses no
 ambient proxy or credential, bounds every request and response, and treats a

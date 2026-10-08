@@ -3,6 +3,7 @@ package installation
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -21,6 +22,7 @@ func TestAnApplyRemediesItsTargetsPreBootRefusalsByName(t *testing.T) {
 				call, request := execution(t, "digest")
 				request.Target.Substrate, request.Target.Physical = arm, arm == substrate.ArmBaremetal
 				call.Proved, call.Context = dependencyProof(), "lab-b"
+				call.Continuation = "bootwright apply --context lab-b --authorize data-loss"
 				marker, _ := MarkerFor(request, "digest")
 				runner := &fakeRunner{}
 				capability := New(nil).WithIdentities(&pinReader{})
@@ -34,11 +36,15 @@ func TestAnApplyRemediesItsTargetsPreBootRefusalsByName(t *testing.T) {
 				}
 				want := map[string][]diagnostics.Diagnostic{}
 				if operation == "apply" {
-					for reason, err := range substrate.PreBootRefusals(arm, "lab-b", "rhel-01", request.Target.Controller.Endpoint) {
+					for reason, err := range substrate.PreBootRefusals(arm, "lab-b", call.Continuation, "rhel-01", request.Target.Controller.Endpoint) {
 						want[reason] = diagnostics.Of(err)
 					}
 					if len(want[substrate.RefusalMachineRunning]) != 1 || request.Target.Controller.Endpoint == "" {
 						t.Fatalf("the %s proof names %v at %q", arm, want, request.Target.Controller.Endpoint)
+					}
+					if running := got[substrate.RefusalMachineRunning]; len(running) != 1 ||
+						!strings.HasSuffix(running[0].Remediation, ", then run bootwright apply --context lab-b --authorize data-loss") {
+						t.Fatalf("the %s running refusal names %#v, not the apply's continuation", arm, running)
 					}
 					for reason, err := range mediaRefusals("lab-b", request) {
 						want[reason] = diagnostics.Of(err)

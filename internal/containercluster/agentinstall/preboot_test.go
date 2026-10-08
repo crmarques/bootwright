@@ -35,7 +35,7 @@ func TestAnApplyRemediesEachNodesPreBootRefusalsUnderItsPosition(t *testing.T) {
 			want := map[string][]diagnostics.Diagnostic{}
 			if operation == "apply" {
 				for index, node := range request.Nodes {
-					for reason, err := range substrate.PreBootRefusals(node.Substrate, mixedRunContext, node.Machine, node.Controller.Endpoint) {
+					for reason, err := range substrate.PreBootRefusals(node.Substrate, mixedRunContext, mixedRunContinuation, node.Machine, node.Controller.Endpoint) {
 						want[reason+"-node-"+strconv.Itoa(index)] = diagnostics.Of(err)
 					}
 				}
@@ -44,8 +44,12 @@ func TestAnApplyRemediesEachNodesPreBootRefusalsUnderItsPosition(t *testing.T) {
 					t.Fatalf("nodes on %v name %d refusals, want 7", arms, len(want))
 				}
 				if refused := got["machine-running-node-2"]; len(refused) != 1 || refused[0].Object.Name != "metal-03" ||
-					!strings.Contains(refused[0].Remediation, "bootwright machine stop --context "+mixedRunContext+" --name metal-03") {
+					!strings.Contains(refused[0].Remediation, "bootwright machine stop --context "+mixedRunContext+" --name metal-03") ||
+					!strings.HasSuffix(refused[0].Remediation, ", then run "+mixedRunContinuation) {
 					t.Fatalf("the third node's running refusal reports %#v", refused)
+				}
+				if repeat := runner.requests[0].Repeat; repeat != mixedRunContinuation {
+					t.Fatalf("the apply's run repeats %q, want %q", repeat, mixedRunContinuation)
 				}
 			}
 			if !reflect.DeepEqual(got, want) {

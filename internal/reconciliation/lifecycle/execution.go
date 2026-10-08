@@ -1145,7 +1145,7 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	if len(remaining) != 0 {
 		unresolved = failure("lifecycle.unknown",
 			"this removal cannot prove what these effects left behind, so it registered nothing: "+strings.Join(remaining, ", "),
-			"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy)))
+			"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizing(requiredTokens(decided.plan))...))
 	}
 	return withCause(fault, withCause(cause, unresolved))
 }

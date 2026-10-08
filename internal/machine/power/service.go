@@ -425,6 +425,7 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 	progress func(context.Context, string, string)) lifecycle.RunRequest {
 	return lifecycle.RunRequest{
 		Context:        runtime.Context.Name,
+		Repeat:         "bootwright machine list --context " + runtime.Context.Name + " --power-status",
 		Description:    readStep(frozen, 1, 1).Description,
 		Implementation: ReadImplementation,
 		Operation:      ReadOperation,
@@ -454,6 +455,7 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 	}
 	request := lifecycle.RunRequest{
 		Context:           runtime.Context.Name,
+		Repeat:            powerCommand(runtime.Context.Name, frozen),
 		Description:       powerStep(frozen).Description,
 		Implementation:    Implementation,
 		Operation:         Operation,

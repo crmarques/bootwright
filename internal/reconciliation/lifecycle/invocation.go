@@ -58,7 +58,13 @@ type RunRequest struct {
 	// Context, Block and Description name the run for the runner's job record
 	// and its refusals alone: none of them reaches the adapter, its variables
 	// or any digest.
-	Context        string
+	Context string
+	// Repeat is the exact command that repeats this run's operation, bound to
+	// its context and carrying every token it needs, so a refusal of the
+	// runner's own names it; empty when the next command depends on what the
+	// whole run settles. Like Context it reaches no adapter, variable or
+	// digest.
+	Repeat         string
 	Block          string
 	Description    string
 	Implementation string
@@ -139,6 +145,7 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 	materials := append(slices.Clone(invocation.Materials), Materials(invocation.Placement)...)
 	return RunRequest{
 		Context:           execution.Context,
+		Repeat:            execution.Continuation,
 		Block:             execution.Block.ID,
 		Description:       execution.Block.Description,
 		Implementation:    invocation.Implementation,

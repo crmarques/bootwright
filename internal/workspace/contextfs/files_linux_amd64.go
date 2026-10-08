@@ -305,19 +305,62 @@ func walkAbsolute(path string, create bool) (*os.File, error) {
 		probe.Close()
 		return createAbsolute(path, parent)
 	}
-	for _, name := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
+	components := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	for i, name := range components {
 		if err := qualifiedFileSystem(parent); err != nil {
 			parent.Close()
 			return nil, err
 		}
 		child, err := syscall.Openat(int(parent.Fd()), name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
-		parent.Close()
 		if err != nil {
+			err = unreachableAncestor(parent, name, components[:i+1], err)
+			parent.Close()
 			return nil, err
 		}
+		parent.Close()
 		parent = os.NewFile(uintptr(child), name)
 	}
 	return parent, nil
+}
+
+// unreachableRoot is the refusal of a state root the store cannot reach
+// because one component of its absolute path, named in full, is a symbolic
+// link or not a directory; its status tells the root itself from an ancestor.
+type unreachableRoot struct {
+	component string
+	stat      syscall.Stat_t
+	failure   error
+}
+
+func (e *unreachableRoot) Error() string { return e.failure.Error() }
+
+func (e *unreachableRoot) Unwrap() error { return e.failure }
+
+func unreachableRootRefusal(component string, stat syscall.Stat_t) error {
+	return &unreachableRoot{component: component, stat: stat, failure: contexts.StateErrorWithRemediation(
+		"the state root is reached through "+component+", which is "+fileKind(stat.Mode)+
+			", but the store reaches its root only through directories and never follows a symbolic link",
+		"replace "+component+" with a directory, such as the directory a symbolic link there names or a mount of that storage, then repeat the command")}
+}
+
+// unreachableAncestor names the component an open of the root's path refused
+// because it is a symbolic link or not a directory; any other error, or one
+// whose component cannot be read without following it, passes unchanged.
+func unreachableAncestor(parent *os.File, name string, walked []string, err error) error {
+	if !errors.Is(err, syscall.ENOTDIR) && !errors.Is(err, syscall.ELOOP) {
+		return err
+	}
+	fd, openErr := syscall.Openat(int(parent.Fd()), name, pathHandle|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if openErr != nil {
+		return err
+	}
+	var stat syscall.Stat_t
+	statErr := syscall.Fstat(fd, &stat)
+	syscall.Close(fd)
+	if statErr != nil || stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
+		return err
+	}
+	return unreachableRootRefusal("/"+strings.Join(walked, "/"), stat)
 }
 
 func createAbsolute(path string, base *os.File) (*os.File, error) {
@@ -362,7 +405,8 @@ func createAbsolute(path string, base *os.File) (*os.File, error) {
 		}
 		return nil
 	}
-	for _, name := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
+	components := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	for i, name := range components {
 		if err := verify(); err != nil {
 			return nil, err
 		}
@@ -384,7 +428,7 @@ func createAbsolute(path string, base *os.File) (*os.File, error) {
 			fd, err = syscall.Openat(int(parent.Fd()), name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
 		}
 		if err != nil {
-			return nil, err
+			return nil, unreachableAncestor(parent, name, components[:i+1], err)
 		}
 		file := os.NewFile(uintptr(fd), name)
 		if err := qualifiedFileSystem(file); err != nil {
@@ -450,6 +494,12 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 	}
 	file, err := walkAbsolute(path, create)
 	if err != nil {
+		// A root that is itself a link or not a directory is a root of
+		// another type, which setup reports the same way.
+		var unreachable *unreachableRoot
+		if errors.As(err, &unreachable) && unreachable.component == path {
+			return nil, unsafeRoot(unreachable.stat, uid, gid)
+		}
 		return nil, err
 	}
 	stat, err := statHandle(file)

@@ -26,10 +26,13 @@ const (
 // PreBootRefusals is what the pre-boot proof of a Machine on one arm may
 // refuse, each with the diagnostic an installation reports for it: the Machine
 // as the refused object, what was refused and what to change, with every
-// command it names bound to the context the installation runs in. An arm with
-// no pre-boot entry point refuses nothing here, because its installation fails
-// before any proof.
-func PreBootRefusals(arm, contextName, machine, endpoint string) map[string]error {
+// command it names bound to the context the installation runs in. The
+// continuation is the exact command that continues the refusing apply,
+// bootwright apply --context <context> with every --authorize token its frozen
+// plan consumes, as the lifecycle's execution carries it; when it is empty the
+// remedy names the plain apply of the context. An arm with no pre-boot entry
+// point refuses nothing here, because its installation fails before any proof.
+func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) map[string]error {
 	identity := string(api.Machine) + "/" + machine
 	refused := func(message, remediation string) error {
 		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
@@ -38,8 +41,12 @@ func PreBootRefusals(arm, contextName, machine, endpoint string) map[string]erro
 		}}}
 	}
 	apply := "bootwright apply --context " + contextName
+	next := continuation
+	if next == "" {
+		next = apply
+	}
 	running := refused(identity+" is running, and its installation erases its disk, so no media was inserted into it and it was not booted",
-		"stop it with bootwright machine stop --context "+contextName+" --name "+machine+", then run "+apply)
+		"stop it with bootwright machine stop --context "+contextName+" --name "+machine+", then run "+next)
 	// The refusing apply stays incomplete, so it continues its frozen plan
 	// and the context's input cannot change under it: a corrected declaration
 	// takes effect only after a destroy takes the context back.
@@ -52,7 +59,7 @@ func PreBootRefusals(arm, contextName, machine, endpoint string) map[string]erro
 		return map[string]error{
 			RefusalHardwareMismatch: refused("the machine answering at "+endpoint+" does not report every hardware address "+identity+
 				" declares, or its inventory could not be read in full, so no media was inserted into it and it was not booted",
-				"once the machine reports the hardware "+identity+" declares in full, run "+apply+"; to correct that declaration instead, "+destroy+
+				"once the machine reports the hardware "+identity+" declares in full, run "+next+"; to correct that declaration instead, "+destroy+
 					", correct spec.hardware.management.bmc.address or spec.hardware.nics on "+identity+update+", then run "+apply),
 			RefusalIdentityMismatch: refused("the management controller at "+endpoint+" answers as another system than the one this operation proved for "+
 				identity+", so no media was inserted into it and it was not booted",
