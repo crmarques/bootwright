@@ -113,7 +113,7 @@ func TestTheControllerBoundsAreTheFiguresTheSpecificationsState(t *testing.T) {
 	}{
 		"a power read":      {ControllerPowerReadBound, "30s"},
 		"a media read":      {ControllerMediaReadBound, "2m0s"},
-		"an insert":         {ControllerInsertBound, "36m20s"},
+		"an insert":         {ControllerInsertBound, "39m20s"},
 		"an eject":          {ControllerEjectBound, "4m30s"},
 		"a boot selection":  {ControllerBootSelectionBound, "2m30s"},
 		"a power operation": {ControllerPowerBound, "3m30s"},

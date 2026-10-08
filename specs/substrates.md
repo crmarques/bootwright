@@ -412,8 +412,12 @@ every MAC the Machine declares to appear in it. The collection must be present,
 non-empty and readable in full: a member that answers with an error, a
 malformed body or no MAC leaves the proof unknown, never satisfied, because a
 partial inventory cannot show that this is the server the operator meant. A
-declared MAC the hardware does not report refuses. The power state is read and
-recorded but never changed here.
+declared MAC the hardware does not report refuses. The refusal names each
+declared NIC the inventory lacks, by its declared name and address, and each
+member that proved nothing, by its position counted from zero, never a value
+the controller reported; the repeated proof before media is inserted names the
+declared addresses. The power state is read and recorded but never changed
+here.
 
 A reported `UUID` and `SerialNumber` are recorded without their surrounding
 space, and each must then be at most 128 characters, every one of them
@@ -530,9 +534,11 @@ every call it makes that bound: every pause the call's polls may take, and
 every request outside those polls at its full timeout, 5 minutes for an attach
 and 30 seconds for any other. A power read is bounded by 30 seconds; a media
 read by 2 minutes, the four requests the pinned emulator takes to report its
-power and find its device; an insert by 36 minutes 20 seconds, three attaches
-with their polls and the release and pause between each two; an eject by 4
-minutes 30 seconds; a boot selection by 2 minutes 30 seconds; and a power
+power and find its device; an insert by 39 minutes 20 seconds, the release of
+any other media before its first attach, three attaches with their polls and
+the release and pause between each two, and the security service a private
+delivery reads; an eject by 4 minutes 30 seconds; a boot selection by 2
+minutes 30 seconds; and a power
 operation, polling 60 times, by 3 minutes 30 seconds. A controller that needs
 more requests to find its device takes longer, and one whose polled reads also
 run to their timeout can take up to the second bound the client documents; a
@@ -596,9 +602,19 @@ server's certificate to the virtual-media device's certificate collection
 unless that certificate is already there and turns the device's certificate
 verification on, before the consumer's insert. `disable-verification` turns
 that verification off before the insert when it reads on. `established` changes
-nothing on the device. Each is set once, before the first attach and never
-inside its retry, and nothing falls back from one mode to another: a device
-that cannot import fails, naming the exceptions an operator may declare
+nothing on the device. When the insert carries private material, as a physical
+installation's does, `established` first reads, and writes nothing, whether
+the controller verifies the server it fetches from: the device's
+`VerifyCertificate` must read `true`, and a manager the system names that links
+a security service reporting `HttpsTransferCertVerification` must report it
+`true`. Anything else, an absent `VerifyCertificate` or an unreadable security
+service included, refuses the insert before any write, naming the setting, and
+the operator imports the artifact server's CA into the controller and turns its
+verification on out of band. Private material is never inserted under
+`disable-verification`. Before the trust is set, a device presenting other
+media is released and proved empty. Each is set once, before the first attach
+and never inside its retry, and nothing falls back from one mode to another: a
+device that cannot import fails, naming the exceptions an operator may declare
 instead. The consumer's eject, once the device is proved empty, settles what
 the insert needed: it turns verification back on after `disable-verification`
 unless the Machine declares otherwise, and deletes the imported certificate
@@ -708,4 +724,12 @@ endpoint bounds every reference the controller returns, whether a member, an
 action target, an action's metadata, a task or a Location header: a reference
 naming another scheme, host or port, or carrying user information, is refused
 before any request is built, so it never receives the credential and nothing it
-could answer is taken as evidence.
+could answer is taken as evidence. The insert asks for exactly `Image`,
+`Inserted` and the `TransferProtocolType` its URL's scheme names. A device's
+echo matches when scheme, host without case, path and query are the requested
+ones and it names no port or the requested one; a different port refuses. An
+attach the controller reports failed, or after which the device never presents
+the image, fails naming the controller-side causes (route and DNS to the image
+host from the BMC network, trust of the artifact server's certificate, TLS) and
+the artifact server unit's journal, which records each completed request
+without its path.

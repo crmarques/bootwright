@@ -3109,3 +3109,178 @@ stays [B302](m1.md#b302)'s and the artifact server's `Unsupported`
 refuses a content root with a `..` component ([B435](m1.md#b435)), the reset of
 a failed unit after a failed apply ([B436](m1.md#b436)) and three continuation
 edges ([B437](m1.md#b437)). Under D48 eight were parked: B438 to B445.
+
+### X45 — private installer delivery and the xFusion iBMC
+
+**Owner:** Substrate and Managed OS, with Infrastructure services. A slice of
+M4 delivered out of sequence on the owner's request (D60), on 2026-10-08 as one
+commit, the third slice to move request versions and the automation digest, in
+the window X43 opened. **Decisions:** D60, D103, D104,
+D110, D113, and, recorded after the run, D120, D121 and D122. **In-tree gates
+passed, operator gates awaiting acceptance:** [B73](m4.md#b73), whose
+acceptance baseline is this commit, and [B305](m4.md#b305); their rows stay on
+M4 with Delivery `awaiting operator acceptance`.
+
+**Outcome, B73:** a physical installation no longer refuses before
+registration. A delivered-key Machine's installer image, whose Kickstart names
+the tokenized host-key URL, is no longer served at the public
+`os/<machine>/install.iso`: the apply renames it into
+`private/os/<machine>/<token>/`, beside the key pair, hidden, owned by root and not world-readable,
+after clearing whatever an earlier attempt left beneath the private
+root. Before it inserts anything it fetches the first byte of the image, the
+identity and the public key through the listener, with no proxy and no
+redirect, verified against the bound serving certificate; each fetch is judged
+alone and names the file and the cause with the token replaced. The insert
+takes the private URL and its failure never prints the token. The private
+material is withdrawn before the completion inspection runs, so the inspection
+reports what is left, and the postcondition of a private installation requires
+the image withdrawn as well as the key pair; a destroy removes the public image
+directory only for the public arm. The installation request carries exactly one
+publication, the public `image` of the guest-agent arm or the `private`
+publication of the delivered-key arm, which needs https and a serving
+certificate; the request version `os-install-anaconda-v6` becomes `v7` and the
+Kickstart version `kickstart-anaconda-v5` becomes `v6`. The blanket refusal is
+replaced by D103's: a delivered-key installation whose controller leg is not
+https with its certificate verified, through `bmc.tls.verify` or a
+`trustBundleRef`, refuses before registration (a refusal-table row), and an
+apply whose frozen request holds both publications or neither, or a private one
+over an unverified leg, refuses at execution naming the Machine and directing
+the operator to destroy and plan again, while its destroy and observation still
+run.
+
+**Outcome, B73, the host key (F-035):** the request's target carries the
+generated key type of the Secret its `hostKeyRef` names; a missing Secret refuses
+as `api.reference`, a Secret with no generated source as `lifecycle.unsupported`
+and a type outside the table as `api.value`, all before registration. The
+Kickstart installs the pair at the path of its own type (Ed25519, RSA or ECDSA),
+proves that the public half names the frozen algorithm and that the private
+half derives the same key, and names it in a
+`40-bootwright-host-key.conf` drop-in beneath `sshd_config.d`, all before
+`ssh-keygen -A`; an apply whose bound key is of another type than the frozen one
+refuses before any effect, and observation and destroy never refuse on it. A
+new filter pins `HostKeyAlgorithms` to the delivered key's type on every
+connection of the reachability wait and the identity read, with SHA-1 RSA left
+out, so a controller under the FIPS policy can prove an RSA or ECDSA key. The
+[lab-baremetal](../../examples/lab-baremetal/README.md) example names a
+`caBundle` Secret in `trustBundleRef` instead of opting out of verification,
+and its README states what the run needs: the disk the media and hosted trees
+take, the egress destinations, the listener hand check, the firewall ports by
+source (D110), the rule for a host whose store an earlier build holds, the FIPS
+key types, the RSA-2048 serving-certificate workaround (D113) with the
+`openssl` command that makes a leaf Bootwright accepts, the artifact unit's
+journal for a failed fetch, and why the emulated rehearsal cannot run yet. The
+managed-OS, infrastructure-services, substrates and machines specs and the
+operator guide state it.
+
+**Outcome, B305:** the collection's one Redfish client drives the owner's xFusion
+iBMC as its captures of 2026-05-22 show it, proved by a redacted `xfusion`
+fixture running every parametrized operation. An echo that names no port
+matches the inserted image while a different explicit port still refuses; the
+InsertMedia body is exactly `Image`, `Inserted` and the transfer protocol; a
+task's one-object `Messages` yields its message id; a device presenting other
+media is released and proved empty before the first attach, and one that cannot
+be released is never attached. Under `established` trust an insert that carries
+private material first reads, writing nothing, the device's `VerifyCertificate`
+and the `HttpsTransferCertVerification` of every security service a manager
+links, and refuses before any write unless both read true (D104); the insert
+asks for that read-back exactly when the installer image is private, and
+`redfish_boot` refuses private delivery beside `disable-verification`. A task
+that ends unsuccessfully or never settles, or a device that never presents the
+image, ends the insert naming the BMC-side causes and the artifact unit's
+journal. That journal now records each completed fetch, without its URI: the
+remote address, the time, the TLS protocol and cipher, the method, the status
+and the bytes, with the error log kept at warn. The MAC proof stays strict and
+its refusal names each declared NIC the inventory lacks and each member that
+proved nothing by position, never a reported value. The knowledge page on
+physical BMCs is rewritten from the captures without host names or serials, with
+the RSA premise and its check, and each of [B74](m4.md#b74) to
+[B77](m4.md#b77) points to the pre-rewrite page that holds its field lessons.
+
+**Review:** four sub-items in two lanes integrated without a conflict and with
+one integration fix: the insert bound grew by 3 minutes (36m20s to 39m20s) for
+the release and the verification reads, which moved the controller calls an apply
+makes to 1h4m20s and lab-rhel's run deadline to 4h9m20s, within the 6 hour
+ceiling, and a test and the managed-OS spec still stated the earlier figures.
+The slice review, by reviewers that did not write the diff, raised six findings,
+five confirmed in scope and one not confirmed, three distinct defects among the
+five. The installation's insert never passed the private-delivery argument, so
+the D104 read-back never ran for a real installation, a blocking finding
+reported three times; the README's journal command named the block's prefix
+instead of the artifact server's unit; and the README's RSA-2048 command made a
+CA certificate, which Bootwright refuses. One fix round fixed all three, each
+with a test that fails without it, the first mutation-checked against dropping
+the argument and against a constant true and shown end to end through the
+`xfusion` emulator, where a private insert now refuses with no write. The check
+found no gap. The finding not confirmed, a spec sentence that read against the
+container cluster's plain-HTTP controller leg, which its spec already records as
+an exception, is part of [B452](backlog.md#b452).
+
+**Digest effects:** the third slice to move them, in X43's window. Every frozen
+installation request and its content digest move with the request version
+`os-install-anaconda-v7` and the Kickstart version `kickstart-anaconda-v6`; a
+libvirt installation, lab-rhel's included, changes only in the version string,
+and a delivered-key request omits `image` and carries `private` and the key
+type. The automation digest moves through the managed-OS install role, the
+bare-metal machine role, the new filter, the protocol and inspect plugins, the
+Redfish client, discovery and module and the artifact-server nginx template, so
+every plan digest moves with it. The lab-baremetal goldens move with the
+example. The bare-metal machine request `machine-baremetal-v2`, the libvirt host
+and machine requests, the controller request and the evidence shapes do not
+move. An artifact server an earlier build applied renders its changed
+configuration at its next apply and restarts its unit; observation does not
+compare the rendered file, so it reports no drift before then. **Before a build
+that contains X43, X24 or X45 touches a host, destroy every live context with
+the build that applied it, then run `setup` once, with `--purge-old-bundles`
+when the host is at its bundle bound;** one such destroy and setup serve the
+three slices, and the next window opens with M4's [X47](m4.md#planned-slices) and M1's [X46](m1.md#planned-slices).
+
+**Operator-visible effects:** a physical installation whose controller leg is
+verified plans, applies and proves completion against its delivered key, and an
+unverified leg refuses before registration, directing the operator to an
+https address, the `tls.verify` opt-out's removal and `trustBundleRef`; the owner's iBMC needs `established` trust, the media CA
+imported out of band and its HTTPS transfer verification turned on, or the
+apply refuses with `NO_VERIFIED_FETCH`. A failed fetch names its causes and the
+unit's journal, which now shows each completed request. A refused MAC proof
+names the declared NICs it lacks. An installation's run deadline grows by 3
+minutes, lab-rhel's to 4h9m20s. A failed attempt leaves its private subtree
+until the next apply or a destroy takes it (D122, stated in the
+[managed-OS spec](../managed-os.md#physical-installation)).
+
+**Gates:** at the integration head, after the one integration fix, `make
+check-offline tidy-check modules-check vulncheck docs-check race` passed, and so
+did the four `./scripts/ansible-check` suites, units, sanity, integration (the
+controller supervisor test) and lint (no failures or warnings under the
+production profile), `./scripts/check-commits` and `git diff --check`; the fix
+round's head passed the same commands, and its collection run counted 1570
+passed. On the squashed commit, whose code is the fix round's and which differs
+from it only under `specs/` and in two sentences of the operator guide and the
+lab-baremetal README, the same `make` targets passed (all modules verified, no
+vulnerabilities found in called code), and so did the four suites (units 264,
+238, 1068 and 1570 passed across its runs, sanity, integration and lint),
+`make docs-check` after the last wording edit, `./scripts/check-commits` and
+`git diff --check`. The Go test step reused cached results for packages
+unchanged since the integration head's run. The adversarial review, by reviewers
+that did not write the diff, is the independent review the safety-class items
+name. No real-host run: the rehearsal, the xFusion observation and every effect
+on a host are unrun, and each depends on X47.
+
+**Constraints left behind:** [B73](m4.md#b73) completes on an owner-accepted
+ledger row of the lab-baremetal rehearsal on a build that descends from this
+commit, which X47's [B446](m4.md#b446) makes runnable (D120), and
+[B305](m4.md#b305) on the first xFusion server, which D60 records as an
+observation and which needs [B447](m4.md#b447)'s rule (D121) first; real
+hardware is [B78](m4.md#b78)'s (D17). A
+[residual race](../state-reconciliation.md#mutation-safety) between the last
+controller proof and the installer's first write, and physical destroy that
+retains the system ([B70](m3.md#b70)), stay. None of the follow-ups joins M1:
+each lies in the physical-installation or the Redfish journey, so four joined
+M4, the emulated controller's TLS ([B446](m4.md#b446)) and the read-back's rule
+with the silent `disable-verification` ([B447](m4.md#b447)), which D120 and
+D121 put on the new slice X47, a key type the controller's policy excludes
+([B448](m4.md#b448)) and the insert bound ([B449](m4.md#b449)); under D48 three
+were parked: the private subtree on plain listeners ([B450](backlog.md#b450)),
+the host observations ([B451](backlog.md#b451)) and the wording and tests
+([B452](backlog.md#b452)). Already tracked: the iBMC's privilege refusal, HTTP
+400, joined [B319](m4.md#b319)'s definition; the libvirt identity path's FIPS
+key is [B346](backlog.md#b346); and the TLS half of [B334](backlog.md#b334)
+moved to B446 (D120).

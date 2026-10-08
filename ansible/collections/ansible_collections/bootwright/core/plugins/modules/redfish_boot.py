@@ -9,12 +9,13 @@ give readably fails the operation rather than reading as empty.
 
 Each operation's worst case, from the bounds in redfish_control:
 
-- insert: at most 1,880 s of pauses and attach timeouts, 3 x (MEDIA_TIMEOUT
+- insert: at most 2,000 s of pauses and attach timeouts, 3 x (MEDIA_TIMEOUT
   300 + TASK_POLLS 60 x 2 + MEDIA_PROBES 24 x 5) + 2 x (24 x 5 +
-  INSERT_RETRY_DELAY 10), and at most 10,940 s when every request also times
-  out, 3 x (300 + 60 x 32 + 24 x 35) + 2 x (30 + 24 x 35 + 10); plus one
-  REQUEST_TIMEOUT for each discovery read and for each read before an attach
-  or an eject.
+  INSERT_RETRY_DELAY 10) + 24 x 5 releasing other media before the first
+  attach, and at most 11,810 s when every request also times out, 3 x (300 +
+  60 x 32 + 24 x 35) + 2 x (30 + 24 x 35 + 10) + (30 + 24 x 35); plus one
+  REQUEST_TIMEOUT for each discovery read, for each read before an attach or
+  an eject, and for each security service a private delivery reads.
 - eject: at most 120 s of pauses, and 870 s when every request after discovery
   times out (the detach and 24 probes).
 - the virtual-media trust an insert sets before its first attach, and what an
@@ -113,6 +114,14 @@ options:
         once the device is proved empty. Applies only to eject.
     type: bool
     default: false
+  private_delivery:
+    description:
+      - Whether the image URL carries private material. Under C(established)
+        the insert first reads, and refuses unless, the device's
+        VerifyCertificate and any HttpsTransferCertVerification a manager's
+        security service reports are true; C(disable-verification) is refused.
+    type: bool
+    default: false
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -167,6 +176,7 @@ def main():
             "certificate": {"type": "str", "default": ""},
             "restore_verification": {"type": "bool", "default": False},
             "remove_certificate": {"type": "bool", "default": False},
+            "private_delivery": {"type": "bool", "default": False},
         },
         supports_check_mode=False,
     )
@@ -179,7 +189,7 @@ def main():
         changed, power, media = drive(
             client, operation, attempts, params["image"] or "", params["target"], trust=params["trust"],
             certificate=params["certificate"] or "", restore_verification=bool(params["restore_verification"]),
-            remove_certificate=bool(params["remove_certificate"]))
+            remove_certificate=bool(params["remove_certificate"]), private_delivery=bool(params["private_delivery"]))
     except redfish_control.ControllerError as failure:
         module.fail_json(msg="the management controller did not complete %s: %s" % (operation, failure))
     else:
@@ -187,7 +197,7 @@ def main():
 
 
 def drive(client, operation, attempts, image="", target="Cd", trust=redfish_control.TRUST_ESTABLISHED,
-          certificate="", restore_verification=False, remove_certificate=False):
+          certificate="", restore_verification=False, remove_certificate=False, private_delivery=False):
     """Perform exactly the one operation asked for, prove it, and report it.
 
     Returns whether it changed anything, the power state the invocation's last
@@ -196,7 +206,8 @@ def drive(client, operation, attempts, image="", target="Cd", trust=redfish_cont
     report no image. Anything else is refused before a request is made: this
     module drives, and a read goes through redfish_system_read. An insert
     carries the virtual-media trust and an eject what it settles; by default
-    neither asks the controller for anything more.
+    neither asks the controller for anything more. An insert carrying private
+    material is never made under disable-verification.
     """
     if operation not in DRIVES:
         raise redfish_control.ControllerError("%s is not an operation this module drives" % operation)
@@ -204,6 +215,8 @@ def drive(client, operation, attempts, image="", target="Cd", trust=redfish_cont
         raise redfish_control.ControllerError("insert needs an image")
     if operation == "insert" and trust == redfish_control.TRUST_IMPORT and not certificate:
         raise redfish_control.ControllerError("insert under import-certificate needs the server's certificate")
+    if operation == "insert" and private_delivery and trust == redfish_control.TRUST_DISABLED:
+        raise redfish_control.ControllerError("an insert carrying private material refuses disable-verification")
     if operation == "eject" and remove_certificate and not certificate:
         raise redfish_control.ControllerError("an eject removing a certificate needs that certificate")
     if operation == "boot":
@@ -217,7 +230,7 @@ def drive(client, operation, attempts, image="", target="Cd", trust=redfish_cont
         return client.power(kind, expected, attempts), client.last_power, ""
     power = client.power_state()
     if operation == "insert":
-        changed = client.insert(image, trust, certificate)
+        changed = client.insert(image, trust, certificate, private=private_delivery)
     else:
         changed = client.eject(restore_verification, remove_certificate, certificate)
     return changed, power, client.last_image

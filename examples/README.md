@@ -37,12 +37,12 @@ and the cluster that installs onto it. Its README walks the journey.
 
 [`lab-baremetal/`](lab-baremetal/) is the physical counterpart of `lab-rhel`:
 one operator-owned server that RHEL is installed on through its own Redfish
-management controller. Physical installation is refused until private host-key
-delivery is repaired ([B73](../specs/milestones/m4.md#b73)), so its README
-[walks what runs today](lab-baremetal/README.md#run-it-today): admission, the
-import into a context and the refusal of `plan` and `apply` before anything is
-registered. It then describes the rehearsal against an emulated controller that
-the repair restores.
+management controller. Its installation publishes the installer image and the
+delivered host key privately and needs a verified controller leg
+([B73](../specs/milestones/m4.md#b73)); its README states the
+[host prerequisites](lab-baremetal/README.md#host-prerequisites) and
+[the run](lab-baremetal/README.md#run-it), proved in-tree only, and the
+rehearsal against an emulated controller that is not provided yet.
 
 The [operator guide](../docs/operator-guide.md) prepares a host for these lab
 journeys and records their runs in the acceptance ledger.

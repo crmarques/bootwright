@@ -98,16 +98,16 @@ func lineDiff(want, got string) string {
 }
 
 // A physical installation that imports the server's certificate through a
-// controller anchored by its own bundle is refused by selection today, so no
-// selected request reaches that shape. It is pinned from a literal instead,
-// so every key it freezes is in a golden the role's argument specification is
-// checked against, and the golden must decode as this build's request.
+// controller anchored by its own bundle publishes its installer image only
+// beneath its private subtree, so it freezes no public image. It is pinned
+// from a literal so every key it freezes is in a golden the role's argument
+// specification is checked against, and the golden must decode as this
+// build's request.
 func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 	request := Request{
 		Address: "198.51.100.41/24", BootMedia: Media{Name: bootImageName, SHA256: bootDigest, Size: 1105199104}, Budgets: installationBudgets,
 		FleetKeyRef: "bootwright-machine-key", HostKeyPath: HostKeyPath, Hostname: "metal-01.lab.example.test",
 		Identity:   Identity{Block: BlockID("metal-01"), Context: testContext, Object: "metal-01", Profile: "rhel-9-8"},
-		Image:      Publication{Path: "/srv/public/os/metal-01/install.iso", URL: "https://artifacts.lab.example.test/public/os/metal-01/install.iso"},
 		Kickstart:  "text\n",
 		MarkerPath: MarkerPath,
 		Placement:  machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
@@ -120,7 +120,7 @@ func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 				VirtualMedia: VirtualMedia{RemoveCertificate: true, Trust: substrate.TrustImportCertificate},
 			},
 			Hardware:   &Hardware{Interfaces: []Interface{{MACAddress: "52:54:00:9a:1b:01", Name: "enp1s0"}}, RootDevice: "/dev/sda"},
-			HostKeyRef: "metal-01-host-key", Physical: true, Substrate: substrate.ArmBaremetal,
+			HostKeyRef: "metal-01-host-key", HostKeyType: "ed25519", Physical: true, Substrate: substrate.ArmBaremetal,
 		},
 		TLSCertificateRef: "lab-artifacts-tls",
 		User:              installUser,

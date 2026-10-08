@@ -53,9 +53,12 @@ func PublicPath(catalog api.Catalog, server api.Object, selection api.Value, con
 }
 
 // PrivatePath is the subtree a consumer owns for material only one machine may
-// read, and the certificate that machine verifies the fetch against. The
-// unguessable final segment is not here: the attempt that publishes mints it,
-// so the plan, the evidence and every log name only the parent.
+// read, and the certificate that machine verifies the fetch against. It may
+// also carry that machine's own image, when the image names the private URL.
+// The unguessable final segment is not here: the attempt that publishes mints
+// it, so the plan, the evidence and every log name only the parent. A consumer
+// that hands this URL to a remote fetcher sends it only over a verified
+// channel.
 func PrivatePath(catalog api.Catalog, server api.Object, selection api.Value, contextName, consumer, object, identity string) (Publication, string, error) {
 	base, err := EndpointURL(catalog, server, selection.Get("endpointRef").Text(), identity)
 	if err != nil {

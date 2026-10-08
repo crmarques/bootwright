@@ -379,9 +379,12 @@ Secret. The request names the token, so neither it nor the response reaches
 output; only that cause does, with the token redacted. The proof precedes
 anything that lets a later attempt treat the publication as complete.
 
-Not yet met: the physical installation's host-key publication carries no such
-proof, and its refusal before registration leaves that publication unreachable;
-tracked as [B73](milestones/m4.md#b73).
+The physical installation proves its `install.iso`, `identity` and
+`identity.pub` this way, each before any media is inserted.
+
+A consumer that hands its private URL to a remote fetcher, such as a
+management controller it asks to fetch an image, sends it only over a
+verified channel, because whoever reads that channel holds the token.
 
 Published material is removed as soon as the work that needed it completes,
 and its absence is part of that block's completion evidence, because material
@@ -392,7 +395,8 @@ is needed for as long as its own block is retained.
 
 Two consumers use it. A [physical installation](managed-os.md#physical-installation)
 delivers the host key its machine will present, which is material Bootwright
-generated and which does not outlive the boot that installs it. A
+generated, and the installer image whose Kickstart names where that key is
+fetched; neither outlives the boot that installs it. A
 [container cluster](container-clusters.md#boot-media) publishes its agent boot
 image, which embeds the operator's own pull secret in its ignition and is
 retained while the cluster's media block is, because a node may be booted from

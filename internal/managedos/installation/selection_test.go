@@ -8,6 +8,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -259,7 +260,8 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 // A Machine whose installation delivers private material cannot let its
 // controller fetch the installer without verifying the server, so the
 // per-Machine exception refuses before registration, ahead of the refusal of
-// its delivered host key, and Unsupported agrees with the request builder.
+// an unverified controller leg, and Unsupported agrees with the request
+// builder.
 func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
 	metal := server(api.MapValue(text("deviceName", "/dev/sda")))
 	metal = metal.WithSpec(metal.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
@@ -286,21 +288,28 @@ func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
 // always publishes privately, so the rule is proved on its own statement.
 func TestImportCertificateNeedsAnHttpsImageAndItsCertificate(t *testing.T) {
 	machine := server(api.MapValue(text("deviceName", "/dev/sda")))
-	importing := Request{
-		Image:             Publication{URL: "https://artifacts.lab.example.test/public/os/metal-01/install.iso"},
-		Target:            Target{Controller: Controller{VirtualMedia: VirtualMedia{Trust: substrate.TrustImportCertificate}}},
-		TLSCertificateRef: "lab-artifacts-tls",
+	importing := func(url string) Request {
+		return Request{
+			Private:           &Publication{URL: url},
+			Target:            Target{Controller: Controller{VirtualMedia: VirtualMedia{Trust: substrate.TrustImportCertificate}}},
+			TLSCertificateRef: "lab-artifacts-tls",
+		}
 	}
-	if err := mediaTrustRefusal(machine, importing); err != nil {
+	if err := mediaTrustRefusal(machine, importing("https://artifacts.lab.example.test/private/os/metal-01")); err != nil {
 		t.Fatalf("an https image with its certificate refused: %v", err)
 	}
+	public := importing("")
+	public.Private, public.Image = nil, &Publication{URL: "https://artifacts.lab.example.test/os/metal-01/install.iso"}
+	if err := mediaTrustRefusal(machine, public); err != nil {
+		t.Fatalf("an https public image with its certificate refused: %v", err)
+	}
 	for name, change := range map[string]func(*Request){
-		"a plain http image":     func(r *Request) { r.Image.URL = "http://artifacts.lab.example.test/public/os/metal-01/install.iso" },
+		"a plain http image":     func(r *Request) { r.Private.URL = "http://artifacts.lab.example.test/private/os/metal-01" },
 		"no server certificate":  func(r *Request) { r.TLSCertificateRef = "" },
-		"neither of them at all": func(r *Request) { r.Image.URL, r.TLSCertificateRef = "http://a.test/i.iso", "" },
+		"neither of them at all": func(r *Request) { r.Private.URL, r.TLSCertificateRef = "http://a.test/p", "" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			request := importing
+			request := importing("https://artifacts.lab.example.test/private/os/metal-01")
 			change(&request)
 			err := mediaTrustRefusal(machine, request)
 			expectRefusal(t, err, "lifecycle.state")
@@ -312,8 +321,8 @@ func TestImportCertificateNeedsAnHttpsImageAndItsCertificate(t *testing.T) {
 		})
 	}
 	for _, trust := range []string{substrate.TrustEstablished, substrate.TrustDisableVerification} {
-		request := importing
-		request.Image.URL, request.TLSCertificateRef = "http://a.test/i.iso", ""
+		request := importing("http://a.test/p")
+		request.TLSCertificateRef = ""
 		request.Target.Controller.VirtualMedia.Trust = trust
 		if err := mediaTrustRefusal(machine, request); err != nil {
 			t.Fatalf("%s needs no certificate to import, yet refused: %v", trust, err)
@@ -321,24 +330,118 @@ func TestImportCertificateNeedsAnHttpsImageAndItsCertificate(t *testing.T) {
 	}
 }
 
-// A physical installation delivers its host key at a tokenized URL the
-// Kickstart names, and the Kickstart is implanted in an installer image served
-// without authentication. Until that delivery is private, every physical
-// installation refuses before registration, even one naming its root device.
+// A delivered-key installation hands its controller the private installer
+// image URL, so a controller reached over plain http, or over https without
+// verifying its certificate, refuses before registration with the one reason
+// and remedy, and Unsupported agrees with the request builder.
+func TestAPrivateInstallationRefusesAnUnverifiedController(t *testing.T) {
+	const reason = "a Machine whose installation delivers private material hands its controller the private installer image URL, " +
+		"so the controller must be reached over https with its certificate verified"
+	const remedy = "address the controller of Machine/metal-01 with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out " +
+		"on Machine/metal-01 or in spec.baremetal.defaults.bmc of InfraProvider/lab-metal; " +
+		"name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it"
+	for name, change := range map[string]func(api.Value) api.Value{
+		"an http controller": func(spec api.Value) api.Value {
+			return spec.WithPath(api.StringValue("http://bmc-01.lab.example.test/redfish/v1/Systems/1"), "hardware", "management", "bmc", "address")
+		},
+		"verification disabled": func(spec api.Value) api.Value {
+			return spec.WithPath(api.BoolValue(false), "hardware", "management", "bmc", "tls", "verify")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			metal := server(api.MapValue(text("deviceName", "/dev/sda")))
+			metal = metal.WithSpec(change(metal.Spec()))
+			catalog := labCatalog(metalProvider(), metal, sshKeySecret(api.MapValue(field("generated", api.MapValue(text("keyType", "ed25519"))))))
+			refusals := Refusals(catalog)
+			if unsupported := lifecycle.Identities(refusals); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
+				t.Fatalf("unsupported = %v", unsupported)
+			}
+			_, _, err := Requests(catalog, "controller", testContext)
+			expectRefusal(t, err, "lifecycle.unsupported")
+			reported := diagnostics.Of(err)[0]
+			if reported.Message != reason || reported.Remediation != remedy {
+				t.Fatalf("refusal = %q / %q", reported.Message, reported.Remediation)
+			}
+		})
+	}
+}
+
+// A delivered key's URL is named by the Kickstart implanted in the installer
+// image, so that image is never derived as a public publication, and an
+// operation an earlier build froze with a public image beside its private
+// publication refuses its apply before anything is published.
 func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) {
-	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))))
-	if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
-		t.Fatalf("unsupported = %v", unsupported)
+	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
+		sshKeySecret(api.MapValue(field("generated", api.MapValue()))))
+	requests, _, err := Requests(catalog, "controller", testContext)
+	if err != nil {
+		t.Fatalf("requests: %v", diagnostics.Of(err))
 	}
-	_, _, err := Requests(catalog, "controller", testContext)
-	expectRefusal(t, err, "lifecycle.unsupported")
-	reported := diagnostics.Of(err)[0]
-	if reported.Message != "a delivered host key would be readable from the publicly served installer image" {
-		t.Fatalf("message = %q", reported.Message)
+	delivered := 0
+	for _, request := range requests {
+		if request.Target.Channel != substrate.ChannelDeliveredKey {
+			continue
+		}
+		delivered++
+		if request.Image != nil || request.Private == nil {
+			t.Fatalf("a delivered-key installation of %s derived a public image: %+v", request.Identity.Object, request.Image)
+		}
+		exposed := request
+		exposed.Image = &Publication{Path: request.Private.Path + "/install.iso", URL: request.Private.URL + "/install.iso"}
+		err := refusedContinuation(testContext, exposed)
+		expectRefusal(t, err, "lifecycle.state")
+		if reported := diagnostics.Of(err)[0]; reported.Message !=
+			"this operation froze an installation of Machine/metal-01 with no single installer image publication, which this executable refuses" {
+			t.Fatalf("message = %q", reported.Message)
+		}
+		if err := refusedContinuation(testContext, request); err != nil {
+			t.Fatalf("the derived request refused: %v", diagnostics.Of(err))
+		}
 	}
-	if !strings.Contains(reported.Remediation, "Machine/metal-01") ||
-		!strings.Contains(reported.Remediation, "physical managed-OS installation is disabled until private delivery is repaired") {
-		t.Fatalf("remediation = %q", reported.Remediation)
+	if delivered != 1 {
+		t.Fatalf("%d delivered-key installations derived, want 1", delivered)
+	}
+}
+
+// A physical Machine whose controller is reached over verified https derives
+// a request that publishes its installer image only beneath its private
+// subtree: no public image, the private parent and URL, the serving
+// certificate the installer verifies, and the key type it installs.
+func TestAVerifiedPhysicalInstallationDerivesAPrivateRequest(t *testing.T) {
+	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
+		sshKeySecret(api.MapValue(field("generated", api.MapValue(text("keyType", "rsa"))))))
+	if refusals := Refusals(catalog); len(refusals) != 0 {
+		t.Fatalf("refusals = %v", refusals)
+	}
+	requests, requirements, err := Requests(catalog, "controller", testContext)
+	if err != nil {
+		t.Fatalf("requests: %v", diagnostics.Of(err))
+	}
+	var request Request
+	var needs Requirements
+	for index, candidate := range requests {
+		if candidate.Identity.Object == "metal-01" {
+			request, needs = candidate, requirements[index]
+		}
+	}
+	root := "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public"
+	if request.Image != nil {
+		t.Fatalf("a delivered-key installation froze a public image: %+v", request.Image)
+	}
+	if request.Private == nil || request.Private.Path != root+"/private/os/metal-01" || request.Private.URL != "https://192.0.2.1:8443/private/os/metal-01" {
+		t.Fatalf("private = %+v", request.Private)
+	}
+	if request.TLSCertificateRef != "lab-artifacts-tls" || request.Target.HostKeyType != "rsa" || !request.Target.Physical {
+		t.Fatalf("request = %+v", request)
+	}
+	if !slices.Contains(needs.ArtifactServers, "lab-artifacts") || needs.Machine != "metal-01" {
+		t.Fatalf("requirements = %+v", needs)
+	}
+	if keys := request.ReservationKeys(); !slices.Contains(keys, "path:"+root+"/private/os/metal-01") || slices.Contains(keys, "path:") {
+		t.Fatalf("reservation keys = %v", keys)
+	}
+	if !strings.Contains(request.Kickstart, PrivateURLToken) {
+		t.Fatalf("the kickstart names no private URL")
 	}
 }
 
@@ -496,7 +599,7 @@ func TestTheMarkerNamesTheRequestItProves(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v7"} {
+	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v6", "os-install-anaconda-v8"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)
@@ -576,4 +679,61 @@ func TestAProxyWithCredentialsIsAcceptedWithoutRepositories(t *testing.T) {
 	if strings.Contains(request.Kickstart, "proxy") {
 		t.Fatalf("the kickstart names a proxy:\n%s", request.Kickstart)
 	}
+}
+
+// sshKeySecret is a host key Secret of one source, as admission normalizes it.
+func sshKeySecret(source api.Value) api.Object {
+	declared := api.NewObject(api.Secret, "metal-01-host-key", api.Value{}, api.MapValue(
+		text("type", "sshKeyPair"), field("source", source),
+	))
+	normalized, _ := secrets.Normalize(declared, api.Catalog{})
+	return normalized
+}
+
+// The key a physical installation delivers is installed at its own type's
+// path, and only a generated declaration names that type before the material
+// exists: its keyType, or the ed25519 admission defaults it to. A key of any
+// other source refuses, naming the Secret and the Machine that selects it.
+func TestTheDeliveredHostKeyTypeIsItsGeneratedKeyType(t *testing.T) {
+	machine := server(api.MapValue(text("deviceName", "/dev/sda")))
+	for _, row := range []struct {
+		name   string
+		source api.Value
+		want   string
+	}{
+		{"rsa", api.MapValue(field("generated", api.MapValue(text("keyType", "rsa")))), "rsa"},
+		{"ecdsa-p256", api.MapValue(field("generated", api.MapValue(text("keyType", "ecdsa-p256")))), "ecdsa-p256"},
+		{"defaulted", api.MapValue(field("generated", api.MapValue())), "ed25519"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			got, err := hostKeyType(labCatalog(metalProvider(), machine, sshKeySecret(row.source)), machine, "metal-01-host-key")
+			if err != nil || got != row.want {
+				t.Fatalf("host key type = %q (%v), want %q", got, diagnostics.Of(err), row.want)
+			}
+		})
+	}
+
+	_, err := hostKeyType(labCatalog(metalProvider(), machine,
+		sshKeySecret(api.MapValue(field("contextStore", api.MapValue())))), machine, "metal-01-host-key")
+	expectRefusal(t, err, "lifecycle.unsupported")
+	reported := diagnostics.Of(err)[0]
+	if reported.Message != "a physical installation installs its delivered SSH host key at the path of the type its generated declaration names, "+
+		"and Secret/metal-01-host-key declares no generated source" {
+		t.Fatalf("message = %q", reported.Message)
+	}
+	if reported.Remediation != "declare spec.source.generated.keyType on Secret/metal-01-host-key, "+
+		"or name a generated sshKeyPair Secret in spec.os.install.hostKeyRef on Machine/metal-01" {
+		t.Fatalf("remediation = %q", reported.Remediation)
+	}
+
+	_, err = hostKeyType(labCatalog(metalProvider(), machine), machine, "metal-01-host-key")
+	expectRefusal(t, err, "api.reference")
+	if reported := diagnostics.Of(err)[0]; reported.Remediation != "declare Secret/metal-01-host-key or correct spec.os.install.hostKeyRef on Machine/metal-01" {
+		t.Fatalf("remediation = %q", reported.Remediation)
+	}
+
+	token := api.NewObject(api.Secret, "metal-01-host-key", api.Value{}, api.MapValue(
+		text("type", "token"), field("source", api.MapValue(field("generated", api.MapValue(number("bytes", "32")))))))
+	_, err = hostKeyType(labCatalog(metalProvider(), machine, token), machine, "metal-01-host-key")
+	expectRefusal(t, err, "api.value")
 }

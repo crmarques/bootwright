@@ -8,9 +8,11 @@ const maxEvidenceBytes = 64 << 10
 // records what a later consumer needs — the marker digest, the guest's host key
 // and the address it answered on — and nothing secret.
 type Evidence struct {
-	Absent        bool   `json:"absent"`
-	Address       string `json:"address"`
-	HostKey       string `json:"hostKey"`
+	Absent  bool   `json:"absent"`
+	Address string `json:"address"`
+	HostKey string `json:"hostKey"`
+	// Image is the installer image still published, publicly or beneath the
+	// private subtree. A completed private installation has withdrawn it.
 	Image         bool   `json:"image"`
 	Marker        string `json:"marker"`
 	Media         string `json:"media"`
@@ -87,10 +89,15 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	if evidence.Private {
 		return refusal("lifecycle.state", "the installation left material only its machine may read published", "")
 	}
+	// A private installer image names the private URL in its Kickstart, so a
+	// completed private installation has withdrawn it with the key.
+	if request.Private != nil && evidence.Image {
+		return refusal("lifecycle.state", "the installation left its private installer image published", "")
+	}
 	if evidence.Power != "On" {
 		return refusal("lifecycle.state", "the installed machine is not running", "")
 	}
-	if !evidence.Image || (request.Tree != nil && !evidence.Tree) {
+	if (request.Private == nil && !evidence.Image) || (request.Tree != nil && !evidence.Tree) {
 		return refusal("lifecycle.state", "the installation did not publish everything its boot needs", "")
 	}
 	if request.TreeMedia != nil && evidence.TreeIdentity != request.TreeMedia.SHA256 {

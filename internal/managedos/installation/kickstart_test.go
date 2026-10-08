@@ -219,7 +219,7 @@ func physicalInstallation() Installation {
 		ExpectedMACs: []string{"52:54:00:9a:1b:01", "52:54:00:9a:1b:02"},
 		Hostname:     "metal-01.metal.example.test", Interface: "eno1",
 		InterfaceMAC: "52:54:00:9a:1b:01", Keyboard: "us", Language: "en_US.UTF-8",
-		MarkerPath: MarkerPath, HostKeyPath: HostKeyPath, PackageSource: "cdrom",
+		MarkerPath: MarkerPath, HostKeyPath: HostKeyPath, HostKeyType: "ed25519", PackageSource: "cdrom",
 		Physical: true, Prefix: 24, RootDevice: "/dev/sda", Timezone: "UTC", User: "bootwright",
 	}
 }
@@ -343,8 +343,12 @@ curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem --out
 chmod 0600 /etc/ssh/ssh_host_ed25519_key
 chmod 0644 /etc/ssh/ssh_host_ed25519_key.pub
 test -s /etc/ssh/ssh_host_ed25519_key
+test "$(cut -d' ' -f1 /etc/ssh/ssh_host_ed25519_key.pub)" = 'ssh-ed25519'
+test "$(/usr/bin/ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key | cut -d' ' -f1,2)" = "$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)"
+install -d -m 0755 /etc/ssh/sshd_config.d
+printf '%s\n' 'HostKey /etc/ssh/ssh_host_ed25519_key' > /etc/ssh/sshd_config.d/40-bootwright-host-key.conf
+chmod 0600 /etc/ssh/sshd_config.d/40-bootwright-host-key.conf
 /usr/bin/ssh-keygen -A
-/usr/bin/ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key > /dev/null
 shred -u /tmp/bootwright-artifact-ca.pem 2>/dev/null || rm -f /tmp/bootwright-artifact-ca.pem
 install -d -m 0750 /etc/sudoers.d
 printf '%s\n' 'bootwright ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/60-bootwright
@@ -396,6 +400,78 @@ func TestADeliveredKeyIsInstalledBeforeAnyKeyIsGenerated(t *testing.T) {
 			t.Fatalf("a machine with no guest agent renders %q", absent)
 		}
 	}
+}
+
+// deliveredBlock is the exact %post block that installs a delivered key at
+// path and proves it is an algorithm key whose halves match.
+func deliveredBlock(path, algorithm string) string {
+	return `install -d -m 0755 /etc/ssh
+cat > /tmp/bootwright-artifact-ca.pem <<'BOOTWRIGHT_ARTIFACT_CA_EOF'
+@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@
+BOOTWRIGHT_ARTIFACT_CA_EOF
+curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem --output ` + path + ` '@@BOOTWRIGHT_PRIVATE_URL@@/identity'
+curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem --output ` + path + `.pub '@@BOOTWRIGHT_PRIVATE_URL@@/identity.pub'
+chmod 0600 ` + path + `
+chmod 0644 ` + path + `.pub
+test -s ` + path + `
+test "$(cut -d' ' -f1 ` + path + `.pub)" = '` + algorithm + `'
+test "$(/usr/bin/ssh-keygen -y -f ` + path + ` | cut -d' ' -f1,2)" = "$(cut -d' ' -f1,2 ` + path + `.pub)"
+install -d -m 0755 /etc/ssh/sshd_config.d
+printf '%s\n' 'HostKey ` + path + `' > /etc/ssh/sshd_config.d/40-bootwright-host-key.conf
+chmod 0600 /etc/ssh/sshd_config.d/40-bootwright-host-key.conf
+/usr/bin/ssh-keygen -A
+shred -u /tmp/bootwright-artifact-ca.pem 2>/dev/null || rm -f /tmp/bootwright-artifact-ca.pem
+`
+}
+
+// A delivered key is installed at the path sshd reads its own type from, is
+// proved to be that type with matching halves, and is named as the host key
+// sshd presents, so a key a FIPS controller can pin is the key it is shown.
+func TestADeliveredKeyIsInstalledAtItsOwnTypesPath(t *testing.T) {
+	for _, row := range []struct{ keyType, path, algorithm string }{
+		{"ed25519", "/etc/ssh/ssh_host_ed25519_key", "ssh-ed25519"},
+		{"rsa", "/etc/ssh/ssh_host_rsa_key", "ssh-rsa"},
+		{"ecdsa-p256", "/etc/ssh/ssh_host_ecdsa_key", "ecdsa-sha2-nistp256"},
+		{"ecdsa-p384", "/etc/ssh/ssh_host_ecdsa_key", "ecdsa-sha2-nistp384"},
+		{"ecdsa-p521", "/etc/ssh/ssh_host_ecdsa_key", "ecdsa-sha2-nistp521"},
+	} {
+		t.Run(row.keyType, func(t *testing.T) {
+			input := physicalInstallation()
+			input.HostKeyType = row.keyType
+			rendered, err := RenderKickstart(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			marker := "chmod 0444 /etc/bootwright/install-marker.json\n"
+			start := strings.Index(rendered, marker)
+			end := strings.Index(rendered, "install -d -m 0750 /etc/sudoers.d")
+			if start < 0 || end < start {
+				t.Fatalf("the %%post has no delivered-key block:\n%s", rendered)
+			}
+			if block := rendered[start+len(marker) : end]; block != deliveredBlock(row.path, row.algorithm) {
+				t.Fatalf("delivered-key block =\n%s\nwant\n%s", block, deliveredBlock(row.path, row.algorithm))
+			}
+		})
+	}
+}
+
+// A delivered key whose type has no installed path is refused rather than
+// installed where sshd would never read it; a type no Kickstart line can carry
+// is refused by the value guard first.
+func TestADeliveredKeyOfAnUnknownTypeRefuses(t *testing.T) {
+	for _, keyType := range []string{"", "dsa"} {
+		input := physicalInstallation()
+		input.HostKeyType = keyType
+		_, err := RenderKickstart(input)
+		expectRefusal(t, err, "lifecycle.state")
+		if reported := diagnostics.Of(err); !strings.Contains(reported[0].Message, "the delivered SSH host key type "+keyType+" has no installed path") {
+			t.Fatalf("refusal = %q", reported[0].Message)
+		}
+	}
+	input := physicalInstallation()
+	input.HostKeyType = "rsa extra"
+	_, err := RenderKickstart(input)
+	expectRefusal(t, err, "api.value")
 }
 
 // A machine its substrate created renders none of the physical arms, so one

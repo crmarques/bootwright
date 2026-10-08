@@ -19,6 +19,8 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 POWER_STATES = ("", "On", "Off")
 MAX_ADDRESSES = 64
 IDENTITY_LIMIT = 128
+NAME_LIMIT = 64
+MAX_NAMED_FAILURES = 8
 
 
 def bounded(value, limit=128):
@@ -87,22 +89,56 @@ def presence(arguments, request_digest):
     return evidence
 
 
+def _printable(text, limit):
+    """Text with every character that is not printable removed, cut to a bound."""
+    return "".join(character for character in str(text) if character.isprintable())[:limit]
+
+
+def _declared_names(arguments):
+    """Each declared address mapped to its declared NIC name, in declared order."""
+    names = {}
+    for interface in arguments.get("declared") or []:
+        if not isinstance(interface, dict):
+            raise ValueError("declared interface")
+        address = bounded(interface.get("macAddress"), NAME_LIMIT)
+        name = bounded(interface.get("name"), NAME_LIMIT)
+        if address and address not in names:
+            names[address] = name
+    return names
+
+
+def _inventory(failures):
+    shown = [_printable(failure, NAME_LIMIT) for failure in failures[:MAX_NAMED_FAILURES]]
+    more = len(failures) - len(shown)
+    return "a complete hardware inventory (%s%s)" % (
+        "; ".join(shown), (", and %d more" % more) if more > 0 else "")
+
+
+def _missing(missing, names):
+    ordered = [address for address in names if address in missing]
+    ordered += sorted(address for address in missing if address not in names)
+    return [("declared NIC %s (%s)" % (names[address], address)) if names.get(address)
+            else ("declared address %s" % address) for address in ordered]
+
+
 def unproved(evidence, arguments):
     """What a proof still lacks, named so the refusal can say so.
 
-    These are field names and counts, never the values themselves, so naming
-    them is safe in the message the attempt's retained output carries.
+    These are field names, the desired state's own NIC names and addresses, and
+    the positions of members that proved nothing, never a value the controller
+    reported, so naming them is safe in the message the attempt's retained
+    output carries.
     """
     observation = arguments.get("observation") or {}
     names = []
-    if observation.get("failures"):
-        names.append("a complete hardware inventory")
+    failures = observation.get("failures") or []
+    if failures:
+        names.append(_inventory(list(failures)))
     expected = {bounded(address, 32) for address in (arguments.get("expected") or [])}
     if not expected:
         names.append("any declared hardware address")
-    elif not expected.issubset(set(evidence["addresses"])):
-        names.append("%d of %d declared addresses" % (
-            len(expected - set(evidence["addresses"])), len(expected)))
+    else:
+        names.extend(_missing(expected - set(evidence["addresses"]), _declared_names(arguments)))
     if not evidence["power"]:
         names.append("a power state")
     if not evidence["uuid"] and not evidence["serial"]:

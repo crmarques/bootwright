@@ -29,9 +29,8 @@ func compiledEffective(t *testing.T, name string) api.Catalog {
 }
 
 // TestExampleRequestsKeepTheirBytes pins the requests lab-rhel, lab-sno and
-// lab-baremetal derive with controller Machine controller in context lab.
-// lab-baremetal's installation is refused before registration (a delivered
-// host key), so it is not derived here.
+// lab-baremetal derive with controller Machine controller in context lab,
+// lab-baremetal's private installation included.
 func TestExampleRequestsKeepTheirBytes(t *testing.T) {
 	const controllerMachine, contextName = "controller", "lab"
 	derive := func(t *testing.T, name string, err error) {
@@ -68,6 +67,7 @@ func TestExampleRequestsKeepTheirBytes(t *testing.T) {
 			var err error
 			found.BaremetalMachines, err = baremetal.Requests(catalog, controllerMachine, contextName)
 			derive(t, "the bare-metal requests", err)
+			found.Installations = plannedInstallations(t, "lab-baremetal", controllerMachine, contextName)
 			return found
 		},
 	}

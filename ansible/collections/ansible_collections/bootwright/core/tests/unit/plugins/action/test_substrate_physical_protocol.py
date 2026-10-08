@@ -46,8 +46,8 @@ def test_hardware_beyond_the_declaration_still_proves_it():
 # An inventory that could not be read in full proves nothing about which
 # machine this is, so data-loss authorization must never reach past it.
 @pytest.mark.parametrize("observation,reason", [
-    ({"failures": ["member[1] could not be read"]}, "a complete hardware inventory"),
-    ({"addresses": ["aa:bb:cc:dd:ee:01"]}, "1 of 2 declared addresses"),
+    ({"failures": ["member[1] could not be read"]}, "a complete hardware inventory (member[1] could not be read)"),
+    ({"addresses": ["aa:bb:cc:dd:ee:01"]}, "declared address aa:bb:cc:dd:ee:02"),
     ({"power": ""}, "a power state"),
     ({"uuid": "", "serial": ""}, "a system identity"),
 ])
@@ -56,6 +56,42 @@ def test_an_unproved_machine_names_what_is_missing(observation, reason):
     evidence = substrate_physical_protocol.presence(values, DIGEST)
     assert not evidence["postcondition"]
     assert reason in substrate_physical_protocol.unproved(evidence, values)
+
+
+# A NIC the inventory lacks is named as the desired state names it, by its
+# declared name and address, never by anything the controller reported.
+def test_a_missing_declared_nic_is_named_by_its_declared_name():
+    values = arguments(observation={"addresses": ["aa:bb:cc:dd:ee:01"], "uuid": "uuid-reported",
+                                    "serial": "SN-reported"},
+                       declared=[{"name": "eno1", "macAddress": "aa:bb:cc:dd:ee:01"},
+                                 {"name": "eno2", "macAddress": "aa:bb:cc:dd:ee:02"}])
+    evidence = substrate_physical_protocol.presence(values, DIGEST)
+    names = substrate_physical_protocol.unproved(evidence, values)
+    assert names == ["declared NIC eno2 (aa:bb:cc:dd:ee:02)"]
+    assert not any("reported" in name for name in names)
+
+
+# A declared NIC name outside its bound refuses the publication rather than
+# print it.
+def test_a_declared_name_outside_its_bound_is_refused():
+    values = arguments(observation={"addresses": ["aa:bb:cc:dd:ee:01"]},
+                       declared=[{"name": "n" * 65, "macAddress": "aa:bb:cc:dd:ee:02"}])
+    evidence = substrate_physical_protocol.presence(values, DIGEST)
+    with pytest.raises(ValueError):
+        substrate_physical_protocol.unproved(evidence, values)
+
+
+# The inventory failures named are the client's own positional lines, at most
+# eight of them, each cut to 64 printable characters, and a count of the rest.
+def test_the_inventory_failures_named_are_bounded():
+    failures = ["\x1b[31m" + "m" * 80] + ["member[%d] reports no hardware address" % index for index in range(9)]
+    values = arguments(observation={"failures": failures})
+    evidence = substrate_physical_protocol.presence(values, DIGEST)
+    named = substrate_physical_protocol.unproved(evidence, values)[0]
+    assert named.startswith("a complete hardware inventory (") and named.endswith(", and 2 more)")
+    shown = named[len("a complete hardware inventory ("):-len(", and 2 more)")].split("; ")
+    assert shown == ["[31m" + "m" * 60] + ["member[%d] reports no hardware address" % index for index in range(7)]
+    assert all(len(line) <= 64 for line in shown)
 
 
 # A declaration with no address to compare against is never satisfied, because

@@ -53,7 +53,8 @@ spec:
         protocol: redfish
         credentialsRef: lab-bmc-credentials
         tls:
-          verify: false
+          verify: true
+          trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:
             trust: import-certificate
@@ -192,7 +193,8 @@ spec:
       bmc:
         credentialsRef: lab-bmc-credentials
         tls:
-          verify: false
+          verify: true
+          trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:
             trust: import-certificate
@@ -285,6 +287,15 @@ spec:
     generated:
       keyType: ed25519
       comment: bootwright-machine-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-ca
+spec:
+  type: caBundle
+  source:
+    contextStore: {}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret

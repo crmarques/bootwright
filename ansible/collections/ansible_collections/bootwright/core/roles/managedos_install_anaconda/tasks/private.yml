@@ -1,6 +1,7 @@
 ---
 # Material only the installing machine may read, published beneath an
-# unguessable directory this attempt minted. Every directory from the owned
+# unguessable directory this attempt minted: the host key pair here, and the
+# installer image apply.yml publishes into the same directory. Every directory from the owned
 # root down is 0711 and every file 0640 root:root, so nothing is listable, the
 # unguessable segment is the only way to name what it contains, and only root
 # and the serving worker, whose group is root
@@ -45,6 +46,6 @@
       - /usr/bin/chcon
       - --recursive
       - --reference
-      - '{{ bootwright_os_install_request.image.path | dirname | dirname }}'
+      - '{{ managedos_install_anaconda_served_root }}'
       - '{{ managedos_install_anaconda_private_root }}'
   changed_when: true

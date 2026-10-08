@@ -261,6 +261,15 @@ def test_every_ssh_argv_uses_a_generated_configuration_and_keepalives():
             assert options[0] == "UserKnownHostsFile=%s/known_hosts" % work, where
             for required in SSH_OPTIONS:
                 assert required in options, "%s lacks %s" % (where, required)
+            # The pinned key is negotiated under its own type's algorithms, so
+            # a FIPS controller proves an rsa or ecdsa key it pinned.
+            pinned = [option for option in options if option.startswith("HostKeyAlgorithms=")]
+            assert len(pinned) == 1 and "bootwright.core.host_key_algorithms" not in pinned[0], where
+            fact = pinned[0][len("HostKeyAlgorithms={{ "):-len(" }}")]
+            derivations = [earlier for earlier in tasks[:index]
+                           if fact in (earlier.get("ansible.builtin.set_fact") or {})]
+            assert derivations, "%s pins no derived algorithm list" % where
+            assert "| bootwright.core.host_key_algorithms" in derivations[-1]["ansible.builtin.set_fact"][fact], where
             writes = [earlier for earlier in tasks[:index]
                       if (earlier.get(COPY) or {}).get("dest") == configuration]
             assert writes and writes[-1][COPY]["content"] == SSH_CONFIG, where
@@ -313,7 +322,9 @@ def test_the_image_and_tree_are_fetched_through_the_listener_before_the_insert()
     tasks = applied()
     published = index_of(tasks, lambda task: task.get("name") == "Publish the installer image by atomic rename", "publish the image")
     boot = index_of(tasks, lambda task: task.get("name") == "Boot the machine from its own installer image", "boot block")
-    fetches = [index for index, task in enumerate(tasks) if URI in task]
+    # The private files are fetched by their own task, which
+    # test_managedos_install_private.py holds to its rules.
+    fetches = [index for index, task in enumerate(tasks) if URI in task and "private_url" not in task[URI]["url"]]
     urls = [tasks[index][URI]["url"] for index in fetches]
     assert urls == ["{{ bootwright_os_install_request.image.url }}", "{{ bootwright_os_install_request.tree.url ~ '/.treeinfo' }}"]
     for index, certificate, url in zip(fetches, ("imageCertificate", "treeCertificate"), ("image", "tree")):

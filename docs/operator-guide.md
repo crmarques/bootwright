@@ -246,9 +246,9 @@ OpenSSH accepts no Ed25519 key. Declare `remoteMachinesAccessKey` and every SSH
 access `privateKeyRef` with an `sshKeyPair` Secret of `keyType` `rsa`
 (generated at 3072 bits), `ecdsa-p256`, `ecdsa-p384` or `ecdsa-p521`, never the
 default `ed25519` ([generated source](../specs/api/secrets.md#generated-source)).
-A delivered `hostKeyRef`'s type follows the controller's policy only with
-[B73](../specs/milestones/m4.md#b73), and physical installation refuses until
-then anyway.
+A delivered `hostKeyRef` follows the same rule: declare it `rsa` or
+`ecdsa-p256` and the installation installs it at its type's path and pins its
+type.
 
 ### A host an earlier Bootwright build manages
 
@@ -273,7 +273,7 @@ same sockets and the same guest bridge.
 | --- | --- | --- |
 | [lab-rhel](../examples/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, a session through exec and rsh, a restart, a settled replay, a removal refused while the guest runs, a fresh apply and a host restart | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; next, M1's closing run ([D59](../specs/milestones/backlog.md#decisions)) |
 | [lab-sno](../examples/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
-| [lab-baremetal](../examples/lab-baremetal/README.md#run-it-today) | Admission and import of one physical Machine, then the refusal of its installation; the emulated rehearsal once B73 resumes | [B73](../specs/milestones/m4.md#b73) operator gate, blocked |
+| [lab-baremetal](../examples/lab-baremetal/README.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish controller, its installer image and host key published privately; the emulated rehearsal needs an https emulated controller, [B446](../specs/milestones/m4.md#b446) | [B73](../specs/milestones/m4.md#b73) operator gate, not run |
 
 Run each block from the repository root, one line at a time, and keep the
 sequence exactly as run: the ledger records it. After each operation, `status`
@@ -309,8 +309,9 @@ authored access and bound host key, is operator-run too and has no example.
 No real-hardware row has been accepted yet: [B67](../specs/milestones/m3.md#b67)
 and [B78](../specs/milestones/m4.md#b78) name one as exit evidence, and M3 and
 M4 each need one besides their emulated rehearsal (decision D17). Today a physical
-installation refuses until [B73](../specs/milestones/m4.md#b73) resumes, and a
-physical cluster node until [B67](../specs/milestones/m3.md#b67).
+installation is proved in-tree only until [B73](../specs/milestones/m4.md#b73)'s
+rehearsal runs, which waits on [B446](../specs/milestones/m4.md#b446), and a
+physical cluster node refuses until [B67](../specs/milestones/m3.md#b67).
 
 ## Changing the build between runs
 

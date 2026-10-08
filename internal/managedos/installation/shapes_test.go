@@ -257,9 +257,10 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 
 // A physical controller fetches under the trust its Machine declares, so the
 // provider-host rule is the emulated controller's alone: it says nothing about
-// a physical target with a server off its placement, and a virtual Machine
-// whose provider and server share one host off the controller is refused for
-// that placement, not for its fetch.
+// a physical target with a server off its placement, which is refused only
+// for building its image off the controller, and a virtual Machine whose
+// provider and server share one host off the controller is refused for that
+// placement, not for its fetch.
 func TestTheProviderHostRuleDoesNotRefuseAPhysicalTarget(t *testing.T) {
 	sshPlaced := artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2"))
 	metal := server(api.MapValue(text("deviceName", "/dev/sda")))
@@ -274,9 +275,9 @@ func TestTheProviderHostRuleDoesNotRefuseAPhysicalTarget(t *testing.T) {
 		t.Fatalf("the provider-host rule refused a physical target: %q, %q", reason, remediation)
 	}
 	want := []lifecycle.Refusal{{Kind: "Machine", Name: "metal-01",
-		Reason: "a delivered host key would be readable from the publicly served installer image",
-		Remediation: "physical managed-OS installation is disabled until private delivery is repaired; remove Machine/metal-01" +
-			" from the selected Environment or install its operating system outside Bootwright"}}
+		Reason: "a managed-OS installation builds and publishes its installer image on the controller, and ArtifactServer/lab-artifacts is placed on Machine/services",
+		Remediation: "place ArtifactServer/lab-artifacts on the controller Machine, or select a server placed there in " +
+			"spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on MachineInstallProfile/rhel-9-8"}}
 	if refused := Refusals(catalog); !slices.Equal(refused, want) {
 		t.Fatalf("refusals = %+v", refused)
 	}
@@ -332,7 +333,7 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 // tooling list it once named must leave its input, and every frozen plan,
 // unchanged.
 func TestTheContentDigestIsPinned(t *testing.T) {
-	if digest := ContentDigest(); digest != "cb670a606d4ffc541676436d33ecb98ec7f14e6189ccd0ac24c79c9482670d42" {
+	if digest := ContentDigest(); digest != "061b55ae8e72f109a21e114e488ca4412f8de130c8950468270d65d8936e2132" {
 		t.Fatalf("content digest = %s", digest)
 	}
 }

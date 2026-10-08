@@ -90,6 +90,25 @@ def tree_identity(path):
     return value
 
 
+def private_image(root):
+    """Whether a direct child of the private subtree holds a regular install.iso.
+
+    A delivered-key installation publishes its image beneath the unguessable
+    directory its attempt minted, which no request names, so every directory
+    one level down is looked in and nothing deeper.
+    """
+    try:
+        children = os.listdir(root)
+    except OSError:
+        return False
+    for child in children:
+        directory = os.path.join(root, child)
+        image = os.path.join(directory, "install.iso")
+        if os.path.isdir(directory) and not os.path.islink(directory) and os.path.isfile(image) and not os.path.islink(image):
+            return True
+    return False
+
+
 def observe(request, staging, work):
     """Whether each piece of content this installation publishes is present,
     and each remnant of an attempt that did not finish."""
@@ -97,8 +116,11 @@ def observe(request, staging, work):
     private = request.get("private")
     identity = tree_identity(tree["path"]) if tree else ""
     frozen = (request.get("treeMedia") or {}).get("sha256", "")
+    image = request.get("image")
     return {
-        "image": os.path.isfile(request["image"]["path"]),
+        # The installer image is published publicly, or beneath the private
+        # subtree for a delivered-key installation.
+        "image": (bool(image) and os.path.isfile(image["path"])) or (bool(private) and private_image(private["path"])),
         # Material that only needed to exist for one boot must not outlive it,
         # so a subtree still present is unfinished work rather than a state.
         "private": bool(private) and os.path.isdir(private["path"]),

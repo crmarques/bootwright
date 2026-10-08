@@ -262,7 +262,10 @@ provider default of it is refused at
 kind default of it, for a Machine or an InfraProvider, is refused at its
 `$.spec.defaults.<Kind>` path. A managed-OS installation that delivers private
 material refuses it before registration
-([managed OS](../managed-os.md#installation)).
+([managed OS](../managed-os.md#installation)). Under `established` such an
+installation's insert first reads whether the controller verifies the artifact
+server and refuses unless it does
+([identity and power operations](../substrates.md#identity-and-power-operations)).
 
 `os.install.rootDeviceHints` admits only `deviceName`, `hctl`, `model`,
 `vendor`, `serialNumber`, `minSizeGigabytes`, `wwn`, and boolean `rotational`.

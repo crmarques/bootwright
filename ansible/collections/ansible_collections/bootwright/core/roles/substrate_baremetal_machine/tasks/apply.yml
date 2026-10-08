@@ -70,9 +70,10 @@
     status: ok
   no_log: true
 
-# The publication reads no bound material, and its refusal names fields, counts
-# and the controller but never a reported value, so it is not censored: that
-# refusal is what the attempt's retained output tells the operator.
+# The publication reads no bound material, and its refusal names fields, the
+# declared NICs the inventory lacks, the positions of members that proved
+# nothing and the controller, never a reported value, so it is not censored:
+# that refusal is what the attempt's retained output tells the operator.
 - name: Publish bounded machine proof
   bootwright.core.substrate_physical_protocol:
     phase: completed
@@ -81,3 +82,4 @@
     observation: '{{ substrate_baremetal_machine_observed.observation }}'
     endpoint: '{{ bootwright_substrate_physical_request.controller.endpoint }}'
     expected: '{{ substrate_baremetal_machine_expected }}'
+    declared: '{{ bootwright_substrate_physical_request.hardware }}'

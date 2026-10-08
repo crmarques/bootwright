@@ -29,6 +29,14 @@
     mode: '0600'
   changed_when: false
 
+# The connection negotiates only the pinned key's own algorithms, so a client
+# whose policy prefers another type still proves the key it pinned; an rsa key
+# is accepted under its SHA-2 signatures, which a FIPS controller permits.
+- name: Name the algorithms the guest's key is accepted under
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_host_key_algorithms: '{{ managedos_install_anaconda_host_key | bootwright.core.host_key_algorithms }}'
+  changed_when: false
+
 - name: Try the fleet account on that exact key
   ansible.builtin.command:
     argv:
@@ -49,6 +57,8 @@
       - CheckHostIP=no
       - -o
       - StrictHostKeyChecking=yes
+      - -o
+      - 'HostKeyAlgorithms={{ managedos_install_anaconda_host_key_algorithms }}'
       - -o
       - IdentitiesOnly=yes
       - -o

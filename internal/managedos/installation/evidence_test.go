@@ -3,6 +3,8 @@ package installation
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func encode(t *testing.T, evidence Evidence) []byte {
@@ -216,5 +218,43 @@ func TestPresenceRequiresTheTreeTheOperationFroze(t *testing.T) {
 				t.Fatal("a tree extracted from another image was accepted")
 			}
 		})
+	}
+}
+
+// A private installer image names the private URL in its Kickstart, so a
+// completed delivered-key installation has withdrawn it with the key pair:
+// its presence accepts no image and no private material, and refuses either
+// still published. A public installation still needs its image in place.
+func TestPresenceOfAPrivateInstallationRequiresItsImageWithdrawn(t *testing.T) {
+	private := Request{Address: "198.51.100.41", Private: &Publication{Path: "/srv/public/private/os/metal-01"}}
+	withdrawn := Evidence{
+		Address: private.Address, HostKey: "ssh-ed25519 AAAAHOST", Marker: "{}",
+		Postcondition: true, Power: "On", Reachable: true, Request: "digest",
+	}
+	if err := ValidatePresence(encode(t, withdrawn), private, "digest", "{}"); err != nil {
+		t.Fatalf("a private installation that withdrew everything was refused: %v", diagnostics.Of(err))
+	}
+	for name, test := range map[string]struct {
+		change  func(*Evidence)
+		message string
+	}{
+		"its image":    {func(e *Evidence) { e.Image = true }, "the installation left its private installer image published"},
+		"its key pair": {func(e *Evidence) { e.Private = true }, "the installation left material only its machine may read published"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			left := withdrawn
+			test.change(&left)
+			err := ValidatePresence(encode(t, left), private, "digest", "{}")
+			expectRefusal(t, err, "lifecycle.state")
+			if reported := diagnostics.Of(err)[0]; reported.Message != test.message {
+				t.Fatalf("message = %q", reported.Message)
+			}
+		})
+	}
+	public := Request{Address: private.Address, Image: &Publication{Path: "/srv/public/os/rhel-01/install.iso"}}
+	err := ValidatePresence(encode(t, withdrawn), public, "digest", "{}")
+	expectRefusal(t, err, "lifecycle.state")
+	if reported := diagnostics.Of(err)[0]; reported.Message != "the installation did not publish everything its boot needs" {
+		t.Fatalf("message = %q", reported.Message)
 	}
 }

@@ -31,6 +31,14 @@
     mode: '0600'
   changed_when: false
 
+# The connection negotiates only the pinned key's own algorithms, so a client
+# whose policy prefers another type still proves the key it pinned; an rsa key
+# is accepted under its SHA-2 signatures, which a FIPS controller permits.
+- name: Name the algorithms the delivered key is accepted under
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_identity_algorithms: '{{ substrate_baremetal_machine_identity_key | bootwright.core.host_key_algorithms }}'
+  changed_when: false
+
 - name: Read the install marker over that pinned connection
   ansible.builtin.command:
     argv:
@@ -51,6 +59,8 @@
       - CheckHostIP=no
       - -o
       - StrictHostKeyChecking=yes
+      - -o
+      - 'HostKeyAlgorithms={{ substrate_baremetal_machine_identity_algorithms }}'
       - -o
       - IdentitiesOnly=yes
       - -o

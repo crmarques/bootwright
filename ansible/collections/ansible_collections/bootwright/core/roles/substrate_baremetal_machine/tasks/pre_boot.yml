@@ -53,7 +53,13 @@
     fail_msg: >-
       the machine answering at this controller does not report every hardware
       address its declaration requires, or its inventory could not be read in
-      full, so it must not be erased
+      full, so it must not be erased; declared addresses not reported:
+      {{ (((substrate_baremetal_machine_target_expected
+      | difference(substrate_baremetal_machine_target.observation.addresses | default([]))
+      | join(', ')) or 'none') | string | bootwright.core.printable)[:256] }};
+      inventory failures:
+      {{ (((substrate_baremetal_machine_target.observation.failures | default([]) | join('; ')) or 'none')
+      | string | bootwright.core.printable)[:256] }}
     quiet: true
 
 # The Machine's bare-metal block pinned the UUID and serial it proved earlier

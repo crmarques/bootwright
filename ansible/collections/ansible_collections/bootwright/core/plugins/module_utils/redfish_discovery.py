@@ -25,6 +25,9 @@ POWER_ON_ORDER = ("ForceOn", "On", "PushPowerButton")
 TERMINAL_TASK_STATES = ("Completed", "Exception", "Killed", "Cancelled")
 DEFAULT_PORTS = {"http": 80, "https": 443}
 MESSAGE_ID = re.compile(r"[A-Za-z0-9._]+")
+# The manager security-service property that says whether the controller
+# verifies an HTTPS server it fetches media from.
+TRANSFER_VERIFICATION = "HttpsTransferCertVerification"
 
 
 def resolve(base, reference):
@@ -196,10 +199,11 @@ def media_present(member):
 def image_matches(observed, expected):
     """Whether a reported image is the one that was inserted.
 
-    A controller may normalize what it echoes back, most often by dropping a
-    default port, so scheme, host, port and path are compared rather than the
-    text. An absent port is the scheme's default and nothing else: an image
-    served on 8443 is not proved by an echo that names no port.
+    A controller may normalize what it echoes back, so scheme, host without
+    case, path and query are compared rather than the text. The captured iBMC
+    echoes an image without its non-default port, so an echo that names no port
+    leaves the port uncompared; a port the echo names must be the requested
+    one, or the scheme's default when the request names none.
     """
     if not observed:
         return False
@@ -216,9 +220,9 @@ def image_matches(observed, expected):
         return False
     if left.path != right.path or left.query != right.query:
         return False
-    default = DEFAULT_PORTS.get(left.scheme)
-    observed_port, expected_port = (default if port is None else port for port in ports)
-    return observed_port == expected_port
+    if ports[0] is None:
+        return True
+    return ports[0] == (DEFAULT_PORTS.get(right.scheme) if ports[1] is None else ports[1])
 
 
 def transfer_protocol(image):
@@ -269,11 +273,15 @@ def message_id(body):
 
     It is taken from a task's first message or an error body's first extended
     information entry, and kept only when it is a bounded identifier, so what
-    a controller writes there never reaches a failure line as free text.
+    a controller writes there never reaches a failure line as free text. A
+    task whose Messages is one object, as the captured iBMC reports, is read as
+    a list of that one entry.
     """
     entries = []
     if isinstance(body, dict):
         entries = body.get("Messages")
+        if isinstance(entries, dict):
+            entries = [entries]
         error = body.get("error")
         if not isinstance(entries, list) and isinstance(error, dict):
             entries = error.get("@Message.ExtendedInfo")
@@ -282,6 +290,33 @@ def message_id(body):
     if isinstance(value, str) and MESSAGE_ID.fullmatch(value):
         return value[:64]
     return ""
+
+
+def security_service(manager):
+    """The security service a manager links, or the empty string.
+
+    The standard top-level link wins. A manager that links it only under its
+    vendor's `Oem` section, as the captured iBMC does with a null top-level
+    property, is read there without naming the vendor, vendors in name order.
+    """
+    if not isinstance(manager, dict):
+        return ""
+    found = _link(manager.get("SecurityService"))
+    if found:
+        return found
+    oem = manager.get("Oem")
+    if isinstance(oem, dict):
+        for vendor, value in sorted(oem.items()):
+            if isinstance(vendor, str) and isinstance(value, dict):
+                found = _link(value.get("SecurityService"))
+                if found:
+                    return found
+    return ""
+
+
+def _link(value):
+    reference = value.get("@odata.id") if isinstance(value, dict) else None
+    return reference if isinstance(reference, str) and reference else ""
 
 
 def boot_selected(system, target):

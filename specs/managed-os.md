@@ -149,7 +149,7 @@ accepted then. Every refusal names the Machine that selects the installation, wi
 reason and remedy the [refusal table](#refusal-table) states. A Machine whose
 installation delivers private material refuses
 `disable-verification` virtual-media trust before registration, ahead of its
-[delivered-key refusal](#physical-installation), because a controller that
+[unverified-controller refusal](#physical-installation), because a controller that
 fetches the installer without verifying the artifact server boots whatever
 image answers, and that installer is what receives the private material; its
 remedy is `import-certificate`, or `established` when the controller already
@@ -173,9 +173,10 @@ address on one ethernet interface, its default route and the selected name
 servers; a Machine declaring a network the line cannot carry refuses before
 registration, as the [derived installation](#installation) states. Publicly
 served content remains secret-free by construction; the one thing an installation
-may deliver confidentially is the host key it installs, through the
-[private path](#physical-installation) below, and every other secret-bearing
-arm stays refused until it is separately specified.
+may deliver confidentially is the host key it installs, and the installer image
+of a delivered-key Machine, whose Kickstart names the key's private URL, both
+travel only through the [private path](#physical-installation) below; every
+other secret-bearing arm stays refused until it is separately specified.
 
 The Environment's
 [rescue declaration](api/environment.md#lifecycle-rescue-declaration) is
@@ -269,16 +270,33 @@ sshd's key directory, so the `%post` both permits those reads and republishes
 the key, and proves each edit took rather than leaving a guest that installs
 and can never prove it. Generating the host keys during installation rather
 than at first boot is what makes the republished copy the key sshd will
-present. For a delivered key it installs the bound key pair as sshd's own
-before any key is generated, so the generation step adds only the types it did
-not receive and the machine presents exactly the key the plan froze.
+present. For a delivered key it installs the bound key pair at its declared
+type's path (`/etc/ssh/ssh_host_ed25519_key`, `/etc/ssh/ssh_host_rsa_key` or
+`/etc/ssh/ssh_host_ecdsa_key`), proves that the public half names that type
+and that the private half derives it, and names the key as sshd's host key in
+the drop-in `/etc/ssh/sshd_config.d/40-bootwright-host-key.conf`, all before
+any key is generated; the generation step then adds only the types it did not
+receive, and the machine presents exactly the key the plan froze. The type is
+the `spec.source.generated.keyType` of the Secret `spec.os.install.hostKeyRef`
+names, frozen in the request: a `hostKeyRef` Secret with no generated source
+refuses before registration, and an apply whose bound key is of another type
+than the frozen one refuses before any effect. Every SSH connection the
+installation makes to the machine pins `HostKeyAlgorithms` to the pinned key's
+type, an `ssh-rsa` key as `rsa-sha2-512,rsa-sha2-256`, so a controller under
+the FIPS crypto policy proves an rsa or ecdsa-p256 key.
 
 **Publication.** The block publishes beneath the selected artifact server's
 served root under the
 [consumer publication contract](infrastructure-services.md#consumer-publication):
-the per-Machine installer image at `os/<machine>/install.iso`, built by
-`mkksiso` from the frozen boot media with the derived Kickstart implanted and
-the media check removed from every boot entry; and, for `hostedTree`, the DVD's
+the per-Machine installer image, built by `mkksiso` from the frozen boot media
+with the derived Kickstart implanted and the media check removed from every
+boot entry, at `os/<machine>/install.iso` for a Machine proved through its
+guest agent, and for a delivered-key Machine at
+`private/os/<machine>/<token>/install.iso`, beside `identity` and
+`identity.pub`, mode 0640 owned by root:root and labelled as the served root,
+under the [private publication](#physical-installation) below. An apply first
+clears whatever an earlier attempt left beneath `private/os/<machine>/`, whose
+token it does not know; and, for `hostedTree`, the DVD's
 complete tree at `os/<profile>/tree/`, copied once from the frozen image with
 its `.treeinfo` and repositories intact, and published by atomic rename so a
 fetching installer never sees a partial tree. The tree carries
@@ -311,7 +329,10 @@ of the tree's `.treeinfo` when it hosts one, through the listener the
 consumer uses: with a `Range` request, through no proxy, following no
 redirect, and verifying an `https` listener against the serving certificate
 bound to the operation. A fetch answered with neither 200 nor 206 refuses,
-naming the URL and the status, and no machine is given media. The proof runs at that moment rather than at planning time, because a plan
+naming the URL and the status, and no machine is given media. A delivered-key
+Machine's image, `identity` and `identity.pub` are fetched the same way at
+their tokenized URLs, hidden, and a refusal names the file and its cause with
+the token replaced by `<token>`, never the URL. The proof runs at that moment rather than at planning time, because a plan
 proves intent and only an observation taken before the effect proves the
 target. It fails closed, and no authorization relaxes it: `data-loss`
 acknowledges that an installation destroys data and never selects what to
@@ -343,8 +364,8 @@ bounded by a [deadline](architecture.md#the-adapter-result-protocol) derived
 from the budgets it froze: their pauses back to back, one hour for the rest of
 the media work and each read's own time, and the
 [bound](substrates.md#identity-and-power-operations) of every call an apply
-makes to the machine's controller, 1 hour 1 minute 20 seconds, which is 4 hours
-6 minutes 20 seconds for these budgets and within the runner's ceiling. Those
+makes to the machine's controller, 1 hour 4 minutes 20 seconds, which is 4 hours
+9 minutes 20 seconds for these budgets and within the runner's ceiling. Those
 calls are the pre-boot power read, the insert, the power-off, boot selection
 and power-on that boot the installer, the eject, disk selection and power-on
 that boot the installed system, and the eject the verification repeats. A
@@ -387,7 +408,7 @@ realization to be destroyed and applied again. A powered-off Machine with no
 marker installs.
 
 **Inverse.** Destroy removes the published image, the private subtree when one was
-published, the work area, and, when no other block of the same operation still
+published, with a delivered-key Machine's image inside it, the work area, and, when no other block of the same operation still
 needs it, the published package tree with the staging tree beside it, then
 proves each absent. It withdraws the tree's `.treeinfo` before the rest of the
 tree, so a removal stopped part way never leaves the marker over a partial
@@ -412,7 +433,10 @@ and no published content is positive no effect, which is what an apply stopped
 before it published anything leaves; and this operation's own
 unfinished work is a positive partial realization the next attempt converges,
 which is either content it published on a powered-off guest that never
-installed, or the frozen marker with the completion not yet true. Anything else
+installed, or the frozen marker with the completion not yet true. A
+delivered-key completion has nothing published beneath its private subtree,
+neither the key pair nor the image; that subtree left on a powered-off guest
+that never installed is its partial. Anything else
 stays unknown, including a guest answering with another marker and a powered-on
 guest with none, because the first belongs to another installation and the
 second may be running the installer now. A removal's resolution observes only
@@ -440,16 +464,20 @@ attempt becomes unknown and is resolved from the marker.
 
 ### Physical installation
 
-An installation whose delivered host key would be readable from publicly
-served content refuses before registration, naming its Machine. An operation
-that froze such a target or a private publication refuses its apply at
-execution, naming the Machine and directing the operator to destroy the
-operation and plan again, while its destroy and observation still run.
+An installation that delivers private material hands its management
+controller the tokenized URL of the private installer image, so it refuses
+before registration, naming its Machine, unless its controller is addressed
+over `https` with its certificate verified: `tls.verify` not opted out, and a
+`tls.trustBundleRef` naming the authority when the system trust store does not
+hold it. An operation that froze an installation with no single installer
+image publication, or a private publication over an unverified controller
+leg, refuses its apply at execution, naming the Machine and directing the
+operator to destroy the operation and plan again, while its destroy and
+observation still run.
 
-Not yet met: private delivery, because the Kickstart that names the tokenized
-key URL is implanted in the unauthenticated `os/<machine>/install.iso`, so
-every physical installation refuses; tracked as
-[B73](milestones/m4.md#b73).
+This arm is proved in-tree only. The emulated rehearsal, B73's operator gate,
+and an installation on real hardware ([B78](milestones/m4.md#b78)) have not
+run, so no firmware is claimed supported.
 
 Installing a physical server differs from installing a virtual one in three
 ways, each following from the machine existing before Bootwright and outliving
@@ -488,19 +516,28 @@ completion is proved against a key that was known in advance. Nothing is
 trusted on first sight.
 
 **Private publication.** The Kickstart cannot carry the private half of that key,
-because the installer image is served to a controller over a network and is
-secret-free by construction. The block therefore publishes the key pair beneath
-the artifact server's served root under the
+and an installer image that carries a Kickstart naming where it is fetched
+from cannot be served publicly. The block therefore publishes the key pair
+and the installer image beneath the artifact server's served root under the
 [private consumer publication contract](infrastructure-services.md#private-consumer-publication),
 at a path whose final segment is an unguessable token minted by the attempt
-rather than frozen in the plan, and the Kickstart fetches it once, verifying
-the artifact server's certificate against the bound public certificate rather
-than disabling verification. The private subtree is removed when the installation
-completes, when an observation finds it orphaned, and by the inverse, and its
-absence is part of completion evidence: material that only needed to exist for
-one boot does not outlive it. The token never appears in the plan, the
-evidence, the progress output or any log, so the path is reconstructible only
-by the attempt that minted it.
+rather than frozen in the plan, and the Kickstart fetches the key once,
+verifying the artifact server's certificate against the bound public
+certificate rather than disabling verification. The controller's insert
+carries the token URL, so the controller-to-BMC leg is `https` and verified,
+and the BMC-to-artifact leg refuses `disable-verification`. The first byte of
+the image, `identity` and `identity.pub` is fetched through the listener before
+the insert, with the token redacted from any refusal, so a key the installer
+could not fetch fails before the disk is cleared. The private subtree is
+withdrawn when the installation completes, before the completion inspection,
+and by the inverse, and its absence is part of completion evidence: material
+that only needed to exist for one boot does not outlive it. An attempt that
+fails leaves the subtree until the next apply clears it or a destroy removes
+it, and an observation reports it as unfinished work. The token never appears
+in the plan, the evidence, the progress output or any log, so the path is
+reconstructible only by the attempt that minted it; a media URL the controller
+reports is redacted before it reaches evidence, because a controller can echo
+it with its host or port rewritten.
 
 This is the private path the rest of this contract was shaped to admit. The
 profile arms that carry secret bytes remain refused, and promoting one is now a
@@ -536,7 +573,7 @@ is not `absent`, other than the line's own default route, in declared order.
 | A physical Machine naming no root device | no `spec.os.install.rootDeviceHints.deviceName` on a Machine on a `baremetal` provider, a `wwn` alone included | `a physical installation erases only a root device named by path, and the Machine names none` | `set spec.os.install.rootDeviceHints.deviceName on <machine>; a wwn-only selection is not yet supported` |
 | A root-device hint other than deviceName | any `spec.os.install.rootDeviceHints` field but `deviceName` | `a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
 | An unverified fetch of private material | `spec.hardware.management.bmc.virtualMedia.tls.trust: disable-verification` on a Machine whose installation delivers private material | `a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server` | `declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on <machine>, or established when its controller already trusts the server` |
-| A delivered host key | a Machine on a `baremetal` provider, whose installation delivers its host key | `a delivered host key would be readable from the publicly served installer image` | `physical managed-OS installation is disabled until private delivery is repaired; remove <machine> from the selected Environment or install its operating system outside Bootwright` |
+| An unverified controller leg for private delivery | a Machine whose installation delivers private material, with a non-https `spec.hardware.management.bmc.address` or `tls.verify: false` | `a Machine whose installation delivers private material hands its controller the private installer image URL, so the controller must be reached over https with its certificate verified` | `address the controller of <machine> with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out on <machine> or in spec.baremetal.defaults.bmc of <provider>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
 | A DHCP-only install | an effective `spec.network.installAddressRef` naming no `spec.network.addresses` entry with an `interface` and an IPv4 address with its prefix; admission refuses it first, so no validated graph reaches this row | `a managed-OS installation configures one static IPv4 install address, and the Machine selects none; DHCP installation is not supported` | `assign an IPv4 address with its prefix to the install interface in spec.network.addresses of <machine> and select it with spec.network.installAddressRef` |
 | A non-ethernet install interface | the install address's `interface` composed with a `type` other than `ethernet`, such as `vlan` or `bond`, on any substrate | `a managed-OS installation configures its install interface as one ethernet device and cannot carry a bonded, VLAN or other logical install interface` | `assign the install address of <machine> to an ethernet interface; a bonded or VLAN install interface is not yet supported` |
 | Network content the Kickstart cannot carry | another interface-assigned address, another available interface that is not `ethernet`, an `mtu` other than 1500 or a route other than the install line's default route, in the composed network | `a managed-OS installation configures only the install address, its default route and the selected name servers, and cannot carry the other network content the Machine declares` | `remove <network> from the network of <machine>, or install its operating system outside Bootwright` |

@@ -47,8 +47,22 @@ def bounded(value, limit):
     return value
 
 
+def flag(value):
+    """A boolean argument, whether templating kept its type or rendered it."""
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in ("true", "yes", "1")
+
+
 def presence(arguments, request_digest):
+    """The evidence a completion proves.
+
+    A private installation's image names the private URL in its Kickstart, so
+    its completion has withdrawn the image with the key pair and proves
+    neither published; a public installation's image stays in place.
+    """
     observation = arguments.get("observation") or {}
+    private_delivery = flag(arguments.get("privateDelivery"))
     power = arguments.get("power")
     if power not in POWER_STATES:
         raise ValueError("power state")
@@ -72,7 +86,8 @@ def presence(arguments, request_digest):
     }
     evidence["postcondition"] = bool(
         evidence["marker"] and evidence["hostKey"] and evidence["address"]
-        and not evidence["media"] and evidence["power"] == "On" and evidence["image"]
+        and not evidence["media"] and evidence["power"] == "On"
+        and ((not evidence["image"]) if private_delivery else evidence["image"])
         and not evidence["private"] and evidence["reachable"]
     )
     return evidence
@@ -88,7 +103,7 @@ def remaining(arguments):
     return [name for name in CONTENT if observation.get(name)]
 
 
-def unproved(evidence):
+def unproved(evidence, private_delivery=False):
     """What a completion proof still lacks, named for the same reason."""
     names = [name for name in ("marker", "hostKey", "address") if not evidence[name]]
     if evidence["media"]:
@@ -97,7 +112,9 @@ def unproved(evidence):
         names.append("private material still published")
     if evidence["power"] != "On":
         names.append("power")
-    if not evidence["image"]:
+    if private_delivery and evidence["image"]:
+        names.append("private installer image still published")
+    if not private_delivery and not evidence["image"]:
         names.append("image")
     if not evidence["reachable"]:
         names.append("reachable")
@@ -135,7 +152,7 @@ def completion(arguments):
         unmet, verb = remaining(arguments), "still present"
     else:
         evidence = presence(arguments, request_digest)
-        unmet, verb = unproved(evidence), "not proved"
+        unmet, verb = unproved(evidence, flag(arguments.get("privateDelivery"))), "not proved"
     if publishes(evidence, arguments.get("observed")):
         return evidence, None
     return evidence, unreached("the installation", verb, unmet)

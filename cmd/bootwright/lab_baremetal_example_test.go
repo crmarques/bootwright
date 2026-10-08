@@ -12,7 +12,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -24,7 +23,7 @@ func baremetalPlanBlocks(t *testing.T, verb reconciliation.Verb) []reconciliatio
 	return blocks
 }
 
-const baremetalExampleFiles = 14
+const baremetalExampleFiles = 15
 
 func baremetalInput(t *testing.T, verb reconciliation.Verb) lifecycle.PlanInput {
 	t.Helper()
@@ -34,12 +33,6 @@ func baremetalInput(t *testing.T, verb reconciliation.Verb) lifecycle.PlanInput 
 	}
 }
 
-// isInstallation reports the managed-OS installation binding, which refuses
-// this example before registration; every other capability still plans it.
-func isInstallation(binding lifecycle.CapabilityBinding) bool {
-	return binding.Kind == installation.Kind && binding.Implementation == installation.Implementation
-}
-
 func baremetalPlan(t *testing.T, verb reconciliation.Verb) ([]reconciliation.BlockDefinition, []prerequisites.HostReservation) {
 	t.Helper()
 	input := baremetalInput(t, verb)
@@ -47,9 +40,6 @@ func baremetalPlan(t *testing.T, verb reconciliation.Verb) ([]reconciliation.Blo
 	var definitions []reconciliation.BlockDefinition
 	var claims []prerequisites.HostReservation
 	for _, binding := range resolver.Bindings() {
-		if isInstallation(binding) {
-			continue
-		}
 		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
 		if !ok {
 			t.Fatalf("%s/%s does not resolve", binding.Kind, binding.Implementation)
@@ -76,49 +66,9 @@ func machineBlocks(blocks []reconciliation.BlockDefinition) []reconciliation.Blo
 	return found
 }
 
-// The example's one Machine proves completion through a host key its
-// installation delivers, and that key would be readable from the publicly
-// served installer image. The installation therefore refuses before
-// registration, naming the Machine, so an apply of this example registers
-// nothing.
-func TestLabBaremetalExampleRefusesItsInstallation(t *testing.T) {
-	sources := exampleDirectory(t, "lab-baremetal")
-	if len(sources.Files) != baremetalExampleFiles {
-		t.Fatalf("example discovery: got %d files, want %d", len(sources.Files), baremetalExampleFiles)
-	}
-	input := baremetalInput(t, reconciliation.Apply)
-	capability, ok := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}).Resolve(installation.Kind, installation.Implementation)
-	if !ok {
-		t.Fatal("the installation capability does not resolve")
-	}
-	reporter, ok := capability.(lifecycle.UnsupportedReporter)
-	if !ok {
-		t.Fatal("the installation capability reports nothing it cannot realize")
-	}
-	unsupported := reporter.Unsupported(input.State)
-	if !slices.Equal(lifecycle.Identities(unsupported), []string{"Machine/metal-01"}) {
-		t.Fatalf("unsupported = %+v", unsupported)
-	}
-	_, err := capability.Plan(context.Background(), input)
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" ||
-		reported[0].Message != "a delivered host key would be readable from the publicly served installer image" {
-		t.Fatalf("refusal = %#v", reported)
-	}
-	if !strings.Contains(reported[0].Remediation, "Machine/metal-01") ||
-		!strings.Contains(reported[0].Remediation, "physical managed-OS installation is disabled until private delivery is repaired") {
-		t.Fatalf("remediation = %q", reported[0].Remediation)
-	}
-	// Selection refuses with the reason and remedy the plan would give, so
-	// the operator reads the same refusal before registration.
-	if unsupported[0].Reason != reported[0].Message || unsupported[0].Remediation != reported[0].Remediation {
-		t.Fatalf("selection refused %+v, the plan %+v", unsupported[0], reported[0])
-	}
-}
-
-// Apart from the refused installation, the example is one physical Machine,
-// so it plans exactly the block that claims and proves it and no provider host
-// at all: a bare-metal provider runs nothing Bootwright installs, so its
+// The example is one physical Machine, so it plans exactly the block that
+// claims and proves it and the one that installs it, and no provider host at
+// all: a bare-metal provider runs nothing Bootwright installs, so its
 // substrates stage is empty.
 func TestLabBaremetalExamplePlansTheClaim(t *testing.T) {
 	blocks := machineBlocks(baremetalPlanBlocks(t, reconciliation.Apply))
@@ -126,16 +76,20 @@ func TestLabBaremetalExamplePlansTheClaim(t *testing.T) {
 	for _, block := range blocks {
 		identities = append(identities, block.ID)
 	}
-	if !slices.Equal(identities, []string{"machine-metal-01"}) {
+	if !slices.Equal(identities, []string{"machine-metal-01", "os-install-metal-01"}) {
 		t.Fatalf("blocks = %v", identities)
 	}
 }
 
 // Claiming a physical machine destroys nothing, and its removal takes only the
-// claim back, so neither acknowledges a loss.
+// claim back, so neither acknowledges a loss. The installation's own
+// authorization is TestLabBaremetalExamplePlansItsInstallation's.
 func TestLabBaremetalClaimConsumesNoAuthorization(t *testing.T) {
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
 		for _, block := range machineBlocks(baremetalPlanBlocks(t, verb)) {
+			if !strings.HasPrefix(block.ID, "machine-") {
+				continue
+			}
 			if len(block.Consumes) != 0 {
 				t.Fatalf("%s consumes %v on %s, which retains the machine", block.ID, block.Consumes, verb)
 			}

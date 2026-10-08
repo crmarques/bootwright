@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 type fakeRunner struct {
@@ -490,38 +491,77 @@ func TestOnlyARemovalScopesTheObservationToThePublishedContent(t *testing.T) {
 	}
 }
 
-// An operation registered before a physical installation or a private
-// publication was refused still carries one in its frozen request. Its apply
-// refuses before the adapter boots or publishes anything, naming the Machine,
-// while its destroy and its observation still run, because they install
-// nothing and are how the operator leaves that operation.
+// privateExecution is an apply of a verified physical installation that
+// delivers its host key: its installer image published only beneath its
+// private subtree, its controller reached over verified https, and every
+// Secret part such a run is lent bound.
+func privateExecution(t *testing.T, freeze func(*Request)) (lifecycle.Execution, Request) {
+	t.Helper()
+	call, request := execution(t, "digest")
+	request.Image = nil
+	request.Private = &Publication{Path: "private/os/rhel-01", URL: "https://artifacts.lab.example.test/private/os/rhel-01"}
+	request.Target.Physical, request.Target.Hardware = true, &Hardware{RootDevice: "/dev/sda"}
+	request.Target.Substrate, request.Target.Channel = substrate.ArmBaremetal, substrate.ChannelDeliveredKey
+	request.Target.Controller.Endpoint, request.Target.Controller.TLSVerify = "https://bmc-01.lab.example.test/redfish/v1/Systems/1", true
+	request.Target.HostKeyRef, request.Target.HostKeyType, request.TLSCertificateRef = "rhel-01-host-key", "ed25519", "lab-artifacts-tls"
+	if freeze != nil {
+		freeze(&request)
+	}
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	call.Block.Request, call.Context, call.Proved = canonical, "lab-b", dependencyProof()
+	call.Material["rhel-01-host-key"] = secrets.NewMaterial(map[secrets.Part][]byte{
+		secrets.PrivateKeyPart: []byte("HOST KEY"), secrets.PublicKeyPart: []byte("ssh-ed25519 AAAAHOST\n"),
+	})
+	call.Material["lab-artifacts-tls"] = secrets.NewMaterial(map[secrets.Part][]byte{
+		secrets.CertificatePart: []byte("-----BEGIN CERTIFICATE-----\nSERVING\n-----END CERTIFICATE-----\n"),
+	})
+	return call, request
+}
+
+// A verified physical installation that publishes its installer image only
+// beneath its private subtree reaches the adapter. An operation registered
+// before the controller-leg rule or the single-publication rule still carries
+// what it froze: its apply refuses before the adapter boots or publishes
+// anything, naming the Machine, while its destroy and its observation still
+// run, because they install nothing and are how the operator leaves that
+// operation.
 func TestAFrozenRefusedInstallationRefusesOnlyItsApply(t *testing.T) {
+	call, request := privateExecution(t, nil)
+	marker, _ := MarkerFor(request, "digest")
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: completeEvidence(request, "digest", string(marker))}}
+	if _, err := New(runner).WithIdentities(&pinReader{}).Apply(context.Background(), call); len(runner.requests) != 1 {
+		t.Fatalf("a verified private installation did not reach the adapter: %v", diagnostics.Of(err))
+	}
+	public := &Publication{Path: "/srv/public/os/rhel-01/install.iso", URL: "https://artifacts.lab.example.test/os/rhel-01/install.iso"}
 	for name, test := range map[string]struct {
 		freeze  func(*Request)
 		message string
 	}{
-		"physical target": {
-			func(r *Request) { r.Target.Physical, r.Target.Hardware = true, &Hardware{RootDevice: "/dev/sda"} },
-			"this operation froze a physical installation of Machine/rhel-01, which this executable refuses",
+		"an http controller": {
+			func(r *Request) { r.Target.Controller.Endpoint = "http://bmc-01.lab.example.test/redfish/v1/Systems/1" },
+			"this operation froze a private publication for Machine/rhel-01 whose controller is not reached over a verified connection, which this executable refuses",
 		},
-		"private publication": {
-			func(r *Request) {
-				r.Private = &Publication{Path: "private/os/rhel-01", URL: "https://artifacts.lab.example.test/private/os/rhel-01"}
-			},
-			"this operation froze a private publication for Machine/rhel-01 that the publicly served installer image would expose, which this executable refuses",
+		"an unverified controller": {
+			func(r *Request) { r.Target.Controller.TLSVerify = false },
+			"this operation froze a private publication for Machine/rhel-01 whose controller is not reached over a verified connection, which this executable refuses",
+		},
+		"both publications": {
+			func(r *Request) { r.Image = public },
+			"this operation froze an installation of Machine/rhel-01 with no single installer image publication, which this executable refuses",
+		},
+		"neither publication": {
+			func(r *Request) { r.Private = nil },
+			"this operation froze an installation of Machine/rhel-01 with no single installer image publication, which this executable refuses",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			call, request := execution(t, "digest")
-			test.freeze(&request)
-			canonical, err := request.Canonical()
-			if err != nil {
-				t.Fatal(err)
-			}
-			call.Block.Request, call.Context = canonical, "lab-b"
+			call, request := privateExecution(t, test.freeze)
 			marker, _ := MarkerFor(request, "digest")
 			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: completeEvidence(request, "digest", string(marker))}}
-			result, err := New(runner).Apply(context.Background(), call)
+			result, err := New(runner).WithIdentities(&pinReader{}).Apply(context.Background(), call)
 			if err == nil || result.Outcome != reconciliation.OutcomeFailed {
 				t.Fatalf("an apply of a frozen refused installation = %+v (%v)", result, err)
 			}
@@ -537,16 +577,36 @@ func TestAFrozenRefusedInstallationRefusesOnlyItsApply(t *testing.T) {
 			}
 			absent, _ := json.Marshal(Evidence{Absent: true, Postcondition: true, Request: "digest"})
 			runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: absent}}
-			if _, err := New(runner).Destroy(context.Background(), call); err != nil || len(runner.requests) != 1 {
+			if _, err := New(runner).WithIdentities(&pinReader{}).Destroy(context.Background(), call); err != nil || len(runner.requests) != 1 {
 				t.Fatalf("destroy of a frozen refused installation = %v after %d invocations", err, len(runner.requests))
 			}
 			fresh, _ := json.Marshal(Evidence{Power: "Off", Request: "digest"})
 			runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: fresh}}
-			observation, err := New(runner).Observe(context.Background(), call)
+			observation, err := New(runner).WithIdentities(&pinReader{}).Observe(context.Background(), call)
 			if err != nil || observation.Effect != reconciliation.EffectNoEffect {
 				t.Fatalf("observation of a frozen refused installation = %+v (%v)", observation, err)
 			}
 		})
+	}
+}
+
+// A delivered key installed at the frozen type's path is proved by that type,
+// so an apply whose bound key was regenerated as another type since planning
+// refuses before the adapter is called, rather than after the disk is erased.
+func TestAnApplyRefusesABoundHostKeyOfAnotherType(t *testing.T) {
+	call, request := privateExecution(t, func(r *Request) { r.Target.HostKeyType = "rsa" })
+	marker, _ := MarkerFor(request, "digest")
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: completeEvidence(request, "digest", string(marker))}}
+	result, err := New(runner).WithIdentities(&pinReader{}).Apply(context.Background(), call)
+	if err == nil || result.Outcome != reconciliation.OutcomeFailed {
+		t.Fatalf("an apply of a key of another type = %+v (%v)", result, err)
+	}
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Message != "the bound SSH host key of Secret/rhel-01-host-key is ssh-ed25519, not the rsa key this operation froze" {
+		t.Fatalf("refusal = %#v", reported)
+	}
+	if len(runner.requests) != 0 {
+		t.Fatal("an apply of a key of another type reached the adapter")
 	}
 }
 
@@ -705,4 +765,34 @@ func TestAnHttpsPublicationBindsItsServingCertificate(t *testing.T) {
 	if !slices.Contains(publicationCertificates(secured), treeFile) {
 		t.Fatalf("an https tree bound %+v", publicationCertificates(secured))
 	}
+}
+
+// An apply installs the bound key at the path of the type the operation froze,
+// so a key since regenerated as another type is refused before any effect
+// rather than failing the installation after the machine was erased.
+func TestDeliveredKeyMatchesRefusesAnotherType(t *testing.T) {
+	request := Request{
+		Identity: Identity{Context: testContext, Object: "metal-01"},
+		Target:   Target{Channel: substrate.ChannelDeliveredKey, HostKeyRef: "metal-01-host-key", HostKeyType: "rsa"},
+	}
+	err := deliveredKeyMatches(request, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample metal-01")
+	expectRefusal(t, err, "lifecycle.state")
+	reported := diagnostics.Of(err)[0]
+	if reported.Message != "the bound SSH host key of Secret/metal-01-host-key is ssh-ed25519, not the rsa key this operation froze" {
+		t.Fatalf("message = %q", reported.Message)
+	}
+	if reported.Remediation != "take this context back with bootwright destroy --context lab, then plan and apply it again" {
+		t.Fatalf("remediation = %q", reported.Remediation)
+	}
+	if strings.Contains(reported.Message, "AAAA") {
+		t.Fatal("the refusal echoes the key")
+	}
+	if err := deliveredKeyMatches(request, "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABExample metal-01"); err != nil {
+		t.Fatalf("a matching key refused: %v", diagnostics.Of(err))
+	}
+	request.Target.HostKeyType = "ecdsa-p256"
+	if err := deliveredKeyMatches(request, "ecdsa-sha2-nistp256 AAAAE2VjZHNhExample"); err != nil {
+		t.Fatalf("a matching key refused: %v", diagnostics.Of(err))
+	}
+	expectRefusal(t, deliveredKeyMatches(request, "ecdsa-sha2-nistp384 AAAAE2VjZHNhExample"), "lifecycle.state")
 }

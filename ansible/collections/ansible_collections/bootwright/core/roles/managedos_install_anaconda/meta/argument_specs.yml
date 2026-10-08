@@ -43,7 +43,7 @@ argument_specs:
             required: true
           image:
             type: dict
-            required: true
+            required: false
           kickstart:
             type: str
             required: true
@@ -74,7 +74,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [os-install-anaconda-v6]
+            choices: [os-install-anaconda-v7]
       bootwright_os_install_material:
         type: dict
         required: true

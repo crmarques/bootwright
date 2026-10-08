@@ -142,7 +142,15 @@
     "records": [],
     "result": {
       "failed": true,
-      "msg": "the machine was not proved to be the one this Machine declares; missing: a complete hardware inventory, 1 of 1 declared addresses, a power state"
+      "msg": "the machine was not proved to be the one this Machine declares; missing: a complete hardware inventory (x), declared address aa:bb:cc:dd:ee:02, a power state"
+    }
+  },
+  {
+    "case": "completed unproving declared",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the machine was not proved to be the one this Machine declares; missing: declared NIC eno2 (aa:bb:cc:dd:ee:02)"
     }
   },
   {

@@ -79,7 +79,7 @@ Alias cell.
 | [B331](#b331) | new, 2026-10-05 | product | Controller setup | A FIPS-qualified controller runtime | D108: M1 documents the runtime's own cryptography on a FIPS host |
 | [B332](#b332) | new, 2026-10-05 | product | Machine and Controller | `auth.operatorIdentity` runs under the invoking account | D112: M1 documents what the arm does today; this needs B282's helper |
 | [B333](#b333) | new, 2026-10-05 | enabling | Infrastructure services | A DNSServer binds its endpoint address by default | D114: M1 keeps the wildcard default and names a colliding socket |
-| [B334](#b334) | new, 2026-10-05 | safety | Substrate | The emulated BMC serves TLS, binds loopback and runs confined | D115: M1 binds the examples' emulated BMCs to loopback |
+| [B334](#b334) | new, 2026-10-05; its TLS half split to B446 on 2026-10-07 (D120) | safety | Substrate | The emulated BMC refuses a non-loopback bind address and runs confined | D115: M1 binds the examples' emulated BMCs to loopback; D120 moved the TLS to M4 |
 | [B335](#b335) | new, 2026-10-05 | enabling | Controller setup | An operator-run RHEL 9.8 resolution harness | Optional beside the RHEL 9.8 controller run D60 plans |
 | [B341](#b341) | new, 2026-10-05 (X39) | enabling | State reconciliation | The template-delimiter refusal names the authored field and scopes native content | Found in X39 after D56; parked under D48; the scope needs an owner decision |
 | [B345](#b345) | new, 2026-10-05 (X39) | enabling | Controller, with CLI | A sudoers denial in a human invocation names its remedy | Found in X39 after D56; parked under D48 |
@@ -137,6 +137,9 @@ Alias cell.
 | [B443](#b443) | new, 2026-10-07 (X24) | enabling | Each test's owner | Tests X24 left narrower than they read | Found in X24; parked under D48 (D116) |
 | [B444](#b444) | new, 2026-10-07 (X24) | enabling | Architecture, with each capability's owner | Copies and dead code X24 left | Found in X24; parked under D48 (D116) |
 | [B445](#b445) | new, 2026-10-07 (X24) | enabling | Controller, with Architecture | The cancellation's group-kill order and its knowledge page | Found in X24; parked under D48 (D116); the order is bounded by the drain and was older than X24 |
+| [B450](#b450) | new, 2026-10-08 (X45) | enabling | Infrastructure services | The artifact server serves its private subtree only over https listeners | Found in X45; parked under D48 (D116); defense in depth, since fetching a token in clear needs a plain listener the operator declared, and it moves the automation digest |
+| [B451](#b451) | new, 2026-10-08 (X45) | enabling | Managed OS, Substrate and Infrastructure services | Host observations of what X45 proved only in-tree | Found in X45; parked under D48 (D116); each needs the lab-baremetal rehearsal or real hardware, which B73's gate and the first xFusion observation provide |
+| [B452](#b452) | new, 2026-10-08 (X45) | enabling | Each spec's and test's owner | Wording and tests X45 left narrower than they read | Found in X45; parked under D48 (D116) |
 
 ### B96
 
@@ -474,7 +477,7 @@ A DNSServer's bind address defaults to the wildcard address, which collides with
 
 ### B334
 
-The emulated BMC runs as root, unconfined, with the libvirt socket, and serves plain HTTP with a basic-auth credential; [B301](m1.md#b301) binds the examples' BMCs to loopback. TLS from the emulator with a generated certificate its client verifies, a refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). **Exit evidence:** the emulator's TLS with a verifying client, the refusal and the confined type, each with tests.
+The emulated BMC runs as root, unconfined, with the libvirt socket, and serves plain HTTP with a basic-auth credential; [B301](m1.md#b301) binds the examples' BMCs to loopback. A refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). D120 split the emulator's TLS with a generated certificate its client verifies out as [B446](m4.md#b446), in M4. **Exit evidence:** the refusal and the confined type, each with tests.
 
 ### B335
 
@@ -831,6 +834,64 @@ termination handler and is signaled before a native transaction is authorized
 exit, or the bound stated in the architecture spec, and the knowledge page
 corrected.
 
+### B450
+
+Every listener of a managed artifact server serves the whole served root, so
+the private subtree is also reachable on a plain-HTTP listener: a tokenized URL
+learned once could be fetched in clear (found in X45). Serving `private/` only
+on https listeners is defense in depth for D103 and for the container cluster's
+private agent image, and it changes the nginx template, so the automation
+digest, and the golden. **Exit evidence:** the nginx golden denying the private
+path on an http listener, and a test that a private publication on a server
+with both listeners is fetched only over https.
+
+### B451
+
+X45 proved these only in-tree, each for the first host that runs the
+lab-baremetal rehearsal or the xFusion observation (found in X45): the SELinux
+label of the delivered key files and of the `sshd_config.d` drop-in the
+Kickstart's `%post` writes in the chroot, so that sshd loads the key, and
+whether the drop-in's `HostKey` line limits sshd to the delivered key given the
+`sshd_config` the release ships; whether the installer image and the served
+tree carry the same label now that `chcon` references the served root for the
+public arm too; the iBMC's release time after an `EjectMedia` that answers 202,
+which the client polls for up to 24 times 5 seconds and no capture measures;
+whether the iBMC's virtual-media fetch accepts the generated P-256 serving
+certificate (U-11), read from its ClientHello; the iBMC's `EthernetInterfaces`
+collection and members on a powered-off server; the artifact unit's journal
+volume during a streamed ISO fetch against journald's rate limit, since one line
+is logged per completed range request; and the disk figures and the firewall
+zone opening the lab-baremetal README gives, written as the brief stated them.
+The device's `VerifyCertificate` is [B447](m4.md#b447)'s. **Exit evidence:**
+each observed on a host and recorded in the
+[acceptance ledger](../../docs/acceptance.md) or the knowledge page with the
+build commit, or withdrawn by the owner.
+
+### B452
+
+Wording and tests X45 left narrower than they read (found in X45): the
+protocol-record goldens for the managed-OS installation hold no
+`privateDelivery` case, so its postcondition cases live only in the role's own
+test; the substrates spec's delivered-key identity paragraph does not say the
+pinned connection also pins `HostKeyAlgorithms` to the delivered key's type,
+which the managed-OS spec does; the infrastructure-services spec does not state
+that the managed artifact server logs each completed request without its URI to
+its unit's journal and keeps its error log at warn, which the substrates spec
+does; the sentence that a consumer sends a private URL only over a verified
+channel, in the infrastructure-services spec and in the doc comment of the
+private publication path, reads against the container cluster's agent image
+posted to a plain-HTTP emulated controller, an exception the container-clusters
+spec already records, so it needs a pointer to it; the docstring of the
+security-service discovery says the iBMC has a null top-level property where
+the capture shows it absent; the relaxed echo rule treats a device showing
+`https://host/x.iso` as already holding `https://host:8443/x.iso`, so a device
+serving the same path on another port of the same host is taken as inserted,
+which is a recorded limit and a stronger proof is the owner's call; and the
+lab-baremetal example still declares the default `import-certificate`
+virtual-media trust, where the owner's iBMC needs `established`. **Exit
+evidence:** each stated in its owner's file or covered by a test that fails when
+its guard is removed, or withdrawn by the owner.
+
 ## Retired
 
 IDs no longer issued. Where an item took one over, its line here names that
@@ -995,7 +1056,7 @@ Requires cell as `owner decision: <question>`.
 - **D101** (2026-10-05, accepted by the owner from the session's recommendations): B98 stays parked for pruning the narration; the amendment allowing short rationale and safety-invariant comments in the architecture spec, with a shrink-only per-package ratchet on the comment count, splits out as B336 in M1.
 - **D102** (2026-10-05, accepted by the owner from the session's recommendations): B301 adds a Not-yet-met line for removals that release service socket reservations without proving the sockets free; the proof is parked as B323, for the per-capability evidence functions B19 creates.
 - **D103** (2026-10-05, accepted by the owner from the session's recommendations): B73: the per-machine installer ISO is published only under the private token subtree and withdrawn after completion, the in-installer `curl --cacert` fetch stays, and private delivery requires a verified controller-to-BMC leg, because InsertMedia carries the token URL.
-- **D104** (2026-10-05, accepted by the owner from the session's recommendations): B305 and B319: on the xFusion iBMC, under `established` trust, the client reads `VerifyCertificate` and `HttpsTransferCertVerification` before the insert and refuses private delivery when either reads false, the operator importing the CA out of band, within B73's repair; the manager SecurityService root-CA import follows as B319, before the first real-hardware row.
+- **D104** (2026-10-05, accepted by the owner from the session's recommendations): B305 and B319: on the xFusion iBMC, under `established` trust, the client reads `VerifyCertificate` and `HttpsTransferCertVerification` before the insert and refuses private delivery when either reads false, the operator importing the CA out of band, within B73's repair; the manager SecurityService root-CA import follows as B319, before the first real-hardware row. D121 (2026-10-07) amends which flag the read-back counts.
 - **D105** (2026-10-05, accepted by the owner from the session's recommendations): the parked B96 to B107, B122, B161 to B167, B171, B180, B181, B193, B194, B196, B197, B199, B226, B227, B229 to B232, B235, B238, B243, B245, B247, B248, B256, B258, B261 to B263, B266 to B269, B273 and B274 stay parked.
 - **D106** (2026-10-05, accepted by the owner from the session's recommendations): B288: a RHEL controller accepts `lorax` and `xorriso` the operator installed from the host's own entitled, vendor-signed repositories, proved by presence like any root; an entitled-source adapter is parked as B330.
 - **D107** (2026-10-05, accepted by the owner from the session's recommendations): B292 and B297: the execution foundation keeps its byte-exact guard at every launch and gains a named check, a refusal naming package, build and file, a documented hold procedure and a regeneration tool in B292; in B297, within X43's window, setup qualifies vendor-signed glibc and libgcc within the qualified minor against the RPM database and records the proved digests as the receipt's requirement.
@@ -1011,3 +1072,6 @@ Requires cell as `owner decision: <question>`.
 - **D117** (2026-10-06, the owner accepted the session's recommendation): B357: D65 widens, so a confirmed trust write that takes over an endpoint also drops the record of a still-declared Machine that no longer uses the context's SSH trust, the controller Machine's included, as a `remove` row in every lifecycle state, with no input edit.
 - **D118** (2026-10-06, the owner accepted the session's recommendation): B372: a file-input `secret set` replacement, `secret delete` and `secret encryption rotate` confirm before the lease and revalidate under it, as standard input does since D73, refusing with `secret.store.conflict` and writing nothing when the store changed meanwhile.
 - **D119** (2026-10-07, the owner accepted the session's recommendation): B440 joins M1 on X46: a destroy over an unknown apply resolves each block with the removal's own check, which proves the object is this context's and can be taken back, so a drifted machine is removed with its ownership proved; the state-reconciliation spec records what that resolution proves.
+- **D120** (2026-10-07, the owner): the emulated controller serves TLS: the libvirt emulator unit serves HTTPS with a generated serving certificate the InfraProvider's emulated-BMC defaults name, the lab-baremetal physical copy names its authority in `trustBundleRef` and verifies the leg, so D103's verified controller leg holds for the rehearsal; B334 splits: its TLS half joins M4 as B446 on a new planned slice X47, the loopback bind stays with X44 (D115) and confinement stays parked.
+- **D121** (2026-10-07, accepted by the owner from the session's recommendation): D104 is amended: where the manager publishes `HttpsTransferCertVerification` that switch alone decides, and the device's `VerifyCertificate` counts only on firmware whose manager publishes no such switch; a hardware capture of the device flag stays an operator item; this is B447 on X47 together with the follow-up that `disable-verification` is a silent no-op on the iBMC.
+- **D122** (2026-10-07, accepted by the owner from the session's recommendation): after a failed physical apply the private subtree stays published until the next apply or a destroy clears it; the managed-OS spec says so.

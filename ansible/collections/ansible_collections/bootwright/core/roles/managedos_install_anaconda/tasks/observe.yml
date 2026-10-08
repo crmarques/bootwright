@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v6'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v7'
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -115,6 +115,9 @@
     hostKey: '{{ managedos_install_anaconda_host_key | default("") }}'
     reachable: '{{ managedos_install_anaconda_reachable.rc | default(1) == 0 }}'
     address: '{{ bootwright_os_install_request.address }}'
-    media: '{{ managedos_install_anaconda_controller.media | default("") }}'
+    # A controller can echo the media URL with its host or port rewritten,
+    # so any token-shaped run is redacted rather than a known prefix.
+    media: "{{ managedos_install_anaconda_controller.media | default('') | regex_replace('[0-9a-f]{64}', '<token>') }}"
     power: '{{ managedos_install_anaconda_controller.power | default("") }}'
+    privateDelivery: '{{ bootwright_os_install_request.private is defined }}'
   no_log: true

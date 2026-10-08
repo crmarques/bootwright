@@ -281,8 +281,7 @@ func contractExampleOf(t *testing.T, resolver capabilityResolver, name string) c
 		capability, _ := resolver.Resolve(binding.Kind, binding.Implementation)
 		contribution, err := capability.Plan(context.Background(), example.apply)
 		if err != nil {
-			// A binding may refuse an example it has no row for, as the
-			// installation refuses lab-baremetal's physical Machine.
+			// A binding may refuse an example it has no row for.
 			continue
 		}
 		example.plans[binding] = contribution
@@ -1239,6 +1238,9 @@ func contractMaterial(t *testing.T, example contractExample, references []string
 			material[reference] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(`{"auths":{"registry.example.test":{"auth":"Y29udHJhY3Q6c2VjcmV0"}}}`)})
 		case "sshKeyPair":
 			material[reference] = contractKeyPair(t, reference)
+		case "caBundle":
+			certificate, _ := contractServingCertificate(t, nil).Part(secrets.CertificatePart)
+			material[reference] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: certificate})
 		default:
 			t.Fatalf("the Secret %s is a %s, which the suite synthesizes no material for", reference, kind)
 		}

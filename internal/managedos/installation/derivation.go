@@ -87,6 +87,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		WeakDeps:         weakDepsChoice(customizations),
 	}
 	installation.Channel, installation.Physical = request.Target.Channel, request.Target.Physical
+	installation.HostKeyType = request.Target.HostKeyType
 	if request.Target.Hardware != nil {
 		installation.InterfaceMAC = installInterfaceMAC(machine, request.Target.Hardware, iface)
 		for _, declared := range request.Target.Hardware.Interfaces {
@@ -380,7 +381,7 @@ func (r proxyRoute) proxyFor(baseURL string, request Request) string {
 }
 
 func artifactURLs(request Request) []string {
-	urls := []string{request.Image.URL}
+	urls := []string{request.installerImage().URL}
 	if request.Tree != nil {
 		urls = append(urls, request.Tree.URL)
 	}

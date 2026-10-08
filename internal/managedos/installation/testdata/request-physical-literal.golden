@@ -28,10 +28,6 @@
     "object": "metal-01",
     "profile": "rhel-9-8"
   },
-  "image": {
-    "path": "/srv/public/os/metal-01/install.iso",
-    "url": "https://artifacts.lab.example.test/public/os/metal-01/install.iso"
-  },
   "kickstart": "text\n",
   "markerPath": "/etc/bootwright/install-marker.json",
   "placement": {
@@ -65,10 +61,11 @@
       "rootDevice": "/dev/sda"
     },
     "hostKeyRef": "metal-01-host-key",
+    "hostKeyType": "ed25519",
     "physical": true,
     "substrate": "baremetal"
   },
   "tlsCertificateRef": "lab-artifacts-tls",
   "user": "bootwright",
-  "version": "os-install-anaconda-v6"
+  "version": "os-install-anaconda-v7"
 }

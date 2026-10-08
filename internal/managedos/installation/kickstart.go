@@ -11,11 +11,12 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v5"
+const kickstartVersion = "kickstart-anaconda-v6"
 
-// hostKeySource is the key the installation republishes. Ed25519 is the type
-// the identity operation binds, and generating it here rather than at first
-// boot means the published copy is the key sshd will actually present.
+// hostKeySource is the key a guest-agent installation republishes. Ed25519 is
+// the type its identity operation binds, and generating it here rather than at
+// first boot means the published copy is the key sshd will actually present. A
+// delivered key is installed at its own type's path instead.
 const hostKeySource = "/etc/ssh/ssh_host_ed25519_key.pub"
 
 // agentFilter is the guest agent's RPC filter, and identityRPCs are the
@@ -83,22 +84,25 @@ type Installation struct {
 	Formats          string
 	Gateway          string
 	HostKeyPath      string
-	Hostname         string
-	Interface        string
-	Keyboard         string
-	Language         string
-	MarkerPath       string
-	Nameservers      []string
-	NTPServers       []string
-	Packages         []string
-	PackageSource    string
-	Prefix           int
-	Repositories     []Repository
-	RootDevice       string
-	SELinux          string
-	Timezone         string
-	User             string
-	WeakDeps         string
+	// HostKeyType is the generated keyType of a delivered key, which decides
+	// the path it is installed at and the type it is proved to be.
+	HostKeyType   string
+	Hostname      string
+	Interface     string
+	Keyboard      string
+	Language      string
+	MarkerPath    string
+	Nameservers   []string
+	NTPServers    []string
+	Packages      []string
+	PackageSource string
+	Prefix        int
+	Repositories  []Repository
+	RootDevice    string
+	SELinux       string
+	Timezone      string
+	User          string
+	WeakDeps      string
 }
 
 // RenderKickstart derives the complete unattended installation. The machine
@@ -117,6 +121,10 @@ func RenderKickstart(input Installation) (string, error) {
 	}
 	if err := guardKickstartValues(input); err != nil {
 		return "", err
+	}
+	if _, known := deliveredHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelDeliveredKey && !known {
+		return "", refusal("lifecycle.state", "the delivered SSH host key type "+input.HostKeyType+" has no installed path",
+			"plan the installation again with this release")
 	}
 	network, err := networkLine(input)
 	if err != nil {
@@ -186,6 +194,7 @@ var kickstartFields = []struct {
 	{"the formats locale", "spec.customizations.localization.formats of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Formats} }},
 	{"the default gateway", "the default route's next-hop-address in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return []string{i.Gateway} }},
 	{"the host key path", "the product-owned host key path", kickstartToken, func(i Installation) []string { return []string{i.HostKeyPath} }},
+	{"the delivered host key type", "spec.source.generated.keyType of the Secret spec.os.install.hostKeyRef names", kickstartToken, func(i Installation) []string { return []string{i.HostKeyType} }},
 	{"the host name", "the fqdn address in spec.network.addresses of the Machine", kickstartToken, func(i Installation) []string { return []string{i.Hostname} }},
 	{"the install interface", "the interface of the install address in spec.network.addresses of the Machine", kickstartToken, func(i Installation) []string { return []string{i.Interface} }},
 	{"the keyboard layout", "spec.customizations.localization.keyboard of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Keyboard} }},
@@ -489,11 +498,11 @@ func repoFlag(value bool) string {
 // order to answer once the installation is over. A guest agent reads files the
 // installation wrote, so the key is generated and republished where the agent
 // may reach it and the agent is permitted those reads; a delivered key is
-// installed as sshd's own before any key is generated, so the machine presents
-// exactly the key that was frozen with the plan.
+// installed as sshd's own at its type's path before any key is generated, so
+// the machine presents exactly the key that was frozen with the plan.
 func identityLines(input Installation) []string {
 	if input.Channel == substrate.ChannelDeliveredKey {
-		return deliveredKeyLines()
+		return deliveredKeyLines(input)
 	}
 	if input.Channel != substrate.ChannelGuestAgent {
 		return nil
@@ -505,27 +514,55 @@ func identityLines(input Installation) []string {
 	}, agentFilterLines()...)
 }
 
+// deliveredHostKey is where sshd reads a host key of one generated type, and
+// the algorithm name its public half begins with.
+type deliveredHostKey struct {
+	path, algorithm string
+}
+
+// deliveredHostKeys are the generated SSH key types an installation can
+// deliver, each at the path sshd's own generation gives that type.
+var deliveredHostKeys = map[string]deliveredHostKey{
+	"ed25519":    {path: "/etc/ssh/ssh_host_ed25519_key", algorithm: "ssh-ed25519"},
+	"rsa":        {path: "/etc/ssh/ssh_host_rsa_key", algorithm: "ssh-rsa"},
+	"ecdsa-p256": {path: "/etc/ssh/ssh_host_ecdsa_key", algorithm: "ecdsa-sha2-nistp256"},
+	"ecdsa-p384": {path: "/etc/ssh/ssh_host_ecdsa_key", algorithm: "ecdsa-sha2-nistp384"},
+	"ecdsa-p521": {path: "/etc/ssh/ssh_host_ecdsa_key", algorithm: "ecdsa-sha2-nistp521"},
+}
+
+// deliveredHostKeyDropIn names the delivered key as sshd's host key. Naming
+// any HostKey replaces sshd's default list, so the machine presents the frozen
+// key and no other it generated.
+const deliveredHostKeyDropIn = "/etc/ssh/sshd_config.d/40-bootwright-host-key.conf"
+
 // deliveredKeyLines install the key pair this installation was given as the
-// machine's own, before any key is generated, so `ssh-keygen -A` adds only the
-// types it did not receive and the machine presents exactly the key the plan
-// froze. The fetch verifies the server's certificate rather than disabling
+// machine's own, at its type's path and before any key is generated, so
+// `ssh-keygen -A` adds only the types it did not receive. The pair is proved
+// to be of the frozen type with halves that match, and the drop-in names it,
+// so the machine presents exactly the key the plan froze whichever type that
+// is. The fetch verifies the server's certificate rather than disabling
 // verification, because the confidentiality of the path depends on it, and the
 // material is removed from the installer environment as soon as it is placed.
-func deliveredKeyLines() []string {
+func deliveredKeyLines(input Installation) []string {
+	key := deliveredHostKeys[input.HostKeyType]
 	return []string{
 		"install -d -m 0755 /etc/ssh",
 		"cat > /tmp/bootwright-artifact-ca.pem <<'BOOTWRIGHT_ARTIFACT_CA_EOF'",
 		CertificateToken,
 		"BOOTWRIGHT_ARTIFACT_CA_EOF",
 		"curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem" +
-			" --output /etc/ssh/ssh_host_ed25519_key '" + PrivateURLToken + "/" + IdentityFile + "'",
+			" --output " + key.path + " '" + PrivateURLToken + "/" + IdentityFile + "'",
 		"curl --fail --silent --show-error --cacert /tmp/bootwright-artifact-ca.pem" +
-			" --output /etc/ssh/ssh_host_ed25519_key.pub '" + PrivateURLToken + "/" + IdentityFile + ".pub'",
-		"chmod 0600 /etc/ssh/ssh_host_ed25519_key",
-		"chmod 0644 /etc/ssh/ssh_host_ed25519_key.pub",
-		"test -s /etc/ssh/ssh_host_ed25519_key",
+			" --output " + key.path + ".pub '" + PrivateURLToken + "/" + IdentityFile + ".pub'",
+		"chmod 0600 " + key.path,
+		"chmod 0644 " + key.path + ".pub",
+		"test -s " + key.path,
+		`test "$(cut -d' ' -f1 ` + key.path + `.pub)" = '` + key.algorithm + `'`,
+		`test "$(/usr/bin/ssh-keygen -y -f ` + key.path + ` | cut -d' ' -f1,2)" = "$(cut -d' ' -f1,2 ` + key.path + `.pub)"`,
+		"install -d -m 0755 /etc/ssh/sshd_config.d",
+		"printf '%s\\n' 'HostKey " + key.path + "' > " + deliveredHostKeyDropIn,
+		"chmod 0600 " + deliveredHostKeyDropIn,
 		"/usr/bin/ssh-keygen -A",
-		"/usr/bin/ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key > /dev/null",
 		"shred -u /tmp/bootwright-artifact-ca.pem 2>/dev/null || rm -f /tmp/bootwright-artifact-ca.pem",
 	}
 }

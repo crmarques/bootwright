@@ -20,6 +20,10 @@ alone when one is given, against the system trust store otherwise, and not at
 all only when verification is declared off. The leg on which the controller
 fetches media from the artifact server is set on the discovered device around
 an insert and an eject, exactly as the frozen trust says and with no fallback.
+An insert carrying private material under established trust first reads, and
+writes nothing while reading, whether the controller verifies that server: the
+device's VerifyCertificate and any HttpsTransferCertVerification a manager's
+security service reports must read true, or the insert refuses.
 """
 
 from __future__ import annotations
@@ -80,6 +84,14 @@ NO_IMPORT = "no fallback: established, or disable-verification on this Machine, 
 NO_DISABLE = "verification stays on; use import-certificate or established"
 STALE = ("remove the stale certificate from the controller's virtual-media certificate collection,"
          " or set removeCertificateAfterBoot")
+# What an operator checks when the controller reports that it could not fetch
+# an image or never presents it: the fetch is the controller's own, so its
+# causes are on the BMC side of the leg.
+FETCH_CAUSES = ("the controller fetches the image itself: check its route and DNS to the image host from the BMC"
+                " network, that it trusts the artifact server's certificate, and the TLS it negotiates; the"
+                " artifact server unit's journal records each completed request")
+NO_VERIFIED_FETCH = ("private delivery needs a controller that verifies the artifact server: import that server's CA"
+                     " into the controller and turn its verification on, then apply again")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -137,11 +149,12 @@ class ControllerError(Exception):
     It names what was being done, the resource path, the HTTP status (0 when
     nothing answered) and the controller's own message identifier. It is built
     only from those and cut to one printable line, so it never carries user
-    information, the credential or a response body.
+    information, the credential or a response body. A remedy, always one of
+    this module's fixed texts and never the controller's, follows the line.
     """
 
-    def __init__(self, line):
-        super().__init__(_printable(line, LINE_LIMIT, " "))
+    def __init__(self, line, remedy=""):
+        super().__init__(_printable(line, LINE_LIMIT, " ") + ("; " + remedy if remedy else ""))
 
 
 class UnverifiedCertificate(ControllerError):
@@ -176,6 +189,7 @@ class Client:
         self.sleep = time.sleep
         self.last_power, self.last_image = "", ""
         self._system = self._media = self._member = None
+        self._managers = []
 
     def fetch(self, reference="", method="GET", payload=None, headers=None, timeout=REQUEST_TIMEOUT, doing=""):
         """One bounded call, returning status, body and headers.
@@ -345,7 +359,9 @@ class Client:
         managed = []
         links = system.get("Links")
         for manager in self._references(links.get("ManagedBy") if isinstance(links, dict) else None, self.endpoint):
-            managed.extend(self._view(self._read(manager)[0], manager, fetched))
+            body = self._read(manager)[0]
+            self._managers.append((manager, body))
+            managed.extend(self._view(body, manager, fetched))
         for url in redfish_discovery.media_candidates(listed, managed):
             member = self._read(url)[0]
             if redfish_discovery.optical(member):
@@ -427,38 +443,79 @@ class Client:
             self.last_image = redfish_discovery.inserted_image(self._member)
         return self.last_image
 
-    def insert(self, image, trust=TRUST_ESTABLISHED, certificate=""):
+    def insert(self, image, trust=TRUST_ESTABLISHED, certificate="", private=False):
         """Attach an image and confirm the device presents it; True when it changed.
 
         The response is never the evidence. An accepted request may still be
         reported as a failure by an asynchronous task, and a completed task may
         still leave nothing attached, so the device itself is read back. A
-        failed attempt is retried only from a device proved empty. The device
-        is made to trust the server it fetches from once, before the first
-        attempt, and never again inside the retry.
+        device already presenting the image is left alone. Otherwise private
+        material under established trust is attached only once reads alone
+        prove the controller verifies the server it fetches from; a device
+        presenting other media is then released and proved empty, so the first
+        attach is never refused as occupied; and the device is made to trust
+        the server once, before the first attempt and never again inside the
+        retry. A failed attempt is retried only from a device proved empty, and
+        a fetch the controller reports failed names the causes on its side.
         """
         member = self.media_member()
         if not member:
             raise ControllerError("attaching: the controller exposes no virtual-media device")
         if redfish_discovery.image_matches(self.inserted(), image):
             return False
+        if private and trust == TRUST_ESTABLISHED:
+            self._verified_fetch(member)
+        if redfish_discovery.media_present(self._device(member, "attaching")):
+            reason = self._release(member)[1]
+            if reason:
+                raise ControllerError("attaching: the device presents other media and was not released: " + reason)
         self._trust_media(member, trust, certificate)
-        reason = ""
+        reason, fetch_failed = "", False
         for attempt in range(INSERT_ATTEMPTS):
             if attempt:
                 self.sleep(INSERT_RETRY_DELAY)
-            reason = self._attach(member, image)
+            reason, fetch_failed = self._attach(member, image)
             if not reason:
                 return True
             if attempt + 1 < INSERT_ATTEMPTS and self._release(member)[1]:
                 raise ControllerError("the device was not released after " + reason)
-        raise ControllerError(reason)
+        raise ControllerError(reason, FETCH_CAUSES if fetch_failed else "")
+
+    def _verified_fetch(self, member):
+        """Prove by reading alone that the controller verifies the server it
+        fetches media from, or refuse before any write.
+
+        The device's VerifyCertificate must read true; an absent one reads as
+        off, as the schema says. Each manager the system names that links a
+        security service has it read, and one reporting
+        HttpsTransferCertVerification must report it true. A manager without a
+        security service, or a service without the property, adds no
+        condition; a service that cannot be read refuses.
+        """
+        doing = "verifying the fetch"
+        device = self._device(member, doing)
+        if device.get("VerifyCertificate") is not True:
+            raise ControllerError("%s %s: VerifyCertificate reads %s" % (
+                doing, _shown(member), "false" if "VerifyCertificate" in device else "nothing"), NO_VERIFIED_FETCH)
+        setting = redfish_discovery.TRANSFER_VERIFICATION
+        for _manager, body in self._managers:
+            link = redfish_discovery.security_service(body)
+            if not link:
+                continue
+            url = self._own(link, doing)
+            service = self._read(url, doing)[0]
+            if setting in service and service[setting] is not True:
+                raise ControllerError("%s %s: %s reads false" % (doing, _shown(url), setting), NO_VERIFIED_FETCH)
 
     def _attach(self, member, image):
-        """One attach: the reason it failed, or "" once the device presents the image.
+        """One attach: the reason it failed, or "" once the device presents the
+        image, and whether the controller failed to fetch it.
 
         A refused privilege ends the insert at once. An attach nothing answered
-        may still have happened, so it is read back before anything else.
+        may still have happened, so it is read back before anything else. A
+        task that settles unsuccessfully or never settles, and a device that
+        never presents the image, are failed fetches; a POST answered with
+        another status is a refused request.
         """
         target, payload = self._attach_request(self._device(member, "attaching"), member, image)
         status, body, headers = self.fetch(target, "POST", payload, timeout=MEDIA_TIMEOUT, doing="attaching")
@@ -467,10 +524,11 @@ class Client:
         if status == 202:
             reason = self._await_task(body, headers)
             if reason:
-                return reason
+                return reason, True
         elif status not in (0, 200, 204):
-            return str(_failure("attaching", target, status, body))
-        return self._presented(member, image)
+            return str(_failure("attaching", target, status, body)), False
+        reason = self._presented(member, image)
+        return reason, bool(reason)
 
     def _attach_request(self, resource, member, image):
         """The attach this device advertises and what it is sent, standard first.
@@ -478,7 +536,7 @@ class Client:
         A vendor extension is used only where no standard action exists and the
         extension's own metadata proves it takes what this client sends.
         """
-        payload = {"Image": image, "Inserted": True, "WriteProtected": True}
+        payload = {"Image": image, "Inserted": True}
         if redfish_discovery.transfer_protocol(image):
             payload["TransferProtocolType"] = redfish_discovery.transfer_protocol(image)
         advertised = redfish_discovery.actions(resource, "#VirtualMedia.InsertMedia")

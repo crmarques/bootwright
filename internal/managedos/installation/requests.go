@@ -91,6 +91,10 @@ type Target struct {
 	// HostKeyRef names the key pair a delivered-key installation installs as
 	// the machine's own, and is absent on every other channel.
 	HostKeyRef string `json:"hostKeyRef,omitempty"`
+	// HostKeyType is the generated keyType of the Secret HostKeyRef names, one
+	// of ed25519, rsa, ecdsa-p256, ecdsa-p384 or ecdsa-p521, and is absent on
+	// every other channel.
+	HostKeyType string `json:"hostKeyType,omitempty"`
 	// Physical is operator-owned hardware: what it already held is what this
 	// installation erases, and its removal retains it.
 	Physical  bool   `json:"physical"`
@@ -139,17 +143,22 @@ type Request struct {
 	// FleetKeyRef names the Secret whose public half the installation
 	// authorizes for the product-owned account. Only that half ever leaves the
 	// binding, and it reaches the adapter at execution rather than in the plan.
-	FleetKeyRef string               `json:"fleetKeyRef"`
-	HostKeyPath string               `json:"hostKeyPath"`
-	Hostname    string               `json:"hostname"`
-	Identity    Identity             `json:"identity"`
-	Image       Publication          `json:"image"`
-	Kickstart   string               `json:"kickstart"`
-	MarkerPath  string               `json:"markerPath"`
-	Placement   machineref.Placement `json:"placement"`
+	FleetKeyRef string   `json:"fleetKeyRef"`
+	HostKeyPath string   `json:"hostKeyPath"`
+	Hostname    string   `json:"hostname"`
+	Identity    Identity `json:"identity"`
+	// Image is the publicly served installer image of a Machine proved
+	// through its guest agent. Exactly one of Image and Private is set: a
+	// delivered-key Machine's image names the private URL in its Kickstart,
+	// so it is published beneath Private instead.
+	Image      *Publication         `json:"image,omitempty"`
+	Kickstart  string               `json:"kickstart"`
+	MarkerPath string               `json:"markerPath"`
+	Placement  machineref.Placement `json:"placement"`
 	// Private is the subtree this block owns for material only the installing
-	// machine may read. The attempt mints the unguessable final segment, so
-	// this names the parent it owns and never the path itself.
+	// machine may read: the delivered key pair and the installer image. The
+	// attempt mints the unguessable final segment, so this names the parent
+	// it owns and never the path itself.
 	Private *Publication `json:"private,omitempty"`
 	Target  Target       `json:"target"`
 	// TLSCertificateRef names the serving certificate the installing machine
@@ -202,6 +211,20 @@ func MarkerFor(request Request, digest string) ([]byte, error) {
 	return data, nil
 }
 
+// installerImage is where this request publishes its installer image and the
+// URL its controller fetches it from: the public publication, or the private
+// subtree whose minted segment holds it, which the plan names only as the
+// parent it owns.
+func (r Request) installerImage() Publication {
+	if r.Image != nil {
+		return *r.Image
+	}
+	if r.Private != nil {
+		return Publication{Path: r.Private.Path, URL: r.Private.URL}
+	}
+	return Publication{}
+}
+
 // MediaNames lists the store entries this request uses, so the operation
 // freezes a shared reservation on each before its first effect.
 func (r Request) MediaNames() []string {
@@ -217,7 +240,10 @@ func (r Request) MediaNames() []string {
 // included, so a second context never publishes into them. A media claim conflicts with nothing but deletion and
 // replacement of what it names.
 func (r Request) ReservationKeys() []string {
-	keys := []string{"path:" + r.Image.Path}
+	var keys []string
+	if r.Image != nil {
+		keys = append(keys, "path:"+r.Image.Path)
+	}
 	if r.Private != nil {
 		keys = append(keys, "path:"+r.Private.Path)
 	}
@@ -251,7 +277,9 @@ func (r Request) SecretReferences() []string {
 	if r.TLSCertificateRef != "" {
 		references = append(references, r.TLSCertificateRef)
 	}
-	references = append(references, r.Image.CertificateRef)
+	if r.Image != nil {
+		references = append(references, r.Image.CertificateRef)
+	}
 	if r.Tree != nil {
 		references = append(references, r.Tree.CertificateRef)
 	}

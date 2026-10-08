@@ -76,6 +76,13 @@ options:
         reported. An observation proves this the same way an apply does.
     type: bool
     required: false
+  privateDelivery:
+    description:
+      - Whether the installation published its installer image beneath its
+        private subtree. Such an image names the private URL in its
+        Kickstart, so a completion proves it withdrawn rather than in place.
+    type: bool
+    required: false
   removed:
     description: Whether the completion proves removal rather than presence.
     type: bool

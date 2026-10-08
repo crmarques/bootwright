@@ -56,9 +56,10 @@
     verify: '{{ managedos_install_anaconda_verify }}'
     ca_data: '{{ managedos_install_anaconda_ca_data }}'
     operation: insert
-    image: '{{ bootwright_os_install_request.image.url }}'
+    image: '{{ managedos_install_anaconda_image_url }}'
     trust: '{{ managedos_install_anaconda_media_trust.trust }}'
     certificate: '{{ managedos_install_anaconda_certificate }}'
+    private_delivery: '{{ bootwright_os_install_request.private is defined }}'
   register: managedos_install_anaconda_inserted
   failed_when: false
   no_log: true
@@ -72,7 +73,11 @@
     fail_msg: >-
       inserting the installer image into Machine {{ bootwright_os_install_request.identity.object }}
       failed:
-      {{ (managedos_install_anaconda_inserted.msg | default('') | string | bootwright.core.printable)[:512] }}
+      {{ ((managedos_install_anaconda_inserted.msg | default('') | string
+           | replace(managedos_install_anaconda_token.stdout | trim, '<token>')
+           if bootwright_os_install_request.private is defined
+           else managedos_install_anaconda_inserted.msg | default('') | string)
+          | bootwright.core.printable)[:512] }}
     quiet: true
 
 - name: Boot a machine this substrate created from that media

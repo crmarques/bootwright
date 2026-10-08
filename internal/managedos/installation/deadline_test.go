@@ -153,11 +153,11 @@ func TestTheMarginAllowsEveryControllerCallAnApplyMakes(t *testing.T) {
 	if mediaMargin < time.Hour+calls {
 		t.Fatalf("the margin is %s, less than an hour and the %s the controller calls may take", mediaMargin, calls)
 	}
-	if want := time.Hour + time.Minute + 20*time.Second; calls != want {
+	if want := time.Hour + 4*time.Minute + 20*time.Second; calls != want {
 		t.Errorf("the controller calls may take %s, want the %s the specification states", calls, want)
 	}
 	request, _ := onlyRequest(t, labCatalog())
-	if got, want := request.Deadline(), 4*time.Hour+6*time.Minute+20*time.Second; got != want {
+	if got, want := request.Deadline(), 4*time.Hour+9*time.Minute+20*time.Second; got != want {
 		t.Errorf("lab-rhel installs under %s, want the %s the specification states", got, want)
 	}
 }

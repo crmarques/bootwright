@@ -166,7 +166,7 @@ func description(verb reconciliation.Verb, request Request) string {
 }
 
 func impacts(verb reconciliation.Verb, request Request) []string {
-	published := []string{request.Image.Path}
+	published := []string{request.installerImage().Path}
 	if request.Tree != nil {
 		published = append(published, request.Tree.Path)
 	}
@@ -368,23 +368,43 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, 
 
 // refusedContinuation says why this executable does not apply a request an
 // earlier executable froze, or nothing when it would plan that request itself.
-// Planning refuses a physical target and a private publication before
-// registration, but an operation registered before that refusal still carries
-// one, and an apply performs exactly what was frozen. A destroy and an
-// observation are never refused: the one takes back published content and the
-// other reads. The removal it names is the one of the context the operation
-// runs in.
+// Planning publishes exactly one installer image, privately for a delivered
+// key, and refuses a private delivery over an unverified controller leg, but
+// an operation registered before those rules still carries what it froze, and
+// an apply performs exactly that. A destroy and an observation are never
+// refused: the one takes back published content and the other reads. The
+// removal it names is the one of the context the operation runs in.
 func refusedContinuation(contextName string, request Request) error {
 	machine := "Machine/" + request.Identity.Object
 	remediation := "run bootwright destroy --context " + contextName + " to end this operation, then plan it again under this executable"
-	if request.Target.Physical {
-		return refusal("lifecycle.state", "this operation froze a physical installation of "+machine+", which this executable refuses", remediation)
+	if (request.Image == nil) == (request.Private == nil) {
+		return refusal("lifecycle.state", "this operation froze an installation of "+machine+
+			" with no single installer image publication, which this executable refuses", remediation)
 	}
-	if request.Private != nil {
+	controller := request.Target.Controller
+	if request.Private != nil && (!strings.HasPrefix(controller.Endpoint, "https://") || !controller.TLSVerify) {
 		return refusal("lifecycle.state", "this operation froze a private publication for "+machine+
-			" that the publicly served installer image would expose, which this executable refuses", remediation)
+			" whose controller is not reached over a verified connection, which this executable refuses", remediation)
 	}
 	return nil
+}
+
+// deliveredKeyMatches refuses an apply whose bound host key is not of the type
+// the operation froze. The Kickstart installs the key at the frozen type's path
+// and proves that type, so a key regenerated as another type since planning
+// would fail the installation only after the machine was erased. Observation
+// and destroy read and take back, and never refuse on it.
+func deliveredKeyMatches(request Request, publicLine string) error {
+	bound := ""
+	if fields := strings.Fields(publicLine); len(fields) != 0 {
+		bound = fields[0]
+	}
+	if key, known := deliveredHostKeys[request.Target.HostKeyType]; known && bound == key.algorithm {
+		return nil
+	}
+	return refusal("lifecycle.state", "the bound SSH host key of Secret/"+request.Target.HostKeyRef+" is "+bound+
+		", not the "+request.Target.HostKeyType+" key this operation froze",
+		"take this context back with bootwright destroy --context "+request.Identity.Context+", then plan and apply it again")
 }
 
 func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request, marker []byte, observes string) (lifecycle.RunResult, error) {
@@ -424,6 +444,11 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			return lifecycle.RunResult{}, err
 		}
 		values["hostKey"] = key
+		if operation == "apply" && request.Target.Channel == substrate.ChannelDeliveredKey {
+			if err := deliveredKeyMatches(request, key); err != nil {
+				return lifecycle.RunResult{}, err
+			}
+		}
 	}
 	materials := []lifecycle.MaterialFile{
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Target.Controller.CredentialsRef, Variable: "controllerUser"},
@@ -462,7 +487,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 
 func publicationCertificates(request Request) []lifecycle.MaterialFile {
 	var materials []lifecycle.MaterialFile
-	if request.Image.CertificateRef != "" {
+	if request.Image != nil && request.Image.CertificateRef != "" {
 		materials = append(materials,
 			lifecycle.MaterialFile{Name: "image-ca", Part: secrets.CertificatePart, Secret: request.Image.CertificateRef, Variable: "imageCertificate"})
 	}

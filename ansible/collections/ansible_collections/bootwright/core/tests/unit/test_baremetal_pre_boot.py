@@ -248,3 +248,28 @@ def test_the_managed_os_hands_its_proof_the_pin_or_nothing(tmp_path):
             ({}, ("", ""))):
         rendering = Templar(loader=LOADER, variables=managed_os(tmp_path, pins, DECLARED))
         assert tuple(rendering.template(arguments[name]) for name in PINS) == want
+
+
+# The repeated proof names what it lacks from the declaration and the client's
+# own positional lines: each declared address the inventory does not report and
+# each member that proved nothing, never an address, UUID or serial the
+# controller reported.
+@pytest.mark.parametrize("consumer", sorted(CONSUMERS))
+def test_the_hardware_refusal_names_the_unreported_addresses_and_the_failures(tmp_path, consumer):
+    observation = dict(reported(), addresses=[MACS[1], "aa:bb:cc:dd:ee:09"],
+                       failures=["member[2] reports no hardware address"])
+    variables = scope(tmp_path, consumer, observation)
+    assert accepts(declared(), variables) is False
+    message = Templar(loader=LOADER, variables=variables).template(declared()[ASSERT]["fail_msg"])
+    assert message.endswith("so it must not be erased; declared addresses not reported: %s; inventory failures: "
+                            "member[2] reports no hardware address" % MACS[0])
+    for value in (UUID, SERIAL, "aa:bb:cc:dd:ee:09"):
+        assert value not in message
+
+
+@pytest.mark.parametrize("consumer", sorted(CONSUMERS))
+def test_the_hardware_refusal_names_none_when_nothing_is_missing(tmp_path, consumer):
+    observation = dict(reported(), uuid="", serial="")
+    variables = scope(tmp_path, consumer, observation)
+    message = Templar(loader=LOADER, variables=variables).template(declared()[ASSERT]["fail_msg"])
+    assert message.endswith("declared addresses not reported: none; inventory failures: none")

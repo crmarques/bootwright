@@ -38,6 +38,7 @@ READS = ("ansible.builtin.assert", PROTOCOL, "bootwright.core.redfish_system_ins
 
 DIGEST = "c" * 64
 DECLARED = ["aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"]
+NICS = ["eno1", "eno2"]
 ENDPOINT = "https://bmc.example.test/redfish/v1/Systems/1"
 
 
@@ -85,7 +86,8 @@ def scope(observed):
     variables = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
     variables.update(
         bootwright_substrate_physical_request={
-            "controller": {"endpoint": ENDPOINT}, "hardware": [{"macAddress": address} for address in DECLARED]},
+            "controller": {"endpoint": ENDPOINT},
+            "hardware": [{"macAddress": address, "name": name} for address, name in zip(DECLARED, NICS)]},
         bootwright_substrate_physical_digest=DIGEST,
         substrate_baremetal_machine_observed={"observation": observed},
     )
@@ -146,12 +148,14 @@ def test_an_unprintable_identity_refuses_naming_the_declared_controller(entry, m
 # What an operator is told about a refused proof is its refusal in the
 # attempt's retained output, which holds what the adapter printed, raw
 # (specs/cli/output.md, Private operation logs). The publication reads no bound
-# material, so its result is not censored, and the refusal names fields, counts
-# and the controller, never a reported value.
+# material, so its result is not censored, and the refusal names fields, the
+# declared NICs by the names the request carries, and the controller, never a
+# reported value.
 REFUSALS = {
     "a declared address the controller does not report": (
         observation(addresses=DECLARED[:1], serial="SN-missing", uuid="uuid-missing"),
-        "the machine was not proved to be the one this Machine declares; missing: 1 of 2 declared addresses"),
+        "the machine was not proved to be the one this Machine declares; missing: declared NIC eno2 "
+        "(aa:bb:cc:dd:ee:02)"),
     "a serial holding a bidi override": (
         observation(serial="SN\u202e1", uuid="uuid-bidi"),
         "the management controller at %s reported a SerialNumber holding a character that is not printable"

@@ -2,8 +2,10 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v6'
-      - bootwright_os_install_request.image.path.startswith('/var/lib/bootwright-services/')
+      - bootwright_os_install_request.version == 'os-install-anaconda-v7'
+      - (bootwright_os_install_request.image is defined) != (bootwright_os_install_request.private is defined)
+      - (bootwright_os_install_request.image.path if bootwright_os_install_request.image is defined
+         else bootwright_os_install_request.private.path).startswith('/var/lib/bootwright-services/')
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -27,10 +29,13 @@
     work: '{{ managedos_install_anaconda_work }}'
   register: managedos_install_anaconda_before
 
+# A delivered-key Machine's image is beneath its private subtree, which the
+# removal of that subtree below takes back with it.
 - name: Remove the subtree this installation owns beneath the served root
   ansible.builtin.file:
     path: '{{ managedos_install_anaconda_image_dir }}'
     state: absent
+  when: bootwright_os_install_request.image is defined
   register: managedos_install_anaconda_image_removed
 
 # The file module deletes a directory in the order it lists its entries, so a

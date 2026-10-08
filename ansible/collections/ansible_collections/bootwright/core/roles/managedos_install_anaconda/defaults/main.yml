@@ -18,7 +18,17 @@ managedos_install_anaconda_boot_media: >-
   {{ managedos_install_anaconda_media }}/{{ bootwright_os_install_request.bootMedia.name }}
 managedos_install_anaconda_tree_media: >-
   {{ managedos_install_anaconda_media }}/{{ bootwright_os_install_request.treeMedia.name | default('') }}
-managedos_install_anaconda_image_dir: '{{ bootwright_os_install_request.image.path | dirname }}'
+# The public image's directory, and nothing for a delivered-key Machine,
+# whose image is published beneath its private subtree instead.
+managedos_install_anaconda_image_dir: >-
+  {{ (bootwright_os_install_request.image.path | dirname)
+     if bootwright_os_install_request.image is defined else '' }}
+# The server's served root, <content root>/public, which every publication of
+# this block is beneath and whose label the serving process reads.
+managedos_install_anaconda_served_root: >-
+  {{ (bootwright_os_install_request.image.path | dirname | dirname | dirname)
+     if bootwright_os_install_request.image is defined
+     else (bootwright_os_install_request.private.path | dirname | dirname | dirname) }}
 # Where the package tree is extracted beside its published location before the
 # rename publishes it whole, and nothing when the request hosts no tree. An
 # apply killed while it extracted leaves it beneath the served root, so an
@@ -96,6 +106,17 @@ managedos_install_anaconda_private_dir: >-
 managedos_install_anaconda_private_url: >-
   {{ (bootwright_os_install_request.private.url ~ '/' ~ (managedos_install_anaconda_token.stdout | default('') | trim))
      if managedos_install_anaconda_delivers_key | bool else '' }}
+# Where this attempt publishes its installer image and the URL its controller
+# fetches it from: the public publication, or install.iso beneath the
+# unguessable directory, whose URL carries the token and is never logged.
+managedos_install_anaconda_image_path: >-
+  {{ bootwright_os_install_request.image.path
+     if bootwright_os_install_request.image is defined
+     else managedos_install_anaconda_private_dir ~ '/install.iso' }}
+managedos_install_anaconda_image_url: >-
+  {{ bootwright_os_install_request.image.url
+     if bootwright_os_install_request.image is defined
+     else managedos_install_anaconda_private_url ~ '/install.iso' }}
 # The artifact server's certificate: what the installing machine verifies its
 # private fetch against, and what a controller importing it is given.
 managedos_install_anaconda_certificate: >-

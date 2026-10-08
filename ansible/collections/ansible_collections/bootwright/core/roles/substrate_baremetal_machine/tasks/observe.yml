@@ -33,3 +33,4 @@
     observation: '{{ substrate_baremetal_machine_observed.observation | default({}) }}'
     endpoint: '{{ bootwright_substrate_physical_request.controller.endpoint }}'
     expected: '{{ substrate_baremetal_machine_expected }}'
+    declared: '{{ bootwright_substrate_physical_request.hardware }}'

@@ -1,11 +1,13 @@
 """Every Redfish effect, and every read a consumer decides from, goes through one client.
 
-Three firmware shapes answer through urllib itself, so every test runs through
+Four firmware shapes answer through urllib itself, so every test runs through
 the client's single request path: the pinned emulator, which keeps virtual
 media under the system and attaches synchronously; a manager-scoped controller
-that attaches through a vendor extension and reports the outcome in a task; and
-one that exposes the same device under both views and demands a precondition on
-a write. No test names a vendor in the client.
+that attaches through a vendor extension and reports the outcome in a task; one
+that exposes the same device under both views and demands a precondition on a
+write; and the owner's xFusion iBMC as captured, redacted, which attaches
+through a task and echoes an image without its non-default port. No test names
+a vendor in the client.
 """
 
 from __future__ import annotations
@@ -255,7 +257,9 @@ def emulator():
 def manager_scoped():
     """Virtual media only under the manager, attached by a vendor extension.
 
-    The shape .agents/knowledge/redfish-physical-bmc.md records: the system's
+    No captured firmware has this shape: the captured iBMC, xfusion() below,
+    lists its device under both views and advertises the standard insert. It
+    is the shape .agents/knowledge/redfish-physical-bmc.md records: the system's
     own VirtualMedia path answers 404, the device hangs off the manager, and
     its only attach is an OEM VmmControl whose ActionInfo proves it takes an
     image and Connect/Disconnect, reporting the outcome in a task behind a
@@ -350,8 +354,140 @@ def dual_view():
     return firmware
 
 
-SHAPES = {"emulator": emulator, "manager-scoped": manager_scoped, "dual-view": dual_view}
-CONNECT = {"Image": IMAGE, "Inserted": True, "WriteProtected": True, "TransferProtocolType": "HTTPS"}
+XFUSION_PROTOCOLS = ("Nfs", "Cifs", "https", "NFS", "CIFS", "HTTPS")
+SECURITY_SERVICE = "/redfish/v1/Managers/1/SecurityService"
+
+
+def xfusion():
+    """The owner's xFusion iBMC as captured on 2026-05-22, redacted.
+
+    A 2288H V7 whose manager reports FirmwareVersion 3.08.05.85. Captured, with
+    every name, address and identity replaced: the system reports Manufacturer
+    XFUSION and Model 2288H V7, an ETag response header, a Boot with
+    BootSourceOverrideMode UEFI and target allowable values but none for
+    BootSourceOverrideEnabled, EthernetInterfaces and VirtualMedia links, one
+    manager in Links.ManagedBy, and a standard reset with an ActionInfo and
+    inline types without ForceOn. The system and the manager each list CD,
+    USBStick and iBMAUSBStick under their own path, and both CD paths show one
+    device: MediaTypes CD, ConnectedVia URI or NotConnected, VerifyCertificate
+    false, no Certificates link, an Oem VmmControl with an ActionInfo beside
+    standard InsertMedia and EjectMedia that carry theirs. InsertMedia answers
+    202 with a Running task and a Location ending /Monitor; over a connected
+    device the task ends Exception, Warning, with Messages one
+    iBMC.1.0.ConnectionOccupied object, and a failed fetch ends it the same way
+    with iBMC.1.0.ConnectionFailed. A TransferProtocolType outside the
+    ActionInfo's allowable values answers 400
+    Base.1.0.ActionParameterValueFormatError. The device echoes an image
+    without its non-default port. EjectMedia answers 202 with a Running task. A
+    PATCH of the device answers 501 iBMC.1.0.PropertyModificationNotSupported.
+    A boot PATCH answers 200 with the system, and a reset 200 with a
+    Base.1.0.Success extended message. The manager's top-level SecurityService
+    is null and its link sits under Oem.xFusion; the service reports
+    HttpsTransferCertVerification false.
+
+    Invented, never captured: the UUID, serial and interface address; a
+    connect task that completes, Completed/OK with no message; an eject task
+    that completes, and a device empty as soon as the eject is accepted (the
+    captured device still presented its image right after the 202); and the
+    VerifyCertificate and HttpsTransferCertVerification a test sets true.
+    """
+    system, manager = "/redfish/v1/Systems/1", "/redfish/v1/Managers/1"
+    views = (system + "/VirtualMedia", manager + "/VirtualMedia")
+    devices = tuple(view + "/CD" for view in views)
+    nic = system + "/EthernetInterfaces/1"
+
+    def system_body(f):
+        return {
+            "@odata.id": system, "Id": "1", "UUID": "8d3a6f20-4b1c-4e7d-9a2b-3c4d5e6f7a81",
+            "SerialNumber": "SN-XF-0001", "Manufacturer": "XFUSION", "Model": "2288H V7", "PowerState": f.power,
+            "Boot": dict(f.boot, **{"BootSourceOverrideMode": "UEFI", "BootSourceOverrideTarget@Redfish.AllowableValues": [
+                "None", "Pxe", "Floppy", "Cd", "Hdd", "BiosSetup"]}),
+            "EthernetInterfaces": {"@odata.id": system + "/EthernetInterfaces"},
+            "VirtualMedia": {"@odata.id": views[0]},
+            "Links": {"ManagedBy": [{"@odata.id": manager}]},
+            "Actions": {"#ComputerSystem.Reset": {
+                "target": system + "/Actions/ComputerSystem.Reset",
+                "@Redfish.ActionInfo": system + "/ResetActionInfo",
+                "ResetType@Redfish.AllowableValues": [
+                    "On", "ForceOff", "GracefulShutdown", "ForceRestart", "Nmi", "ForcePowerCycle", "PowerCycle"]}}}
+
+    def device_body(path):
+        def serve(f):
+            return 200, {
+                "@odata.id": path, "Id": "CD", "MediaTypes": ["CD"], "Image": f.image or None,
+                "Inserted": bool(f.image), "ConnectedVia": "URI" if f.image else "NotConnected",
+                "TransferProtocolType": "HTTPS" if f.image else None, "VerifyCertificate": f.verify_certificate,
+                "Oem": {"xFusion": {"Actions": {"#VirtualMedia.VmmControl": {
+                    "target": path + "/Oem/xFusion/Actions/VirtualMedia.VmmControl",
+                    "@Redfish.ActionInfo": path + "/VmmControlActionInfo"}}}},
+                "Actions": {
+                    "#VirtualMedia.InsertMedia": {"target": path + "/Actions/VirtualMedia.InsertMedia",
+                                                  "@Redfish.ActionInfo": path + "/InsertMediaActionInfo"},
+                    "#VirtualMedia.EjectMedia": {"target": path + "/Actions/VirtualMedia.EjectMedia",
+                                                 "@Redfish.ActionInfo": path + "/EjectMediaActionInfo"}}}, {"ETag": 'W/"d1"'}
+        return serve
+
+    def accepted(firmware, terminal):
+        firmware.tasks += 1
+        task = "/redfish/v1/TaskService/Tasks/%d" % firmware.tasks
+        body = {"@odata.id": task, "Id": str(firmware.tasks), "TaskState": "Running", "Messages": [],
+                "TaskMonitor": "/redfish/v1/TaskService/TaskMonitors/%d" % firmware.tasks}
+        reads = [{}]
+        firmware.resources[task] = lambda f: dict(body, **(reads.pop(0) if reads else terminal))
+        return 202, dict(body), {"Location": task + "/Monitor"}
+
+    def failed(message):
+        return {"TaskState": "Exception", "TaskStatus": "Warning", "Messages": {
+            "MessageId": message, "Message": "free text the client never shows"}}
+
+    def write(firmware, method, path, payload, headers):
+        if method == "POST" and path in [device + "/Actions/VirtualMedia.InsertMedia" for device in devices]:
+            if payload.get("TransferProtocolType") not in XFUSION_PROTOCOLS:
+                return 400, {"error": {"@Message.ExtendedInfo": [
+                    {"MessageId": "Base.1.0.ActionParameterValueFormatError"}]}}, {}
+            if firmware.image:
+                return accepted(firmware, failed("iBMC.1.0.ConnectionOccupied"))
+            if firmware.fetch_failure:
+                return accepted(firmware, failed(firmware.fetch_failure))
+            parts = urlsplit(payload["Image"])
+            firmware.image = parts._replace(netloc=parts.hostname).geturl()
+            return accepted(firmware, {"TaskState": "Completed", "TaskStatus": "OK", "Messages": []})
+        if method == "POST" and path in [device + "/Actions/VirtualMedia.EjectMedia" for device in devices]:
+            firmware.image = ""
+            return accepted(firmware, {"TaskState": "Completed", "TaskStatus": "OK", "Messages": []})
+        if method == "PATCH" and path in devices:
+            return 501, {"error": {"@Message.ExtendedInfo": [
+                {"MessageId": "iBMC.1.0.PropertyModificationNotSupported"}]}}, {}
+        if method == "PATCH" and path == system:
+            firmware.boot.update(payload["Boot"])
+            return 200, system_body(firmware), {"ETag": 'W/"x1"'}
+        if method == "POST" and path == system + "/Actions/ComputerSystem.Reset":
+            firmware.power = "On" if payload["ResetType"] == "On" else "Off"
+            return 200, {"error": {"@Message.ExtendedInfo": [{"MessageId": "Base.1.0.Success"}]}}, {}
+        return 404, None, {}
+
+    resources = {
+        system: lambda f: (200, system_body(f), {"ETag": 'W/"x1"'}),
+        system + "/EthernetInterfaces": {"Members": [{"@odata.id": nic}]},
+        nic: {"@odata.id": nic, "MACAddress": "aa:bb:cc:dd:ee:71"},
+        manager: {"@odata.id": manager, "FirmwareVersion": "3.08.05.85", "SecurityService": None,
+                  "VirtualMedia": {"@odata.id": views[1]},
+                  "Oem": {"xFusion": {"SecurityService": {"@odata.id": SECURITY_SERVICE}}}},
+        SECURITY_SERVICE: lambda f: {"@odata.id": SECURITY_SERVICE, "Id": "SecurityService",
+                                     "HttpsTransferCertVerification": f.transfer_verification},
+    }
+    for view, device in zip(views, devices):
+        resources[view] = {"@odata.id": view, "Members": [
+            {"@odata.id": view + "/" + name} for name in ("CD", "USBStick", "iBMAUSBStick")]}
+        resources[device] = device_body(device)
+    firmware = Firmware("https://bmc.test" + system, resources, write)
+    firmware.boot = {"BootSourceOverrideEnabled": "Disabled", "BootSourceOverrideTarget": "None"}
+    firmware.transfer_verification, firmware.fetch_failure, firmware.tasks = False, "", 0
+    return firmware
+
+
+SHAPES = {"emulator": emulator, "manager-scoped": manager_scoped, "dual-view": dual_view, "xfusion": xfusion}
+CONNECT = {"Image": IMAGE, "Inserted": True, "TransferProtocolType": "HTTPS"}
 EXPECTED = {
     "emulator": {
         "attach": ("/VirtualMedia/Cd/Actions/VirtualMedia.InsertMedia", CONNECT),
@@ -371,6 +507,13 @@ EXPECTED = {
         "precondition": ['W/"tag"'], "enabled": "Once",
         "resets": {"power-off": "ForceOff", "shutdown": None, "power-on": "ForceOn"},
     },
+    "xfusion": {
+        "attach": ("/Managers/1/VirtualMedia/CD/Actions/VirtualMedia.InsertMedia", CONNECT),
+        "detach": ("/Managers/1/VirtualMedia/CD/Actions/VirtualMedia.EjectMedia", {}),
+        "precondition": ['W/"x1"'], "enabled": "Once",
+        "resets": {"power-off": "ForceOff", "shutdown": "GracefulShutdown", "power-on": "On"},
+        "echo": "https://server.test/os/m/install.iso",
+    },
 }
 
 
@@ -380,20 +523,20 @@ EXPECTED = {
 @pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_every_operation_goes_through_the_client(monkeypatch, shape):
     firmware, expected = SHAPES[shape](), EXPECTED[shape]
-    power = firmware.power
+    power, echo = firmware.power, EXPECTED[shape].get("echo", IMAGE)
 
     assert read(monkeypatch, firmware) == (power, "")
     assert not writes(firmware) and gets(firmware).count(firmware.system) == 1
 
     mark = len(firmware.calls)
-    assert run(monkeypatch, firmware, "insert", image=IMAGE) == (True, power, IMAGE)
+    assert run(monkeypatch, firmware, "insert", image=IMAGE) == (True, power, echo)
     [(method, path, payload)] = writes(firmware, mark)
     assert (method, path.endswith(expected["attach"][0]), payload) == ("POST", True, expected["attach"][1])
     if shape == "manager-scoped":
         assert "/redfish/v1/TaskService/Tasks/9" in gets(firmware, mark)
     mark = len(firmware.calls)
-    assert run(monkeypatch, firmware, "insert", image=IMAGE) == (False, power, IMAGE)
-    assert read(monkeypatch, firmware) == (power, IMAGE)
+    assert run(monkeypatch, firmware, "insert", image=IMAGE) == (False, power, echo)
+    assert read(monkeypatch, firmware) == (power, echo)
     assert not writes(firmware, mark)
 
     for target in ("Cd", "Hdd"):
@@ -657,6 +800,9 @@ ASYNCHRONOUS = {
     "exception": (FOLLOWED, [], (200, {"TaskState": "Exception", "TaskStatus": "Critical",
                                        "Messages": [{"MessageId": "ConnectionFailed"}]}, {}),
                   False, 3, "task Exception (ConnectionFailed)"),
+    "exception with one message object": (FOLLOWED, [], (200, {"TaskState": "Exception", "TaskStatus": "Warning",
+                                                               "Messages": {"MessageId": "iBMC.1.0.ConnectionFailed"}}, {}),
+                                          False, 3, "task Exception (iBMC.1.0.ConnectionFailed)"),
     "completed with a warning": (FOLLOWED, [], completing({"TaskState": "Completed", "TaskStatus": "Warning"}),
                                  False, 1, ""),
     "monitor 404": ((202, None, {"Location": MONITOR}), [], (404, None, {}), True, 1, ""),
@@ -713,12 +859,19 @@ def test_an_attach_that_timed_out_is_read_back_before_it_is_retried(monkeypatch)
     assert [path for method, path, payload in writes(firmware)] == [firmware.system + INSERT]
 
 
+OTHER = "https://server.test:8443/os/old.iso"
+
+
 # A second attach is sent only to a device proved empty; one that could not be
 # released ends the insert, naming both what failed and that it stayed attached.
 def test_a_retry_starts_from_an_empty_device(monkeypatch):
     firmware = emulator()
-    firmware.image = "https://server.test:8443/os/old.iso"
-    firmware.script("POST", firmware.system + INSERT, (500, None, {}))
+
+    def left_other_media(firmware):
+        firmware.image = OTHER
+        return 500, None, {}
+
+    firmware.script("POST", firmware.system + INSERT, left_other_media)
     firmware.script("POST", firmware.system + EJECT, (204, None, {}))
     with pytest.raises(ControllerError) as failure:
         run(monkeypatch, firmware, "insert", image=IMAGE)
@@ -726,12 +879,224 @@ def test_a_retry_starts_from_an_empty_device(monkeypatch):
     assert [path for method, path, payload in writes(firmware)] == [firmware.system + INSERT, firmware.system + EJECT]
 
 
+# A device presenting other media is released, and read back empty, before the
+# first attach, so that attach is not refused as occupied and spends no retry.
+@pytest.mark.parametrize("shape", ["emulator", "xfusion"])
+def test_a_device_presenting_other_media_is_released_before_the_first_attach(monkeypatch, shape):
+    firmware, expected = SHAPES[shape](), EXPECTED[shape]
+    firmware.image = OTHER
+    assert run(monkeypatch, firmware, "insert", image=IMAGE)[0] is True
+    assert firmware.image == expected.get("echo", IMAGE)
+    posts = [(index, urlsplit(call[1]).path) for index, call in enumerate(firmware.calls) if call[0] != "GET"]
+    assert len(posts) == 2
+    (eject_at, detach), (attach_at, attach) = posts
+    assert detach.endswith(expected["detach"][0]) and attach.endswith(expected["attach"][0])
+    device = detach[:-len("/Actions/VirtualMedia.EjectMedia")]
+    read_back = [call for call in firmware.calls[eject_at + 1:attach_at] if urlsplit(call[1]).path == device]
+    assert read_back and all(call[0] == "GET" for call in read_back)
+    assert redfish_control.INSERT_RETRY_DELAY not in firmware.pauses
+
+
+# A device whose other media cannot be released is never attached to: the
+# insert ends naming the release that was not proved.
+def test_a_device_that_cannot_be_released_is_never_attached(monkeypatch):
+    firmware = emulator()
+    firmware.image = OTHER
+    firmware.script("POST", firmware.system + EJECT, (204, None, {}))
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, firmware, "insert", image=IMAGE)
+    assert "was not released" in str(failure.value) and "still presents media" in str(failure.value)
+    assert [path for _method, path, _payload in writes(firmware)] == [firmware.system + EJECT]
+
+
+# A fetch the controller reports failed, or after which the device never
+# presents the image, names the causes on the controller's side of the leg; a
+# request the controller refused does not.
+def test_a_failed_fetch_names_the_controller_side_causes(monkeypatch):
+    failing = xfusion()
+    failing.fetch_failure = "iBMC.1.0.ConnectionFailed"
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, failing, "insert", image=IMAGE)
+    assert "(iBMC.1.0.ConnectionFailed)" in str(failure.value)
+    assert str(failure.value).endswith("; " + redfish_control.FETCH_CAUSES)
+
+    module = Module({"endpoint": failing.endpoint, "user": "operator", "password": PASSWORD, "verify": True,
+                     "ca_data": "", "operation": "insert", "image": IMAGE, "target": "Cd", "attempts": 3,
+                     "trust": "established", "certificate": "", "restore_verification": False,
+                     "remove_certificate": False, "private_delivery": False})
+    monkeypatch.setattr(redfish_boot, "AnsibleModule", module.build)
+    monkeypatch.setattr(redfish_control, "_opener", failing.opener)
+    monkeypatch.setattr(redfish_control.time, "sleep", lambda seconds: None)
+    redfish_boot.main()
+    assert module.ended[0] == "fail" and module.ended[1]["msg"].endswith(redfish_control.FETCH_CAUSES)
+    assert len(module.ended[1]["msg"]) <= 512
+
+    silent = emulator()
+    for _attempt in range(redfish_control.INSERT_ATTEMPTS):
+        silent.script("POST", silent.system + INSERT, FOLLOWED)
+    silent.resources[TASK] = (200, COMPLETED, {})
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, silent, "insert", image=IMAGE)
+    assert "the device does not present the image" in str(failure.value)
+    assert str(failure.value).endswith("; " + redfish_control.FETCH_CAUSES)
+
+    refusing = xfusion()
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, refusing, "insert", image="http://server.test:8080/os/m/install.iso")
+    assert "HTTP 400" in str(failure.value) and "Base.1.0.ActionParameterValueFormatError" in str(failure.value)
+    assert redfish_control.FETCH_CAUSES not in str(failure.value)
+
+
+def test_the_fetch_causes_fit_the_module_failure():
+    assert len(redfish_control.FETCH_CAUSES) <= 250
+    assert all(" " <= char <= "~" for char in redfish_control.FETCH_CAUSES + redfish_control.NO_VERIFIED_FETCH)
+    worst = "the management controller did not complete insert: " + str(
+        ControllerError("x" * 400, redfish_control.FETCH_CAUSES))
+    assert len(worst) <= 512
+
+
+PRIVATE = {"private_delivery": True}
+
+
+def verifying(firmware, device=True, manager=True):
+    firmware.verify_certificate, firmware.transfer_verification = device, manager
+    return firmware
+
+
+# Private material under established trust is attached only once reads alone
+# prove the controller verifies the server: the device's VerifyCertificate and
+# the security service's HttpsTransferCertVerification, before any write.
+def test_private_delivery_under_established_proves_the_controller_verifies_before_any_write(monkeypatch):
+    firmware = verifying(xfusion())
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **PRIVATE)[0] is True
+    paths = [(call[0], urlsplit(call[1]).path) for call in firmware.calls]
+    attach = ("POST", "/redfish/v1" + EXPECTED["xfusion"]["attach"][0])
+    assert paths.index(("GET", SECURITY_SERVICE)) < paths.index(attach)
+    assert [path for _method, path, _payload in writes(firmware)] == [attach[1]]
+
+
+@pytest.mark.parametrize("other", ["", OTHER], ids=["empty", "holding other media"])
+def test_private_delivery_refuses_a_device_that_does_not_verify(monkeypatch, other):
+    firmware = xfusion()
+    firmware.image = other
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, firmware, "insert", image=IMAGE, **PRIVATE)
+    assert "VerifyCertificate reads false" in str(failure.value)
+    assert str(failure.value).endswith("; " + redfish_control.NO_VERIFIED_FETCH)
+    assert writes(firmware) == [] and firmware.image == other
+
+
+def test_private_delivery_refuses_a_manager_that_does_not_verify(monkeypatch):
+    firmware = verifying(xfusion(), manager=False)
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, firmware, "insert", image=IMAGE, **PRIVATE)
+    assert SECURITY_SERVICE + ": HttpsTransferCertVerification reads false" in str(failure.value)
+    assert str(failure.value).endswith("; " + redfish_control.NO_VERIFIED_FETCH)
+    assert writes(firmware) == []
+
+
+# A controller whose manager links no security service is decided by the
+# device alone, and an absent VerifyCertificate reads as off.
+def test_private_delivery_without_a_security_service_is_decided_by_the_device(monkeypatch):
+    firmware = verifying(emulator())
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **PRIVATE) == (True, "Off", IMAGE)
+    refusing = emulator()
+    with pytest.raises(ControllerError, match="VerifyCertificate reads false"):
+        run(monkeypatch, refusing, "insert", image=IMAGE, **PRIVATE)
+    absent = emulator()
+    serve = absent.resources[absent.system + DEVICE]
+    absent.resources[absent.system + DEVICE] = lambda f: {
+        key: value for key, value in serve(f).items() if key != "VerifyCertificate"}
+    with pytest.raises(ControllerError, match="VerifyCertificate reads nothing"):
+        run(monkeypatch, absent, "insert", image=IMAGE, **PRIVATE)
+    for each in (firmware, refusing, absent):
+        assert not [path for path in gets(each) if "SecurityService" in path]
+    assert writes(refusing) == [] and writes(absent) == []
+
+
+def test_an_unreadable_security_service_refuses_private_delivery(monkeypatch):
+    firmware = verifying(xfusion())
+    firmware.resources[SECURITY_SERVICE] = (500, None, {})
+    with pytest.raises(ControllerError) as failure:
+        run(monkeypatch, firmware, "insert", image=IMAGE, **PRIVATE)
+    assert SECURITY_SERVICE + ": HTTP 500" in str(failure.value)
+    assert writes(firmware) == []
+
+
+def test_established_without_private_delivery_reads_no_security_service(monkeypatch):
+    firmware = xfusion()
+    assert run(monkeypatch, firmware, "insert", image=IMAGE)[0] is True
+    assert SECURITY_SERVICE not in gets(firmware)
+
+
+def test_private_delivery_refuses_disable_verification_before_any_request(monkeypatch):
+    firmware = verifying(xfusion())
+    with pytest.raises(ControllerError, match="an insert carrying private material refuses disable-verification"):
+        run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_DISABLED, **PRIVATE)
+    assert firmware.calls == []
+
+
+# The module Ansible runs carries private_delivery to the client: a play that
+# asks for it on the captured iBMC is refused before any write.
+def test_the_module_carries_private_delivery_to_the_client(monkeypatch):
+    firmware = xfusion()
+    module = Module({"endpoint": firmware.endpoint, "user": "operator", "password": PASSWORD, "verify": True,
+                     "ca_data": "", "operation": "insert", "image": IMAGE, "target": "Cd", "attempts": 3,
+                     "trust": "established", "certificate": "", "restore_verification": False,
+                     "remove_certificate": False, "private_delivery": True})
+    monkeypatch.setattr(redfish_boot, "AnsibleModule", module.build)
+    monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
+    monkeypatch.setattr(redfish_control.time, "sleep", lambda seconds: None)
+    redfish_boot.main()
+    assert module.ended[0] == "fail"
+    assert "VerifyCertificate reads false" in module.ended[1]["msg"]
+    assert module.ended[1]["msg"].endswith(redfish_control.NO_VERIFIED_FETCH)
+    assert writes(firmware) == []
+
+
+# Importing the certificate turns verification on and reads it back, so a
+# private insert under import-certificate reads nothing more and is not
+# refused by a device that verifies nothing before the import.
+def test_private_delivery_under_import_certificate_adds_no_read(monkeypatch):
+    firmware = emulator()
+    assert firmware.verify_certificate is False
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **dict(IMPORT, **PRIVATE)) == (True, "Off", IMAGE)
+    assert trust_writes(firmware) == [
+        ("POST", CERTIFICATES, {"CertificateString": SERVER, "CertificateType": "PEM"}),
+        ("PATCH", DEVICE, {"VerifyCertificate": True})]
+    assert not [path for path in gets(firmware) if "SecurityService" in path]
+
+
+# A device already presenting the image is left alone: an idempotent apply
+# with private delivery reads no verification and writes nothing.
+def test_private_delivery_over_the_presented_image_reads_no_verification(monkeypatch):
+    firmware = xfusion()
+    firmware.image = EXPECTED["xfusion"]["echo"]
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **PRIVATE) == (
+        False, firmware.power, EXPECTED["xfusion"]["echo"])
+    assert writes(firmware) == []
+    assert SECURITY_SERVICE not in gets(firmware)
+
+
+# A security service that does not report HttpsTransferCertVerification adds
+# no condition: it is read, and the device decides.
+def test_a_security_service_without_the_setting_adds_no_condition(monkeypatch):
+    firmware = verifying(xfusion())
+    firmware.resources[SECURITY_SERVICE] = {"@odata.id": SECURITY_SERVICE, "Id": "SecurityService"}
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **PRIVATE)[0] is True
+    assert SECURITY_SERVICE in gets(firmware)
+    assert [path for _method, path, _payload in writes(firmware)] == [
+        "/redfish/v1" + EXPECTED["xfusion"]["attach"][0]]
+
+
 # A controller that echoes the image in another spelling of the same URL, a
-# host in capitals or a default port dropped, presents it, so nothing is sent.
+# host in capitals, a default port dropped, or a non-default port dropped as
+# the captured iBMC does, presents it, so nothing is sent.
 @pytest.mark.parametrize("image, echoed", [
     (IMAGE, "https://SERVER.test:8443/os/m/install.iso"),
     ("https://server.test:443/os/m/install.iso", "https://server.test/os/m/install.iso"),
-], ids=["host case", "default port"])
+    (IMAGE, "https://server.test/os/m/install.iso"),
+], ids=["host case", "default port", "non-default port dropped"])
 def test_an_image_echoed_in_another_spelling_is_not_attached_again(monkeypatch, image, echoed):
     firmware = emulator()
     firmware.image = echoed
@@ -1208,7 +1573,7 @@ def test_an_identical_certificate_is_not_added_twice(monkeypatch):
 # refuses, naming the exceptions an operator may declare instead, and nothing
 # is attached.
 def test_a_member_without_a_certificate_collection_refuses_naming_the_exception(monkeypatch):
-    for shape in (emulator, dual_view):
+    for shape in (emulator, dual_view, xfusion):
         firmware = shape()
         if shape is emulator:
             serve = firmware.resources[firmware.system + DEVICE]
@@ -1434,6 +1799,7 @@ def test_the_trust_options_default_to_no_action(monkeypatch):
     assert options["trust"]["default"] == "established" and options["certificate"]["default"] == ""
     assert options["restore_verification"]["default"] is False and options["remove_certificate"]["default"] is False
     assert options["ca_data"] == {"type": "str", "default": ""}
+    assert options["private_delivery"]["default"] is False
     with pytest.raises(ControllerError, match="needs the server's certificate"):
         run(monkeypatch, emulator(), "insert", image=IMAGE, trust=redfish_control.TRUST_IMPORT)
     with pytest.raises(ControllerError, match="needs that certificate"):
@@ -1445,7 +1811,8 @@ def test_the_trust_options_default_to_no_action(monkeypatch):
 # than as a traceback.
 @pytest.mark.parametrize("module, extra", [
     (redfish_boot, {"operation": "boot", "image": None, "target": "Cd", "attempts": 3, "trust": "established",
-                    "certificate": "", "restore_verification": False, "remove_certificate": False}),
+                    "certificate": "", "restore_verification": False, "remove_certificate": False,
+                    "private_delivery": False}),
     (redfish_system_read, {"media": False}),
     (redfish_system_inspect, {}),
 ])

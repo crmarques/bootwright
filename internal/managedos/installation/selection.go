@@ -171,7 +171,8 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if err != nil {
 		return Request{}, Requirements{}, err
 	}
-	imageServer, image, err := publicationFor(catalog, anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), contextName, name, "install.iso", profile.Identity())
+	imageServer, image, private, certificate, err := installerPublication(catalog,
+		anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), target, contextName, name, profile.Identity())
 	if err != nil {
 		return Request{}, Requirements{}, err
 	}
@@ -198,19 +199,18 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 		return Request{}, Requirements{}, refusal("api.required", "the Environment declares no fleet access key", "set spec.remoteMachinesAccessKey.keyRef")
 	}
 	// A machine proved by a key this installation delivers needs that key, and
-	// the key cannot travel in publicly served content.
-	if target.Channel == substrate.ChannelDeliveredKey {
-		published, certificate, err := artifactserver.PrivatePath(catalog, imageServer,
-			anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), contextName, consumerPrefix, name, profile.Identity())
-		if err != nil {
-			return Request{}, Requirements{}, err
-		}
-		private := Publication{Path: published.Path, URL: published.URL}
+	// the key travels only beneath the private subtree.
+	if private != nil {
 		if target.HostKeyRef == "" {
 			return Request{}, Requirements{}, refusal("api.required", "the Machine declares no SSH host key for its installation to deliver",
 				"set spec.os.install.hostKeyRef on "+machine.Identity())
 		}
-		request.Private, request.TLSCertificateRef = &private, certificate
+		keyType, err := hostKeyType(catalog, machine, target.HostKeyRef)
+		if err != nil {
+			return Request{}, Requirements{}, err
+		}
+		request.Target.HostKeyType = keyType
+		request.Private, request.TLSCertificateRef = private, certificate
 	}
 	if err := mediaTrustRefusal(machine, request); err != nil {
 		return Request{}, Requirements{}, err
@@ -381,6 +381,31 @@ func treeFor(catalog api.Catalog, source api.Value, contextName string, profile 
 
 // publicationFor is this block's own subtree beneath the selected server's
 // served root, in the shape that server's publication contract fixes.
+// installerPublication is where one Machine's installer image is published:
+// the server it is published through, and either the public image or the
+// private subtree with the certificate its fetch verifies. A machine proved
+// by a key this installation delivers boots an image whose Kickstart names
+// the private URL of that key, so the image itself is published only beneath
+// the private subtree and never publicly.
+func installerPublication(catalog api.Catalog, selection api.Value, target Target, contextName, name, identity string) (api.Object, *Publication, *Publication, string, error) {
+	if target.Channel != substrate.ChannelDeliveredKey {
+		server, public, err := publicationFor(catalog, selection, contextName, name, "install.iso", identity)
+		if err != nil {
+			return api.Object{}, nil, nil, "", err
+		}
+		return server, &public, nil, "", nil
+	}
+	server, err := artifactserver.Selected(catalog, selection, identity)
+	if err != nil {
+		return api.Object{}, nil, nil, "", err
+	}
+	published, certificate, err := artifactserver.PrivatePath(catalog, server, selection, contextName, consumerPrefix, name, identity)
+	if err != nil {
+		return api.Object{}, nil, nil, "", err
+	}
+	return server, nil, &Publication{Path: published.Path, URL: published.URL}, certificate, nil
+}
+
 func publicationFor(catalog api.Catalog, selection api.Value, contextName, object, leaf, identity string) (api.Object, Publication, error) {
 	server, err := artifactserver.Selected(catalog, selection, identity)
 	if err != nil {
@@ -479,15 +504,43 @@ func refusedTarget(machine api.Object, target substrate.Target) (reason, remedia
 		return "a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server",
 			"declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on " + machine.Identity() + ", or established when its controller already trusts the server"
 	}
-	// A delivered key reaches the installer at a tokenized URL the Kickstart
-	// names, and the Kickstart is implanted in an installer image served
-	// without authentication, so the token would protect nothing.
-	if target.Identity.Channel == substrate.ChannelDeliveredKey {
-		return "a delivered host key would be readable from the publicly served installer image",
-			"physical managed-OS installation is disabled until private delivery is repaired; remove " + machine.Identity() +
-				" from the selected Environment or install its operating system outside Bootwright"
+	// The controller is handed the tokenized URL of the private installer
+	// image, so whoever answers or reads the controller leg holds the token.
+	// A trust bundle implies verification, so https with verification is the
+	// whole test.
+	if target.Identity.Channel == substrate.ChannelDeliveredKey &&
+		(!strings.HasPrefix(target.Controller.Endpoint, "https://") || !target.Controller.TLSVerify) {
+		return "a Machine whose installation delivers private material hands its controller the private installer image URL, so the controller must be reached over https with its certificate verified",
+			"address the controller of " + machine.Identity() + " with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out on " +
+				machine.Identity() + " or in spec.baremetal.defaults.bmc of InfraProvider/" + target.Provider +
+				"; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it"
 	}
 	return "", ""
+}
+
+// hostKeyType is the type of the key pair a delivered-key installation
+// installs, which decides the path the Kickstart installs it at and the
+// algorithm every connection pins. Only a generated declaration names its type
+// before the material exists, so a key of any other source refuses here,
+// before registration, rather than at the installer.
+func hostKeyType(catalog api.Catalog, machine api.Object, reference string) (string, error) {
+	secret, ok := catalog.Find(api.Secret, reference)
+	if !ok {
+		return "", refusal("api.reference", "the Machine's SSH host key Secret is not in the selected graph",
+			"declare Secret/"+reference+" or correct spec.os.install.hostKeyRef on "+machine.Identity())
+	}
+	generated := secret.Spec().Get("source", "generated")
+	if !generated.Present() {
+		return "", refusal("lifecycle.unsupported",
+			"a physical installation installs its delivered SSH host key at the path of the type its generated declaration names, and Secret/"+reference+" declares no generated source",
+			"declare spec.source.generated.keyType on Secret/"+reference+", or name a generated sshKeyPair Secret in spec.os.install.hostKeyRef on "+machine.Identity())
+	}
+	keyType := generated.Get("keyType").Text()
+	if _, known := deliveredHostKeys[keyType]; !known {
+		return "", refusal("api.value", "Secret/"+reference+" generates no SSH host key type an installation can deliver",
+			"declare spec.source.generated.keyType as ed25519, rsa, ecdsa-p256, ecdsa-p384 or ecdsa-p521 on Secret/"+reference)
+	}
+	return keyType, nil
 }
 
 // mediaTrustRefusal says why the controller cannot be made to trust the server
@@ -498,7 +551,7 @@ func mediaTrustRefusal(machine api.Object, request Request) error {
 	if request.Target.Controller.VirtualMedia.Trust != substrate.TrustImportCertificate {
 		return nil
 	}
-	if strings.HasPrefix(request.Image.URL, "https://") && request.TLSCertificateRef != "" {
+	if strings.HasPrefix(request.installerImage().URL, "https://") && request.TLSCertificateRef != "" {
 		return nil
 	}
 	return refusal("lifecycle.state", "importing the artifact server's certificate into the controller of "+machine.Identity()+" needs an https installer image and the certificate its server presents",

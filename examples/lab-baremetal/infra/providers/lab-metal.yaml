@@ -13,11 +13,11 @@ spec:
         credentialsRef: lab-bmc-credentials
         tls:
           # The lab controllers present certificates their own authority
-          # issued. This context does not carry that authority yet, so the
-          # opt-out is declared here and reaches exactly these endpoints;
-          # carried as a caBundle Secret named by tls.trustBundleRef, it would
-          # verify them instead.
-          verify: false
+          # issued. That authority is carried as a caBundle Secret, so every
+          # controller leg is verified against it: an installation that
+          # delivers private material hands its controller a private URL and
+          # refuses an unverified leg.
+          trustBundleRef: lab-bmc-ca
 
   networkAttachments:
     - name: lab-metal

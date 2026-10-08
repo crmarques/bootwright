@@ -73,6 +73,7 @@ LOOPED = re.compile(r"\{\{\s*item\.([a-z_]+)\s*\}\}")
 PUBLISHED = {
     ("containercluster_media_agent/tasks/build.yml", "Keep the published image readable only by the serving process"),
     ("managedos_install_anaconda/tasks/private.yml", "Publish the host key pair this installation delivers"),
+    ("managedos_install_anaconda/tasks/apply.yml", "Keep the private installer image readable only by the serving process"),
 }
 
 
