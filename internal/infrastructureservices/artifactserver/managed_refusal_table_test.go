@@ -14,7 +14,11 @@ import (
 )
 
 // artifactOnlyRows are the refusal-table rows only an ArtifactServer declares.
-var artifactOnlyRows = map[string]bool{"Install-only retention": true}
+var artifactOnlyRows = map[string]bool{"Install-only retention": true, "Artifact sockets beyond the host reservation": true}
+
+// networkOnlyRows are the refusal-table rows only a Proxy, DNSServer or
+// NTPServer declares.
+var networkOnlyRows = map[string]bool{"Endpoint addresses beyond the host reservation": true}
 
 func labEnvironment() api.Object {
 	return api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(field("controller", api.MapValue(text("machineRef", "controller")))))
@@ -91,6 +95,9 @@ func TestManagedServiceRefusalTableMatchesUnsupported(t *testing.T) {
 			}
 			t.Run(string(definition.Kind)+"/"+row.name, func(t *testing.T) {
 				catalog, values, found := placementRowGraph(row.name, managedServiceOf(definition.Kind))
+				if !found {
+					catalog, values, found = boundRowGraph(row.name, definition.Kind)
+				}
 				if !found {
 					t.Fatalf("the table row %q has no graph here that it refuses", row.name)
 				}

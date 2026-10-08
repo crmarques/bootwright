@@ -33,6 +33,7 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 				"declare spec.retention: persistent on "+server.Identity()+", or omit it"))
 		}
 		found = append(found, managedservice.PlacementRefusals(catalog, server)...)
+		found = append(found, managedservice.ReservationRefusals(catalog, server)...)
 	}
 	return lifecycle.SortRefusals(found)
 }

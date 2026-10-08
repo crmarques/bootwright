@@ -135,6 +135,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	machine, placed := c.Find(api.Machine, value.Get("machineRef").Text())
 	if placed {
 		issues = add(issues, validatePlacement(o.Kind(), value, machine)...)
+		issues = add(issues, validateReservationBound(o, machine)...)
 	}
 	if o.Kind() != api.ArtifactServer {
 		return issues

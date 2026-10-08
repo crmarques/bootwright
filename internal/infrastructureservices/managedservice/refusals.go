@@ -1,8 +1,11 @@
 package managedservice
 
 import (
+	"fmt"
+
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -55,6 +58,24 @@ func PlacementRefusals(catalog api.Catalog, service api.Object) []lifecycle.Refu
 	return refused
 }
 
+// ReservationRefusals refuses a managed service whose claim exceeds the keys
+// one controller host reservation holds, so the operation refuses before
+// registration for state that bypassed admission. It reads no material.
+func ReservationRefusals(catalog api.Catalog, service api.Object) []lifecycle.Refusal {
+	machine, found := catalog.Find(api.Machine, service.Spec().Get("machineRef").Text())
+	if !found || infrastructureservices.ReservationSockets(service, machine) <= infrastructureservices.MaxReservationSockets {
+		return nil
+	}
+	if service.Kind() == api.ArtifactServer {
+		return []lifecycle.Refusal{lifecycle.RefusalOf(service,
+			fmt.Sprintf("an artifact server claims one host reservation key for each listener and, under a wildcard bindAddress, for each distinct endpoint address of each listener, beside its unit and its content root, within the 64 keys one reservation holds, so its listeners and endpoints claim at most %d sockets", infrastructureservices.MaxReservationSockets),
+			fmt.Sprintf("declare fewer listeners in spec.listeners or fewer endpoints with distinct addresses in spec.endpoints of %s, so they claim at most %d sockets", service.Identity(), infrastructureservices.MaxReservationSockets))}
+	}
+	return []lifecycle.Refusal{lifecycle.RefusalOf(service,
+		fmt.Sprintf("a managed service bound to a wildcard claims one host reservation key for each distinct endpoint address beside its unit, its content root and its bind socket, within the 64 keys one reservation holds, so it declares at most %d distinct endpoint addresses", infrastructureservices.MaxReservationSockets-1),
+		fmt.Sprintf("declare at most %d distinct endpoint addresses in spec.endpoints of %s", infrastructureservices.MaxReservationSockets-1, service.Identity()))}
+}
+
 // Unsupported refuses every managed service of this kind the capability
 // cannot realize, with its reason and remedy, before registration.
 func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
@@ -64,6 +85,7 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	var refused []lifecycle.Refusal
 	for _, service := range ManagedObjects(state.Effective(), c.definition.Kind) {
 		refused = append(refused, PlacementRefusals(state.Effective(), service)...)
+		refused = append(refused, ReservationRefusals(state.Effective(), service)...)
 	}
 	return lifecycle.SortRefusals(refused)
 }

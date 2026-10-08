@@ -35,9 +35,11 @@ or creates a log.
 
 Each row is one refusal of a managed service capability.
 `TestArtifactServerRefusalTableMatchesUnsupported` holds the artifact server's
-`Unsupported` to every row, and `TestManagedServiceRefusalTableMatchesUnsupported`
-holds the Proxy, DNSServer and NTPServer capabilities' to every row except
-install-only retention, which only an ArtifactServer declares. Reason and
+`Unsupported` to every row except the endpoint-address bound, which only a
+Proxy, DNSServer or NTPServer declares, and
+`TestManagedServiceRefusalTableMatchesUnsupported` holds the Proxy, DNSServer
+and NTPServer capabilities' to every row except install-only retention and the
+artifact socket bound, which only an ArtifactServer declares. Reason and
 remedy are the diagnostic's message and remediation (`lifecycle.unsupported` on
 the refused service), in which `<server>` is the refused service, `<machine>`
 its placement Machine and `<proxy>` the Proxy that Machine selects. A placement
@@ -53,6 +55,8 @@ rows never refuse a service placed there.
 | Operator SSH identity | `spec.access.ssh.auth.operatorIdentity` on a placement `Machine` other than the controller, the default of a provided Machine without authored access included | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.operatorIdentity` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
 | Password SSH authentication | `spec.access.ssh.auth.passwordRef` on a placement `Machine` other than the controller | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.passwordRef` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
 | No bound host key | `spec.access.ssh` without `knownHostsRef` on a placement `Machine` other than the controller | `this executable connects to a placement host other than the controller only against a bound SSH host key, and <machine>, where <server> runs, declares no spec.access.ssh.knownHostsRef` | `author spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
+| Endpoint addresses beyond the host reservation | a managed `Proxy`, `DNSServer` or `NTPServer` bound to a wildcard with more than 61 distinct endpoint addresses | `a managed service bound to a wildcard claims one host reservation key for each distinct endpoint address beside its unit, its content root and its bind socket, within the 64 keys one reservation holds, so it declares at most 61 distinct endpoint addresses` | `declare at most 61 distinct endpoint addresses in spec.endpoints of <server>` |
+| Artifact sockets beyond the host reservation | a managed `ArtifactServer` whose listeners and, under a wildcard `bindAddress`, distinct endpoint addresses of each listener claim more than 62 sockets | `an artifact server claims one host reservation key for each listener and, under a wildcard bindAddress, for each distinct endpoint address of each listener, beside its unit and its content root, within the 64 keys one reservation holds, so its listeners and endpoints claim at most 62 sockets` | `declare fewer listeners in spec.listeners or fewer endpoints with distinct addresses in spec.endpoints of <server>, so they claim at most 62 sockets` |
 
 ## Placement arms and credentials
 
@@ -113,6 +117,23 @@ capability claims, while a plan's listener impact names the socket as an
 address and port are written, an IPv6 address bracketed, as
 `open-listener [fd00::1]:3128` (`TestIPv6ListenerImpactsAreBracketed`,
 `TestIPv6ArtifactListenerImpactsAreBracketed`).
+
+One reservation holds at most 64 keys ([controller
+record](contexts/controller-record.md#bounds)), and a managed service's claim is
+its `unit:` key, its `path:` key and its distinct `socket:` keys, so it claims at
+most 62 sockets. A Proxy, DNSServer or NTPServer bound to a wildcard therefore
+declares at most 61 distinct endpoint addresses beside its bind socket, and an
+ArtifactServer's listeners and, under a wildcard bind, the distinct endpoint
+addresses of each listener claim at most 62 sockets. Admission refuses more with
+`api.value`, at `$.spec.endpoints`, or at `$.spec.listeners` for an
+ArtifactServer bound to one address. The refusal names the bound and the count,
+and it applies wherever the service is placed. Selection keeps the refusal
+before registration for state that bypassed admission ([refusal
+table](#refusal-table))
+(`TestAWildcardServiceDeclaresAtMostTheEndpointAddressesItsReservationHolds`,
+`TestAnArtifactServerClaimsAtMostTheSocketsItsReservationHolds`,
+`TestTheReservationSocketBoundKeepsAClaimWithinItsKeys`,
+`TestTheArtifactSocketBoundKeepsAClaimWithinItsKeys`).
 
 Every key is exclusive except the class marked shared. Reservations are
 published under the root lock before the operation's first effect and released

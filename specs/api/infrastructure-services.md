@@ -96,6 +96,9 @@ configured by address. When `bindAddress` is not a wildcard (`0.0.0.0` or
 on another address; a DNS-name endpoint is not compared, since admission
 performs no lookup. A wildcard bind requires at least one endpoint, because
 readiness probes the service through its endpoint addresses.
+A managed Proxy, DNSServer or NTPServer bound to a wildcard declares at most 61
+distinct endpoint addresses, its [host reservation's](../infrastructure-services.md#host-reservations)
+bound.
 
 Managed DNSServer additionally accepts optional `additionalIngressHosts[]`
 and `forwarders[]`; forwarders are IP resolver addresses. Managed NTPServer
@@ -136,7 +139,7 @@ A managed ArtifactServer accepts these fields after `management`:
 | `listeners[].name` | string | yes | Unique listener name. |
 | `listeners[].protocol` | string | yes | `http` or `https`. |
 | `listeners[].port` | integer | yes | Unique port in `1..65535`. |
-| `endpoints` | array | no | Set keyed by required unique `name`. Under a wildcard `bindAddress`, every effective listener, the default one included, has an endpoint naming it; under any other, every endpoint whose address is an IP equals `bindAddress`. |
+| `endpoints` | array | no | Set keyed by required unique `name`. Under a wildcard `bindAddress`, every effective listener, the default one included, has an endpoint naming it; under any other, every endpoint whose address is an IP equals `bindAddress`. Its listeners and, under a wildcard `bindAddress`, the distinct endpoint addresses of each listener claim at most 62 sockets, its [host reservation's](../infrastructure-services.md#host-reservations) bound. |
 | `endpoints[].listenerRef` | string | yes | Local listener name. |
 | `endpoints[].addressRef` | string | yes | Address name on the placement Machine. |
 | `image` | object | no | Managed image pins under the common rules above. |

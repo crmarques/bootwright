@@ -28,18 +28,24 @@ type refusalCase struct {
 
 // TestArtifactServerRefusalTableMatchesUnsupported holds the artifact server
 // capability's Unsupported to the infrastructure-services refusal table: every
-// row refuses its graph with exactly its reason and remedy, and a row added or
-// removed on either side fails here.
+// row but those only a network service declares refuses its graph with exactly
+// its reason and remedy, and a row added or removed on either side fails here.
 func TestArtifactServerRefusalTableMatchesUnsupported(t *testing.T) {
 	cases := map[string]refusalCase{
 		"Install-only retention": {catalogOf(controller(), artifactServer(text("retention", "install-only"))),
 			"ArtifactServer/lab-artifacts", map[string]string{"<server>": "ArtifactServer/lab-artifacts"}},
 	}
+	socketRow := "Artifact sockets beyond the host reservation"
+	socketCatalog, socketValues, _ := boundRowGraph(socketRow, api.ArtifactServer)
+	cases[socketRow] = refusalCase{socketCatalog, "ArtifactServer/lab-artifacts", socketValues}
 	for _, row := range []string{"Managed Proxy egress", "Proxy authentication", "Private trust", "Operator SSH identity", "Password SSH authentication", "No bound host key"} {
 		catalog, values, _ := placementRowGraph(row, placedArtifactServer)
 		cases[row] = refusalCase{catalog, "ArtifactServer/lab-artifacts", values}
 	}
 	for _, row := range refusalTable(t) {
+		if networkOnlyRows[row.name] {
+			continue
+		}
 		test, found := cases[row.name]
 		if !found {
 			t.Errorf("the table row %q has no graph here that it refuses", row.name)
