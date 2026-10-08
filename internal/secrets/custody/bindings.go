@@ -140,7 +140,7 @@ func (s Service) Reopen(ctx context.Context, request BindingRequest) ([]secretst
 	var result []secretstore.BoundMaterial
 	err = s.access.View(ctx, selected.Context, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		if session == nil {
-			return secretstore.Failure("store.uninitialized", "bound secret store is not initialized")
+			return secretstore.Uninitialized(selected.Context.Name)
 		}
 		var err error
 		result, err = session.Reopen(ctx, request.BindingID)

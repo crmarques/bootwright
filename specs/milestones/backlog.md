@@ -140,6 +140,11 @@ Alias cell.
 | [B450](#b450) | new, 2026-10-08 (X45) | enabling | Infrastructure services | The artifact server serves its private subtree only over https listeners | Found in X45; parked under D48 (D116); defense in depth, since fetching a token in clear needs a plain listener the operator declared, and it moves the automation digest |
 | [B451](#b451) | new, 2026-10-08 (X45) | enabling | Managed OS, Substrate and Infrastructure services | Host observations of what X45 proved only in-tree | Found in X45; parked under D48 (D116); each needs the lab-baremetal rehearsal or real hardware, which B73's gate and the first xFusion observation provide |
 | [B452](#b452) | new, 2026-10-08 (X45) | enabling | Each spec's and test's owner | Wording and tests X45 left narrower than they read | Found in X45; parked under D48 (D116) |
+| [B460](#b460) | new, 2026-10-08 (X46) | enabling | State reconciliation | A resolution record says which check proved its evidence | Found in X46; parked under D48 (D116); it adds an optional field to the attempt record |
+| [B461](#b461) | new, 2026-10-08 (X46) | enabling | Infrastructure services | The managed-service and artifact-server roles share their helpers, and Go checks the content root it decodes | Found in X46; parked under D48 (D116); defense in depth, since no input reaches either, and the role half moves the automation digest |
+| [B462](#b462) | new, 2026-10-08 (X46) | enabling | Container cluster | The media role's keep task is qualified in an agent-install rehearsal | Found in X46; parked under D48 (D116); needs an agent-install run on a host, which B61's operator gate provides |
+| [B463](#b463) | new, 2026-10-08 (X46) | enabling | Controller (privilege), Desired state and Infrastructure services | Host observations of what X46 proved only in-tree | Found in X46; parked under D48 (D116); each needs root on a host, which D59's closing run provides |
+| [B464](#b464) | new, 2026-10-08 (X46) | enabling | Each spec's and test's owner | Wording, tests and dead code X46 left | Found in X46; parked under D48 (D116) |
 
 ### B96
 
@@ -541,7 +546,7 @@ The rename `validate` offers within two edits reads oddly for short keys, so `oc
 
 ### B368
 
-The enrollment test double records observations without a lock while enrollment observes up to eight endpoints at once, so `TestAnUnchangedKeyIsReusedAndNothingIsWritten` fails under `-race`, and `make race` does not cover `internal/trust`; the documented-command gate reads a `--` before a payload as an unknown flag, so the lab-rhel README writes `machine exec` without it; the status golden's retired-key fixture shows a keyring the local keyring cannot hold; `TestValidateRefusalsNameObjectFieldExpectationAndRemedy` lacks the `Golden` the Go rules ask of a golden test's name, and the rows of `TestSelectionRefusalsPointAtTheEntry` sit in a golden of their own; no session-path test pins the controller Machine's divergent-pin remedy, which only `TestADivergentPinHeldByTheControllerMachineNamesTheBindingThatKeepsIt` holds through enrollment; attributing a Secret refusal drops its usage mark, which custody avoids today only by never attributing a usage refusal; and the hand-built validate fixture `internal/cli/testdata/cli-validate-failed-json.golden` still shows the `api.field` message from before X40, `field is not permitted by this schema` (found in X40). **Exit evidence:** the double locked and `make race` covering `internal/trust`, the gate admitting `--`, a fixture the keyring can produce, the golden renamed and merged, the session-path test, attribution keeping the mark under a test, and the validate fixture rebuilt from a real compile.
+The enrollment test double records observations without a lock while enrollment observes up to eight endpoints at once, so `TestAnUnchangedKeyIsReusedAndNothingIsWritten` fails under `-race`, and `make race` does not cover `internal/trust`; the documented-command gate reads a `--` before a payload as an unknown flag, so the lab-rhel README writes `machine exec` without it; the status golden's retired-key fixture shows a keyring the local keyring cannot hold; `TestValidateRefusalsNameObjectFieldExpectationAndRemedy` lacks the `Golden` the Go rules ask of a golden test's name, and the rows of `TestSelectionRefusalsPointAtTheEntry` sit in a golden of their own; attributing a Secret refusal drops its usage mark, which custody avoids today only by never attributing a usage refusal; and the hand-built validate fixture `internal/cli/testdata/cli-validate-failed-json.golden` still shows the `api.field` message from before X40, `field is not permitted by this schema` (found in X40). **Exit evidence:** the double locked and `make race` covering `internal/trust`, the gate admitting `--`, a fixture the keyring can produce, the golden renamed and merged, attribution keeping the mark under a test, and the validate fixture rebuilt from a real compile.
 
 ### B369
 
@@ -553,7 +558,7 @@ Since X40 `status` reads a keyring listing that fails as corrupt or undecryptabl
 
 ### B375
 
-A fresh destroy over a failed setup receipt is proved to decide only in the lifecycle harness, whose receipt keeps an execution definition. The execution closure refuses a receipt that has none, naming `bootwright setup`, so the setup-gated steps `status` offers may have to name setup there in place of destroy; nobody checked what a failed receipt the context store writes holds (found in X40). **Exit evidence:** a failed receipt written through the context store, with `status` and `destroy` agreeing on the step.
+A fresh destroy over a failed setup receipt is proved to decide only in the lifecycle harness, whose receipt keeps an execution definition. The execution closure refuses a receipt that has none, naming `bootwright setup`, so the setup-gated steps `status` offers may have to name setup there in place of destroy; nobody checked what a failed receipt the context store writes holds (found in X40). X46 saw `status` report its `execution-bundle` setup check as ready over a receipt that holds no execution definition (found in X46). **Exit evidence:** a failed receipt written through the context store, with `status` and `destroy` agreeing on the step, and that check not ready.
 
 ### B376
 
@@ -892,6 +897,89 @@ virtual-media trust, where the owner's iBMC needs `established`. **Exit
 evidence:** each stated in its owner's file or covered by a test that fails when
 its guard is removed, or withdrawn by the owner.
 
+### B460
+
+A resolution record does not say whether the apply's check or the removal's
+(D119) produced its evidence, so `status` explains a removal-check resolution of
+an apply block through the apply's reading, with a fallback; recording the check
+needs a new optional field in the attempt record. The removal's check also reads
+an agent installation as removed when no node presents media while the cluster
+keeps running, and a capability may report no effect for a target it cannot
+read, which the resolution maps to "partial, this context's own": stronger than
+what was proved, though the more conservative of the two failed outcomes (found
+in X46). **Exit evidence:** the record naming the check, `status` reading it, and
+the state-reconciliation spec stating the weaker proofs, with tests; or withdrawn
+by the owner.
+
+### B461
+
+The managed-service and artifact-server module utilities still duplicate the
+unit-state, invoke, container-image, container-present and probe-failure helpers
+after X24, so a fix like B436's is made twice. Go decodes a frozen managed-service
+or artifact-server request without checking that its content root is clean and
+under the prefix, where a controller-side mirror of B435's role refusal would
+refuse a corrupt frozen block before any adapter run; no input reaches it today
+(found in X46). **Exit evidence:** one helper set the two utilities import, with
+the collection's units and lint suites passing, and the decoders refusing a root
+with a `.` or `..` component or a repeated slash, in a test per kind; and
+`make quick`, `make docs-check`, `make check` and `make race`.
+
+### B462
+
+X46's D124 keep task, the media role's observation that copies the installer's
+kept administrator kubeconfig into the output the engine publishes to custody
+before the work area goes, is proved in-tree only: the Go journeys, the role's
+unit tests and their mutants (found in X46). **Exit evidence:** an agent-install
+rehearsal in which a completed installation whose custody publication failed is
+destroyed, the kubeconfig held in custody marked unproved when the work area is
+removed and exported by `cluster kubeconfig` with its `access.unproved` warning,
+recorded in the [acceptance ledger](../../docs/acceptance.md) with the build
+commit, or withdrawn by the owner.
+
+### B463
+
+X46 proved these only in-tree, each for D59's closing run or the first host that
+runs the journey (found in X46): the layout of the `sudo -ll` listing the
+input-logging check parses, from sudo's display code and not a recorded listing,
+on Fedora 43 and RHEL 9.8 under a policy that sets `log_input`; that the
+operator's terminal is left sane after the elevated child's exit on a second
+signal under `use_pty`, which skips its deferred cleanup ([B339](m1.md#b339)'s
+run); a browse-mode autofs path and an NFSv3 export without READDIRPLUS under
+root squash, for the input reader, and the kernel's `ENOTDIR` for
+`O_PATH|O_NOFOLLOW|O_DIRECTORY` on a symbolic link or a FIFO; and systemd's
+documented handling of a failed unit, that stopping it leaves it failed, that
+failed units are not collected, that `reset-failed` on an unloaded unit fails and
+that stopping a failed unit with no definition succeeds. **Exit evidence:** each
+observed on a host and recorded in the [acceptance ledger](../../docs/acceptance.md)
+or the knowledge page with the build commit, or withdrawn by the owner.
+
+### B464
+
+Wording, tests and dead code X46 left (found in X46). Wording: `specs/cli.md`'s
+bullet for a destroy over an apply that has not completed still says the destroy
+is offered unless a contradiction is named, beside the setup bullet that
+overrides it; the lab-baremetal README does not point to the new `secret.input`
+refusal under `log_input`; the security spec's row on authored strings reaching
+Ansible does not cite the power-verb refusal tests; refusals other than the
+`metadata.name` grammar from an object whose name is not a DNS label carry
+neither the object nor its kind; and the interactive confirmation of a context
+deletion has not been compared with the lost-context wording. Tests: the host
+proof of a fresh destroy is shown between its shared and exclusive reads only
+through presentation counts; the `--allow-orphans` exit for unsafe evidence of a
+context still initializing is untested; the prerequisites service tests fake
+the store's old bare limit texts; no test reaches the bundle backstop of the
+client area or the dependency source backstop; and
+`TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst` failed once under shared-CPU
+load; and
+`TestADestroyAfterAFailedPublicationCapturesBeforeAnyInverse` reads the result's
+receipt when the destroy returned no result, so it fails through a nil-pointer
+panic instead of its assertion. Dead code: the unlink helper builds its name pointer twice, the repository
+grammar keeps an empty rule field, the context store keeps a private
+reservation-key constant beside the prerequisites package's exported one, and
+the template test's host fixture names a pool path the layout does not.
+**Exit evidence:** each stated in its owner's file or covered by a test that
+fails when its guard is removed, or withdrawn by the owner.
+
 ## Retired
 
 IDs no longer issued. Where an item took one over, its line here names that
@@ -1075,3 +1163,5 @@ Requires cell as `owner decision: <question>`.
 - **D120** (2026-10-07, the owner): the emulated controller serves TLS: the libvirt emulator unit serves HTTPS with a generated serving certificate the InfraProvider's emulated-BMC defaults name, the lab-baremetal physical copy names its authority in `trustBundleRef` and verifies the leg, so D103's verified controller leg holds for the rehearsal; B334 splits: its TLS half joins M4 as B446 on a new planned slice X47, the loopback bind stays with X44 (D115) and confinement stays parked.
 - **D121** (2026-10-07, accepted by the owner from the session's recommendation): D104 is amended: where the manager publishes `HttpsTransferCertVerification` that switch alone decides, and the device's `VerifyCertificate` counts only on firmware whose manager publishes no such switch; a hardware capture of the device flag stays an operator item; this is B447 on X47 together with the follow-up that `disable-verification` is a silent no-op on the iBMC.
 - **D122** (2026-10-07, accepted by the owner from the session's recommendation): after a failed physical apply the private subtree stays published until the next apply or a destroy clears it; the managed-OS spec says so.
+- **D123** (2026-10-08, the owner accepted the session's recommendation): B440: D119's destroy resolution must not lose produced material: a destroy that resolves an unknown apply block first runs that block's apply observation (the capability's read-only Observe) and, when it proves the operation completed, captures the produced material into custody exactly as a completed apply's finalization does (for example the agent-install admin kubeconfig) before any inverse runs; a drifted machine whose observation does not prove completion is still resolved by the removal's ownership proof as D119 says; the state-reconciliation spec states the capture.
+- **D124** (2026-10-08, the owner accepted the session's recommendation): B440: an installer's kept administrator kubeconfig is never deleted while custody holds none for that cluster: when a removal (the agent-install media block's inverse, or any inverse that deletes the installer's work area) would delete the kept kubeconfig and custody holds no kubeconfig for that ContainerCluster, it first moves the kept copy into custody as produced material marked unproved access, its completion never proved, under the custody path and bounds a completed apply's capture uses, and only then removes the work area, so a crash between the two leaves the copy in one durable place or both and never in neither; `bootwright cluster kubeconfig` exports it with a warning that its access was not proved; deleting the context removes it as it removes any custody entry; this holds whatever the nodes' power state, so the destroy's `Stop first` path loses nothing.

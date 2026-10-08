@@ -96,7 +96,7 @@ func (p *parseSession) parseFile(file desiredstate.SourceFile) error {
 		}
 		if err != nil {
 			message, remediation := syntaxFailure(err)
-			return p.addSyntax(file.Path(), index, parserErrorLine(err), 0, message, remediation)
+			return p.addSyntax(file.Path(), index, syntaxLine(err), 0, message, remediation)
 		}
 		p.documentNum++
 		if index > desiredstate.MaxFileDocuments {
@@ -146,23 +146,50 @@ func invalidUTF8Position(data []byte) (int, int) {
 
 const syntaxReasonBytes = 120
 
-func syntaxFailure(err error) (string, string) {
+var parserStageProblems = map[string]bool{
+	"did not find expected <stream-start>":   true,
+	"did not find expected <document start>": true,
+	"found duplicate %YAML directive":        true,
+	"found incompatible YAML document":       true,
+	"found duplicate %TAG directive":         true,
+	"found undefined tag handle":             true,
+	"did not find expected node content":     true,
+	"did not find expected '-' indicator":    true,
+	"did not find expected key":              true,
+	"did not find expected ',' or ']'":       true,
+	"did not find expected ',' or '}'":       true,
+}
+
+func syntaxReason(err error) (string, int, bool) {
 	reason := strings.TrimPrefix(err.Error(), "yaml: ")
 	if rest, found := strings.CutPrefix(reason, "line "); found {
 		if number, tail, cut := strings.Cut(rest, ": "); cut && number != "" && strings.Trim(number, "0123456789") == "" {
-			reason = tail
+			line, parseErr := strconv.Atoi(number)
+			if parseErr == nil && line >= 1 {
+				return tail, line, true
+			}
+			return tail, 0, false
 		}
 	}
+	return reason, 0, false
+}
+
+func syntaxFailure(err error) (string, string) {
+	reason, _, _ := syntaxReason(err)
 	switch {
 	case reason == "found incompatible YAML document":
 		return "a %YAML 1.2 directive is not accepted", "remove the directive"
 	case strings.HasPrefix(reason, "unknown anchor "):
 		return "YAML syntax error: an alias names an anchor the document does not define", "write the value out in full instead of an anchor or alias"
 	}
+	remediation := "correct the YAML at that line; indent with spaces, not tabs"
+	if parserStageProblems[reason] {
+		remediation = "correct the YAML at or below that line; indent with spaces, not tabs"
+	}
 	if len(reason) > syntaxReasonBytes {
 		reason = reason[:syntaxReasonBytes]
 	}
-	return "YAML syntax error: " + printableReason(reason), "correct the YAML at that line; indent with spaces, not tabs"
+	return "YAML syntax error: " + printableReason(reason), remediation
 }
 
 func printableReason(reason string) string {
@@ -226,21 +253,15 @@ func limitFailure(resource string, ceiling int, path string, document int, node 
 	}}}
 }
 
-func parserErrorLine(err error) int {
-	text := err.Error()
-	const prefix = "yaml: line "
-	if !strings.HasPrefix(text, prefix) {
-		return 0
+func syntaxLine(err error) int {
+	reason, line, located := syntaxReason(err)
+	if !parserStageProblems[reason] {
+		return line
 	}
-	number, _, found := strings.Cut(text[len(prefix):], ":")
-	if !found {
-		return 0
+	if !located {
+		return 1
 	}
-	line, parseErr := strconv.Atoi(number)
-	if parseErr != nil || line < 1 {
-		return 0
-	}
-	return line
+	return line + 1
 }
 
 type contextReader struct {

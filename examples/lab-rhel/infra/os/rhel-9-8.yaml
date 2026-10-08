@@ -30,9 +30,6 @@ spec:
       endpointRef: ip
 
   customizations:
-    hostname:
-      source: machineName
-
     localization:
       language: en_US.UTF-8
       formats: en_US.UTF-8
@@ -42,12 +39,7 @@ spec:
     ssh:
       passwordAuthentication: false
 
-    storage:
-      rootDevice:
-        source: machineRootDeviceHints
-
     packages:
-      environment: minimal
       installWeakDeps: false
       excludeDocs: true
       install:

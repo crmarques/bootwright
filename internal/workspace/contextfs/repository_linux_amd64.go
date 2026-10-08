@@ -510,6 +510,14 @@ func abandonRemediation(name string) string {
 	return "abandon it with bootwright context delete --name " + name + " --purge --allow-orphans: its directory is gone, so what it owned cannot be listed; or " + restoreStoreRemediation
 }
 
+// evidenceRemediation is the exit of mutation evidence the store refuses to
+// open as its own: the deletion never removes an entry it cannot verify, so
+// the entry is removed by hand and the context is then abandoned as one whose
+// evidence is missing.
+func evidenceRemediation(name string) string {
+	return "remove contexts/" + name + "/state/mutation.json beneath the state root, which leaves nothing to prove what the context owns, then abandon whatever it owns with bootwright context delete --name " + name + " --purge --allow-orphans; or " + restoreStoreRemediation
+}
+
 // contextDamage names a ready context whose mapping failed verification: the
 // context, the entry relative to the state root and the kernel's answer or the
 // store's own refusal, never the root's absolute path, with that damage's exit.
@@ -679,6 +687,9 @@ func readEvidence(ctx context.Context, dir *directory, absentReadsEmpty bool) ([
 	data, err := readBounded(ctx, runtime, "mutation.json", maxRecord, true)
 	if absentReadsEmpty && errors.Is(err, syscall.ENOENT) {
 		return []byte{}, nil
+	}
+	if err != nil && !errors.Is(err, syscall.ENOENT) && ctx.Err() == nil {
+		return nil, contextDamage(ctx, dir.name, storeEntry(runtime, "mutation.json"), err, evidenceRemediation(dir.name))
 	}
 	return data, err
 }

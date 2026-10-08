@@ -99,7 +99,12 @@ func TestReadCurrentNamesEveryMissingAndStaleSecret(t *testing.T) {
 
 	access.session = nil
 	_, err = service.ReadCurrent(ctx, ReadCurrentRequest{ContextName: "fixture", Names: []string{"beta"}})
-	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "secret.store.uninitialized" {
+	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "secret.store.uninitialized" || found[0].Remediation != "bootwright secret encryption init --context fixture" {
 		t.Fatalf("an uninitialized store gave %+v", found)
+	}
+	_, err = service.Reopen(ctx, BindingRequest{ContextName: "fixture", BindingID: "binding-earlier"})
+	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "secret.store.uninitialized" ||
+		found[0].Message != "the secret store of context fixture is not initialized" || found[0].Remediation != "bootwright secret encryption init --context fixture" {
+		t.Fatalf("a reopen over an uninitialized store gave %+v", found)
 	}
 }

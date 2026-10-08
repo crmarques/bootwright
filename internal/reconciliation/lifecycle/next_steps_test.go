@@ -341,9 +341,11 @@ func containsCommand(text, command string) bool {
 // Status offers setup in place of every step that the controller setup gates:
 // beside no operation, the first apply claims the host only once its setup
 // completed, and over an incomplete operation, a continuation or resolution
-// that still has a block to run re-proves that setup first. A finalization
-// and a replacement are not held to it and stay offered. Each offered verb
-// decides; each verb setup replaces refuses naming setup, before any effect.
+// that still has a block to run re-proves that setup first, and a fresh
+// removal, a replacement included, proves it before it resolves or registers
+// anything. A finalization is not held to it and stays offered. Each offered
+// verb decides; each verb setup replaces refuses naming setup, before any
+// effect.
 func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 	ctx := context.Background()
 	failedReceipt := func(h *harness) { h.workspace.controller.State.Receipt.Status = "failed" }
@@ -379,7 +381,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright setup", "bootwright destroy --context lab"}, gated: []reconciliation.Verb{reconciliation.Apply},
+			steps: []string{"bootwright setup"}, gated: []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy},
 		},
 		{
 			name: "a failed receipt over a lagging apply",
@@ -388,7 +390,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright apply --context lab", "bootwright destroy --context lab"},
+			steps: []string{"bootwright apply --context lab", "bootwright setup"}, gated: []reconciliation.Verb{reconciliation.Destroy},
 		},
 		{
 			name: "a failed receipt over a failed destroy",
@@ -398,7 +400,7 @@ func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 				failedReceipt(h)
 				return h
 			},
-			steps: []string{"bootwright destroy --context lab"},
+			steps: []string{"bootwright setup"}, gated: []reconciliation.Verb{reconciliation.Destroy},
 		},
 	} {
 		t.Run(row.name, func(t *testing.T) {

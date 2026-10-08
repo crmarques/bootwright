@@ -227,7 +227,8 @@ directive is rendered. The `%post` writes each, in ID order, as
 section, `name` (its `displayName`), `baseurl`, `enabled` and `gpgcheck` as
 `1` or `0`, `gpgkey` when `gpgKeyURL` is set and `proxy` when the installed
 system reaches it through one; a disabled repository is written with
-`enabled=0`. The proxy is the Machine's effective proxy choice: none for
+`enabled=0`. The renderer refuses an ID dnf would not accept, as admission
+does. The proxy is the Machine's effective proxy choice: none for
 `direct` or an absent choice; otherwise the selected external Proxy's
 `httpsProxy` for an `https` base URL and `httpProxy` for an `http` one, each
 falling back to the other when only one is declared. A repository on the host
@@ -249,7 +250,7 @@ composed `type` is not `ethernet`, and any other network content refuse before
 registration, naming the Machine: another interface-assigned address, another
 available interface that is not `ethernet`, an `mtu` other than 1500, or a
 route that is not `absent` other than the line's own default route. That route
-is the first IPv4 `0.0.0.0/0` route whose `next-hop-interface` is absent or is
+is the first route whose destination is a zero-prefix IPv4 CIDR, whose `next-hop-interface` is absent or is
 the install interface and whose `next-hop-address` is the gateway the line
 carries, the next hop of the first composed route that is not `absent`,
 whose destination is a zero-prefix IPv4 CIDR and whose next hop is an IPv4

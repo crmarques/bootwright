@@ -5,7 +5,6 @@ package contextfs
 import (
 	"cmp"
 	"context"
-	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -108,7 +107,7 @@ func (s *Store) retireRuns(ctx context.Context, runs *directory) error {
 func listRuns(ctx context.Context, runs *directory) ([]boundedRun, error) {
 	names, err := directoryNames(runs, maxOperationEntries)
 	if err != nil {
-		return nil, state("bounded run storage cannot be listed: " + runs.path)
+		return nil, state("bounded run storage cannot be listed: " + heldEntry(runs))
 	}
 	candidates := make([]boundedRun, 0, len(names))
 	for _, name := range names {
@@ -195,7 +194,7 @@ func (s *Store) createRun(ctx context.Context, runs *directory, identity string)
 		return nil, err
 	}
 	if err := syscall.Mkdirat(int(runs.file.Fd()), identity, 0700); err != nil {
-		return nil, state("bounded run directory could not be created exclusively: " + filepath.Join(runs.path, identity))
+		return nil, state("bounded run directory could not be created exclusively: " + storeEntry(runs, identity))
 	}
 	run, err := s.holdRun(ctx, runs, identity)
 	if err != nil {
@@ -206,7 +205,7 @@ func (s *Store) createRun(ctx context.Context, runs *directory, identity string)
 }
 
 func (s *Store) holdRun(ctx context.Context, runs *directory, identity string) (*directory, error) {
-	location := filepath.Join(runs.path, identity)
+	location := storeEntry(runs, identity)
 	run, err := openDirectory(runs, identity)
 	if err != nil {
 		return nil, state("bounded run directory is not a private directory: " + location)

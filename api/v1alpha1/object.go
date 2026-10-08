@@ -1,6 +1,9 @@
 package v1alpha1
 
-import "slices"
+import (
+	"maps"
+	"slices"
+)
 
 const APIVersion = "bootwright.io/v1alpha1"
 
@@ -72,9 +75,10 @@ func (o Object) Value() Value {
 }
 
 type Catalog struct {
-	objects    []Object
-	byKind     map[Kind][]Object
-	byIdentity map[string][]Object
+	objects     []Object
+	byKind      map[Kind][]Object
+	byIdentity  map[string][]Object
+	undecodable map[string]bool
 }
 
 func NewCatalog(objects []Object) Catalog {
@@ -95,6 +99,17 @@ func (c Catalog) Find(kind Kind, name string) (Object, bool) {
 		return Object{}, false
 	}
 	return objects[0], true
+}
+
+// WithUndecodable records the Kind/name identities of selected documents that
+// failed decoding, so a check naming one adds no diagnostic of its own.
+func (c Catalog) WithUndecodable(identities map[string]bool) Catalog {
+	c.undecodable = maps.Clone(identities)
+	return c
+}
+
+func (c Catalog) Undecodable(kind Kind, name string) bool {
+	return c.undecodable[string(kind)+"/"+name]
 }
 
 type Issue struct {

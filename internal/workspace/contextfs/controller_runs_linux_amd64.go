@@ -5,7 +5,6 @@ package contextfs
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -74,7 +73,7 @@ func unsafeSetupRun(path, reason string) error {
 func verifyControllerRuns(ctx context.Context, owner *directory) ([]int, error) {
 	runs, err := openDirectory(owner, setupRunsName)
 	if err != nil {
-		return nil, unsafeSetupRun(filepath.Join(owner.path, setupRunsName), "it is not a private directory")
+		return nil, unsafeSetupRun(storeEntry(owner, setupRunsName), "it is not a private directory")
 	}
 	defer runs.file.Close()
 	return verifySetupRuns(ctx, runs)
@@ -83,7 +82,7 @@ func verifyControllerRuns(ctx context.Context, owner *directory) ([]int, error) 
 func verifySetupRuns(ctx context.Context, runs *directory) ([]int, error) {
 	names, err := directoryNames(runs, maxSetupRuns)
 	if err != nil {
-		return nil, unsafeSetupRun(runs.path, "it holds more than "+strconv.Itoa(maxSetupRuns)+" runs or cannot be listed")
+		return nil, unsafeSetupRun(heldEntry(runs), "it holds more than "+strconv.Itoa(maxSetupRuns)+" runs or cannot be listed")
 	}
 	numbers := make([]int, 0, len(names))
 	for _, name := range names {
@@ -92,11 +91,11 @@ func verifySetupRuns(ctx context.Context, runs *directory) ([]int, error) {
 		}
 		number, valid := setupRunNumber(name)
 		if !valid {
-			return nil, unsafeSetupRun(filepath.Join(runs.path, name), "its name is not one a setup run takes")
+			return nil, unsafeSetupRun(storeEntry(runs, name), "its name is not one a setup run takes")
 		}
 		run, err := openDirectory(runs, name)
 		if err != nil {
-			return nil, unsafeSetupRun(filepath.Join(runs.path, name), "it is not a private directory")
+			return nil, unsafeSetupRun(storeEntry(runs, name), "it is not a private directory")
 		}
 		_, _, err = setupRunOutput(run)
 		run.file.Close()
@@ -112,12 +111,12 @@ func verifySetupRuns(ctx context.Context, runs *directory) ([]int, error) {
 func setupRunOutput(run *directory) (syscall.Stat_t, bool, error) {
 	names, err := directoryNames(run, 1)
 	if err != nil {
-		return syscall.Stat_t{}, false, unsafeSetupRun(run.path, "it holds more than its own output")
+		return syscall.Stat_t{}, false, unsafeSetupRun(heldEntry(run), "it holds more than its own output")
 	}
 	if len(names) == 0 {
 		return syscall.Stat_t{}, false, nil
 	}
-	path := filepath.Join(run.path, names[0])
+	path := storeEntry(run, names[0])
 	if names[0] != setupRunOutputName {
 		return syscall.Stat_t{}, false, unsafeSetupRun(path, "it is not the run's own output")
 	}
@@ -153,7 +152,7 @@ func (t *controllerTransaction) OpenRun(ctx context.Context) (prerequisites.Setu
 	defer owner.file.Close()
 	runs, err := t.base.store.ensureDirectory(ctx, owner, setupRunsName)
 	if err != nil {
-		return nil, unsafeSetupRun(filepath.Join(owner.path, setupRunsName), "it cannot be opened as a private directory")
+		return nil, unsafeSetupRun(storeEntry(owner, setupRunsName), "it cannot be opened as a private directory")
 	}
 	defer runs.file.Close()
 	numbers, err := verifySetupRuns(ctx, runs)
@@ -181,7 +180,7 @@ func (t *controllerTransaction) OpenRun(ctx context.Context) (prerequisites.Setu
 func (s *Store) removeSetupRun(ctx context.Context, runs *directory, name string) error {
 	run, err := openDirectory(runs, name)
 	if err != nil {
-		return unsafeSetupRun(filepath.Join(runs.path, name), "it is not a private directory")
+		return unsafeSetupRun(storeEntry(runs, name), "it is not a private directory")
 	}
 	identity := run.identity
 	output, present, err := setupRunOutput(run)
@@ -203,18 +202,18 @@ func (s *Store) removeSetupRun(ctx context.Context, runs *directory, name string
 func (s *Store) createSetupRun(ctx context.Context, runs *directory, name string) (prerequisites.SetupRun, error) {
 	run, err := s.newDirectory(ctx, runs, name)
 	if err != nil {
-		return nil, unsafeSetupRun(filepath.Join(runs.path, name), "it could not be created exclusively")
+		return nil, unsafeSetupRun(storeEntry(runs, name), "it could not be created exclusively")
 	}
 	defer run.file.Close()
 	file, err := openRelative(run, setupRunOutputName, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
 	if err != nil {
-		return nil, unsafeSetupRun(filepath.Join(run.path, setupRunOutputName), "it could not be created exclusively")
+		return nil, unsafeSetupRun(storeEntry(run, setupRunOutputName), "it could not be created exclusively")
 	}
 	created, err := statHandle(file)
 	if err != nil || !private(created, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || created.Mode&0777 != 0600 || s.syncDirectory(ctx, run) != nil {
 		file.Close()
 		discardCreated(run, setupRunOutputName, created)
-		return nil, unsafeSetupRun(filepath.Join(run.path, setupRunOutputName), "it could not be made durable as a private file")
+		return nil, unsafeSetupRun(storeEntry(run, setupRunOutputName), "it could not be made durable as a private file")
 	}
 	return &setupRun{file: file, location: run.path}, nil
 }

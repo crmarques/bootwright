@@ -68,6 +68,8 @@ func refusalRows() []refusalRow {
 		{"duplicate entry", environmentYAML + "  sites: [{name: east}, {name: east}]\n", ""},
 		{"duplicate entry that is not a label", environmentYAML + "  sites: [{name: " + refusalSentinel + ".}, {name: " + refusalSentinel + ".}]\n", ""},
 		{"name that is not a label", environmentYAML, strings.Replace(refusalSecret, "name: probe", "name: "+refusalSentinel+".", 1) + "  type: opaque\n  typ: x\n"},
+		{"name that is not a label, alone", environmentYAML, strings.Replace(refusalSecret, "name: probe", "name: "+refusalSentinel+".", 1) + "  type: opaque\n"},
+		{"Machine name that is not a label", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: Probe-}\nspec:\n  os: {provided: true}\n"},
 		{"key three edits from its only near field", environmentYAML, refusalSecret + "  name: probe\n  type: opaque\n"},
 		{"kind three edits from a registered kind", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Mach\nmetadata: {name: probe}\nspec: {}\n"},
 		{"kind defaults key three edits from a kind", environmentYAML + "  defaults:\n    Mach: {}\n", ""},
@@ -76,6 +78,9 @@ func refusalRows() []refusalRow {
 		{"network selection without a configured network", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  network:\n    installAddressRef: ip\n    addresses: [{name: ip, address: 192.0.2.9/24, interface: eth0}]\n"},
 		{"interface assignment on an OS-ready Machine", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  network:\n    addresses: [{name: ip, address: 192.0.2.9/24, interface: eth0}]\n"},
 		{"selected cluster that does not decode", environmentYAML + "  containerClusters: [probe]\n", undecodableCluster},
+		{"OS-ready Machine with installation declarations", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true, installProfileRef: rhel}\n"},
+		{"OS-ready Machine with a network configuration", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  network: {configRef: net}\n"},
+		{"non-provided Machine without a provider", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: false}\n"},
 	}
 }
 

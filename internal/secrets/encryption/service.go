@@ -112,26 +112,23 @@ func (s Service) Rotate(ctx context.Context, request EncryptionRotateRequest) (*
 		return nil, err
 	}
 	result := &MutationResult{Context: selected.Context}
-	err = s.access.Mutate(ctx, selected.Context, func(session secretstore.StoreSession, selection secretstore.Selection) error {
-		if !request.SkipConfirmation {
-			if s.confirmer == nil {
-				return diagnostics.NewFailureWithRemediation("secret.store.conflict", "key rotation requires confirmation", "",
-					"repeat bootwright secret encryption rotate --context "+selected.Context.Name+" with --yes")
-			}
-			// The confirmer's refusal names the context and the command that
-			// repeats the rotation with --yes, so it is returned unchanged.
-			if err := s.confirmer.Confirm(ctx, "rotate secret encryption", selected.Context.Name); err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				return err
-			}
+	name := selected.Context.Name
+	seenKey := ""
+	if !request.SkipConfirmation {
+		if seenKey, err = s.confirmRotation(ctx, selected.Context); err != nil {
+			return nil, err
 		}
+	}
+	err = s.access.Mutate(ctx, selected.Context, func(session secretstore.StoreSession, selection secretstore.Selection) error {
 		// Rotation re-encrypts every version the store holds under one fresh
 		// key and keeps no other, so each key held before it is retired.
 		snapshot, err := session.Inspect(ctx)
 		if err != nil {
 			return err
+		}
+		if !request.SkipConfirmation && snapshot.ActiveKey != seenKey {
+			return diagnostics.NewFailureWithRemediation("secret.store.conflict", "the secret encryption key of context "+name+" changed while its rotation was being confirmed; nothing was rotated", "",
+				"review it with bootwright secret encryption status --context "+name+", then repeat bootwright secret encryption rotate --context "+name)
 		}
 		active, err := session.Rotate(ctx)
 		if err != nil {
@@ -154,4 +151,38 @@ func (s Service) Rotate(ctx context.Context, request EncryptionRotateRequest) (*
 		return nil, err
 	}
 	return result, nil
+}
+
+// confirmRotation reads the active key under a shared read, then confirms the
+// rotation with no store lock and no context lease held. It returns the key
+// the prompt was about, which the rotation proves again under the lease.
+func (s Service) confirmRotation(ctx context.Context, selected secretstore.Context) (string, error) {
+	seenKey := ""
+	err := s.access.View(ctx, selected, false, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		if session == nil {
+			return secretstore.Uninitialized(selected.Name)
+		}
+		snapshot, err := session.Inspect(ctx)
+		if err != nil {
+			return err
+		}
+		seenKey = snapshot.ActiveKey
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if s.confirmer == nil {
+		return "", diagnostics.NewFailureWithRemediation("secret.store.conflict", "key rotation requires confirmation", "",
+			"repeat bootwright secret encryption rotate --context "+selected.Name+" with --yes")
+	}
+	// The confirmer's refusal names the context and the command that repeats
+	// the rotation with --yes, so it is returned unchanged.
+	if err := s.confirmer.Confirm(ctx, "rotate secret encryption", selected.Name); err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return "", err
+	}
+	return seenKey, nil
 }

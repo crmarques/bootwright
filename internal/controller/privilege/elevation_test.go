@@ -676,3 +676,21 @@ func TestAnnouncementReachesOnlyAPipeOfASupervisedChild(t *testing.T) {
 		}
 	}
 }
+
+func TestElevationRefusesAStandardInputSecretUnderInputLogging(t *testing.T) {
+	for _, json := range []bool{false, true} {
+		started := false
+		elevator := scriptedElevator(scriptedChild{}, nil)
+		elevator.Executor = inputLoggingExecutor(&started)
+		var stdout, stderr bytes.Buffer
+		outcome := elevator.Run(context.Background(), Invocation{JSON: json, Arguments: []string{"secret", "set", "--name", "bmc", "--value-stdin"}, Input: strings.NewReader("never read"), Output: &stdout, Error: &stderr, SecretStdin: "bmc"})
+		d := outcome.Diagnostic
+		if outcome.ExitCode != 1 || d == nil || d.Code != "secret.input" || !strings.Contains(d.Message, "log_input") || !strings.Contains(d.Message, "Secret bmc") ||
+			!strings.Contains(d.Remediation, "--value-file") || d.Object == nil || d.Object.Kind != "Secret" || d.Object.Name != "bmc" {
+			t.Fatalf("json %v: outcome = %d %+v", json, outcome.ExitCode, d)
+		}
+		if started || stdout.Len() != 0 || stderr.Len() != 0 {
+			t.Fatalf("json %v: child started %v, stdout %q, stderr %q", json, started, stdout.String(), stderr.String())
+		}
+	}
+}

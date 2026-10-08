@@ -94,7 +94,10 @@ ends at or below `65535`, and the ranges of providers on the same host do not
 overlap. The retired `vMediaPort` is rejected: the emulator fetches
 media from the artifact server and opens no second listener.
 [Substrates](../substrates.md#machine-realization) owns the controller each
-Machine receives.
+Machine receives. A libvirt provider whose name a Machine realized on a libvirt
+provider also takes refuses at admission, because that Machine's disk directory
+would hold the provider's virtual-media pool
+([substrates](../substrates.md#refusal-table)).
 
 ### Refused arms
 
@@ -133,7 +136,7 @@ materializes `0`, which admission refuses at that profile's size.
 | Arm | Exact fields | Rule |
 | --- | --- | --- |
 | `baremetal` | none | Names a physical network a Machine may select; it configures nothing. A VLAN interface is [B74](../milestones/m4.md#b74)'s. |
-| `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `bridge` is 1 to 15 bytes of letters, digits, `_`, `.` or `-`, and neither `.` nor `..`; a `+` is refused because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. On one host, no two providers declare a managed attachment of one name, a bridge a managed attachment defines is named by no other attachment, of the same provider or another, and no two managed attachments, of one provider or two, declare overlapping prefixes, IPv4 or IPv6; each refuses at admission, naming both providers. |
+| `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `bridge` is 1 to 15 bytes of letters, digits, `_`, `.` or `-`, and neither `.` nor `..`; a `+` is refused because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. On one host, no two providers declare a managed attachment of one name, a bridge a managed attachment defines is named by no other attachment, of the same provider or another, and no two managed attachments, of one provider or two, declare overlapping prefixes, IPv4 or IPv6; each refuses at admission, naming both providers. A libvirt provider declares at most 20 managed attachments (its host reservation's key bound). |
 
 ## Machine
 
@@ -406,7 +409,9 @@ network configuration at all, is rejected at `network.installAddressRef`,
 because the Kickstart carries one static IPv4 `network` line and DHCP
 installation is not supported. Without a network configuration there is no
 install interface yet, so that remedy first selects one with
-`network.configRef` or `network.inline`.
+`network.configRef` or `network.inline`. That refusal is the only one at
+`network.installAddressRef`: the rule that network selections require a
+configured network does not repeat it.
 Its static installation interface is `ethernet`, `vlan`, or `bond`. A `vlan`
 or `bond` install interface is admitted for a later bonded or VLAN
 installation, and the managed-OS installation refuses it before registration,
@@ -628,7 +633,6 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `hostname.source` | string | no | — | `machineName`; permitted only when the machine is not cluster-bound. |
 | `localization.language` | string | no | `en_US.UTF-8` | Kickstart token. |
 | `localization.formats` | string | no | effective language | Kickstart token; when it differs from the language it is written for every regional category with its `glibc-langpack`. |
 | `localization.keyboard` | string | no | `us` | Kickstart token. |
@@ -636,8 +640,6 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 | `localization.additionalLocales` | array of strings | no | `[]` | Unique Kickstart tokens. |
 | `ssh.passwordAuthentication` | boolean | no | `false` | `true` is refused until a password can be set, because `initialPassword` is refused. |
 | `ssh.initialPassword.secretRef` | string | no | — | `usernamePassword` `Secret`. |
-| `storage.rootDevice.source` | string | no | — | `machineRootDeviceHints`. |
-| `packages.environment` | string | no | — | `minimal` when set. |
 | `packages.install` | array of strings | no | `[]` | Unique entries, each a package name, glob or `@group`; no whitespace, quote or `#`, and no leading `%` or `-`. |
 | `packages.excludeDocs` | boolean | no | `false` | Exclude package documentation. |
 | `packages.installWeakDeps` | boolean | no | OS/package-manager default | Absence is distinct from `false`. |
@@ -660,9 +662,11 @@ as a backstop.
 Each `repositories.configure[]` entry has required `id` and HTTP(S) `baseURL`
 with no fragment and no quote, optional `displayName` defaulting to `id`,
 `enabled` defaulting `true`, `gpgCheck` defaulting `true`, and optional
-`gpgKeyURL`. IDs are unique, printable ASCII with no whitespace, quote, slash,
-backslash, `#` or comma, and do not start with `%`; subscription and Anaconda
-mirror repository IDs follow the same rule. `displayName` is one line of UTF-8
+`gpgKeyURL`. IDs are unique and are what dnf accepts in a repository ID, 1 to
+239 ASCII letters, digits, `-`, `_`, `.` or `:`, and neither `.` nor `..`, since
+each names its `.repo` file's section and file; Anaconda mirror repository IDs
+follow the same rule; subscription repository IDs are printable ASCII with no
+whitespace, quote, slash, backslash, `#` or comma, not starting with `%`. `displayName` is one line of UTF-8
 text with no control character. `gpgKeyURL` accepts HTTP(S) or `file:///`
 with no quote, backslash or `#`; it is required while GPG checking is enabled.
 The installation writes each entry as the installed system's own

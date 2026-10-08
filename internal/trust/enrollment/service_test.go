@@ -632,65 +632,90 @@ func TestADivergentPinRefusesBeforeTheDryRunReturns(t *testing.T) {
 	}
 }
 
-type fixedState struct{ catalog api.Catalog }
-
-func (f fixedState) RenderEffective(context.Context, compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
-	return &compilation.EffectiveResult{Effective: f.catalog}, nil
-}
-
-// A divergent pin held by a Machine that no longer uses this context's trust
-// never names a re-trust of it, which would refuse. It names the input change
-// that drops its record, and once that Machine leaves the input the write that
-// trusts node-a removes the record.
-func TestADivergentPinHeldByAnExemptMachineNamesTheStepThatClearsIt(t *testing.T) {
+// A record of a declared Machine that no longer uses this context's trust is
+// read by nothing, so the write that trusts node-a at its endpoint removes it
+// as a remove row naming why, with no input edit (D117).
+func TestATakeoverRemovesTheRecordOfAMachineThatNoLongerUsesTheStore(t *testing.T) {
 	h := newHarness(t)
 	h.trust.data = storedRecords(t, storedRecord("declared", "192.0.2.10", 22, otherKey))
-	_, err := enroll(t, h, EnrollRequest{Machines: []string{"node-a"}, SkipConfirmation: true})
-	want := "drop declared from the input with bootwright context update --name lab --input-dir <dir>, repeat this command, then restore declared the same way; " +
-		"this needs a context with no incomplete operation and an input in which no other object references declared, " +
-		"and after a completed apply the next apply no longer settles: it refuses the changed input until a destroy"
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" || reported[0].Remediation != want ||
-		!strings.Contains(reported[0].Message, "declared no longer uses this context's SSH trust (declares an explicit knownHostsRef)") {
-		t.Fatalf("refusal = %+v", reported)
-	}
-	if _, err := enroll(t, h, EnrollRequest{Machines: []string{"declared"}, Replace: []string{"declared"}, SkipConfirmation: true}); code(t, err) != "access.unavailable" {
-		t.Fatalf("a re-trust of a Machine that no longer uses the store = %v", err)
-	}
-	var remaining []api.Object
-	for _, object := range catalog().Objects() {
-		if object.Name() != "declared" {
-			remaining = append(remaining, object)
-		}
-	}
-	h.service.state = fixedState{catalog: api.NewCatalog(remaining)}
 	report, err := enroll(t, h, EnrollRequest{Machines: []string{"node-a"}, SkipConfirmation: true})
 	if err != nil {
-		t.Fatalf("the remedy did not clear the pin: %v", err)
+		t.Fatalf("the takeover refused: %v", err)
 	}
-	if removed := action(report, "declared"); removed.Action != ActionRemove || report.Recorded != 2 {
+	removed := action(report, "declared")
+	if removed.Action != ActionRemove ||
+		removed.Reason != "declares an explicit knownHostsRef, so it no longer uses this context's SSH trust; node-a now uses its address" ||
+		report.Recorded != 2 {
 		t.Fatalf("report = %+v", report)
+	}
+	after, err := trust.Decode(h.trust.data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Hosts) != 1 || after.Hosts[0].Machine != "node-a" {
+		t.Fatalf("records = %+v", after.Hosts)
 	}
 }
 
-// The controller Machine is reached locally, so a stale record it holds is
-// one no re-trust replaces and, once an apply has bound the context, no input
-// edit drops. The refusal says so instead of naming the drop that the
-// controller binding refuses.
-func TestADivergentPinHeldByTheControllerMachineNamesTheBindingThatKeepsIt(t *testing.T) {
+// The controller Machine is reached locally, so its record is read by nothing
+// either, and the takeover removes it; enrollment reads no lifecycle record.
+func TestATakeoverRemovesTheControllerMachinesRecord(t *testing.T) {
 	h := newHarness(t)
 	h.trust.data = storedRecords(t, storedRecord("controller", "192.0.2.10", 22, otherKey))
-	_, err := enroll(t, h, EnrollRequest{Machines: []string{"node-a"}, SkipConfirmation: true})
-	want := "controller is the controller Machine, which leaves the input only when spec.controller.machineRef names another local Machine; " +
-		"before an apply binds this context to controller, and with no incomplete operation, make that change with " +
-		"bootwright context update --name lab --input-dir <dir>, repeat this command, then restore controller the same way; " +
-		"once an apply has bound this context, context update refuses any input that changes the controller Machine, " +
-		"so no input edit drops the record and only a separate context does"
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" || reported[0].Remediation != want ||
-		!strings.Contains(reported[0].Message, "controller no longer uses this context's SSH trust (reached locally)") {
-		t.Fatalf("refusal = %+v", reported)
+	report, err := enroll(t, h, EnrollRequest{Machines: []string{"node-a"}, SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("the takeover refused: %v", err)
 	}
-	if len(h.trust.written) != 0 || h.prompt.asked != 0 {
-		t.Fatalf("wrote %d, asked %d", len(h.trust.written), h.prompt.asked)
+	if removed := action(report, "controller"); removed.Action != ActionRemove ||
+		removed.Reason != "reached locally, so it no longer uses this context's SSH trust; node-a now uses its address" || report.Recorded != 2 {
+		t.Fatalf("report = %+v", report)
+	}
+	after, err := trust.Decode(h.trust.data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Hosts) != 1 || after.Hosts[0].Machine != "node-a" {
+		t.Fatalf("records = %+v", after.Hosts)
+	}
+}
+
+// The removal of an exempt Machine's record is part of the plan: shown before
+// the prompt, written only by the confirmed write, and never by a declined
+// prompt or a dry run.
+func TestAnExemptRecordsRemovalIsShownAndOnlyTheConfirmedWriteRecordsIt(t *testing.T) {
+	stored := storedRecord("declared", "192.0.2.10", 22, otherKey)
+	declined := newHarness(t)
+	declined.trust.data = storedRecords(t, stored)
+	declined.prompt.decline = errors.New("declined")
+	if _, err := enroll(t, declined, EnrollRequest{Machines: []string{"node-a"}}); err == nil {
+		t.Fatal("a declined takeover was recorded")
+	}
+	if !slices.Equal(declined.events.log, []string{"present", "confirm"}) || len(declined.trust.written) != 0 {
+		t.Fatalf("events = %v, wrote %d", declined.events.log, len(declined.trust.written))
+	}
+	if shown := declined.presenter.shown[0]; shown.Pending != 2 || action(&shown, "declared").Action != ActionRemove {
+		t.Fatalf("presented %+v, want the removal before the prompt", shown)
+	}
+
+	dry := newHarness(t)
+	dry.trust.data = storedRecords(t, stored)
+	report, err := enroll(t, dry, EnrollRequest{Machines: []string{"node-a"}, DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action(report, "declared").Action != ActionRemove || report.Pending != 2 || report.Recorded != 0 ||
+		len(dry.trust.written) != 0 || dry.prompt.asked != 0 {
+		t.Fatalf("dry run = %+v, wrote %d, asked %d", report, len(dry.trust.written), dry.prompt.asked)
+	}
+
+	confirmed := newHarness(t)
+	confirmed.trust.data = storedRecords(t, stored)
+	report, err = enroll(t, confirmed, EnrollRequest{Machines: []string{"node-a"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Recorded != 2 || len(confirmed.trust.written) != 1 {
+		t.Fatalf("recorded %d, wrote %d", report.Recorded, len(confirmed.trust.written))
 	}
 }
 

@@ -260,7 +260,10 @@ func (s Service) performAction(ctx context.Context, tx StorageTransaction, curre
 				if err != nil && result.Outcome == "failed" && len(result.Evidence) > 2 {
 					action.Phase, action.Outcome, action.Evidence = "observed", "failed", result.Evidence
 					state.Receipt.Status = "failed"
-					if publicationErr := publish(ctx, tx, *state); publicationErr != nil {
+					// A run canceled before its native authorization
+					// performed nothing, and its receipt says so even
+					// though the invocation that met it is canceled.
+					if publicationErr := publish(context.WithoutCancel(ctx), tx, *state); publicationErr != nil {
 						return nil, publicationErr
 					}
 				} else if err == nil && result.Outcome != "changed" && result.Outcome != "unchanged" {

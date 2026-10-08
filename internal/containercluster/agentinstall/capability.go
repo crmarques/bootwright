@@ -232,6 +232,34 @@ func (c MediaCapability) observe(ctx context.Context, execution lifecycle.Execut
 	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
+// Keeps names the custody entry of the administrator kubeconfig the cluster's
+// installation keeps in the work area this block's removal deletes: the one a
+// completed installation's capture fills.
+func (MediaCapability) Keeps(block reconciliation.Block) (lifecycle.KeptEntry, bool, error) {
+	request, err := DecodeMediaRequest(block.Request)
+	if err != nil {
+		return lifecycle.KeptEntry{}, false, err
+	}
+	return lifecycle.KeptEntry{Block: InstallBlockID(request.Identity.Cluster), Name: KubeconfigOutput}, true, nil
+}
+
+// Keep runs the read-only observation with the administrator access declared
+// as its one output, so the adapter hands over the kubeconfig the
+// installation kept in the work area, whole and within its bound, whatever
+// the installation proved. A work area that holds none hands over nothing.
+func (c MediaCapability) Keep(ctx context.Context, execution lifecycle.Execution) ([]lifecycle.Produced, error) {
+	request, err := c.prepare(ctx, execution)
+	if err != nil {
+		return nil, err
+	}
+	result, err := c.runWithOutputs(ctx, execution, "observe", request, kubeconfigOutputs())
+	if err != nil {
+		lifecycle.ClearProduced(result.Produced)
+		return nil, err
+	}
+	return result.Produced, nil
+}
+
 // Quiescent is derived rather than probed. This block owns a published image
 // and the installer's own work area, which an installed cluster no longer
 // reads; a node still booting from it is one whose own block is probed in the
@@ -260,6 +288,10 @@ func (c MediaCapability) prepare(ctx context.Context, execution lifecycle.Execut
 }
 
 func (c MediaCapability) run(ctx context.Context, execution lifecycle.Execution, operation string, request MediaRequest) (lifecycle.RunResult, error) {
+	return c.runWithOutputs(ctx, execution, operation, request, nil)
+}
+
+func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle.Execution, operation string, request MediaRequest, outputs []lifecycle.OutputFile) (lifecycle.RunResult, error) {
 	canonical, err := request.Canonical()
 	if err != nil {
 		return lifecycle.RunResult{}, err
@@ -297,7 +329,7 @@ func (c MediaCapability) run(ctx context.Context, execution lifecycle.Execution,
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: MediaImplementation, Operation: operation, Variable: mediaVariablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
-		Deadline: request.Deadline(),
+		Outputs: outputs, Deadline: request.Deadline(),
 	}))
 }
 

@@ -53,7 +53,8 @@ func (Service) Kubectl(ctx context.Context, _ KubectlRequest) error {
 }
 
 // Kubeconfig reveals the administrator kubeconfig the context's custody holds
-// for one selected ContainerCluster. The target and its applicability are
+// for one selected ContainerCluster, and says when that copy's access was
+// never proved. The target and its applicability are
 // settled from the compiled graph before any custody read, so a name that
 // selects nothing, or selects a StorageCluster, reads no credential bytes.
 func (s Service) Kubeconfig(ctx context.Context, request KubeconfigRequest) (*KubeconfigResult, error) {
@@ -75,9 +76,9 @@ func (s Service) Kubeconfig(ctx context.Context, request KubeconfigRequest) (*Ku
 		return nil, err
 	}
 	block, output := s.locate(request.Name)
-	material, found, err := s.reader.ReadProduced(ctx, name, block, output)
+	custodied, found, err := s.reader.ReadProduced(ctx, name, block, output)
 	if err != nil {
-		material.Clear()
+		custodied.Material.Clear()
 		return nil, err
 	}
 	if !found {
@@ -85,7 +86,7 @@ func (s Service) Kubeconfig(ctx context.Context, request KubeconfigRequest) (*Ku
 			"this context holds no administrator kubeconfig for ContainerCluster "+request.Name+"; an apply keeps it once it proves the installation complete",
 			"bootwright apply --context "+name)
 	}
-	return &KubeconfigResult{Context: name, Cluster: request.Name, Material: material}, nil
+	return &KubeconfigResult{Context: name, Cluster: request.Name, Material: custodied.Material, Unproved: custodied.Unproved}, nil
 }
 
 // kubeconfigTarget resolves --name in the selected graph's shared cluster

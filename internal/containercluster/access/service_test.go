@@ -31,21 +31,22 @@ func (s *effectiveState) RenderEffective(_ context.Context, request compilation.
 }
 
 type custodyReader struct {
-	entries map[string]string
-	reads   []string
-	failure error
+	entries  map[string]string
+	unproved bool
+	reads    []string
+	failure  error
 }
 
-func (r *custodyReader) ReadProduced(_ context.Context, contextName, block, name string) (secrets.Material, bool, error) {
+func (r *custodyReader) ReadProduced(_ context.Context, contextName, block, name string) (Custodied, bool, error) {
 	r.reads = append(r.reads, contextName+"/"+block+"/"+name)
 	if r.failure != nil {
-		return secrets.Material{}, false, r.failure
+		return Custodied{}, false, r.failure
 	}
 	value, found := r.entries[contextName+"/"+block+"/"+name]
 	if !found {
-		return secrets.Material{}, false, nil
+		return Custodied{}, false, nil
 	}
-	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)}), true, nil
+	return Custodied{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)}), Unproved: r.unproved}, true, nil
 }
 
 func locate(cluster string) (string, string) { return "cluster-install-" + cluster, "kubeconfig" }
@@ -104,6 +105,24 @@ func TestKubeconfigRevealsTheCustodyBytesExactly(t *testing.T) {
 	}
 	if !slices.Equal(reader.reads, []string{"lab/cluster-install-sno/kubeconfig"}) {
 		t.Fatalf("custody reads = %v", reader.reads)
+	}
+}
+
+// A copy custody holds unproved is still revealed, and the result says its
+// access was not proved, so the caller can warn (D124).
+func TestKubeconfigSaysWhenItsAccessWasNotProved(t *testing.T) {
+	for _, unproved := range []bool{false, true} {
+		reader := custody()
+		reader.unproved = unproved
+		result, err := New(&effectiveState{objects: graph()}, reader, locate, current("lab")).Kubeconfig(context.Background(), KubeconfigRequest{Name: "sno"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		value, _ := result.Material.Part(secrets.ValuePart)
+		result.Material.Clear()
+		if string(value) != kubeconfig || result.Unproved != unproved {
+			t.Fatalf("custody unproved %t: result %+v with %q", unproved, result, value)
+		}
 	}
 }
 

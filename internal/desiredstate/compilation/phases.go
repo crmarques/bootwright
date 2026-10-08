@@ -252,7 +252,11 @@ func (r *run) validateEffective(catalog api.Catalog) bool {
 			break
 		}
 		if !api.ValidLexical("name", record.object.Name()) {
-			r.ds.issue(record, api.Issue{Code: "api.value", Field: "$.metadata.name", Message: "object name must be a DNS label"})
+			r.ds.issue(record, api.Issue{
+				Code: "api.value", Field: "$.metadata.name",
+				Message:     string(record.object.Kind()) + " metadata.name must be a lowercase DNS label",
+				Remediation: "rename it to a lowercase DNS label of at most 63 characters, letters a-z, digits and '-', starting and ending with a letter or digit, and rename every reference to it",
+			})
 		}
 		validateShape(record, record.object.Spec(), api.Schema(record.object.Kind()), "$.spec", false, true, catalog, r.ds)
 		for _, rules := range r.compiler.rules {

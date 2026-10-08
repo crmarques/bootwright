@@ -47,13 +47,17 @@ func (p *ContextPlanPresenter) PresentDeletion(ctx context.Context, plan context
 	if len(plan.Reservations) != 0 {
 		reservations = strings.Join(plan.Reservations, ", ")
 	}
+	keyring := "removed with every secret version it holds"
+	if plan.Lost {
+		keyring = "already gone with its directory"
+	}
 	var text display
 	text.headline("", "Context deletion plan")
 	text.section("")
 	text.fields(
 		field{Label: "Name", Value: plan.Context},
 		field{Label: "Input revisions", Value: revisions},
-		field{Label: "Keyring", Value: "removed with every secret version it holds"},
+		field{Label: "Keyring", Value: keyring},
 		field{Label: "Reservations", Value: reservations},
 		field{Label: "Owned objects", Value: abandonedObjects(plan)},
 	)

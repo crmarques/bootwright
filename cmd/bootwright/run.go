@@ -86,7 +86,7 @@ func elevationInvocation(classification cli.InvocationClass, args []string, rout
 	invocation := privilege.Invocation{
 		JSON: classification.JSON, Arguments: args, Route: route, Terminal: os.Getenv("TERM"),
 		Input: os.Stdin, Output: stdout, Error: stderr, InputTerminal: err == nil && terminal,
-		Session: sessionCommand(classification),
+		Session: sessionCommand(classification), SecretStdin: classification.SecretStdin,
 	}
 	if file, ok := terminalFile(stdout); ok {
 		invocation.OutputTerminal = file

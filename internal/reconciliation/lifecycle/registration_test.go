@@ -318,7 +318,7 @@ func TestARegistrationThatProvablyFailedRestoresTheEvidence(t *testing.T) {
 		if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
 			t.Fatal("an unknown outcome reported success")
 		}
-		h.capability.observations = []Observation{{Effect: reconciliation.EffectNoEffect}}
+		h.capability.observations = []Observation{{Effect: reconciliation.EffectNoEffect}, {Effect: reconciliation.EffectCompleted}}
 		h.workspace.area.fail["write "+path.Join(removal, "plan.json")] = errors.New("interrupted")
 		if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
 			t.Fatal("an interrupted registration reported success")

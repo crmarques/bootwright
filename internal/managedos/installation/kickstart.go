@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -268,7 +269,7 @@ func kickstartCarries(shape kickstartShape, value string) bool {
 	case kickstartPackage:
 		return !strings.HasPrefix(value, "-") && oneKickstartToken(value, false)
 	case kickstartRepositoryID:
-		return value != "." && value != ".." && !strings.Contains(value, "/") && oneKickstartToken(value, false)
+		return managedos.RepositoryID(value)
 	case kickstartLine:
 		return true
 	}

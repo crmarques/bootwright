@@ -26,7 +26,9 @@ type escalationKey struct{}
 // ignored (os/signal).
 //
 // Once the context is done, the next SIGINT or SIGTERM closes its escalation
-// channel, which only the supervisor reads, to kill sudo. A hangup never
+// channel, which the supervisor reads to kill sudo, and an elevated child
+// reads only where ForegroundOfOwnTerminal proves the signal reached it once,
+// to exit at once. A hangup never
 // escalates: one terminal hangup reaches the foreground job twice, from the
 // shell that resends it to its jobs and from the kernel when that shell exits.
 func Begin(parent context.Context) (context.Context, func()) {
@@ -66,6 +68,11 @@ func Begin(parent context.Context) (context.Context, func()) {
 func withEscalation(parent context.Context, escalated <-chan struct{}) context.Context {
 	return context.WithValue(parent, escalationKey{}, escalated)
 }
+
+// Escalated is closed by a second operator SIGINT or SIGTERM after the first
+// canceled ctx; it is nil, and never closes, for a context Begin did not
+// derive.
+func Escalated(ctx context.Context) <-chan struct{} { return escalation(ctx) }
 
 // escalation is closed by a second operator signal; it is nil, and never
 // closes, for a context Begin did not derive.

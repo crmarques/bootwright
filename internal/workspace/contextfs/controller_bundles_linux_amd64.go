@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -173,7 +174,7 @@ func (t *controllerTransaction) Bundle(ctx context.Context, id string) (prerequi
 		}
 		if index < 0 {
 			if len(t.stored.bundles) >= maxControllerBundles {
-				return nil, state("retained controller bundle limit exceeded")
+				return nil, controllerFailure("controller.conflict", "this host already holds the "+strconv.Itoa(maxControllerBundles)+" bundle areas it may hold, so setup's new execution bundle has no room", setupBoundRemedy)
 			}
 			next := slices.Clone(t.stored.bundles)
 			next = append(next, controllerBundleReservation{ID: id, Mode: "reserved"})

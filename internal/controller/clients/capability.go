@@ -260,6 +260,16 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	return result, inStage(execution, err)
 }
 
+// liveResolution is the remedy of an installation whose outcome is unknown:
+// the exact continuation of its apply, which resolves it read-only first, or
+// the operation's repetition when the attempt carries none.
+func liveResolution(execution lifecycle.Execution) string {
+	if execution.Continuation == "" {
+		return "repeat the operation to resolve it from live evidence"
+	}
+	return "resolve it from live evidence with " + execution.Continuation
+}
+
 // inStage names this stage, not setup, as what settles a failure the adapters
 // it shares with setup raise, because setup installs nothing a context
 // selects.
@@ -399,7 +409,7 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 		return unknown, err
 	}
 	if result.Outcome != "changed" && result.Outcome != "unchanged" {
-		return unknown, refuse("controller.unknown", "the controller prerequisites adapter reported no usable outcome", "repeat the operation to resolve it from live evidence")
+		return unknown, refuse("controller.unknown", "the controller prerequisites adapter reported no usable outcome", liveResolution(execution))
 	}
 	report(ctx, execution, "publish-clients", "ok")
 	report(ctx, execution, "verify-clients", "running")
@@ -412,10 +422,10 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 		return unknown, err
 	}
 	if !prerequisites.ClosuresReady(closures) {
-		return unknown, refuse("controller.unknown", "the selected native clients are not installed after their transaction", "repeat the operation to resolve it from live evidence")
+		return unknown, refuse("controller.unknown", "the selected native clients are not installed after their transaction", liveResolution(execution))
 	}
 	if !present {
-		return unknown, refuse("controller.unknown", "the published target clients could not be verified", "repeat the operation to resolve it from live evidence")
+		return unknown, refuse("controller.unknown", "the published target clients could not be verified", liveResolution(execution))
 	}
 	if err := execution.Stage.SealClientArea(ctx, area); err != nil {
 		return unknown, err

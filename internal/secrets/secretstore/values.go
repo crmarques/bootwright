@@ -82,18 +82,31 @@ type Binding struct {
 
 // Produced names material one lifecycle block captured from a proved effect,
 // keyed by that block and the output's name. Only the lifecycle holds and
-// withdraws it; no Secret declaration names it.
+// withdraws it; no Secret declaration names it. Unproved marks material kept
+// from a copy a removal would otherwise delete, whose effect was never proved
+// (D124); a proved capture of the same entry clears it.
 type Produced struct {
-	Block   string `json:"block"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Block    string `json:"block"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Unproved bool   `json:"unproved,omitempty"`
 }
 
 // ProducedInput is one output a block offers for custody. Material is bounded
-// memory the caller owns and clears.
+// memory the caller owns and clears. An unproved input never replaces an
+// entry custody already holds.
 type ProducedInput struct {
 	Name     string
 	Material secrets.Material
+	Unproved bool
+}
+
+// ProducedMaterial is one produced entry's material as custody holds it, and
+// whether its effect was never proved. Material is bounded memory the caller
+// owns and clears.
+type ProducedMaterial struct {
+	Material secrets.Material
+	Unproved bool
 }
 
 type Key struct {
@@ -130,3 +143,13 @@ type BoundMaterial struct {
 }
 
 func Failure(code, message string) error { return diagnostics.NewFailure("secret."+code, message, "") }
+
+// Uninitialized refuses a read or write of a store no encryption init has
+// created, naming the init of the context whose store it is.
+func Uninitialized(contextName string) error {
+	message := "the secret store is not initialized"
+	if contextName != "" {
+		message = "the secret store of context " + contextName + " is not initialized"
+	}
+	return diagnostics.NewFailureWithRemediation("secret.store.uninitialized", message, "", secrets.Command(contextName, "encryption init"))
+}

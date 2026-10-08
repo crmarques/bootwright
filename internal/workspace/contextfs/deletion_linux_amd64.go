@@ -276,20 +276,29 @@ func unlinkVerified(parent *directory, name string, expected syscall.Stat_t, dir
 	if err != nil || !sameIdentity(expected, actual) || !directory && !sameFile(expected, actual) {
 		return state("context deletion target was substituted")
 	}
+	if _, err := syscall.BytePtrFromString(name); err != nil {
+		return err
+	}
+	if errno := unlinkAt(parent, name, directory); errno != 0 {
+		return state("context deletion target could not be removed")
+	}
+	return nil
+}
+
+// unlinkAt removes one name beneath a held directory without following it: a
+// directory only when it is empty and directory is set.
+func unlinkAt(dir *directory, name string, directory bool) syscall.Errno {
 	pointer, err := syscall.BytePtrFromString(name)
 	if err != nil {
-		return err
+		return syscall.EINVAL
 	}
 	flags := uintptr(0)
 	if directory {
 		flags = 0x200
 	}
-	_, _, errno := syscall.Syscall(syscall.SYS_UNLINKAT, parent.file.Fd(), uintptr(unsafe.Pointer(pointer)), flags)
+	_, _, errno := syscall.Syscall(syscall.SYS_UNLINKAT, dir.file.Fd(), uintptr(unsafe.Pointer(pointer)), flags)
 	runtime.KeepAlive(pointer)
-	if errno != 0 {
-		return state("context deletion target could not be removed")
-	}
-	return nil
+	return errno
 }
 
 func (t *transaction) Delete(ctx context.Context, requested contexts.Record) error {

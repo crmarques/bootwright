@@ -123,8 +123,6 @@ spec:
             serverRef: lab-artifacts
             endpointRef: ip-http
   customizations:
-    hostname:
-      source: machineName
     localization:
       language: en_US.UTF-8
       formats: en_US.UTF-8
@@ -132,11 +130,7 @@ spec:
       timezone: Etc/UTC
     ssh:
       passwordAuthentication: false
-    storage:
-      rootDevice:
-        source: machineRootDeviceHints
     packages:
-      environment: minimal
       install:
         - chrony
       excludeDocs: true

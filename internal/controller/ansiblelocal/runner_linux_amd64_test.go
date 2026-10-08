@@ -210,8 +210,8 @@ func TestRunnerRefusesCancellationAtDurablePreparation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { cancel(); return nil }, nil, nil, boundary)
-	if !errors.Is(err, context.Canceled) || result.Outcome != "unknown" {
-		t.Fatalf("cancellation lost durable intent: %s %v", result.Outcome, err)
+	if !errors.Is(err, context.Canceled) || result.Outcome != "failed" || string(result.Evidence) != `{"intentRecorded":true,"postcondition":false}` {
+		t.Fatalf("cancellation lost durable intent: %s %s %v", result.Outcome, result.Evidence, err)
 	}
 }
 
@@ -337,9 +337,14 @@ func TestAnUnstampedClientRefusalNamesTheReleaseStampCheck(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
-			found := diagnostics.Of(err)
-			if len(found) != 1 || result.Outcome != "unknown" {
-				t.Fatalf("the refused client left the run %s (%v)", result.Outcome, err)
+			// Before its continue is acknowledged the adapter installs no
+			// client, so the run is failed; after it, unknown.
+			found, want := diagnostics.Of(err), "unknown"
+			if check.mode == "unreleased-before-continue" {
+				want = "failed"
+			}
+			if len(found) != 1 || result.Outcome != want {
+				t.Fatalf("the refused client left the run %s (%v), want %s", result.Outcome, err, want)
 			}
 			named := found[0].Code == "controller.setup" && found[0].Message == "the oc of OpenShift client release 4.21.15 does not name its frozen release" &&
 				strings.Contains(found[0].Remediation, "passes the release-stamp check")
@@ -445,13 +450,9 @@ func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
 			if len(found) != 1 || found[0].Code != check.code || found[0].Message != check.message {
 				t.Fatalf("the run reported %+v (%v), want %s %q", found, err, check.code, check.message)
 			}
-			// Setup's own run, which carries no tool, records failed until
-			// Go acknowledges a native record; with a tool it is unknown
-			// once prepared.
+			// A record read after the exit is never acknowledged, so it
+			// authorizes no effect and the run records failed.
 			outcome := "failed"
-			if check.published && len(request.Tools) > 0 {
-				outcome = "unknown"
-			}
 			if result.Outcome != outcome || published != check.published {
 				t.Fatalf("the run left %s with intent published %v, want %s with %v", result.Outcome, published, outcome, check.published)
 			}

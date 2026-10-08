@@ -919,7 +919,7 @@ var kubeconfigNotApplicable = diagnostics.NewFailureWithRemediation("cluster.not
 
 // An explicit sensitive result is the custody's bytes exactly: nothing is
 // added, not even a final LF the material lacks, and standard error stays
-// empty. A refusal writes nothing to standard output and exactly one
+// empty but for one warning when custody holds the copy unproved. A refusal writes nothing to standard output and exactly one
 // diagnostic to standard error.
 func TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic(t *testing.T) {
 	run := func(result *containeraccess.KubeconfigResult, failure error) (int, string, string) {
@@ -949,6 +949,11 @@ func TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic(t *testing.T) {
 	code, out, errOut := run(&containeraccess.KubeconfigResult{Context: "lab", Cluster: "sno"}, nil)
 	if code != 1 || out != "" || strings.Count(errOut, "[FAIL] ") != 1 {
 		t.Fatalf("an empty kubeconfig exited %d with %q and standard error %q", code, out, errOut)
+	}
+	code, out, errOut = run(&containeraccess.KubeconfigResult{Context: "lab", Cluster: "sno", Unproved: true, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(kubeconfigFixture)})}, nil)
+	if code != 0 || out != kubeconfigFixture || strings.Count(errOut, "\n") != 1 || !strings.Contains(errOut, "access.unproved") ||
+		!strings.Contains(errOut, "ContainerCluster sno was kept from an installation whose completion was never proved") || strings.Contains(errOut, "[FAIL] ") {
+		t.Fatalf("an unproved kubeconfig exited %d with %q and standard error %q, want its bytes and one warning", code, out, errOut)
 	}
 }
 

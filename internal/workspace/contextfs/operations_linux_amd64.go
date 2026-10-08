@@ -69,6 +69,15 @@ func storeEntry(dir *directory, name string) string {
 	return path.Join(parts...)
 }
 
+// heldEntry names a held directory relative to the state root, which is "."
+// for the root itself.
+func heldEntry(dir *directory) string {
+	if dir.parent == nil {
+		return "."
+	}
+	return storeEntry(dir.parent, dir.name)
+}
+
 // causeText renders why an entry was refused. A refusal this area raised is a
 // diagnostic whose Error is a fixed placeholder, so its message carries the
 // reason.

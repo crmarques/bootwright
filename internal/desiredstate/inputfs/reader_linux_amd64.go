@@ -1,11 +1,14 @@
 package inputfs
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -24,6 +27,7 @@ type discoveredFile struct {
 type discovery struct {
 	ctx         context.Context
 	session     FileSession
+	listing     func(*os.File, int) ([]directoryEntry, error)
 	root        *os.File
 	rootReads   bool
 	identities  map[string]syscall.Stat_t
@@ -185,14 +189,14 @@ func discoverThrough(ctx context.Context, session FileSession) (*discovery, erro
 		return nil, failure("input.read", "input root cannot be opened safely", "")
 	}
 	return &discovery{
-		ctx: ctx, session: session, root: root, rootReads: syscall.Geteuid() == 0,
+		ctx: ctx, session: session, listing: readDirectoryEntries, root: root, rootReads: syscall.Geteuid() == 0,
 		identities: make(map[string]syscall.Stat_t), directories: make(map[string]syscall.Stat_t),
 		files: make(map[string]discoveredFile), markers: make(map[string]discoveredFile),
 	}, nil
 }
 
 func (s *discovery) source(path string, directoryOnly bool) error {
-	file, stat, err := s.openPath(path, pathHandle)
+	file, stat, err := s.walk(path, pathHandle, true)
 	if err != nil {
 		return err
 	}
@@ -240,33 +244,49 @@ func (s *discovery) directory(path string, depth int) error {
 		return err
 	}
 	defer file.Close()
-	entries, err := file.ReadDir(desiredstate.MaxEntries - s.entries + 1)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return failure("input.read", "input directory cannot be enumerated", path)
+	entries, err := s.listing(file, desiredstate.MaxEntries-s.entries+1)
+	if err != nil {
+		return s.enumerationFailure(err, path)
 	}
 	s.entries += len(entries)
 	if s.entries > desiredstate.MaxEntries {
 		return limit("filesystem entries enumerated", desiredstate.MaxEntries, path)
 	}
-	slices.SortFunc(entries, func(a, b os.DirEntry) int { return strings.Compare(a.Name(), b.Name()) })
+	slices.SortFunc(entries, func(a, b directoryEntry) int { return strings.Compare(a.name, b.name) })
 	for _, entry := range entries {
 		if err := s.ctx.Err(); err != nil {
 			return err
 		}
-		child := filepath.Join(path, entry.Name())
+		child := filepath.Join(path, entry.name)
 		if depth+1 > desiredstate.MaxPathDepth {
 			return limit("descendant path depth", desiredstate.MaxPathDepth, child)
 		}
 		marker := markerPosition(child)
-		if entry.IsDir() && desiredstate.SkippedDirectory(entry.Name()) && !marker {
+		var handle *os.File
+		var stat syscall.Stat_t
+		isDir := entry.kind == syscall.DT_DIR
+		if entry.kind == syscall.DT_UNKNOWN {
+			handle, stat, err = s.openDirectoryChild(file, entry.name, child)
+			if err != nil {
+				return err
+			}
+			isDir = stat.Mode&syscall.S_IFMT == syscall.S_IFDIR
+		}
+		if isDir && desiredstate.SkippedDirectory(entry.name) && !marker || !isDir && !yamlPath(child) && !marker {
+			if handle != nil {
+				handle.Close()
+			}
 			continue
 		}
-		if !entry.IsDir() && !yamlPath(child) && !marker {
-			continue
-		}
-		handle, stat, err := s.openChild(file, entry.Name(), pathHandle, child)
-		if err != nil {
-			return err
+		if handle == nil {
+			if isDir {
+				handle, stat, err = s.openDirectoryChild(file, entry.name, child)
+			} else {
+				handle, stat, err = s.openChild(file, entry.name, pathHandle, child)
+			}
+			if err != nil {
+				return err
+			}
 		}
 		handle.Close()
 		if marker {
@@ -274,7 +294,7 @@ func (s *discovery) directory(path string, depth int) error {
 				return err
 			}
 		} else if stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
-			if desiredstate.SkippedDirectory(entry.Name()) {
+			if desiredstate.SkippedDirectory(entry.name) {
 				continue
 			}
 			if err := s.rememberIdentity(child, stat); err != nil {
@@ -427,6 +447,13 @@ func readBounded(ctx context.Context, file *os.File, maximum int) ([]byte, error
 }
 
 func (s *discovery) openPath(path string, flags int) (*os.File, syscall.Stat_t, error) {
+	return s.walk(path, flags, false)
+}
+
+// walk opens each ancestor of path as a directory and then path itself, as a
+// directory too when directory is set; a directory open mounts an automounted
+// directory before anything beneath it is looked up.
+func (s *discovery) walk(path string, flags int, directory bool) (*os.File, syscall.Stat_t, error) {
 	if err := s.ctx.Err(); err != nil {
 		return nil, syscall.Stat_t{}, err
 	}
@@ -439,6 +466,9 @@ func (s *discovery) openPath(path string, flags int) (*os.File, syscall.Stat_t, 
 	}()
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	if path == "/" {
+		if directory {
+			return s.openDirectoryChild(s.root, ".", path)
+		}
 		return s.openChild(s.root, ".", flags, path)
 	}
 	current := ""
@@ -447,11 +477,14 @@ func (s *discovery) openPath(path string, flags int) (*os.File, syscall.Stat_t, 
 			return nil, syscall.Stat_t{}, err
 		}
 		current += "/" + name
-		openFlags := flags
-		if index != len(parts)-1 {
-			openFlags = pathHandle
+		var file *os.File
+		var stat syscall.Stat_t
+		var err error
+		if index != len(parts)-1 || directory {
+			file, stat, err = s.openDirectoryChild(parent, name, current)
+		} else {
+			file, stat, err = s.openChild(parent, name, flags, current)
 		}
-		file, stat, err := s.openChild(parent, name, openFlags, current)
 		if err != nil {
 			return nil, syscall.Stat_t{}, err
 		}
@@ -486,6 +519,21 @@ func (s *discovery) openPath(path string, flags int) (*os.File, syscall.Stat_t, 
 // at it, and the reader proves the descriptor it receives.
 func (s *discovery) openChild(parent *os.File, name string, flags int, path string) (*os.File, syscall.Stat_t, error) {
 	file, err := s.session.OpenAt(parent, name, flags)
+	return s.prove(file, err, path)
+}
+
+// openDirectoryChild opens a name expected to be a directory as one, and opens
+// it again as a path handle only when it is not, so the caller classifies a
+// link or a file from the descriptor it receives.
+func (s *discovery) openDirectoryChild(parent *os.File, name, path string) (*os.File, syscall.Stat_t, error) {
+	file, err := s.session.OpenAt(parent, name, pathHandle|syscall.O_DIRECTORY)
+	if errors.Is(err, syscall.ENOTDIR) {
+		file, err = s.session.OpenAt(parent, name, pathHandle)
+	}
+	return s.prove(file, err, path)
+}
+
+func (s *discovery) prove(file *os.File, err error, path string) (*os.File, syscall.Stat_t, error) {
 	if err != nil {
 		if canceled := s.ctx.Err(); canceled != nil {
 			return nil, syscall.Stat_t{}, canceled
@@ -498,6 +546,82 @@ func (s *discovery) openChild(parent *os.File, name string, flags int, path stri
 		return nil, syscall.Stat_t{}, failure("input.read", "input handle cannot be verified", path)
 	}
 	return file, stat, nil
+}
+
+// enumerationFailure names why a directory's entries could not be listed: a
+// denial names who was denied, as a read does.
+func (s *discovery) enumerationFailure(err error, path string) error {
+	if canceled := s.ctx.Err(); canceled != nil {
+		return canceled
+	}
+	if denied(err) {
+		return readDenied(s.rootReads, path)
+	}
+	reason := "read error"
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		reason = errno.Error()
+	}
+	return diagnostics.NewFailureWithRemediation("input.read", "input directory cannot be enumerated ("+reason+")", path,
+		"check that the filesystem holding it is mounted and readable, or copy the input to a local directory and name the copy")
+}
+
+type directoryEntry struct {
+	name string
+	kind uint8
+}
+
+var errDirectoryRecord = errors.New("malformed directory record")
+
+// readDirectoryEntries lists at most limit entries with the type the
+// filesystem reports for each, and never stats one.
+func readDirectoryEntries(file *os.File, limit int) ([]directoryEntry, error) {
+	entries := []directoryEntry{}
+	buffer := make([]byte, 32768)
+	for len(entries) < limit {
+		n, err := syscall.ReadDirent(int(file.Fd()), buffer)
+		runtime.KeepAlive(file)
+		if errors.Is(err, syscall.EINTR) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if n <= 0 {
+			break
+		}
+		entries, err = appendDirectoryEntries(buffer[:n], entries, limit)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return entries, nil
+}
+
+// appendDirectoryEntries parses linux_dirent64 records: d_ino at 0, d_reclen
+// at 16, d_type at 18 and a NUL-terminated name from 19.
+func appendDirectoryEntries(buf []byte, entries []directoryEntry, limit int) ([]directoryEntry, error) {
+	const nameOffset = 19
+	for len(buf) != 0 && len(entries) < limit {
+		if len(buf) < nameOffset {
+			return nil, errDirectoryRecord
+		}
+		length := int(binary.LittleEndian.Uint16(buf[16:18]))
+		if length <= nameOffset || length > len(buf) {
+			return nil, errDirectoryRecord
+		}
+		record := buf[:length]
+		buf = buf[length:]
+		name := record[nameOffset:]
+		if end := bytes.IndexByte(name, 0); end >= 0 {
+			name = name[:end]
+		}
+		if binary.LittleEndian.Uint64(record[0:8]) == 0 || len(name) == 0 || string(name) == "." || string(name) == ".." {
+			continue
+		}
+		entries = append(entries, directoryEntry{name: string(name), kind: record[18]})
+	}
+	return entries, nil
 }
 
 const realPathRemedy = "pass a path with no symbolic link in it, such as the output of realpath"

@@ -192,7 +192,7 @@ func retainDependencies(value prerequisites.HostState, held []controllerBundleRe
 		merged[source.ID] = source
 	}
 	if len(merged) > maxControllerRetainedSources {
-		return prerequisites.HostState{}, state("retained controller dependency limit exceeded")
+		return prerequisites.HostState{}, controllerFailure("controller.conflict", "this host already retains the "+strconv.Itoa(maxControllerRetainedSources)+" dependency source identities it may hold, so this resolution's sources have no room", retainedSourcesRemedy)
 	}
 	value.RetainedSources = slices.SortedFunc(maps.Values(merged), func(x, y prerequisites.DependencySource) int {
 		return strings.Compare(x.ID, y.ID)

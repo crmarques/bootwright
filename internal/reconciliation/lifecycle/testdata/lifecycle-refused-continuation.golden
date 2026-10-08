@@ -104,7 +104,10 @@
     "apply": {
       "code": "lifecycle.state",
       "message": "an incomplete destroy must be continued before another operation",
-      "remediation": "continue it with bootwright destroy --context lab"
+      "remediation": "restore the controller state that recorded this context's binding from a matching backup, or delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own",
+      "causes": [
+        "controller.identity: this context is not bound to a controller host (restore the controller state that recorded this context's binding from a matching backup, or delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own)"
+      ]
     },
     "destroy": {
       "code": "controller.identity",

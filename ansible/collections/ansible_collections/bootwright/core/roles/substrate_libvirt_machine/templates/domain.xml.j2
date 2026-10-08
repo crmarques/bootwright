@@ -44,7 +44,7 @@
 {% else %}
     <interface type="bridge">
       <mac address="{{ interface.macAddress }}"/>
-      <source bridge="{{ interface.bridge }}"/>
+      <source bridge="{{ interface.bridge | e }}"/>
       <model type="virtio"/>
     </interface>
 {% endif %}

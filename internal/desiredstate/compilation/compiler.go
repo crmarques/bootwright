@@ -115,7 +115,7 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 		return compilationFailure(ctx, ds)
 	}
 	catalog := catalogOf(r.records)
-	if !r.validateEffective(catalog) {
+	if !r.validateEffective(catalog.WithUndecodable(r.ds.undecodable)) {
 		return compilationFailure(ctx, ds)
 	}
 	if err := ctx.Err(); err != nil {

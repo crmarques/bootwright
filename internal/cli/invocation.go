@@ -19,6 +19,9 @@ type InvocationClass struct {
 	// choice can come from. Every context-backed or local shape, including
 	// one of the same command, takes no route from it.
 	AmbientRoute bool
+	// SecretStdin names the Secret a secret set reads from standard input,
+	// which a sudo policy that logs input would record.
+	SecretStdin string
 }
 
 func ClassifyInvocation(args []string) InvocationClass {
@@ -45,7 +48,14 @@ func ClassifyInvocation(args []string) InvocationClass {
 	if path == "setup" && boolValue(command.Flags(), "dry-run") {
 		return InvocationClass{Command: path, AmbientRoute: ambient}
 	}
-	return InvocationClass{RequiresRoot: true, JSON: selectedJSON(command), Command: path, AmbientRoute: ambient}
+	return InvocationClass{RequiresRoot: true, JSON: selectedJSON(command), Command: path, AmbientRoute: ambient, SecretStdin: secretStdin(path, command.Flags())}
+}
+
+func secretStdin(path string, flags *pflag.FlagSet) string {
+	if path == "secret set" && (boolValue(flags, "value-stdin") || boolValue(flags, "password-stdin")) {
+		return stringValue(flags, "name")
+	}
+	return ""
 }
 
 // contextFreeAcquisition decides from an admitted invocation's parsed flags

@@ -5,6 +5,9 @@ package main
 import (
 	"context"
 	"errors"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -16,7 +19,7 @@ func (f secretConfirmationFunc) Confirm(ctx context.Context, action, name string
 	return f(ctx, action, name)
 }
 
-func TestSecretConfirmationsHoldMutationLeaseAndReleaseItOnRefusal(t *testing.T) {
+func TestSecretConfirmationsHoldNoLeaseAndWriteNothingOnRefusal(t *testing.T) {
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
@@ -32,8 +35,8 @@ func TestSecretConfirmationsHoldMutationLeaseAndReleaseItOnRefusal(t *testing.T)
 		confirmations++
 		entered := false
 		err := repository.MutateSecrets(ctx, snapshot.Context, func(secretstore.Area) error { entered = true; return nil })
-		if err == nil || entered {
-			t.Fatal("confirmation did not hold the mutation lease")
+		if err != nil || !entered {
+			t.Fatal("confirmation held the context lease", err)
 		}
 		return errors.New("synthetic confirmation refusal")
 	})
@@ -51,14 +54,58 @@ func TestSecretConfirmationsHoldMutationLeaseAndReleaseItOnRefusal(t *testing.T)
 		before := stateFingerprint(t, root)
 		contextRun(t, services, 1, args...)
 		if !sameFingerprints(before, stateFingerprint(t, root)) {
-			t.Fatal("refused confirmation changed state")
-		}
-		if err := repository.MutateSecrets(context.Background(), snapshot.Context, func(secretstore.Area) error { return nil }); err != nil {
-			t.Fatal("refused confirmation retained a lease", err)
+			t.Fatal("refused confirmation changed state", args)
 		}
 	}
 	if confirmations != 3 {
 		t.Fatal("unexpected confirmation count", confirmations)
+	}
+}
+
+func TestASecretChangedDuringItsPromptIsRefusedWithNothingWritten(t *testing.T) {
+	services, repository, input, root := contextFixture(t)
+	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	contextRun(t, services, 0, "secret", "encryption", "init")
+	values := t.TempDir()
+	first := addSecretInput(t, values, "first", "synthetic-first-value")
+	replacement := addSecretInput(t, values, "replacement", "synthetic-replacement-value")
+	contextRun(t, services, 0, "secret", "set", "--name", "payload", "--value-file", first)
+	inner := testContextWiring(t, root)
+	inner.Repository, inner.Workspace = repository, repository
+	inner.Confirmer = secretConfirmationFunc(func(context.Context, string, string) error {
+		t.Fatal("the conflicting change prompted")
+		return nil
+	})
+	conflicting := assembleServices(inner)
+	for i, prompt := range []struct{ outer, change []string }{
+		{[]string{"secret", "set", "--name", "payload", "--value-file", replacement}, []string{"secret", "set", "--name", "payload", "--value-file", "OTHER", "--yes"}},
+		{[]string{"secret", "delete", "--name", "payload"}, []string{"secret", "set", "--name", "payload", "--value-file", "OTHER", "--yes"}},
+		{[]string{"secret", "encryption", "rotate"}, []string{"secret", "encryption", "rotate", "--yes"}},
+	} {
+		other := addSecretInput(t, values, "other-"+strconv.Itoa(i), "synthetic-conflicting-value-"+strconv.Itoa(i))
+		change := slices.Clone(prompt.change)
+		if j := slices.Index(change, "OTHER"); j >= 0 {
+			change[j] = other
+		}
+		var afterChange map[string]string
+		outer := testContextWiring(t, root)
+		outer.Repository, outer.Workspace = repository, repository
+		outer.Confirmer = secretConfirmationFunc(func(context.Context, string, string) error {
+			contextRun(t, conflicting, 0, change...)
+			afterChange = stateFingerprint(t, root)
+			return nil
+		})
+		_, stderr := contextRun(t, assembleServices(outer), 1, prompt.outer...)
+		if afterChange == nil {
+			t.Fatal("the outer command did not prompt", prompt.outer)
+		}
+		if !strings.Contains(stderr, "secret.store.conflict") {
+			t.Fatalf("%v: stderr = %s, want secret.store.conflict", prompt.outer, stderr)
+		}
+		if !sameFingerprints(afterChange, stateFingerprint(t, root)) {
+			t.Fatal("the outer command wrote after its Secret changed", prompt.outer)
+		}
 	}
 }
 

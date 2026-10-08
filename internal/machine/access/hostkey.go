@@ -101,9 +101,10 @@ func recordedHostKey(record trust.Record, selected target, contextName string) (
 // firstUse observes an unproved endpoint and asks the operator to accept what
 // it presented. Nothing is recorded without that explicit confirmation, and
 // without a terminal to ask on there is no first use at all. The record it
-// would write replaces any record of a Machine the context no longer declares
-// at the same endpoint, named before the prompt, and a write that would still
-// pin the endpoint to two keys refuses before anything is asked.
+// would write replaces any record at the same endpoint of a Machine that no
+// longer uses this context's trust, undeclared or exempt (D117), named before
+// the prompt, and a write that would still pin the endpoint to two keys
+// refuses before anything is asked.
 func (s Service) firstUse(ctx context.Context, contextName string, selected target,
 	records trust.Store, previous []byte, machines declaredTrust) (trust.HostKey, error) {
 	remedy := "record it with bootwright machine trust --context " + contextName + " --machines " + selected.name
@@ -127,13 +128,17 @@ func (s Service) firstUse(ctx context.Context, contextName string, selected targ
 		Source: trust.SourceFirstUse, Recorded: s.now(),
 	}
 	candidate := records.Clone()
-	removed := candidate.Supersede(record, machines.declared)
+	removed := candidate.Supersede(record, machines.uses)
 	if err := candidate.Validate(); err != nil {
 		return trust.HostKey{}, retrust(err, contextName, selected.name, machines)
 	}
 	for _, stale := range removed {
+		why := "which it no longer declares"
+		if exemption := machines.exempt(stale.Machine); exemption != "" {
+			why = "which no longer uses this context's SSH trust (" + exemption + ")"
+		}
 		s.warn("trust.identity: confirming also removes the host key this context trusted for " + stale.Machine +
-			", which it no longer declares, at " + endpoint)
+			", " + why + ", at " + endpoint)
 	}
 	if err := s.options.Confirmer.ConfirmHostKey(ctx, contextName, selected.name, endpoint,
 		observed.Type, observed.Fingerprint()); err != nil {

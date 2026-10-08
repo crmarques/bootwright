@@ -25,19 +25,20 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Provision and destroy OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M7](milestones/m7.md) | Add-ons ACM, Argo CD and GitLab | M5 | not started | nothing until M5 |
 
-No slice is active; X43, X24 and X45 are delivered.
+X46 is active; X43, X24 and X45 are delivered.
 
-- **Next for agents:** deliver M1's X46, then X44; M4's X47 follows unless
-  the owner runs it out of sequence.
-- **Next for operator:** before a build that contains X45 touches a host,
+- **Next for agents:** finish M1's X46, do [B465](milestones/m1.md#b465)
+  before D59's closing run,
+  then X44; X47 follows.
+- **Next for operator:** before a build that contains X46 touches a host,
   destroy every live context with the build that applied it, then run `setup`
-  once: X21, X29 to X32, X43, X24 and X45 moved request and record versions,
-  the keyring format, the automation digest, the Kickstart version, the managed
-  service request and the plan encoding. Then, on a clean build, run
-  [lab-sno](../examples/lab-sno/README.md) for [B61](milestones/m3.md#b61) and
-  record it as the [operator guide](../docs/operator-guide.md) describes. After
-  X44, run M1's closing lab-rhel run (D59), which also accepts B19, B20 and
-  B270. [B73](milestones/m4.md#b73)'s rehearsal follows X47, then one xFusion
+  once: X21, X29 to X32, X43, X24, X45 and X46 moved request and record
+  versions, the keyring format, the automation digest and the plan encoding.
+  On a clean build, run [lab-sno](../examples/lab-sno/README.md) for
+  [B61](milestones/m3.md#b61) and record it per the
+  [operator guide](../docs/operator-guide.md). After X44, run M1's
+  closing lab-rhel run (D59), which also accepts B19, B20, B270 and B339.
+  [B73](milestones/m4.md#b73)'s rehearsal follows X47, then one xFusion
   observation ([B305](milestones/m4.md#b305)).
 
 ## Scope rules

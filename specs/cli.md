@@ -312,14 +312,16 @@ cancellation. A second `SIGINT` or `SIGTERM` the supervisor receives kills
 sudo, which ends the child through its parent-death guard and can leave its
 operation for the next command to resolve. A hangup never does: one terminal
 hangup reaches the foreground job twice, from the shell that resends it to its
-jobs and from the kernel when that shell exits. The child never escalates on
-its own, because sudo can hand it one terminal interrupt twice: without a
-pseudo-terminal the child receives the kernel's signal beside the relay, and
-with one in the background sudo forwards both. Where sudo runs the child in
-the foreground of a pseudo-terminal of its own, as `use_pty`, its default
-since sudo 1.9.14, does for an interactive invocation, the terminal's Ctrl-C
-reaches only the child, so a second Ctrl-C leaves its bounded cancellation
-running; a second `SIGTERM` sent to the supervisor still kills sudo.
+jobs and from the kernel when that shell exits. The child escalates on its own
+second `SIGINT` or `SIGTERM` only where it proves, at that signal, that it is
+the foreground process group of a pseudo-terminal other than the supervisor's
+terminal, as sudo's `use_pty`, its default since sudo 1.9.14, leaves an
+interactive invocation; there each Ctrl-C reaches only the child, once, and
+the second ends it at once with status `130`, which can leave its operation
+for the next command to resolve. Without a pseudo-terminal, or with one in the
+background, sudo can hand the child one interrupt twice, the kernel's signal
+beside the relay or both forwarded, so there the child never escalates on its
+own and the supervisor's second signal kills sudo.
 
 The supervisor owns bounded `sudo -n -v` refresh subprocesses during that child.
 Keep the same parent and terminal identity. An unambiguous positive effective
@@ -329,7 +331,10 @@ best-effort interval; never assume a five-minute timeout. Refresh failure or
 timeout warns once on standard error, except in JSON mode, whose standard error
 stays empty, and stops refresh without terminating the elevated command.
 Completion/cancellation stops and reaps every refresh process. Never leave a
-daemon or invalidate the user's wider sudo cache.
+daemon or invalidate the user's wider sudo cache. The same `sudo -n -ll`
+listing decides whether a standard-input `secret set` refuses before sudo
+starts it because the policy logs input
+([secret custody](secrets.md)).
 
 Capture the real invoking account before elevation. Resolve it through the
 name service with the pinned, root-owned `/usr/bin/getent`: `passwd` by UID and
@@ -628,9 +633,12 @@ records `status` read, so it never offers a command those records refuse:
   continuation's own refusal;
 - over either incomplete operation, `bootwright setup` in place of a
   continuation or resolution that still has a block to run while the host's
-  controller setup has not completed, because that continuation re-proves the
-  setup and refuses an incomplete one; a finalization and a replacement are
-  not held to it and stay offered;
+  controller setup has not completed or while its retained receipt holds no
+  execution definition, because that continuation re-proves the setup and
+  refuses either; the removal beside an incomplete apply and the replacement
+  of a failed removal, which prove the setup before they resolve or register
+  anything, are then replaced by it too, and a finalization is not held to it
+  and stays offered;
 - over a completed operation, nothing, except over a completed destroy holding
   a block that is not `done`, which both verbs refuse naming the deletion of
   the context: there that deletion, as beside unindexed records;
@@ -732,7 +740,8 @@ discarded rather than left where nothing names it.
 
 `cluster kubeconfig --name <cluster>` reveals the administrator kubeconfig a
 [completed installation](container-clusters.md#installation) left in
-the context's [custody](secrets.md#produced-material). It resolves the explicit
+the context's [custody](secrets.md#produced-material), or the copy a removal
+kept there unproved from an installation whose completion was never proved. It resolves the explicit
 `--context`, or the current context, once; compiles that context's effective
 state; and resolves `--name` in the selected graph's shared
 ContainerCluster/StorageCluster name namespace. It never searches outside the
@@ -752,11 +761,16 @@ reads no credential bytes. A store this build cannot open refuses with its own
 [`secret.store.*` diagnostic](secrets.md#local-keyring-v4). The discovery
 action is `render effective` because `cluster list` and `cluster info` are
 unavailable. On success, standard output is exactly the custodied bytes with no
-added LF, and standard error is empty; on any failure, standard output is empty
+added LF, and standard error is empty, or, for a copy custody holds unproved,
+holds exactly one `access.unproved` warning naming the cluster and saying its
+access was not proved, as the copy was kept from an installation whose
+completion was never proved; on any failure, standard output is empty
 and standard error holds exactly one diagnostic. The entry exists from the
-apply that proves the installation complete until the destroy that completes
-the context's removal withdraws it, and `context delete --purge
---allow-orphans` removes it with the keyring.
+apply that proves the installation complete, or from the removal that kept the
+unproved copy before deleting the installer's work area
+([produced material custody](state-reconciliation.md#produced-material-custody)),
+until the destroy that completes the context's removal withdraws it, and
+`context delete --purge --allow-orphans` removes it with the keyring.
 
 ### Machine SSH sessions
 
@@ -802,10 +816,12 @@ session dials the address that installation proved, so another address refuses
 finally, on an interactive terminal alone, one observation of the endpoint
 confirmed against its displayed fingerprint and recorded as context trust. The
 prompt names the context, and when a record of a Machine the context no longer
-declares holds the endpoint, the confirmed write replaces that record, which
-standard error names before the prompt; a record of a Machine still declared
-that pins the endpoint to another key fails `trust.identity` before anything
-is asked. Without a terminal an unproved key fails `trust.identity` and names
+declares, or of a declared Machine that no longer uses context trust (reached
+locally, installed by Bootwright, declaring no SSH access or declaring a
+`knownHostsRef`), holds the endpoint, the confirmed write replaces that record,
+which standard error names, with why, before the prompt; a record of a Machine
+that still uses context trust and pins the endpoint to another key fails
+`trust.identity` before anything is asked. Without a terminal an unproved key fails `trust.identity` and names
 `machine trust`. Recording requires that explicit confirmation, so an
 observation by itself trusts nothing. The session pins exactly the proved key
 and its algorithm, so a Machine presenting another key fails to connect; a
@@ -848,42 +864,25 @@ It observes each such endpoint exactly once, offering no credential, and
 reports one action for every selected Machine: `add` for a key the context
 does not trust yet, `reuse` for the key it already trusts at that endpoint,
 `replace` for a supersede, and `skip`, with its reason, for every other
-Machine, which it never contacts. An `add` or `replace` whose endpoint a record
-of a Machine the context no longer declares holds removes that record in the
-same write, reported after the selected Machines as a `remove` row naming the
-Machine, the endpoint, the key removed and which Machine now uses the address;
-it counts as pending, but not as a Machine checked. One endpoint that cannot be
+Machine, which it never contacts. An `add` or `replace` whose endpoint is held
+by a record of a Machine the context no longer declares, or of a declared
+Machine that no longer uses context trust (reached locally, installed by
+Bootwright, declaring no SSH access or declaring a `knownHostsRef`), removes
+that record in the same write, reported after the selected Machines as a
+`remove` row naming the Machine, the endpoint, the key removed, why nothing
+reads the record any more and which Machine now uses the address; it counts as
+pending, but not as a Machine checked. The confirmed (or `--yes`) write records
+it in every lifecycle state, with no input edit (D117). One endpoint that cannot be
 read fails the whole enrollment, which records nothing.
 
 A changed key fails `trust.identity` naming both fingerprints. An unchanged key
 observed at another endpoint fails `trust.identity` naming the endpoint the
 context trusts it at, since the store trusts a key at one address. Either is
 superseded only by `--replace` naming that Machine. A plan that would still pin
-one endpoint to two keys, because a Machine the context still declares holds it
-with another, fails `trust.identity` before it is shown, in a dry run too,
-naming both Machines, the endpoint and the re-trust of the other Machine. When
-that Machine no longer uses this context's trust, because it is reached
-locally, installed, declares no SSH access or declares a `knownHostsRef`, a
-re-trust of it refuses and nothing reads its record, so the refusal says why
-and names the one change that drops the record: leave it out of the input for
-one `context update`, repeat the command, then restore it. The remedy also
-names what that change needs and costs: `context update` refuses while an
-operation is incomplete, as the
-[mutation guard](state-reconciliation.md#context-mutation-evidence) states; an
-input that drops a Machine another object references, such as a cluster
-member, does not compile; and each update that changes the input publishes a
-new input revision, so after a completed apply the next apply no longer
-settles but refuses the
-changed input until a [destroy](state-reconciliation.md#lifecycle-unit). The
-Machine reached locally is the
-[controller Machine](api/environment.md#controller-machine), which leaves the
-input only when the Environment's `spec.controller.machineRef` names another
-local Machine. Before an apply binds the context, that input compiles and the
-same steps drop the record. Once an apply has bound the context, the
-[controller binding](contexts.md#controller-relationship-and-host-binding),
-not compilation, refuses any input that changes the controller Machine, so
-that refusal's remedy says no input edit drops the record and only a separate
-context does.
+one endpoint to two keys, because a Machine that still uses this context's
+trust holds it with another, fails `trust.identity` before it is shown, in a
+dry run too, naming both Machines, the endpoint and the re-trust of the other
+Machine.
 
 With pending writes and no `--yes`, the plan is written to standard output
 before the one [ordinary confirmation](#ordinary-confirmation): every Machine's
@@ -891,7 +890,10 @@ action, key and fingerprint, what a replacement supersedes, the earlier
 fingerprint and, when it moved, the earlier endpoint, and every record a
 `remove` row drops. The plan is the same observation the command records.
 After recording, the result repeats only its headline; a declined,
-non-interactive or canceled confirmation records nothing.
+non-interactive or canceled confirmation records nothing. A plan that cannot
+be written to standard output asks nothing and records nothing, and fails
+`trust.identity` naming the context and the repeat of `machine trust` with
+`--context`.
 Under `--yes` or `--dry-run`, and in JSON, which
 [requires one of them](cli/commands.md#flag-relationships-and-safeguards),
 nothing precedes the result, which carries every Machine's row once.

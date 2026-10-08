@@ -27,7 +27,7 @@ func unresolvedRig(ctx context.Context, t *testing.T, unproved func(*killHost)) 
 func requireUnresolvedRefusal(t *testing.T, err error, why Unresolved) {
 	t.Helper()
 	want := []diagnostics.Diagnostic{
-		diagnostics.Of(unresolvedFailure("b", why))[0],
+		diagnostics.Of(unresolvedFailure("b", why, "bootwright destroy --context lab"))[0],
 		{Severity: "error", Code: "lifecycle.unknown", Message: "this removal cannot prove what these effects left behind, so it registered nothing: b",
 			Remediation: "do what the diagnostic of each reports, then repeat bootwright destroy --context lab"},
 	}
@@ -88,7 +88,7 @@ func TestAnUnresolvableRemovalKilledAtAnyWriteRefusesAgainUntilItsTargetIsRestor
 	} {
 		t.Run(name, func(t *testing.T) {
 			rig := unresolvedRig(ctx, t, test.unproved)
-			if held, why := unresolvedStatus(t, rig.harness.service); held != "apply unknown, b unknown" || why != unobserved {
+			if held, why := unresolvedStatus(t, rig.harness.service); held != "apply unknown, b unknown" || why != unobservedBy("bootwright apply --context lab") {
 				t.Fatalf("before any resolution status reads %s: %+v", held, why)
 			}
 			names := &killPoints{counts: map[string]int{}}
@@ -112,7 +112,7 @@ func TestAnUnresolvableRemovalKilledAtAnyWriteRefusesAgainUntilItsTargetIsRestor
 					if len(failures) != 0 {
 						t.Fatalf("the killed refusal left %v", failures)
 					}
-					if held, why := unresolvedStatus(t, service); held != "apply unknown, b unknown" || why != unobserved && why != test.why {
+					if held, why := unresolvedStatus(t, service); held != "apply unknown, b unknown" || why != unobservedBy("bootwright apply --context lab") && why != test.why {
 						t.Fatalf("the killed refusal left status reading %s: %+v", held, why)
 					}
 					requireUnresolvedRefusal(t, killInvoke(ctx, service, reconciliation.Destroy), test.why)

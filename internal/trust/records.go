@@ -152,12 +152,10 @@ func (e *DivergentPin) message() string {
 // Machine whose record a refused write did not make: the record that diverges
 // from what its endpoint presents now. writing reports the Machines the
 // refused write records, and is nil for a store that was read. exempt reports
-// why a Machine no longer uses this store, so a re-trust would refuse; its
-// record is then dropped the one way the store allows, by the Machine leaving
-// the input for one write, and the remedy states what that input change needs
-// and what it costs a completed apply. The controller Machine leaves the input
-// only with the controller reference, which the controller binding refuses
-// once an apply has bound the context, so its remedy says so.
+// why a Machine no longer uses this store. A confirmed takeover write drops
+// such a Machine's record before it validates (D117), so an exempt record
+// reaches this refusal only from a stored file that already pins one endpoint
+// to two keys, and the remedy is the takeover write that drops it.
 func (e *DivergentPin) Retrust(contextName string, writing func(string) bool, exempt func(string) string) error {
 	message, other := e.message(), e.Machines[0]
 	for index, name := range e.Machines {
@@ -173,18 +171,9 @@ func (e *DivergentPin) Retrust(contextName string, writing func(string) bool, ex
 		return failure(message, "re-trust "+other+" with bootwright machine trust --context "+contextName+
 			" --machines "+other+" --replace "+other)
 	}
-	message += "; " + other + " no longer uses this context's SSH trust (" + reason + "), so nothing reads that record, " +
-		"but the store drops it only once " + other + " leaves the input"
-	update := "bootwright context update --name " + contextName + " --input-dir <dir>, repeat this command, then restore " + other + " the same way"
-	if reason == ExemptReachedLocally {
-		return failure(message, other+" is the controller Machine, which leaves the input only when spec.controller.machineRef names another local Machine; "+
-			"before an apply binds this context to "+other+", and with no incomplete operation, make that change with "+update+
-			"; once an apply has bound this context, context update refuses any input that changes the controller Machine, "+
-			"so no input edit drops the record and only a separate context does")
-	}
-	return failure(message, "drop "+other+" from the input with "+update+"; "+
-		"this needs a context with no incomplete operation and an input in which no other object references "+other+
-		", and after a completed apply the next apply no longer settles: it refuses the changed input until a destroy")
+	return failure(message+"; "+other+" no longer uses this context's SSH trust ("+reason+"), so nothing reads that record",
+		"trust the Machine that now uses "+e.Endpoint+" with bootwright machine trust --context "+contextName+
+			"; its confirmed write removes the record of "+other)
 }
 
 func exemption(exempt func(string) string, machine string) string {
@@ -219,18 +208,19 @@ func (s Store) Clone() Store {
 	return Store{FormatVersion: s.FormatVersion, Hosts: slices.Clone(s.Hosts)}
 }
 
-// Supersede records one Machine's key and removes the record of every Machine
-// the context no longer declares that holds the same endpoint, whatever its
-// key: an address the context reassigned belongs to the Machine that declares
-// it now. It returns what it removed, in Machine order. A record of a Machine
-// declared still is kept, so a key that diverges from it stays a refusal of
-// Validate rather than a silent replacement.
-func (s *Store) Supersede(record Record, declared func(string) bool) []Record {
+// Supersede records one Machine's key and removes the record of every other
+// Machine at the same endpoint that does not use this store, whatever its key:
+// an address the context reassigned, or holds for a Machine that no longer
+// uses this store, belongs to the Machine that declares it now. It returns
+// what it removed, in Machine order. A record of a Machine that still uses the
+// store is kept, so a key that diverges from it stays a refusal of Validate
+// rather than a silent replacement; a nil uses keeps every record.
+func (s *Store) Supersede(record Record, uses func(machine string) bool) []Record {
 	endpoint := HostToken(record.Address, record.Port)
 	kept := make([]Record, 0, len(s.Hosts)+1)
 	var removed []Record
 	for _, existing := range s.Hosts {
-		if existing.Machine != record.Machine && declared != nil && !declared(existing.Machine) &&
+		if existing.Machine != record.Machine && uses != nil && !uses(existing.Machine) &&
 			HostToken(existing.Address, existing.Port) == endpoint {
 			removed = append(removed, existing)
 			continue

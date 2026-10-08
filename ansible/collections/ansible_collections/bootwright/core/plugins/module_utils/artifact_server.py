@@ -48,10 +48,10 @@ def invoke(runner, argv):
 
 
 def unit_state(runner, unit_path, service):
-    """Report the unit's state, or the empty string when it is not defined."""
-    if not os.path.exists(unit_path):
-        return ""
+    """Report the unit's state; a unit with no definition is reported only while systemd still lists it failed, which a removal must take back."""
     _code, shown = invoke(runner, [SYSTEMCTL, "show", "--property=ActiveState", "--value", service])
+    if not os.path.exists(unit_path):
+        return "failed" if shown == "failed" else ""
     return shown if shown in UNIT_STATES else ""
 
 

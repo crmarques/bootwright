@@ -30,14 +30,19 @@ func (s *session) Produce(ctx context.Context, block string, outputs []secretsto
 	}
 	results := make([]secretstore.Produced, len(outputs))
 	newIdentities := []string{}
+	proved := false
 	plain := []plainPart{}
 	defer func() { clearPlain(plain) }()
 	for position, output := range outputs {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		entry := secretstore.Produced{Block: block, Name: output.Name}
+		entry := secretstore.Produced{Block: block, Name: output.Name, Unproved: output.Unproved}
 		existing, found := producedEntry(next, block, output.Name)
+		if found && output.Unproved {
+			results[position] = existing
+			continue
+		}
 		if found {
 			version, _ := findVersion(next, existing.Version)
 			equal, err := s.equalVersion(ctx, version, output.Material)
@@ -45,6 +50,11 @@ func (s *session) Produce(ctx context.Context, block string, outputs []secretsto
 				return nil, err
 			}
 			if equal {
+				if existing.Unproved {
+					existing.Unproved = false
+					setProduced(&next, existing)
+					proved = true
+				}
 				results[position] = existing
 				continue
 			}
@@ -62,7 +72,7 @@ func (s *session) Produce(ctx context.Context, block string, outputs []secretsto
 		setProduced(&next, entry)
 		results[position] = entry
 	}
-	if len(newIdentities) == 0 {
+	if len(newIdentities) == 0 && !proved {
 		return results, nil
 	}
 	collectVersions(&next)
@@ -101,23 +111,23 @@ func (s *session) Withdraw(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (s *session) ReadProduced(ctx context.Context, block, name string) (secrets.Material, bool, error) {
+func (s *session) ReadProduced(ctx context.Context, block, name string) (secretstore.ProducedMaterial, bool, error) {
 	if err := s.usable(ctx, false); err != nil {
-		return secrets.Material{}, false, err
+		return secretstore.ProducedMaterial{}, false, err
 	}
 	entry, found := producedEntry(s.index, block, name)
 	if !found {
-		return secrets.Material{}, false, nil
+		return secretstore.ProducedMaterial{}, false, nil
 	}
 	version, exists := findVersion(s.index, entry.Version)
 	if !exists {
-		return secrets.Material{}, false, secretstore.Failure("store.corrupt", "produced material references a missing version")
+		return secretstore.ProducedMaterial{}, false, secretstore.Failure("store.corrupt", "produced material references a missing version")
 	}
 	material, err := s.readVersion(ctx, version)
 	if err != nil {
-		return secrets.Material{}, false, err
+		return secretstore.ProducedMaterial{}, false, err
 	}
-	return material, true, nil
+	return secretstore.ProducedMaterial{Material: material, Unproved: entry.Unproved}, true, nil
 }
 
 // validateProducedInputs admits one block's outputs by name, each carrying
@@ -154,7 +164,7 @@ func producedEntry(index indexRecord, block, name string) (secretstore.Produced,
 func setProduced(index *indexRecord, entry secretstore.Produced) {
 	for i := range index.Produced {
 		if index.Produced[i].Block == entry.Block && index.Produced[i].Name == entry.Name {
-			index.Produced[i].Version = entry.Version
+			index.Produced[i].Version, index.Produced[i].Unproved = entry.Version, entry.Unproved
 			return
 		}
 	}

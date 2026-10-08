@@ -219,6 +219,18 @@ var ansibleReservedKeys = []string{"__ansible_type", "__ansible_unsafe", "__ansi
 // Ansible as data; this keeps a value that would be code there, or that no
 // runner could encode, out of a plan at all.
 func RefuseTemplateDelimiters(contextName string, definitions []reconciliation.BlockDefinition) error {
+	return refuseTemplateValues(contextName, contextCommand(contextName, "plan"), definitions)
+}
+
+// RefuseBoundedTemplateDelimiters refuses a bounded run's requests as
+// RefuseTemplateDelimiters refuses a plan's. A bounded run is never planned,
+// so its remedy ends with retry, the command that carries the run again.
+func RefuseBoundedTemplateDelimiters(contextName, retry string, definitions []reconciliation.BlockDefinition) error {
+	return refuseTemplateValues(contextName, retry, definitions)
+}
+
+// refuseTemplateValues is the refusal of both, whose remedy ends with retry.
+func refuseTemplateValues(contextName, retry string, definitions []reconciliation.BlockDefinition) error {
 	var refused []diagnostics.Diagnostic
 	for _, definition := range definitions {
 		hits := templateHits(definition.Request)
@@ -240,7 +252,7 @@ func RefuseTemplateDelimiters(contextName string, definitions []reconciliation.B
 		// A plan reads the context's imported input, so the repaired values are
 		// imported before the context is planned again.
 		remedy := "remove " + strings.Join(removed, " and ") + " from the desired-state values " + object + " is planned from, " +
-			"import them with bootwright context update --name " + contextName + " --input-dir <dir>, then run bootwright plan --context " + contextName
+			"import them with bootwright context update --name " + contextName + " --input-dir <dir>, then run " + retry
 		refused = append(refused, diagnostics.Diagnostic{
 			Severity: "error", Code: "api.value", Message: message, Remediation: remedy,
 			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: definition.Kind, Name: definition.Object},

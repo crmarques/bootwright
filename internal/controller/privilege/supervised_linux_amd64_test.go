@@ -16,7 +16,13 @@ type fakeProcess struct {
 }
 
 func process(pid int, exe string, parent int) fakeProcess {
-	return fakeProcess{pid: pid, exe: exe, stat: strconv.Itoa(pid) + " (" + exe + ") S " + strconv.Itoa(parent) + " " + strconv.Itoa(pid) + " " + strconv.Itoa(pid) + " 0 -1 4194560\n"}
+	return onTerminal(pid, exe, parent, pid, 0, -1)
+}
+
+// onTerminal writes the process group, controlling terminal and that
+// terminal's foreground process group into the stat (proc_pid_stat(5)).
+func onTerminal(pid int, exe string, parent, group, tty, foreground int) fakeProcess {
+	return fakeProcess{pid: pid, exe: exe, stat: strconv.Itoa(pid) + " (" + exe + ") S " + strconv.Itoa(parent) + " " + strconv.Itoa(group) + " " + strconv.Itoa(pid) + " " + strconv.Itoa(tty) + " " + strconv.Itoa(foreground) + " 4194560\n"}
 }
 
 // procTree lays out the executables and a procfs of the given processes. An
@@ -77,6 +83,32 @@ func TestSupervisedChildRecognizesOnlyItsOwnSupervisor(t *testing.T) {
 			proc, sudo, self := procTree(t, test.processes...)
 			if got := supervisedBy(proc, test.parent, sudo, self); got != test.want {
 				t.Fatalf("supervised = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestTheChildEscalatesOnlyInTheForegroundOfAPseudoTerminalOfItsOwn(t *testing.T) {
+	const supervisorTerminal, ownTerminal = 34816, 34817
+	supervisor := onTerminal(10, "bootwright", 1, 10, supervisorTerminal, 10)
+	sudo := onTerminal(20, "sudo", 10, 10, supervisorTerminal, 10)
+	monitor := onTerminal(30, "sudo", 20, 30, ownTerminal, 40)
+	for _, test := range []struct {
+		name      string
+		processes []fakeProcess
+		want      bool
+	}{
+		{"the foreground of its own pseudo-terminal", []fakeProcess{onTerminal(40, "bootwright", 30, 40, ownTerminal, 40), monitor, sudo, supervisor}, true},
+		{"on the supervisor's terminal", []fakeProcess{onTerminal(40, "bootwright", 30, 40, supervisorTerminal, 40), monitor, sudo, supervisor}, false},
+		{"in the background of its own pseudo-terminal", []fakeProcess{onTerminal(40, "bootwright", 30, 40, ownTerminal, 30), monitor, sudo, supervisor}, false},
+		{"with no terminal", []fakeProcess{onTerminal(40, "bootwright", 30, 40, 0, 40), monitor, sudo, supervisor}, false},
+		{"with an unreadable supervisor stat", []fakeProcess{onTerminal(40, "bootwright", 30, 40, ownTerminal, 40), monitor, sudo, {pid: 10, exe: "bootwright"}}, false},
+		{"under a parent that is not sudo", []fakeProcess{onTerminal(40, "bootwright", 30, 40, ownTerminal, 40), onTerminal(30, "bash", 10, 30, ownTerminal, 40), supervisor}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			proc, sudoPath, self := procTree(t, test.processes...)
+			if got := foregroundOfOwnTerminal(proc, 40, 30, sudoPath, self); got != test.want {
+				t.Fatalf("foreground of its own terminal = %v, want %v", got, test.want)
 			}
 		})
 	}

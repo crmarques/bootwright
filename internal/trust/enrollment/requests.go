@@ -10,8 +10,8 @@ type EnrollRequest struct {
 
 // The actions one enrollment reports. Add, Replace and Remove change
 // anything; Reuse and Skip exist so an operator can see why a Machine was left
-// alone. Remove names the record of a Machine the context no longer declares
-// whose endpoint a selected Machine now holds.
+// alone. Remove names the record of a Machine, undeclared or no longer using
+// the context's SSH trust, whose endpoint a selected Machine now holds.
 const (
 	ActionAdd     = "add"
 	ActionReuse   = "reuse"

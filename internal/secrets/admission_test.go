@@ -39,6 +39,10 @@ func TestGeneratedParametersRefuseWhatGenerationRefuses(t *testing.T) {
 		{"sshKeyPair", "comment", "a\tb"},
 		{"sshKeyPair", "comment", `a"b`},
 		{"sshKeyPair", "comment", `a\b`},
+		{"tlsCertificate", "commonName", "a\x00b"},
+		{"tlsCertificate", "commonName", "a\xffb"},
+		{"caBundle", "commonName", oversize},
+		{"caBundle", "commonName", ""},
 	} {
 		issues := Validate(generatedSecret(test.kind, test.parameter, test.value), api.Catalog{})
 		field := "$.spec.source.generated." + test.parameter
@@ -53,6 +57,20 @@ func TestGeneratedParametersRefuseWhatGenerationRefuses(t *testing.T) {
 	} {
 		if issues := Validate(generatedSecret(test.kind, test.parameter, test.value), api.Catalog{}); len(issues) != 0 {
 			t.Errorf("%s %q was refused: %v", test.parameter, test.value, issues)
+		}
+	}
+}
+
+// The retired file source remedy names the context its secret set writes to,
+// as a placeholder, since admission reads no context; validate fills it in.
+func TestTheRetiredFileSourceRemedyNamesTheContext(t *testing.T) {
+	object := api.NewObject(api.Secret, "material", api.MapValue(), api.MapValue(
+		api.FieldValue{Name: "type", Value: api.StringValue("token")},
+		api.FieldValue{Name: "source", Value: api.MapValue(api.FieldValue{Name: "file", Value: api.MapValue()})},
+	))
+	for name, issues := range map[string][]api.Issue{"a Secret": Validate(object, api.Catalog{}), "a kind default": ValidatePartial(object, api.Catalog{})} {
+		if len(issues) != 1 || issues[0].Field != "$.spec.source.file" || !strings.Contains(issues[0].Remediation, "--context <context>") {
+			t.Errorf("%s gave %#v", name, issues)
 		}
 	}
 }

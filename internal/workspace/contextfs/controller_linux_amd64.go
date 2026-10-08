@@ -7,10 +7,10 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -31,12 +31,6 @@ const setupRetry = "repeat the same controller setup command with its original i
 // completeSetup settles a command other than setup that needs the completed
 // setup this host lacks.
 const completeSetup = "run bootwright setup, then repeat the command"
-
-// controllerFailure is a controller-state refusal and the action that settles
-// it, which belongs to the command that met it.
-func controllerFailure(code, message, remediation string) error {
-	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
-}
 
 func openControllerDirectory(root *directory, registry contexts.Registry) (*directory, error) {
 	// An unattributed descriptor is an interrupted initialization. Any
@@ -454,7 +448,7 @@ func (t *controllerTransaction) Publish(ctx context.Context, requested prerequis
 	// could replace it, so it is refused while the record is still unchanged.
 	if next.Receipt.ID != t.stored.value.Receipt.ID && len(t.stored.bundles) >= maxControllerBundles &&
 		!slices.ContainsFunc(t.stored.bundles, func(item controllerBundleReservation) bool { return item.ID == next.Receipt.CatalogDigest }) {
-		return prerequisites.NotCommitted, state("retained controller bundle limit exceeded")
+		return prerequisites.NotCommitted, controllerFailure("controller.conflict", "this host already holds the "+strconv.Itoa(maxControllerBundles)+" bundle areas it may hold, so setup's new execution bundle has no room", setupBoundRemedy)
 	}
 	// First publication also admits only this context's new binding.
 	for _, binding := range next.Bindings {

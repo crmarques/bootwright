@@ -5,6 +5,13 @@
       - bootwright_artifact_server_request.version == 'artifact-server-nginx-v2'
       - bootwright_artifact_server_request.unit is string
       - bootwright_artifact_server_request.contentRoot.startswith('/var/lib/bootwright-services/')
+      - bootwright_artifact_server_request.contentRoot.split('/') | length == 7
+      - >-
+        bootwright_artifact_server_request.contentRoot.split('/')[1:]
+        | select('in', ['', '.', '..']) | list | length == 0
+      - >-
+        (bootwright_artifact_server_request.contentRoot | dirname | dirname)
+        == '/var/lib/bootwright-services/' ~ bootwright_artifact_server_request.identity.context
       - bootwright_artifact_server_request.image is search('@sha256:[0-9a-f]{64}$')
       - bootwright_artifact_server_request.listeners | length > 0
       - bootwright_artifact_server_digest is match('[0-9a-f]{64}')

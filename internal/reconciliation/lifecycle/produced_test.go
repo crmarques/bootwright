@@ -101,8 +101,9 @@ func TestAFailedPublicationLeavesTheAttemptUnknown(t *testing.T) {
 	}
 }
 
-// A destroy that follows a failed publication resolves the installation as
-// the apply's own and captures its access before any inverse runs, so the
+// A destroy that follows a failed publication resolves the installation by
+// the apply's own observation (D123) and captures its access before any
+// inverse runs, so the
 // media block's inverse, which deletes the installer's copy, never runs while
 // custody holds none, and a removal that then stops keeps the only access.
 func TestADestroyAfterAFailedPublicationCapturesBeforeAnyInverse(t *testing.T) {
@@ -251,8 +252,8 @@ func TestADestroyNeverCaptures(t *testing.T) {
 }
 
 // A fresh destroy over an apply that never proved its block resolves that
-// block as the apply's, so a completion it proves is captured like the apply's
-// own before the removal withdraws it.
+// block first by the apply's observation (D123), so a completion it proves is
+// captured like the apply's own before the removal withdraws it.
 func TestAFreshDestroyCapturesWhatItsResolutionOfTheApplyProves(t *testing.T) {
 	h := newHarness(t, "install")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}

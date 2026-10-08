@@ -6,13 +6,25 @@ import (
 	"errors"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
+
+// controllerFailure is a controller-state refusal and the action that settles
+// it, which belongs to the command that met it.
+func controllerFailure(code, message, remediation string) error {
+	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
+}
+
+const setupBoundRemedy = prerequisites.PurgeRemedy + "; when client areas and the current execution bundle fill the host, no command of this build frees that room"
+
+const retainedSourcesRemedy = "no command of this build frees a retained dependency source, because it never retires one; set this build up on another controller host"
 
 // ControllerRecordVersion is the private shared-host evidence format. Version 2
 // names the owning context by name in its receipt, bindings and reservations.
@@ -397,7 +409,7 @@ func retainControllerSources(before, next prerequisites.HostState) (prerequisite
 		index := slices.IndexFunc(next.RetainedDefinitions, func(item prerequisites.Definition) bool { return item.ResolutionDigest == definition.ResolutionDigest })
 		if index < 0 {
 			if len(next.RetainedDefinitions) >= maxControllerBundles {
-				return prerequisites.HostState{}, state("retained controller resolution limit exceeded")
+				return prerequisites.HostState{}, controllerFailure("controller.conflict", "this host already retains the "+strconv.Itoa(maxControllerBundles)+" dependency resolutions it may hold, so setup's new resolution has no room", setupBoundRemedy)
 			}
 			next.RetainedDefinitions = append(next.RetainedDefinitions, definition)
 		} else if !prerequisites.SameDefinition(next.RetainedDefinitions[index], definition) {
@@ -412,7 +424,7 @@ func retainControllerSources(before, next prerequisites.HostState) (prerequisite
 			}
 			values[source.ID] = source
 			if len(values) > maxControllerRetainedSources {
-				return prerequisites.HostState{}, state("retained controller dependency limit exceeded")
+				return prerequisites.HostState{}, controllerFailure("controller.conflict", "this host already retains the "+strconv.Itoa(maxControllerRetainedSources)+" dependency source identities it may hold, so this resolution's sources have no room", retainedSourcesRemedy)
 			}
 		}
 	}

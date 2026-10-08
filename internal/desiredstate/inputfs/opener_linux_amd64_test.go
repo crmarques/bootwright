@@ -201,7 +201,7 @@ func TestReaderReprovesTheDescriptorsItReceives(t *testing.T) {
 				reading := false
 				return func(path string, flags int) (*os.File, bool, error) {
 					reading = reading || path == environment && flags&pathHandle == 0
-					if reading && path == nested && flags == pathHandle {
+					if reading && path == nested && flags&pathHandle != 0 {
 						return openHost(fifo, flags)
 					}
 					return nil, false, nil
@@ -242,13 +242,14 @@ func TestReaderReprovesTheDescriptorsItReceives(t *testing.T) {
 	}
 }
 
+const (
+	accountMessage     = "the invoking account cannot read this input path (permission denied)"
+	accountRemediation = "give the invoking account read access to it, or copy it to a directory that account can read"
+	rootMessage        = "root cannot read this input path (a network home with root squash?)"
+	rootRemediation    = "copy it to a local directory and name the copy"
+)
+
 func TestReaderNamesWhoCannotReadAnInput(t *testing.T) {
-	const (
-		accountMessage     = "the invoking account cannot read this input path (permission denied)"
-		accountRemediation = "give the invoking account read access to it, or copy it to a directory that account can read"
-		rootMessage        = "root cannot read this input path (a network home with root squash?)"
-		rootRemediation    = "copy it to a local directory and name the copy"
-	)
 	for _, errno := range []syscall.Errno{syscall.EACCES, syscall.EPERM} {
 		for _, root := range []bool{false, true} {
 			for _, place := range []string{"ancestor", "final read"} {

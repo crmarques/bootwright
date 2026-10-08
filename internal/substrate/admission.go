@@ -234,6 +234,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 		issues = add(issues, validateSharedHostNetworks(o, c)...)
+		issues = add(issues, validateLibvirtHostFootprint(o, c)...)
 	}
 	if variant == "vsphere" {
 		domains := arm.Get("failureDomains").Items()
@@ -453,6 +454,36 @@ func validateSharedHostNetworks(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	return issues
+}
+
+// validateLibvirtHostFootprint refuses a libvirt provider whose pool directory
+// a Machine's disk directory would hold, and one whose host reservation would
+// claim more keys than one reservation holds.
+func validateLibvirtHostFootprint(o api.Object, c api.Catalog) []api.Issue {
+	issues := []api.Issue{}
+	if machine, ok := DirectoryOwner(c, o); ok {
+		issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.metadata.name",
+			Message:     machine.Identity() + " is realized on a libvirt provider and shares this provider's name, and its disk directory, which its destroy removes with everything in it, would hold this provider's virtual-media pool directory",
+			Remediation: "rename " + o.Identity() + " or " + machine.Identity() + ", with every reference to the one renamed"})
+	}
+	if count := ManagedAttachments(o); count > MaxManagedAttachments {
+		issues = add(issues, api.Issue{Code: "api.value", Field: "$.spec.networkAttachments",
+			Message:     fmt.Sprintf("a libvirt provider declares at most %d managed network attachments, because its host reservation claims three keys for each beside the two of its media pool, within the 64 keys one reservation holds; this one declares %d", MaxManagedAttachments, count),
+			Remediation: fmt.Sprintf("declare at most %d attachments with management: managed in spec.networkAttachments of %s, or make the others external", MaxManagedAttachments, o.Identity())})
+	}
+	return issues
+}
+
+// ManagedAttachments counts a libvirt provider's attachments of management:
+// managed; an attachment that declares none is external.
+func ManagedAttachments(provider api.Object) int {
+	count := 0
+	for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
+		if attachment.Get("libvirt", "management").Text() == "managed" {
+			count++
+		}
+	}
+	return count
 }
 
 func validateLibvirtAttachment(arm api.Value, path string) []api.Issue {

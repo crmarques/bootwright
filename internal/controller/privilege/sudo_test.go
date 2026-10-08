@@ -331,3 +331,41 @@ func TestSupervisorLeavesADirectInvocationUnchanged(t *testing.T) {
 		t.Fatalf("arguments = %v", child.Arguments)
 	}
 }
+
+type unreadableInput struct{ t *testing.T }
+
+func (r unreadableInput) Read([]byte) (int, error) {
+	r.t.Error("the standard-input Secret was read")
+	return 0, io.EOF
+}
+
+func inputLoggingExecutor(started *bool) executorFunc {
+	return executorFunc(func(_ context.Context, c Command) (int, error) {
+		if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+			io.WriteString(c.Output, string(listing("env_reset, log_input", "", "")))
+			return 0, nil
+		}
+		if c.Elevated {
+			*started = true
+		}
+		return 0, nil
+	})
+}
+
+func TestAStandardInputSecretUnderInputLoggingNeverStartsTheChild(t *testing.T) {
+	delay := delayFunc(func(ctx context.Context, _ time.Duration) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	started := false
+	options := SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: inputLoggingExecutor(&started), Delay: delay, NonInteractive: true, SecretStdin: "bmc", Input: unreadableInput{t}}
+	code, err := NewSupervisor(options).Run(context.Background(), []string{"secret", "set", "--name", "bmc", "--value-stdin"})
+	var logged *InputLogged
+	if code != 1 || !errors.As(err, &logged) || logged.Option != "log_input" || logged.Secret != "bmc" || started {
+		t.Fatalf("Run = %d, %v; child started %v", code, err, started)
+	}
+	options.SecretStdin, options.Input = "", strings.NewReader("")
+	if code, err := NewSupervisor(options).Run(context.Background(), []string{"status"}); code != 0 || err != nil || !started {
+		t.Fatalf("an invocation with no standard-input Secret = %d, %v; child started %v", code, err, started)
+	}
+}

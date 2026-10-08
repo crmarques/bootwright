@@ -17,25 +17,25 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 	}
 	issues = appendIssues(issues, infrastructureservices.ValidateProxyChoice(o.Spec().Get("proxy"), "$.spec.proxy")...)
 	if installed(o) && o.Spec().Has("access") {
-		issues = appendIssues(issues, invariant("$.spec.access", "Bootwright-installed Machines must not author access"))
+		issues = appendIssues(issues, invariant("$.spec.access", "Bootwright-installed Machines must not author access", "remove access; Bootwright derives an installed Machine's access from the fleet key"))
 	}
 	issues = appendIssues(issues, validateNative(o.Spec().Get("network", "inline", "nmstate"), "$.spec.network.inline.nmstate", true)...)
 	issues = appendIssues(issues, validateNative(o.Spec().Get("network", "overrides"), "$.spec.network.overrides", true)...)
 	network := o.Spec().Get("network")
 	if network.Has("inline") && network.Has("overrides") {
-		issues = appendIssues(issues, invariant("$.spec.network.overrides", "inline configuration forbids reusable-template overrides"))
+		issues = appendIssues(issues, invariant("$.spec.network.overrides", "inline configuration forbids reusable-template overrides", "remove network.overrides, or select a reusable configuration with network.configRef instead of network.inline"))
 	}
 	if network.Has("attachmentRef") && network.Has("interfaceAttachments") {
-		issues = appendIssues(issues, invariant("$.spec.network.interfaceAttachments", "attachment selections are mutually exclusive"))
+		issues = appendIssues(issues, invariant("$.spec.network.interfaceAttachments", "attachment selections are mutually exclusive", "keep either network.attachmentRef or network.interfaceAttachments"))
 	}
 	issues = appendIssues(issues, validateDefaultMediaTrust(o.Spec().Get("hardware", "management", "bmc"))...)
 	if o.Spec().Get("os", "provided").Bool() {
 		if o.Spec().Has("os", "install", "ntp") {
-			issues = appendIssues(issues, invariant("$.spec.os.install.ntp", "OS-ready Machines forbid installation NTP choices"))
+			issues = appendIssues(issues, invariant("$.spec.os.install.ntp", "OS-ready Machines forbid installation NTP choices", "remove os.install.ntp"))
 		}
 		for _, key := range []string{"configRef", "inline", "attachmentRef", "interfaceAttachments", "interfaceBinding", "installAddressRef", "overrides"} {
 			if network.Has(key) {
-				issues = appendIssues(issues, invariant("$.spec.network."+key, "OS-ready Machines declare contacts only"))
+				issues = appendIssues(issues, invariant("$.spec.network."+key, "OS-ready Machines declare contacts only", "remove network."+key+"; an OS-ready Machine declares contacts only"))
 			}
 		}
 	}

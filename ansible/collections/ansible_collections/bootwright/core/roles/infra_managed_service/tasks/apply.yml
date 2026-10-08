@@ -6,6 +6,10 @@
       - bootwright_managed_service_request.kind in infra_managed_service_kinds
       - bootwright_managed_service_request.unit is string
       - bootwright_managed_service_request.contentRoot.startswith('/var/lib/bootwright-services/')
+      - bootwright_managed_service_request.contentRoot.split('/') | length == 7
+      - >-
+        bootwright_managed_service_request.contentRoot.split('/')[1:]
+        | select('in', ['', '.', '..']) | list | length == 0
       - >-
         (bootwright_managed_service_request.contentRoot | dirname | dirname)
         == '/var/lib/bootwright-services/' ~ bootwright_managed_service_request.identity.context

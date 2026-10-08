@@ -3,6 +3,7 @@ package custody
 import (
 	"context"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -20,7 +21,9 @@ func (s Service) Produce(ctx context.Context, selected secretstore.Context, area
 	var result []secretstore.Produced
 	err := s.access.MutateArea(ctx, selected, area, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		if session == nil {
-			return secretstore.Failure("store.uninitialized", "produced material needs an initialized secret store; run secret encryption init")
+			return diagnostics.NewFailureWithRemediation("secret.store.uninitialized",
+				"produced material needs an initialized secret store, and the secret store of context "+selected.Name+" is not initialized", "",
+				secrets.Command(selected.Name, "encryption init"))
 		}
 		var err error
 		result, err = session.Produce(ctx, request.Block, request.Outputs)
@@ -53,33 +56,57 @@ func (s Service) Withdraw(ctx context.Context, selected secretstore.Context, are
 	return withdrawn, err
 }
 
-// ReadProduced reads one produced entry under the store's shared lock. An
-// entry that does not exist, including in a store never initialized, reports
-// false and no material.
-func (s Service) ReadProduced(ctx context.Context, request ReadProducedRequest) (secrets.Material, bool, error) {
+// Holds reports, through the lent area, whether custody holds the produced
+// entry of block and name, proved or not. A store never initialized holds
+// none. It reads the entry's material only to prove the entry readable, and
+// clears it at once.
+func (s Service) Holds(ctx context.Context, selected secretstore.Context, area secretstore.Area, block, name string) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return secrets.Material{}, false, err
+		return false, err
 	}
 	if s.access == nil {
-		return secrets.Material{}, false, secretstore.Failure("store.implementation", "secret service is not configured")
+		return false, secretstore.Failure("store.implementation", "secret service is not configured")
+	}
+	held := false
+	err := s.access.MutateArea(ctx, selected, area, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		if session == nil {
+			return nil
+		}
+		read, found, err := session.ReadProduced(ctx, block, name)
+		read.Material.Clear()
+		held = found
+		return err
+	})
+	return held, err
+}
+
+// ReadProduced reads one produced entry under the store's shared lock. An
+// entry that does not exist, including in a store never initialized, reports
+// false and no material; an entry kept unproved says so.
+func (s Service) ReadProduced(ctx context.Context, request ReadProducedRequest) (secretstore.ProducedMaterial, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return secretstore.ProducedMaterial{}, false, err
+	}
+	if s.access == nil {
+		return secretstore.ProducedMaterial{}, false, secretstore.Failure("store.implementation", "secret service is not configured")
 	}
 	selected, err := s.access.Context(ctx, request.ContextName)
 	if err != nil {
-		return secrets.Material{}, false, err
+		return secretstore.ProducedMaterial{}, false, err
 	}
-	var material secrets.Material
+	var read secretstore.ProducedMaterial
 	found := false
 	err = s.access.View(ctx, selected.Context, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		if session == nil {
 			return nil
 		}
 		var err error
-		material, found, err = session.ReadProduced(ctx, request.Block, request.Name)
+		read, found, err = session.ReadProduced(ctx, request.Block, request.Name)
 		return err
 	})
 	if err != nil {
-		material.Clear()
-		return secrets.Material{}, false, err
+		read.Material.Clear()
+		return secretstore.ProducedMaterial{}, false, err
 	}
-	return material, found, nil
+	return read, found, nil
 }

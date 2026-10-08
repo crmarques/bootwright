@@ -67,6 +67,12 @@ type scheduler struct {
 	// prove the outcome of the effects it is about to take back, which is
 	// read-only and may start no attempt of the operation it observes.
 	observeOnly bool
+	// removal marks the observation a fresh removal makes of the apply it
+	// supersedes: each unproved block is read by the check of the block of
+	// removalPlan that takes it back (D119), unless the apply's own observation
+	// proves it completed (D123).
+	removal     bool
+	removalPlan reconciliation.Plan
 }
 
 // converge runs the operation's blocks until nothing more may start, and
@@ -78,9 +84,12 @@ func (s Service) converge(ctx context.Context, tx Transaction, store OperationSt
 
 // observe resolves every unproved effect of an operation and starts nothing
 // else, leaving the block states it was given holding what each one proved.
-func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved bundle, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material) error {
+// removal says a fresh removal resolves an apply's blocks, by the check of the
+// block of removalPlan that takes each one back.
+func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved bundle, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, removal bool, removalPlan reconciliation.Plan) error {
 	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, reconciliation.StageSelection{})
 	run.observeOnly = true
+	run.removal, run.removalPlan = removal, removalPlan
 	_, err := run.converge(ctx)
 	return err
 }
@@ -257,6 +266,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 	}
 	prior := c.states[block.ID]
 	observing := unproved(prior)
+	command := c.observingCommand()
 	go func() {
 		var state reconciliation.BlockState
 		var err error
@@ -266,7 +276,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 			// it reports a refusal, so the operation state matches the record.
 			// One that never started recorded nothing, and the block keeps the
 			// state it had.
-			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks))
+			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks), c.removal, c.removalPlan, command)
 			if state == "" {
 				state = prior
 			}
@@ -280,6 +290,21 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 		}
 		c.results <- step{block: block.ID, state: state, err: err, unstarted: unstarted}
 	}()
+}
+
+// observingCommand is the exact command that observes again a block a
+// resolution leaves unknown, read from the states the scheduler holds when the
+// block starts: the removal that resolves an apply's blocks, with its own
+// plan's tokens, or the continuation of this operation.
+func (c *scheduler) observingCommand() string {
+	name := c.tx.Identity().Name
+	if c.removal {
+		return contextCommand(name, string(reconciliation.Destroy), authorizing(requiredTokens(c.removalPlan))...)
+	}
+	if command := continuationCommand(name, c.operation, c.plan, c.states); command != "" {
+		return command
+	}
+	return contextCommand(name, string(c.operation.Verb))
 }
 
 // settle records what one block proved and frees what it held.

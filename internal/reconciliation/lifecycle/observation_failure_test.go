@@ -58,7 +58,7 @@ func TestAnObservationThatCouldNotRunIsRecordedAndStatusNamesIt(t *testing.T) {
 	})
 	t.Run("an undiagnosed failure", func(t *testing.T) {
 		h, err := resolve(t, errors.New("lost"))
-		if got := diagnostics.Of(err); len(got) != 2 || got[0] != diagnostics.Of(unresolvedFailure(block, unexplained))[0] || !unresolvedOutcome(got[1]) {
+		if got := diagnostics.Of(err); len(got) != 2 || got[0] != diagnostics.Of(unresolvedFailure(block, unexplained, "bootwright apply --context lab"))[0] || !unresolvedOutcome(got[1]) {
 			t.Fatalf("the apply refused with %+v, want the unresolved diagnosis", got)
 		}
 		if recorded := settlingResolution(t, h, block).Failure; recorded != nil {

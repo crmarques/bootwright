@@ -629,29 +629,21 @@ func TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb(t *testi
 	})
 }
 
-// unknownApplyWithEveryBlockDone applies alpha to an unknown outcome and then
-// runs a removal whose resolution proves alpha done and whose record of what it
-// proved fails, which leaves the apply unknown beside no block that is not done.
+// unknownApplyWithEveryBlockDone rewrites a completed apply of alpha as
+// unknown, under an unknown apply's evidence, beside alpha's done record. That
+// is what a removal an executable before D119 ran leaves once its resolution
+// proved alpha done by the apply's check and its record of what it proved
+// failed; a removal now resolves an apply's block by its own check, which
+// never proves it done.
 func unknownApplyWithEveryBlockDone(t *testing.T) *harness {
 	t.Helper()
-	ctx := context.Background()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha")})
 	h.capability.consumes = map[string][]string{"alpha": dataLoss()}
-	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeUnknown}}
-	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true}); err == nil {
-		t.Fatal("an apply whose block lost its outcome reported success")
+	if err := authorized(context.Background(), h.service, reconciliation.Apply); err != nil {
+		t.Fatal(err)
 	}
-	h.capability.outcomeFor = nil
-	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
-	recorded := "replace " + path.Join(currentOperation(t, h), "operation.json")
-	h.workspace.area.fail[recorded] = errors.New("interrupted")
-	if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true}); err == nil {
-		t.Fatal("a removal that could not record its resolution reported success")
-	}
-	delete(h.workspace.area.fail, recorded)
-	if !slices.Equal(h.capability.observes, []string{"alpha"}) || len(h.capability.destroys) != 0 {
-		t.Fatalf("the removal observed %v and took back %v", h.capability.observes, h.capability.destroys)
-	}
+	rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationUnknown))
+	h.workspace.evidence = evidenceBytes(t, reconciliation.Apply, reconciliation.OperationUnknown)
 	requireRecordedWithEveryBlockDone(t, h, reconciliation.Apply, reconciliation.OperationUnknown)
 	return h
 }

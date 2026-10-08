@@ -1109,8 +1109,8 @@ func (a *mediaArea) remove(ctx context.Context, name string) error {
 	if err := a.dir.verify(); err != nil {
 		return err
 	}
-	if err := syscall.Unlinkat(int(a.dir.file.Fd()), name+".json"); err != nil && !errors.Is(err, syscall.ENOENT) {
-		return safeError(err)
+	if err := a.removeEntry(name+".json", name); err != nil {
+		return err
 	}
 	if err := a.store.syncDirectory(ctx, a.dir); err != nil {
 		return err
@@ -1118,10 +1118,28 @@ func (a *mediaArea) remove(ctx context.Context, name string) error {
 	if err := a.store.checkpoint(ctx, checkpointBeforeMediaImageRemoval); err != nil {
 		return err
 	}
-	if err := syscall.Unlinkat(int(a.dir.file.Fd()), name); err != nil && !errors.Is(err, syscall.ENOENT) {
-		return safeError(err)
+	if err := a.removeEntry(name, name); err != nil {
+		return err
 	}
 	return a.store.syncDirectory(ctx, a.dir)
+}
+
+// removeEntry removes whatever occupies one media name without following it:
+// a file, link or other non-directory is unlinked and an empty directory is
+// removed, but nothing inside a directory is ever removed.
+func (a *mediaArea) removeEntry(entry, image string) error {
+	errno := unlinkAt(a.dir, entry, false)
+	if errno == syscall.EISDIR {
+		errno = unlinkAt(a.dir, entry, true)
+	}
+	switch errno {
+	case 0, syscall.ENOENT:
+		return nil
+	case syscall.ENOTEMPTY, syscall.EEXIST:
+		return mediaFailure("media entry "+storeEntry(a.dir, entry)+" is a directory that still holds entries, which media delete never removes",
+			"remove "+storeEntry(a.dir, entry)+" beneath the state root, then repeat bootwright media delete --name "+image)
+	}
+	return safeError(errno)
 }
 
 func mediaFailure(message, remediation string) error {

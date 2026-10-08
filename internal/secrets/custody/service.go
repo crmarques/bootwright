@@ -43,20 +43,18 @@ func (s Service) Set(ctx context.Context, request SetRequest) (*MutationResult, 
 		return nil, err
 	}
 	result := &MutationResult{Context: selected, Name: request.Name, Parts: d.Parts()}
-	if input.UsesStdin() {
+	switch {
+	case input.UsesStdin():
 		err = s.setFromStdin(ctx, selected, d, input, request.SkipConfirmation, result)
-	} else {
+	case !request.SkipConfirmation:
+		err = s.setConfirmed(ctx, selected, d, input, result)
+	default:
 		err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 			snapshot, err := session.Inspect(ctx)
 			if err != nil {
 				return err
 			}
 			previous, exists := currentVersion(snapshot, request.Name)
-			if exists && !request.SkipConfirmation {
-				if err := s.confirm(ctx, "replace secret", selected.Name, request.Name, "replaced", secrets.Remedy(selected.Name, d, false)+" --yes"); err != nil {
-					return err
-				}
-			}
 			material, err := s.material.Acquire(ctx, d, input)
 			if err != nil {
 				return acquisitionRefusal(err, selected.Name, d)
@@ -69,6 +67,56 @@ func (s Service) Set(ctx context.Context, request SetRequest) (*MutationResult, 
 		return nil, err
 	}
 	return result, nil
+}
+
+// setConfirmed confirms a file-input replacement with no store lock and no
+// context lease held, then proves under the lease that the version it asked
+// about is still the current one before it reads the files and writes.
+func (s Service) setConfirmed(ctx context.Context, selected secretstore.Context, d secrets.Declaration, input secrets.Input, result *MutationResult) error {
+	var seen secretstore.Version
+	existed := false
+	err := s.access.View(ctx, selected, false, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		if session == nil {
+			return secrets.Refusal("store.uninitialized", "the secret store of context "+selected.Name+" is not initialized", selected.Name, d.Name, secrets.Command(selected.Name, "encryption init"))
+		}
+		snapshot, err := session.Inspect(ctx)
+		if err != nil {
+			return err
+		}
+		seen, existed = currentVersion(snapshot, d.Name)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if existed {
+		if err := s.confirm(ctx, "replace secret", selected.Name, d.Name, "replaced", secrets.Remedy(selected.Name, d, false)+" --yes"); err != nil {
+			return err
+		}
+	}
+	return s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		snapshot, err := session.Inspect(ctx)
+		if err != nil {
+			return err
+		}
+		previous, exists := currentVersion(snapshot, d.Name)
+		if exists != existed || (exists && previous.ID != seen.ID) {
+			return changedMeanwhile(selected.Name, d.Name, "written")
+		}
+		material, err := s.material.Acquire(ctx, d, input)
+		if err != nil {
+			return acquisitionRefusal(err, selected.Name, d)
+		}
+		defer material.Clear()
+		return store(ctx, session, d, previous, exists, material, result)
+	})
+}
+
+// changedMeanwhile refuses a confirmed change whose Secret another command
+// changed between the read that the prompt was about and the lease.
+func changedMeanwhile(contextName, name, outcome string) error {
+	return secrets.Refusal("store.conflict", "Secret "+name+" changed in context "+contextName+" after this command read it; nothing was "+outcome, contextName, name,
+		"review it with "+secrets.Command(contextName, "check")+", then repeat the command")
 }
 
 // setFromStdin reads standard input with no store lock held, so a value still
@@ -412,32 +460,76 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*MutationRe
 		return nil, secrets.Refusal("declaration", "secret name is invalid", selected.Name, request.Name, secrets.Command(selected.Name, "list"))
 	}
 	result := &MutationResult{Context: selected, Name: request.Name}
-	err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
-		snapshot, err := session.Inspect(ctx)
-		if err != nil {
-			return err
-		}
-		if _, exists := currentVersion(snapshot, request.Name); !exists {
-			result.Unchanged = 1
-			return nil
-		}
-		if !request.SkipConfirmation {
-			if err := s.confirm(ctx, "delete secret", selected.Name, request.Name, "deleted", secrets.Command(selected.Name, "delete")+" --name "+request.Name+" --yes"); err != nil {
+	if !request.SkipConfirmation {
+		err = s.deleteConfirmed(ctx, selected, request.Name, result)
+	} else {
+		err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+			snapshot, err := session.Inspect(ctx)
+			if err != nil {
 				return err
 			}
-		}
-		changed, err := session.Delete(ctx, request.Name)
-		if changed {
-			result.Changed = 1
-		} else {
-			result.Unchanged = 1
-		}
-		return err
-	})
+			if _, exists := currentVersion(snapshot, request.Name); !exists {
+				result.Unchanged = 1
+				return nil
+			}
+			return deleteCurrent(ctx, session, request.Name, result)
+		})
+	}
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+// deleteConfirmed confirms a delete with no store lock and no context lease
+// held, then proves under the lease that the version it asked about is still
+// the current one before it deletes. A name with no current version changes
+// nothing and asks nothing.
+func (s Service) deleteConfirmed(ctx context.Context, selected secretstore.Context, name string, result *MutationResult) error {
+	var seen secretstore.Version
+	existed := false
+	err := s.access.View(ctx, selected, false, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		if session == nil {
+			return secretstore.Uninitialized(selected.Name)
+		}
+		snapshot, err := session.Inspect(ctx)
+		if err != nil {
+			return err
+		}
+		seen, existed = currentVersion(snapshot, name)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if !existed {
+		result.Unchanged = 1
+		return nil
+	}
+	if err := s.confirm(ctx, "delete secret", selected.Name, name, "deleted", secrets.Command(selected.Name, "delete")+" --name "+name+" --yes"); err != nil {
+		return err
+	}
+	return s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		snapshot, err := session.Inspect(ctx)
+		if err != nil {
+			return err
+		}
+		current, exists := currentVersion(snapshot, name)
+		if !exists || current.ID != seen.ID {
+			return changedMeanwhile(selected.Name, name, "deleted")
+		}
+		return deleteCurrent(ctx, session, name, result)
+	})
+}
+
+func deleteCurrent(ctx context.Context, session secretstore.StoreSession, name string, result *MutationResult) error {
+	changed, err := session.Delete(ctx, name)
+	if changed {
+		result.Changed = 1
+	} else {
+		result.Unchanged = 1
+	}
+	return err
 }
 
 // confirm returns the confirmer's own refusal unchanged, which names the

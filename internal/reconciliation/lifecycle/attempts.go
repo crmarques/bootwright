@@ -69,10 +69,14 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
 	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, proved, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
+			if err := s.keepBeforeRemoval(inner, tx, boundary, log, capability, execution); err != nil {
+				return Result{Outcome: reconciliation.OutcomeFailed}, err
+			}
 			return capability.Destroy(inner, execution)
 		}
 		return capability.Apply(inner, execution)
 	})
+	runErr = stageReading(runErr, block, operation.Verb, tx.Identity().Name)
 	outcome := result.Outcome
 	if !reconciliation.ValidOutcome(outcome) {
 		outcome = reconciliation.OutcomeUnknown
@@ -105,13 +109,25 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 // keeps the one it had: a resolution that cannot start moves nothing. It
 // observes for the verb the operation froze: a destroy's block through
 // ObserveRemoval, so a target its removal has not yet taken back is no
-// removal, and every other block through Observe.
-func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
+// removal, and an apply's block through Observe. Where removal says a fresh
+// removal resolves an apply's block, an Observe that proves it completed
+// resolves it done and captures what it produced, as the apply's own
+// finalization does (D123); otherwise that removal reads the apply's block by
+// its own check, through the block of removalPlan that takes it back, which
+// keeps the apply's identity, implementation, content digest and request
+// (D119), and the resolution is still recorded against the apply's block, as
+// removalEffect maps it. A block it leaves unknown names command, the exact
+// command that observes it again.
+func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int, removal bool, removalPlan reconciliation.Plan, command string) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
 			"this executable cannot observe the implementation this block froze",
 			"install the executable that registered this operation")
+	}
+	observed, verb, err := observedAs(tx.Identity().Name, operation, block, removal, removalPlan)
+	if err != nil {
+		return "", err
 	}
 	attemptNumber, err := store.LastAttempt(ctx, operation.ID, block.ID)
 	if err != nil {
@@ -132,21 +148,21 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	}
 	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
-	var observation Observation
-	_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, nil, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
-		observe := capability.Observe
-		if operation.Verb == reconciliation.Destroy {
-			observe = capability.ObserveRemoval
-		}
-		value, err := observe(inner, execution)
-		observation = value
-		return Result{Outcome: reconciliation.OutcomeUnknown}, err
-	})
-	effect := observation.Effect
-	if !reconciliation.ValidEffectState(effect) || runErr != nil {
-		effect = reconciliation.EffectUnknown
+	read := func(target reconciliation.Block, as reconciliation.Verb) (Observation, error) {
+		var observation Observation
+		_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, target, material, nil, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
+			observe := capability.Observe
+			if as == reconciliation.Destroy {
+				observe = capability.ObserveRemoval
+			}
+			value, err := observe(inner, execution)
+			observation = value
+			return Result{Outcome: reconciliation.OutcomeUnknown}, err
+		})
+		return observation, stageReading(runErr, target, as, tx.Identity().Name)
 	}
-	resolvedEffect, state, err := reconciliation.ResolutionTransition(effect)
+	observation, byRemoval, runErr := resolutionReading(ctx, boundary, log, operation.Verb, block, observed, verb, removal, read)
+	resolvedEffect, state, err := reconciliation.ResolutionTransition(observedEffect(observation, runErr, byRemoval))
 	if err != nil {
 		ClearProduced(observation.Produced)
 		return reconciliation.BlockUnknown, err
@@ -181,6 +197,10 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	// undiagnosed failure says nothing more than the unresolved diagnosis.
 	case runErr != nil && (recorded != nil || ctx.Err() != nil):
 		return state, runErr
+	// The removal's check proved the block this context's own or absent, and
+	// the removal takes it back next, so the apply's remedies do not apply.
+	case removal && state == reconciliation.BlockFailed:
+		return state, nil
 	case resolvedEffect == reconciliation.EffectNoEffect:
 		return state, failure("lifecycle.state",
 			"the frozen effect was never performed",
@@ -190,9 +210,85 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 			"the frozen effect is partly realized and owned by this context",
 			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, true))
 	}
-	explanation := s.explain(operation.Verb, block, observation.Evidence)
+	explanation := s.explain(verb, observed, observation.Evidence)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "unresolved", Block: block.ID, Detail: explanation.Reason})
-	return state, unresolvedFailure(block.ID, explanation)
+	return state, unresolvedFailure(block.ID, explanation, command)
+}
+
+// resolutionReading is the observation a resolution resolves block by, and
+// whether that is the removal's own check of observed, read for verb. A fresh
+// removal first reads the apply's block by the apply's own observation (D123):
+// one that proves it completed resolves it done, so what it produced is
+// captured before any inverse runs. Anything less, which the log records, is
+// resolved by the removal's own check (D119). Every other resolution reads
+// observed once, for verb.
+func resolutionReading(ctx context.Context, boundary *logBoundary, log *operationstore.Log, applied reconciliation.Verb, block, observed reconciliation.Block, verb reconciliation.Verb, removal bool, read func(reconciliation.Block, reconciliation.Verb) (Observation, error)) (Observation, bool, error) {
+	if !removal {
+		observation, err := read(observed, verb)
+		return observation, false, err
+	}
+	observation, err := read(block, applied)
+	if err == nil && observation.Effect == reconciliation.EffectCompleted {
+		return observation, false, nil
+	}
+	ClearProduced(observation.Produced)
+	for _, reported := range diagnostics.Of(err) {
+		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
+	}
+	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "apply-observation", Block: block.ID, Detail: string(observedEffect(observation, err, false))})
+	if ctx.Err() != nil {
+		return Observation{}, true, err
+	}
+	observation, err = read(observed, verb)
+	return observation, true, err
+}
+
+// observedAs is the block a resolution reads and the verb it reads it for: the
+// block itself, for the verb its operation froze, or, where a fresh removal
+// resolves an apply's block, the removal block that takes it back, read for
+// the removal.
+func observedAs(contextName string, operation operationstore.Operation, block reconciliation.Block, removal bool, removalPlan reconciliation.Plan) (reconciliation.Block, reconciliation.Verb, error) {
+	if !removal {
+		return block, operation.Verb, nil
+	}
+	taken, found := removalPlan.Block(block.ID)
+	if !found {
+		return reconciliation.Block{}, "", failure("lifecycle.state",
+			"this removal carries no block that takes back "+block.ID, reviewStatus(contextName))
+	}
+	return taken, reconciliation.Destroy, nil
+}
+
+// observedEffect is the effect an observation proves: unknown when it failed
+// or reported an effect outside the vocabulary, and, where a fresh removal
+// resolves an apply's block, what that removal's check proves of the apply.
+func observedEffect(observation Observation, runErr error, removal bool) reconciliation.EffectState {
+	effect := observation.Effect
+	if !reconciliation.ValidEffectState(effect) || runErr != nil {
+		effect = reconciliation.EffectUnknown
+	}
+	if removal {
+		effect = removalEffect(effect)
+	}
+	return effect
+}
+
+// removalEffect is what a removal's own check of an apply's block proves of
+// that apply's effect. An absent target is the apply's positive absence of
+// effect; a target that still shows everything the removal takes back, or
+// part of it, as this context's own, is a positive partial realization. Both
+// leave the block failed for the removal to take back. The check proves
+// ownership and removability, never that the apply's frozen request was
+// realized, so it never proves the block done; one that proves nothing leaves
+// it unknown.
+func removalEffect(observed reconciliation.EffectState) reconciliation.EffectState {
+	switch observed {
+	case reconciliation.EffectCompleted:
+		return reconciliation.EffectNoEffect
+	case reconciliation.EffectNoEffect, reconciliation.EffectPartial:
+		return reconciliation.EffectPartial
+	}
+	return reconciliation.EffectUnknown
 }
 
 // invoke runs the capability inside the private Python execution boundary,
@@ -245,8 +341,14 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 				},
 			}
 		}
+		// Only an apply's own attempt names the command that continues it: a
+		// destroy's next command depends on what the whole run settles.
+		continuation := ""
+		if operation.Verb == reconciliation.Apply && resolution == 0 {
+			continuation = contextCommand(tx.Identity().Name, string(reconciliation.Apply), authorizing(requiredTokens(plan))...)
+		}
 		execution := Execution{
-			Operation: operation.ID, Context: tx.Identity().Name, Attempt: attempt, Resolution: resolution, Block: block,
+			Operation: operation.ID, Context: tx.Identity().Name, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
 			Launch: launch, Bundle: approved.location, Area: approved.area, Material: material, Proved: proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)
@@ -273,6 +375,18 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		return callErr
 	})
 	return result, err
+}
+
+// stageReading names the controller stage command that settles a failure the
+// foundation raised on entry, before the stage capability ran, for the calls
+// the capability itself reads so: an apply's Apply and Observe. A removal's
+// failure keeps its own remedy, because an incomplete destroy refuses every
+// apply until it is continued.
+func stageReading(err error, block reconciliation.Block, verb reconciliation.Verb, contextName string) error {
+	if verb != reconciliation.Apply || block.Stage != reconciliation.StageController {
+		return err
+	}
+	return prerequisites.InStage(err, contextName)
 }
 
 // locateTool asks the controller stage block this plan froze where the closure

@@ -6,6 +6,11 @@ containercluster_media_agent_private: '{{ bootwright_cluster_media_request.image
 # The receipt records what the published image was built from, so a replay
 # proves that building again would change nothing without reading the image.
 containercluster_media_agent_receipt: '{{ containercluster_media_agent_work }}/bootwright-media.json'
+# The administrator kubeconfig the cluster's installation keeps in this work
+# area (containercluster_install_agent_kubeconfig), and the inspection's 64 KiB
+# read bound on it.
+containercluster_media_agent_kubeconfig: '{{ containercluster_media_agent_work }}/.bootwright-kubeconfig'
+containercluster_media_agent_kubeconfig_bound: 65536
 containercluster_media_agent_installer: '{{ bootwright_cluster_media_material.installer }}'
 # The unguessable directory this attempt publishes in. The token is minted by
 # the attempt, so it names a path that exists in no request and no log.

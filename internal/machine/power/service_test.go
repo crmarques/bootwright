@@ -335,8 +335,8 @@ func TestAPowerRunReportsOneStepWithTheRolesGroups(t *testing.T) {
 		Read(context.Background(), "lab", selected()); err != nil {
 		t.Fatal(err)
 	}
-	if len(reporter.order) != 0 {
-		t.Fatalf("a reading reported %v", reporter.order)
+	if slices.Contains(reporter.order, "logs") {
+		t.Fatalf("a reading named a log location: %v", reporter.order)
 	}
 }
 

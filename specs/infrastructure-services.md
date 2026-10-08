@@ -210,8 +210,14 @@ context storage. The apply creates the context's and the kind's directories
 beneath `/var/lib/bootwright-services` that hold the content root; the destroy
 removes each once it is empty, never recursively, and retains
 `/var/lib/bootwright-services` itself
-(`test_a_destroy_removes_each_empty_parent_never_recursively`). Nothing else on
-the host is created, modified or removed.
+(`test_a_destroy_removes_each_empty_parent_never_recursively`). Its apply and
+its destroy each refuse, as their first check and so before any effect or
+removal, a content root that is not exactly
+`/var/lib/bootwright-services/<context>/<kind>/<name>` in normal form: one with
+a `.` or `..` component, an empty component from a repeated or trailing slash,
+or another depth
+(`test_a_content_root_not_in_normal_form_refuses_before_any_removal`). Nothing
+else on the host is created, modified or removed.
 
 **TLS.** The [schema](api/infrastructure-services.md#artifactserver) requires a
 serving certificate exactly when an effective listener uses HTTPS. A
@@ -277,10 +283,13 @@ file and restarting the service is therefore completed by its next attempt.
 Everything it owns carries the context in its name, so a same-name object it
 did not create cannot occur without a reservation conflict refusing first.
 
-**Inverse.** Destroy stops the service, removes the unit definition, removes
-the container, removes the owned content root and then reobserves. Positive
-absence requires the unit absent, the container absent, the content root absent
-and every reserved socket free. An already-absent service reports `completed`
+**Inverse.** Destroy stops the service, removes the unit definition, resets
+the failed state systemd still lists the unit in, as a unit whose daemon exited
+at each start until its start limit is left
+(`test_a_destroy_resets_a_unit_it_finds_failed`), removes the container,
+removes the owned content root and then reobserves. Positive absence requires
+the unit absent, neither defined nor listed failed, the container absent, the
+content root absent and every reserved socket free. An already-absent service reports `completed`
 with that same absence evidence. Destroy removes no image from the host store
 and no unrelated file.
 
@@ -422,7 +431,9 @@ exactly as the [artifact server's](#managed-artifact-serving) is. The unit
 never uses the image's own entrypoint: the frozen request alone decides what
 runs. Each daemon ends within its unit's stop timeout when stopped: the
 proxy's shutdown lifetime is two seconds, below podman's ten-second stop
-timeout, so a stop or removal never leaves the unit failed
+timeout, so a stop never leaves the unit failed, and a unit that failed before
+its destroy is reset by it, as the
+[artifact server's inverse](#managed-artifact-serving) states
 (`test_the_proxy_stops_within_podmans_stop_timeout`).
 
 **Owned host state.** Each service owns one content root, one daemon
@@ -430,8 +441,10 @@ configuration inside it and one unit definition. Directories are `0755`. The
 content root is outside the Bootwright state root. The apply creates the
 context's and the kind's directories beneath `/var/lib/bootwright-services`
 that hold the content root; the destroy removes each once it is empty, never
-recursively, and retains `/var/lib/bootwright-services` itself. Nothing else on
-the host is created, modified or removed, and no managed service writes to the
+recursively, and retains `/var/lib/bootwright-services` itself. Each service's
+apply and destroy refuse a content root not in normal form before any effect,
+as the artifact server's do. Nothing else on the host is created, modified or
+removed, and no managed service writes to the
 host's own resolver, proxy or time configuration.
 
 **Derived configuration.** A managed service is configured from the selected

@@ -150,7 +150,15 @@ administrator. A forwarded proxy route also needs `SETENV`
 ([on a proxied network](#on-a-proxied-network)). A JSON invocation, or one
 whose standard input is not a terminal, cannot prompt for a password, so run
 `sudo -v` in the same terminal first. Each refusal names which of these
-applies.
+applies. Where the policy sets `log_input` or `log_stdin`, a `secret set`
+with `--value-stdin` or `--password-stdin` refuses with `secret.input` before
+it reads anything, because sudo's I/O log would record the value. The check
+reads the policy with `sudo -n -ll`, so it holds only when sudo lists the
+policy without a password, through a cached credential (run `sudo -v` first)
+or a rule that needs none; under a rule such as `%wheel ALL=(ALL) ALL` with no
+cached credential it proves nothing, and sudo logs what you type. Pass the
+value with `--value-file` or `--password-file`, or run the command as root
+([secret custody](../specs/secrets.md)).
 
 ### Directory accounts
 
@@ -286,10 +294,9 @@ terminal or losing the SSH session it runs in interrupts it as Ctrl-C does, and
 a command killed outright takes its running lifecycle adapter with it
 ([process boundary](../specs/security.md#process-boundary)). Ctrl-C asks the
 elevated command to stop and waits while it releases what it holds, up to a
-minute inside a package transaction. Where sudo gives the command a terminal
-of its own, as it does under `use_pty`, its default since sudo 1.9.14, a
-second Ctrl-C reaches only that command and does not hurry it; elsewhere it
-kills the command. Sending
+minute inside a package transaction. A second Ctrl-C ends the command at
+once, whether sudo gives it a terminal of its own, as under `use_pty`, its
+default since sudo 1.9.14, or not. Sending
 `SIGTERM` twice, from another terminal, to the `bootwright` process you
 started kills it either way. A killed command can leave its operation for the
 next command to resolve

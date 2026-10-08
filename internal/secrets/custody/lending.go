@@ -28,7 +28,7 @@ func (s Service) ReadCurrent(ctx context.Context, request ReadCurrentRequest) ([
 	var result []secretstore.BoundMaterial
 	err = s.access.View(ctx, selected, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		if session == nil {
-			return secretstore.Failure("store.uninitialized", "run secret encryption init to initialize the configured store")
+			return secretstore.Uninitialized(selected.Name)
 		}
 		selection, err := s.readCurrent(ctx, session, selected.Name, requested)
 		if err != nil {

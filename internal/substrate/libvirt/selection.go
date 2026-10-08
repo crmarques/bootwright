@@ -1,6 +1,7 @@
 package libvirt
 
 import (
+	"fmt"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"net/netip"
 	"slices"
@@ -27,6 +28,16 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 			found = append(found, lifecycle.RefusalOf(provider,
 				"an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one",
 				"set spec.libvirt.bmcEmulationDefaults.bindAddress on "+provider.Identity()+" to one unicast host address"))
+		}
+		if machine, ok := substrate.DirectoryOwner(catalog, provider); ok {
+			found = append(found, lifecycle.RefusalOf(provider,
+				machine.Identity()+" shares this provider's name, and its disk directory, which its destroy removes with everything in it, would hold this provider's virtual-media pool",
+				"rename "+provider.Identity()+" or "+machine.Identity()+", with every reference to the one renamed"))
+		}
+		if substrate.ManagedAttachments(provider) > substrate.MaxManagedAttachments {
+			found = append(found, lifecycle.RefusalOf(provider,
+				fmt.Sprintf("a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool, within the 64 keys one reservation holds, so it declares at most %d managed attachments", substrate.MaxManagedAttachments),
+				fmt.Sprintf("declare at most %d attachments with management: managed in spec.networkAttachments of %s, or make the others external", substrate.MaxManagedAttachments, provider.Identity())))
 		}
 	}
 	return lifecycle.SortRefusals(found)

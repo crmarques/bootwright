@@ -42,10 +42,11 @@ func (h *integrationStore) readProduced(block, name string) (string, bool) {
 	var value string
 	var found bool
 	if err := h.view(func(session secretstore.StoreSession) error {
-		material, exists, err := session.ReadProduced(context.Background(), block, name)
+		read, exists, err := session.ReadProduced(context.Background(), block, name)
 		if err != nil {
 			return err
 		}
+		material := read.Material
 		defer material.Clear()
 		found = exists
 		if exists {

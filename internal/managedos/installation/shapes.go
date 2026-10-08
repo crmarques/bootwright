@@ -77,7 +77,9 @@ func uncarriedNetwork(catalog api.Catalog, machine api.Object, composed api.Valu
 		}
 	}
 	// The line carries the gateway DefaultGateway reads from the composed
-	// network, so only a route that is exactly that one is carried.
+	// network, so the carried route is the first zero-prefix IPv4 route through
+	// the install interface, or through none named, whose next hop is that
+	// gateway.
 	gateway := ""
 	if template, err := substrate.NetworkTemplate(catalog, machine); err == nil {
 		gateway = substrate.DefaultGateway(template)
@@ -89,7 +91,7 @@ func uncarriedNetwork(catalog api.Catalog, machine api.Object, composed api.Valu
 		}
 		destination := route.Get("destination").Text()
 		hop := route.Get("next-hop-interface")
-		if !carried && destination == "0.0.0.0/0" && (!hop.Present() || hop.Text() == iface) && route.Get("next-hop-address").Text() == gateway {
+		if !carried && substrate.DefaultRouteIPv4(destination) && (!hop.Present() || hop.Text() == iface) && route.Get("next-hop-address").Text() == gateway {
 			carried = true
 			continue
 		}

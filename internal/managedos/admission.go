@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -126,15 +127,27 @@ var (
 		"a package entry is a package name, glob or @group: letters, digits and _.+*?@:~^/[]-, not starting with '%' or '-'", "chrony"}
 	serviceGrammar = kickstartGrammar{"systemd-unit",
 		"a service is a systemd unit name: letters, digits and :_.@-, starting with a letter or digit, at most 255 bytes", "chronyd"}
-	repositoryGrammar = kickstartGrammar{"kickstart-token",
-		"a repository ID is printable ASCII with no whitespace, quote, slash, backslash, '#' or comma, not starting with '%'", "extras"}
+	repositoryGrammar = kickstartGrammar{"",
+		"a repository ID is what dnf accepts in one: 1 to 239 ASCII letters, digits, '-', '_', '.' or ':', and neither '.' nor '..'", "extras"}
 )
+
+const subscriptionRepositoryRule = "kickstart-token"
+
+var repositoryIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,239}$`)
+
+// RepositoryID reports whether s is a repository ID dnf accepts: ASCII letters,
+// digits and "-_.:" (dnf's _REPOID_CHARS and libdnf's Repo::verifyId). The ID
+// also names /etc/yum.repos.d/bootwright-<id>.repo, whose base name is at most
+// 255 bytes, so the ID is at most 239 bytes, and neither "." nor "..".
+func RepositoryID(s string) bool {
+	return repositoryIDPattern.MatchString(s) && s != "." && s != ".."
+}
 
 func validateCustomizationEntries(custom api.Value) []api.Issue {
 	issues := validateKickstartValues(custom)
 	for i, repo := range custom.Get("repositories", "configure").Items() {
 		path := fmt.Sprintf("$.spec.customizations.repositories.configure[%d]", i)
-		if !repositoryID(repo.Get("id").Text()) {
+		if !RepositoryID(repo.Get("id").Text()) {
 			issues = add(issues, grammarIssue(path+".id", repositoryGrammar))
 		}
 		entry := strings.TrimPrefix(path, "$.")
@@ -217,7 +230,7 @@ func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
 				"set spec.subscription, or remove spec.customizations.repositories.subscription"))
 		}
 		for _, id := range enable {
-			if id == "*" || !repositoryID(id) {
+			if id == "*" || !subscriptionRepositoryID(id) {
 				issues = add(issues, issue("$.spec.customizations.repositories.subscription.enable", "enabled repository IDs are not the wildcard and are printable ASCII with no whitespace, quote, slash, backslash, '#' or comma, not starting with '%'",
 					"correct that entry of spec.customizations.repositories.subscription.enable"))
 			}
@@ -227,7 +240,7 @@ func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
 			}
 		}
 		for _, id := range disable {
-			if id != "*" && !repositoryID(id) {
+			if id != "*" && !subscriptionRepositoryID(id) {
 				issues = add(issues, issue("$.spec.customizations.repositories.subscription.disable", "disabled repository IDs must be identifiers or wildcard",
 					"correct that entry of spec.customizations.repositories.subscription.disable"))
 			}
@@ -290,7 +303,7 @@ func validateInstallerSources(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	for i, repo := range anaconda.Get("packageSource", "mirror", "repositories").Items() {
-		if !repositoryID(repo.Get("id").Text()) {
+		if !RepositoryID(repo.Get("id").Text()) {
 			issues = add(issues, grammarIssue(fmt.Sprintf("$.spec.installer.anaconda.packageSource.mirror.repositories[%d].id", i), repositoryGrammar))
 		}
 	}
@@ -360,10 +373,6 @@ func validateConsumers(o api.Object, c api.Catalog) []api.Issue {
 		if custom.Has("security", "diskEncryption") && variant != substrate.ArmBaremetal && profileOK && !profile.Has("tpm") {
 			issues = add(issues, issue("$.spec.customizations.security.diskEncryption", "virtual disk encryption requires TPM support in every consuming provider profile",
 				"declare tpm on machine profile "+profileName+" of "+provider.Identity()+", or remove spec.customizations.security.diskEncryption"))
-		}
-		if custom.Get("hostname", "source").Text() == "machineName" && clusterBound(machine, c) {
-			issues = add(issues, issue("$.spec.customizations.hostname.source", "machineName hostname customization is forbidden for cluster-bound Machines",
-				"remove spec.customizations.hostname.source"))
 		}
 	}
 	return issues
@@ -455,7 +464,7 @@ func validateCloneCustomizations(o api.Object) []api.Issue {
 	}
 	custom := o.Spec().Get("customizations")
 	issues := []api.Issue{}
-	for _, path := range [][]string{{"localization"}, {"ssh", "initialPassword"}, {"storage"}, {"packages"}, {"security", "selinux"}, {"security", "firewall"}, {"security", "fips"}, {"security", "diskEncryption"}} {
+	for _, path := range [][]string{{"localization"}, {"ssh", "initialPassword"}, {"packages"}, {"security", "selinux"}, {"security", "firewall"}, {"security", "fips"}, {"security", "diskEncryption"}} {
 		if custom.Get(path...).Present() {
 			field := "spec.customizations." + strings.Join(path, ".")
 			issues = add(issues, issue("$."+field, "template clone forbids Anaconda-only customization", "remove "+field))
@@ -504,34 +513,8 @@ func localProfile(values api.Value, name string) (api.Value, bool) {
 	}
 	return found, n == 1
 }
-func clusterBound(machine api.Object, c api.Catalog) bool {
-	for _, kind := range []api.Kind{api.ContainerCluster, api.StorageCluster} {
-		for _, cluster := range c.OfKind(kind) {
-			if containsReference(cluster.Spec(), "machineRef", machine.Name()) {
-				return true
-			}
-		}
-	}
-	return false
-}
-func containsReference(value api.Value, key, name string) bool {
-	if value.Get(key).Text() == name {
-		return true
-	}
-	for _, f := range value.Fields() {
-		if containsReference(f.Value, key, name) {
-			return true
-		}
-	}
-	for _, item := range value.Items() {
-		if containsReference(item, key, name) {
-			return true
-		}
-	}
-	return false
-}
-func repositoryID(s string) bool {
-	return api.ValidLexical(repositoryGrammar.rule, s) && !strings.Contains(s, "/")
+func subscriptionRepositoryID(s string) bool {
+	return api.ValidLexical(subscriptionRepositoryRule, s) && !strings.Contains(s, "/")
 }
 
 // lineBreak is any rune that ends or has no meaning in a line of the .repo file

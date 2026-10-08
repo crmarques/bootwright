@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -57,5 +58,24 @@ func TestReadingTheRegistryLeavesTheHeldRootListingAlone(t *testing.T) {
 	names, err := root.file.Readdirnames(-1)
 	if err != nil || !slices.Equal(names, []string{stage}) {
 		t.Fatalf("the held root handle lists %v (%v), want only %s", names, err, stage)
+	}
+}
+
+// A refusal that names damaged store state names its entry relative to the
+// state root, never the host path the root lives at.
+func TestBoundedRunAndStageRefusalsNameStoreRelativeEntries(t *testing.T) {
+	ctx := context.Background()
+	store, _ := lifecycleFixture(t)
+	plantBoundedRun(t, runsRoot(t, store, "example"), boundedRunName(1), time.Now())
+	err := store.RunLifecycle(ctx, "example", func(view lifecycle.RunView) error {
+		return view.OpenRun(ctx, boundedRunName(1))
+	})
+	want := "bounded run directory could not be created exclusively: contexts/example/state/runs/" + boundedRunName(1)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Message != want {
+		t.Fatalf("refusal = %v %#v, want the message %q", err, reported, want)
+	}
+	if strings.Contains(reported[0].Message, store.options.Root) {
+		t.Fatalf("the refusal %q names the host path %s", reported[0].Message, store.options.Root)
 	}
 }

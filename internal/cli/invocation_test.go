@@ -210,3 +210,21 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		}
 	}
 }
+
+func TestOnlyAStandardInputSecretSetNamesItsSecretToTheBoundary(t *testing.T) {
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"secret", "set", "--name", "a", "--value-stdin"}, "a"},
+		{[]string{"secret", "set", "--name", "a", "--username", "u", "--password-stdin"}, "a"},
+		{[]string{"secret", "set", "--name", "a", "--value-file", "f"}, ""},
+		{[]string{"secret", "set", "--name", "a", "--value-stdin=false", "--value-file", "f"}, ""},
+		{[]string{"secret", "delete", "--name", "a"}, ""},
+	} {
+		classified := ClassifyInvocation(test.args)
+		if !classified.RequiresRoot || classified.SecretStdin != test.want {
+			t.Errorf("%v: requires root %v, standard-input Secret %q, want %q", test.args, classified.RequiresRoot, classified.SecretStdin, test.want)
+		}
+	}
+}

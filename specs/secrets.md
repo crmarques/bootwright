@@ -21,8 +21,11 @@ publication, without requiring Environment input or generating Secret values.
 no `--type` override. It also completes interrupted cleanup. Changing the
 initialized type refuses. Subsequent commands
 resolve exact persisted references; absent, ambiguous or incompatible
-implementations never fall back. Rotation confirms unless `--yes`, does not
-migrate implementations, and reports the keys it retired and how many versions
+implementations never fall back. Rotation confirms unless `--yes`, before the
+lease: a shared read finds the active key, the prompt holds no store lock and
+no context lease, and under the lease rotation refuses with
+`secret.store.conflict`, rotating nothing, when the active key changed
+meanwhile. It does not migrate implementations, and reports the keys it retired and how many versions
 and parts it re-encrypted.
 Encryption initialization/status/rotation require context identity and
 configuration, but no desired-state revision. Declaration-dependent commands
@@ -71,15 +74,27 @@ store is opened, and exits `2` as a usage failure with concise help. The former
 source flags have no aliases. Only the alternatives no type takes together,
 `--value-file` with `--value-stdin`, `--password-file` with `--password-stdin`
 and `--value-stdin` with `--password-stdin`, refuse before the context is read,
-as `cli.usage`. Fresh set does not confirm. File input is confirmed and read
-under the lease: a replacement confirms there unless `--yes`. Standard input
+as `cli.usage`. Fresh set does not confirm. A file-input replacement, like
+`delete` and encryption rotation, is confirmed before the lease unless
+`--yes`: a shared read finds the current version, the prompt holds no store
+lock and no context lease, and under the lease the command refuses with
+`secret.store.conflict`, writing nothing, when that version changed meanwhile;
+the files are then read under the lease. With `--yes` nothing is asked and the
+command reads, decides and writes in one lease. Standard input
 is read with no store lock held, so a value still being typed or piped blocks
 no other command: under a shared read, set refuses an uninitialized store with
 `secret.store.uninitialized` and a replacement without `--yes` with
 `secret.input`, both before any read; it then reads with no lock, and under
 the lease refuses with `secret.store.conflict`, writing nothing, a current
-version another command stored meanwhile unless `--yes` was given. Equal
-material creates no new version. Multipart versions and generation batches
+version another command stored meanwhile unless `--yes` was given. An
+elevated `set` with `--value-stdin` or `--password-stdin` refuses with
+`secret.input` before sudo starts the command, reading nothing, when the sudo
+policy listing the supervisor reads (`sudo -n -ll`) sets `log_input` or
+`log_stdin`, since sudo's I/O log would record the value. The check needs that
+listing to be readable without a password, through a cached credential or a
+rule that needs none, and proves nothing otherwise; the remedy is
+`--value-file` or `--password-file`, or running as root, where sudo logs
+nothing. Equal material creates no new version. Multipart versions and generation batches
 publish atomically.
 
 When standard input is a terminal, "`--value-stdin` and `--password-stdin` at
@@ -105,7 +120,9 @@ no extra prompt. Generate reports by name the generated Secrets it changed and
 those it left unchanged. `check` validates all declarations and their current keyring
 material. `list` reads metadata only; an uninitialized store is empty.
 `delete --name` removes an active mapping, including orphans, while retaining
-bound versions; existing deletion confirms unless yes. A delete of a name with
+bound versions; existing deletion confirms unless yes, before the lease as a
+file-input replacement does, and refuses with `secret.store.conflict`,
+deleting nothing, when the current version changed meanwhile. A delete of a name with
 no current version changes nothing, asks nothing, and reports that nothing was
 deleted.
 
@@ -270,7 +287,8 @@ keyring and never exposes prior material.
 
 Produced material is confidential output a lifecycle block's proved effect
 leaves, such as the administrator kubeconfig a
-[completed installation](container-clusters.md#installation) writes.
+[completed installation](container-clusters.md#installation) writes, or the
+copy of it a removal keeps unproved (D124, below).
 It is keyed by the block that captured it and the output's name, never by a
 Secret declaration. Only the lifecycle holds and withdraws it: the engine
 publishes a block's outputs in one publication, and withdraws every entry of
@@ -278,7 +296,10 @@ the context in one publication, through the secret area the
 [Workspace lends its transaction](contexts.md#storage-locking-and-publication)
 ([capture and withdrawal](state-reconciliation.md#produced-material-custody)).
 A recapture of equal bytes publishes nothing; different bytes replace the
-entry's version, and the block's entries of other names stay. A store never
+entry's version, and the block's entries of other names stay. An entry kept
+from a copy a removal would otherwise delete, its effect never proved, is
+marked unproved in the store's record; such a copy never replaces an entry the
+store holds, and a proved capture of the same entry clears the mark. A store never
 initialized refuses a capture with `secret.store.uninitialized` and holds
 nothing to withdraw. No secret command lists, checks, reveals, sets, generates,
 deletes or matches it to a declaration of the same name; `cluster kubeconfig`
@@ -331,7 +352,8 @@ summary is `name` (its entry's), `type` `opaque`, `source` `produced` and a
 `{"domain":"bootwright.secret.produced.v4","block":…,"name":…}`; its
 `sequence` is 1 and it holds one `value` part of one byte up to the part bound.
 `produced` is always present, `[]` when empty, and holds `block`, `name` and
-`version` entries sorted by block and then name, unique on that pair. A
+`version` entries, each with the optional member `unproved`, written only as
+`true`, sorted by block and then name, unique on that pair. A
 produced version is reached through exactly the one entry whose block and name
 its fingerprint covers, never through a current mapping or a binding.
 

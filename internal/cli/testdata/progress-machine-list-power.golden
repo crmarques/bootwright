@@ -1,0 +1,7 @@
+
+Checks
+  [RUNNING]  [1/1] Read the power state through Machine/hypervisor
+  [RUNNING]  [1/1] Read the power state through Machine/hypervisor: read-state
+  [RUNNING]  [1/1] Read the power state through Machine/hypervisor: read-state  still running, 10s
+  [RUNNING]  [1/1] Read the power state through Machine/hypervisor: read-state  still running, 20s
+  [OK]       [1/1] Read the power state through Machine/hypervisor: 2 of 2 machines read  25s

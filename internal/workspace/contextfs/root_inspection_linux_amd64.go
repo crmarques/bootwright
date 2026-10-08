@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -42,13 +43,16 @@ func (s *Store) InspectStateRoot(ctx context.Context) (prerequisites.StateRootIn
 // setup verifies its contents.
 func (s *Store) inspectStateRoot(ctx context.Context, path string, uid, gid uint32, owner bool) (prerequisites.StateRootInspection, error) {
 	inspection := prerequisites.StateRootInspection{Required: "a directory owned by " + ownerText(uid, gid) + " with mode 0700 on a local filesystem"}
-	var stat syscall.Stat_t
-	if err := syscall.Lstat(path, &stat); err != nil {
-		if errors.Is(err, syscall.ENOENT) {
-			inspection.Observed, inspection.Status = "absent; setup creates it", "ready"
-			return inspection, nil
-		}
+	stat, filesystem, err := statStateRoot(path)
+	switch {
+	case errors.Is(err, syscall.ENOENT):
+		inspection.Observed, inspection.Status = "absent; setup creates it", "ready"
+		return inspection, nil
+	case errors.Is(err, syscall.EACCES):
 		inspection.Observed, inspection.Status = "not inspectable without privilege; setup verifies it", "unverified"
+		return inspection, nil
+	case err != nil:
+		inspection.Observed, inspection.Status, inspection.Refusal = "behind a path every store command refuses to open", "not-ready", safeError(err)
 		return inspection, nil
 	}
 	if !private(stat, syscall.S_IFDIR, uid, gid) {
@@ -56,8 +60,7 @@ func (s *Store) inspectStateRoot(ctx context.Context, path string, uid, gid uint
 		inspection.Refusal = unsafeRoot(stat, uid, gid)
 		return inspection, nil
 	}
-	var filesystem syscall.Statfs_t
-	if err := syscall.Statfs(path, &filesystem); err != nil || !localFilesystem(filesystem.Type) {
+	if !localFilesystem(filesystem.Type) {
 		inspection.Observed, inspection.Status = "not on a qualified local filesystem", "not-ready"
 		inspection.Refusal = state("state filesystem is not qualified for private durable storage")
 		return inspection, nil
@@ -76,4 +79,33 @@ func (s *Store) inspectStateRoot(ctx context.Context, path string, uid, gid uint
 	}
 	inspection.Observed, inspection.Status = held, "ready"
 	return inspection, nil
+}
+
+// statStateRoot reads the root as the store opens it: every ancestor without
+// following a link and on a qualified filesystem, then the root itself by a
+// path handle that needs only search permission on its parent. It does not
+// refuse a root that is a mount point, which the store accepts.
+func statStateRoot(path string) (syscall.Stat_t, syscall.Statfs_t, error) {
+	var stat syscall.Stat_t
+	var filesystem syscall.Statfs_t
+	parent, err := walkAbsolute(filepath.Dir(path), false)
+	if err != nil {
+		return stat, filesystem, err
+	}
+	defer parent.Close()
+	if err := qualifiedFileSystem(parent); err != nil {
+		return stat, filesystem, err
+	}
+	fd, err := syscall.Openat(int(parent.Fd()), filepath.Base(path), pathHandle|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return stat, filesystem, err
+	}
+	defer syscall.Close(fd)
+	if err := syscall.Fstat(fd, &stat); err != nil {
+		return stat, filesystem, err
+	}
+	if syscall.Fstatfs(fd, &filesystem) != nil {
+		filesystem.Type = 0
+	}
+	return stat, filesystem, nil
 }

@@ -19,7 +19,7 @@ func TestSyntaxDiagnosticsSeparateEncodingFromYAML(t *testing.T) {
 		{"invalid first byte", "\xfe", "input is not valid UTF-8", "save the file as UTF-8", 0, 1, 1},
 		{"mis-indented key", "apiVersion: bootwright.io/v1alpha1\nkind: Secret\n  name: probe\n", "YAML syntax error: mapping values are not allowed in this context", yamlRemedy, 1, 3, 0},
 		{"tab indent", "spec:\n\ttype: opaque\n", "YAML syntax error: found character that cannot start any token", yamlRemedy, 1, 2, 0},
-		{"YAML 1.2 directive", "%YAML 1.2\n---\nvalue: true\n", "a %YAML 1.2 directive is not accepted", "remove the directive", 1, 0, 0},
+		{"YAML 1.2 directive", "%YAML 1.2\n---\nvalue: true\n", "a %YAML 1.2 directive is not accepted", "remove the directive", 1, 1, 0},
 		{"unknown anchor", "value: *zz-authored-sentinel\n", "YAML syntax error: an alias names an anchor the document does not define", "write the value out in full instead of an anchor or alias", 1, 0, 0},
 	} {
 		t.Run(row.name, func(t *testing.T) {

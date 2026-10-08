@@ -9,7 +9,7 @@ import (
 )
 
 func TestProductionAdmissionRefusesADefaultFileSourceAtTheDefaultAndEachRecipient(t *testing.T) {
-	const defaultRemedy = "replace source.file in the Environment's Secret kind default with source: {contextStore: {}}, then for each Secret that inherits it run bootwright secret set --name <name> with the file flags of its type"
+	const defaultRemedy = "replace source.file in the Environment's Secret kind default with source: {contextStore: {}}, then for each Secret that inherits it run bootwright secret set --name <name> --context <context> with the file flags of its type"
 	for _, test := range []struct{ name, fragment, recipientType, remedy string }{
 		{"token", "type: token\n      source: {file: {path: ../secrets/material}}", "", defaultRemedy + " (--value-file <path> for token)"},
 		{"usernamePassword", "type: usernamePassword\n      source: {file: {path: secrets/credentials}}", "", defaultRemedy + " (--username <username> --password-file <path> for usernamePassword)"},
@@ -57,7 +57,7 @@ func TestProductionAdmissionFileSourceRemedyNeverPrintsAnInvalidName(t *testing.
 	if state != nil || report != nil || err == nil {
 		t.Fatalf("a file source compiled: %v %v %v", state, report, err)
 	}
-	want := "declare source: {contextStore: {}} and run bootwright secret set --name <name> --value-file <path>"
+	want := "declare source: {contextStore: {}} and run bootwright secret set --name <name> --context <context> --value-file <path>"
 	for _, d := range diagnostics.Of(err) {
 		if d.Field == "$.spec.source.file" {
 			if d.Code != "api.field" || d.Remediation != want {

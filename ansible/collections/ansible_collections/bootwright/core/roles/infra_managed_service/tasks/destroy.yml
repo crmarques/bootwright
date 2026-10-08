@@ -5,6 +5,10 @@
       - bootwright_managed_service_request.version == 'managed-service-v3'
       - bootwright_managed_service_request.kind in infra_managed_service_kinds
       - bootwright_managed_service_request.contentRoot.startswith('/var/lib/bootwright-services/')
+      - bootwright_managed_service_request.contentRoot.split('/') | length == 7
+      - >-
+        bootwright_managed_service_request.contentRoot.split('/')[1:]
+        | select('in', ['', '.', '..']) | list | length == 0
       - >-
         (bootwright_managed_service_request.contentRoot | dirname | dirname)
         == '/var/lib/bootwright-services/' ~ bootwright_managed_service_request.identity.context
@@ -64,6 +68,39 @@
       - /usr/bin/systemctl
       - daemon-reload
   changed_when: false
+
+# As systemd documents, a unit whose daemon exited at every start until its
+# start limit stays listed failed after its stop and its definition's removal,
+# until it is reset. `systemctl show` prints ActiveState=inactive for a unit
+# that is not loaded, so such a unit is never reset, and a reset that finds the
+# unit unloaded meanwhile ("Unit ... not loaded.") is tolerated.
+- name: Observe whether systemd still lists the removed unit failed
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - show
+      - --property=ActiveState
+      - --value
+      - '{{ infra_managed_service_service }}'
+  environment:
+    LC_ALL: C
+  register: infra_managed_service_listed
+  changed_when: false
+
+- name: Reset the failed state the removed unit is still listed in
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - reset-failed
+      - '{{ infra_managed_service_service }}'
+  environment:
+    LC_ALL: C
+  when: infra_managed_service_listed.stdout == 'failed'
+  register: infra_managed_service_reset
+  changed_when: infra_managed_service_reset.rc == 0
+  failed_when:
+    - infra_managed_service_reset.rc != 0
+    - '"not loaded" not in infra_managed_service_reset.stderr'
 
 - name: Remove a container the stopped unit left behind
   ansible.builtin.command:
@@ -137,6 +174,7 @@
          if (infra_managed_service_unit_removed is changed
              or infra_managed_service_root_removed is changed
              or infra_managed_service_parents is changed
+             or infra_managed_service_reset is changed
              or infra_managed_service_before.observation.unit | length > 0)
          else 'unchanged' }}
     digest: '{{ bootwright_managed_service_digest }}'

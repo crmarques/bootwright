@@ -259,7 +259,7 @@ func (s *Service) validateGeneratedCertificate(declaration secrets.Declaration, 
 	if days == 0 {
 		days = 3650
 	}
-	if configuration.CommonName == "" || !utf8.ValidString(configuration.CommonName) || strings.ContainsRune(configuration.CommonName, 0) || days < 1 || days > 36500 {
+	if validGeneratedCommonName(configuration.CommonName) != nil || days < 1 || days > 36500 {
 		return failure("source", "generated certificate parameters are invalid", "")
 	}
 	for _, name := range configuration.DNSNames {
@@ -438,7 +438,7 @@ func (s *Service) generateCertificate(ctx context.Context, declaration secrets.D
 	if days == 0 {
 		days = 3650
 	}
-	if configuration.CommonName == "" || !utf8.ValidString(configuration.CommonName) || strings.ContainsRune(configuration.CommonName, 0) || days < 1 || days > 36500 {
+	if validGeneratedCommonName(configuration.CommonName) != nil || days < 1 || days > 36500 {
 		return nil, nil, failure("source", "generated certificate parameters are invalid", "")
 	}
 	dnsNames := slices.Clone(configuration.DNSNames)
@@ -587,6 +587,15 @@ func (s *Service) generateSSH(ctx context.Context, keyType, comment string) ([]b
 		return nil, nil, failure("store.crypto", "SSH material encoding failed", "")
 	}
 	return privateKey, publicKey, nil
+}
+
+// validGeneratedCommonName refuses a common name no certificate subject could
+// carry as declared, which admission refuses at validate too.
+func validGeneratedCommonName(value string) error {
+	if value == "" || len(value) > secrets.MaxPartBytes || !utf8.ValidString(value) || strings.ContainsRune(value, 0) {
+		return failure("source", "generated certificate parameters are invalid", "")
+	}
+	return nil
 }
 
 func validateGeneratedSSHComment(comment string) error {

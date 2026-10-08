@@ -113,7 +113,10 @@ Every refusal carries what the operator needs to correct it:
 
 - the object, as its kind and name, whenever the document's `apiVersion`, its
   registered `kind` and its DNS-label `metadata.name` decode as strings,
-  including on a decode failure elsewhere in the document;
+  including on a decode failure elsewhere in the document; when
+  `metadata.name` is not a DNS label, its grammar refusal names the kind in its
+  message and the document by its source location, and its remediation states
+  the label grammar;
 - the path of the field it concerns;
 - the schema's expectation: the permitted values, the numeric bounds, the
   expected YAML type, noting that a quoted value is a string, the referenced
@@ -158,7 +161,14 @@ one. Every `api.reference` check against a selected document that fails
 decoding is another: while a selected document of a referenced kind and name
 does not decode, a reference field naming it, and an Environment cluster
 selection entry naming it, add no diagnostic, so the document's own
-diagnostics are the only ones.
+diagnostics are the only ones. The same holds for checks that refuse at a
+containing field: while a selected add-on, add-on profile or add-on input
+target fails decoding, the selection, input, configuration and capability
+checks of a `ClusterAddonProfile` or `ClusterAddonBinding` that name it or
+depend on its expansion add no diagnostic, and configuration and capability
+checks run only on a complete expansion. A Machine whose substrate provider
+does not resolve gets no provider-dependent refusal: neither the host-key
+lifecycle refusal nor the BMC credentials required after inheritance.
 
 ## Common envelope
 

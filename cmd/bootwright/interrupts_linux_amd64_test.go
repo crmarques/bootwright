@@ -278,9 +278,11 @@ func TestIgnoredHangupHelper(t *testing.T) {
 }
 
 // sudo can hand the elevated child one terminal interrupt twice, the kernel's
-// and the supervisor's relay, so an operation this process runs never acts on
-// a second signal itself: its bounded cancellation runs to its own end, and
-// only the supervisor's second signal kills sudo.
+// and the supervisor's relay, so without the proof that it is the foreground
+// of a pseudo-terminal of its own the child never escalates on a second
+// signal: its bounded cancellation runs to its own end, and only the
+// supervisor's second signal kills sudo. The test binary is no supervised
+// child, so it never has that proof.
 func TestASecondInterruptLeavesTheCancellationRunning(t *testing.T) {
 	for _, received := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
 		t.Run(received.String(), func(t *testing.T) {
@@ -328,8 +330,56 @@ func TestASecondInterruptLeavesTheCancellationRunning(t *testing.T) {
 	}
 }
 
+func TestASecondInterruptEndsAChildInItsOwnForegroundTerminalAtOnce(t *testing.T) {
+	for _, received := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
+		t.Run(received.String(), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSecondInterruptHelper$")
+			command.Env = append(os.Environ(), "BOOTWRIGHT_SECOND_INTERRUPT_HELPER=escalating")
+			if _, err := command.StdinPipe(); err != nil {
+				t.Fatal(err)
+			}
+			output, err := command.StdoutPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := command.Start(); err != nil {
+				t.Fatal(err)
+			}
+			reader := bufio.NewReader(output)
+			expect := func(want string) {
+				t.Helper()
+				if line, err := reader.ReadString('\n'); err != nil || line != want {
+					cancel()
+					_ = command.Wait()
+					t.Fatalf("the helper wrote %q (%v), want %q", line, err, want)
+				}
+			}
+			expect("ready\n")
+			if err := command.Process.Signal(received); err != nil {
+				t.Fatal(err)
+			}
+			expect("canceled\n")
+			if err := command.Process.Signal(received); err != nil {
+				t.Fatal(err)
+			}
+			rest, _ := io.ReadAll(reader)
+			err = command.Wait()
+			var exit *exec.ExitError
+			if ctx.Err() != nil || !errors.As(err, &exit) || exit.ExitCode() != 130 || len(rest) != 0 {
+				t.Fatalf("a second %s left the helper %v with %q (deadline %v), want status 130 at once", received, err, rest, ctx.Err())
+			}
+		})
+	}
+}
+
 func TestSecondInterruptHelper(t *testing.T) {
-	if os.Getenv("BOOTWRIGHT_SECOND_INTERRUPT_HELPER") != "1" {
+	switch os.Getenv("BOOTWRIGHT_SECOND_INTERRUPT_HELPER") {
+	case "1":
+	case "escalating":
+		escalatesOnItsOwn = func() bool { return true }
+	default:
 		return
 	}
 	ctx, finish := beginSignalOperation(context.Background())

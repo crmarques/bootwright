@@ -70,6 +70,13 @@ func EthernetInterfaces(catalog api.Catalog, machine api.Object) ([]string, erro
 	return names, nil
 }
 
+// DefaultRouteIPv4 is the one reading of an IPv4 default-route destination: any
+// IPv4 CIDR whose prefix length is zero, whatever its address bits.
+func DefaultRouteIPv4(destination string) bool {
+	prefix, err := netip.ParsePrefix(destination)
+	return err == nil && prefix.Bits() == 0 && prefix.Addr().Is4()
+}
+
 // DefaultGateway is the authored next hop of the first route that is not
 // absent, whose destination is a zero-prefix IPv4 CIDR and whose next hop is an
 // IPv4 address; a template without one installs without a default route.
@@ -78,8 +85,7 @@ func DefaultGateway(template api.Value) string {
 		if route.Get("state").Text() == "absent" {
 			continue
 		}
-		destination, err := netip.ParsePrefix(route.Get("destination").Text())
-		if err != nil || destination.Bits() != 0 || !destination.Addr().Is4() {
+		if !DefaultRouteIPv4(route.Get("destination").Text()) {
 			continue
 		}
 		hop := route.Get("next-hop-address").Text()

@@ -154,6 +154,12 @@ Four rules govern the stream:
    naming the reason when the store could not read the image; no check holds
    a store lock while it reads. A plain
    `media list` and a `media delete` report no progress.
+
+   `machine list --power-status` reads the controllers each host reaches as
+   one check under `Checks`, one per host, named by that host; the role's
+   groups are its sub-steps, and the check closes `[OK]` with how many of its
+   Machines it read, or `[FAIL]`. A reading keeps no log, so no `Logs` field
+   precedes it, and a plain `machine list` reports no progress.
 2. **Silence bound.** While a step runs and ten seconds pass without a new
    row of its own, the presenter repeats that step's row with `still running`
    and the time since the step started. The bound is per step, so a step that
@@ -502,7 +508,7 @@ probe. Its result orders these fields:
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected managed shared services, `status` in the realization vocabulary below. |
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
 | `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. |
-| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does before repeating a verb, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
+| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |
 
 The cluster and shared rows share one realization vocabulary. Each object the
@@ -639,6 +645,7 @@ it to a variable.
 | `lifecycle.adapter-running` | An adapter of the same context, or one whose record names no context, still holds its job lock, so no adapter of that context starts until it ends. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
+| `access.unproved` | A revealed credential was kept from an effect never proved complete, so the access it grants was not proved; a warning. |
 | `access.target` | Explicit access cannot resolve one exact authorized target. |
 | `access.handoff` | An explicit access descriptor cannot be safely resolved or encoded. |
 | `access.credential` | A Machine's SSH access names a password credential the operator reveals and types; written before the connection. |

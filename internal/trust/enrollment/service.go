@@ -73,7 +73,8 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 	}
 	report := &Report{Context: selected, DryRun: request.DryRun, Hosts: make([]HostReport, 0, len(chosen))}
 	pending := records.Clone()
-	declared := declaredMachines(effective.Effective)
+	exempt := exemptMachines(effective.Effective)
+	uses := usingMachines(effective.Effective)
 	writing := map[string]bool{}
 	var removed []HostReport
 	for index, entry := range chosen {
@@ -84,8 +85,8 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 		report.Hosts = append(report.Hosts, host)
 		if host.Action == ActionAdd || host.Action == ActionReplace {
 			writing[entry.name] = true
-			for _, stale := range pending.Supersede(record, declared) {
-				removed = append(removed, removal(stale, entry.name))
+			for _, stale := range pending.Supersede(record, uses) {
+				removed = append(removed, removal(stale, exempt(stale.Machine), entry.name))
 			}
 			report.Pending++
 		}
@@ -168,20 +169,27 @@ func evaluate(entry candidate, observed observation, records trust.Store, replac
 	return host, record, nil
 }
 
-// removal reports a record of a Machine the context no longer declares that
-// the write removes, because a selected Machine now holds its endpoint.
-func removal(stale trust.Record, successor string) HostReport {
+// removal reports a record the write removes because a selected Machine now
+// holds its endpoint and nothing reads the record any more: its Machine is no
+// longer declared, or exemption says why it no longer uses this store.
+func removal(stale trust.Record, exemption, successor string) HostReport {
+	reason := "no longer declared"
+	if exemption != "" {
+		reason = exemption + ", so it no longer uses this context's SSH trust"
+	}
 	return HostReport{
 		Machine: stale.Machine, Address: stale.Address, Port: stale.Port, Action: ActionRemove,
 		KeyType: stale.KeyType, Fingerprint: stale.HostKey().Fingerprint(),
-		Reason: "no longer declared; " + successor + " now uses its address",
+		Reason: reason + "; " + successor + " now uses its address",
 	}
 }
 
-func declaredMachines(catalog api.Catalog) func(string) bool {
+// usingMachines reports whether the context still reads a Machine's record:
+// it declares the Machine and the Machine is not exempt from its trust.
+func usingMachines(catalog api.Catalog) func(string) bool {
 	return func(name string) bool {
-		_, found := catalog.Find(api.Machine, name)
-		return found
+		object, found := catalog.Find(api.Machine, name)
+		return found && machine.TrustExemption(object) == ""
 	}
 }
 

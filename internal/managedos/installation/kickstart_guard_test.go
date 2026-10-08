@@ -219,3 +219,18 @@ func TestARepositoryIDHoldsNoSlash(t *testing.T) {
 		expectGuardRefusal(t, input, fmt.Sprintf("a repository ID %q", value))
 	}
 }
+
+// The renderer refuses what dnf would not accept as a repository ID, as
+// admission does, and still renders one it accepts.
+func TestARepositoryIDIsWhatDnfAccepts(t *testing.T) {
+	for _, value := range []string{"a@b", "x*y", "[x]", "a=b", strings.Repeat("a", 240)} {
+		input := guardedInstallation()
+		input.Repositories[0].ID = value
+		expectGuardRefusal(t, input, fmt.Sprintf("a repository ID %q", value))
+	}
+	input := guardedInstallation()
+	input.Repositories[0].ID = "extras"
+	if _, err := RenderKickstart(input); err != nil {
+		t.Fatalf("repository ID extras was refused: %v", err)
+	}
+}

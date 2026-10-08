@@ -183,75 +183,60 @@ func TestARecordTakingOverAnUndeclaredEndpointRemovesIt(t *testing.T) {
 	if len(restated) != 1 || restated[0].Remediation != "re-trust node-b with bootwright machine trust --context lab --machines node-b --replace node-b" {
 		t.Fatalf("restated = %+v", restated)
 	}
-	exempt := diagnostics.Of(pin.Retrust("lab", func(name string) bool { return name == "node-a" }, func(name string) string {
-		if name == "node-b" {
-			return "declares an explicit knownHostsRef"
+}
+
+// A record of a Machine that no longer uses this store, declared or not, is
+// read by nothing, so the write that takes over its endpoint removes it; a
+// Machine that still uses the store keeps its record (D117).
+func TestSupersedeRemovesARecordItsMachineNoLongerUses(t *testing.T) {
+	exempt := record(t, "a", "192.0.2.10", 2)
+	using := record(t, "b", "192.0.2.10", 3)
+	elsewhere := record(t, "c", "192.0.2.11", 4)
+	store := Store{FormatVersion: FormatVersion, Hosts: []Record{using, elsewhere, exempt}}
+	uses := func(name string) bool { return name == "b" || name == "c" || name == "d" }
+	removed := store.Supersede(record(t, "d", "192.0.2.10", 1), uses)
+	if len(removed) != 1 || removed[0].Machine != "a" || removed[0].PublicKey != exempt.PublicKey {
+		t.Fatalf("removed = %+v", removed)
+	}
+	for _, name := range []string{"b", "c", "d"} {
+		if _, found := store.Find(name); !found {
+			t.Fatalf("%s was removed: %+v", name, store.Hosts)
 		}
-		return ""
-	}))
-	if len(exempt) != 1 || exempt[0].Remediation != exemptRemedy("node-b") {
-		t.Fatalf("restated for a Machine that no longer uses the store = %+v", exempt)
+	}
+	if _, found := store.Find("a"); found {
+		t.Fatalf("the record of a Machine that no longer uses the store was kept: %+v", store.Hosts)
+	}
+	if kept := (Store{FormatVersion: FormatVersion, Hosts: []Record{exempt}}); len(kept.Supersede(record(t, "d", "192.0.2.10", 1), nil)) != 0 {
+		t.Fatal("a nil predicate removed a record")
 	}
 }
 
-func exemptRemedy(machine string) string {
-	return "drop " + machine + " from the input with bootwright context update --name lab --input-dir <dir>, repeat this command, then restore " +
-		machine + " the same way; this needs a context with no incomplete operation and an input in which no other object references " +
-		machine + ", and after a completed apply the next apply no longer settles: it refuses the changed input until a destroy"
-}
-
-// Dropping a Machine from the input is no remedy while an operation is
-// incomplete, which context update refuses, nor for a Machine another object
-// references, whose input would not compile, and over a completed apply it
-// publishes a changed input the next apply refuses until a destroy. The
-// refusal says all of that rather than offer a step that dead-ends.
-func TestAnExemptPinRemedyStatesWhatDroppingTheMachineNeedsAndCosts(t *testing.T) {
-	store := Store{FormatVersion: FormatVersion, Hosts: []Record{record(t, "node-b", "192.0.2.10", 2), record(t, "node-a", "192.0.2.10", 1)}}
-	var pin *DivergentPin
-	if err := store.Validate(); !errors.As(err, &pin) {
-		t.Fatalf("a divergent pin did not refuse: %v", err)
-	}
-	reported := diagnostics.Of(pin.Retrust("lab", func(name string) bool { return name == "node-a" }, func(name string) string {
-		if name == "node-b" {
-			return "host key comes from its installation evidence"
+// An exempt Machine's record reaches the divergent-pin refusal only from a
+// stored file, since a confirmed takeover drops it first, so the remedy is
+// that takeover rather than an input edit.
+func TestAnExemptPinRemedyIsTheTakeoverWriteThatDropsIt(t *testing.T) {
+	for _, reason := range []string{"host key comes from its installation evidence", ExemptReachedLocally, "declares an explicit knownHostsRef"} {
+		store := Store{FormatVersion: FormatVersion, Hosts: []Record{record(t, "node-b", "192.0.2.10", 2), record(t, "node-a", "192.0.2.10", 1)}}
+		var pin *DivergentPin
+		if err := store.Validate(); !errors.As(err, &pin) {
+			t.Fatalf("a divergent pin did not refuse: %v", err)
 		}
-		return ""
-	}))
-	want := "trusting node-a at 192.0.2.10 would pin it to a key that diverges from the one this context trusts there for node-b; " +
-		"node-b no longer uses this context's SSH trust (host key comes from its installation evidence), so nothing reads that record, " +
-		"but the store drops it only once node-b leaves the input"
-	if len(reported) != 1 || reported[0].Code != "trust.identity" || reported[0].Message != want || reported[0].Remediation != exemptRemedy("node-b") {
-		t.Fatalf("refusal = %+v", reported)
-	}
-}
-
-// The controller Machine, the one reached locally, leaves the input only when
-// the Environment names another local controller, which the controller binding
-// refuses once an apply has bound the context. Its refusal names that dead end
-// and the separate context it leaves, rather than an input edit that refuses.
-func TestTheControllerMachinePinRemedyNamesTheBindingThatKeepsItInTheInput(t *testing.T) {
-	store := Store{FormatVersion: FormatVersion, Hosts: []Record{record(t, "controller", "192.0.2.10", 2), record(t, "node-a", "192.0.2.10", 1)}}
-	var pin *DivergentPin
-	if err := store.Validate(); !errors.As(err, &pin) {
-		t.Fatalf("a divergent pin did not refuse: %v", err)
-	}
-	reported := diagnostics.Of(pin.Retrust("lab", func(name string) bool { return name == "node-a" }, func(name string) string {
-		if name == "controller" {
-			return ExemptReachedLocally
+		exempt := func(name string) string {
+			if name == "node-b" {
+				return reason
+			}
+			return ""
 		}
-		return ""
-	}))
-	want := "trusting node-a at 192.0.2.10 would pin it to a key that diverges from the one this context trusts there for controller; " +
-		"controller no longer uses this context's SSH trust (reached locally), so nothing reads that record, but the store drops it only once controller leaves the input"
-	if len(reported) != 1 || reported[0].Code != "trust.identity" || reported[0].Message != want || reported[0].Remediation != controllerRemedy("controller") {
-		t.Fatalf("refusal = %+v", reported)
+		reported := diagnostics.Of(pin.Retrust("lab", func(name string) bool { return name == "node-a" }, exempt))
+		want := "trusting node-a at 192.0.2.10 would pin it to a key that diverges from the one this context trusts there for node-b; " +
+			"node-b no longer uses this context's SSH trust (" + reason + "), so nothing reads that record"
+		remedy := "trust the Machine that now uses 192.0.2.10 with bootwright machine trust --context lab; its confirmed write removes the record of node-b"
+		if len(reported) != 1 || reported[0].Code != "trust.identity" || reported[0].Message != want || reported[0].Remediation != remedy {
+			t.Fatalf("refusal = %+v", reported)
+		}
+		read := diagnostics.Of(pin.Retrust("lab", nil, exempt))
+		if len(read) != 1 || read[0].Remediation != remedy || strings.Contains(read[0].Remediation, "context update") {
+			t.Fatalf("refusal of a stored pin = %+v", read)
+		}
 	}
-}
-
-func controllerRemedy(machine string) string {
-	return machine + " is the controller Machine, which leaves the input only when spec.controller.machineRef names another local Machine; " +
-		"before an apply binds this context to " + machine + ", and with no incomplete operation, make that change with " +
-		"bootwright context update --name lab --input-dir <dir>, repeat this command, then restore " + machine + " the same way; " +
-		"once an apply has bound this context, context update refuses any input that changes the controller Machine, " +
-		"so no input edit drops the record and only a separate context does"
 }

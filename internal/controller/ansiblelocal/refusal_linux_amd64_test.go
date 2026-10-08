@@ -4,6 +4,7 @@ package ansiblelocal
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -170,11 +171,12 @@ func TestAStorageRefusalNamesTheFilesystemItsSourceFills(t *testing.T) {
 	}
 }
 
-// Setup's own run that fails after publishing its preparation but before Go
-// acknowledged a native record authorized nothing, since the adapter waits for
-// that acknowledgement before its transaction, so the action is failed and
-// the next setup replaces it. Once the native record is acknowledged, or for
-// a client installation, which publishes into another area, it stays unknown.
+// A run that fails after publishing its preparation but before Go
+// acknowledged any record authorizing an effect performed none, since the
+// adapter waits for that acknowledgement before a native transaction or a
+// tool installation, so the action is failed and the next run replaces it.
+// Once such a record is acknowledged, or for a recovery, which starts already
+// prepared, it stays unknown.
 func TestASetupThatFailsBeforeItsNativeRecordIsFailed(t *testing.T) {
 	f := newRefusalFixture(t)
 	result, found := scriptedRun(t, f.handoff+acknowledged(f.nativePrepared)+`exit 2`, func(request *capabilityRequest) {
@@ -195,13 +197,90 @@ func TestASetupThatFailsAfterItsNativeAcknowledgementStaysUnknown(t *testing.T) 
 	}
 }
 
-func TestAClientInstallationThatFailsBeforeNativeStaysUnknown(t *testing.T) {
+func TestAClientInstallationThatFailsBeforeAnyAcknowledgementIsFailed(t *testing.T) {
 	f := newRefusalFixture(t)
 	result, found := scriptedRun(t, f.handoff+acknowledged(f.nativePrepared)+`exit 2`, func(request *capabilityRequest) {
 		request.Native, request.Packages = f.plan, []prerequisites.NativePackage{f.pkg}
 		request.PublicationBundle = bundleLocation{Path: request.Bundle.Path + "-clients", Writable: true}
 	})
+	if len(found) != 1 || result.Outcome != "failed" || string(result.Evidence) != `{"intentRecorded":true,"postcondition":false}` {
+		t.Fatalf("the client installation left %s %s with %+v, want failed with its intent recorded", result.Outcome, result.Evidence, found)
+	}
+}
+
+func TestAClientInstallationAfterAnAcknowledgedToolStaysUnknown(t *testing.T) {
+	f := newRefusalFixture(t)
+	result, found := scriptedRun(t, f.handoff+acknowledged(f.toolPrepare)+acknowledged(`{"phase":"continue"}\n`)+`exit 2`, func(request *capabilityRequest) {
+		request.Tools = []prerequisites.ToolDefinition{f.tool}
+		request.PublicationBundle = bundleLocation{Path: request.Bundle.Path + "-clients", Writable: true}
+	})
 	if len(found) != 1 || result.Outcome != "unknown" {
 		t.Fatalf("the client installation left %s with %+v, want unknown", result.Outcome, found)
+	}
+}
+
+func TestARecoveryThatFailsBeforeAcknowledgementStaysUnknown(t *testing.T) {
+	f := newRefusalFixture(t)
+	result, found := scriptedRun(t, f.handoff+`exit 2`, func(request *capabilityRequest) {
+		request.Operation = "recover"
+		request.Native, request.Packages = f.plan, []prerequisites.NativePackage{f.pkg}
+		transitions, err := prerequisites.NativeTransitionsDigest(f.plan.Actions)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Preparation = &prerequisites.NativePreparation{InventorySHA256: f.plan.BeforeSHA256, AfterInventorySHA256: f.plan.AfterSHA256,
+			PlanDigest: f.plan.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
+	})
+	if len(found) != 1 || result.Outcome != "unknown" {
+		t.Fatalf("the recovery left %s with %+v, want unknown", result.Outcome, found)
+	}
+}
+
+// canceledRun runs script as setup's adapter and cancels the invocation when
+// the runner reports detail, or when it publishes the preparation if detail
+// is empty.
+func canceledRun(t *testing.T, script, detail string, configure func(*capabilityRequest)) (prerequisites.ActionResult, error) {
+	t.Helper()
+	launch, request, boundary := runnerFixture(t, "unused")
+	configure(&request)
+	boundary.completedDrain, boundary.authorizedDrain = 5*time.Second, 5*time.Second
+	boundary.command = func(string, ...string) *exec.Cmd { return exec.Command("/bin/sh", "-c", script) }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	publish := func(context.Context, prerequisites.NativePreparation) error {
+		if detail == "" {
+			cancel()
+		}
+		return nil
+	}
+	progress := func(event prerequisites.ProgressEvent) {
+		if detail != "" && strings.HasPrefix(event.Detail, detail) {
+			cancel()
+		}
+	}
+	return runProcess(ctx, launch, request, func() error { return nil }, publish, progress, nil, boundary)
+}
+
+// Setup canceled once its preparation is published but before its native
+// record is acknowledged performed nothing, so its action is failed; canceled
+// after that acknowledgement, its transaction may be running, so it stays
+// unknown.
+func TestASetupCanceledBeforeNativeAuthorizationIsFailed(t *testing.T) {
+	f := newRefusalFixture(t)
+	result, err := canceledRun(t, f.handoff+acknowledged(f.nativePrepared)+`sleep 5; exit 2`, "", func(request *capabilityRequest) {
+		request.Native, request.Packages = f.plan, []prerequisites.NativePackage{f.pkg}
+	})
+	if !errors.Is(err, context.Canceled) || result.Outcome != "failed" || string(result.Evidence) != `{"intentRecorded":true,"postcondition":false}` {
+		t.Fatalf("the canceled setup left %s %s with %v, want failed with its intent recorded", result.Outcome, result.Evidence, err)
+	}
+}
+
+func TestASetupCanceledAfterNativeAuthorizationStaysUnknown(t *testing.T) {
+	f := newRefusalFixture(t)
+	result, err := canceledRun(t, f.handoff+acknowledged(f.nativePrepared)+acknowledged(`{"phase":"native"}\n`)+`sleep 0.2; exit 2`, "installing 1 native package", func(request *capabilityRequest) {
+		request.Native, request.Packages = f.plan, []prerequisites.NativePackage{f.pkg}
+	})
+	if !errors.Is(err, context.Canceled) || result.Outcome != "unknown" {
+		t.Fatalf("the canceled setup left %s with %v, want unknown", result.Outcome, err)
 	}
 }

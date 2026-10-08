@@ -2067,7 +2067,7 @@ say that only a separate context drops the record. The third check found
 that the controller remedy no longer says that no other object may reference
 the controller Machine, and that the CLI spec claims the input then compiles,
 which is false for every tracked example; that wording stays with its
-decision in [B357](m1.md#b357).
+decision in [B357](#x46--the-safety-and-defect-sweep-of-m1).
 
 **Gates:** `make check-offline tidy-check modules-check vulncheck docs-check
 race` passes on the integrated slice, after each of the three fix rounds and
@@ -2083,18 +2083,18 @@ does not cover `internal/trust`, whose enrollment test double races under
 still declares but no longer trusts by SSH blocks another Machine at that
 endpoint until the input drops it, and the controller Machine's record has no
 exit inside a bound context; widening D65 is the owner's decision
-([B357](m1.md#b357)). Add-on and Machine checks still repeat a refusal for a
-target that failed decoding ([B358](m1.md#b358)); until a replacing removal
+([B357](#x46--the-safety-and-defect-sweep-of-m1)). Add-on and Machine checks still repeat a refusal for a
+target that failed decoding ([B358](#x46--the-safety-and-defect-sweep-of-m1)); until a replacing removal
 starts its first block, the object the replaced attempt failed on reads done
 ([B359](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); a YAML parser error can name the line before its own
-([B360](m1.md#b360)); the uninitialized-store refusals and the retired
-file-source remedy name no `--context` ([B361](m1.md#b361));
+([B360](#x46--the-safety-and-defect-sweep-of-m1)); the uninitialized-store refusals and the retired
+file-source remedy name no `--context` ([B361](#x46--the-safety-and-defect-sweep-of-m1));
 `machine list --power-status` reads controllers with no progress row
-([B370](m1.md#b370)); the context store's uncertain secret-state publication
+([B370](#x46--the-safety-and-defect-sweep-of-m1)); the context store's uncertain secret-state publication
 names no inspection command ([B371](#x42--media-contexts-setup-service-and-machine-admission)); a file-input secret
 replacement, deletion or rotation prompts under the host-wide lock and lease,
-which the owner decides ([B372](m1.md#b372)); and nothing reports a sudo
-policy that logs a standard-input secret ([B373](m1.md#b373)). Under D116 these
+which the owner decides ([B372](#x46--the-safety-and-defect-sweep-of-m1)); and nothing reports a sudo
+policy that logs a standard-input secret ([B373](#x46--the-safety-and-defect-sweep-of-m1)). Under D116 these
 nine join M1 on X46. A Secret version stored before X40 stays current only
 while its declaring path and document index are unchanged, so the first
 re-import from another directory stales it once ([B362](backlog.md#b362)).
@@ -2355,7 +2355,7 @@ incomplete apply or a failed destroy or removes a completed apply, verifies
 neither the host identity nor the controller binding, which only a
 continuation does, although the spec runs a controller-hosted service effect
 only under a verified binding, and the unbound continuation's remedy relies on
-it ([B377](m1.md#b377)); `status` still offers a continuation that the
+it ([B377](#x46--the-safety-and-defect-sweep-of-m1)); `status` still offers a continuation that the
 binding, automation-digest or other continuation proofs refuse, among them an
 apply over an unbound incomplete apply and a destroy over an unbound running,
 paused or unknown removal ([B378](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); an apply's or a deletion's
@@ -2374,7 +2374,7 @@ interactive sudo refusal before a session still exits 1
 holds no run lock, so retention could retire its directory if 16 newer runs
 of its context opened beside it, which no later build can change. Tracked
 elsewhere: the uninitialized-store refusal the bounded read shares with a
-binding ([B361](m1.md#b361)); container-cluster admission remedies
+binding ([B361](#x46--the-safety-and-defect-sweep-of-m1)); container-cluster admission remedies
 ([B313](m3.md#b313)); content the install line still drops, search domains
 and IPv6 policy among it ([B338](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation), [B326](m4.md#b326)); RHEL 9.8's
 `rpm` output and the snapshot read as the helper account
@@ -2540,7 +2540,7 @@ fields.
 
 **Toward B342 and B380:** the libvirt bridge and a Machine's
 `interfaceAttachments[].interface` take the Linux interface-name grammar,
-which the machines spec's tables state; [B342](m1.md#b342) keeps the
+which the machines spec's tables state; [B342](#x46--the-safety-and-defect-sweep-of-m1) keeps the
 templates' escaping of the bridge for X46's digest window. The context store's
 refusal of a context with no revision carries its remedy as the remediation,
 which [B380](m1.md#b380) no longer lists.
@@ -2621,7 +2621,7 @@ until `context update` imports corrected input; status over such a revision is
 registered keeps its frozen unbracketed URLs, so destroy it before applying
 again, and a request an earlier build froze with no probe target no longer
 proves presence, while its destroy is unaffected. Tracked elsewhere: the
-templates' escaping of the bridge ([B342](m1.md#b342)); the generic
+templates' escaping of the bridge ([B342](#x46--the-safety-and-defect-sweep-of-m1)); the generic
 execution-failure remedy that an rpm lock conflict, an unsafe root or an
 unverified bundle location still gives when reached from apply or destroy
 ([B379](m1.md#b379)); a receipt that this build leaves pending after a native
@@ -2635,18 +2635,18 @@ through a managed or authenticated Proxy, refused only at plan
 controller run D60 plans to confirm ([B335](backlog.md#b335) beside it); and a
 guard port that lists the owned blocks ([B324](backlog.md#b324)). Under D116
 these join M1 on X46: an elevated selection refusal drops its remedy
-([B398](m1.md#b398)); the `context delete` row still promises a listing of
+([B398](#x46--the-safety-and-defect-sweep-of-m1)); the `context delete` row still promises a listing of
 what an orphan-acknowledged deletion abandons, and a lost context's plan says
-its keyring is removed ([B399](m1.md#b399)); unsafe mutation evidence has no
-named exit ([B400](m1.md#b400)); stage-collection, bounded-run and setup-run
+its keyring is removed ([B399](#x46--the-safety-and-defect-sweep-of-m1)); unsafe mutation evidence has no
+named exit ([B400](#x46--the-safety-and-defect-sweep-of-m1)); stage-collection, bounded-run and setup-run
 refusals name absolute paths, and setup's store backstops name no remedy
-([B401](m1.md#b401)); the dry run's state-root inspection follows a
-symbolic-link ancestor the store refuses ([B402](m1.md#b402)); a setup action
+([B401](#x46--the-safety-and-defect-sweep-of-m1)); the dry run's state-root inspection follows a
+symbolic-link ancestor the store refuses ([B402](#x46--the-safety-and-defect-sweep-of-m1)); a setup action
 whose adapter failed before any native record stays unknown
 ([B403](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); a `contextStore` serving certificate is proved only
 after registration, and missing material names no Secret
 ([B404](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); the `metadata.name` grammar refusal names no object or
-remedy ([B405](m1.md#b405)); a managed service's name can outgrow its block
+remedy ([B405](#x46--the-safety-and-defect-sweep-of-m1)); a managed service's name can outgrow its block
 identity ([B406](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); overlapping managed prefixes on one host in one
 context are admitted ([B407](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); a mid-body media cancellation is
 misnamed, and one unreadable media entry hides the listing
@@ -2892,14 +2892,14 @@ and a remedy instead of blaming the host.
 **Constraints left behind:** [B270](m1.md#b270) keeps the proxy unit's stop
 ([B20](m1.md#b20), X24). A Machine and an InfraProvider of one name share a
 directory, and the Machine's destroy can remove the provider's pool
-([B420](m1.md#b420)); the 64-key reservation bound meets an unbounded
-attachment list ([B421](m1.md#b421)); the install profile still admits fields
-it ignores and repository IDs dnf refuses ([B422](m1.md#b422)); two Machine
-refusals keep the slogan remedy ([B423](m1.md#b423)); a zero-prefix default
-route spelled otherwise is refused ([B424](m1.md#b424)); a controller-stage
+([B420](#x46--the-safety-and-defect-sweep-of-m1)); the 64-key reservation bound meets an unbounded
+attachment list ([B421](#x46--the-safety-and-defect-sweep-of-m1)); the install profile still admits fields
+it ignores and repository IDs dnf refuses ([B422](#x46--the-safety-and-defect-sweep-of-m1)); two Machine
+refusals keep the slogan remedy ([B423](#x46--the-safety-and-defect-sweep-of-m1)); a zero-prefix default
+route spelled otherwise is refused ([B424](#x46--the-safety-and-defect-sweep-of-m1)); a controller-stage
 install or a canceled setup that failed before any native record is still
-`unknown` ([B425](m1.md#b425)); and the failed media row of a directory has no
-working remedy ([B426](m1.md#b426)). The installation request's SSH placement arm,
+`unknown` ([B425](#x46--the-safety-and-defect-sweep-of-m1)); and the failed media row of a directory has no
+working remedy ([B426](#x46--the-safety-and-defect-sweep-of-m1)). The installation request's SSH placement arm,
 whose material the role writes only on the controller, is unreachable since D82
 and is [B387](backlog.md#b387)'s removal. Under D116 those seven join M1 on X46; the rest,
 B427 to B434, were parked under D48.
@@ -2984,7 +2984,7 @@ not what its <verb> froze: <refusal>"), and the resolution log records an
 `unresolved` line. A drifted libvirt machine's apply resolution therefore names
 its first difference. The remedy for a drifted subject is to restore it to what
 its frozen request names; destroying cannot help, because a destroy over an
-unknown apply resolves its blocks with the apply's own check ([B440](m1.md#b440)).
+unknown apply resolves its blocks with the apply's own check ([B440](#x46--the-safety-and-defect-sweep-of-m1)).
 
 **Outcome, B359 and B378:** a destroy that replaces a failed removal records the
 removal it replaces in an optional `replaces` member, and `status` reads the
@@ -3045,7 +3045,7 @@ reviewers that did not write the diff, raised four findings: two confirmed in
 scope, none blocking, and fixed with a test that fails with the fix reverted
 (a bypass remedy that named `spec.install.proxy` on an Environment default, and
 a foreign-listener remedy that offered a DNSServer or an NTPServer a port
-validation pins), and two not confirmed, which are kept as [B436](m1.md#b436) and
+validation pins), and two not confirmed, which are kept as [B436](#x46--the-safety-and-defect-sweep-of-m1) and
 [B443](backlog.md#b443): a destroy after a failed apply may leave an
 unreachable unit listed failed, and the canonical-JSON fitness test misses a
 marshal-and-compare split across two functions. The second round changed no
@@ -3106,9 +3106,9 @@ run, which carries their real-host apply, destroy and no-failed-unit proofs; the
 other host observations are [B442](backlog.md#b442). The binding-proof port
 stays [B302](m1.md#b302)'s and the artifact server's `Unsupported`
 [B233](m1.md#b233)'s. Under D116 three follow-ups join M1 on X46: a destroy that
-refuses a content root with a `..` component ([B435](m1.md#b435)), the reset of
-a failed unit after a failed apply ([B436](m1.md#b436)) and three continuation
-edges ([B437](m1.md#b437)). Under D48 eight were parked: B438 to B445.
+refuses a content root with a `..` component ([B435](#x46--the-safety-and-defect-sweep-of-m1)), the reset of
+a failed unit after a failed apply ([B436](#x46--the-safety-and-defect-sweep-of-m1)) and three continuation
+edges ([B437](#x46--the-safety-and-defect-sweep-of-m1)). Under D48 eight were parked: B438 to B445.
 
 ### X45 — private installer delivery and the xFusion iBMC
 
@@ -3284,3 +3284,342 @@ the host observations ([B451](backlog.md#b451)) and the wording and tests
 400, joined [B319](m4.md#b319)'s definition; the libvirt identity path's FIPS
 key is [B346](backlog.md#b346); and the TLS half of [B334](backlog.md#b334)
 moved to B446 (D120).
+
+### X46 — the safety and defect sweep of M1
+
+**Owner:** State reconciliation, Controller, Workspace, Secrets, Trust, Desired
+state, Substrate, Managed OS and Infrastructure services. Integrated on local
+`main` on 2026-10-08 as one commit, the sweep slice before the closing run (D116),
+in the digest window X43, X24 and X45 opened. **Items:** B340, B342, B344, B347,
+B351, B357, B358, B360, B361, B370, B372, B373, B377, B398, B399, B400, B401,
+B402, B405, B420, B421, B422, B423, B424, B425, B426, B435, B436, B437, B440.
+**Decisions:** D56, D66, D73, D88, D89, D94, D116, D117, D118, D119, D123,
+D124. **In-tree gates passed, operator gate awaiting acceptance:**
+[B339](m1.md#b339), whose row stays on M1 with Delivery
+`awaiting operator acceptance`. **Partly delivered:** [B379](m1.md#b379) and
+[B380](m1.md#b380), which keep their rows with what remains.
+
+**Outcome, B357:** a confirmed trust write that takes over an endpoint,
+`machine trust` or a first use, also removes the record of a still-declared
+Machine that no longer uses the context's SSH trust: one reached locally,
+installed by Bootwright, declaring no SSH access or declaring a `knownHostsRef`,
+the controller Machine's included (D117, widening D65). The removal is a
+`remove` row in the plan the write presents, counted and shown before the
+prompt, written only by the confirmed or `--yes` write and never by a dry run or
+a declined prompt. Neither path reads a lifecycle record, so it holds in every
+lifecycle state with no input edit. The input-edit and controller-binding
+remedies and the CLI spec sentence that promised a compiling input are gone.
+
+**Outcome, B347:** a `machine trust` plan that cannot be written refuses
+`trust.identity`, naming the context and the repeat with `--context`, and an
+unconfigured presenter is `runtime.internal`, in place of an error with no
+diagnostic that ended as an unsupported result.
+
+**Outcome, B344:** admission refuses a generated certificate's common name that
+is empty, not UTF-8, holds NUL or exceeds the part byte limit, exactly as
+generation does. The check is one helper, and generation now enforces the byte
+limit too.
+
+**Outcome, B361:** the uninitialized-store refusals of store access, lending,
+binding reopen and produced material name `bootwright secret encryption init
+--context <ctx>`, and the orphaned-store refusal names its context. The retired
+file-source remedy names `--context <context>`, filled with the context
+`validate` read (`--context`, or the selected one), while `validate -f` keeps
+the placeholder (D66). The secret commands, `context init` and `context update`
+still print the placeholder ([B453](m1.md#b453)).
+
+**Outcome, B372:** a file-input `secret set` replacement, `secret delete` and
+`secret encryption rotate` confirm before the lease (D118, applying D73). A
+shared read records the current version, or for a rotation the active key, the
+prompt holds no store lock and no context lease, and under the lease the command
+refuses with `secret.store.conflict` and writes nothing when that version or key
+changed meanwhile. A delete of a name with no current version asks nothing and
+takes no lease; `--yes` keeps the single-transaction path. An unanswered prompt
+no longer makes every other Bootwright command on the host refuse as busy. The
+concurrency test is rewritten and the secrets spec says so.
+
+**Outcome, B373:** an elevated `secret set` with `--value-stdin` or
+`--password-stdin` refuses `secret.input`, naming the Secret, before sudo starts
+the child and before any input is read, when the listing the supervisor already
+reads (`sudo -n -ll`) sets `log_input` or `log_stdin` as an explicit,
+non-negated option in the matching Defaults, in a Runas, host, user or
+command-specific Defaults line with several members or a member that carries
+arguments, or in a rule's Options. It is a refusal, not a warning, because a
+warning cannot protect piped input and JSON keeps standard error empty; the
+remedy, a file flag or running as root, always works. A listing that cannot be
+read without a password proves nothing and the command proceeds, which the
+secrets spec and the operator guide state and [B458](m1.md#b458) closes. The
+sudo argument vector, the child's environment and D73's acquisition order do not
+change.
+
+**Outcome, B339 (in-tree):** the elevated child exits at once with status 130 on
+its own second SIGINT or SIGTERM only where, at that signal, it proves it is the
+foreground process group of a pseudo-terminal other than its supervisor's
+terminal, as sudo's `use_pty` leaves an interactive invocation. Without that
+proof it never escalates, and the supervisor's second signal kills sudo as
+before. Unit tests prove each clause. The exit evidence, a real-sudo run on
+Fedora 43 and RHEL 9.8 in which a second Ctrl-C ends the command at once and a
+single one never does, is D59's closing run's, and the exit skips the child's
+deferred cleanup, so the run also confirms the operator's terminal is left sane.
+
+**Outcome, B377:** a fresh destroy proves its host under the shared lock before
+its plan is presented and again under the exclusive lock before it resolves,
+probes or registers: setup completed on this host, this host is the controller
+state's own, and a binding recorded for the context names it. A context with no
+recorded binding is admitted once the host is proved, so the unbound
+continuation's remedy names a destroy that runs.
+
+**Outcome, B437:** a continuation or a resolution re-proves its input,
+automation, closure, setup and host binding before its plan is presented, so no
+plan is printed for a continuation that then refuses. An apply over an
+incomplete removal names that removal's continuation only where its proof admits
+it, and otherwise the exit the proof's refusal names, followed by that refusal.
+`status` offers `bootwright setup` in place of every step that runs a block or
+registers while setup is incomplete or the receipt holds no execution definition.
+
+**Outcome, B440:** a fresh destroy resolves each unproved block of the apply it
+supersedes through the removal's own check, which proves the object is this
+context's and can be taken back, so a machine that drifted from its frozen
+request is removed with its ownership proved instead of waiting for a hand
+restore (D119). The resolution first runs the block's apply observation (D123):
+one that proves the operation completed records the block done and captures what
+it produced into custody, as a completed apply's finalization does, before any
+inverse runs, and anything less falls back to the removal's check. Before a
+destroy runs the inverse of a block whose removal deletes the installer's work
+area, and only when custody holds no entry for that cluster, the media
+capability's read-only observation hands the installer's kept administrator
+kubeconfig over, and the engine publishes it in one publication under the entry
+a completed capture uses, marked unproved (D124). A failed read, hand-over or
+publication records the removal attempt failed before its inverse runs, so the
+copy stays in the work area, in custody or in both, whatever the nodes' power
+state. `cluster kubeconfig` exports an unproved copy with one `access.unproved`
+warning on standard error, and the entry leaves custody as any entry does. The
+journeys drive the real agent-installation capability through an adapter double:
+a completed installation whose publication failed is captured before its
+removal, a part-way one captures nothing, and a completed one with its nodes off
+is kept unproved before the work area goes, both when the destroy completes and
+when it stops after the removal.
+
+**Outcome, B340:** a bounded run never planned, `machine start`, `stop` and
+`restart` and the power read of `machine list --power-status`, refuses a
+template delimiter or a key ansible-core reserves before anything is confirmed,
+lent or bound, naming the Machine and ending with the exact command to repeat.
+The plan's refusal text is unchanged. The tests put the delimiter in
+`controller.credentialsRef`, since a Machine's BMC endpoint and placement user
+cannot hold one.
+
+**Outcome, B370:** `machine list --power-status` reports one check per placement
+host under Checks, running with the role's groups as sub-steps, then `ok` with
+"N of M machines read" or its settlement.
+
+**Outcome, B425:** an adapter run that published its preparation and fails or is
+canceled before Go delivered an acknowledgement authorizing an effect is
+recorded failed, for setup's own run and for a controller-stage client
+installation alike; a recovery and an uncertain acknowledgement delivery stay
+unknown, and a canceled setup's receipt records its failed action.
+
+**Outcome, B379 (part):** an execution-foundation failure says "Restore the
+qualified host execution foundation, then repeat this command", and names
+`bootwright apply --stage controller --context <c>` for an apply's controller
+stage only; a destroy keeps its own retry. The controller record's uncertain
+publication, which an apply reaches while it publishes its client areas and a
+context deletion reaches while it drops the context's claims, still names
+setup's retry and stays on [B379](m1.md#b379).
+
+**Outcome, B380 (part):** the unknown-outcome remedies of the controller stage
+and of the controller clients name the exact apply with every token its frozen
+plan consumes. An unobserved block's `status` remedy is the command that
+observes it before anything else starts, an unresolved block's diagnostic ends
+with the exact repeat, and a removal resolving an apply names the destroy. The
+pre-boot refusals, the agent installer's tool lookup and the sites listed on
+[B380](m1.md#b380) remain.
+
+**Outcome, B398:** an elevated selection refusal keeps its remedy: the helper's
+response carries the remediation when message and remediation are each one
+bounded printable line, so the unsafe-marker and unsafe-directory repairs
+survive sudo. The helper protocol is never persisted and has no version.
+
+**Outcome, B399:** the `context delete` row names `status` as the inventory of
+abandoned objects (D88), and a lost context's plan says its keyring is already
+gone with its directory instead of promising to remove it.
+
+**Outcome, B400:** an evidence file the store refuses as unsafe, for its mode,
+owner, type, links or size, refuses `context update`, both deletions, `status`,
+`apply` and `destroy` naming the context, the store-relative entry and the exit,
+which is to remove that entry beneath the state root and run `context delete
+--purge --allow-orphans`, or restore the store (D89). `--allow-orphans` does not
+waive the refusal, and the deletion never removes an entry it cannot verify as
+its own.
+
+**Outcome, B401:** refusals of abandoned-stage collection, the bounded-run
+listing and creation and a controller setup-run entry name the entry relative
+to the state root. Setup's store backstops at the bundle bound, the retained
+resolution bound and the retained dependency source bound refuse with
+`controller.conflict`, name the bound and carry a remedy. No bound changed.
+
+**Outcome, B402:** `setup --dry-run` judges the state root as the store opens
+it, walking every ancestor without following links, so a root behind a
+symbolic-link ancestor is reported not ready with the store's own refusal.
+
+**Outcome, B426:** a failed `media list` row whose entry is a directory or
+another non-regular file is removed by the `media delete` command its row names:
+the store unlinks it without following, retries an empty directory with
+`AT_REMOVEDIR`, and refuses a directory that still holds entries, naming it and
+the remedy; nothing inside a directory is removed.
+
+**Outcome, B351:** the input reader opens every ancestor, directory source and
+descendant directory with `O_DIRECTORY`, falling back to a path handle only on
+`ENOTDIR`, so a browse-mode autofs directory is mounted before a lookup beneath
+it. Enumeration reads directory entries through `getdents` and never stats with
+this process's credentials; an entry of unknown type is classified by opening it
+through the session's opener, so a denial names who was denied, and any other
+enumeration error names its errno and a remedy.
+
+**Outcome, B358:** the compiler records which identities failed decoding. Add-on
+profile and binding checks that name an undecodable profile, add-on or input
+target add nothing, configuration and capability checks run only on a complete
+expansion, and a Machine whose provider does not resolve gets no host-key or BMC
+credential refusal. Every add-on refusal names a next step.
+
+**Outcome, B360:** a parser-stage YAML error counts its line from 0 and a
+scanner error from 1, and the syntax diagnostic adds one to the parser-stage
+line, so a directive on line 1 names line 1 and the remedy says "at or below
+that line". Scanner errors are unchanged.
+
+**Outcome, B405:** an invalid `metadata.name` refusal names its kind and
+document and states the DNS-label grammar to follow.
+
+**Outcome, B423:** every Machine invariant, reference and type refusal requires
+a remedy, and the slogan "make the Machine declaration consistent with its
+referenced resources" is gone from all 75 sites. An Anaconda Machine with no
+network that sets `installAddressRef` is refused once, by the static-install
+rule.
+
+**Outcome, B342:** the libvirt network and domain templates escape the bridge
+in its XML attribute, so a value holding a quote, angle bracket or ampersand
+stays one attribute value; the existing goldens are byte-identical, and a
+collection test renders both templates with a hostile name and parses the
+result. The request-template test's libvirt bridge case still skips by design,
+because bridge admission refuses its value first; its evidence is
+`TestAPlannedBridgeHoldingATemplateDelimiterRefusesBeforeRegistration` in the
+libvirt substrate package, which refuses a bridge holding a template delimiter
+at planning for the provider host and the Machine request before registration.
+
+**Outcome, B420:** admission refuses a libvirt InfraProvider whose name a Machine
+realized on a libvirt provider also takes, and selection keeps the refusal
+before registration for state that bypassed admission, so the Machine's
+recursive destroy can no longer delete the provider's pool directory. The layout
+and request shapes are unchanged.
+
+**Outcome, B421:** admission refuses a libvirt provider with more than 20 managed
+attachments, naming the bound and `spec.networkAttachments`, and selection keeps
+the refusal, in place of the opaque reservation error a 64-key reservation gave.
+
+**Outcome, B422:** `customizations.hostname.source`,
+`customizations.storage.rootDevice.source` and `customizations.packages.environment`
+leave the install profile, because the Kickstart never read them (D94), so the
+closed schema refuses each as an unknown field. A configured or mirror
+repository ID is 1 to 239 ASCII letters, digits, `-`, `_`, `.` or `:` and neither
+`.` nor `..`, what dnf accepts, at admission and in the renderer's guard;
+subscription repository IDs keep the Kickstart-token rule. The sibling
+environment template still emits the removed fields; its migration, which the
+owner approved on 2026-10-07, is owed in the sibling repository ([B465](m1.md#b465)) before D59's
+closing run.
+
+**Outcome, B424:** one reading of a zero-prefix IPv4 destination, any spelling,
+serves the gateway and the installation's carried-route check, so a default
+route spelled `192.0.2.0/0` is carried as `0.0.0.0/0` is.
+
+**Outcome, B435:** the managed-service and artifact-server roles refuse a content
+root that is not in normal form, exactly seven components with none empty, `.` or
+`..`, in the frozen-request assert that runs before any effect, for the managed
+apply and destroy and the artifact apply and destroy, so no removal can reach
+the context's directory. The tests plant a root per entry point, among them a
+context of `lab/nested` that only the depth condition refuses, and see no removal
+run.
+
+**Outcome, B436:** both destroys read the unit's state after the daemon reload and
+reset one that systemd still lists failed, ignoring a unit that is not loaded and
+counting the reset as a change, and the unit-state proof reports a definition-less
+unit systemd still lists failed as failed, so a removal that leaves it listed is
+an unfinished removal the next destroy converges. The lab-rhel README's claim that
+a destroy leaves none holds. A service an earlier build destroyed that left its
+unit listed failed is not revisited: reset it by hand.
+
+**Review:** ten sub-items in six lanes integrated without a conflict. The first
+gate run stopped on one citation, on M1's page, of a test the lanes renamed; a
+repoint fixed it. The slice review, by reviewers that did not write the diff,
+raised nine findings, six confirmed in scope and three not confirmed: a
+scanner-stage YAML error on the first line that B360 leaves unchanged, now
+[B456](m1.md#b456); a commit-message wording; and a plan preview that the
+state-reconciliation spec deliberately leaves unproved. Of the six, an input-logging
+option hidden in a multi-member and then in an argument-carrying `Defaults`
+line, and a controller-stage entry refusal that named no stage command, were
+fixed over three rounds; the first fix of the second wrapped a destroy's refusal
+too, which the check caught and the next round corrected, each with a test that
+fails without it. The stdin refusal that never fires while the sudo listing needs
+a password got its condition stated in the operator guide and became
+[B458](m1.md#b458); the sibling template and B342's skipping case were recorded; and
+the loss of the only kubeconfig under D119 led the owner to D123. A review of D123
+found that the capture needs the cluster API, which the destroy's own `Stop first`
+path powers off, and the owner decided D124. A review of D124 found a log record
+that claimed a copy no one had published and spec statements the unproved mark
+falsified, both fixed; its check found no gap. In all, twelve findings, nine
+confirmed in scope.
+
+**Gates:** at the integration head after the last fix round, `make check-offline
+tidy-check modules-check vulncheck docs-check race` passed, and so did the four
+`./scripts/ansible-check` suites (units 240 passed, sanity, integration and
+lint with no failures or warnings), `./scripts/check-commits` and `git diff
+--check`. The review-fix and decision rounds re-ran them on each head. On the squashed commit the same `make` targets passed (all modules
+verified, no vulnerabilities found, the race results of unchanged packages
+cached from the integration head), and so did the four suites (units 264 and 240
+passed across its runs, sanity, integration and lint with no failure or warning
+in 314 files), `make docs-check` after the last wording edit,
+`./scripts/check-commits` and `git diff --check`.
+No real-host run: the real-sudo run of B339, the autofs and root-squash reads of
+B351 and the keep task of D124 are unrun.
+
+**Digest effects:** the fourth slice to move them, in X43's window. The automation
+digest moves, and every plan digest with it, through B342's two templates, B435
+and B436's roles and module utilities and the media role's keep task. No request version or
+record version moves; the refusal texts this record names change, and so do the
+goldens that show them. The keyring index's produced entries gain an optional
+`unproved` member, written only when true, so a store holding none is
+byte-identical; an executable built before X46 refuses a store holding an
+unproved entry, so a context that holds one is destroyed with the build that
+wrote it. **Before a build that contains X46 touches a host, destroy every live
+context with the build that applied it, then run `setup` once, keeping the host
+under its bundle bound with `--purge-old-bundles`;** one destroy and setup serve
+X43, X24, X45 and X46. An input a context stores that holds a removed profile
+field, a Machine and a libvirt provider of one name, more than 20 managed
+attachments, a repository ID dnf refuses, a refused common name or an unsafe
+bridge plans again once `context update` imports corrected input.
+
+**Operator-visible effects:** the refusals this record names carry their context,
+entry or exact command. A trust takeover shows and writes the removal of an
+unread record, a prompt on a secret no longer blocks other commands, a stdin
+secret under a logging sudo policy is refused before it is read, a destroy over
+a drifted or unproved installation is removed instead of waiting, and a
+completed installation's kubeconfig survives a destroy whose publication failed,
+exported with an `access.unproved` warning. `machine list --power-status` shows
+progress. Input over automounted and root-squashed mounts names its cause.
+
+**Constraints left behind:** [B339](m1.md#b339) completes on an owner-accepted
+ledger row of D59's closing run; [B379](m1.md#b379) and [B380](m1.md#b380) keep
+what each section lists. B342's evidence is the package test above, not the
+named case. Under D116 eight follow-ups joined M1 on X46: the secret and
+context commands that keep a placeholder ([B453](m1.md#b453)), a stored trust file
+pinning one endpoint to two keys ([B454](m1.md#b454)), the deletion walk's and a
+linked root's bare refusals ([B455](m1.md#b455)), the first-line YAML scanner
+error ([B456](m1.md#b456)), the Machine and Environment refusals still without a step
+([B457](m1.md#b457)), the stdin secret under a sudo listing that needs a password
+([B458](m1.md#b458)) and a managed service's endpoint count
+([B459](m1.md#b459)) and the sibling template's removed fields
+([B465](m1.md#b465)). Under D48 five were parked: the resolution record's check
+([B460](backlog.md#b460)), the infrastructure roles' shared helpers
+([B461](backlog.md#b461)), the keep task's rehearsal ([B462](backlog.md#b462)), the
+host observations ([B463](backlog.md#b463)) and the wording, tests and dead code
+([B464](backlog.md#b464)). Already tracked: the enrollment test double and the
+status of a setup receipt with no execution definition are
+[B368](backlog.md#b368) and [B375](backlog.md#b375).

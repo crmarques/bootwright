@@ -543,7 +543,7 @@ func TestControllerAdmissionAcceptsOnlyWellFormedSetupRuns(t *testing.T) {
 			store, _ := intendedControllerFixture(t)
 			lay(t, store)
 			err := store.ReadController(context.Background(), "", func(prerequisites.StorageView) error { return nil })
-			if reported := diagnostics.Of(err); len(reported) != 1 || !strings.Contains(reported[0].Message, "controller setup run entry is not this store's own: "+runsPath(store)) {
+			if reported := diagnostics.Of(err); len(reported) != 1 || !strings.Contains(reported[0].Message, "controller setup run entry is not this store's own: controller/runs") {
 				t.Fatalf("admission of %s = %v %#v", name, err, reported)
 			}
 			if _, err := keepRun(store, "next\n"); err == nil {

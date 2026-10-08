@@ -4,7 +4,6 @@ package contextfs
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -94,7 +93,7 @@ func (s *Store) collectStage(ctx context.Context, dir *directory, name string, s
 		return false, err
 	}
 	if err := unlinkVerified(dir, name, stat, false); err != nil {
-		return false, state("abandoned publication stage could not be removed: " + filepath.Join(dir.path, name))
+		return false, state("abandoned publication stage could not be removed: " + storeEntry(dir, name))
 	}
 	return true, nil
 }

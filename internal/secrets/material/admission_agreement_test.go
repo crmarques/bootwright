@@ -10,7 +10,7 @@ import (
 
 // Admission cannot import this package, so it repeats what generation refuses.
 // Over every class of value either side treats specially, admission refuses a
-// generated username or comment exactly when generation would.
+// generated username, common name or comment exactly when generation would.
 func TestAdmissionAgreesWithGenerationOnGeneratedParameters(t *testing.T) {
 	values := []string{
 		"admin", "bootwright-machine-key", "operator key", "a\x00b", "a\rb", "a\nb", "a:b", "a b", " a", "a ",
@@ -25,6 +25,14 @@ func TestAdmissionAgreesWithGenerationOnGeneratedParameters(t *testing.T) {
 		generationErr = validateGeneratedSSHComment(value)
 		if refused := admissionRefuses(t, "sshKeyPair", "comment", value); refused != (generationErr != nil) {
 			t.Errorf("comment %.16q: admission refused=%t, generation error=%v", value, refused, generationErr)
+		}
+	}
+	for _, value := range append(values, "") {
+		generationErr := validGeneratedCommonName(value)
+		for _, kind := range []string{"tlsCertificate", "caBundle"} {
+			if refused := admissionRefuses(t, kind, "commonName", value); refused != (generationErr != nil) {
+				t.Errorf("%s commonName %.16q: admission refused=%t, generation error=%v", kind, value, refused, generationErr)
+			}
 		}
 	}
 }

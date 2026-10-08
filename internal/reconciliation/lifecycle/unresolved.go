@@ -20,12 +20,14 @@ var unexplained = Unresolved{
 	Remedy: "restore the target it ran against so an observation can read it",
 }
 
-// unobserved is what an unproved block says before any resolution observed
+// unobservedBy is what an unproved block says before any resolution observed
 // it: an attempt whose outcome was lost, or whose executor died, is observed
-// by the next invocation of either verb before anything else starts.
-var unobserved = Unresolved{
-	Reason: "its attempt's outcome was not recorded and no observation has read it yet",
-	Remedy: "repeat the verb, which observes it before anything else starts",
+// by command, the next invocation of its verb, before anything else starts.
+func unobservedBy(command string) Unresolved {
+	return Unresolved{
+		Reason: "its attempt's outcome was not recorded and no observation has read it yet",
+		Remedy: "run " + command + ", which observes it before anything else starts",
+	}
 }
 
 // explain says why one block's observation proved nothing, from the evidence
@@ -67,9 +69,10 @@ func PlacedOn(placement machineref.Placement) string {
 // not what the verb froze, named by the check that decided. For an apply that
 // is the realized target's first difference from the frozen request; for a
 // removal, what keeps the target from reading as this context's own. Either
-// way the remedy is to restore it: a removal that supersedes an apply resolves
-// the apply's block by the apply's own reading, so it refuses the same way. A
-// refusal without a diagnostic explains nothing.
+// way the remedy is to restore it. A removal that supersedes an apply resolves
+// the apply's block by the removal's own reading (D119), so a target that has
+// drifted from the apply's request but still reads as this context's own is
+// removed rather than refused. A refusal without a diagnostic explains nothing.
 func Drifted(verb reconciliation.Verb, subject, host string, refused error) (Unresolved, bool) {
 	reported := diagnostics.Of(refused)
 	if len(reported) == 0 || reported[0].Message == "" || subject == "" || host == "" {
@@ -85,31 +88,32 @@ func Drifted(verb reconciliation.Verb, subject, host string, refused error) (Unr
 
 // unresolvedFailure is the diagnostic of one effect an observation left
 // unknown. It names the block, why it stayed unknown and what the operator
-// does before repeating the verb, which then observes it again.
-func unresolvedFailure(block string, unresolved Unresolved) error {
+// does before repeating command, the exact command that observes it again.
+func unresolvedFailure(block string, unresolved Unresolved, command string) error {
 	return failure("lifecycle.unknown",
 		"the outcome of "+block+" is still unknown: "+unresolved.Reason,
-		unresolved.Remedy+", then repeat the operation to observe it again")
+		unresolved.Remedy+", then repeat "+command+" to observe it again")
 }
 
 // unresolvedOf reads why one unproved block of an operation is still unknown:
 // what the last resolution of its last attempt recorded, when one observed it,
 // read for the verb the operation froze. Each resolution supersedes the one
-// before it, so that record is the one that left the block unknown.
-func (s Service) unresolvedOf(ctx context.Context, store OperationStore, operation operationstore.Operation, block reconciliation.Block) (Unresolved, error) {
+// before it, so that record is the one that left the block unknown. A block
+// no resolution observed names command, which observes it.
+func (s Service) unresolvedOf(ctx context.Context, store OperationStore, operation operationstore.Operation, block reconciliation.Block, command string) (Unresolved, error) {
 	record, err := store.Block(ctx, operation.ID, block.ID)
 	if err != nil {
 		return Unresolved{}, err
 	}
 	if record.Attempts < 1 {
-		return unobserved, nil
+		return unobservedBy(command), nil
 	}
 	resolution, resolved, err := store.LastResolution(ctx, operation.ID, block.ID, record.Attempts)
 	if err != nil {
 		return Unresolved{}, err
 	}
 	if !resolved || resolution.Phase != "observed" {
-		return unobserved, nil
+		return unobservedBy(command), nil
 	}
 	if failed := resolution.Failure; failed != nil {
 		remedy := failed.Remediation
@@ -118,7 +122,13 @@ func (s Service) unresolvedOf(ctx context.Context, store OperationStore, operati
 		}
 		return Unresolved{Reason: "its observation could not run: " + failed.Message, Remedy: remedy}, nil
 	}
-	return s.explain(operation.Verb, block, resolution.Evidence), nil
+	explained := s.explain(operation.Verb, block, resolution.Evidence)
+	// A fresh removal resolves an apply's block by its own check, so what it
+	// recorded may be read only by the removal's reading of the same evidence.
+	if explained == unexplained && operation.Verb == reconciliation.Apply {
+		explained = s.explain(reconciliation.Destroy, block, resolution.Evidence)
+	}
+	return explained, nil
 }
 
 // observationFailure is what a resolution records of an observation that could
@@ -153,8 +163,9 @@ func bounded(text string) string {
 }
 
 // explainUnproved names, for each block of a result that is unknown or still
-// running, why its outcome is unproved.
-func (s Service) explainUnproved(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, blocks []BlockResult) error {
+// running, why its outcome is unproved, and command, the exact command that
+// observes a block no resolution has.
+func (s Service) explainUnproved(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, blocks []BlockResult, command string) error {
 	for index := range blocks {
 		if !unproved(reconciliation.BlockState(blocks[index].State)) {
 			continue
@@ -163,7 +174,7 @@ func (s Service) explainUnproved(ctx context.Context, store OperationStore, oper
 		if !ok {
 			continue
 		}
-		unresolved, err := s.unresolvedOf(ctx, store, operation, block)
+		unresolved, err := s.unresolvedOf(ctx, store, operation, block, command)
 		if err != nil {
 			return err
 		}

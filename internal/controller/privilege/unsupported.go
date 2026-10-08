@@ -23,3 +23,7 @@ func Begin(ctx context.Context) (context.Context, func()) { return context.WithC
 func ExitCode(_ context.Context, fallback int) int { return fallback }
 
 func SupervisedChild() bool { return false }
+
+func ForegroundOfOwnTerminal() bool { return false }
+
+func Escalated(context.Context) <-chan struct{} { return nil }

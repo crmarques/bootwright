@@ -121,6 +121,7 @@ type SecretBinder interface {
 	Release(context.Context, custody.BindingRequest) (bool, error)
 	Bindings(context.Context, custody.BindingsRequest) ([]string, error)
 	Produce(context.Context, secretstore.Context, secretstore.Area, custody.ProduceRequest) ([]secretstore.Produced, error)
+	Holds(ctx context.Context, selected secretstore.Context, area secretstore.Area, block, name string) (bool, error)
 	Withdraw(context.Context, secretstore.Context, secretstore.Area) (bool, error)
 }
 
@@ -169,6 +170,25 @@ type Capability interface {
 	// never completed: it reports no-effect, so the removal repeats and proves
 	// its own postcondition.
 	ObserveRemoval(context.Context, Execution) (Observation, error)
+}
+
+// Keeper is the optional half of a capability whose removal deletes a copy of
+// produced material another block's custody entry would hold, such as the
+// administrator kubeconfig an installation keeps in the work area its media
+// block's removal deletes. Keeps names that entry for one frozen block, and
+// Keep reads the copy, read-only, and hands it over, or nothing when there is
+// none. Before that removal runs, the engine moves the copy into custody,
+// marked unproved, whenever custody holds no such entry (D124).
+type Keeper interface {
+	Keeps(reconciliation.Block) (KeptEntry, bool, error)
+	Keep(context.Context, Execution) ([]Produced, error)
+}
+
+// KeptEntry is the custody entry a kept copy enters: the block that captures
+// it when its effect is proved, and the output's name.
+type KeptEntry struct {
+	Block string
+	Name  string
 }
 
 // QuiescenceProber is the optional half of a capability whose quiescence is
@@ -401,14 +421,20 @@ type Execution struct {
 	// the runner records it against the adapter's job, so a job it holds
 	// refuses only that context's next run. It is never part of what the
 	// block froze.
-	Context    string
-	Attempt    int
-	Resolution int
-	Block      reconciliation.Block
-	Launch     prerequisites.PythonLaunch
-	Bundle     prerequisites.BundleLocation
-	Area       prerequisites.BundleArea
-	Material   map[string]secrets.Material
+	Context string
+	// Continuation is the exact command that continues this apply, bound to
+	// its context and carrying every token its frozen plan consumes; empty
+	// for a destroy, a resolution and a probe, whose next command depends on
+	// what the whole run settles. It is never part of what the block froze,
+	// and nothing persists it.
+	Continuation string
+	Attempt      int
+	Resolution   int
+	Block        reconciliation.Block
+	Launch       prerequisites.PythonLaunch
+	Bundle       prerequisites.BundleLocation
+	Area         prerequisites.BundleArea
+	Material     map[string]secrets.Material
 	// Proved is what each block this apply attempt's block depends on durably
 	// proved in this operation, read from the record that settled it, its
 	// last attempt or that attempt's last resolution, and handed over unread.

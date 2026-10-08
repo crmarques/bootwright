@@ -6,7 +6,6 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
-	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -24,6 +23,7 @@ func installAccess(cluster string) (string, string) {
 
 type producedReader struct{ binder *custody.Service }
 
-func (r producedReader) ReadProduced(ctx context.Context, contextName, block, name string) (secrets.Material, bool, error) {
-	return r.binder.ReadProduced(ctx, custody.ReadProducedRequest{ContextName: contextName, Block: block, Name: name})
+func (r producedReader) ReadProduced(ctx context.Context, contextName, block, name string) (containeraccess.Custodied, bool, error) {
+	read, found, err := r.binder.ReadProduced(ctx, custody.ReadProducedRequest{ContextName: contextName, Block: block, Name: name})
+	return containeraccess.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
 }

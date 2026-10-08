@@ -30,7 +30,7 @@ const retiredRemedy = "destroy this context's effects with the Bootwright build 
 type producedCustody interface {
 	Produce(context.Context, secretstore.Context, secretstore.Area, custody.ProduceRequest) ([]secretstore.Produced, error)
 	Withdraw(context.Context, secretstore.Context, secretstore.Area) (bool, error)
-	ReadProduced(context.Context, custody.ReadProducedRequest) (secrets.Material, bool, error)
+	ReadProduced(context.Context, custody.ReadProducedRequest) (secretstore.ProducedMaterial, bool, error)
 }
 
 func composedCustody(t *testing.T, services cli.Services) producedCustody {
@@ -79,10 +79,11 @@ func withdrawThroughLentArea(t *testing.T, services cli.Services, repository *co
 
 func readProduced(t *testing.T, services cli.Services, contextName, block, name string) (string, bool) {
 	t.Helper()
-	material, found, err := composedCustody(t, services).ReadProduced(context.Background(), custody.ReadProducedRequest{ContextName: contextName, Block: block, Name: name})
+	read, found, err := composedCustody(t, services).ReadProduced(context.Background(), custody.ReadProducedRequest{ContextName: contextName, Block: block, Name: name})
 	if err != nil {
 		t.Fatal(err)
 	}
+	material := read.Material
 	defer material.Clear()
 	value, _ := material.Part(secrets.ValuePart)
 	defer clear(value)

@@ -235,7 +235,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	for index := range blocks {
 		blocks[index].Attempts = attempts[blocks[index].ID]
 	}
-	if err := s.explainUnproved(ctx, store, operation, plan, blocks); err != nil {
+	if err := s.explainUnproved(ctx, store, operation, plan, blocks, continuationCommand(view.Identity().Name, operation, plan, states)); err != nil {
 		return nil, err
 	}
 	summary := &LifecycleSummary{
@@ -324,9 +324,33 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 		steps = append(steps, s.continuation(view, operation, frozen, states, next)...)
 	}
 	if operation.Verb == reconciliation.Apply && len(contradicted) == 0 {
-		steps = append(steps, contextCommand(view.Identity().Name, string(reconciliation.Destroy)))
+		// The removal proves the host's setup before it resolves or registers
+		// anything, so setup takes its place while setup gates it.
+		removal := contextCommand(view.Identity().Name, string(reconciliation.Destroy))
+		if setupGates(view.Controller()) {
+			removal = setupStep
+		}
+		if !slices.Contains(steps, removal) {
+			steps = append(steps, removal)
+		}
 	}
 	return steps, nil
+}
+
+// setupStep is the step status offers in place of every verb the retained
+// controller setup refuses. Setup is context-free, so it names no context.
+const setupStep = "bootwright setup"
+
+// setupGates reports whether the retained controller setup refuses every
+// transition that runs a block or registers: setup has not completed on this
+// host, or its receipt holds no execution definition, which every effect and
+// every registration runs in (executionClosure).
+func setupGates(controller prerequisites.StorageView) bool {
+	if !setupComplete(controller) {
+		return true
+	}
+	definition := controller.State.Receipt.Definition
+	return definition == nil || definition.Bootstrap == nil
 }
 
 // continuation is the command that takes an incomplete operation on. A
@@ -338,18 +362,26 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 // names and that status may run: the deletion over a removal, while the
 // removal that supersedes an apply is offered beside it anyway. Status probes
 // no host, so a binding recorded for another host is the continuation's own
-// refusal. A finalization runs no block and a replacement is a fresh removal,
-// and neither is held to that re-proof.
+// refusal. A finalization runs no block and is held to nothing here. A
+// replacement is a fresh removal, which is not held to that re-proof but
+// proves the host's setup like every transition that registers, so setup
+// takes its place while setup gates it.
 func (s Service) continuation(view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string) []string {
 	command := continuationCommand(view.Identity().Name, operation, frozen, states)
-	if next == string(reconciliation.Destroy) || !pendingRemains(frozen, states) {
+	if !pendingRemains(frozen, states) {
+		return []string{command}
+	}
+	if next == string(reconciliation.Destroy) {
+		if setupGates(view.Controller()) {
+			return []string{setupStep}
+		}
 		return []string{command}
 	}
 	if err := s.recordedRefusal(view, operation); err != nil {
 		return refusalExit(view, err)
 	}
-	if !setupComplete(view.Controller()) {
-		return []string{"bootwright setup"}
+	if setupGates(view.Controller()) {
+		return []string{setupStep}
 	}
 	if !slices.ContainsFunc(view.Controller().State.Bindings, func(item prerequisites.ControllerBinding) bool {
 		return item.Context == view.Identity().Name

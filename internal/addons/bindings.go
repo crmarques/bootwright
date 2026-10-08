@@ -17,12 +17,16 @@ func ExpandBinding(binding api.Object, c api.Catalog) ([]api.Object, []api.Issue
 }
 
 func expandSelection(owner api.Object, c api.Catalog) ([]api.Object, []api.Issue) {
-	return expandIndexed(owner, uniqueObjects(c.OfKind(api.ClusterAddonProfile)), uniqueObjects(c.OfKind(api.ClusterAddon)))
+	selected, issues, _ := expandIndexed(owner, c, uniqueObjects(c.OfKind(api.ClusterAddonProfile)), uniqueObjects(c.OfKind(api.ClusterAddon)))
+	return selected, issues
 }
 
-func expandIndexed(owner api.Object, profiles, definitions map[string]api.Object) ([]api.Object, []api.Issue) {
+// expandIndexed reports whether the expansion is complete. A name of a
+// document that failed decoding leaves it incomplete with no refusal of its
+// own, because that document's diagnostics are the only ones.
+func expandIndexed(owner api.Object, c api.Catalog, profiles, definitions map[string]api.Object) ([]api.Object, []api.Issue, bool) {
 	if owner.Spec().Get("profileRefs").Len()+owner.Spec().Get("addonRefs").Len() == 0 {
-		return nil, []api.Issue{addonIssue("api.invariant", "spec", "At least one profile or direct add-on must be selected.")}
+		return nil, []api.Issue{addonIssue("api.invariant", "spec", "At least one profile or direct add-on must be selected.", "add a profile to spec.profileRefs or an add-on to spec.addonRefs")}, false
 	}
 	type frame struct {
 		object api.Object
@@ -36,16 +40,18 @@ func expandIndexed(owner api.Object, profiles, definitions map[string]api.Object
 	}
 	result := []api.Object{}
 	issues := []api.Issue{}
+	complete := true
 	for len(stack) != 0 {
 		if len(issues) >= maxIssues {
-			return result, issues[:maxIssues]
+			return result, issues[:maxIssues], false
 		}
 		current := &stack[len(stack)-1]
 		if current.next < len(current.refs) {
 			name := current.refs[current.next]
 			current.next++
 			if active[name] {
-				issues = append(issues, addonIssue("api.invariant", "spec.profileRefs", "Add-on profile expansion contains a cycle."))
+				complete = false
+				issues = append(issues, addonIssue("api.invariant", "spec.profileRefs", "Add-on profile expansion contains a cycle.", "remove the profile reference that leads back to a profile already being expanded"))
 				continue
 			}
 			if done[name] {
@@ -53,7 +59,11 @@ func expandIndexed(owner api.Object, profiles, definitions map[string]api.Object
 			}
 			profile, found := profiles[name]
 			if !found {
-				issues = append(issues, addonIssue("api.reference", "spec.profileRefs", "A selected add-on profile does not resolve uniquely."))
+				complete = false
+				if c.Undecodable(api.ClusterAddonProfile, name) {
+					continue
+				}
+				issues = append(issues, addonIssue("api.reference", "spec.profileRefs", "A selected add-on profile does not resolve uniquely.", "declare each profile named in spec.profileRefs, and in the profiles it expands, exactly once as a ClusterAddonProfile, or remove the name"))
 				continue
 			}
 			active[name] = true
@@ -62,7 +72,7 @@ func expandIndexed(owner api.Object, profiles, definitions map[string]api.Object
 		}
 		for _, name := range current.object.Spec().Get("addonRefs").Strings() {
 			if len(issues) >= maxIssues {
-				return result, issues[:maxIssues]
+				return result, issues[:maxIssues], false
 			}
 			if seen[name] {
 				continue
@@ -70,8 +80,11 @@ func expandIndexed(owner api.Object, profiles, definitions map[string]api.Object
 			seen[name] = true
 			if addon, found := definitions[name]; found {
 				result = append(result, addon)
-			} else {
-				issues = append(issues, addonIssue("api.reference", "spec.addonRefs", "A selected add-on does not resolve uniquely."))
+				continue
+			}
+			complete = false
+			if !c.Undecodable(api.ClusterAddon, name) {
+				issues = append(issues, addonIssue("api.reference", "spec.addonRefs", "A selected add-on does not resolve uniquely.", "declare each add-on named in spec.addonRefs, and in the profiles this selection expands, exactly once as a ClusterAddon, or remove the name"))
 			}
 		}
 		if current.object.Kind() == api.ClusterAddonProfile {
@@ -80,7 +93,7 @@ func expandIndexed(owner api.Object, profiles, definitions map[string]api.Object
 		}
 		stack = stack[:len(stack)-1]
 	}
-	return result, issues
+	return result, issues, complete
 }
 
 func uniqueObjects(objects []api.Object) map[string]api.Object {
@@ -100,7 +113,7 @@ func uniqueObjects(objects []api.Object) map[string]api.Object {
 
 func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 	profiles, definitions := uniqueObjects(c.OfKind(api.ClusterAddonProfile)), uniqueObjects(c.OfKind(api.ClusterAddon))
-	selected, issues := expandIndexed(binding, profiles, definitions)
+	selected, issues, complete := expandIndexed(binding, c, profiles, definitions)
 	selectedByName := uniqueObjects(selected)
 	configs := binding.Spec().Get("addonConfigs")
 	configsByName := uniqueNamedValues(configs, "addonRef")
@@ -108,8 +121,8 @@ func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 		if len(issues) >= maxIssues {
 			return issues[:maxIssues]
 		}
-		if _, found := selectedByName[config.Get("addonRef").Text()]; !found {
-			issues = append(issues, addonIssue("api.reference", indexed("spec.addonConfigs", i)+".addonRef", "Add-on configuration must name an expanded selection; it cannot select an add-on."))
+		if _, found := selectedByName[config.Get("addonRef").Text()]; complete && !found {
+			issues = append(issues, addonIssue("api.reference", indexed("spec.addonConfigs", i)+".addonRef", "Add-on configuration must name an expanded selection; it cannot select an add-on.", "select the add-on through spec.addonRefs or a profile, or remove this spec.addonConfigs entry"))
 		}
 	}
 	for _, addon := range selected {
@@ -124,7 +137,7 @@ func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 			supplied, present := inputsByName[accepted.Get("name").Text()]
 			if !present {
 				if !accepted.Has("required") || accepted.Get("required").Bool() {
-					issues = append(issues, addonIssue("api.required", "spec.addonConfigs", "Every required add-on input must be supplied exactly once."))
+					issues = append(issues, addonIssue("api.required", "spec.addonConfigs", "Every required add-on input must be supplied exactly once.", "supply each required input of the selected add-on once in its spec.addonConfigs entry"))
 				}
 				continue
 			}
@@ -132,9 +145,13 @@ func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 			if accepted.Has("secretType") {
 				kind = api.Secret
 			}
-			target, found := c.Find(kind, supplied.Get("value").Text())
+			value := supplied.Get("value").Text()
+			target, found := c.Find(kind, value)
+			if !found && c.Undecodable(kind, value) {
+				continue
+			}
 			if !found || kind == api.Secret && target.Spec().Get("type").Text() != accepted.Get("secretType").Text() {
-				issues = append(issues, addonIssue("api.reference", "spec.addonConfigs", "A supplied add-on input does not resolve to its declared resource or Secret type."))
+				issues = append(issues, addonIssue("api.reference", "spec.addonConfigs", "A supplied add-on input does not resolve to its declared resource or Secret type.", "set the input's value to the name of a declared object of the input's resourceKind, or of a Secret of its secretType"))
 			}
 		}
 		for _, supplied := range inputs.Items() {
@@ -142,12 +159,13 @@ func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 				return issues[:maxIssues]
 			}
 			if _, declared := acceptedByName[supplied.Get("name").Text()]; !declared {
-				issues = append(issues, addonIssue("api.field", "spec.addonConfigs", "A supplied input is not declared by the selected add-on."))
+				issues = append(issues, addonIssue("api.field", "spec.addonConfigs", "A supplied input is not declared by the selected add-on.", "remove the input, or use an input name the add-on declares in its spec.inputs"))
 			}
 		}
 	}
 	clusterSelected := slices.Clone(selected)
 	clusterSeen := uniqueObjects(selected)
+	clusterComplete := complete
 	for _, other := range c.OfKind(api.ClusterAddonBinding) {
 		if len(issues) >= maxIssues {
 			return issues[:maxIssues]
@@ -156,7 +174,8 @@ func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 			continue
 		}
 		// Each other binding reports its own selection diagnostics.
-		expanded, _ := expandIndexed(other, profiles, definitions)
+		expanded, _, otherComplete := expandIndexed(other, c, profiles, definitions)
+		clusterComplete = clusterComplete && otherComplete
 		duplicate := false
 		for _, addon := range expanded {
 			if _, found := selectedByName[addon.Name()]; found {
@@ -168,10 +187,12 @@ func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 		if duplicate {
-			issues = append(issues, addonIssue("api.duplicate", "spec.clusterRef", "An add-on can be bound to a cluster only once after profile expansion."))
+			issues = append(issues, addonIssue("api.duplicate", "spec.clusterRef", "An add-on can be bound to a cluster only once after profile expansion.", "bind each add-on to the cluster through one ClusterAddonBinding only"))
 		}
 	}
-	issues = append(issues, validateCapabilities(clusterSelected)...)
+	if clusterComplete {
+		issues = append(issues, validateCapabilities(clusterSelected)...)
+	}
 	return boundedIssues(issues)
 }
 
@@ -198,7 +219,7 @@ func validateCapabilities(selected []api.Object) []api.Issue {
 				}
 			}
 			if !found {
-				issues = append(issues, addonIssue("api.reference", "spec", "A required capability must be provided by another selected add-on."))
+				issues = append(issues, addonIssue("api.reference", "spec", "A required capability must be provided by another selected add-on.", "select an add-on that provides the required capability, or remove the add-on that requires it"))
 			}
 		}
 		for provider := range dependencies {
@@ -221,7 +242,7 @@ func validateCapabilities(selected []api.Object) []api.Issue {
 		}
 	}
 	if len(queue) != len(selected) {
-		issues = append(issues, addonIssue("api.invariant", "spec", "Selected add-on capability requirements form a cycle."))
+		issues = append(issues, addonIssue("api.invariant", "spec", "Selected add-on capability requirements form a cycle.", "remove a requires entry from one of the selected add-ons to break the cycle"))
 	}
 	return boundedIssues(issues)
 }
@@ -235,7 +256,7 @@ func StorageAttachments(c api.Catalog) []Attachment {
 	profiles, definitions := uniqueObjects(c.OfKind(api.ClusterAddonProfile)), uniqueObjects(c.OfKind(api.ClusterAddon))
 	for _, binding := range c.OfKind(api.ClusterAddonBinding) {
 		// Validation owns selection diagnostics; this projection grants no effects.
-		selected, _ := expandIndexed(binding, profiles, definitions)
+		selected, _, _ := expandIndexed(binding, c, profiles, definitions)
 		configsByName := uniqueNamedValues(binding.Spec().Get("addonConfigs"), "addonRef")
 		for _, addon := range selected {
 			if !slices.Contains(addon.Spec().Get("provides").Strings(), "dataFoundation") {

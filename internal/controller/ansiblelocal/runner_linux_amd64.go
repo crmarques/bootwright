@@ -200,6 +200,11 @@ type protocolRun struct {
 	preparation              *prerequisites.NativePreparation
 	continuations            int
 	native, nativeAuthorized bool
+	// effectRequested marks a record judged for an acknowledgement that lets
+	// the adapter perform an effect: a native record's, which starts its
+	// transaction, or a continue record's, which installs a tool. It is set
+	// before the write; effectAuthorized marks that write delivered.
+	effectRequested, effectAuthorized bool
 }
 
 // Spare reports that only an authorized native transaction may outlive
@@ -290,13 +295,19 @@ func (run *protocolRun) Judge(ctx context.Context, record adapterprotocol.Record
 		valid = false
 	}
 	verdict.Valid = valid
+	if valid && !exited && (record.Phase == "native" || record.Phase == "continue") {
+		run.effectRequested = true
+	}
 	return verdict
 }
 
-// Acknowledged records what a delivered acknowledgement authorizes: only a
-// native record's, which lets the adapter start its transaction. One whose
-// delivery failed authorizes nothing.
+// Acknowledged records what a delivered acknowledgement authorizes: a native
+// record's lets the adapter start its transaction, and a continue record's
+// lets it install a tool.
 func (run *protocolRun) Acknowledged(record adapterprotocol.Record) {
+	if record.Phase == "native" || record.Phase == "continue" {
+		run.effectAuthorized = true
+	}
 	if record.Phase == "native" {
 		run.nativeAuthorized = true
 		run.report("installing " + countNoun(nativeChanges(run.request), "native package"))
@@ -343,6 +354,9 @@ func (run *protocolRun) outcome(ctx context.Context, ending adapterprotocol.Endi
 	case adapterprotocol.NotStarted:
 		return run.result, failure("controller.setup", "the qualified Ansible process could not start")
 	case adapterprotocol.Canceled:
+		if run.unauthorized(ending.Kind) {
+			return actionResult("failed", true), ctx.Err()
+		}
 		return actionResult("unknown", run.published), ctx.Err()
 	case adapterprotocol.Completed:
 		return prerequisites.ActionResult{Outcome: ending.Outcome, Evidence: slices.Clone(ending.Evidence)}, nil
@@ -363,11 +377,11 @@ func (run *protocolRun) outcome(ctx context.Context, ending adapterprotocol.Endi
 	default:
 		err = failure("controller.unknown", "the Ansible operation has no complete result")
 	}
-	// Setup's own run that failed before Go acknowledged a native record
-	// authorized nothing: the adapter cannot start its transaction before
-	// that acknowledgement, so the preparation it published records a
-	// failure the next setup replaces.
-	if run.published && !run.nativeAuthorized && ownSetup(run.request) {
+	// A run that failed before Go delivered any acknowledgement authorizing
+	// an effect performed none: the adapter waits for that acknowledgement
+	// before a native transaction or a tool installation, so the preparation
+	// it published records a failure the next run replaces.
+	if run.unauthorized(ending.Kind) {
 		return actionResult("failed", true), err
 	}
 	if run.published {
@@ -376,11 +390,16 @@ func (run *protocolRun) outcome(ctx context.Context, ending adapterprotocol.Endi
 	return run.result, err
 }
 
-// ownSetup is setup's own run: it publishes into the bundle it executes and
-// carries no tools. A recovery is recover, and a client installation passes a
-// separate area.
-func ownSetup(request capabilityRequest) bool {
-	return request.Operation == "setup" && len(request.Tools) == 0 && request.PublicationBundle == request.Bundle
+// unauthorized is a run that published its preparation and was never
+// delivered an acknowledgement of a record authorizing an effect. Only EPIPE
+// proves such an acknowledgement undelivered; any other failed write ends the
+// session Uncertain, which a cancellation reported first hides, so under
+// either ending a requested one may have reached the adapter. A recovery
+// starts already prepared and verifies an earlier transaction, so it is never
+// one.
+func (run *protocolRun) unauthorized(ending adapterprotocol.Kind) bool {
+	uncertain := run.effectRequested && (ending == adapterprotocol.Uncertain || ending == adapterprotocol.Canceled)
+	return run.published && !run.effectAuthorized && !uncertain && run.request.Operation != "recover"
 }
 
 func countNoun(count int, noun string) string {

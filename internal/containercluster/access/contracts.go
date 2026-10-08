@@ -18,5 +18,13 @@ type EffectiveState interface {
 // custody, keyed by that block and the output's name. An entry that does not
 // exist reports false and no material.
 type ProducedReader interface {
-	ReadProduced(ctx context.Context, contextName, block, name string) (secrets.Material, bool, error)
+	ReadProduced(ctx context.Context, contextName, block, name string) (Custodied, bool, error)
+}
+
+// Custodied is one custody entry's material and whether its access was never
+// proved: a copy a removal kept from an installation whose completion no
+// observation proved (D124). Material is bounded memory the caller clears.
+type Custodied struct {
+	Material secrets.Material
+	Unproved bool
 }

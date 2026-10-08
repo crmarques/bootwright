@@ -102,18 +102,19 @@ func command(words []string) ([]string, error) {
 }
 
 // declaredTrust is what the selected context declares about the Machine a
-// trust record names: whether it still declares it, which is what makes its
-// record its own rather than stale, and why it no longer uses that record.
+// trust record names: whether it still uses this context's trust, declared
+// and not exempt, which is what makes its record its own rather than stale,
+// and why a declared Machine no longer uses that record.
 type declaredTrust struct {
-	declared func(string) bool
-	exempt   func(string) string
+	uses   func(string) bool
+	exempt func(string) string
 }
 
 func declaredMachines(catalog api.Catalog) declaredTrust {
 	return declaredTrust{
-		declared: func(name string) bool {
-			_, found := catalog.Find(api.Machine, name)
-			return found
+		uses: func(name string) bool {
+			object, found := catalog.Find(api.Machine, name)
+			return found && machine.TrustExemption(object) == ""
 		},
 		exempt: func(name string) string {
 			if object, found := catalog.Find(api.Machine, name); found {

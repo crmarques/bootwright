@@ -111,7 +111,7 @@ func TestCompilerRefusesTheRetiredFileSourceWithItsRemedy(t *testing.T) {
 				t.Fatalf("a file source compiled: %#v %#v %v", state, report, err)
 			}
 			found := diagnostics.Of(err)
-			want := "declare source: {contextStore: {}} and run bootwright secret set --name material " + test.flags
+			want := "declare source: {contextStore: {}} and run bootwright secret set --name material --context <context> " + test.flags
 			if len(found) != 1 {
 				t.Fatalf("diagnostics = %#v", found)
 			}

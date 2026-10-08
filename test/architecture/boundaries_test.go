@@ -439,7 +439,7 @@ func effectGrants() map[string][]string {
 		"internal/cli": {"fmt.Fprintf", "fmt.Fprintln", "github.com/spf13/cobra", "github.com/spf13/pflag", "io"},
 		// The input adapter reads through the handles it holds and names no
 		// other os member.
-		readOnlyInput:                           {"io", "os.DirEntry", "os.File", "os.NewFile", "syscall"},
+		readOnlyInput:                           {"io", "os.File", "os.NewFile", "syscall"},
 		"internal/desiredstate/yamlstream":      {"io"},
 		"internal/workspace/contextfs":          {"crypto/rand", "io", "os", "syscall", "unsafe"},
 		"internal/workspace/selectionfs":        {"crypto/rand", "io", "os", "os/exec", "syscall"},

@@ -464,7 +464,7 @@ func TestTheCollectorLeavesWhatItCannotProve(t *testing.T) {
 		if substitute == nil {
 			t.Fatal("the lease never reached the stage's removal")
 		}
-		expectRefusal(t, err, "abandoned publication stage could not be removed: "+path)
+		expectRefusal(t, err, "abandoned publication stage could not be removed: contexts/example/state/"+plantedStageName(1, ".json"))
 		if kept, err := os.Lstat(path); err != nil || !os.SameFile(substitute, kept) {
 			t.Fatalf("the refused lease removed the substituted stage (%v)", err)
 		}

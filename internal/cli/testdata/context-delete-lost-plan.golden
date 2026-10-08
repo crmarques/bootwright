@@ -1,0 +1,7 @@
+Context deletion plan
+
+  Name             retired
+  Input revisions  selected rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
+  Keyring          already gone with its directory
+  Reservations     unit:retired
+  Owned objects    cannot be listed: its directory is gone

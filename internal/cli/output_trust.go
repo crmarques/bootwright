@@ -6,6 +6,7 @@ import (
 	"io"
 	"strconv"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 )
 
@@ -56,7 +57,7 @@ func (p *TrustPlanPresenter) PresentTrustPlan(ctx context.Context, report enroll
 		return err
 	}
 	if p == nil || p.out == nil {
-		return &trustOutputFailure{}
+		return diagnostics.NewFailure("runtime.internal", "host-key trust plan presentation is not configured", "")
 	}
 	var text display
 	text.headline("", "Host-key trust plan for context "+report.Context+": "+trustChecked(&report)+
@@ -67,14 +68,12 @@ func (p *TrustPlanPresenter) PresentTrustPlan(ctx context.Context, report enroll
 		return err
 	}
 	if err := text.writeTo(p.out); err != nil {
-		return &trustOutputFailure{}
+		return diagnostics.NewFailureWithRemediation("trust.identity",
+			"the host-key trust plan for context "+report.Context+" could not be written to standard output, so nothing was asked and nothing was recorded", "",
+			"make standard output writable, then repeat bootwright machine trust --context "+report.Context+" with the same Machines")
 	}
 	return nil
 }
-
-type trustOutputFailure struct{}
-
-func (*trustOutputFailure) Error() string { return "host-key trust plan output failed" }
 
 func writeTrustTable(text *display, hosts []enrollment.HostReport) {
 	rows := make([][]string, 0, len(hosts))
@@ -102,7 +101,7 @@ func trustHeadline(report *enrollment.Report) string {
 }
 
 // trustChecked counts the selected Machines alone: a removal names the record
-// of a Machine the context no longer declares, which nothing checked.
+// of a Machine that no longer uses this context's trust, which nothing checked.
 func trustChecked(report *enrollment.Report) string {
 	checked := 0
 	for _, host := range report.Hosts {

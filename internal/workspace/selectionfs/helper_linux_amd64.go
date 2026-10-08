@@ -25,33 +25,43 @@ type helperRequest struct {
 }
 
 type helperResponse struct {
-	Selection contexts.Selection `json:"selection"`
-	Failed    bool               `json:"failed"`
-	Message   string             `json:"message,omitempty"`
+	Selection   contexts.Selection `json:"selection"`
+	Failed      bool               `json:"failed"`
+	Message     string             `json:"message,omitempty"`
+	Remediation string             `json:"remediation,omitempty"`
 }
 
 const unclassifiedRefusal = "selection could not be accessed under its owning account"
+
+// boundedText admits a short printable line, the only text the helper's
+// response may carry into a diagnostic.
+func boundedText(text string) bool {
+	if text == "" || len(text) > 200 {
+		return false
+	}
+	for _, r := range text {
+		if r < ' ' || r > '~' {
+			return false
+		}
+	}
+	return true
+}
 
 // The helper is this same verified executable under the selection account, so
 // its bounded state message is the accurate diagnosis of a refusal. Anything
 // else reaching this decoder is reported as an unclassified refusal.
 func refusal(message string) string {
-	if message == "" || len(message) > 200 {
+	if !boundedText(message) {
 		return unclassifiedRefusal
-	}
-	for _, r := range message {
-		if r < ' ' || r > '~' {
-			return unclassifiedRefusal
-		}
 	}
 	return message
 }
 
-func refusalMessage(err error) string {
+func refusalOf(err error) (string, string) {
 	if reported := diagnostics.Of(err); len(reported) == 1 {
-		return reported[0].Message
+		return reported[0].Message, reported[0].Remediation
 	}
-	return unclassifiedRefusal
+	return unclassifiedRefusal, ""
 }
 
 func (s *Store) perform(ctx context.Context, action string, selection contexts.Selection) (contexts.Selection, error) {
@@ -81,12 +91,23 @@ func (s *Store) perform(ctx context.Context, action string, selection contexts.S
 		}
 		return contexts.Selection{}, state("selection account helper failed")
 	}
+	return decodeHelperResponse(output.data, output.overflow)
+}
+
+// decodeHelperResponse reads the helper's answer. A refusal keeps the
+// account's own bounded diagnosis and its repair; an unclassified refusal
+// never carries a repair.
+func decodeHelperResponse(data []byte, overflow bool) (contexts.Selection, error) {
 	var response helperResponse
-	if output.overflow || json.Unmarshal(output.data, &response) != nil {
+	if overflow || json.Unmarshal(data, &response) != nil {
 		return contexts.Selection{}, state("selection account helper returned no usable response")
 	}
 	if response.Failed {
-		return contexts.Selection{}, state(refusal(response.Message))
+		message := refusal(response.Message)
+		if message != unclassifiedRefusal && boundedText(response.Remediation) {
+			return contexts.Selection{}, contexts.StateErrorWithRemediation(message, response.Remediation)
+		}
+		return contexts.Selection{}, state(message)
 	}
 	return response.Selection, nil
 }
@@ -151,7 +172,7 @@ func ServeHelper(ctx context.Context, args []string, input io.Reader, output io.
 	selection, err := New(request.Account).local(ctx, request.Action, request.Selection)
 	response := helperResponse{Selection: selection, Failed: err != nil}
 	if err != nil {
-		response.Message = refusalMessage(err)
+		response.Message, response.Remediation = refusalOf(err)
 	}
 	if json.NewEncoder(output).Encode(response) != nil {
 		return true, 1

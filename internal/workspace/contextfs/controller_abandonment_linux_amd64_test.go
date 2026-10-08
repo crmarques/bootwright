@@ -234,7 +234,7 @@ func TestAnInterruptedAbandonmentAtTheBoundCompletesOnTheNextPurge(t *testing.T)
 			t.Fatalf("%s the store holds %#v", when, view.Areas)
 		}
 		if step.canceled && len(view.Areas) == maxControllerBundles {
-			expectState(t, setUpAfresh(t, store, fresh, false))
+			expectSetupBound(t, setUpAfresh(t, store, fresh, false))
 			canceledAs(t, store, stranded, when+" and a setup without the flag")
 		}
 	}

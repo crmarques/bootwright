@@ -81,13 +81,15 @@ type StoreSession interface {
 	Release(context.Context, string) (bool, error)
 	Rotate(context.Context) (string, error)
 	// Produce keeps one block's outputs in one publication. An output whose
-	// bytes equal its entry's changes nothing; different bytes replace the
-	// entry's version, and the block's entries of other names stay.
+	// bytes equal its entry's changes nothing but a proved capture's clearing
+	// of the entry's unproved mark; different bytes replace the entry's
+	// version, and the block's entries of other names stay. An unproved
+	// output never replaces an entry that exists.
 	Produce(ctx context.Context, block string, outputs []ProducedInput) ([]Produced, error)
 	// Withdraw removes every produced entry in one publication, and reports
 	// false without publishing when there is none.
 	Withdraw(context.Context) (bool, error)
-	ReadProduced(ctx context.Context, block, name string) (secrets.Material, bool, error)
+	ReadProduced(ctx context.Context, block, name string) (ProducedMaterial, bool, error)
 	Close() error
 }
 

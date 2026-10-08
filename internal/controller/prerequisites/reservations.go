@@ -9,6 +9,10 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
+// MaxReservationKeys is the most keys one host reservation holds, as the
+// controller record stores them (specs/contexts/controller-record.md, Bounds).
+const MaxReservationKeys = 64
+
 // Conflict is one exclusive key another context holds and the key of this
 // context's claim it conflicts with.
 type Conflict struct {

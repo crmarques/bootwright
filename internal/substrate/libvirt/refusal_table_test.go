@@ -11,6 +11,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // refusalSpec owns this capability's refusal table, read from this package's
@@ -46,6 +47,10 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			map[string]string{"<provider>": "InfraProvider/vc", "<machine>": "Machine/node-01"}},
 		"An emulated BMC no endpoint can name": {catalogOf(controller(), wildcard), "InfraProvider/lab-libvirt",
 			map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
+		"A Machine sharing its libvirt provider's name": {catalogOf(controller(), provider(), networkConfig(), guest("lab-libvirt")), "InfraProvider/lab-libvirt",
+			map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<machine>": "Machine/lab-libvirt"}},
+		"A provider with more managed attachments than its reservation holds": {catalogOf(controller(), provider(managedAttachments(substrate.MaxManagedAttachments+1))),
+			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
 	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]

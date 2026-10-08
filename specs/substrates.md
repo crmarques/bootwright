@@ -67,6 +67,8 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` or `kubevirt` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal or libvirt provider` |
 | A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
 | An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulationDefaults.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulationDefaults.bindAddress on <provider> to one unicast host address` |
+| A Machine sharing its libvirt provider's name | a libvirt provider whose name a Machine on a libvirt provider also takes | `<machine> shares this provider's name, and its disk directory, which its destroy removes with everything in it, would hold this provider's virtual-media pool` | `rename <provider> or <machine>, with every reference to the one renamed` |
+| A provider with more managed attachments than its reservation holds | a libvirt provider with more than 20 `networkAttachments[]` entries of `management: managed` | `a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool, within the 64 keys one reservation holds, so it declares at most 20 managed attachments` | `declare at most 20 attachments with management: managed in spec.networkAttachments of <provider>, or make the others external` |
 
 ## Provider host realization
 
@@ -102,7 +104,8 @@ answer refuses before anything is defined.
 
 **Managed networks.** Each `networkAttachments[]` entry whose libvirt arm
 declares `management: managed` becomes one persistent libvirt network named
-`bootwright-<context>-<attachment>`, owning the declared `bridge`, carrying the
+`bootwright-<context>-<attachment>`, owning the declared `bridge`, which the
+definition writes as an XML-escaped attribute value, carrying the
 declared host address and prefix, forwarding as `forward` selects, with the
 built-in resolver and DHCP disabled so a managed `DNSServer` may bind the
 bridge address, placed in the host firewall's trusted zone so its guests reach
@@ -166,7 +169,11 @@ bridge name is host-global; `prefix:<masked prefix>` for every managed
 attachment, because the host routes its prefix to that bridge;
 `libvirt-network:<name>` for every managed network; `libvirt-pool:<name>` for
 the pool and `path:` for its directory
-(`TestHostReservationsClaimEveryManagedNetworkAndThePool`).
+(`TestHostReservationsClaimEveryManagedNetworkAndThePool`). A provider therefore
+declares at most 20 managed attachments, within the 64 keys one reservation
+holds ([controller record](contexts/controller-record.md#bounds)), and
+admission refuses more, naming the bound and `spec.networkAttachments`
+(`TestTheManagedAttachmentBoundKeepsTheHostReservationWithinItsKeys`).
 
 **Evidence.** Completion requires the hypervisor present by package name, every
 driver daemon active and enabled to start with the host, the `uri` answering,
@@ -237,7 +244,13 @@ as `qcow2` images beneath
 `/var/lib/libvirt/images/bootwright/<context>/<machine>/`, one interface per
 effective attachment with a deterministic locally administered MAC, an
 emulated TPM 2.0 when the profile declares `tpm`, a serial console, and
-ownership metadata naming the context and Machine. Each disk is presented on
+ownership metadata naming the context and Machine. Admission refuses a libvirt
+provider whose name a Machine on a libvirt provider of the context also takes,
+because that Machine's disk directory
+`/var/lib/libvirt/images/bootwright/<context>/<machine>/` is the parent of the
+pool directory `<context>/<provider>/vmedia` and the Machine's destroy removes
+its disk directory with what it holds; selection keeps the refusal
+([refusal table](#refusal-table)). Each disk is presented on
 the virtio bus, the root disk as `vda` and the data disks as `vdb` through
 `vdh` in declared order, and carries no WWN, SCSI address or serial number for a
 [root-device hint](api/machines.md#bmc-and-root-device-shape) to match. Each
@@ -246,8 +259,9 @@ same derived address the realized target reports, so a consumer that must
 declare this Machine's hardware to an installer names exactly what the domain
 presents. An interface attaches to the
 libvirt network a managed attachment defines, and to the bridge alone for an
-external one, so the hypervisor holds the dependency on a network this context
-owns and refuses to start a Machine whose network is down rather than starting
+external one, which the definition writes as an XML-escaped attribute value,
+so the hypervisor holds the dependency on a network this context owns and
+refuses to start a Machine whose network is down rather than starting
 it unreachable. Admission refuses a non-provided Machine whose composed network
 configuration presents no available ethernet interface, which would leave its
 domain without one

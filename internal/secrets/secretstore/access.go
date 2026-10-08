@@ -6,6 +6,8 @@ import (
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 type Access struct {
@@ -61,7 +63,7 @@ func (a *Access) Mutate(ctx context.Context, selected Context, callback func(Sto
 			return err
 		}
 		if !exists {
-			return Failure("store.uninitialized", "run secret encryption init to initialize the configured store")
+			return Uninitialized(selected.Name)
 		}
 		return a.open(ctx, selected, area, selector, true, callback)
 	})
@@ -225,7 +227,8 @@ func ReadSelector(ctx context.Context, area Area, contextName string) (Selector,
 		return Selector{}, false, err
 	}
 	if len(entries) != 0 {
-		return Selector{}, false, Failure("store.corrupt", "nonempty secret store has no metadata; run secret encryption init for recovery")
+		return Selector{}, false, diagnostics.NewFailureWithRemediation("secret.store.corrupt",
+			"the nonempty secret store of context "+contextName+" has no metadata", "", secrets.Command(contextName, "encryption init")+" recovers it")
 	}
 	return Selector{}, false, nil
 }

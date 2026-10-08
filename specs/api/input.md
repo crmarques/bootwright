@@ -41,6 +41,15 @@ source refuses with `input.not-found`; an unreadable, wrong-type, or symlink
 source is an input error. An empty source universe reaches graph validation and
 fails because it has no `Environment`.
 
+Discovery opens every directory it walks, each ancestor of a source, a
+directory source and each descendant directory, as a directory, so an
+automounted directory is mounted before anything beneath it is looked up. An
+entry whose type the filesystem does not report is classified by opening it
+through the invoking account's opener, never with the process's own
+credentials. A directory that cannot be enumerated names its cause: a
+permission denial names who was denied, as a read does, and any other failure
+names the error and the remedy.
+
 ## Environment selection
 
 Discovery establishes the input universe. The selecting `Environment` then
@@ -158,8 +167,11 @@ directive; a `%YAML 1.2` directive is rejected. Bootwright applies the
 directive-free and accepted-directive streams.
 
 A syntax failure names the parser's reason and line, and is reported
-separately from invalid UTF-8, which names the line and column of the first
-invalid byte. An `input.limit` message names its resource and inclusive
+separately from invalid UTF-8. The line is the authored 1-based line where the
+parser locates the failure: for a parser-stage failure, the start of its
+enclosing block when the parser names one, otherwise the offending token. A
+reason the parser does not locate, such as an alias naming no anchor, names no
+line. Invalid UTF-8 names the line and column of the first invalid byte. An `input.limit` message names its resource and inclusive
 ceiling. Syntax failure metadata is bounded to one record per acquired file.
 Apply the returned-diagnostic ceiling after resource selection; syntax errors
 from excluded files do not consume that allowance. Structural limits remain

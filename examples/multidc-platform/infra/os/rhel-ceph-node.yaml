@@ -37,12 +37,7 @@ spec:
     ssh:
       passwordAuthentication: false
 
-    storage:
-      rootDevice:
-        source: machineRootDeviceHints
-
     packages:
-      environment: minimal
       installWeakDeps: false
       excludeDocs: true
       install:

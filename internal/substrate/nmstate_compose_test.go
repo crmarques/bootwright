@@ -197,3 +197,16 @@ func TestTheDefaultGatewayIsTheFirstNonAbsentIPv4DefaultRouteWithAnIPv4NextHop(t
 		})
 	}
 }
+
+// The default route of an install and the gateway composed for it read a
+// destination one way: any IPv4 CIDR with a zero prefix length.
+func TestADefaultRouteIPv4IsAnyZeroPrefixIPv4Destination(t *testing.T) {
+	for destination, want := range map[string]bool{
+		"0.0.0.0/0": true, "192.0.2.0/0": true, "10.1.2.3/0": true,
+		"::/0": false, "0.0.0.0/1": false, "198.51.100.0/24": false, "garbage": false, "": false,
+	} {
+		if got := DefaultRouteIPv4(destination); got != want {
+			t.Errorf("DefaultRouteIPv4(%q) = %v, want %v", destination, got, want)
+		}
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
@@ -28,6 +29,8 @@ type Invocation struct {
 	// Session marks a command whose exit status is an SSH session's, which
 	// is the remote command's once the child ran.
 	Session bool
+	// SecretStdin names the Secret a secret set reads from standard input.
+	SecretStdin string
 }
 
 // Elevator relaunches one invocation as root through the qualified sudo and
@@ -64,7 +67,7 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 	// Without a terminal sudo cannot prompt, so its refusal text carries no
 	// operator action until the child proves it started.
 	errorStream := newStartFilter(invocation.Error, invocation.JSON, noninteractive)
-	options := SudoOptions{Executable: executable, Sudo: sudo, Executor: e.Executor, Delay: e.Delay, NonInteractive: noninteractive, Quiet: invocation.JSON, Assignments: RouteAssignments(invocation.Route), Input: invocation.Input, Output: output, Error: errorStream}
+	options := SudoOptions{Executable: executable, Sudo: sudo, Executor: e.Executor, Delay: e.Delay, NonInteractive: noninteractive, Quiet: invocation.JSON, Assignments: RouteAssignments(invocation.Route), SecretStdin: invocation.SecretStdin, Input: invocation.Input, Output: output, Error: errorStream}
 	if !noninteractive {
 		// Sudo relays the terminal only while the child inherits it on stdin
 		// and stdout; behind a pipe it parks the child in the background of a
@@ -81,6 +84,10 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 	}
 	code, err := NewSupervisor(options).Run(ctx, invocation.Arguments)
 	errorStream.Close()
+	var logged *InputLogged
+	if errors.As(err, &logged) {
+		return inputLoggedRefusal(logged)
+	}
 	outcome := conclude(elevationRun{
 		json: invocation.JSON, interactive: !noninteractive, failed: err != nil,
 		interrupted: ExitCode(ctx, 0) != 0, code: code, wrote: output.bytes != 0,
@@ -167,6 +174,18 @@ func concludeSession(run elevationRun, stderr *startFilter) Outcome {
 		return refusal
 	}
 	return Outcome{ExitCode: 255}
+}
+
+// inputLoggedRefusal reports, before anything was read, that sudo would log
+// a Secret's standard input; a file flag or a root invocation logs nothing.
+func inputLoggedRefusal(logged *InputLogged) Outcome {
+	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "secret.input",
+		Message:     "this host's sudo policy sets " + logged.Option + ", so sudo's I/O log would record the value of Secret " + logged.Secret + " read from standard input; nothing was read",
+		Remediation: "repeat the command with --value-file <path> or --password-file <path> in place of the standard-input flag, or run it as root, where sudo logs nothing"}
+	if api.ValidLexical("name", logged.Secret) {
+		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: logged.Secret}
+	}
+	return Outcome{ExitCode: 1, Diagnostic: &diagnostic}
 }
 
 func interruption() Outcome {

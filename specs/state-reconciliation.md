@@ -493,7 +493,9 @@ running its effect.
 A typed failure proves nothing about the target, so its effect stays `unknown`,
 yet its block is `failed` rather than `unknown`: the retry that follows
 [converges](#converging-an-effect) whatever the attempt left. An attempt never
-records `no-effect` or `partial`; only a resolution does.
+records `no-effect` or `partial`; only a resolution does. A canceled attempt
+stays `unknown` even when its adapter proves it performed no effect, because
+the next verb's resolution reads it read-only.
 
 ### Resolution outcomes
 
@@ -514,8 +516,7 @@ keeps by design proves nothing against it. An observation that cannot tell the
 removal's postcondition from a target it could not read never proves
 completion: its capability reads it as no effect, and the retry that follows
 proves its own absence, since a removal over an absent target completes (see
-[attempts and unknown outcomes](#attempts-and-unknown-outcomes)). A fresh
-`destroy` observes the incomplete apply's blocks as that apply's.
+[attempts and unknown outcomes](#attempts-and-unknown-outcomes)).
 
 | Observation proves | Effect state | Block |
 | --- | --- | --- |
@@ -526,7 +527,39 @@ proves its own absence, since a removal over an absent target completes (see
 
 The operation then takes the state its blocks give it under
 [precedence](#operation-state-precedence), and a block resolved `failed` is
-retried by a new attempt, which converges it.
+retried by a new attempt, which converges it. The diagnostic of a block a
+resolution leaves `unknown`, and the `unresolved` remedy `status` names for a
+block no resolution observed, end with the exact command that observes it
+again: the operation's continuation, or the fresh `destroy` that resolves an
+apply's blocks, with `--context` and every `--authorize` token its plan
+consumes.
+
+A fresh `destroy` resolves each unproved block of the incomplete apply it
+supersedes first with that block's apply observation, the capability's
+read-only `Observe` (D123). One that proves the operation completed records
+the block `done` and captures the material it produced into
+[custody](#produced-material-custody) exactly as a completed apply's
+finalization does, such as an agent installation's administrator kubeconfig,
+before any inverse runs. Any other block it resolves with the removal's own
+check, through the removal block that takes it back and keeps its identity,
+implementation, content digest and frozen request, rather than with the
+apply's exactness check (D119). That resolution proves that the object is this
+context's own and can be taken back, or that it is absent, and never that the
+apply's frozen request is realized, so a target that drifted from that request
+yet reads as this context's own is removed rather than refused. It is recorded
+against the apply's block, as a positive absence of effect for an absent
+target and a positive partial realization for an owned one, both `failed` for
+the removal to take back, and it never proves the block `done`, so it captures
+nothing. A target neither observation resolves stays `unknown`, and the
+removal refuses, registering nothing. A continuation of the apply still
+resolves by the apply's check alone.
+
+| Removal's check proves, after an apply observation that did not prove completion | Apply effect state | Block |
+| --- | --- | --- |
+| `completed`: the target is absent | `no-effect` | `failed` |
+| `no-effect`: the target shows everything the removal takes back, as this context's own | `partial` | `failed` |
+| `partial`: part of it remains, as this context's own | `partial` | `failed` |
+| `unknown` | `unknown` | `unknown` |
 
 A resolution records an outcome beside that effect. A completed effect records
 the outcome its capability proves the effect had, `changed` or `unchanged`, as
@@ -542,21 +575,46 @@ Material a block's proved effect leaves, such as an installation's
 administrator kubeconfig, enters the context's
 [custody](secrets.md#produced-material) before its apply block is recorded
 `done`, whether an attempt or a resolution proves it, including a fresh
-`destroy`'s resolution of an incomplete apply's block. The engine publishes
+`destroy`'s resolution of an incomplete apply's block by its apply observation
+([resolution outcomes](#resolution-outcomes)); one resolved by the removal's
+own check proves no completion and captures nothing. The engine publishes
 one block's outputs in one publication, inside the operation's transaction
 through the secret area the Workspace lends it, and a capability offers them
-only from a proved completion. A publication that fails records the attempt
+only from a proved completion, except the copy a capability's read-only
+observation hands over before a removal, which is published unproved (D124,
+below). A publication that fails records the attempt
 or the resolution `unknown`, never `failed`, because the effect it follows was
 proved: it never leaves a block `done` whose material custody does not hold,
 and the next invocation of either verb, including a `destroy` before it
-registers, observes the block again and captures what that proves before any
-effect or inverse follows. A `failed` block would be retried by an `apply` but
-never observed by a `destroy`, whose inverses could then delete the only copy.
-A removal's attempt and resolution capture nothing. A completed removal
+registers, observes the block again by its apply observation and captures what
+that proves before any effect or inverse follows. A `failed` block would be
+retried by an `apply` but never observed by a `destroy`, whose inverses could
+then delete the only copy.
+A removal's attempt, and its resolution of its own block, capture nothing
+proved. A completed removal
 withdraws every entry inside the transaction that records or finalizes its
 completion, before it releases its reservations, and a removal that stops part
-way keeps them, so the only access a partly removed context still has is never
-the first thing it loses. No record, log, evidence or adapter output carries
+way keeps them, so access custody already holds is never the first thing a
+partly removed context loses. A destroy that resolved an installation by its
+removal check, its completion unproved, captures nothing then, yet the
+installer's own copy of the access is never deleted while custody holds none
+for that cluster (D124). Before an inverse that deletes the copy a block's work
+area keeps, such as the media block's inverse that deletes the installer's
+work area, runs, the engine asks custody for the entry a proved capture of that
+copy fills, keyed by the installation block and `kubeconfig`. When custody
+holds none, proved or unproved, the capability's read-only observation hands
+the copy over under the same output bounds, the engine publishes it in one
+publication under that entry marked unproved, its completion never proved, and
+only then does the inverse run. A crash between the publication and the
+inverse leaves the copy in custody and the work area both, and the next
+removal finds custody holding it and keeps nothing more; a crash before the
+publication leaves it in the work area alone. An observation or publication
+that fails records the removal attempt `failed` before its inverse ran, so the
+copy is never in neither place. This holds whatever the nodes' power state, so
+a destroy that waited on its `Stop first` Machines loses nothing. An unproved
+copy never replaces an entry custody holds, a proved capture of the same entry
+clears the mark, and the entry is withdrawn as every entry is. No record, log,
+evidence or adapter output carries
 the material.
 
 ### Block transitions
@@ -786,7 +844,13 @@ holding a delimiter or such a key, how many more of its fields hold one, and
 the remedy: remove the delimiters and keys from the values the object is
 planned from, import them with `bootwright context update`, then run
 `bootwright plan --context` with the context. A removal or a continuation
-planned from a frozen plan is never refused this way.
+planned from a frozen plan is never refused this way. A bounded run, which a
+`machine start`, `stop` or `restart` and the power reading of
+`machine list --power-status` each carry and which is never planned, refuses
+the same way before its confirmation and before any runtime is lent or Secret
+bound. It names the Machine whose value holds the delimiter or key and the
+field, read from that Machine's request, and its remedy ends with that same
+command, with `--context`.
 
 Every `plan` previews exactly the decision the verb it previews takes, and one
 path takes both. That verb is a fresh `apply` over no operation or a completed
@@ -886,6 +950,19 @@ says so and names no build. It offers the superseding removal where one may
 take the operation's place, and otherwise the
 [deletion exit](#lifecycle-unit) of the records neither verb acts on. Only a
 fresh verb runs under the build and bundle in hand.
+
+That re-proof, with the controller setup and host binding a continuation also
+re-proves ([controller-host protection](#controller-host-protection)), runs
+under the shared lock before the plan is presented, authorized or confirmed,
+and again under the exclusive lock before registration, so no plan is
+presented for a continuation or resolution that refuses. A fresh removal
+proves its host the same way. An `apply` refused over an incomplete removal
+names that removal's continuation, or the fresh removal that replaces a failed
+one, only when its re-proof, or that replacement's host proof, admits it;
+otherwise its remedy is the exit that proof's refusal names, and that refusal
+follows it. A retained setup receipt that holds no execution definition
+refuses every verb that runs a block or registers, naming
+`run bootwright setup`, and `status` offers `bootwright setup` in their place.
 
 ### Attempts and unknown outcomes
 
@@ -1282,8 +1359,11 @@ destroy, which is removed over what it has not yet proved gone and is never
 continued. An apply
 qualifies however it stopped, because the set it owns is the same at a
 boundary, at a failure, and at an interruption.
-An unproved effect is not an exception: the removal resolves it first and
-refuses, registering nothing, when it cannot. A running or unknown removal is
+An unproved effect is not an exception: the removal resolves it first, by its
+apply observation and otherwise by the removal's own check
+([resolution outcomes](#resolution-outcomes)), and refuses,
+registering nothing, when it cannot. A continuation of an apply still
+resolves by the apply's check. A running or unknown removal is
 continued rather than replaced, because a removal that lost an outcome is
 resolved by repeating itself. Replacement is the only road out of a repaired
 adapter, because a continuation is frozen to the automation and execution
@@ -1450,6 +1530,15 @@ cross-context ownership, conflict refusal and recovery evidence. Context-local
 leases remain necessary but do not coordinate two contexts targeting the same
 host.
 
+A fresh removal proves, before its plan is presented and again under the
+exclusive lock before it resolves an effect, probes quiescence or registers,
+that controller setup completed on this host, that this host is the host the
+controller state records, and that a binding the controller state records for
+the context names this host. A fresh removal over a context the controller
+state records no binding for proceeds once that host is proved: no apply can
+bind a context that holds an incomplete operation, the removal is that
+context's exit, and the apply after it binds the context again.
+
 An apply or destroy must preserve the controller OS, power, Bootwright runtime,
 Workspace state, keyring and evidence needed to continue or remove owned
 resources. An owned service may be removed only through its frozen inverse
@@ -1461,7 +1550,8 @@ Controller setup, immutable execution dependencies and locally hosted services
 have separate owners. Plans must model their actual readiness relationships
 without converting every Machine address or service reference into a readiness
 edge. Missing, changed or unprovable controller bindings refuse the affected
-operation; continuation never silently substitutes the invoking host or moves
+operation, except a missing binding beneath a fresh removal, which proceeds on
+a proved host as above; continuation never silently substitutes the invoking host or moves
 context state. Migration and complete-store restore require their own defined
 recovery journey.
 

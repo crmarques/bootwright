@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -90,6 +92,9 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 	if err != nil {
 		return nil, err
 	}
+	if err := refuseSurveyTemplateValues(name, surveys); err != nil {
+		return nil, err
+	}
 	readings := map[string]string{}
 	if len(surveys) == 0 {
 		return readings, nil
@@ -109,11 +114,15 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 	// request therefore retains no output, so its run keeps no file and carries
 	// no remediation pointing at one.
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
-		for _, survey := range surveys {
-			answered, err := s.observe(inner, runtime, survey)
+		for index, survey := range surveys {
+			step := readStep(survey, index+1, len(surveys))
+			s.progress(inner, step, "running", "")
+			answered, err := s.observe(inner, runtime, survey, step)
 			if err != nil {
+				s.progress(inner, step, settlement(inner, err), "")
 				return err
 			}
+			s.progress(inner, step, "ok", strconv.Itoa(len(answered))+" of "+strconv.Itoa(len(survey.Targets))+" machines read")
 			maps.Copy(readings, answered)
 		}
 		return nil
@@ -126,7 +135,7 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 
 // observe runs one bounded reading against every controller a single host
 // reaches, inside the runtime the whole survey shares.
-func (s Service) observe(ctx context.Context, runtime lifecycle.Runtime, frozen ReadSurvey) (map[string]string, error) {
+func (s Service) observe(ctx context.Context, runtime lifecycle.Runtime, frozen ReadSurvey, step lifecycle.ProgressEvent) (map[string]string, error) {
 	canonical, err := frozen.Canonical()
 	if err != nil {
 		return nil, err
@@ -138,7 +147,7 @@ func (s Service) observe(ctx context.Context, runtime lifecycle.Runtime, frozen 
 	if err != nil {
 		return nil, err
 	}
-	run, err := s.runner.Run(ctx, readInvocation(runtime, frozen, canonical, digest))
+	run, err := s.runner.Run(ctx, readInvocation(runtime, frozen, canonical, digest, s.readGroups(step)))
 	if err != nil {
 		return nil, err
 	}
@@ -170,6 +179,9 @@ func (s Service) converge(ctx context.Context, request PowerRequest) (*Result, e
 	if err != nil {
 		return nil, err
 	}
+	if err := refuseTemplateValues(name, frozen); err != nil {
+		return nil, err
+	}
 	var pin machine.HardwareIdentity
 	if physical {
 		proved, found, err := s.identities.ProvedIdentity(ctx, name, frozen.Identity.Object)
@@ -186,6 +198,50 @@ func (s Service) converge(ctx context.Context, request PowerRequest) (*Result, e
 	return s.execute(ctx, name, frozen, pin)
 }
 
+// refuseTemplateValues refuses a power request holding a template delimiter
+// or a key ansible-core reserves before anything is confirmed, lent or bound.
+// A bounded run is never planned, so the plan's own refusal never saw it, and
+// its remedy ends with the command that carries it again.
+func refuseTemplateValues(contextName string, frozen Request) error {
+	canonical, err := frozen.Canonical()
+	if err != nil {
+		return err
+	}
+	return lifecycle.RefuseBoundedTemplateDelimiters(contextName, powerCommand(contextName, frozen),
+		[]reconciliation.BlockDefinition{{Kind: string(api.Machine), Object: frozen.Identity.Object, Request: canonical}})
+}
+
+// refuseSurveyTemplateValues refuses a reading the same way, naming the
+// Machine whose controller or placement host holds the value, so a field path
+// reads relative to that Machine.
+func refuseSurveyTemplateValues(contextName string, surveys []ReadSurvey) error {
+	var definitions []reconciliation.BlockDefinition
+	for _, survey := range surveys {
+		for _, target := range survey.Targets {
+			encoded, err := json.Marshal(target)
+			if err != nil {
+				return err
+			}
+			definitions = append(definitions, reconciliation.BlockDefinition{Kind: string(api.Machine), Object: target.Object, Request: encoded})
+		}
+		encoded, err := json.Marshal(survey.Placement)
+		if err != nil {
+			return err
+		}
+		definitions = append(definitions, reconciliation.BlockDefinition{Kind: string(api.Machine), Object: survey.Placement.Machine, Request: encoded})
+	}
+	return lifecycle.RefuseBoundedTemplateDelimiters(contextName, "bootwright machine list --context "+contextName+" --power-status", definitions)
+}
+
+// powerCommand is the command that repeats one power request in its context.
+func powerCommand(contextName string, frozen Request) string {
+	command := "bootwright machine " + frozen.Verb + " --context " + contextName + " --name " + frozen.Identity.Object
+	if frozen.Force {
+		command += " --force"
+	}
+	return command
+}
+
 // confirm asks before an operation interrupts a running system. Powering a
 // machine on interrupts nothing, so only stopping and restarting ask. The
 // prompt names the Machine and its context, and a refusal is the confirmer's
@@ -195,11 +251,7 @@ func (s Service) confirm(ctx context.Context, contextName string, request PowerR
 		return nil
 	}
 	if s.confirmer == nil {
-		command := "bootwright machine " + frozen.Verb + " --context " + contextName + " --name " + frozen.Identity.Object
-		if frozen.Force {
-			command += " --force"
-		}
-		return failure("machine.power", "this operation requires confirmation", "repeat "+command+" with --yes")
+		return failure("machine.power", "this operation requires confirmation", "repeat "+powerCommand(contextName, frozen)+" with --yes")
 	}
 	action := frozen.Verb + " machine"
 	if frozen.Force {
@@ -283,6 +335,27 @@ func (s Service) groups(step lifecycle.ProgressEvent, force bool) func(context.C
 	}
 }
 
+// readGroups reports each group of a reading as a sub-step of its host's
+// check, named as the role names it.
+func (s Service) readGroups(step lifecycle.ProgressEvent) func(context.Context, string, string) {
+	return func(ctx context.Context, group, status string) {
+		nested := step
+		nested.Group, nested.Detail, nested.Status = group, group, status
+		s.report(ctx, nested)
+	}
+}
+
+// readStep is the check one host's reading reports. A reading proves no
+// effect and registers no operation, so it is a check, numbered among the
+// hosts the inspection reads through.
+func readStep(survey ReadSurvey, position, total int) lifecycle.ProgressEvent {
+	return lifecycle.ProgressEvent{
+		Phase: lifecycle.CheckPhase, Block: "power-read",
+		Description: "Read the power state through " + string(api.Machine) + "/" + survey.Placement.Machine,
+		Position:    position, Total: total,
+	}
+}
+
 // powerStep is the one progress step a power run reports. The adapter's groups
 // are its sub-steps; it declares no count of them, because a stop skips the
 // shutdown of a Machine that is already off.
@@ -348,10 +421,11 @@ func (s Service) report(ctx context.Context, event lifecycle.ProgressEvent) {
 	}
 }
 
-func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []byte, digest string) lifecycle.RunRequest {
+func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []byte, digest string,
+	progress func(context.Context, string, string)) lifecycle.RunRequest {
 	return lifecycle.RunRequest{
 		Context:        runtime.Context.Name,
-		Description:    "Read the power state through " + string(api.Machine) + "/" + frozen.Placement.Machine,
+		Description:    readStep(frozen, 1, 1).Description,
 		Implementation: ReadImplementation,
 		Operation:      ReadOperation,
 		Variable:       ReadVariable,
@@ -364,6 +438,7 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 		Area:           runtime.Area,
 		Material:       runtime.Material,
 		Output:         runtime.Output,
+		Progress:       progress,
 	}
 }
 

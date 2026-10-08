@@ -11,11 +11,9 @@ func machineInstallSchema() *Shape {
 	clone := record(required("seed", choice(field("cloudInit", record(defaulted("growRootFilesystem", boolean(), BoolValue(true)))))))
 	configure := &Shape{Type: Sequence, Atomic: true, NameKey: "id", Element: record(required("id", nonempty()), required("baseURL", lexical("repository-url")), field("displayName", nonempty()), defaulted("enabled", boolean(), BoolValue(true)), defaulted("gpgCheck", boolean(), BoolValue(true)), field("gpgKeyURL", nonempty()))}
 	customizations := record(
-		field("hostname", record(field("source", enumeration("machineName")))),
 		field("localization", record(defaulted("language", nonempty(), StringValue("en_US.UTF-8")), field("formats", nonempty()), defaulted("keyboard", nonempty(), StringValue("us")), defaulted("timezone", nonempty(), StringValue("UTC")), field("additionalLocales", set(nonempty())))),
 		field("ssh", record(defaulted("passwordAuthentication", boolean(), BoolValue(false)), field("initialPassword", record(required("secretRef", secret("usernamePassword")))))),
-		field("storage", record(field("rootDevice", record(field("source", enumeration("machineRootDeviceHints")))))),
-		field("packages", record(field("environment", enumeration("minimal")), field("install", set(nonempty())), defaulted("excludeDocs", boolean(), BoolValue(false)), field("installWeakDeps", boolean()))),
+		field("packages", record(field("install", set(nonempty())), defaulted("excludeDocs", boolean(), BoolValue(false)), field("installWeakDeps", boolean()))),
 		field("repositories", record(field("configure", configure), field("subscription", record(field("enable", set(nonempty())), field("disable", set(nonempty())))))),
 		field("services", record(field("enabled", set(nonempty())), field("disabled", set(nonempty())))),
 		field("security", record(field("selinux", record(field("mode", enumeration("enforcing", "permissive", "disabled")))), field("firewall", record(field("enabled", boolean()))), field("fips", record(defaulted("enabled", boolean(), BoolValue(false)))), field("diskEncryption", record(required("unlock", choice(field("tpm2", record(field("pcrIds", set(integer("0", "23"))), field("pcrBank", enumeration("sha1", "sha256", "sha384", "sha512")))))), required("recoveryPassphraseRef", secret("opaque", "token")))))),

@@ -57,9 +57,21 @@ type SudoOptions struct {
 	// needs, which env_reset would otherwise drop. Sudo parses NAME=value only
 	// before the option terminator; after it, the assignment becomes the
 	// command sudo tries to execute.
-	Assignments   []string
+	Assignments []string
+	// SecretStdin names the Secret whose value the elevated command reads
+	// from standard input, which sudo's I/O log would record.
+	SecretStdin   string
 	Input         io.Reader
 	Output, Error io.Writer
+}
+
+// InputLogged refuses a standard-input Secret before sudo starts the child,
+// because the policy the probe listed sets Option, so sudo's I/O log would
+// record the value as it flows.
+type InputLogged struct{ Option, Secret string }
+
+func (e *InputLogged) Error() string {
+	return "the sudo policy sets " + e.Option + ", which would log the standard input of Secret " + e.Secret
 }
 
 type Supervisor struct{ options SudoOptions }
@@ -99,6 +111,9 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 	}
 	interval := 30 * time.Second
 	if probeErr == nil && code == 0 && !policy.overflow {
+		if option := inputLogging(policy.data); option != "" && options.SecretStdin != "" {
+			return 1, &InputLogged{Option: option, Secret: options.SecretStdin}
+		}
 		interval = refreshInterval(policy.data)
 	}
 	childArgs := []string{"-u", "#0"}
@@ -229,6 +244,58 @@ func refreshInterval(report []byte) time.Duration {
 		return 0
 	}
 	return interval
+}
+
+// inputLogging names the input-logging option a -ll report sets explicitly:
+// in the Defaults that match the invoking user, in a Runas or command-specific
+// Defaults line, or in a rule's Options. Sudo lists each as comma-separated
+// options (display_defaults, display_bound_defaults_by_type and
+// display_cmndspec_long in plugins/sudoers). A bound line prints its members
+// before its first option with only a blank between them, and a command member
+// carries its arguments after blanks too, so an option is the last word of its
+// comma field: the first option of a bound line is the last word of the field
+// that ends its members. A negated option, another option containing the word
+// and an unbalanced list name nothing.
+func inputLogging(report []byte) string {
+	for _, list := range optionLists(string(report)) {
+		fields, valid := defaultFields(list)
+		if !valid {
+			continue
+		}
+		for _, field := range fields {
+			words := strings.Fields(field)
+			if len(words) == 0 {
+				continue
+			}
+			if option := words[len(words)-1]; option == "log_input" || option == "log_stdin" {
+				return option
+			}
+		}
+	}
+	return ""
+}
+
+func optionLists(text string) []string {
+	var lists []string
+	if start := strings.Index(text, "Matching Defaults entries for "); start >= 0 {
+		if colon := strings.Index(text[start:], ":\n"); colon >= 0 {
+			block := text[start+colon+2:]
+			if end := strings.Index(block, "\n\n"); end >= 0 {
+				block = block[:end]
+			}
+			lists = append(lists, block)
+		}
+	}
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed != line && strings.HasPrefix(trimmed, "Defaults"):
+			lists = append(lists, trimmed)
+		case strings.HasPrefix(trimmed, "Options:"):
+			lists = append(lists, strings.TrimPrefix(trimmed, "Options:"))
+		}
+	}
+	return lists
 }
 
 // Commas inside a quoted option value are not Defaults separators.

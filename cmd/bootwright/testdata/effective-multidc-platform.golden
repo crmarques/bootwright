@@ -1574,11 +1574,7 @@ spec:
       additionalLocales: []
     ssh:
       passwordAuthentication: false
-    storage:
-      rootDevice:
-        source: machineRootDeviceHints
     packages:
-      environment: minimal
       install:
         - podman
         - lvm2

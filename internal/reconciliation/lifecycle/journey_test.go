@@ -1059,6 +1059,7 @@ type testBinder struct {
 	// withdrawal in order. produceErr and withdrawErr fail every Produce and
 	// Withdraw before anything changes.
 	produced    map[string]string
+	unproved    map[string]bool
 	journal     []string
 	produceErr  error
 	withdrawErr error
@@ -1077,14 +1078,29 @@ func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, 
 	if next == nil {
 		next = map[string]string{}
 	}
+	unproved := maps.Clone(b.unproved)
+	if unproved == nil {
+		unproved = map[string]bool{}
+	}
 	result := make([]secretstore.Produced, 0, len(request.Outputs))
 	for _, output := range request.Outputs {
+		key := request.Block + "/" + output.Name
+		entry := secretstore.Produced{Block: request.Block, Name: output.Name, Version: "ver-" + request.Block + "-" + output.Name}
+		if _, held := next[key]; held && output.Unproved {
+			result = append(result, entry)
+			continue
+		}
 		value, _ := output.Material.Part(secrets.ValuePart)
-		next[request.Block+"/"+output.Name] = string(value)
+		next[key] = string(value)
 		clear(value)
-		result = append(result, secretstore.Produced{Block: request.Block, Name: output.Name, Version: "ver-" + request.Block + "-" + output.Name})
+		if output.Unproved {
+			unproved[key] = true
+		} else {
+			delete(unproved, key)
+		}
+		result = append(result, entry)
 	}
-	if maps.Equal(next, b.produced) {
+	if maps.Equal(next, b.produced) && maps.Equal(unproved, b.unproved) {
 		return result, nil
 	}
 	if b.kill != nil {
@@ -1095,15 +1111,35 @@ func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, 
 	if b.produceErr != nil {
 		return nil, b.produceErr
 	}
-	b.produced = next
-	b.journal = append(b.journal, "produce "+request.Block)
+	event := "produce "
+	if slices.ContainsFunc(request.Outputs, func(output secretstore.ProducedInput) bool { return output.Unproved }) {
+		event = "produce unproved "
+	}
+	b.produced, b.unproved = next, unproved
+	b.journal = append(b.journal, event+request.Block)
 	return result, nil
 }
 
-// producedEntries names every produced entry with its bytes, sorted.
+// Holds reports whether custody holds the entry of block and name.
+func (b *testBinder) Holds(ctx context.Context, selected secretstore.Context, _ secretstore.Area, block, name string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if selected.Name != testContextName {
+		return false, errors.New("produced material was read from another context")
+	}
+	_, held := b.produced[block+"/"+name]
+	return held, nil
+}
+
+// producedEntries names every produced entry with its bytes, sorted, an
+// unproved one marked so.
 func (b *testBinder) producedEntries() []string {
 	entries := make([]string, 0, len(b.produced))
 	for key, value := range b.produced {
+		if b.unproved[key] {
+			key += " (unproved)"
+		}
 		entries = append(entries, key+"="+value)
 	}
 	slices.Sort(entries)
@@ -1130,7 +1166,7 @@ func (b *testBinder) Withdraw(ctx context.Context, selected secretstore.Context,
 	if b.withdrawErr != nil {
 		return false, b.withdrawErr
 	}
-	b.produced = nil
+	b.produced, b.unproved = nil, nil
 	b.journal = append(b.journal, "withdraw")
 	return true, nil
 }
@@ -3293,7 +3329,7 @@ func TestDestroyOverAnUnprovableBlockRefusesBeforeRegistration(t *testing.T) {
 		t.Fatal("an unknown outcome reported success")
 	}
 	current := currentOperation(t, h)
-	h.capability.observations = []Observation{{Effect: reconciliation.EffectUnknown}}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectUnknown}, {Effect: reconciliation.EffectUnknown}}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	reported := diagnostics.Of(err)
 	if len(reported) == 0 || reported[len(reported)-1].Code != "lifecycle.unknown" {
@@ -3305,7 +3341,7 @@ func TestDestroyOverAnUnprovableBlockRefusesBeforeRegistration(t *testing.T) {
 	if len(h.capability.destroys) != 0 {
 		t.Fatalf("an unprovable block was destroyed: %v", h.capability.destroys)
 	}
-	if !slices.Equal(h.capability.observes, []string{"artifact-server-lab"}) {
+	if !slices.Equal(h.capability.observes, []string{"artifact-server-lab", "artifact-server-lab"}) {
 		t.Fatalf("observations = %v", h.capability.observes)
 	}
 	if after := currentOperation(t, h); after != current {
@@ -3322,15 +3358,19 @@ func TestDestroyOverAnUnprovableBlockRefusesBeforeRegistration(t *testing.T) {
 
 // An interrupted apply owns every block it started, including the one whose
 // outcome it lost. The removal proves that outcome first, which is what admits
-// the removal, and then takes back the whole set.
+// the removal, and then takes back the whole set: by the apply's observation
+// where it proves the block completed (D123), and otherwise by the removal's
+// own check of what it takes back (D119), which reads an owned target as such
+// and a target never created as absent.
 func TestDestroyOverAnInterruptedApplyResolvesThenRemoves(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		effect reconciliation.EffectState
+		name    string
+		effect  reconciliation.EffectState
+		removal []Observation
 	}{
-		{"partly realized", reconciliation.EffectPartial},
-		{"completed", reconciliation.EffectCompleted},
-		{"never performed", reconciliation.EffectNoEffect},
+		{"partly realized", reconciliation.EffectPartial, []Observation{{Effect: reconciliation.EffectPartial}}},
+		{"completed", reconciliation.EffectCompleted, nil},
+		{"never performed", reconciliation.EffectNoEffect, []Observation{{Effect: reconciliation.EffectCompleted}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
@@ -3343,7 +3383,7 @@ func TestDestroyOverAnInterruptedApplyResolvesThenRemoves(t *testing.T) {
 				t.Fatal("an unknown outcome reported success")
 			}
 			h.capability.outcomeFor = nil
-			h.capability.observations = []Observation{{Effect: tc.effect}}
+			h.capability.observations = append([]Observation{{Effect: tc.effect}}, tc.removal...)
 			result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 			if err != nil {
 				t.Fatalf("an interrupted apply refused its removal: %v", err)
@@ -3351,7 +3391,7 @@ func TestDestroyOverAnInterruptedApplyResolvesThenRemoves(t *testing.T) {
 			if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "none" {
 				t.Fatalf("receipt = %+v", result.Receipt)
 			}
-			if !slices.Equal(h.capability.observes, []string{"bravo"}) {
+			if want := slices.Repeat([]string{"bravo"}, 1+len(tc.removal)); !slices.Equal(h.capability.observes, want) {
 				t.Fatalf("observations = %v", h.capability.observes)
 			}
 			if !slices.Equal(h.capability.destroys, []string{"alpha", "bravo"}) {
@@ -3381,7 +3421,7 @@ func TestDestroyOverADeadExecutorResolvesTheRunningBlock(t *testing.T) {
 	}
 	leaveRunning(t, h, "artifact-server-lab")
 	h.capability.hold, h.capability.errorFor = nil, nil
-	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}, {Effect: reconciliation.EffectPartial}}
 	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil {
 		t.Fatalf("a dead executor refused its removal: %v", err)
@@ -3389,7 +3429,7 @@ func TestDestroyOverADeadExecutorResolvesTheRunningBlock(t *testing.T) {
 	if result.Receipt.State != string(reconciliation.OperationDone) {
 		t.Fatalf("receipt = %+v", result.Receipt)
 	}
-	if !slices.Equal(h.capability.observes, []string{"artifact-server-lab"}) {
+	if !slices.Equal(h.capability.observes, []string{"artifact-server-lab", "artifact-server-lab"}) {
 		t.Fatalf("observations = %v", h.capability.observes)
 	}
 	if !slices.Equal(h.capability.destroys, []string{"artifact-server-lab"}) {
@@ -3439,7 +3479,7 @@ func TestDestroyOverAnInterruptedApplyIsStillGated(t *testing.T) {
 		t.Fatal("an unknown outcome reported success")
 	}
 	h.capability.outcomeFor = nil
-	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}, {Effect: reconciliation.EffectPartial}}
 	h.capability.quiescence = map[string]Quiescence{
 		"artifact-server-lab": {State: Live, Reason: "rhel-01 is running", Stop: "bootwright machine stop --name rhel-01"},
 	}
@@ -3458,7 +3498,7 @@ func TestDestroyOverAnInterruptedApplyIsStillGated(t *testing.T) {
 	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(h.capability.observes, []string{"artifact-server-lab"}) {
+	if !slices.Equal(h.capability.observes, []string{"artifact-server-lab", "artifact-server-lab"}) {
 		t.Fatalf("the second removal observed again: %v", h.capability.observes)
 	}
 }
@@ -4222,14 +4262,14 @@ func TestARemovalOpensItsApprovedBundleOncePerPhase(t *testing.T) {
 	}
 	applied := h.workspace.opened
 	h.capability.outcomeFor = nil
-	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}, {Effect: reconciliation.EffectPartial}}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}, {Effect: reconciliation.EffectPartial}, {Effect: reconciliation.EffectPartial}, {Effect: reconciliation.EffectPartial}}
 	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	if opened := h.workspace.opened - applied; opened != 2 {
 		t.Fatalf("the removal opened the approved bundle %d times, want one to prove and one to remove", opened)
 	}
-	if len(h.capability.observes) != 2 || len(h.capability.destroys) != 2 {
+	if len(h.capability.observes) != 4 || len(h.capability.destroys) != 2 {
 		t.Fatalf("observed %v and destroyed %v", h.capability.observes, h.capability.destroys)
 	}
 }

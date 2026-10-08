@@ -14,8 +14,9 @@ import (
 // what its removal proves, so a target the removal has not taken back is no
 // removal: its block is failed and retried, never done over what it kept. An
 // apply's block is observed for the apply's effect, and so is the one a fresh
-// destroy resolves before it registers, because the operation it replaces is
-// an apply.
+// destroy resolves before it registers, which an observation proving it
+// completed resolves done (D123); only one that does not falls back to the
+// removal's own check (D119).
 func TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves(t *testing.T) {
 	const block = "artifact-server-lab"
 	ctx := context.Background()
@@ -97,7 +98,7 @@ func TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves(t *testing.T) {
 			t.Fatalf("an apply's resolution asked %v, want only its observation", h.capability.calls)
 		}
 	})
-	t.Run("a fresh destroy resolves the apply it replaces as an apply", func(t *testing.T) {
+	t.Run("a fresh destroy resolves the apply it replaces as an apply first", func(t *testing.T) {
 		h := newHarness(t, block)
 		h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 		if _, err := h.service.Apply(ctx, apply); err == nil {

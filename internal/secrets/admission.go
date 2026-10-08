@@ -76,6 +76,9 @@ func validate(object api.Object, partial, kindDefault bool) []api.Issue {
 			if !partial && !generated.Has("commonName") {
 				add("source.generated.commonName", "generated certificates require a common name")
 			}
+			if value := generated.Get("commonName"); value.Present() && !generableCommonName(value.Text()) {
+				add("source.generated.commonName", "generated common name must be non-empty UTF-8 within the part byte limit and must not contain NUL")
+			}
 		case "sshKeyPair":
 			allowed = []string{"keyType", "comment"}
 		case "opaque", "dockerConfigJson":
@@ -98,11 +101,15 @@ func validate(object api.Object, partial, kindDefault bool) []api.Issue {
 	return issues
 }
 
-// generableUsername and generableComment repeat what generation refuses, so a
-// declaration it cannot honour is refused at validate instead. Material
-// imports this package and pins the agreement.
+// generableUsername, generableCommonName and generableComment repeat what
+// generation refuses, so a declaration it cannot honour is refused at validate
+// instead. Material imports this package and pins the agreement.
 func generableUsername(value string) bool {
 	return len(value) <= MaxPartBytes && utf8.ValidString(value) && !strings.ContainsAny(value, ":\x00") && strings.IndexFunc(value, unicode.IsSpace) < 0
+}
+
+func generableCommonName(value string) bool {
+	return value != "" && len(value) <= MaxPartBytes && utf8.ValidString(value) && !strings.ContainsRune(value, 0)
 }
 
 func generableComment(value string) bool {
@@ -123,7 +130,7 @@ func SSHComment(value string) bool {
 func fileSourceRemedy(name, kind string, kindDefault bool) string {
 	flags := setFileFlags(kind)
 	if kindDefault {
-		remedy := "replace source.file in the Environment's Secret kind default with source: {contextStore: {}}, then for each Secret that inherits it run bootwright secret set --name <name> with the file flags of its type"
+		remedy := "replace source.file in the Environment's Secret kind default with source: {contextStore: {}}, then for each Secret that inherits it run bootwright secret set --name <name> --context <context> with the file flags of its type"
 		if flags != "" {
 			remedy += " (" + flags + " for " + kind + ")"
 		}
@@ -135,7 +142,7 @@ func fileSourceRemedy(name, kind string, kindDefault bool) string {
 	if flags == "" {
 		flags = "with the file flags of its type"
 	}
-	return "declare source: {contextStore: {}} and run bootwright secret set --name " + name + " " + flags
+	return "declare source: {contextStore: {}} and run bootwright secret set --name " + name + " --context <context> " + flags
 }
 
 func setFileFlags(kind string) string {

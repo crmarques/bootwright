@@ -149,7 +149,13 @@ reservations record their mode and physical directory identity. A new receipt
 naming a namespace the record does not hold is refused while all 16 are held,
 so none is left pending on a bundle that can never be reserved;
 [setup](../controller.md#supported-host-and-dependency-selection) makes room
-first. A controller stage's client-area reservation, or its new retained
+first. A new receipt's bundle namespace, or setup's new retained resolution,
+that finds its bound held refuses with `controller.conflict` and the
+`bootwright setup --purge-old-bundles` remedy, and a setup whose resolution
+would add dependency sources beyond the 4096 retained source identities refuses
+with `controller.conflict`, saying that no command of this build frees a
+retained source and that the remedy is to set this build up on another
+controller host. A controller stage's client-area reservation, or its new retained
 resolution, that finds its bound held refuses with `controller.conflict`,
 naming that bound, and its remedy is to run
 `bootwright setup --purge-old-bundles` to retire superseded execution bundles,

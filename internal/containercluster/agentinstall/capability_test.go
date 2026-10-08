@@ -478,6 +478,41 @@ func TestAMediaRemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 	}
 }
 
+// The media block's removal deletes the work area the installation keeps its
+// administrator kubeconfig in, so it names the custody entry a completed
+// installation's capture fills, and its keep is the read-only observation with
+// that one output declared, handing over whatever the adapter left there. No
+// other run of this block declares an output (D124).
+func TestTheMediaRemovalKeepsTheInstallationsKubeconfig(t *testing.T) {
+	execution, _ := mediaExecution(t, testDigest)
+	entry, keeps, err := NewMedia(nil).Keeps(execution.Block)
+	if err != nil || !keeps || entry != (lifecycle.KeptEntry{Block: InstallBlockID("sno"), Name: KubeconfigOutput}) {
+		t.Fatalf("keeps = %+v, %t (%v)", entry, keeps, err)
+	}
+	access := []lifecycle.Produced{{Name: KubeconfigOutput, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("apiVersion: v1\n")})}}
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: mediaEvidence(t, testDigest, nil), Produced: access}}
+	produced, err := NewMedia(runner).Keep(context.Background(), execution)
+	defer lifecycle.ClearProduced(produced)
+	if err != nil || len(produced) != 1 || produced[0].Name != KubeconfigOutput {
+		t.Fatalf("keep = %+v (%v)", produced, err)
+	}
+	if len(runner.requests) != 1 || runner.requests[0].Operation != "observe" ||
+		!slices.Equal(runner.requests[0].Outputs, []lifecycle.OutputFile{{Name: KubeconfigOutput, Variable: KubeconfigOutput}}) {
+		t.Fatalf("adapter invocation = %+v", runner.requests)
+	}
+	failing := &fakeRunner{err: errors.New("unreachable")}
+	if produced, err := NewMedia(failing).Keep(context.Background(), execution); err == nil || len(produced) != 0 {
+		t.Fatalf("a failed keep = %+v (%v)", produced, err)
+	}
+	other := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: mediaEvidence(t, testDigest, nil)}}
+	if _, err := NewMedia(other).ObserveRemoval(context.Background(), execution); err != nil || len(other.requests[0].Outputs) != 0 {
+		t.Fatalf("the removal observation declared %+v (%v)", other.requests, err)
+	}
+	if _, err := NewMedia(other).Destroy(context.Background(), execution); len(other.requests) != 2 || len(other.requests[1].Outputs) != 0 {
+		t.Fatalf("the removal declared %+v (%v)", other.requests, err)
+	}
+}
+
 // Removing this block takes back only what it published, so nothing it owns is
 // still in use when the gate asks.
 func TestTheBootMediaIsAlwaysQuiescent(t *testing.T) {

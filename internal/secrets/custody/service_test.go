@@ -577,7 +577,7 @@ func TestAFileSourceRefusesEveryCommandBeforeTheStore(t *testing.T) {
 			service, access, material, _ := unresolvedFixture(declarationYAML("file", "  source: {file: {path: secrets/token}}\n"))
 			refused := false
 			for _, d := range diagnostics.Of(invoke(service)) {
-				refused = refused || d.Code == "api.field" && d.Field == "$.spec.source.file" && strings.Contains(d.Remediation, "secret set --name file --value-file <path>")
+				refused = refused || d.Code == "api.field" && d.Field == "$.spec.source.file" && strings.Contains(d.Remediation, "secret set --name file --context <context> --value-file <path>")
 			}
 			if !refused {
 				t.Fatal("the file source was not refused with its remedy")

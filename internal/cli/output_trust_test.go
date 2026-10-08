@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 )
 
@@ -171,8 +172,20 @@ func TestTheTrustPlanRefusesWhenItCannotBeWritten(t *testing.T) {
 		"a failed write": failingWriter{}, "a short write": failingWriter{short: true}, "no output": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := NewTrustPlanPresenter(out).PresentTrustPlan(context.Background(), *trustReport()); err == nil {
+			err := NewTrustPlanPresenter(out).PresentTrustPlan(context.Background(), *trustReport())
+			if err == nil {
 				t.Fatal("an unwritten plan was reported as presented")
+			}
+			reported := diagnostics.Of(err)
+			if out == nil {
+				if len(reported) != 1 || reported[0].Code != "runtime.internal" {
+					t.Fatalf("refusal = %+v", reported)
+				}
+				return
+			}
+			if len(reported) != 1 || reported[0].Code != "trust.identity" ||
+				!strings.Contains(reported[0].Remediation, "bootwright machine trust --context lab") {
+				t.Fatalf("refusal = %+v", reported)
 			}
 		})
 	}

@@ -17,6 +17,34 @@
     request: '{{ bootwright_cluster_media_request }}'
   register: containercluster_media_agent_observed
 
+# Declared only before a removal that deletes this work area while custody
+# holds no administrator access for the cluster: the copy the installation
+# kept is handed over, unproved, so it is never deleted while custody holds
+# none. Only a whole regular file within the bound is offered.
+- name: Read the administrator access the installation kept
+  ansible.builtin.stat:
+    path: '{{ containercluster_media_agent_kubeconfig }}'
+    follow: false
+    get_checksum: false
+  register: containercluster_media_agent_kept
+  when: bootwright_cluster_media_output is defined
+  no_log: true
+
+- name: Offer the kept administrator access for custody, unproved
+  ansible.builtin.copy:
+    src: '{{ containercluster_media_agent_kubeconfig }}'
+    dest: '{{ bootwright_cluster_media_output.kubeconfig }}'
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - bootwright_cluster_media_output is defined
+    - containercluster_media_agent_kept.stat.isreg | default(false)
+    - containercluster_media_agent_kept.stat.size | default(0) > 0
+    - containercluster_media_agent_kept.stat.size | default(0) <= containercluster_media_agent_kubeconfig_bound
+  no_log: true
+
 - name: Publish what the observation found
   bootwright.core.containercluster_media_protocol:
     phase: completed

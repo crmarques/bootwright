@@ -515,11 +515,9 @@ func TestAFirstUseTakesOverAnUndeclaredEndpoint(t *testing.T) {
 	}
 }
 
-// A record of a Machine still declared is never removed, so a first use that
-// would pin its endpoint to a second key refuses before the operator is asked
-// to accept a key no write could record. When that Machine no longer uses this
-// context's trust, a re-trust of it would refuse, so the remedy names the
-// input change that drops its record instead.
+// A record of a Machine that still uses this context's trust is never
+// removed, so a first use that would pin its endpoint to a second key refuses
+// before the operator is asked to accept a key no write could record.
 func TestAFirstUseThatWouldPinTwoKeysRefusesBeforeAsking(t *testing.T) {
 	h := newHarness(t, nil)
 	h.trust.data = recorded(t, "secured", "192.0.2.10", 2222, otherKey)
@@ -534,19 +532,49 @@ func TestAFirstUseThatWouldPinTwoKeysRefusesBeforeAsking(t *testing.T) {
 	if len(h.prompt.asked) != 0 || len(h.trust.written) != 0 || len(h.client.sessions) != 0 {
 		t.Fatalf("asked %d, wrote %d, opened %d", len(h.prompt.asked), len(h.trust.written), len(h.client.sessions))
 	}
+}
 
-	exempt := newHarness(t, nil)
-	exempt.trust.data = recorded(t, "declared", "192.0.2.10", 2222, otherKey)
-	_, err = exec(t, exempt, "host", machine.SSHOptions{}, "true")
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" ||
-		!strings.Contains(reported[0].Message, "declared no longer uses this context's SSH trust (declares an explicit knownHostsRef)") ||
-		reported[0].Remediation != "drop declared from the input with bootwright context update --name lab --input-dir <dir>, repeat this command, then restore declared the same way; "+
-			"this needs a context with no incomplete operation and an input in which no other object references declared, "+
-			"and after a completed apply the next apply no longer settles: it refuses the changed input until a destroy" {
-		t.Fatalf("a pin held by a Machine that no longer uses the store gave %+v", reported)
-	}
-	if len(exempt.prompt.asked) != 0 || len(exempt.trust.written) != 0 || len(exempt.client.sessions) != 0 {
-		t.Fatalf("asked %d, wrote %d, opened %d", len(exempt.prompt.asked), len(exempt.trust.written), len(exempt.client.sessions))
+// A declared Machine that no longer uses this context's trust holds its record
+// for nothing, so a first use at its endpoint takes the endpoint over in the
+// one confirmed write and names, before asking, the record it removes and why
+// (D117).
+func TestAFirstUseTakesOverTheEndpointOfAMachineThatNoLongerUsesTheStore(t *testing.T) {
+	for _, test := range []struct{ machine, why string }{
+		{"declared", "declares an explicit knownHostsRef"},
+		{"controller", "reached locally"},
+	} {
+		t.Run(test.machine, func(t *testing.T) {
+			h := newHarness(t, nil)
+			h.trust.data = recorded(t, test.machine, "192.0.2.10", 2222, otherKey)
+			if _, err := exec(t, h, "host", machine.SSHOptions{}, "true"); err != nil {
+				t.Fatal(err)
+			}
+			notice := "[WARN] trust.identity: confirming also removes the host key this context trusted for " + test.machine +
+				", which no longer uses this context's SSH trust (" + test.why + "), at [192.0.2.10]:2222\n"
+			if len(h.prompt.before) != 1 || h.prompt.before[0] != notice {
+				t.Fatalf("before the prompt the operator read %q, want %q", h.prompt.before, notice)
+			}
+			if len(h.trust.written) != 1 {
+				t.Fatalf("writes = %d", len(h.trust.written))
+			}
+			records, err := trust.Decode(h.trust.written[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(records.Hosts) != 1 || records.Hosts[0].Machine != "host" {
+				t.Fatalf("records = %+v", records.Hosts)
+			}
+
+			declined := newHarness(t, nil)
+			declined.trust.data = recorded(t, test.machine, "192.0.2.10", 2222, otherKey)
+			declined.prompt.decline = errors.New("declined")
+			if _, err := exec(t, declined, "host", machine.SSHOptions{}, "true"); err == nil {
+				t.Fatal("a declined first use opened a session")
+			}
+			if len(declined.trust.written) != 0 || len(declined.client.sessions) != 0 {
+				t.Fatal("a declined first use removed or recorded a key")
+			}
+		})
 	}
 }
 

@@ -2339,10 +2339,11 @@ func checkpointProduced(ctx context.Context, store *Store) (string, bool, error)
 	}
 	value, found := "", false
 	err = checkpointSecretAccess(store).View(ctx, token, true, func(session secretstore.StoreSession, _ secretstore.Selection) error {
-		material, exists, err := session.ReadProduced(ctx, "cluster-install-example", "kubeconfig")
+		read, exists, err := session.ReadProduced(ctx, "cluster-install-example", "kubeconfig")
 		if err != nil || !exists {
 			return err
 		}
+		material := read.Material
 		defer material.Clear()
 		part, _ := material.Part(secrets.ValuePart)
 		value, found = string(part), true

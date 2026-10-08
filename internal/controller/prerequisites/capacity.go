@@ -59,18 +59,21 @@ func (i inspection) room(view StorageView, purge bool) (retirement, error) {
 		retiring.resolutions = i.supersededResolutions(view.State, kept)
 	}
 	if full(view, area, resolution, retiring) {
-		return retirement{}, failure("controller.conflict", "only client areas and the current execution bundle hold this host's "+strconv.Itoa(MaxRetainedBundles)+" bundle areas or resolutions, and neither is ever retired, so the new execution bundle has no room", clientAreaBoundRemedy)
+		return retirement{}, failure("controller.conflict", "only client areas and the current execution bundle hold this host's "+strconv.Itoa(MaxRetainedBundles)+" bundle areas or resolutions, and neither is ever retired, so the new execution bundle has no room", ClientAreaBoundRemedy)
 	}
 	if !purge {
-		return retirement{}, failure("controller.conflict", "this host already retains the "+strconv.Itoa(MaxRetainedBundles)+" bundle areas or resolutions it may hold, so the new execution bundle has no room", "run bootwright setup --purge-old-bundles to retire the superseded execution bundles first")
+		return retirement{}, failure("controller.conflict", "this host already retains the "+strconv.Itoa(MaxRetainedBundles)+" bundle areas or resolutions it may hold, so the new execution bundle has no room", PurgeRemedy)
 	}
 	return retiring, nil
 }
 
-// clientAreaBoundRemedy is the remedy of a bound that client areas and the
+// PurgeRemedy is the remedy of a bound that superseded execution bundles hold.
+const PurgeRemedy = "run bootwright setup --purge-old-bundles to retire the superseded execution bundles first"
+
+// ClientAreaBoundRemedy is the remedy of a bound that client areas and the
 // current execution bundle fill. This build retires no client area, so no
 // command of it frees that room, and the remedy names none (B322).
-const clientAreaBoundRemedy = "no command of this build frees that room, because it never retires a client area; " +
+const ClientAreaBoundRemedy = "no command of this build frees that room, because it never retires a client area; " +
 	"keep using the build whose execution bundle this host holds, or set this build up on another controller host"
 
 // stranded reports a pending receipt an earlier build published at the bound:

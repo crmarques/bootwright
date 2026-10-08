@@ -298,12 +298,21 @@ func (s *memorySession) Produce(ctx context.Context, block string, outputs []sec
 	result := make([]secretstore.Produced, 0, len(outputs))
 	for _, output := range outputs {
 		key := block + "/" + output.Name
+		if entry, exists := s.state.produced[key]; exists && output.Unproved {
+			result = append(result, entry)
+			continue
+		}
 		if entry, exists := s.state.produced[key]; exists && equalTestMaterial(s.state.material[entry.Version], output.Material) {
+			if entry.Unproved {
+				entry.Unproved = false
+				s.state.produced[key] = entry
+				changed = true
+			}
 			result = append(result, entry)
 			continue
 		}
 		version := s.add(secrets.Declaration{Name: output.Name, Type: "opaque", Source: "produced", Fingerprint: strings.Repeat("0", 64)}, output.Material)
-		entry := secretstore.Produced{Block: block, Name: output.Name, Version: version.ID}
+		entry := secretstore.Produced{Block: block, Name: output.Name, Version: version.ID, Unproved: output.Unproved}
 		s.state.produced[key] = entry
 		result = append(result, entry)
 		changed = true
@@ -325,13 +334,13 @@ func (s *memorySession) Withdraw(ctx context.Context) (bool, error) {
 	return true, s.publish(ctx)
 }
 
-func (s *memorySession) ReadProduced(ctx context.Context, block, name string) (secrets.Material, bool, error) {
+func (s *memorySession) ReadProduced(ctx context.Context, block, name string) (secretstore.ProducedMaterial, bool, error) {
 	entry, exists := s.state.produced[block+"/"+name]
 	if !exists {
-		return secrets.Material{}, false, ctx.Err()
+		return secretstore.ProducedMaterial{}, false, ctx.Err()
 	}
 	material, err := s.Read(ctx, entry.Version)
-	return material, err == nil, err
+	return secretstore.ProducedMaterial{Material: material, Unproved: entry.Unproved}, err == nil, err
 }
 
 func equalTestMaterial(a, b secrets.Material) bool {

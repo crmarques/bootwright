@@ -653,8 +653,11 @@ func (reader executionReader) Read(data []byte) (int, error) {
 	return reader.reader.Read(data)
 }
 
+// executionFailure is scoped: setup, preflight, apply, destroy and a power run
+// each meet the foundation, so an unscoped reading repeats the command that
+// met it, and a context's controller stage names its own.
 func executionFailure(code, message string) error {
-	return diagnostics.NewFailureWithRemediation(code, message, "", "Restore the qualified host execution foundation before retrying setup or preflight.")
+	return &prerequisites.ScopedFailure{Code: code, Message: message, Correction: "Restore the qualified host execution foundation", Command: "repeat this command"}
 }
 
 // qualifiable reports a drift that an update of the package build providing

@@ -95,7 +95,7 @@ func ValidatePartial(o api.Object, _ api.Catalog) []api.Issue {
 	}
 	issues := validateDeclaration(o, api.NewCatalog(nil), true)
 	if o.Spec().Get("provides").Len() > 0 && o.Spec().Has("readiness", "checks") && o.Spec().Get("readiness", "checks").Len() == 0 {
-		issues = append(issues, addonIssue("api.invariant", "spec.readiness.checks", "An add-on providing capabilities requires an effective readiness check."))
+		issues = append(issues, addonIssue("api.invariant", "spec.readiness.checks", "An add-on providing capabilities requires an effective readiness check.", "add a check to readiness.checks, or remove provides"))
 	}
 	return boundedIssues(issues)
 }
@@ -105,7 +105,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	case api.ClusterAddon:
 		issues := validateDeclaration(o, c, false)
 		if o.Spec().Get("provides").Len() > 0 && o.Spec().Get("readiness", "checks").Len() == 0 {
-			issues = append(issues, addonIssue("api.invariant", "spec.readiness.checks", "An add-on providing capabilities requires an effective readiness check."))
+			issues = append(issues, addonIssue("api.invariant", "spec.readiness.checks", "An add-on providing capabilities requires an effective readiness check.", "add a check to readiness.checks, or remove provides"))
 		}
 		return boundedIssues(issues)
 	case api.ClusterAddonProfile:
@@ -130,25 +130,25 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 			wrongStorageKind := input.Get("resourceKind").Text() != string(api.StorageExport) && (!partial || input.Has("resourceKind") || input.Has("secretType"))
 			missingStorageCapability := !providesStorage && (!partial || s.Has("provides"))
 			if effect.Has("storageExportAttachment") && (wrongStorageKind || missingStorageCapability) {
-				issues = append(issues, addonIssue("api.invariant", field, "Storage attachment requires a StorageExport input and the dataFoundation capability."))
+				issues = append(issues, addonIssue("api.invariant", field, "Storage attachment requires a StorageExport input and the dataFoundation capability.", "make the input a StorageExport resourceKind input and add dataFoundation to provides, or remove the storageExportAttachment effect"))
 			}
 			if effect.Has("globalPullSecretMerge") && input.Get("secretType").Text() != "token" && (!partial || input.Has("resourceKind") || input.Has("secretType")) {
-				issues = append(issues, addonIssue("api.invariant", field, "Global pull-secret merging requires a token Secret input."))
+				issues = append(issues, addonIssue("api.invariant", field, "Global pull-secret merging requires a token Secret input.", "make the input a token Secret input (secretType: token), or remove the globalPullSecretMerge effect"))
 			}
 		}
 	}
 	olm := s.Get("olm")
 	if catalog := olm.Get("catalogSource"); catalog.Present() {
 		if source := olm.Get("subscription", "source"); source.Present() && catalog.Get("name").Text() != "" && source.Text() != catalog.Get("name").Text() {
-			issues = append(issues, addonIssue("api.invariant", "spec.olm.subscription.source", "Subscription source must match the shipped CatalogSource name."))
+			issues = append(issues, addonIssue("api.invariant", "spec.olm.subscription.source", "Subscription source must match the shipped CatalogSource name.", "set olm.subscription.source to olm.catalogSource.name"))
 		}
 		if (!partial || olm.Has("namespace", "management")) && olm.Get("namespace", "management").Text() != "external" && olm.Get("namespace", "name").Text() != "" && olm.Get("subscription", "sourceNamespace").Text() == olm.Get("namespace", "name").Text() {
-			issues = append(issues, addonIssue("api.invariant", "spec.olm.subscription.sourceNamespace", "A shipped CatalogSource must use a namespace distinct from a managed operator namespace."))
+			issues = append(issues, addonIssue("api.invariant", "spec.olm.subscription.sourceNamespace", "A shipped CatalogSource must use a namespace distinct from a managed operator namespace.", "set olm.subscription.sourceNamespace to a namespace other than olm.namespace.name"))
 		}
 	}
 	for _, label := range olm.Get("namespace", "labels").Fields() {
 		if !validLabelKey(label.Name) || !validLabelValue(label.Value.Text()) {
-			issues = append(issues, addonIssue("api.value", "spec.olm.namespace.labels", "Namespace labels must have valid Kubernetes keys and values."))
+			issues = append(issues, addonIssue("api.value", "spec.olm.namespace.labels", "Namespace labels must have valid Kubernetes keys and values.", "use valid Kubernetes label keys and values in olm.namespace.labels"))
 			break
 		}
 	}
@@ -160,14 +160,14 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 		for _, member := range []string{"apiVersion", "kind"} {
 			value := resource.Get(member)
 			if (!partial || value.Present()) && (value.Type() != api.String || value.Text() == "") {
-				issues = append(issues, addonIssue("api.value", field+"."+member, "A custom resource requires a non-empty string identity."))
+				issues = append(issues, addonIssue("api.value", field+"."+member, "A custom resource requires a non-empty string identity.", "set apiVersion and kind of the custom resource to non-empty strings"))
 			}
 		}
 		if name := resource.Get("metadata", "name"); (!partial || name.Present()) && (name.Type() != api.String || name.Text() == "") {
-			issues = append(issues, addonIssue("api.value", field+".metadata.name", "A custom resource requires a non-empty string name."))
+			issues = append(issues, addonIssue("api.value", field+".metadata.name", "A custom resource requires a non-empty string name.", "set metadata.name of the custom resource to a non-empty string"))
 		}
 		if resource.Get("kind").Text() == "Secret" && (resource.Has("data") || resource.Has("stringData")) {
-			issues = append(issues, addonIssue("api.invariant", field, "Custom Secret resources cannot contain inline data or stringData."))
+			issues = append(issues, addonIssue("api.invariant", field, "Custom Secret resources cannot contain inline data or stringData.", "remove data and stringData from the custom Secret resource and supply the value through a Secret input"))
 		}
 	}
 	issues = append(issues, validateManifests(s.Get("manifestSet", "manifests"), "spec.manifestSet.manifests", partial)...)
@@ -184,16 +184,16 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 		}
 		issues = append(issues, validateManifests(step.Get("manifests"), field+".manifests", partial)...)
 		if !partial && !step.Has("playbook") && step.Get("manifests").Len() == 0 {
-			issues = append(issues, addonIssue("api.invariant", field, "A step requires a playbook or at least one manifest."))
+			issues = append(issues, addonIssue("api.invariant", field, "A step requires a playbook or at least one manifest.", "add a playbook or at least one manifest to the step"))
 		}
 		if step.Get("follows").Text() == "operatorReady" && !s.Has("olm") && (!partial || s.Has("manifestSet")) {
-			issues = append(issues, addonIssue("api.invariant", field+".follows", "Only OLM add-ons have an operatorReady anchor."))
+			issues = append(issues, addonIssue("api.invariant", field+".follows", "Only OLM add-ons have an operatorReady anchor.", "remove follows: operatorReady, or make the add-on an OLM add-on"))
 		}
 		if !partial && step.Has("playbook") && !step.Has("target") {
-			issues = append(issues, addonIssue("api.required", field+".target", "A playbook step requires an explicit target."))
+			issues = append(issues, addonIssue("api.required", field+".target", "A playbook step requires an explicit target.", "set the step's target"))
 		}
 		if !partial && !step.Has("playbook") && (step.Has("target") || step.Has("outputs")) {
-			issues = append(issues, addonIssue("api.invariant", field, "Targets and outputs require a playbook step."))
+			issues = append(issues, addonIssue("api.invariant", field, "Targets and outputs require a playbook step.", "add a playbook to the step, or remove its target and outputs"))
 		}
 		issues = append(issues, validateStepTarget(step.Get("target"), inputsByName, s.Has("inputs"), field+".target", c, partial)...)
 		for j, output := range step.Get("outputs").Items() {
@@ -201,7 +201,7 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 				return issues[:maxIssues]
 			}
 			if output.Get("secret").Bool() && output.Get("format").Text() == "sha256" {
-				issues = append(issues, addonIssue("api.invariant", indexed(field+".outputs", j), "A SHA-256 output cannot be marked secret."))
+				issues = append(issues, addonIssue("api.invariant", indexed(field+".outputs", j), "A SHA-256 output cannot be marked secret.", "remove secret: true from the SHA-256 output"))
 			}
 		}
 	}
@@ -212,14 +212,14 @@ func validateStepTarget(target api.Value, inputs map[string]api.Value, inputsPre
 	issues := []api.Issue{}
 	if static := target.Get("static"); static.Present() {
 		if !partial && static.Get("clusters").Len()+static.Get("machines").Len() == 0 {
-			issues = append(issues, addonIssue("api.invariant", field+".static", "A static target requires at least one cluster or Machine."))
+			issues = append(issues, addonIssue("api.invariant", field+".static", "A static target requires at least one cluster or Machine.", "list at least one cluster or Machine in the static target"))
 		}
 		for i, ref := range static.Get("machines").Items() {
 			if len(issues) >= maxIssues {
 				return issues[:maxIssues]
 			}
 			if machine, found := c.Find(api.Machine, ref.Text()); found && !machine.Spec().Has("access", "ssh") {
-				issues = append(issues, addonIssue("api.reference", indexed(field+".static.machines", i), "Static playbook targets must select SSH-accessible Machines."))
+				issues = append(issues, addonIssue("api.reference", indexed(field+".static.machines", i), "Static playbook targets must select SSH-accessible Machines.", "select a Machine that declares spec.access.ssh, or give that Machine SSH access"))
 			}
 		}
 	}
@@ -230,7 +230,7 @@ func validateStepTarget(target api.Value, inputs map[string]api.Value, inputsPre
 		input, found := inputs[from.Get("input").Text()]
 		validKind := slices.Contains([]string{string(api.StorageExport), string(api.StorageCluster), string(api.ContainerCluster), string(api.Machine)}, input.Get("resourceKind").Text())
 		if !found || !validKind && (!partial || input.Has("resourceKind") || input.Has("secretType")) || input.Get("resourceKind").Text() == string(api.StorageExport) && !hasEffect(input, "storageExportAttachment") && (!partial || input.Has("effects")) {
-			issues = append(issues, addonIssue("api.reference", field+".fromInput.input", "Input targets require a declared supported resource input and any required storage-attachment effect."))
+			issues = append(issues, addonIssue("api.reference", field+".fromInput.input", "Input targets require a declared supported resource input and any required storage-attachment effect.", "name a declared input whose resourceKind is StorageExport, StorageCluster, ContainerCluster or Machine; a StorageExport input also needs the storageExportAttachment effect"))
 		}
 	}
 	return boundedIssues(issues)
@@ -248,7 +248,7 @@ func validateManifests(manifests api.Value, field string, partial bool) []api.Is
 		value := manifest.Get("path").Text()
 		ext := strings.ToLower(path.Ext(value))
 		if !api.ValidLexical("relative-path", value) || !slices.Contains(strings.Split(value, "/"), "manifests") || ext != ".yaml" && ext != ".yml" {
-			issues = append(issues, addonIssue("api.value", indexed(field, i)+".path", "Manifest paths must be contained YAML paths with a manifests segment."))
+			issues = append(issues, addonIssue("api.value", indexed(field, i)+".path", "Manifest paths must be contained YAML paths with a manifests segment.", "use a relative .yaml or .yml path with a manifests directory in it"))
 		}
 	}
 	return issues
@@ -305,11 +305,11 @@ func validLabelKey(value string) bool {
 
 func indexed(field string, index int) string { return field + "[" + strconv.Itoa(index) + "]" }
 
-func addonIssue(code, field, message string) api.Issue {
+func addonIssue(code, field, message, remediation string) api.Issue {
 	if !strings.HasPrefix(field, "$") {
 		field = "$." + field
 	}
-	return api.Issue{Code: code, Field: field, Message: message}
+	return api.Issue{Code: code, Field: field, Message: message, Remediation: remediation}
 }
 
 const maxIssues = 999

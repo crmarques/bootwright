@@ -3,6 +3,7 @@ package secretstore
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -246,6 +247,33 @@ func TestUninitializedVersusOrphanedStore(t *testing.T) {
 	}
 	if err := a.Initialize(context.Background(), w.selected, "selected", func(StoreSession, Selection, bool) error { return nil }); err == nil {
 		t.Fatal("orphaned storage overwritten")
+	}
+}
+
+// A refusal over a store no init created, or over a nonempty one that lost its
+// metadata, names the init of the context whose store it is.
+func TestAnUninitializedStoreRefusalNamesItsInitInTheContext(t *testing.T) {
+	a, w, _ := testAccess(testBackend("selected", false))
+	err := a.Mutate(context.Background(), w.selected, func(StoreSession, Selection) error {
+		t.Fatal("an uninitialized store reached a write callback")
+		return nil
+	})
+	want := []diagnostics.Diagnostic{{
+		Severity: "error", Code: "secret.store.uninitialized", Message: "the secret store of context fixture is not initialized",
+		Remediation: "bootwright secret encryption init --context " + w.selected.Name,
+	}}
+	if found := diagnostics.Of(err); !reflect.DeepEqual(found, want) {
+		t.Fatalf("refusal = %+v, want %+v", found, want)
+	}
+	w.area.files["orphan"] = []byte("not a fresh store")
+	_, _, err = ReadSelector(context.Background(), w.area, w.selected.Name)
+	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "secret.store.corrupt" ||
+		!strings.Contains(found[0].Remediation, "--context "+w.selected.Name) {
+		t.Fatalf("refusal of an orphaned store = %+v", found)
+	}
+	if found := diagnostics.Of(Uninitialized("")); len(found) != 1 || found[0].Message != "the secret store is not initialized" ||
+		found[0].Remediation != "bootwright secret encryption init" {
+		t.Fatalf("refusal without a context = %+v", found)
 	}
 }
 

@@ -1,6 +1,7 @@
 package prerequisites
 
 import (
+	"cmp"
 	"errors"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -22,12 +23,16 @@ type ScopedFailure struct {
 	// Routable marks a publisher this host could not reach or resolve, which
 	// a scope that selects its route on every run can settle over another.
 	Routable bool
+	// Command is the command an unscoped reading names; "rerun bootwright
+	// setup" when empty. A failure every command that executes on the host can
+	// meet names "repeat this command", because only the stage knows its own.
+	Command string
 }
 
 func (f *ScopedFailure) Error() string { return "failed with diagnostics" }
 
 func (f *ScopedFailure) Unwrap() error {
-	return f.remedied("set HTTPS_PROXY to a proxy that reaches it and keep it out of NO_PROXY", "rerun bootwright setup")
+	return f.remedied("set HTTPS_PROXY to a proxy that reaches it and keep it out of NO_PROXY", cmp.Or(f.Command, "rerun bootwright setup"))
 }
 
 // InStage renders a scoped failure as the named context's controller stage

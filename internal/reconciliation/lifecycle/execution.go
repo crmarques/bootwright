@@ -201,6 +201,9 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err := s.refuseLostBinding(ctx, name, decided, decided.basis); err != nil {
 		return nil, err
 	}
+	if err := s.proveShared(ctx, name, decided); err != nil {
+		return nil, err
+	}
 	// The plan is presented before authorization refuses, so a refusal names
 	// steps the operator has just read; both precede the prompt and
 	// registration.
@@ -233,6 +236,41 @@ func (s Service) decideShared(ctx context.Context, name string, verb reconciliat
 		return err
 	})
 	return decided, identity, err
+}
+
+// proveShared re-proves, under the shared lock and before the plan is
+// presented, authorized or confirmed, what the transition's exclusive
+// transaction proves again before it registers: a continuation or resolution
+// its input, automation, closure, setup and host binding, and a fresh removal
+// its host. No plan is then presented for a transition that would refuse. A
+// lost frozen binding names the only exit those records leave whatever else
+// they hold, so it wins: a binding the keyring no longer lists has refused
+// already, and one whose material the keyring cannot read, which only its
+// reopen proves, is reported in place of the refusal here, as the reopen this
+// transition would make before it registers reports it.
+func (s Service) proveShared(ctx context.Context, name string, decided transition) error {
+	removal := decided.fresh && decided.verb == reconciliation.Destroy
+	if !removal && (decided.fresh || decided.operation.ID == "") {
+		return nil
+	}
+	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+		if removal {
+			return s.verifyRemovalHost(ctx, view)
+		}
+		return s.verifyContinuation(ctx, view, decided.operation)
+	})
+	binding := frozenBinding(decided)
+	if err == nil || binding == "" {
+		return err
+	}
+	bound, reopened := s.binder.Reopen(ctx, custody.BindingRequest{ContextName: name, BindingID: binding})
+	for _, item := range bound {
+		item.Material.Clear()
+	}
+	if why, unreadable := unreadableMaterial(reopened); unreadable {
+		return s.lostBinding(ctx, name, decided, decided.basis, binding, why)
+	}
+	return err
 }
 
 // authorize compares the tokens this invocation supplied with the tokens the
@@ -328,13 +366,7 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 	name := view.Identity().Name
 	if operation.State != reconciliation.OperationDone {
 		if operation.Verb != verb {
-			remediation := "continue it with "
-			if nextAction(operation, frozen, states) == string(reconciliation.Destroy) {
-				remediation = "replace it with "
-			}
-			return transition{}, failure("lifecycle.state",
-				"an incomplete "+string(operation.Verb)+" must be continued before another operation",
-				remediation+continuationCommand(name, operation, frozen, states))
+			return transition{}, s.refuseOver(ctx, view, operation, frozen, states)
 		}
 		if err := refuseUncontinuable(ctx, store, name, operation, frozen); err != nil {
 			return transition{}, err
@@ -382,6 +414,39 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 		return transition{}, err
 	}
 	return plannedFrom(decided, operation, states, attempts), nil
+}
+
+// refuseOver refuses a verb over an incomplete operation of the other verb,
+// which only an apply over an incomplete removal reaches. It names that
+// removal's continuation, or the fresh removal that replaces a failed one,
+// only where the proof that command would make admits it: the continuation's
+// re-proof, or the replacement's host proof. Otherwise it names the exit that
+// proof's refusal names, followed by that refusal, so the remedy is never a
+// command that refuses. A finalization runs no block and is held to neither.
+func (s Service) refuseOver(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
+	const message = "must be continued before another operation"
+	name := view.Identity().Name
+	next := nextAction(operation, frozen, states)
+	var proof error
+	switch {
+	case next == string(reconciliation.Destroy):
+		proof = s.verifyRemovalHost(ctx, view)
+	case pendingRemains(frozen, states):
+		proof = s.verifyContinuation(ctx, view, operation)
+	}
+	refused := diagnostics.Of(proof)
+	if proof != nil && len(refused) == 0 {
+		return proof
+	}
+	if len(refused) != 0 {
+		return withCause(failure("lifecycle.state", "an incomplete "+string(operation.Verb)+" "+message, refused[0].Remediation), proof)
+	}
+	remediation := "continue it with "
+	if next == string(reconciliation.Destroy) {
+		remediation = "replace it with "
+	}
+	return failure("lifecycle.state", "an incomplete "+string(operation.Verb)+" "+message,
+		remediation+continuationCommand(name, operation, frozen, states))
 }
 
 // completedOwnership is what a completed apply owns: its whole frozen plan,
@@ -941,6 +1006,12 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	// started. Both proofs share one approved bundle, exactly as the operation's
 	// own effects share one once it has registered.
 	if decided.fresh && decided.verb == reconciliation.Destroy {
+		// The host is proved before anything is resolved, probed or
+		// registered, so no removal touches a context from a host its
+		// controller state does not name.
+		if err := s.verifyRemovalHost(ctx, tx); err != nil {
+			return nil, err
+		}
 		proving, err := approvedBundle(ctx, tx)
 		if err != nil {
 			return nil, err
@@ -1051,7 +1122,13 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	observed := s
 	reporter := &resolutionProgress{report: s.report, declared: len(unproved)}
 	observed.options.Progress = reporter
-	cause := observed.observe(work, tx, store, approved, logging, replaced, frozen, states, material)
+	// An apply's block its own observation proves completed is resolved done,
+	// with what it produced captured before any inverse runs (D123); any other
+	// is resolved by this removal's own check (D119), which proves what it
+	// takes back is this context's own, or absent, rather than that the apply's
+	// frozen request was realized.
+	removal := replaced.Verb == reconciliation.Apply
+	cause := observed.observe(work, tx, store, approved, logging, replaced, frozen, states, material, removal, decided.plan)
 	logging.close(ctx, log)
 	if err := s.recordFromBlocks(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
 		return err
@@ -1518,18 +1595,32 @@ func (s Service) establishBinding(ctx context.Context, tx Transaction, machine s
 
 // verifyContinuation re-proves everything a continuation depends on before it
 // does work. Drift refuses; it never re-resolves to another implementation.
-func (s Service) verifyContinuation(ctx context.Context, tx Transaction, operation operationstore.Operation) error {
-	if err := s.recordedRefusal(tx, operation); err != nil {
+func (s Service) verifyContinuation(ctx context.Context, view View, operation operationstore.Operation) error {
+	if err := s.recordedRefusal(view, operation); err != nil {
 		return err
 	}
 	host, err := s.host.Identity(ctx)
 	if err != nil {
 		return err
 	}
-	if err := verifyHostBinding(tx.Controller(), tx.Identity(), host, unboundExit(tx, operation)); err != nil {
+	if err := verifyHostBinding(view.Controller(), view.Identity(), host, unboundExit(view, operation), false); err != nil {
 		return err
 	}
-	return closureRefusal(tx, operation)
+	return closureRefusal(view, operation)
+}
+
+// verifyRemovalHost proves a fresh removal runs on the host the controller
+// state records: setup completed there, it is that state's own host, and a
+// binding the state records for the context names it. A context the state
+// records no binding for is admitted once the host is proved, because no
+// apply can bind a context that holds an incomplete operation, the removal is
+// that context's exit, and the apply after it binds again (unboundExit).
+func (s Service) verifyRemovalHost(ctx context.Context, view View) error {
+	host, err := s.host.Identity(ctx)
+	if err != nil {
+		return err
+	}
+	return verifyHostBinding(view.Controller(), view.Identity(), host, "", true)
 }
 
 // recordedRefusal is the part of a continuation's re-proof that reads only
@@ -1633,8 +1724,9 @@ func registeredWith(executable operationstore.Executable) string {
 
 // verifyHostBinding proves this context is bound to the host the operation
 // runs on and that its setup completed, before any local effect. unbound is
-// the remedy when the controller state records no binding for the context.
-func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity, host controller.InstalledHostIdentity, unbound string) error {
+// the remedy when the controller state records no binding for the context,
+// and admitUnbound admits that context instead, once the host is proved.
+func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity, host controller.InstalledHostIdentity, unbound string, admitUnbound bool) error {
 	if !view.Exists || !view.Initialized {
 		return failure("controller.identity", "this host has no completed controller setup", "run bootwright setup")
 	}
@@ -1655,6 +1747,9 @@ func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity,
 		if binding.HostDigest != digest {
 			return failure("controller.identity", "the recorded controller binding does not match this host", "restore the original host, or create a context on this one")
 		}
+		return nil
+	}
+	if admitUnbound {
 		return nil
 	}
 	return failure("controller.identity", "this context is not bound to a controller host", unbound)

@@ -42,7 +42,9 @@ serving only where `getent` is absent, and a `sudo -i` root shell resolves as
 direct root, as [local privilege and user identity](cli.md#local-privilege-and-user-identity)
 states. Perform its filesystem effects with that user's credentials. Use verified
 no-follow handles, exclusive temporary files and atomic replacement. A refusal
-raised under that account reports that account's own bounded diagnosis.
+raised under that account reports that account's own bounded diagnosis and
+its repair, so an elevated command names the same repair as an unelevated one
+(`TestAnElevatedSelectionRefusalKeepsItsRepair`).
 
 Unsafe ownership, permissions, object type (a symbolic link included) or link
 count fail with `context.state`, naming the object and its repair: an unsafe
@@ -237,7 +239,7 @@ confirmed setup:
 | `state/mutation.json` | Lifecycle ownership and operation evidence; missing or unknown evidence prevents destructive cleanup. |
 | `state/operations/` | [Reconciliation-owned operation records and logs](state-reconciliation.md#operation-records). Workspace supplies the held area and its publication primitives; it never interprets their content. |
 | `state/runs/` | Retained adapter output of [bounded runs](cli/output.md#bounded-run-output), in an area Workspace supplies and never interprets. The area keeps the newest runs the bounds table below states: before a run creates its directory, the oldest runs no live run holds are removed, each only while it holds nothing but its own `run.output`, and an entry not named as a run is neither counted nor removed. A run that cannot hold the directory it created removes it (`TestARunThatCannotOpenLeavesNoDirectory`). Runs are removed with the context. |
-| `state/trust/hosts.json` | The context-managed SSH host-key trust an [SSH session](cli.md#machine-ssh-sessions) proves a Machine against when it declares no `knownHostsRef` and Bootwright did not install it: one public-key record per Machine, and one key per address. Written only by `machine trust` and by an explicitly confirmed first use, published atomically against its exact prior content, and removed with the context. A write that takes over the endpoint of a Machine the context no longer declares removes that Machine's record in the same write. It holds no confidential material. |
+| `state/trust/hosts.json` | The context-managed SSH host-key trust an [SSH session](cli.md#machine-ssh-sessions) proves a Machine against when it declares no `knownHostsRef` and Bootwright did not install it: one public-key record per Machine, and one key per address. Written only by `machine trust` and by an explicitly confirmed first use, published atomically against its exact prior content, and removed with the context. A write that takes over the endpoint of a Machine the context no longer declares, or that no longer uses the context's SSH trust, removes that Machine's record in the same write. It holds no confidential material. |
 | `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring-v4). |
 
 Every directory is owned by `root:root` with mode `0700`; every file is owned
@@ -636,6 +638,13 @@ changing nothing, when the name's occupancy, its published size and digest, its
 freeze or, for a deletion, its retained stage changed meanwhile, whether or not
 a prompt ran. With `--yes` the command takes the exclusive hold alone.
 
+A deletion removes whatever occupies the image's name and its record's name
+without following it: a file, link or other non-directory is unlinked and an
+empty directory is removed. A directory that still holds entries is refused
+with `media.store`, naming the entry relative to the state root and the remedy
+of removing it and repeating the deletion, and nothing inside it is removed
+(`TestAFailedNonRegularMediaEntryIsRemovedByMediaDelete`).
+
 A command that cannot take the lock for the second hold refuses with
 `lifecycle.lease` and publishes nothing. When the request pinned the digest with
 `--sha256`, it first retains its stage: still holding the stage's lock and no
@@ -713,7 +722,17 @@ exit `bootwright context delete --name <name> --purge --allow-orphans`, and
 that acknowledgement abandons the context, its confirmation saying that its
 objects cannot be listed because its mutation evidence cannot be read; an
 absent evidence file is read so, never as storage that cannot be accessed
-(`TestMissingEvidenceIsRefusedAndAbandonedAsCorruptEvidenceIs`). A live
+(`TestMissingEvidenceIsRefusedAndAbandonedAsCorruptEvidenceIs`). An evidence
+file the store refuses to open as its own, for its type, owner, permissions,
+link count, size or a kernel error, refuses an input update, `--purge` with or
+without `--allow-orphans`, `status` and every lifecycle command with
+`context.state`. The refusal names the context, the entry
+`contexts/<name>/state/mutation.json` and the store's answer, and gives the
+exit: remove that entry beneath the state root, which leaves the evidence
+missing, then `bootwright context delete --name <name> --purge
+--allow-orphans`, or restore the whole store from a matching backup. The
+deletion never removes an entry it cannot verify as its own
+(`TestUnsafeEvidenceIsRefusedNamingItsContextEntryAndExit`). A live
 lease refuses under it exactly as it does without it, before the guard reads
 anything. A ready context whose directory is gone from a `contexts`
 container that still verifies is lost: what it owned cannot be listed, so its
@@ -788,7 +807,8 @@ files it copies, the files seen and the objects decoded on standard output,
 and every warning on standard error, the completed-apply warning above
 included, which its result then does not repeat. A deletion's prompt follows a
 plan naming the context, its selected input revision, the keyring with every
-secret version it holds and the host reservations it removes, and what it
+secret version it holds (or, for a lost context whose directory is gone, that
+its keyring already went with it) and the host reservations it removes, and what it
 abandons: nothing, the objects `bootwright status --context <name>` lists, or
 objects that cannot be listed and why. A command that would prompt without a
 plan presenter refuses with `context.state` rather than ask.

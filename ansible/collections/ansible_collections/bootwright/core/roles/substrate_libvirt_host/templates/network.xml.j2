@@ -14,7 +14,7 @@
 {% if network_uuid %}
   <uuid>{{ network_uuid }}</uuid>
 {% endif %}
-  <bridge name="{{ item.bridge }}" stp="on" delay="0" zone="trusted"/>
+  <bridge name="{{ item.bridge | e }}" stp="on" delay="0" zone="trusted"/>
 {% if item.forward | default('') and item.forward != 'none' %}
   <forward mode="{{ item.forward }}"/>
 {% endif %}

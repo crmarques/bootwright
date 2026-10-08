@@ -57,6 +57,9 @@ argument_specs:
       bootwright_cluster_media_material:
         type: dict
         required: true
+      bootwright_cluster_media_output:
+        type: dict
+        required: false
 
   observe:
     short_description: Observe one frozen boot image without changing it.

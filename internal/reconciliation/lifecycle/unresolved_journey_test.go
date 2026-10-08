@@ -56,9 +56,10 @@ type hypervisor struct {
 	// it; partial is this context's own domain defined, with its disk, while
 	// its controller never started; drifted is this context's own machine
 	// whole, its adapter's postcondition proved, while its controller runs
-	// another image than the frozen one.
-	silent, foreign, listener, partial, drifted bool
-	calls                                       []string
+	// another image than the frozen one; stopped is that drifted machine's
+	// domain shut off, as bootwright machine stop leaves it.
+	silent, foreign, listener, partial, drifted, stopped bool
+	calls                                                []string
 }
 
 func (h *hypervisor) Run(_ context.Context, run lifecycle.RunRequest) (lifecycle.RunResult, error) {
@@ -74,8 +75,12 @@ func (h *hypervisor) Run(_ context.Context, run lifecycle.RunRequest) (lifecycle
 	case "apply":
 		return lifecycle.RunResult{}, errors.New("the adapter's result was lost")
 	case "destroy":
-		h.partial, h.drifted = false, false
+		h.partial, h.drifted, h.stopped = false, false, false
 		return lifecycle.RunResult{Outcome: "changed", Evidence: evidenceOf(absent)}, nil
+	}
+	state, power := "running", "On"
+	if h.stopped {
+		state, power = "shut off", "Off"
 	}
 	switch {
 	case h.foreign:
@@ -91,7 +96,7 @@ func (h *hypervisor) Run(_ context.Context, run lifecycle.RunRequest) (lifecycle
 		return lifecycle.RunResult{Outcome: "unchanged", Evidence: evidenceOf(libvirt.MachineEvidence{
 			Answered: true, Controller: "quay.io/metal3-io/sushy-tools@sha256:" + strings.Repeat("f", 64),
 			Disks: []libvirt.DiskEvidence{{Name: "root", Present: true, SizeGiB: 60}}, Domain: h.request.Domain,
-			Listener: held(true), Owned: true, Postcondition: true, Power: "On", Request: run.Digest, State: "running",
+			Listener: held(true), Owned: true, Postcondition: true, Power: power, Request: run.Digest, State: state,
 			System: h.request.UUID, Unit: "active",
 		})}, nil
 	case h.partial:
@@ -186,15 +191,15 @@ func requireRefusal(t *testing.T, journey *lifecycle.CapabilityJourney, adapter 
 	}
 	want := []diagnostics.Diagnostic{
 		{Severity: "error", Code: "lifecycle.unknown", Message: "the outcome of " + lostMachine + " is still unknown: " + reason,
-			Remediation: remedy + ", then repeat the operation to observe it again"},
+			Remediation: remedy + ", then repeat bootwright destroy --context lab --authorize data-loss to observe it again"},
 		{Severity: "error", Code: "lifecycle.unknown", Message: "this removal cannot prove what these effects left behind, so it registered nothing: " + lostMachine,
 			Remediation: "do what the diagnostic of each reports, then repeat bootwright destroy --context lab"},
 	}
 	if got := diagnostics.Of(err); !slices.Equal(got, want) {
 		t.Fatalf("the refusal reported %+v, want %+v", got, want)
 	}
-	if calls := adapter.took(); !slices.Equal(calls, []string{"observe"}) {
-		t.Fatalf("the refused removal ran %v, want only its resolution's observation", calls)
+	if calls := adapter.took(); !slices.Equal(calls, []string{"observe", "observe"}) {
+		t.Fatalf("the refused removal ran %v, want only its resolution's observations, the apply's and then the removal's", calls)
 	}
 	if !slices.EqualFunc(journey.Reservations(), before, func(x, y prerequisites.HostReservation) bool {
 		return x.Context == y.Context && slices.Equal(x.Keys, y.Keys)
@@ -215,8 +220,8 @@ func requireRemoved(t *testing.T, journey *lifecycle.CapabilityJourney, adapter 
 	if err != nil || result.Receipt.Verb != "destroy" || result.Receipt.State != "done" {
 		t.Fatalf("the removal = %+v (%v)", result, err)
 	}
-	if calls := adapter.took(); !slices.Equal(calls, []string{"observe", "observe", "destroy"}) {
-		t.Fatalf("the removal ran %v, want its resolution, its quiescence probe and its removal", calls)
+	if calls := adapter.took(); !slices.Equal(calls, []string{"observe", "observe", "observe", "destroy"}) {
+		t.Fatalf("the removal ran %v, want its resolution's two observations, its quiescence probe and its removal", calls)
 	}
 	if held := journey.Reservations(); len(held) != 0 {
 		t.Fatalf("the completed removal kept %v", held)
@@ -286,9 +291,13 @@ func TestALostLibvirtMachineIsRecoveredOnlyOnceItsObservationProvesIt(t *testing
 // is not what the apply froze. The apply's resolution refuses naming that
 // comparison, records the same reason in its resolution log as `unresolved`,
 // and status names it with its remedy. A removal that supersedes the apply
-// resolves the apply's block by the apply's reading, so it refuses the same way
-// until the machine is restored, and then removes it.
-func TestADriftedLibvirtMachineResolutionLogsItsRefusal(t *testing.T) {
+// first reads the block by the apply's observation, which does not prove it
+// completed (D123), and so resolves it by the removal's own check (D119), which reads the
+// drifted machine as this context's own and everything it takes back still
+// present, so once the operator has stopped it, as the quiescence gate
+// requires, the removal removes it while it is still drifted, with its
+// ownership proved.
+func TestADriftedLibvirtMachineWhoseApplyIsUnknownIsRemovedByItsDestroy(t *testing.T) {
 	host := "Machine hypervisor at 192.0.2.5"
 	reason := "domain bootwright-lab-rhel-01 on " + host + " is not what its apply froze: the running management controller is not the frozen image"
 	remedy := "restore domain bootwright-lab-rhel-01 on " + host + " to what its frozen request names"
@@ -309,7 +318,6 @@ func TestADriftedLibvirtMachineResolutionLogsItsRefusal(t *testing.T) {
 	if operation != "apply unknown" || block != "unknown" || unresolved == nil || unresolved.Reason != reason || unresolved.Remedy != remedy {
 		t.Fatalf("status reports %s with %s block, unresolved %+v", operation, block, unresolved)
 	}
-	requireRefusal(t, journey, adapter, reason, remedy)
-	adapter.set(func(h *hypervisor) { h.drifted = false })
+	adapter.set(func(h *hypervisor) { h.stopped = true })
 	requireRemoved(t, journey, adapter)
 }

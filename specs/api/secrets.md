@@ -63,9 +63,13 @@ supplied by an [Environment kind default](environment.md#kind-defaults), with
 `$.spec.source.file`, names the Secret and its remedy: declare
 `source: {contextStore: {}}` and load the files with
 [`secret set`](../secrets.md#acquisition-and-commands) and the flags of the
-declared type. A name that is not a valid object name prints as `<name>`:
+declared type, as `bootwright secret set --name <n> --context <context>`
+followed by the type's flags. A name that is not a valid object name prints as
+`<name>`. `<context>` is the context the invocation reads: the one `validate`
+names, or the selected one when `validate` reads no file; `validate -f`, which
+reads no context, prints the placeholder:
 
-| Secret type | Remedy after `bootwright secret set --name <n>` |
+| Secret type | Remedy after `bootwright secret set --name <n> --context <context>` |
 | --- | --- |
 | `opaque`, `token`, `dockerConfigJson` | `--value-file <path>` |
 | `usernamePassword` | `--username <username> --password-file <path>` |
@@ -76,7 +80,8 @@ declared type. A name that is not a valid object name prints as `<name>`:
 A kind default that supplies the arm is refused twice. The Environment is
 refused at `$.spec.defaults.Secret.source.file`, with the remedy to replace the
 arm in that default with `source: {contextStore: {}}`, then run
-`bootwright secret set --name <name>` with the file flags of its type for each
+`bootwright secret set --name <name> --context <context>` with the file flags
+of its type for each
 Secret that inherits it; when the default declares a type, the remedy names
 that type's flags from the table. Each Secret that inherits the arm is refused
 at `$.spec.source.file`, located at the default, with the remedy of every
@@ -94,7 +99,7 @@ Parameters are flat and type-scoped:
 | Field | Type | Secret types | Required | Default | Rule |
 | --- | --- | --- | --- | --- | --- |
 | `username` | string | `usernamePassword` | no | `admin` | UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands); no whitespace, colon, newline or NUL. The password itself is randomly generated material. |
-| `commonName` | string | `tlsCertificate`, `caBundle` | yes | — | Common name for the self-signed certificate. |
+| `commonName` | string | `tlsCertificate`, `caBundle` | yes | — | Common name for the self-signed certificate: non-empty UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands), without NUL. |
 | `dnsNames` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | DNS subject-alternative names. |
 | `ipAddresses` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | IP subject-alternative names. |
 | `validityDays` | integer | `tlsCertificate`, `caBundle` | no | `3650` | Inclusive range `1..36500`, counted from generation; the [generated certificate](../secrets.md#acquisition-and-commands) starts 24 hours before it. |

@@ -346,6 +346,12 @@ execution bundle fill, which this build cannot free
   client area or retained resolution meets the bound refuses the same way,
   naming the purge that retires superseded execution bundles
   ([bounds](contexts/controller-record.md#bounds)).
+- The store decides the same bound again when setup publishes. A publication
+  that still finds no room refuses with `controller.conflict`, naming the bound
+  and the same remedy. A setup whose resolution would add dependency sources
+  beyond the 4096 the host retains refuses with `controller.conflict`, saying
+  that no command of this build frees a retained dependency source and that the
+  remedy is to set this build up on another controller host.
 
 The receipt may be one whose setup completed, or one whose setup failed or was
 canceled: the next setup replaces either with a new receipt, so both are
@@ -466,7 +472,7 @@ Global SSH flags remain unconsumed.
 
 | Invocation | Required behavior |
 | --- | --- |
-| `bootwright setup --dry-run` | Produce deterministic dependency intent and actions from policy and bounded local file metadata; with `--purge-old-bundles`, plan the retirement that follows the setup's completion. No controller record is read, so this stays below the privilege boundary. No dependency subprocess, network, Secret read, privilege escalation or write. Versions requiring live resolution and readiness facts requiring effects are explicitly unverified. The `state-root` check reports, from an unprivileged look at the state root, an absent root, which setup creates, or a `root:root` `0700` directory on a local filesystem, whose contents setup verifies. A root of another type, owner or mode, one on an unqualified filesystem, and, when the root's owner runs the dry run, one holding state this build cannot read, such as an earlier build's, are not ready: the dry run reports the check beside the store's own refusal and remedy, and exits 1. |
+| `bootwright setup --dry-run` | Produce deterministic dependency intent and actions from policy and bounded local file metadata; with `--purge-old-bundles`, plan the retirement that follows the setup's completion. No controller record is read, so this stays below the privilege boundary. No dependency subprocess, network, Secret read, privilege escalation or write. Versions requiring live resolution and readiness facts requiring effects are explicitly unverified. The `state-root` check reports, from an unprivileged look at the state root, an absent root, which setup creates, or a `root:root` `0700` directory on a local filesystem, whose contents setup verifies. A root of another type, owner or mode, one on an unqualified filesystem, and, when the root's owner runs the dry run, one holding state this build cannot read, such as an earlier build's, are not ready: the dry run reports the check beside the store's own refusal and remedy, and exits 1. The check reaches the root as the store opens it, every ancestor without following a link and on a qualified local filesystem. A root behind a symbolic link in its path is not ready, and the dry run reports the store's own refusal beside the check (`TestTheStateRootInspectionReachesTheRootAsTheStoreOpensIt`). |
 | `bootwright setup` | Inspect, present the complete bounded local plan, confirm when it contains changes, prepare the host dependencies and verify every required postcondition. Publish no binding and record no context on the receipt. |
 | `bootwright preflight controller` | Read and verify the host prerequisites with bounded local probes, the [execution foundation](#supported-host-and-dependency-selection) among them, and report the host's FIPS mode. May use the verified privilege boundary for private metadata and disposable local probe scratch. |
 | `bootwright preflight controller --context <name>` | Additionally report that context's own target tools, libvirt client, hypervisor and installer-media closures, and host binding as context-scoped checks, by presence only, exactly as [its controller stage](#the-controller-stage) reads them. Contact no publisher and read no repository metadata for them. |
@@ -956,10 +962,17 @@ receipt. If no effect occurred, it may retry the same action. Positive proof
 of the requested postcondition permits completion without repeating an install.
 Contradictory or incomplete proof leaves the action unknown and blocks further
 mutation with recovery guidance. Never turn a lost child result into failure
-with a presumed no-effect outcome. Setup's own action whose adapter failed after
-publishing its preparation but before Go acknowledged a native record is
-recorded failed, because the adapter cannot start its transaction before that
-acknowledgement, and the next setup replaces it. Changed input, host identity or dependency
+with a presumed no-effect outcome. Setup's own action and a controller-stage client
+installation whose adapter failed, or was canceled, after publishing its
+preparation but before Go delivered an acknowledgement of any record that
+authorizes an effect, a native transaction or a tool installation, are recorded
+failed, because the adapter waits for that acknowledgement, and the next run
+replaces them; one whose delivery is uncertain, including one a cancellation
+interrupts, leaves them unknown, and a recovery is never recorded failed this
+way. A canceled stage
+attempt is still recorded `canceled`, then `unknown`, by the lifecycle's
+[attempt rule](state-reconciliation.md#attempt-outcomes), which this does not
+change. Changed input, host identity or dependency
 closure cannot replace an incomplete setup; restore the exact compatible
 executable/dependencies and resolve that receipt first. The one exception is a
 pending receipt of setup's own, at the bound or below it, that this executable

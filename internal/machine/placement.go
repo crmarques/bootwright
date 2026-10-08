@@ -100,6 +100,11 @@ var privilegeRefusals = map[string]string{
 	"sudoPasswordRef": "a lifecycle placement never escalates; remove access.ssh.sudoPasswordRef",
 }
 
+var privilegeRemediations = map[string]string{
+	"user":            "remove spec.access.ssh.user, or set it to root",
+	"sudoPasswordRef": "remove spec.access.ssh.sudoPasswordRef",
+}
+
 // validatePlacementHost refuses a lifecycle placement host whose SSH access
 // would connect as another account or escalate. A Machine no placement names,
 // such as a cluster node, a storage node or a session target, keeps any account.
@@ -110,7 +115,7 @@ func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 	}
 	var issues []api.Issue
 	for _, field := range privilegeFields(ssh) {
-		issues = append(issues, invariant("$.spec.access.ssh."+field, privilegeRefusals[field]))
+		issues = append(issues, invariant("$.spec.access.ssh."+field, privilegeRefusals[field], privilegeRemediations[field]))
 	}
 	return issues
 }

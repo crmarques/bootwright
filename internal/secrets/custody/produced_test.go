@@ -30,14 +30,14 @@ func (s *serviceSession) Withdraw(context.Context) (bool, error) {
 	return withdrawn, nil
 }
 
-func (s *serviceSession) ReadProduced(_ context.Context, block, name string) (secrets.Material, bool, error) {
+func (s *serviceSession) ReadProduced(_ context.Context, block, name string) (secretstore.ProducedMaterial, bool, error) {
 	s.reads++
 	for _, entry := range s.snapshot.Produced {
 		if entry.Block == block && entry.Name == name {
-			return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("produced-kubeconfig")}), true, nil
+			return secretstore.ProducedMaterial{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("produced-kubeconfig")}), Unproved: entry.Unproved}, true, nil
 		}
 	}
-	return secrets.Material{}, false, nil
+	return secretstore.ProducedMaterial{}, false, nil
 }
 
 // withProduced gives the fixture's store a produced entry named like the
@@ -150,7 +150,7 @@ func TestProduceOnAnUninitializedStoreRefuses(t *testing.T) {
 	service, access, _, _ := serviceFixture(t, declarationYAML("token", ""))
 	access.session = nil
 	_, err := service.Produce(context.Background(), access.snapshot.Context, &struct{ secretstore.Area }{}, ProduceRequest{Block: "cluster-install-sno"})
-	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "secret.store.uninitialized" {
+	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "secret.store.uninitialized" || found[0].Remediation != "bootwright secret encryption init --context fixture" {
 		t.Fatalf("produce over an uninitialized store = %+v", found)
 	}
 }
@@ -161,9 +161,9 @@ func TestProduceOnAnUninitializedStoreRefuses(t *testing.T) {
 func TestReadProducedViewsTheNamedEntry(t *testing.T) {
 	service, access, _, _ := serviceFixture(t, declarationYAML("token", ""))
 	withProduced(access)
-	material, found, err := service.ReadProduced(context.Background(), ReadProducedRequest{ContextName: "fixture", Block: "cluster-install-sno", Name: "token"})
-	value, _ := material.Part(secrets.ValuePart)
-	material.Clear()
+	read, found, err := service.ReadProduced(context.Background(), ReadProducedRequest{ContextName: "fixture", Block: "cluster-install-sno", Name: "token"})
+	value, _ := read.Material.Part(secrets.ValuePart)
+	read.Material.Clear()
 	if err != nil || !found || string(value) != "produced-kubeconfig" || !slices.Equal(access.unlocks, []bool{true}) {
 		t.Fatalf("read = %q, %t, %v with unlocks %v", value, found, err, access.unlocks)
 	}

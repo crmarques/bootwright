@@ -228,7 +228,16 @@ requires, before it reports: an image an earlier executable published with a
 mode the serving process cannot read is repaired and reported changed, and one
 the listener still refuses fails the block with its cause. The inverse
 removes the published image and the private directory that held it, discards
-the installer work directory, and proves each absent. A removal's resolution
+the installer work directory, and proves each absent. That directory holds the
+installation's kept administrator kubeconfig, which is never deleted while
+custody holds none for the cluster (D124): before the inverse runs, when
+custody holds no entry for the installation block's `kubeconfig`, the engine
+runs this block's read-only observation with that one output declared, and the
+role copies the kept kubeconfig there, private to root, when it is a regular
+file of one byte up to the inspection's 64 KiB bound, whatever the
+installation proved. The engine keeps it in custody under the installation
+block and `kubeconfig`, marked unproved, before the inverse deletes anything
+([produced material custody](state-reconciliation.md#produced-material-custody)). A removal's resolution
 reads the observation for what the removal proves: neither the image nor the
 work area present is its completion, the image this request describes is
 positive no effect, and anything else of this block's own left is a positive
@@ -408,10 +417,15 @@ complete, including a destroy's resolution of an incomplete apply, the role
 copies the kept kubeconfig into a private output file of its run and the
 engine keeps it in the context's
 [custody](secrets.md#produced-material), keyed by this block and `kubeconfig`,
-before it records the block done; a copy of equal bytes publishes nothing. A
-removal offers nothing. The custodied copy is withdrawn when the context's
-removal completes, not with this block's inverse, so a destroy that stops part
-way keeps the only access, and `cluster kubeconfig` reveals it until then
+before it records the block done; a copy of equal bytes publishes nothing but
+the clearing of an unproved mark. This block's removal offers nothing. When no
+completion was ever proved, as for an installation whose custody publication
+failed and whose nodes were powered off before its destroy, the kept copy
+enters custody only from the media block's removal, under the same entry and
+marked unproved, before that removal deletes the work area. The custodied copy
+is withdrawn when the context's removal completes, not with this block's
+inverse, so a destroy that stops part way keeps the only access, and `cluster
+kubeconfig` reveals it until then, with a warning when it is unproved
 ([administrator access export](cli.md#administrator-access-export)). The
 initial administrator password stays in the work area. No copy is ever
 written to evidence, progress output or a log.

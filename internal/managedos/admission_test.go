@@ -1,9 +1,15 @@
 package managedos
 
 import (
-	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"context"
 	"strings"
 	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func m(kv ...any) api.Value {
@@ -61,7 +67,7 @@ func TestCloneRestrictionsAndProviderBinding(t *testing.T) {
 	if issues := Validate(profile, c); len(issues) > 0 {
 		t.Fatal(issues)
 	}
-	for _, path := range [][]string{{"localization"}, {"ssh", "initialPassword"}, {"storage"}, {"packages"}, {"security", "selinux"}, {"security", "firewall"}, {"security", "fips"}, {"security", "diskEncryption"}} {
+	for _, path := range [][]string{{"localization"}, {"ssh", "initialPassword"}, {"packages"}, {"security", "selinux"}, {"security", "firewall"}, {"security", "fips"}, {"security", "diskEncryption"}} {
 		t.Run(strings.Join(path, "/"), func(t *testing.T) {
 			s := profile.Spec().WithPath(m(), append([]string{"customizations"}, path...)...)
 			if issues := ValidateAuthored(profile.WithSpec(s), c); len(issues) == 0 {
@@ -380,7 +386,6 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 		"a clone on libvirt":                {Validate(clone, consumed), "$.spec.installer.templateClone"},
 		"no virtual media endpoint":         {Validate(anaconda(), consumed), "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint"},
 		"encryption without a TPM":          {Validate(custom(m("security", m("diskEncryption", m()))), consumed), "$.spec.customizations.security.diskEncryption"},
-		"a cluster-bound machine name":      {Validate(custom(m("hostname", m("source", "machineName"))), api.NewCatalog([]api.Object{provider, consumer, obj(api.ContainerCluster, "cluster", m("nodes", list(m("machineRef", "node"))))})), "$.spec.customizations.hostname.source"},
 		"a shared served directory":         {Validate(sameName, api.NewCatalog(append(servedCatalog.Objects(), sameName, obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "node")))))), "$.spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef"},
 		"boot media off the store":          {Validate(obj(api.MachineImage, "image", m("bootMedia", "https://images.example.test/rhel.iso")), api.Catalog{}), "$.spec.bootMedia"},
 		"no RHSM intent":                    {Validate(obj(api.Entitlement, "rhel", m("type", "redhat-rhel")), api.Catalog{}), "$.spec.rhsm"},
@@ -447,6 +452,86 @@ func TestKickstartBoundCustomizationsHaveAGrammar(t *testing.T) {
 	}
 }
 
+// The installation reads no hostname source, root-device source or package
+// environment, so the closed schema refuses each as an unknown field instead of
+// admitting a value the installed system would silently ignore.
+func TestTheInstallProfileRefusesFieldsTheInstallationNeverReads(t *testing.T) {
+	for name, test := range map[string]struct{ customizations, field string }{
+		"hostname.source":      {"hostname: {source: machineName}", "$.spec.customizations.hostname"},
+		"storage.rootDevice":   {"storage: {rootDevice: {source: machineRootDeviceHints}}", "$.spec.customizations.storage"},
+		"packages.environment": {"packages: {environment: minimal}", "$.spec.customizations.packages.environment"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			content := `apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata: {name: synthetic}
+spec:
+  domains: {base: example.test}
+  controller: {machineRef: controller}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata: {name: controller}
+spec: {os: {provided: true}}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata: {name: install}
+spec:
+  os: {family: rhel, version: "9.8", architecture: x86_64}
+  installer: {anaconda: {imageRef: image}}
+  customizations: {` + test.customizations + `}
+`
+			input := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/profile.yaml", []byte(content))}, Roots: []string{"/synthetic"}}
+			_, _, err := compilation.NewCompiler(yamlstream.Parser{}, nil).Compile(context.Background(), input)
+			var refused []diagnostics.Diagnostic
+			for _, reported := range diagnostics.Of(err) {
+				if strings.HasPrefix(reported.Field, "$.spec.customizations") {
+					refused = append(refused, reported)
+				}
+			}
+			if len(refused) != 1 || refused[0].Code != "api.field" || refused[0].Field != test.field || !strings.HasPrefix(refused[0].Message, "unknown field") {
+				t.Fatalf("refusals = %#v, want one api.field unknown-field refusal at %s", refused, test.field)
+			}
+		})
+	}
+}
+
+// A configured repository ID is what dnf accepts in one, since it names the
+// section and the /etc/yum.repos.d/bootwright-<id>.repo file the installation
+// writes.
+func TestAConfiguredRepositoryIDIsWhatDnfAccepts(t *testing.T) {
+	configure := func(id string) []api.Issue {
+		o := anaconda()
+		o = o.WithSpec(o.Spec().With("customizations", m("repositories", m("configure", list(m("id", id, "baseURL", "https://mirror.example.test/x", "gpgCheck", false))))))
+		return Validate(o, api.Catalog{})
+	}
+	const field = "$.spec.customizations.repositories.configure[0].id"
+	for _, id := range []string{"a@b", "x*y", "a=b", "[x]", "a;b", ".", "..", "", strings.Repeat("a", 240)} {
+		issues := configure(id)
+		if len(issues) != 1 || issues[0].Code != "api.value" || issues[0].Field != field ||
+			issues[0].Message != repositoryGrammar.message || !strings.Contains(issues[0].Remediation, strings.TrimPrefix(field, "$.")) {
+			t.Errorf("repository ID %q: refusal = %#v, want one api.value at %s", id, issues, field)
+		}
+	}
+	for _, id := range []string{"extras", "rhel-9:appstream_x.1", strings.Repeat("a", 239)} {
+		if issues := configure(id); len(issues) != 0 {
+			t.Errorf("repository ID %q was refused: %#v", id, issues)
+		}
+	}
+}
+
+// A subscription repository ID may be a pattern subscription-manager expands,
+// so the dnf rule of a configured ID does not narrow it.
+func TestASubscriptionRepositoryIDMayBeAPattern(t *testing.T) {
+	o := anaconda()
+	o = o.WithSpec(o.Spec().With("subscription", m("entitlementRef", "rhel")).With("customizations",
+		m("repositories", m("subscription", m("enable", api.StringList("rhel-9-for-x86_64-*"), "disable", api.StringList("rhel-9-for-x86_64-supplementary-rpms"))))))
+	if issues := Validate(o, api.Catalog{}); len(issues) != 0 {
+		t.Fatalf("subscription repository patterns were refused: %#v", issues)
+	}
+}
+
 // A mirror repository ID follows the configured-repository ID rule before the
 // mirror arm is supported, so the arm cannot later carry an ID its Kickstart
 // directive could not.
@@ -459,7 +544,7 @@ func TestAMirrorRepositoryIDIsAKickstartToken(t *testing.T) {
 		return Validate(o, api.Catalog{})
 	}
 	const field = "$.spec.installer.anaconda.packageSource.mirror.repositories[1].id"
-	for _, id := range []string{"a b", "x/y"} {
+	for _, id := range []string{"a b", "x/y", "a@b"} {
 		issues := mirror(id)
 		if len(issues) != 1 || issues[0].Code != "api.value" || issues[0].Field != field ||
 			issues[0].Message != repositoryGrammar.message || !strings.Contains(issues[0].Remediation, strings.TrimPrefix(field, "$.")) {

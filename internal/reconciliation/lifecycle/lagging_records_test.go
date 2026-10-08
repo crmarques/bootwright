@@ -196,15 +196,22 @@ type verbReport struct {
 	Operation    string   `json:"operation,omitempty"`
 	State        string   `json:"state,omitempty"`
 	Next         string   `json:"next,omitempty"`
+	// Causes are the diagnostics a refusal reports after its first, each as
+	// its code, message and remediation.
+	Causes []string `json:"causes,omitempty"`
 }
 
 func refusalReport(t *testing.T, err error) verbReport {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 {
-		t.Fatalf("want one refusal, got %+v (%v)", reported, err)
+	if len(reported) == 0 {
+		t.Fatalf("want a refusal, got %v", err)
 	}
-	return verbReport{Code: reported[0].Code, Message: reported[0].Message, Remediation: reported[0].Remediation}
+	report := verbReport{Code: reported[0].Code, Message: reported[0].Message, Remediation: reported[0].Remediation}
+	for _, cause := range reported[1:] {
+		report.Causes = append(report.Causes, cause.Code+": "+cause.Message+" ("+cause.Remediation+")")
+	}
+	return report
 }
 
 func stepReports(steps []PlanStep) []string {
