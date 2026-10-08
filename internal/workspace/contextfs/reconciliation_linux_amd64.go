@@ -403,14 +403,14 @@ func (t *lifecycleTransaction) Reserve(ctx context.Context, reservations []prere
 		}
 		return strings.Compare(x.Service, y.Service)
 	})
-	return t.publishReservations(ctx, next)
+	return t.publishReservations(ctx, next, applyRetry(t.identity.Name))
 }
 
 func (t *lifecycleTransaction) ReleaseReservations(ctx context.Context) error {
 	if err := t.base.available(ctx); err != nil {
 		return err
 	}
-	return t.publishReservations(ctx, nil)
+	return t.publishReservations(ctx, nil, destroyRetry(t.identity.Name))
 }
 
 // Bind records this context's controller relationship on the prepared host.
@@ -450,10 +450,10 @@ func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host co
 	slices.SortFunc(bindings, func(x, y prerequisites.ControllerBinding) int { return strings.Compare(x.Context, y.Context) })
 	value := cloneControllerState(t.stored.value)
 	value.Bindings = bindings
-	return t.publishControllerState(ctx, value, t.stored.bundles, checkpointBeforeBinding)
+	return t.publishControllerState(ctx, value, t.stored.bundles, applyRetry(t.identity.Name), checkpointBeforeBinding)
 }
 
-func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []prerequisites.HostReservation) error {
+func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []prerequisites.HostReservation, retry string) error {
 	if t.stored.data == nil {
 		if len(next) == 0 {
 			return nil
@@ -488,13 +488,13 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 	}
 	value := cloneControllerState(t.stored.value)
 	value.Reservations = combined
-	return t.publishControllerState(ctx, value, t.stored.bundles, checkpointBeforeReservation)
+	return t.publishControllerState(ctx, value, t.stored.bundles, retry, checkpointBeforeReservation)
 }
 
 // publishControllerState replaces the shared record atomically under the held
 // root lock, then re-reads it so the transaction keeps working from exactly
 // what is durable.
-func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value prerequisites.HostState, bundles []controllerBundleReservation, point checkpoint) error {
+func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value prerequisites.HostState, bundles []controllerBundleReservation, retry string, point checkpoint) error {
 	if err := t.base.store.checkpoint(ctx, point); err != nil {
 		return err
 	}
@@ -510,7 +510,7 @@ func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value
 	if err := validateControllerState(value); err != nil {
 		return err
 	}
-	if _, err := t.base.store.replaceControllerRecord(ctx, dir, t.stored, data); err != nil {
+	if _, err := t.base.store.replaceControllerRecord(ctx, dir, t.stored, data, retry); err != nil {
 		return err
 	}
 	refreshed, err := readControllerStored(ctx, t.base.root, t.base.registry)

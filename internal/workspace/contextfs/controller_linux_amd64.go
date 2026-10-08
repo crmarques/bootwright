@@ -32,6 +32,24 @@ const setupRetry = "repeat the same controller setup command with its original i
 // setup this host lacks.
 const completeSetup = "run bootwright setup, then repeat the command"
 
+// applyRetry settles an uncertain controller record publication an apply of
+// the named context met.
+func applyRetry(name string) string {
+	return "once storage is healthy, repeat bootwright apply --context " + name
+}
+
+// destroyRetry settles an uncertain controller record publication a destroy of
+// the named context met while it released its reservations.
+func destroyRetry(name string) string {
+	return "once storage is healthy, repeat bootwright destroy --context " + name
+}
+
+// deletionRetry settles an uncertain controller record publication the named
+// context's deletion met after the registry marked it deleting.
+func deletionRetry(name string) string {
+	return "once storage is healthy, finish the deletion with bootwright context delete --name " + name + " --purge"
+}
+
 func openControllerDirectory(root *directory, registry contexts.Registry) (*directory, error) {
 	// An unattributed descriptor is an interrupted initialization. Any
 	// directory beside it holds no readable controller state, so reads report
@@ -563,7 +581,7 @@ func (t *controllerTransaction) publishValue(ctx context.Context, value prerequi
 	if err != nil {
 		return prerequisites.NotCommitted, err
 	}
-	outcome, err := t.base.store.replaceControllerRecord(ctx, dir, t.stored, data)
+	outcome, err := t.base.store.replaceControllerRecord(ctx, dir, t.stored, data, setupRetry)
 	if err != nil {
 		if outcome == prerequisites.Unknown {
 			t.uncertain = true
@@ -589,7 +607,7 @@ func (t *controllerTransaction) publishValue(ctx context.Context, value prerequi
 	return prerequisites.Committed, nil
 }
 
-func (s *Store) replaceControllerRecord(ctx context.Context, dir *directory, expected controllerStored, data []byte) (prerequisites.Publication, error) {
+func (s *Store) replaceControllerRecord(ctx context.Context, dir *directory, expected controllerStored, data []byte, retry string) (prerequisites.Publication, error) {
 	_, counted, err := controllerNames(dir)
 	if err != nil || counted >= maxControllerStages+2 {
 		return prerequisites.NotCommitted, state("controller publication stages exceed their bound")
@@ -615,7 +633,7 @@ func (s *Store) replaceControllerRecord(ctx context.Context, dir *directory, exp
 	case publicationCommitted:
 		return prerequisites.Committed, nil
 	case publicationUnknown:
-		return prerequisites.Unknown, controllerFailure("controller.unknown", "controller receipt publication may have completed; preserve all verified progress", setupRetry)
+		return prerequisites.Unknown, controllerFailure("controller.unknown", "controller receipt publication may have completed; preserve all verified progress", retry)
 	}
 	return prerequisites.NotCommitted, err
 }
@@ -723,7 +741,7 @@ func (t *transaction) dropContextClaims(ctx context.Context, name string) error 
 	if err != nil {
 		return err
 	}
-	_, err = t.store.replaceControllerRecord(ctx, dir, stored, data)
+	_, err = t.store.replaceControllerRecord(ctx, dir, stored, data, deletionRetry(name))
 	if err == nil {
 		current, readErr := readControllerStored(ctx, t.root, t.registry)
 		if readErr != nil {

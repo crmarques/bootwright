@@ -88,6 +88,10 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 	if errors.As(err, &logged) {
 		return inputLoggedRefusal(logged)
 	}
+	var unproven *InputUnproven
+	if errors.As(err, &unproven) {
+		return inputUnprovenRefusal(unproven)
+	}
 	outcome := conclude(elevationRun{
 		json: invocation.JSON, interactive: !noninteractive, failed: err != nil,
 		interrupted: ExitCode(ctx, 0) != 0, code: code, wrote: output.bytes != 0,
@@ -184,6 +188,24 @@ func inputLoggedRefusal(logged *InputLogged) Outcome {
 		Remediation: "repeat the command with --value-file <path> or --password-file <path> in place of the standard-input flag, or run it as root, where sudo logs nothing"}
 	if api.ValidLexical("name", logged.Secret) {
 		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: logged.Secret}
+	}
+	return Outcome{ExitCode: 1, Diagnostic: &diagnostic}
+}
+
+// inputUnprovenRefusal reports, before anything was read, that sudo listed no
+// policy, so whether it would log a Secret's standard input is unknown. A
+// noninteractive invocation is sent to validate the credential first, which an
+// interactive one already did.
+func inputUnprovenRefusal(unproven *InputUnproven) Outcome {
+	remediation := "repeat the command with --value-file <path> or --password-file <path> in place of the standard-input flag, or run it as root, where sudo logs nothing"
+	if !unproven.Validated {
+		remediation = "run sudo -v in this terminal so sudo can list its policy, then repeat the command; or repeat it with --value-file <path> or --password-file <path> in place of the standard-input flag, or run it as root, where sudo logs nothing"
+	}
+	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "secret.input",
+		Message:     "sudo did not list its policy, so whether its I/O log would record the value of Secret " + unproven.Secret + " read from standard input is unknown; nothing was read",
+		Remediation: remediation}
+	if api.ValidLexical("name", unproven.Secret) {
+		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: unproven.Secret}
 	}
 	return Outcome{ExitCode: 1, Diagnostic: &diagnostic}
 }

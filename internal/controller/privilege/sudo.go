@@ -74,6 +74,19 @@ func (e *InputLogged) Error() string {
 	return "the sudo policy sets " + e.Option + ", which would log the standard input of Secret " + e.Secret
 }
 
+// InputUnproven refuses a standard-input Secret before sudo starts the child,
+// because sudo did not list its policy, so whether its I/O log records
+// standard input is unknown. Validated marks an interactive invocation that
+// already validated the credential.
+type InputUnproven struct {
+	Secret    string
+	Validated bool
+}
+
+func (e *InputUnproven) Error() string {
+	return "sudo did not list its policy, so whether it logs the standard input of Secret " + e.Secret + " is unknown"
+}
+
 type Supervisor struct{ options SudoOptions }
 
 func NewSupervisor(options SudoOptions) *Supervisor { return &Supervisor{options: options} }
@@ -103,14 +116,36 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 		environment = append(environment, "TERM="+options.Terminal)
 	}
 	var policy limitedOutput
-	probe, cancelProbe := context.WithTimeout(ctx, 2*time.Second)
-	code, probeErr := options.Executor.Run(probe, Command{Executable: options.Sudo, Arguments: []string{"-n", "-u", "#0", "-ll"}, Environment: append([]string(nil), environment...), Output: &policy, Error: io.Discard})
-	cancelProbe()
+	probe := func() (readable bool) {
+		policy = limitedOutput{}
+		bounded, cancelProbe := context.WithTimeout(ctx, 2*time.Second)
+		code, probeErr := options.Executor.Run(bounded, Command{Executable: options.Sudo, Arguments: []string{"-n", "-u", "#0", "-ll"}, Environment: append([]string(nil), environment...), Output: &policy, Error: io.Discard})
+		cancelProbe()
+		return probeErr == nil && code == 0 && !policy.overflow
+	}
+	readable := probe()
 	if err := ctx.Err(); err != nil {
 		return 1, err
 	}
+	validated := false
+	if !readable && options.SecretStdin != "" && !options.NonInteractive {
+		code, err := options.Executor.Run(ctx, Command{Executable: options.Sudo, Arguments: []string{"-u", "#0", "-v"}, Environment: append([]string(nil), environment...), Output: io.Discard, Error: options.Error})
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return 1, ctxErr
+		}
+		validated = true
+		if err == nil && code == 0 {
+			readable = probe()
+			if err := ctx.Err(); err != nil {
+				return 1, err
+			}
+		}
+	}
+	if !readable && options.SecretStdin != "" {
+		return 1, &InputUnproven{Secret: options.SecretStdin, Validated: validated}
+	}
 	interval := 30 * time.Second
-	if probeErr == nil && code == 0 && !policy.overflow {
+	if readable {
 		if option := inputLogging(policy.data); option != "" && options.SecretStdin != "" {
 			return 1, &InputLogged{Option: option, Secret: options.SecretStdin}
 		}

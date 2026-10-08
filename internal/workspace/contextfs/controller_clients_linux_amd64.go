@@ -84,7 +84,7 @@ func (t *lifecycleTransaction) attributeClientArea(ctx context.Context, id strin
 		}
 		next := append(slices.Clone(t.stored.bundles), controllerBundleReservation{ID: id, Mode: "reserved"})
 		slices.SortFunc(next, func(x, y controllerBundleReservation) int { return strings.Compare(x.ID, y.ID) })
-		if err := t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, checkpointBeforeClientAreaReservation); err != nil {
+		if err := t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, applyRetry(t.identity.Name), checkpointBeforeClientAreaReservation); err != nil {
 			return err
 		}
 	}
@@ -129,7 +129,7 @@ func (t *lifecycleTransaction) attributeClientArea(ctx context.Context, id strin
 		return state("controller client area reservation was lost before attribution")
 	}
 	next[index] = controllerBundleReservation{ID: id, Mode: "attributed", DirectoryDevice: uint64(identity.Dev), DirectoryInode: identity.Ino}
-	return t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, checkpointBeforeClientAreaAttribution)
+	return t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, applyRetry(t.identity.Name), checkpointBeforeClientAreaAttribution)
 }
 
 // SealClientArea makes the published closure immutable. Sealing verifies and
@@ -155,7 +155,7 @@ func (t *lifecycleTransaction) SealClientArea(ctx context.Context, id string) er
 	}
 	next := slices.Clone(t.stored.bundles)
 	next[index].Mode = "sealed"
-	return t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, checkpointBeforeClientAreaSealing)
+	return t.publishControllerState(ctx, cloneControllerState(t.stored.value), next, applyRetry(t.identity.Name), checkpointBeforeClientAreaSealing)
 }
 
 func (t *lifecycleTransaction) openArea(id string) *controllerBundleArea {
@@ -180,7 +180,7 @@ func (t *lifecycleTransaction) RetainDependencies(ctx context.Context, definitio
 	if err != nil {
 		return err
 	}
-	return t.publishControllerState(ctx, value, t.stored.bundles, checkpointBeforeRetainedDependencies)
+	return t.publishControllerState(ctx, value, t.stored.bundles, applyRetry(t.identity.Name), checkpointBeforeRetainedDependencies)
 }
 
 func retainDependencies(value prerequisites.HostState, held []controllerBundleReservation, definition *prerequisites.Definition, sources []prerequisites.DependencySource, superseded []string) (prerequisites.HostState, error) {

@@ -779,9 +779,19 @@ another route is nothing that command can settle. A refusal of the controller
 record that an apply or this stage meets names its own remedy: a host without
 completed setup names `bootwright setup` and then the refused command, another
 host names the host the state belongs to, and a context bound elsewhere names
-its bound Machine input or a new context. Setup's own refusals name setup's
-exact retry, and so does a controller record publication whose outcome is
-unknown, which setup, an apply and context deletion share.
+its bound Machine input or a new context. Setup's own refusals, and a setup
+publication of the controller record whose outcome is unknown, name setup's
+exact retry. The same unknown publication names, once storage is healthy,
+`bootwright apply --context <name>` while an apply binds the context, reserves
+host resources, reserves, attributes or seals a client area, or retains a
+dependency resolution; `bootwright destroy --context <name>` while a destroy
+releases its reservations; and `bootwright context delete --name <name>
+--purge` while a context deletion, which the registry already records, drops
+the context's binding and reservations
+(`TestAnUnknownControllerPublicationNamesTheApplyThatMetIt`,
+`TestAnUnknownControllerPublicationNamesTheDestroyThatMetIt`,
+`TestAnUnknownControllerPublicationNamesTheDeletionThatMetIt`,
+`TestASetupsUnknownControllerPublicationKeepsItsExactRetry`).
 
 ## Egress and local effects
 

@@ -150,15 +150,17 @@ administrator. A forwarded proxy route also needs `SETENV`
 ([on a proxied network](#on-a-proxied-network)). A JSON invocation, or one
 whose standard input is not a terminal, cannot prompt for a password, so run
 `sudo -v` in the same terminal first. Each refusal names which of these
-applies. Where the policy sets `log_input` or `log_stdin`, a `secret set`
-with `--value-stdin` or `--password-stdin` refuses with `secret.input` before
-it reads anything, because sudo's I/O log would record the value. The check
-reads the policy with `sudo -n -ll`, so it holds only when sudo lists the
-policy without a password, through a cached credential (run `sudo -v` first)
-or a rule that needs none; under a rule such as `%wheel ALL=(ALL) ALL` with no
-cached credential it proves nothing, and sudo logs what you type. Pass the
-value with `--value-file` or `--password-file`, or run the command as root
-([secret custody](../specs/secrets.md)).
+applies. A `secret set` with `--value-stdin` or `--password-stdin` reads
+nothing until Bootwright has read the sudo policy with `sudo -n -ll`, and
+refuses with `secret.input` before it reads anything where the policy sets
+`log_input` or `log_stdin`, because sudo's I/O log would record the value.
+Under a rule such as `%wheel ALL=(ALL) ALL` with no cached credential, sudo
+lists nothing without a password: an interactive run then validates with
+`sudo -v`, which prompts on the terminal, and reads the policy again; a JSON
+or non-terminal run, or a policy still unreadable, refuses with
+`secret.input` rather than reading the value. Run `sudo -v` in the same
+terminal first, pass the value with `--value-file` or `--password-file`, or
+run the command as root ([secret custody](../specs/secrets.md)).
 
 ### Directory accounts
 

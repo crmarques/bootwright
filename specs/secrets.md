@@ -87,14 +87,18 @@ no other command: under a shared read, set refuses an uninitialized store with
 `secret.input`, both before any read; it then reads with no lock, and under
 the lease refuses with `secret.store.conflict`, writing nothing, a current
 version another command stored meanwhile unless `--yes` was given. An
-elevated `set` with `--value-stdin` or `--password-stdin` refuses with
-`secret.input` before sudo starts the command, reading nothing, when the sudo
-policy listing the supervisor reads (`sudo -n -ll`) sets `log_input` or
-`log_stdin`, since sudo's I/O log would record the value. The check needs that
-listing to be readable without a password, through a cached credential or a
-rule that needs none, and proves nothing otherwise; the remedy is
-`--value-file` or `--password-file`, or running as root, where sudo logs
-nothing. Equal material creates no new version. Multipart versions and generation batches
+elevated `set` with `--value-stdin` or `--password-stdin` reads nothing until
+the supervisor has read sudo's policy listing (`sudo -n -ll`). A listing that
+sets `log_input` or `log_stdin` refuses with `secret.input` before sudo starts
+the command, since sudo's I/O log would record the value. When sudo will not
+list its policy without a password, an interactive invocation (not JSON, with
+standard input a terminal) first validates the credential with `sudo -v`,
+which prompts on the terminal, and reads the listing again. A JSON or
+non-terminal invocation, a listing still unreadable, one that times out and
+one over 64 KiB each refuse with `secret.input` before sudo starts the
+command, reading nothing. The remedy is `--value-file` or `--password-file`,
+running as root, where sudo logs nothing, or, for a noninteractive invocation,
+`sudo -v` in the same terminal first. Equal material creates no new version. Multipart versions and generation batches
 publish atomically.
 
 When standard input is a terminal, "`--value-stdin` and `--password-stdin` at
