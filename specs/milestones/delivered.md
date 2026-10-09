@@ -1728,7 +1728,7 @@ met and the log digests.
 which B49 also named ([B277](m1.md#b277)). It found [B275](#x40--machine-commands-status-secrets-and-validate-refusals) and
 [B276](m1.md#b276) and a new sighting of [B270](m1.md#b270), all parked
 under D48 until D56 attached them to M1. Lifecycle concurrency may now rise
-above one through [B303](m3.md#b303), and the adapter protocol, roles and
+above one through [B303](m1.md#b303), and the adapter protocol, roles and
 codecs may collapse through [B19](m1.md#b19), [B20](m1.md#b20) and
 [B22](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json), each with the real-host evidence its own item names.
 
@@ -2381,7 +2381,7 @@ and IPv6 policy among it ([B338](#x43--libvirt-roles-managed-os-installation-net
 ([B335](backlog.md#b335), and the RHEL 9.8 controller run D60 plans); the
 glibc and libgcc builds a RHEL 9.8 controller must hold, and building on a
 workstation ([B292](#x42--media-contexts-setup-service-and-machine-admission)); help beyond destroy ([B95](m1.md#b95)); an
-invocation's own in-flight jobs ([B304](m3.md#b304)); and a bounded run
+invocation's own in-flight jobs ([B304](m1.md#b304)); and a bounded run
 beside another context's exclusive apply lock ([B18](m3.md#b18)). Under D48
 (D116) the other follow-ups were parked: B385 to B397, B385 and B393 split
 from B94 and B289.

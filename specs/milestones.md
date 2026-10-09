@@ -17,7 +17,7 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X46, then X44 |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X46, then X48, then X44 |
 | [M2](milestones/m2.md) | Native input files for `openshift-install` and the cephadm and ceph CLIs | none | not started | define B51 |
 | [M3](milestones/m3.md) | Provision and destroy OpenShift clusters on bare metal | M1 | in progress | B61's operator gate |
 | [M4](milestones/m4.md) | Provision and destroy IBM Ceph clusters on bare metal | M1, M2, M3 | in progress | after M1: X47, B73's gate |
@@ -28,8 +28,7 @@ every other command `bootwright --help` lists returns the
 X46 is active; X43, X24 and X45 are delivered.
 
 - **Next for agents:** finish M1's X46, do [B465](milestones/m1.md#b465)
-  before D59's closing run,
-  then X44; X47 follows.
+  before D59's closing run, then X48 and X44; X47 follows.
 - **Next for operator:** before a build that contains X46 touches a host,
   destroy every live context with the build that applied it, then run `setup`
   once: X21, X29 to X32, X43, X24, X45 and X46 moved request and record
@@ -37,7 +36,8 @@ X46 is active; X43, X24 and X45 are delivered.
   On a clean build, run [lab-sno](../examples/lab-sno/README.md) for
   [B61](milestones/m3.md#b61) and record it per the
   [operator guide](../docs/operator-guide.md). After X44, run M1's
-  closing lab-rhel run (D59), which also accepts B19, B20, B270 and B339.
+  closing lab-rhel run (D59): B19, B20, B270, B339 and
+  [B466](milestones/m1.md#b466).
   [B73](milestones/m4.md#b73)'s rehearsal follows X47, then one xFusion
   observation ([B305](milestones/m4.md#b305)).
 

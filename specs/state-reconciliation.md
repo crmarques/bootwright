@@ -793,8 +793,10 @@ together is the graph's answer and does not change between invocations. A
 continuation of an operation frozen by another build therefore runs under this
 build's bound, which changes no effect, no order and no evidence.
 
-Not yet met: roles still share host scratch paths, so the bound is one block;
-tracked as [B303](milestones/m3.md#b303).
+Not yet met: shared role scratch and same-invocation adapter admission keep
+the production bound at one, and the package-tree claim spans an entire
+installation; tracked as [B303](milestones/m1.md#b303),
+[B304](milestones/m1.md#b304) and [B466](milestones/m1.md#b466).
 
 An operation is `paused` when execution stops because no block is startable,
 nothing is still running, no block is failed or unknown, and pending blocks
