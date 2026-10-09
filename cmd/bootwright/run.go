@@ -167,11 +167,8 @@ type invocationHooks struct {
 // buildStamp reads the toolchain's own stamp of this executable.
 var buildStamp = debug.ReadBuildInfo
 
-// buildInformation prefers the linker-injected release values. A build that
-// injects none of them still identifies itself from the toolchain's own stamp,
-// which an ordinary `go build` or `go install` of this module embeds. The
-// dependency bundle is the automation this executable embeds (D100), which
-// every build carries, so no link value is needed for it.
+// buildInformation prefers the linker-injected release values, then the
+// toolchain's own stamp; the dependency bundle is the embedded automation.
 func buildInformation() cli.BuildInfo {
 	stamp, _ := buildStamp()
 	return stampedBuildInformation(cli.BuildInfo{
