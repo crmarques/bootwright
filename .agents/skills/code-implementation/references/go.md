@@ -82,7 +82,7 @@ never install an unreviewed latest tool to make a gate available. Run
 `make quick` (formatting, vet, the architecture suite and the changed packages
 with their dependents) and the affected repository checks. Run `make race` when
 changed paths may execute concurrently or affect shared state, cancellation, or
-goroutine lifetime; CI runs it nightly.
+goroutine lifetime; CI runs it on every push and pull request.
 
 For module/import/toolchain changes, run `./scripts/go mod tidy`, then
 `make tidy-check modules-check`, and review the complete `go.mod`/`go.sum` and

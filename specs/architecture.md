@@ -863,9 +863,11 @@ An allowlisted registry resolves from explicit validated state:
 
 Supported matrices belong to the owning domain contract. When an operation is
 made immutable, each block freezes its selected implementation identity and
-content digest, and the operation freezes the automation it runs;
-continuation refuses another implementation or automation rather than
-silently selecting one. Recovery follows
+content digest, and the operation freezes the automation it runs and the
+Python and Ansible
+[execution closure](state-reconciliation.md#dependency-safety-during-recovery)
+it runs in; continuation refuses another implementation, automation or closure
+rather than silently selecting one. Recovery follows
 [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 
 For an add-on, implementation selection also binds the exact package, catalog

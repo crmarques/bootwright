@@ -70,7 +70,7 @@ says what that requires.
 | `make vulncheck` | Scan for known reachable vulnerabilities. |
 | `make ansible-check` | Run pinned Ansible syntax, lint, collection sanity, unit and safe integration checks; `./scripts/ansible-check --suite <name>` runs one suite locally. |
 | `make check-offline` | Run every gate that needs no network once caches are warm, and name the gates it left unrun. |
-| `make check` | Run all verification gates, including completion. CI runs it on every push and pull request, and `make race` nightly. |
+| `make check` | Run all verification gates, including completion. CI runs it, and `make race` beside it as its own job, on every push and pull request. |
 
 Reusable check caches live in the directory `scripts/cache-dir` prints: the
 primary checkout's `.cache`, shared by every worktree of the clone.

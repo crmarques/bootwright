@@ -914,8 +914,10 @@ never re-resolves to a different implementation.
 
 ### Dependency safety during recovery
 
-Continuation and destroy use the exact frozen dependency versions and content.
-If required content is unavailable, changed, or its safe use for the requested
+A continuation of either verb uses the exact frozen dependency versions and
+content its operation registered with; a fresh removal, which registers an
+operation of its own, runs under the build and bundle in hand, as below. If
+required content is unavailable, changed, or its safe use for the requested
 operation cannot be established, refuse before the affected observation or
 effect and report the recovery requirement. Preserve the plan and ownership
 evidence; never silently upgrade, substitute a dependency, or discard recovery

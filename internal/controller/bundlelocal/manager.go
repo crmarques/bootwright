@@ -155,8 +155,9 @@ func attributableDocumentation(entry prerequisites.BundleEntry) bool {
 	return !entry.Directory && !entry.Executable && entry.Size >= 0 && entry.Size <= maxMemberBytes
 }
 
-// retainedSource reads one approved source from a sealed area this host already
-// holds. A missing, unreadable or unexpected entry is not a failure: the caller
+// retainedSource reads one approved source from a setup bundle this host
+// already holds, sealed or not, through the read-only handle its store opens.
+// A missing, unreadable or unexpected entry is not a failure: the caller
 // acquires that source from its publisher exactly as it otherwise would.
 func retainedSource(ctx context.Context, retained prerequisites.BundleArea, source prerequisites.DependencySource) []byte {
 	if retained == nil || source.Bytes <= 0 || source.Bytes > maxMemberBytes {
@@ -386,8 +387,9 @@ func qualifiedFoundation(bootstrap *prerequisites.BootstrapDefinition) error {
 }
 
 // Rebase carries a retained resolution onto the automation this executable
-// embeds. It reads that resolution's own approved sources from the sealed area
-// holding them and projects them again, so every release, byte count, signer
+// embeds. It reads that resolution's own approved sources from the retained
+// setup bundle holding them, which the store opens read-only whether or not it
+// was sealed, and projects them again, so every release, byte count, signer
 // and publisher origin survives unchanged and nothing is acquired. Only the
 // automation digest and the projection identity it produces may differ. A
 // source the area cannot serve as its approved bytes returns

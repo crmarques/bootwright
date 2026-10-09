@@ -41,6 +41,9 @@ reservations, readiness evidence and the inverse.
   guest bridge.
 - The RHEL 9.8 boot and DVD images, and the addresses below adjusted to the
   host before the input is imported.
+- `chrony`, `bind-utils` and `qemu-img` on the host for the independent checks
+  below: `chronyd`, `dig` and `qemu-img` are not something Bootwright installs
+  for you to run by hand.
 
 Every in-tree test is unitary: none creates a container, a network or a guest.
 Running this journey under a build matching B72's acceptance baseline and
@@ -136,12 +139,13 @@ curl -sk https://192.0.2.1:8443/ -o /dev/null -w '%{http_code}\n'
 curl -x http://192.0.2.1:3128 -sI http://example.com/ | head -1
 dig @192.0.2.1 controller.lab.example.test +short
 dig @192.0.2.1 +tcp rhel-01.lab.example.test +short
-chronyd -Q -t 3 'server 192.0.2.1 iburst port 123'
+chronyd -Q -t 10 'server 192.0.2.1 iburst port 123'
 systemctl list-units 'bootwright-*'
 ./bin/bootwright apply
 ./bin/bootwright status
 ./bin/bootwright machine list
 ./bin/bootwright machine list --power-status
+sudo qemu-img info --force-share --output json /var/lib/libvirt/images/bootwright/lab-rhel/rhel-01/root.qcow2
 ./bin/bootwright machine exec --name rhel-01 cat /etc/os-release
 ./bin/bootwright machine rsh --name rhel-01
 ./bin/bootwright machine restart --name rhel-01
@@ -155,6 +159,7 @@ sudo systemctl reboot
 ./bin/bootwright machine start --name rhel-01
 ./bin/bootwright machine stop --name rhel-01
 ./bin/bootwright destroy --authorize data-loss
+./bin/bootwright status
 systemctl list-units --state=failed 'bootwright-*'
 ```
 
@@ -171,7 +176,10 @@ configuration, starts the units and proves every service answers; the `curl`,
 `dig`, `chronyd` and `systemctl` lines check the same independently. An empty
 served root answers `404` and the proxy answers `400` to a request that is not
 a proxy request; both are well-formed answers and both are what readiness
-proves.
+proves. The time check succeeds when `chronyd` prints an offset. Its timeout
+bounds the whole query, and a managed server that has just started takes a
+few seconds to select its own upstream source, so ten seconds leaves it room;
+a timeout is a failure only once the server has run for longer than that.
 
 The unscoped `apply` realizes the provider host and `rhel-01` and installs RHEL
 through its emulated BMC; `status` reports the result. A completed apply is
@@ -181,7 +189,11 @@ first refuses with `lifecycle.state`, because there is
 
 Before that replay, the machine commands reach the installed guest.
 `machine list` shows `rhel-01` applied, with its install address `198.51.100.11`
-as the contact, and `--power-status` asks its emulated BMC for its power.
+as the contact, and `--power-status` asks its emulated BMC for its power. The
+`qemu-img` line reads the running guest's root disk the way the removal's
+quiescence probe does, sharing the write lock QEMU holds, so it answers while
+the guest runs; its `virtual-size` is the frozen `diskGiB`, 60 GiB, and an
+error there means a probe would read the disk as size zero.
 `machine exec` and `machine rsh` log in as `bootwright` with the fleet key at
 that install address and pin the host key its installation proved, so no trust
 prompt appears; leave the `rsh` shell with `exit`. `machine restart` proves the
@@ -211,7 +223,8 @@ provider host carries its guest network and storage pool across a reboot: once
 the host is back, return to the repository root and `machine start` powers
 `rhel-01` on through its emulated BMC. Only then do the final `machine stop`
 and `destroy` take the environment back, which leaves it ready for the undo
-below. The last line lists no unit, because every managed unit stops within its
+below. `status` after it reports the destroy `done` with nothing left to take
+back. The last line lists no unit, because every managed unit stops within its
 stop timeout and a destroy leaves none failed.
 
 ## Undo
