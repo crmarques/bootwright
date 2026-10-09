@@ -66,7 +66,7 @@ func (r *Resolver) OperatorRoots(ctx context.Context, platform prerequisites.Pla
 	defer cancel()
 	results := map[string]operatorQuery{}
 	for _, name := range names {
-		result, err := queryRPM(bounded, snapshot, name)
+		result, err := queryRPM(bounded, platform, snapshot, name)
 		if err != nil {
 			if ctx.Err() != nil {
 				return prerequisites.OperatorPresence{}, ctx.Err()
@@ -96,14 +96,22 @@ func operatorNames(names []string) bool {
 // queryRPM asks the provided rpm about one package in the snapshot, with the
 // native helper's environment and, as root, the unprivileged identity the
 // snapshot was granted to.
-func queryRPM(ctx context.Context, snapshot, name string) (operatorQuery, error) {
-	return queryRPMFormat(ctx, snapshot, name, rpmQueryFormat, 64<<10)
+func queryRPM(ctx context.Context, platform prerequisites.Platform, snapshot, name string) (operatorQuery, error) {
+	return queryRPMFormat(ctx, platform, snapshot, name, rpmQueryFormat, 64<<10)
 }
 
 // queryRPMFormat asks the same rpm about one package with a fixed query format,
 // keeping at most limit bytes of its standard output.
-func queryRPMFormat(ctx context.Context, snapshot, name, format string, limit int) (operatorQuery, error) {
-	command := exec.CommandContext(ctx, "/usr/bin/rpm", "--dbpath", filepath.Join(snapshot, "var", "lib", "rpm"), "-q", "--queryformat", format, "--", name)
+func queryRPMFormat(ctx context.Context, platform prerequisites.Platform, snapshot, name, format string, limit int) (operatorQuery, error) {
+	return runRPMQuery(ctx, platform, snapshot, name, format, limit, (*exec.Cmd).Run)
+}
+
+func runRPMQuery(ctx context.Context, platform prerequisites.Platform, snapshot, name, format string, limit int, run func(*exec.Cmd) error) (operatorQuery, error) {
+	directory, err := databaseDirectory(platform)
+	if err != nil {
+		return operatorQuery{}, err
+	}
+	command := exec.CommandContext(ctx, "/usr/bin/rpm", "--dbpath", filepath.Join(snapshot, strings.TrimPrefix(directory, "/")), "-q", "--queryformat", format, "--", name)
 	command.Dir = "/"
 	command.Env = helperEnvironment(filepath.Join(filepath.Dir(snapshot), "home"))
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -120,7 +128,7 @@ func queryRPMFormat(ctx context.Context, snapshot, name, format string, limit in
 	output := &boundedBuffer{limit: limit}
 	diagnostic := &boundedBuffer{limit: 64 << 10}
 	command.Stdout, command.Stderr = output, diagnostic
-	err := command.Run()
+	err = run(command)
 	if ctx.Err() != nil {
 		return operatorQuery{}, failure("the provided rpm did not answer within its bound")
 	}

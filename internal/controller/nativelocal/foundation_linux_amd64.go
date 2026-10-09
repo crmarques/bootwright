@@ -61,7 +61,7 @@ func (r *Resolver) FoundationBuilds(ctx context.Context, platform prerequisites.
 	defer cancel()
 	var builds []prerequisites.InstalledBuild
 	for _, name := range names {
-		result, err := queryRPMFormat(bounded, snapshot, name, foundationQueryFormat, foundationQueryLimit)
+		result, err := queryRPMFormat(bounded, platform, snapshot, name, foundationQueryFormat, foundationQueryLimit)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()

@@ -67,9 +67,8 @@ unproved one, which is the one state nothing can retry, destroy or delete past.
 
 `MaxRunningBlocks = 8`, overridable through `lifecycle.Options.Concurrency`
 (zero takes the default) so tests pin 1. It is deliberately **not** frozen in
-the plan, not in desired state and not a flag: ADR 0057 on the superseded
-`work/apply-destroy-rework-…` branch already settled that the graph decides
-what may run together, and commit `33c3db5f` removed the parallelism flags.
+the plan, not in desired state and not a flag: the graph decides what may run
+together.
 A continuation of an operation frozen by another build runs under this build's
 bound, which changes no effect, no order and no evidence.
 
