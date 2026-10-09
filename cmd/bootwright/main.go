@@ -9,10 +9,9 @@ import (
 )
 
 var (
-	version          string
-	commit           string
-	source           string
-	dependencyBundle string
+	version string
+	commit  string
+	source  string
 )
 
 func main() {

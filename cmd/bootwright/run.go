@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
@@ -168,7 +169,9 @@ var buildStamp = debug.ReadBuildInfo
 
 // buildInformation prefers the linker-injected release values. A build that
 // injects none of them still identifies itself from the toolchain's own stamp,
-// which an ordinary `go build` or `go install` of this module embeds.
+// which an ordinary `go build` or `go install` of this module embeds. The
+// dependency bundle is the automation this executable embeds (D100), which
+// every build carries, so no link value is needed for it.
 func buildInformation() cli.BuildInfo {
 	stamp, _ := buildStamp()
 	return stampedBuildInformation(cli.BuildInfo{
@@ -178,7 +181,7 @@ func buildInformation() cli.BuildInfo {
 		GoVersion:        runtime.Version(),
 		GOOS:             runtime.GOOS,
 		GOARCH:           runtime.GOARCH,
-		DependencyBundle: dependencyBundle,
+		DependencyBundle: "sha256:" + ansible.Digest(),
 	}, stamp)
 }
 

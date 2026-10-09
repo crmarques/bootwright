@@ -11,9 +11,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/cli"
 )
 
+// The composition root supplies the linked runtime and the digest of the
+// automation the executable embeds, which version prints as its dependency
+// bundle (D100).
 func TestCompositionSuppliesRuntimeBuildInformation(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := run(context.Background(), []string{"version"}, &stdout, &stderr); code != 0 {
@@ -25,6 +29,7 @@ func TestCompositionSuppliesRuntimeBuildInformation(t *testing.T) {
 	for _, line := range []string{
 		"Go                 " + runtime.Version() + "\n",
 		"Target             " + runtime.GOOS + "/" + runtime.GOARCH + "\n",
+		"Dependency bundle  sha256:" + ansible.Digest() + "\n",
 	} {
 		if !strings.Contains(stdout.String(), line) {
 			t.Fatalf("version %q does not contain linked runtime %q", stdout.String(), line)

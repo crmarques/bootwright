@@ -9,9 +9,11 @@ gate. Preserve the explicit selection when changing build tooling. The
 pinned scanner. Inspect `scripts/go version` when diagnosing toolchain drift.
 The language policy remains in [Go engineering](../skills/code-implementation/references/go.md).
 
-[main.go](../../cmd/bootwright/main.go) exposes `main.version`, `main.commit`,
-`main.source`, and `main.dependencyBundle` as string variables for linker
-`-ldflags -X` injection. Keep these names aligned with release build arguments.
+[main.go](../../cmd/bootwright/main.go) exposes `main.version`, `main.commit`
+and `main.source` as string variables for linker `-ldflags -X` injection. Keep
+these names aligned with release build arguments. The dependency bundle `version`
+prints is the embedded automation digest, which composition computes, so it is
+not injected.
 `make build` stamps the first three from Git: `git describe --tags --dirty`, the
 `HEAD` revision, and `clean` or `modified` from the tracked-file status. Each is
 an overridable variable (`make build VERSION=v0.4.0`), and outside a repository

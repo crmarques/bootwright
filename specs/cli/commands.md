@@ -177,8 +177,10 @@ Bootwright
 ```
 
 The composition root supplies every value. It obtains the Go runtime, GOOS, and
-GOARCH from the linked Go runtime and combines them with the link-supplied
-version, commit, source-state, and dependency-bundle values. For a version,
+GOARCH from the linked Go runtime, the dependency bundle as the digest of the
+automation the executable embeds, the one `setup` publishes and every
+operation records, and combines them with the link-supplied version, commit and
+source-state values (`TestCompositionSuppliesRuntimeBuildInformation`). For a version,
 commit, or source state the build left empty, it uses the module version,
 revision, and working-tree state recorded in the linked build stamp instead, so
 a build identifies the revision it was produced from and whether that revision's
