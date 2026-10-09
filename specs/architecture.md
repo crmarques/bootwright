@@ -218,12 +218,24 @@ abstractions solely to eliminate a comment.
 
 Minimize comments. Omit narration of what code does, redundant declaration or
 package summaries, section labels, commented-out code, and change diaries.
-An exported Go name alone is not a reason to add a comment. Retain only comments
+An exported Go name alone is not a reason to add a comment. Retain comments
 required by language, tooling, a maintained documentation contract, or legal
 obligations, such as build/embed directives, shebangs, generator markers, and
-license notices. Keep those comments minimal and correctly attached; preserve
+license notices, and short comments that state a rationale the code cannot:
+why a non-obvious choice was made, or the safety invariant a guard upholds,
+such as the ordering a durable write needs or the refusal a path must keep.
+Keep those comments minimal and correctly attached; preserve
 comments that are intentional fixture data. Change generated or vendored
 content through its owning source or dependency workflow.
+
+The comment lines each production Go package holds, directives aside, are
+held by `TestProductionCommentLinesOnlyShrink` to a per-package ceiling that
+only shrinks: a package over its ceiling fails, and one more than a tenth
+below it fails until the ceiling is lowered, so narration that leaves a
+package cannot return unnoticed. A package with no ceiling fails until its
+count is added, and a ceiling naming no package fails until it is removed.
+Reducing the narration that remains is parked work
+([B98](milestones/backlog.md#b98)).
 
 Preserve a finding only when it can change a future implementation, review, or
 diagnosis. Record observed constraints, non-obvious implementation rationale,
