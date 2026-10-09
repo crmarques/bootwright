@@ -17,7 +17,7 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X46, then X48, then X44 |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X48, then X44; B470 gates it |
 | [M2](milestones/m2.md) | Full IBM Ceph 9.9.x on libvirt+sushy and bare metal/BMC | M1 | in progress | after M1: X47, B73; define B472 |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
@@ -25,10 +25,10 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X46 is active; X43, X24 and X45 are delivered.
+No slice is active; X43, X24, X45 and X46 are delivered.
 
-- **Next for agents:** finish M1's X46, do [B465](milestones/m1.md#b465)
-  before D59's closing run, then X48 and X44; X47 follows.
+- **Next for agents:** deliver X48, then X44, including
+  [B470](milestones/m1.md#b470), the toolchain move its gates need; X47 follows.
 - **Next for operator:** before a build that contains X46 touches a host,
   destroy every live context with the build that applied it, then run `setup`
   once: X21, X29 to X32, X43, X24, X45 and X46 moved request and record
