@@ -78,10 +78,10 @@ artifact server and its placement Machine.
 | A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.os.install.rootDeviceHints` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.os.install.rootDeviceHints.minSizeGigabytes on <machine> as at most 9007199254740991` |
 | A node off the artifact server's host | a virtual node whose provider's `spec.libvirt.machineRef` is not the selected server's `spec.machineRef` | `an emulated controller fetches the boot image without verifying its server, so the server is placed on the provider host that controller runs on` | `<machine> is booted through a controller on <provider host> and <server> is placed on <server host>; place <provider> and <server> on the same Machine` |
 
-A node whose management controller would have to import a certificate refuses
-as well, with `importing a certificate into a management controller is not
-implemented`; no node reaches it today, because only a physical node's
-controller imports one and a physical node is refused first.
+Only a physical node's controller imports the artifact server's certificate,
+and a physical node is refused first, so no node's virtual-media trust is
+`import-certificate` here; lifting that refusal carries the trust through the
+cluster role ([B67](milestones/m3.md#b67)).
 
 ## Installer inputs
 

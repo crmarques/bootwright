@@ -71,9 +71,6 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 	if spec.Get("distribution", "release", "version").Text() == "" {
 		return "a cluster pinned to a release image alone names no version for its installer to match", ""
 	}
-	if method := spec.Get("install", "method").Text(); method != "" && method != "agent" {
-		return "this executable installs no cluster by the declared method", ""
-	}
 	if mode := spec.Get("install", "mode").Text(); mode != "" && mode != "connected" {
 		return "this executable installs no disconnected cluster", ""
 	}
@@ -119,9 +116,6 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		}
 		if _, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints); reason != "" {
 			return reason, remediation
-		}
-		if target.Controller.VirtualMedia.Trust == substrate.TrustImportCertificate {
-			return "importing a certificate into a management controller is not implemented", ""
 		}
 		// A virtual node's controller is emulated on its provider host and
 		// fetches the private image without verifying the server, so the token

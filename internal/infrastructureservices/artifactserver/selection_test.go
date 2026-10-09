@@ -270,7 +270,7 @@ func TestUnsupportedArtifactServersAreListedInCanonicalOrder(t *testing.T) {
 	installOnly := api.NewObject(api.ArtifactServer, "temp", api.Value{}, api.MapValue(
 		text("management", "managed"), text("retention", "install-only"),
 	))
-	found := Unsupported(catalogOf(controller(), cluster, managedProxy, external, installOnly, artifactServer()))
+	found := lifecycle.Identities(Refusals(catalogOf(controller(), cluster, managedProxy, external, installOnly, artifactServer())))
 	if !slices.Equal(found, []string{"ArtifactServer/temp"}) {
 		t.Fatalf("unsupported = %v", found)
 	}
@@ -281,7 +281,7 @@ func TestUnsupportedArtifactServersAreListedInCanonicalOrder(t *testing.T) {
 	if refused := Refusals(catalogOf(controller(), installOnly)); !slices.Equal(refused, want) {
 		t.Fatalf("refusals = %+v, want %+v", refused, want)
 	}
-	if len(Unsupported(catalogOf(controller(), artifactServer()))) != 0 {
+	if len(Refusals(catalogOf(controller(), artifactServer()))) != 0 {
 		t.Fatal("a supported graph reported unsupported objects")
 	}
 }

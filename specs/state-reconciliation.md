@@ -827,7 +827,25 @@ carries the reason its capability gives, or that no capability claims its kind,
 and the remedy, so `plan` says why as `apply` does; an object refused for two
 reasons is two diagnostics. A frozen plan requires a resolved
 implementation for every block; a removal planned from a frozen plan is never
-refused this way. A fresh `apply` also refuses, once it has bound the Secrets
+refused this way.
+
+The engine's own refusals, of objects no capability of this executable claims,
+are the rows below, and `TestUnclaimedObjectTableMatchesTheEngine` holds
+`Unrealizable` to them. An external managed service and a Machine whose
+operating system is provided are inputs and are never refused. Each reason and
+remedy is the diagnostic's message and remediation, in which `<kind>` is the
+refused object's kind and `<object>` its identity; `examples/lab-rhel` is the
+supported shape the remedy names.
+
+<!-- unclaimed objects -->
+| Refusal | Path | Reason | Remedy |
+| --- | --- | --- | --- |
+| An unclaimed effect-bearing kind | an InfraProvider, ContainerCluster, storage or add-on object of a kind no capability claims | `no capability of this executable realizes the <kind> kind` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/lab-rhel` |
+| An unclaimed managed service | a `management: managed` Proxy, DNSServer, NTPServer, ArtifactServer, Registry or LoadBalancer of a kind no capability claims | `no capability of this executable manages the <kind> kind` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/lab-rhel` |
+| A Machine to install with no capability | a Machine with `spec.os.provided: false` while no capability claims Machine | `no capability of this executable realizes a Machine whose operating system is not provided` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/lab-rhel` |
+| An enabled CustomPlaybook | a CustomPlaybook with `spec.enabled: true` while no capability claims CustomPlaybook | `no capability of this executable runs an enabled CustomPlaybook` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/lab-rhel` |
+
+A fresh `apply` also refuses, once it has bound the Secrets
 its plan names and before registration, any bound material a capability proves
 unusable, naming the Secret, and it releases the binding it created
 (`TestAFreshApplyRefusesMaterialItsCapabilityRefusesBeforeRegistration`).

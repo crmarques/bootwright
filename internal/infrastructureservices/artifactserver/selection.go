@@ -12,15 +12,10 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-// Unsupported lists every artifact server this capability cannot realize, in
-// canonical order. Kinds no capability claims at all are the engine's own
-// refusal, not this capability's.
-func Unsupported(catalog api.Catalog) []string {
-	return lifecycle.Identities(Refusals(catalog))
-}
-
 // Refusals refuses every artifact server this capability cannot realize, with
-// its reason and remedy.
+// its reason and remedy: its own retention row, then the placement and
+// reservation rows it shares with the managed network services. Kinds no
+// capability claims at all are the engine's own refusal, not this one's.
 func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	var found []lifecycle.Refusal
 	for _, server := range catalog.OfKind(api.ArtifactServer) {
