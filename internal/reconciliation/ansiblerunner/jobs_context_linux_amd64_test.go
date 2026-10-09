@@ -36,7 +36,12 @@ func blocking() *exec.Cmd {
 // it ended.
 func runHeld(t *testing.T, runner Runner, request lifecycle.RunRequest) func() error {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
+	return runHeldIn(t, context.Background(), runner, request)
+}
+
+func runHeldIn(t *testing.T, parent context.Context, runner Runner, request lifecycle.RunRequest) func() error {
+	t.Helper()
+	ctx, cancel := context.WithCancel(parent)
 	running := make(chan struct{})
 	var once sync.Once
 	request.Progress = func(context.Context, string, string) { once.Do(func() { close(running) }) }

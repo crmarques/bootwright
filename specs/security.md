@@ -202,7 +202,12 @@ job exists. The adapter inherits the lock, and so do the `ansible-playbook`
 child its supervisor forks and every Ansible worker, so the lock is free only
 once none of them runs, and the worker that a supervisor killed on its own
 leaves running still holds it. A run refuses with `lifecycle.adapter-running`,
-and starts nothing, only while a job of its own context holds its lock. While
+and starts nothing, only while a job of its own context holds its lock, except
+for its own live sibling adapters. That exemption requires the private
+[invocation scope](state-reconciliation.md#stages-and-the-pause-boundary)
+to prove the exact original lock and holder file identities; context,
+operation and attribution bytes alone never authorize it. A released job
+whose descendants still hold the lock loses the exemption. While
 the invocation that started that job still holds its holder, the refusal names
 the job's context, description, operation and Machine and says to wait for it
 to end; only once the holder is free, so that what holds the lock is what the
@@ -386,10 +391,10 @@ Private URL capabilities travel over verified TLS, subject only to the
 [emulated-controller boot-media exception](container-clusters.md#boot-media).
 Public package trees carry no credentials.
 Not yet met: preflight and plan do not prove per-socket firewall reachability;
-tracked as [B318](milestones/m4.md#b318).
+tracked as [B318](milestones/m2.md#b318).
 Not yet met: the emulated BMC does not refuse a non-loopback bind and has no
 confined SELinux type; tracked as [B334](milestones/backlog.md#b334). Its TLS
-transport is tracked separately as [B446](milestones/m4.md#b446).
+transport is tracked separately as [B446](milestones/m2.md#b446).
 
 ### Direct SSH sessions
 

@@ -16,6 +16,10 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
+// BeginInvocation gives concurrent adapters one live execution scope. Its release
+// runs only after every adapter has settled; the scope never enters durable intent.
+type BeginInvocation func(context.Context) (context.Context, func())
+
 // ContextIdentity names the context a lifecycle read resolved. Mode is the
 // context record's mode, which a lifecycle read admits only while it is ready;
 // status reports it and no capability reads it.

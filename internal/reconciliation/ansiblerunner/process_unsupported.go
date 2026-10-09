@@ -15,6 +15,10 @@ type Runner struct {
 
 func New(playbooks map[string]string) Runner { return Runner{playbooks: maps.Clone(playbooks)} }
 
+func (Runner) BeginInvocation(ctx context.Context) (context.Context, func()) {
+	return context.WithCancel(ctx)
+}
+
 func (Runner) Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	return lifecycle.RunResult{}, failure("lifecycle.state", "lifecycle adapter execution requires Linux on amd64", "")
 }

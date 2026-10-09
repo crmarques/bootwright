@@ -993,10 +993,13 @@ func clearMaterial(material map[string]secrets.Material) {
 	}
 }
 
-// run performs the whole operation under one held transaction: registration,
-// reservations, sequential block execution and the evidence projection. What
-// its registration left is recorded in record, whatever run returns.
+// run joins every adapter before releasing its execution scope and transaction.
 func (s Service) run(ctx context.Context, tx Transaction, decided transition, binding string, material map[string]secrets.Material, record *registering) (*OperationResult, error) {
+	if s.options.BeginInvocation != nil {
+		var release func()
+		ctx, release = s.options.BeginInvocation(ctx)
+		defer release()
+	}
 	store := s.store(tx)
 	// A removal proves the outcome of every effect it would take back, and then
 	// that none of it is still in use, before it registers. Proving either one

@@ -1,13 +1,11 @@
 ---
 # Derived from the frozen request only. Nothing here is authored by desired
 # state, and no value selects an executable, a role or a task file.
-# The area the installer image is built in. An attempt killed part way leaves
-# it behind, so an apply clears it before its first write and a removal takes
-# it back; the inspection reports it for both. It lives beneath a parent only
-# root may enter, which an apply and an observation create and prove before
-# the area itself, and which a removal leaves.
+# Interrupted image builds stay private to their context and Machine.
 managedos_install_anaconda_work_parent: /var/lib/bootwright-install
-managedos_install_anaconda_work: '{{ managedos_install_anaconda_work_parent }}/work'
+managedos_install_anaconda_work: >-
+  {{ managedos_install_anaconda_work_parent }}/{{ bootwright_os_install_request.identity.context }}/{{ bootwright_os_install_request.identity.object }}/work
+managedos_install_anaconda_scratch: '{{ bootwright_run_scratch }}/managedos-install'
 managedos_install_anaconda_media: /var/lib/bootwright/media
 # The executables this block needs, proved by path. The controller stage
 # installs the packages that provide them.
@@ -29,10 +27,7 @@ managedos_install_anaconda_served_root: >-
   {{ (bootwright_os_install_request.image.path | dirname | dirname | dirname)
      if bootwright_os_install_request.image is defined
      else (bootwright_os_install_request.private.path | dirname | dirname | dirname) }}
-# Where the package tree is extracted beside its published location before the
-# rename publishes it whole, and nothing when the request hosts no tree. An
-# apply killed while it extracted leaves it beneath the served root, so an
-# apply clears it before extracting and a removal takes it back.
+# Shared publication staging is observed, never changed by this role.
 managedos_install_anaconda_staged_tree: >-
   {{ (bootwright_os_install_request.tree.path ~ '.staging')
      if bootwright_os_install_request.tree is defined else '' }}
@@ -70,12 +65,6 @@ managedos_install_anaconda_installed: >-
 # only the content the removal takes back.
 managedos_install_anaconda_observes_removal: >-
   {{ bootwright_os_install_material.observes | default('') == 'removal' }}
-# A hosted tree is extracted and published only when the profile uses one and
-# no tree extracted from the image this operation froze is published yet.
-managedos_install_anaconda_publish_tree: >-
-  {{ bootwright_os_install_request.tree is defined
-     and not managedos_install_anaconda_before.observation.tree }}
-
 # The realized target every substrate-composed task file reads. Each substrate
 # proves its own target and reads its own identity channel; the installation
 # supplies the terms and never learns which substrate answered.

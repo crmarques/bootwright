@@ -42,6 +42,7 @@ type Runner struct {
 	command     func(string, ...string) *exec.Cmd
 	drain       time.Duration
 	playbooks   map[string]string
+	invocation  *invocationScope
 }
 
 // New binds the entrypoints composition authorizes, keyed by implementation
@@ -75,24 +76,9 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := checkIdentity(request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	// Nothing starts while an earlier adapter of this context still holds its
-	// job, and what a dead one of any context left, with the material in it,
-	// goes first.
-	if err := r.sweep(request.Context); err != nil {
-		return lifecycle.RunResult{}, err
-	}
-	job, err := os.MkdirTemp(r.jobParent, jobPrefix)
+	r.invocation, _ = ctx.Value(invocationKey{}).(*invocationScope)
+	job, lock, holder, err := r.claimRun(request)
 	if err != nil {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "private adapter invocation storage is unavailable", "")
-	}
-	if err := os.Chmod(job, 0700); err != nil {
-		_ = os.RemoveAll(job)
-		return lifecycle.RunResult{}, failure("lifecycle.state", "private adapter invocation storage is unsafe", "")
-	}
-	lock, holder, err := claim(job, request)
-	if err != nil {
-		// Nothing but its locks was written, and no adapter ever held them.
-		_ = os.RemoveAll(job)
 		return lifecycle.RunResult{}, err
 	}
 	// Operation-scoped material never outlives the adapter processes that
@@ -114,6 +100,7 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
+	values["bootwright_run_scratch"] = scratch
 	outputs, err := prepareOutputs(job, request)
 	if err != nil {
 		return lifecycle.RunResult{}, err

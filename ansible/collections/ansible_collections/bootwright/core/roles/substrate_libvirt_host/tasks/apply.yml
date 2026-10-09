@@ -2,9 +2,12 @@
 - name: Validate the frozen provider host request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v3'
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v4'
+      - bootwright_substrate_host_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_substrate_host_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_substrate_host_request.poolPath == '/var/lib/libvirt/images/bootwright/'
+        ~ bootwright_substrate_host_request.identity.context ~ '/providers/' ~ bootwright_substrate_host_request.identity.object ~ '/vmedia'
       - bootwright_substrate_host_request.uri is string
-      - bootwright_substrate_host_request.poolPath.startswith('/var/lib/libvirt/images/bootwright/')
       - bootwright_substrate_host_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -206,101 +209,102 @@
   loop_control:
     label: '{{ item.name }}'
 
-- name: Create the private definition directory
-  ansible.builtin.file:
-    path: '{{ substrate_libvirt_host_definitions }}'
-    state: directory
-    owner: root
-    group: root
-    mode: '0700'
-  changed_when: false
+- name: Use this invocation's private definitions
+  block:
+    - name: Create the private definition directory
+      bootwright.core.lifecycle_scratch:
+        root: '{{ bootwright_run_scratch }}'
+        scope: libvirt-host
+      register: substrate_libvirt_host_scratch
 
-- name: Publish each managed network definition the host does not carry
-  ansible.builtin.template:
-    src: network.xml.j2
-    dest: '{{ substrate_libvirt_host_definitions }}/{{ item.name }}.xml'
-    owner: root
-    group: root
-    mode: '0600'
-  loop: '{{ substrate_libvirt_host_redefined }}'
-  loop_control:
-    label: '{{ item.name }}'
-  changed_when: false
+    - name: Publish each managed network definition the host does not carry
+      ansible.builtin.template:
+        src: network.xml.j2
+        dest: '{{ substrate_libvirt_host_definitions }}/{{ item.name }}.xml'
+        owner: root
+        group: root
+        mode: '0600'
+      loop: '{{ substrate_libvirt_host_redefined }}'
+      loop_control:
+        label: '{{ item.name }}'
+      changed_when: false
 
-# A network already defined but active keeps running the definition it started
-# with: defining it again changes only the one it next starts from.
-- name: Define each managed network the host does not carry as frozen
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/virsh
-      - --connect
-      - '{{ bootwright_substrate_host_request.uri }}'
-      - net-define
-      - '{{ substrate_libvirt_host_definitions }}/{{ item.name }}.xml'
-  loop: '{{ substrate_libvirt_host_redefined }}'
-  loop_control:
-    label: '{{ item.name }}'
-  changed_when: true
+    # A network already defined but active keeps running the definition it started
+    # with: defining it again changes only the one it next starts from.
+    - name: Define each managed network the host does not carry as frozen
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/virsh
+          - --connect
+          - '{{ bootwright_substrate_host_request.uri }}'
+          - net-define
+          - '{{ substrate_libvirt_host_definitions }}/{{ item.name }}.xml'
+      loop: '{{ substrate_libvirt_host_redefined }}'
+      loop_control:
+        label: '{{ item.name }}'
+      changed_when: true
 
-# Defining an active persistent network saves that definition to be restored
-# when the network shuts down, leaving the one it runs alone
-# (virNetworkObjUpdateAssignDef in src/conf/virnetworkobj.c,
-# https://gitlab.com/libvirt/libvirt), so once stopped here it stays defined
-# and the start below runs the frozen one. Nothing runs on these networks, as
-# the refusals above proved.
-- name: Stop each managed network that runs another definition than the frozen one
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/virsh
-      - --connect
-      - '{{ bootwright_substrate_host_request.uri }}'
-      - net-destroy
-      - '{{ item.name }}'
-  loop: '{{ substrate_libvirt_host_restarted }}'
-  loop_control:
-    label: '{{ item.name }}'
-  changed_when: true
+    # Defining an active persistent network saves that definition to be restored
+    # when the network shuts down, leaving the one it runs alone
+    # (virNetworkObjUpdateAssignDef in src/conf/virnetworkobj.c,
+    # https://gitlab.com/libvirt/libvirt), so once stopped here it stays defined
+    # and the start below runs the frozen one. Nothing runs on these networks, as
+    # the refusals above proved.
+    - name: Stop each managed network that runs another definition than the frozen one
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/virsh
+          - --connect
+          - '{{ bootwright_substrate_host_request.uri }}'
+          - net-destroy
+          - '{{ item.name }}'
+      loop: '{{ substrate_libvirt_host_restarted }}'
+      loop_control:
+        label: '{{ item.name }}'
+      changed_when: true
 
-- name: Start each managed network
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/virsh
-      - --connect
-      - '{{ bootwright_substrate_host_request.uri }}'
-      - net-start
-      - '{{ item.name }}'
-  loop: '{{ substrate_libvirt_host_managed }}'
-  loop_control:
-    label: '{{ item.name }}'
-  register: substrate_libvirt_host_started
-  failed_when:
-    - substrate_libvirt_host_started.rc != 0
-    - '"already active" not in substrate_libvirt_host_started.stderr'
-  changed_when: substrate_libvirt_host_started.rc == 0
+    - name: Start each managed network
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/virsh
+          - --connect
+          - '{{ bootwright_substrate_host_request.uri }}'
+          - net-start
+          - '{{ item.name }}'
+      loop: '{{ substrate_libvirt_host_managed }}'
+      loop_control:
+        label: '{{ item.name }}'
+      register: substrate_libvirt_host_started
+      failed_when:
+        - substrate_libvirt_host_started.rc != 0
+        - '"already active" not in substrate_libvirt_host_started.stderr'
+      changed_when: substrate_libvirt_host_started.rc == 0
 
-# Only a network that started is set to autostart, so a start that fails leaves
-# no definition that starts with the host. A replay sets it again on each
-# network the running observation did not report set to autostart, which is
-# also how an attempt interrupted between the two converges.
-- name: Autostart each managed network once it runs
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/virsh
-      - --connect
-      - '{{ bootwright_substrate_host_request.uri }}'
-      - net-autostart
-      - '{{ item.name }}'
-  loop: '{{ substrate_libvirt_host_autostarted }}'
-  loop_control:
-    label: '{{ item.name }}'
-  register: substrate_libvirt_host_autostart
-  changed_when: true
-
-- name: Remove the private definition directory
-  ansible.builtin.file:
-    path: '{{ substrate_libvirt_host_definitions }}'
-    state: absent
-  changed_when: false
+    # Only a network that started is set to autostart, so a start that fails leaves
+    # no definition that starts with the host. A replay sets it again on each
+    # network the running observation did not report set to autostart, which is
+    # also how an attempt interrupted between the two converges.
+    - name: Autostart each managed network once it runs
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/virsh
+          - --connect
+          - '{{ bootwright_substrate_host_request.uri }}'
+          - net-autostart
+          - '{{ item.name }}'
+      loop: '{{ substrate_libvirt_host_autostarted }}'
+      loop_control:
+        label: '{{ item.name }}'
+      register: substrate_libvirt_host_autostart
+      changed_when: true
+  always:
+    - name: Remove the private definition directory
+      bootwright.core.lifecycle_scratch:
+        root: '{{ bootwright_run_scratch }}'
+        scope: libvirt-host
+        state: absent
+        remove_root: "{{ bootwright_substrate_host_request.placement.connection == 'ssh' }}"
+      when: substrate_libvirt_host_scratch is succeeded
 
 - name: Report network definition completion
   bootwright.core.substrate_host_protocol:

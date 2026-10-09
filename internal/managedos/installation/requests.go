@@ -247,25 +247,13 @@ func (r Request) ReservationKeys() []string {
 	if r.Private != nil {
 		keys = append(keys, "path:"+r.Private.Path)
 	}
-	if r.Tree != nil {
-		keys = append(keys, "path:"+r.Tree.Path)
-	}
+
 	slices.Sort(keys)
 	return slices.Compact(keys)
 }
 
-// ExclusiveKeys names what this installation will not share with another
-// running block. The package tree is published per install profile, not per
-// Machine, so two Machines installing the same profile publish one tree: they
-// extract and rename over the same path, and each would undo the other's work
-// if they ran at once. The image and the private subtree are this Machine's
-// own, so neither is named here.
-func (r Request) ExclusiveKeys() []string {
-	if r.Tree == nil {
-		return nil
-	}
-	return []string{"path:" + r.Tree.Path}
-}
+// ExclusiveKeys is empty: shared package trees have their own publication block.
+func (r Request) ExclusiveKeys() []string { return nil }
 
 // SecretReferences names every declaration this request's execution needs
 // bound, so the operation freezes them before it registers.

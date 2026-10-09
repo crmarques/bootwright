@@ -31,7 +31,7 @@ func TestHostRequestFreezesTheNetworksAndPoolItOwns(t *testing.T) {
 	if request.Identity.Block != "substrate-host-lab-libvirt" || request.URI != "qemu:///system" {
 		t.Fatalf("request = %+v", request)
 	}
-	if request.PoolName != "bootwright-lab-lab-libvirt-vmedia" || request.PoolPath != "/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia" {
+	if request.PoolName != "bootwright-lab-lab-libvirt-vmedia" || request.PoolPath != "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia" {
 		t.Fatalf("pool = %q at %q", request.PoolName, request.PoolPath)
 	}
 	if len(request.Networks) != 1 {
@@ -103,7 +103,7 @@ func TestAManagedAttachmentWiresTheDomainToItsLibvirtNetwork(t *testing.T) {
 func TestHostReservationsClaimEveryManagedNetworkAndThePool(t *testing.T) {
 	requests, _ := HostRequests(labCatalog(), "controller", testContext)
 	want := []string{"bridge:virbr-lab", "libvirt-network:bootwright-lab-lab-guests", "libvirt-pool:bootwright-lab-lab-libvirt-vmedia",
-		"path:/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia", "prefix:198.51.100.0/24"}
+		"path:/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia", "prefix:198.51.100.0/24"}
 	if !slices.Equal(requests[0].ReservationKeys(), want) {
 		t.Fatalf("keys = %v", requests[0].ReservationKeys())
 	}
@@ -144,7 +144,7 @@ func TestMachineRequestDerivesTheDomainDisksAndController(t *testing.T) {
 	if len(request.Disks) != 1 || request.Disks[0].SizeGiB != 60 || request.Disks[0].Target != "vda" {
 		t.Fatalf("disks = %+v", request.Disks)
 	}
-	if request.Disks[0].Path != "/var/lib/libvirt/images/bootwright/lab/rhel-01/root.qcow2" {
+	if request.Disks[0].Path != "/var/lib/libvirt/images/bootwright/lab/machines/rhel-01/root.qcow2" {
 		t.Fatalf("root disk = %q", request.Disks[0].Path)
 	}
 	if len(request.Interfaces) != 1 || request.Interfaces[0].Bridge != "virbr-lab" || request.Interfaces[0].Name != "enp1s0" {
@@ -159,7 +159,7 @@ func TestMachineRequestDerivesTheDomainDisksAndController(t *testing.T) {
 	}
 	// The controller uploads inserted media into the provider's own pool, so
 	// the request names that pool as well as its path.
-	if request.PoolName != "bootwright-lab-lab-libvirt-vmedia" || request.PoolPath != "/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia" {
+	if request.PoolName != "bootwright-lab-lab-libvirt-vmedia" || request.PoolPath != "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia" {
 		t.Fatalf("pool = %q at %q", request.PoolName, request.PoolPath)
 	}
 	if controller.Endpoint != "http://192.0.2.1:8000/redfish/v1/Systems/"+request.UUID {
@@ -222,7 +222,7 @@ func TestMachineReservationsClaimItsDomainUnitSocketAndDisks(t *testing.T) {
 	requests, _ := MachineRequests(labCatalog(), "controller", testContext)
 	want := []string{
 		"libvirt-domain:bootwright-lab-rhel-01",
-		"path:/var/lib/libvirt/images/bootwright/lab/rhel-01",
+		"path:/var/lib/libvirt/images/bootwright/lab/machines/rhel-01",
 		"socket:192.0.2.1:8000",
 		"unit:bootwright-lab-bmc-rhel-01",
 	}

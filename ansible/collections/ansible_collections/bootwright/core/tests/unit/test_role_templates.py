@@ -79,11 +79,11 @@ HOST = {
     "packages": ["libvirt-daemon-kvm", "qemu-kvm"],
     "placement": LOCAL,
     "poolName": "bootwright-%s-host" % CONTEXT,
-    "poolPath": "/var/lib/libvirt/images/bootwright/%s/host/pool" % CONTEXT,
+    "poolPath": "/var/lib/libvirt/images/bootwright/%s/providers/host/vmedia" % CONTEXT,
     "provisioned": True,
     "services": ["virtnetworkd.socket", "virtqemud.socket", "virtstoraged.socket"],
     "uri": "qemu:///system",
-    "version": "substrate-host-libvirt-v3",
+    "version": "substrate-host-libvirt-v4",
 }
 
 MACHINE = {
@@ -91,10 +91,10 @@ MACHINE = {
                    "http://192.0.2.1:8001/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
                    "image": "registry.example.test/sushy-tools@sha256:" + DIGEST, "port": 8001,
                    "unit": "bootwright-%s-rhel-01-bmc" % CONTEXT},
-    "directory": "/var/lib/libvirt/images/bootwright/%s/rhel-01" % CONTEXT,
-    "disks": [{"name": "root", "path": "/var/lib/libvirt/images/bootwright/%s/rhel-01/root.qcow2" % CONTEXT,
+    "directory": "/var/lib/libvirt/images/bootwright/%s/machines/rhel-01" % CONTEXT,
+    "disks": [{"name": "root", "path": "/var/lib/libvirt/images/bootwright/%s/machines/rhel-01/root.qcow2" % CONTEXT,
                "sizeGiB": 40, "target": "vda"},
-              {"name": "data", "path": "/var/lib/libvirt/images/bootwright/%s/rhel-01/data.qcow2" % CONTEXT,
+              {"name": "data", "path": "/var/lib/libvirt/images/bootwright/%s/machines/rhel-01/data.qcow2" % CONTEXT,
                "sizeGiB": 20, "target": "vdb"}],
     "domain": "bootwright-%s-rhel-01" % CONTEXT,
     "egress": EGRESS,
@@ -105,12 +105,12 @@ MACHINE = {
     "memoryMiB": 8192,
     "placement": LOCAL,
     "poolName": "bootwright-%s-host" % CONTEXT,
-    "poolPath": "/var/lib/libvirt/images/bootwright/%s/host/pool" % CONTEXT,
+    "poolPath": "/var/lib/libvirt/images/bootwright/%s/providers/host/vmedia" % CONTEXT,
     "tpm": True,
     "uri": "qemu:///system",
     "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
     "vcpu": 4,
-    "version": "machine-libvirt-v3",
+    "version": "machine-libvirt-v4",
 }
 
 # Each rendered template with the variables its task sees beside the role's
@@ -147,6 +147,15 @@ def role_vars(role):
     return dict(LOADER.load_from_file(str(path), trusted_as_template=True) or {}) if path.is_file() else {}
 
 
+def task_tree(tasks):
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        yield task
+        for section in ("block", "rescue", "always"):
+            yield from task_tree(task.get(section, []))
+
+
 def rendered_templates():
     """Every (role, template) a task renders through ansible.builtin.template.
 
@@ -156,7 +165,7 @@ def rendered_templates():
     found = set()
     for path in sorted(ROLES.glob("*/tasks/*.yml")):
         role = path.parent.parent.name
-        for task in LOADER.load_from_file(str(path)) or []:
+        for task in task_tree(LOADER.load_from_file(str(path)) or []):
             source = (task.get("ansible.builtin.template") or {}).get("src") if isinstance(task, dict) else None
             if not source:
                 continue

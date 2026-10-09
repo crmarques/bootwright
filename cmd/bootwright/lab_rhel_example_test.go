@@ -309,7 +309,7 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 	slices.Sort(ordered)
 	if !slices.Equal(ordered, []string{
 		"artifact-server-lab-artifacts", clients.BlockID, "dns-lab-dns", "machine-rhel-01",
-		"ntp-lab-ntp", "os-install-rhel-01", "proxy-lab-proxy", "substrate-host-lab-libvirt",
+		"ntp-lab-ntp", "os-install-rhel-01", "os-package-tree-rhel-9-8", "proxy-lab-proxy", "substrate-host-lab-libvirt",
 	}) {
 		t.Fatalf("blocks = %v", blocks)
 	}
@@ -318,6 +318,8 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 	for _, pair := range [][2]string{
 		{"substrate-host-lab-libvirt", "machine-rhel-01"},
 		{"machine-rhel-01", "os-install-rhel-01"},
+		{"artifact-server-lab-artifacts", "os-package-tree-rhel-9-8"},
+		{"os-package-tree-rhel-9-8", "os-install-rhel-01"},
 		{"artifact-server-lab-artifacts", "os-install-rhel-01"},
 		{"dns-lab-dns", "os-install-rhel-01"},
 		{"ntp-lab-ntp", "os-install-rhel-01"},
@@ -376,6 +378,7 @@ func TestLabRHELExampleDestroyPlanDescribesOnlyRemoval(t *testing.T) {
 		"machine-rhel-01":               "remove the virtual machine rhel-01 and its controller",
 		"ntp-lab-ntp":                   "remove the NTP server lab-ntp from controller",
 		"os-install-rhel-01":            "remove the installer media of rhel-01",
+		"os-package-tree-rhel-9-8":      "remove the shared installation package tree",
 		"proxy-lab-proxy":               "remove the proxy lab-proxy from controller",
 		"substrate-host-lab-libvirt":    "remove the networks and virtual-media pool of lab-libvirt from controller",
 	} {

@@ -1,7 +1,7 @@
 ---
 # Derived from the frozen request only. Nothing here is authored by desired
 # state, and no value selects an executable, a role or a task file.
-substrate_libvirt_machine_definitions: /run/bootwright-substrate
+substrate_libvirt_machine_definitions: '{{ bootwright_run_scratch }}/libvirt-machine'
 substrate_libvirt_machine_domain_xml: >-
   {{ substrate_libvirt_machine_definitions }}/{{ bootwright_substrate_machine_request.domain }}.xml
 substrate_libvirt_machine_unit_path: >-

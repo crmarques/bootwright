@@ -22,9 +22,20 @@ ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "substrate_libvir
 OBSERVATION = re.compile(r"\b(substrate_libvirt_host_\w+)\.observation\b")
 
 
+def flattened(tasks):
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        if "block" in task:
+            for section in ("block", "rescue", "always"):
+                yield from flattened(task.get(section, []))
+        else:
+            yield task
+
+
 def apply_tasks():
     parsed = yaml.safe_load((ROLE / "tasks" / "apply.yml").read_text()) or []
-    return [task for task in parsed if isinstance(task, dict)]
+    return list(flattened(parsed))
 
 
 def argv_of(task):

@@ -233,16 +233,12 @@ func TestEvidenceMatchesItsGoldens(t *testing.T) {
 			Evidence{Address: request.Address, Power: "Off", Request: digest},
 			func(data []byte) error { return ValidateNoEffect(data, digest) },
 		},
-		// A removal's observation reads the published content alone, and a
-		// removal stopped while it deleted the tree left the directory
-		// without its .treeinfo: content the removal still takes back.
+		// Shared tree content survives this machine's completed withdrawal.
 		"removal-partial-tree": {
 			Evidence{Address: request.Address, Request: digest, TreeContent: true},
-			func(data []byte) error { return ValidateWithdrawalUnfinished(data, digest) },
+			func(data []byte) error { return ValidateWithdrawn(data, digest) },
 		},
-		// A removal's observation after an apply was killed while it
-		// extracted the tree: the staging copy beside the tree and the work
-		// area are left, and the removal still takes both back.
+		// Only the machine's work area is unfinished withdrawal here.
 		"removal-remnants": {
 			Evidence{Address: request.Address, Request: digest, TreeStaging: true, Work: true},
 			func(data []byte) error { return ValidateWithdrawalUnfinished(data, digest) },

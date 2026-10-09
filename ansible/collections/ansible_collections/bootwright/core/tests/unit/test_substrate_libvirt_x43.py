@@ -41,9 +41,9 @@ LOADER = DataLoader()
 URI = "qemu:///system"
 NAME = "bootwright-lab-guests"
 POOL = "bootwright-lab-host-vmedia"
-POOL_PATH = "/var/lib/libvirt/images/bootwright/lab/host/vmedia"
+POOL_PATH = "/var/lib/libvirt/images/bootwright/lab/providers/host/vmedia"
 FROZEN = {"name": NAME, "bridge": "virbr-lab", "address": "198.51.100.1/24", "forward": "nat", "managed": True}
-REQUEST = {"identity": {"context": "lab"}, "poolName": POOL, "poolPath": POOL_PATH, "uri": URI}
+REQUEST = {"identity": {"context": "lab", "object": "host"}, "poolName": POOL, "poolPath": POOL_PATH, "uri": URI}
 
 
 def network_xml(context, attachment):
@@ -82,9 +82,20 @@ def pool_xml(path):
     return "<pool type='dir'><name>%s</name><target><path>%s</path><permissions/></target></pool>" % (POOL, path)
 
 
+def flatten(listed):
+    for task in listed:
+        if not isinstance(task, dict):
+            continue
+        if "block" in task:
+            for section in ("block", "always"):
+                yield from flatten(task.get(section, []))
+        else:
+            yield task
+
+
 def load(name):
     loaded = LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True)
-    return [task for task in loaded if isinstance(task, dict)]
+    return list(flatten(loaded))
 
 
 def argv_of(task):
@@ -194,11 +205,12 @@ def test_a_destroy_removes_each_empty_parent_never_recursively():
     assert argv_of(tasks[parents]) == ["/usr/bin/rmdir", "{{ item }}"]
     templar = Templar(loader=LOADER, variables={"bootwright_substrate_host_request": REQUEST})
     assert templar.template(tasks[parents]["loop"]) == [
-        "/var/lib/libvirt/images/bootwright/lab/host", "/var/lib/libvirt/images/bootwright/lab",
+        "/var/lib/libvirt/images/bootwright/lab/providers/host",
+        "/var/lib/libvirt/images/bootwright/lab/providers", "/var/lib/libvirt/images/bootwright/lab",
     ]
     validate = index_of(tasks, lambda task: task.get("name") == "Validate the frozen provider host request", "validates the request")
     base = {"bootwright_substrate_host_digest": "0" * 64}
-    request = dict(REQUEST, version="substrate-host-libvirt-v3")
+    request = dict(REQUEST, version="substrate-host-libvirt-v4")
     assert holds(tasks[validate], dict(base, bootwright_substrate_host_request=request))
     shallow = dict(request, poolPath="/var/lib/libvirt/images/bootwright/lab/vmedia")
     assert not holds(tasks[validate], dict(base, bootwright_substrate_host_request=shallow))
@@ -237,7 +249,7 @@ EGRESS = {
 MACHINE = {
     "controller": {"address": "192.0.2.1", "image": "registry.example.test/sushy-tools@sha256:" + "0" * 64, "port": 8001,
                    "unit": "bootwright-lab-rhel-01-bmc"},
-    "directory": "/var/lib/libvirt/images/bootwright/lab/rhel-01",
+    "directory": "/var/lib/libvirt/images/bootwright/lab/machines/rhel-01",
     "domain": DOMAIN,
     "egress": EGRESS,
     "identity": {"block": "machine-rhel-01", "context": "lab", "object": "rhel-01"},
@@ -249,7 +261,7 @@ MACHINE = {
 
 def load_machine(name):
     loaded = LOADER.load_from_file(str(MACHINE_ROLE / "tasks" / name), trusted_as_template=True)
-    return [task for task in loaded if isinstance(task, dict)]
+    return list(flatten(loaded))
 
 
 def machine_variables(**extra):
@@ -360,8 +372,12 @@ def test_a_machine_destroy_removes_each_empty_context_parent():
         ("Delete every owned disk", "/var/lib/libvirt/images/bootwright/lab"),
     ):
         parent = tasks[named(tasks, removal) + 1]
-        argv = [str(templar.template(trust_as_template(value))) for value in argv_of(parent)]
-        assert argv == ["/usr/bin/rmdir", expected], removal
+        if "loop" in parent:
+            assert argv_of(parent) == ["/usr/bin/rmdir", "{{ item }}"]
+            assert templar.template(parent["loop"]) == [expected + "/machines", expected]
+        else:
+            argv = [str(templar.template(trust_as_template(value))) for value in argv_of(parent)]
+            assert argv == ["/usr/bin/rmdir", expected], removal
         assert parent["environment"] == {"LC_ALL": "C"}
         outcome = tasks[named(tasks, "Publish bounded machine removal evidence")]
         assert parent["register"] + " is changed" in str(outcome["bootwright.core.substrate_machine_protocol"]["outcome"])
@@ -374,8 +390,8 @@ def test_a_machine_destroy_removes_each_empty_context_parent():
             assert evaluate(parent["failed_when"], {parent["register"]: result}) is failed, (removal, result)
     validate = named(tasks, "Validate the frozen machine request")
     base = {"bootwright_substrate_machine_digest": "0" * 64}
-    assert holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v3")))
-    shallow = dict(MACHINE, version="machine-libvirt-v3", directory="/var/lib/libvirt/images/bootwright/rhel-01")
+    assert holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v4")))
+    shallow = dict(MACHINE, version="machine-libvirt-v4", directory="/var/lib/libvirt/images/bootwright/rhel-01")
     assert not holds(tasks[validate], dict(base, bootwright_substrate_machine_request=shallow))
 
 

@@ -2,12 +2,13 @@ package substrate
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func TestALibvirtMachineNeverSharesItsProvidersName(t *testing.T) {
+func TestALibvirtMachineCanShareItsProvidersName(t *testing.T) {
 	const field = "$.metadata.name"
 	host := topologyHost("host")
 	lab := topologyProvider("lab", "host", "8000", topologyProfile())
@@ -21,11 +22,12 @@ func TestALibvirtMachineNeverSharesItsProvidersName(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			refused := issuesAt(Validate(lab, catalog), field)
-			want := api.Issue{Code: "api.invariant", Field: field,
-				Message:     "Machine/lab is realized on a libvirt provider and shares this provider's name, and its disk directory, which its destroy removes with everything in it, would hold this provider's virtual-media pool directory",
-				Remediation: "rename InfraProvider/lab or Machine/lab, with every reference to the one renamed"}
-			if len(refused) != 1 || refused[0] != want {
-				t.Fatalf("a Machine sharing its libvirt provider's name: %v", refused)
+			if len(refused) != 0 {
+				t.Fatalf("disjoint machine and provider directories were refused: %v", refused)
+			}
+			disk, pool := DiskDirectory("lab", "lab"), PoolPath("lab", "lab")
+			if strings.HasPrefix(pool, disk+"/") || strings.HasPrefix(disk, pool+"/") || disk == pool {
+				t.Fatalf("machine and provider directories overlap: %s, %s", disk, pool)
 			}
 		})
 	}

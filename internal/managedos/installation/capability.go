@@ -83,7 +83,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ID:             request.Identity.Block,
 			Description:    description(input.Verb, request),
 			Stage:          reconciliation.StageMachines,
-			Requires:       requires(requirements[index]),
+			Requires:       installationRequires(requirements[index], request),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Exclusive:      request.ExclusiveKeys(),
@@ -117,6 +117,14 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
 	return plan, nil
+}
+
+func installationRequires(needs Requirements, request Request) []reconciliation.ObjectRef {
+	references := requires(needs)
+	if request.Tree != nil {
+		references = append(references, reconciliation.ObjectRef{Kind: TreeKind, Object: request.Identity.Profile})
+	}
+	return references
 }
 
 // requires names the API objects this block waits for, never their block
@@ -167,9 +175,7 @@ func description(verb reconciliation.Verb, request Request) string {
 
 func impacts(verb reconciliation.Verb, request Request) []string {
 	published := []string{request.installerImage().Path}
-	if request.Tree != nil {
-		published = append(published, request.Tree.Path)
-	}
+
 	var impacts []string
 	for _, path := range published {
 		if verb == reconciliation.Destroy {
@@ -190,7 +196,7 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 	machines := []string{request.Identity.Object}
 	steps := [][2]string{
-		{"publish-tree", "publish the package tree the installer fetches"},
+		{"check-tree", "prove the shared package tree the installer fetches"},
 		{"build-image", "build the machine's own installer image"},
 		{"boot-installer", "insert the image and boot the machine from it"},
 		{"await-installation", "wait for the installer to write the disk and power the machine off"},
@@ -199,7 +205,7 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 	}
 	if verb == reconciliation.Destroy {
 		steps = [][2]string{
-			{"remove-published", "remove the published image and tree"},
+			{"remove-published", "remove the published installer image"},
 			{"verify-absence", "verify every published file is gone"},
 		}
 	}

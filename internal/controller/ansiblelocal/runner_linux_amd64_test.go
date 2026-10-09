@@ -488,7 +488,7 @@ func TestAControllerRunEndsUnknownOnANonCanonicalRecord(t *testing.T) {
 func TestACanceledControllerRunNeverAcknowledges(t *testing.T) {
 	directory := t.TempDir()
 	reply, descendant := filepath.Join(directory, "reply"), filepath.Join(directory, "descendant")
-	script := `sleep 30 </dev/null >/dev/null 2>&1 3>&- 4<&- & printf '%s' "$!" > '` + descendant + `'; ` +
+	script := `sleep 30 </dev/null >/dev/null 2>&1 3>&- 4<&- & cat "/proc/$!/stat" > '` + descendant + `'; ` +
 		`setsid sh -c 'printf "{\"phase\":\"loaded\"}\n" >&3; exec 3>&-; ` +
 		`if read -r line <&4; then printf "%s" "$line"; else printf EOF; fi > "$0.partial"; mv "$0.partial" "$0"' '` + reply + `' </dev/null >/dev/null 2>&1 & ` +
 		`exec 3>&- 4<&-; wait`
@@ -519,13 +519,38 @@ func TestACanceledControllerRunNeverAcknowledges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pid, err := strconv.Atoi(string(recorded))
-	if err != nil {
-		t.Fatal(err)
+	identity := fixtureProcess(t, recorded)
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		current, err := os.ReadFile("/proc/" + identity[0] + "/stat")
+		if errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		process := fixtureProcess(t, current)
+		if process[2] != identity[2] || process[1] == "Z" || process[1] == "X" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the adapter's descendant %s remained runnable after cancellation", identity[0])
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
-		t.Fatalf("the adapter's descendant %d outlived the canceled run: %v", pid, err)
+}
+
+// A killed orphan may remain a zombie until its adopter reaps it. Match its
+// start-time as well as its PID so a later process cannot prolong this check.
+func fixtureProcess(t *testing.T, stat []byte) [3]string {
+	t.Helper()
+	pid, _, ok := strings.Cut(string(stat), " (")
+	end := bytes.LastIndexByte(stat, ')')
+	fields := strings.Fields(string(stat[end+1:]))
+	if !ok || end < 0 || len(fields) < 20 {
+		t.Fatalf("invalid fixture process record: %q", stat)
 	}
+	return [3]string{pid, fields[0], fields[19]}
 }
 
 // Package staging must not land in the ambient temporary directory: the child

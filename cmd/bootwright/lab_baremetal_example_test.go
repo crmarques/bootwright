@@ -67,7 +67,7 @@ func machineBlocks(blocks []reconciliation.BlockDefinition) []reconciliation.Blo
 }
 
 // The example is one physical Machine, so it plans exactly the block that
-// claims and proves it and the one that installs it, and no provider host at
+// claims and proves it, its shared package tree and the one that installs it, and no provider host at
 // all: a bare-metal provider runs nothing Bootwright installs, so its
 // substrates stage is empty.
 func TestLabBaremetalExamplePlansTheClaim(t *testing.T) {
@@ -76,7 +76,7 @@ func TestLabBaremetalExamplePlansTheClaim(t *testing.T) {
 	for _, block := range blocks {
 		identities = append(identities, block.ID)
 	}
-	if !slices.Equal(identities, []string{"machine-metal-01", "os-install-metal-01"}) {
+	if !slices.Equal(identities, []string{"machine-metal-01", "os-package-tree-rhel-9-8", "os-install-metal-01"}) {
 		t.Fatalf("blocks = %v", identities)
 	}
 }

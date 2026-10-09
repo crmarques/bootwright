@@ -2,8 +2,11 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_machine_request.version == 'machine-libvirt-v3'
-      - bootwright_substrate_machine_request.directory.startswith('/var/lib/libvirt/images/bootwright/')
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v4'
+      - bootwright_substrate_machine_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_substrate_machine_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_substrate_machine_request.directory == '/var/lib/libvirt/images/bootwright/'
+        ~ bootwright_substrate_machine_request.identity.context ~ '/machines/' ~ bootwright_substrate_machine_request.identity.object
       - bootwright_substrate_machine_request.controller.image is search('@sha256:[0-9a-f]{64}$')
       - bootwright_substrate_machine_request.controller.port | int > 0
       - bootwright_substrate_machine_digest is match('[0-9a-f]{64}')
@@ -87,39 +90,40 @@
     status: running
   no_log: true
 
-- name: Create the private definition directory
-  ansible.builtin.file:
-    path: '{{ substrate_libvirt_machine_definitions }}'
-    state: directory
-    owner: root
-    group: root
-    mode: '0700'
-  changed_when: false
+- name: Use this invocation's private definitions
+  block:
+    - name: Create the private definition directory
+      bootwright.core.lifecycle_scratch:
+        root: '{{ bootwright_run_scratch }}'
+        scope: libvirt-machine
+      register: substrate_libvirt_machine_scratch
 
-- name: Publish the domain definition
-  ansible.builtin.template:
-    src: domain.xml.j2
-    dest: '{{ substrate_libvirt_machine_domain_xml }}'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: false
+    - name: Publish the domain definition
+      ansible.builtin.template:
+        src: domain.xml.j2
+        dest: '{{ substrate_libvirt_machine_domain_xml }}'
+        owner: root
+        group: root
+        mode: '0600'
+      changed_when: false
 
-- name: Define the machine without autostart and leave it powered off
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/virsh
-      - --connect
-      - '{{ bootwright_substrate_machine_request.uri }}'
-      - define
-      - '{{ substrate_libvirt_machine_domain_xml }}'
-  changed_when: substrate_libvirt_machine_before.observation.domain | length == 0
-
-- name: Remove the private definition directory
-  ansible.builtin.file:
-    path: '{{ substrate_libvirt_machine_definitions }}'
-    state: absent
-  changed_when: false
+    - name: Define the machine without autostart and leave it powered off
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/virsh
+          - --connect
+          - '{{ bootwright_substrate_machine_request.uri }}'
+          - define
+          - '{{ substrate_libvirt_machine_domain_xml }}'
+      changed_when: substrate_libvirt_machine_before.observation.domain | length == 0
+  always:
+    - name: Remove the private definition directory
+      bootwright.core.lifecycle_scratch:
+        root: '{{ bootwright_run_scratch }}'
+        scope: libvirt-machine
+        state: absent
+        remove_root: "{{ bootwright_substrate_machine_request.placement.connection == 'ssh' }}"
+      when: substrate_libvirt_machine_scratch is succeeded
 
 - name: Report domain definition completion
   bootwright.core.substrate_machine_protocol:

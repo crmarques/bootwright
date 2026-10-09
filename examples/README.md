@@ -29,6 +29,10 @@ whose RHEL Bootwright installs through an emulated Redfish BMC. It uses
 documentation addresses and a synthetic domain, and its README walks the
 journey that prepares the controller from it.
 
+[`lab-rhel-3-nodes/`](lab-rhel-3-nodes/) extends it to three RHEL guests using
+one install profile and package tree. Its README checks concurrent services,
+machine realization and installation, followed by replay and safe removal.
+
 [`lab-sno/`](lab-sno/) is that same single-machine lab with one
 single-node OpenShift cluster instead of an installed RHEL guest: the same
 managed proxy, DNS, NTP and artifact-server set, one libvirt Machine the

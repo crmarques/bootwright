@@ -1,0 +1,33 @@
+---
+- name: Read an ancestor of this Machine's work area without following links
+  ansible.builtin.stat:
+    path: '{{ managedos_install_anaconda_work_ancestor }}'
+    follow: false
+  register: managedos_install_anaconda_ancestor
+
+- name: Refuse an existing work ancestor that is not private to root
+  ansible.builtin.assert:
+    that:
+      - managedos_install_anaconda_ancestor.stat.exists is defined
+      - managedos_install_anaconda_ancestor.stat.exists is boolean
+      - not (managedos_install_anaconda_ancestor.stat.exists | default(false))
+        or (managedos_install_anaconda_ancestor.stat.isdir | default(false)
+            and not (managedos_install_anaconda_ancestor.stat.islnk | default(true))
+            and managedos_install_anaconda_ancestor.stat.uid | default(-1) == 0
+            and managedos_install_anaconda_ancestor.stat.mode | default('') == '0700')
+    quiet: true
+    fail_msg: >-
+      {{ managedos_install_anaconda_work_ancestor }} is not a directory only root
+      may enter, so the installation work area was not accessed
+
+- name: Create a missing private work ancestor after proving its parent
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_work_ancestor }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  when:
+    - managedos_install_anaconda_work_create | bool
+    - not (managedos_install_anaconda_ancestor.stat.exists | default(false))
+  changed_when: false

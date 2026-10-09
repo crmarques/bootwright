@@ -10,7 +10,7 @@
 - name: Publish the guest's own host key for this one connection
   ansible.builtin.copy:
     content: '{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key | trim }}'
-    dest: '{{ managedos_install_anaconda_work }}/known_hosts'
+    dest: '{{ managedos_install_anaconda_scratch }}/known_hosts'
     owner: root
     group: root
     mode: '0600'
@@ -23,7 +23,7 @@
 - name: Write the one-connection client configuration
   ansible.builtin.copy:
     content: "Include /etc/crypto-policies/back-ends/openssh.config\n"
-    dest: '{{ managedos_install_anaconda_work }}/ssh_config'
+    dest: '{{ managedos_install_anaconda_scratch }}/ssh_config'
     owner: root
     group: root
     mode: '0600'
@@ -42,9 +42,9 @@
     argv:
       - /usr/bin/ssh
       - -F
-      - '{{ managedos_install_anaconda_work }}/ssh_config'
+      - '{{ managedos_install_anaconda_scratch }}/ssh_config'
       - -o
-      - 'UserKnownHostsFile={{ managedos_install_anaconda_work }}/known_hosts'
+      - 'UserKnownHostsFile={{ managedos_install_anaconda_scratch }}/known_hosts'
       - -o
       - GlobalKnownHostsFile=none
       - -o
@@ -105,12 +105,12 @@
 
 - name: Remove the one-connection known-hosts file
   ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_work }}/known_hosts'
+    path: '{{ managedos_install_anaconda_scratch }}/known_hosts'
     state: absent
   changed_when: false
 
 - name: Remove the one-connection client configuration
   ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_work }}/ssh_config'
+    path: '{{ managedos_install_anaconda_scratch }}/ssh_config'
     state: absent
   changed_when: false

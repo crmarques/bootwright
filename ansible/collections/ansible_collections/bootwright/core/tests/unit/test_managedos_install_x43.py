@@ -22,7 +22,6 @@ import re
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
-from ansible_collections.bootwright.core.plugins.modules.managedos_install_inspect import observe
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
 LOADER = DataLoader()
@@ -36,8 +35,7 @@ DVD = {"name": "rhel-9.8-x86_64-dvd.iso", "sha256": "fedcba9876543210" * 4, "siz
 
 
 def applied():
-    return [task for task in LOADER.load_from_file(str(ROLE / "tasks" / "apply.yml"), trusted_as_template=True)
-            if isinstance(task, dict)]
+    return flattened(ROLE / "tasks" / "apply.yml")
 
 
 def index_of(tasks, predicate, description):
@@ -89,8 +87,7 @@ def test_an_apply_proves_each_store_entrys_size_and_digest_before_first_use():
     named = [index for index, task in enumerate(tasks)
              if PROTOCOL in task and str(task[PROTOCOL].get("reason", "")).startswith("media-changed-")]
     assert [tasks[index][PROTOCOL]["reason"] for index in named] == ["media-changed-boot", "media-changed-tree"]
-    first_use = min(index_of(tasks, lambda task: argv0(task, "/usr/bin/xorriso"), "extract the tree"),
-                    index_of(tasks, lambda task: argv0(task, "/usr/bin/mkksiso"), "build the image"))
+    first_use = index_of(tasks, lambda task: argv0(task, "/usr/bin/mkksiso"), "build the image")
     assert read < min(named) and max(named) + 1 < first_use
     for index in named:
         assert tasks[index].get("no_log") is True
@@ -111,55 +108,6 @@ def test_an_apply_proves_each_store_entrys_size_and_digest_before_first_use():
     assert unchanged(stat_of(BOOT), absent) == (True, False)
     directory = stat_of(DVD, isreg=False, isdir=True)
     assert unchanged(stat_of(BOOT), directory) == (True, False)
-
-
-def published(root, identity):
-    tree = root / "tree"
-    (tree / "BaseOS").mkdir(parents=True)
-    (tree / ".treeinfo").write_text("[general]\n")
-    (tree / ".bootwright-tree-identity").write_text(identity + "\n")
-    request = {"image": {"path": str(root / "install.iso")}, "tree": {"path": str(tree)}, "treeMedia": dict(DVD)}
-    return observe(request, str(root / "tree.staging"), str(root / "work"))
-
-
-def publishes(observation):
-    templar = Templar(loader=LOADER, variables=variables(managedos_install_anaconda_before={"observation": observation}))
-    return templar.evaluate_conditional(trust_as_template("managedos_install_anaconda_publish_tree | bool"))
-
-
-def test_a_tree_from_another_image_is_extracted_again(tmp_path):
-    other = published(tmp_path / "other", BOOT["sha256"])
-    assert (other["tree"], other["treeContent"], other["treeIdentity"]) == (False, True, BOOT["sha256"])
-    assert publishes(other) is True
-    frozen = published(tmp_path / "frozen", DVD["sha256"])
-    assert (frozen["tree"], frozen["treeIdentity"]) == (True, DVD["sha256"])
-    assert publishes(frozen) is False
-
-    tasks = applied()
-    withdraw = index_of(tasks, lambda task: (task.get(FILE) or {}).get("path") == "{{ bootwright_os_install_request.tree.path }}/.treeinfo",
-                        "withdraw the published tree's marker")
-    clear = index_of(tasks, lambda task: (task.get(FILE) or {}).get("path") == "{{ bootwright_os_install_request.tree.path }}"
-                     and task[FILE].get("state") == "absent", "clear the published tree")
-    extract = index_of(tasks, lambda task: argv0(task, "/usr/bin/xorriso"), "extract the tree")
-    assert withdraw < clear < extract
-    assert tasks[withdraw][FILE]["state"] == "absent"
-    assert tasks[withdraw]["when"] == tasks[clear]["when"]
-
-
-def test_the_staged_tree_carries_its_identity_before_the_rename():
-    tasks = applied()
-    record = index_of(tasks, lambda task: COPY in task and str(task[COPY].get("dest", "")).endswith("/.bootwright-tree-identity"),
-                      "record the tree's identity")
-    extract = index_of(tasks, lambda task: argv0(task, "/usr/bin/xorriso"), "extract the tree")
-    label = index_of(tasks, lambda task: argv0(task, "/usr/bin/chcon") and "--recursive" in task[COMMAND]["argv"], "label the staged tree")
-    rename = index_of(tasks, lambda task: argv0(task, "/usr/bin/mv")
-                      and task[COMMAND]["argv"][-1] == "{{ bootwright_os_install_request.tree.path }}", "publish the tree")
-    assert extract < record < label < rename
-    copy = tasks[record][COPY]
-    assert copy["dest"] == "{{ managedos_install_anaconda_staged_tree }}/.bootwright-tree-identity"
-    assert tasks[record]["when"] == tasks[extract]["when"]
-    templar = Templar(loader=LOADER, variables=variables())
-    assert templar.template(copy["content"]) == DVD["sha256"] + "\n"
 
 
 ROLES = ROLE.parent
@@ -183,11 +131,10 @@ def flattened(path):
         for task in listed or []:
             if not isinstance(task, dict):
                 continue
+            yield task
             if "block" in task:
                 for section in ("block", "rescue", "always"):
                     yield from opened(task.get(section))
-                continue
-            yield task
     return list(opened(LOADER.load_from_file(str(path), trusted_as_template=True)))
 
 
@@ -230,7 +177,9 @@ def test_a_first_install_reports_changed_and_a_replay_unchanged():
         for task in flattened(path):
             if task is tasks[frozen] or "managedos_install_anaconda_was_installed" in (task.get("ansible.builtin.set_fact") or {}):
                 continue
-            assert "managedos_install_anaconda_installed" not in repr(task), "%s: %s" % (path.name, task.get("name"))
+            assert "managedos_install_anaconda_installed" not in repr(
+                {key: value for key, value in task.items() if key not in ("block", "rescue", "always")}
+            ), "%s: %s" % (path.name, task.get("name"))
 
 
 # Every ssh client a role runs reads only a configuration written for that one
@@ -281,41 +230,39 @@ def test_every_ssh_argv_uses_a_generated_configuration_and_keepalives():
 
 
 def test_the_work_area_lives_under_a_root_only_parent():
-    templar = Templar(loader=LOADER, variables=variables())
+    templar = Templar(loader=LOADER, variables=variables(bootwright_os_install_request={"identity": {"context": "lab", "object": "node"}}))
     parent = templar.template(trust_as_template("{{ managedos_install_anaconda_work_parent }}"))
     work = templar.template(trust_as_template("{{ managedos_install_anaconda_work }}"))
     assert work.startswith(parent + "/")
     for scratch in ("/var/tmp", "/tmp"):
         assert not parent.startswith(scratch + "/") and not work.startswith(scratch + "/")
 
-    for name in ("apply.yml", "observe.yml"):
-        tasks = flattened(ROLE / "tasks" / name)
-        create = index_of(tasks, lambda task: (task.get(FILE) or {}).get("path") == "{{ managedos_install_anaconda_work_parent }}",
-                          "create the parent in " + name)
-        assert {key: tasks[create][FILE].get(key) for key in ("state", "owner", "group", "mode")} == {
-            "state": "directory", "owner": "root", "group": "root", "mode": "0700"}
-        read = create + 1
-        assert tasks[read][STAT]["path"] == "{{ managedos_install_anaconda_work_parent }}"
-        assert tasks[read][STAT]["follow"] is False
-        proof = tasks[read + 1]["ansible.builtin.assert"]
-        assert "{{ managedos_install_anaconda_work_parent }}" in proof["fail_msg"]
-        first_work = min(index for index, task in enumerate(tasks)
-                         if (task.get(FILE) or {}).get("path") == "{{ managedos_install_anaconda_work }}")
-        assert read + 1 < first_work
+    tasks = flattened(ROLE / "tasks" / "work.yml")
+    read, proof, create = tasks
+    assert read[STAT]["follow"] is False
+    assert create[FILE]["mode"] == "0700"
+    assert create[FILE]["owner"] == create[FILE]["group"] == "root"
+    assert create["when"] == ["managedos_install_anaconda_work_create | bool",
+                              "not (managedos_install_anaconda_ancestor.stat.exists | default(false))"]
+    for operation in ("apply", "observe", "destroy"):
+        listed = flattened(ROLE / "tasks" / (operation + ".yml"))
+        ancestor = index_of(listed, lambda task: task.get("ansible.builtin.include_tasks") == "work.yml", "prove all ancestors")
+        first_inspection = index_of(
+            listed, lambda task: task.get("register") in ("managedos_install_anaconda_before", "managedos_install_anaconda_observed"),
+            "read durable work")
+        assert ancestor < first_inspection
+        assert len(listed[ancestor]["loop"]) == 3
+        assert listed[ancestor]["vars"]["managedos_install_anaconda_work_create"] is (operation == "apply")
 
-        def proves(**stat):
-            proved = dict({"exists": True, "isdir": True, "islnk": False, "uid": 0, "mode": "0700"}, **stat)
-            checks = Templar(loader=LOADER, variables={tasks[read]["register"]: {"stat": proved}})
-            return all(checks.evaluate_conditional(trust_as_template(condition)) for condition in proof["that"])
-
-        assert proves()
-        assert not proves(mode="0755")
-        assert not proves(uid=1000)
-        assert not proves(islnk=True)
-        assert not proves(isdir=False)
-
-    removed = flattened(ROLE / "tasks" / "destroy.yml")
-    assert not any("managedos_install_anaconda_work_parent" in repr(task) for task in removed)
+    def proves(**stat):
+        proved = dict({"exists": True, "isdir": True, "islnk": False, "uid": 0, "mode": "0700"}, **stat)
+        checks = Templar(loader=LOADER, variables={read["register"]: {"stat": proved}})
+        return all(checks.evaluate_conditional(trust_as_template(condition)) for condition in proof["ansible.builtin.assert"]["that"])
+    assert proves()
+    assert not proves(mode="0755")
+    assert not proves(uid=1000)
+    assert not proves(islnk=True)
+    assert not proves(isdir=False)
 
 
 def test_the_image_and_tree_are_fetched_through_the_listener_before_the_insert():

@@ -459,7 +459,7 @@ git diff --check
 `-k` runs independent gates even when another fails; the command still fails
 if any gate fails. A known reachable vulnerability on the pinned Go toolchain
 is not a pass. The owner has deferred the Go upgrade, so
-[B466](../specs/milestones/m1.md#b466) remains open until its vulnerability
+[B470](../specs/milestones/m1.md#b470) remains open until its vulnerability
 check can pass. This command installs no controller packages and runs no lab
 effects.
 
@@ -470,6 +470,14 @@ contexts with the build that applied them as the
 missing at least one native root so setup or the controller stage acquires a
 package through the private Python path; an already-prepared host does not
 qualify that part of the gate. Keep a local run record outside Git.
+
+X48 adds the [three-node RHEL journey](../examples/lab-rhel-3-nodes/README.md)
+to that gate. Prove actual overlapping service work, machine realization and
+three same-profile installation waits, with exactly one package-tree
+publication. Keep timestamped progress and operation logs locally; graph
+waves and total runtime alone do not qualify the overlap. Repeat apply and
+safe destroy, proving all guests stopped and no sibling scratch, shared tree
+or managed units remain.
 
 Besides the runbook's time, running-disk, machine-access, replay, restart,
 removal-refusal and final-unit checks, run these JSON status cases after the
@@ -500,7 +508,7 @@ leaves its observation unrun.
 
 Record command results, build commit, clean source stamp and operation-log
 digests following [record a run](#record-a-run); the human owner accepts the
-[ledger row](acceptance.md#row-format). These host gates and B466 remain requirements before the
+[ledger row](acceptance.md#row-format). These host gates, B466 and B470 remain requirements before the
 owner can declare M1 done.
 
 ## Record a run

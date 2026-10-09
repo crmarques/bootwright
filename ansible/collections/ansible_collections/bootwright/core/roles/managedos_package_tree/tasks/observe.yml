@@ -1,0 +1,35 @@
+---
+- name: Validate the frozen package tree request
+  ansible.builtin.assert:
+    that:
+      - bootwright_os_tree_request.version == 'os-package-tree-v1'
+      - bootwright_os_tree_request.identity.context is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+      - bootwright_os_tree_request.identity.profile is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+      - bootwright_os_tree_request.publication.path.startswith('/var/lib/bootwright-services/' ~ bootwright_os_tree_request.identity.context ~ '/')
+      - bootwright_os_tree_request.publication.path.endswith('/public/os/' ~ bootwright_os_tree_request.identity.profile ~ '/tree')
+      - "'/../' not in bootwright_os_tree_request.publication.path"
+      - bootwright_os_tree_request.media.name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+      - bootwright_os_tree_request.media.sha256 is match('^[0-9a-f]{64}$')
+      - bootwright_os_tree_request.media.size | int > 0
+      - bootwright_os_tree_digest is match('^[0-9a-f]{64}$')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.managedos_tree_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Read the shared tree and its staging area
+  bootwright.core.managedos_tree_inspect:
+    request: '{{ bootwright_os_tree_request }}'
+  register: managedos_package_tree_observed
+
+- name: Publish bounded package tree observation
+  bootwright.core.managedos_tree_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_os_tree_digest }}'
+    observation: '{{ managedos_package_tree_observed.observation }}'
+    observed: true
+  no_log: true

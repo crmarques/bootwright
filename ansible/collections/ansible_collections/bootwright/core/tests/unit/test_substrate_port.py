@@ -203,6 +203,7 @@ def managed_os(arm):
         material.update({"hostKey": HOST_KEY, "pinnedSerialBase64": base64.b64encode(b"CZJ2440ABC").decode()})
     variables = defaults(MANAGED_OS)
     variables.update({
+        "bootwright_run_scratch": "/var/tmp/bootwright-run-scratch-1-1",
         "bootwright_os_install_material": material,
         "bootwright_os_install_request": {
             "address": "198.51.100.11", "budgets": BUDGETS, "hostKeyPath": "/etc/bootwright/host-key.pub",

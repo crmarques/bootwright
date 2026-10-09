@@ -2,7 +2,11 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v7'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v8'
+      - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
+        ~ bootwright_os_install_request.identity.context ~ '/' ~ bootwright_os_install_request.identity.object ~ '/work'
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -12,8 +16,17 @@
     phase: loaded
   no_log: true
 
-# Read before this observation creates the work area an identity read may need,
-# so the work area it reports is one it found.
+- name: Prove each ancestor of this Machine's durable work area
+  ansible.builtin.include_tasks: work.yml
+  loop:
+    - '{{ managedos_install_anaconda_work_parent }}'
+    - '{{ managedos_install_anaconda_work | dirname | dirname }}'
+    - '{{ managedos_install_anaconda_work | dirname }}'
+  loop_control:
+    loop_var: managedos_install_anaconda_work_ancestor
+  vars:
+    managedos_install_anaconda_work_create: false
+
 - name: Observe what this installation publishes
   bootwright.core.managedos_install_inspect:
     request: '{{ bootwright_os_install_request }}'
@@ -23,45 +36,14 @@
 
 # A removal's resolution reads only the published content, which is all the
 # removal takes back, so none of the machine reads below runs for it.
-- name: Read the machine through a work area this observation leaves as it found it
+- name: Read the machine through this invocation's private scratch
   when: not (managedos_install_anaconda_observes_removal | bool)
   block:
-    # The parent stays whatever the reads answer: a removal leaves it too.
-    - name: Create the root-only parent of the work area
-      ansible.builtin.file:
-        path: '{{ managedos_install_anaconda_work_parent }}'
-        state: directory
-        owner: root
-        group: root
-        mode: '0700'
-      changed_when: false
-
-    - name: Read the parent of the work area
-      ansible.builtin.stat:
-        path: '{{ managedos_install_anaconda_work_parent }}'
-        follow: false
-      register: managedos_install_anaconda_work_parent_stat
-
-    - name: Refuse a work area parent that is not a root-only directory
-      ansible.builtin.assert:
-        that:
-          - managedos_install_anaconda_work_parent_stat.stat.isdir | default(false)
-          - not (managedos_install_anaconda_work_parent_stat.stat.islnk | default(true))
-          - managedos_install_anaconda_work_parent_stat.stat.uid | default(-1) == 0
-          - managedos_install_anaconda_work_parent_stat.stat.mode | default('') == '0700'
-        fail_msg: >-
-          {{ managedos_install_anaconda_work_parent }} is not a directory only root
-          may enter, so the machine was not read through it; remove it and observe again
-        quiet: true
-
-    - name: Create the work directory an identity read may need
-      ansible.builtin.file:
-        path: '{{ managedos_install_anaconda_work }}'
-        state: directory
-        owner: root
-        group: root
-        mode: '0700'
-      changed_when: false
+    - name: Prepare private connection files
+      bootwright.core.lifecycle_scratch:
+        root: '{{ bootwright_run_scratch }}'
+        scope: managedos-install
+      register: managedos_install_anaconda_scratch_ready
 
     - name: Read the machine through its own identity channel
       ansible.builtin.include_tasks: identity.yml
@@ -77,16 +59,14 @@
         managedos_install_anaconda_reachable_pause: 1
       when: managedos_install_anaconda_host_key | default('') | trim | length > 0
 
-  # A work area this observation created is its own and goes whatever the reads
-  # answered. One it found is what an interrupted attempt left, which the next
-  # apply clears and a removal takes back, so it stays as it was.
   always:
-    - name: Remove the work directory this observation created
-      ansible.builtin.file:
-        path: '{{ managedos_install_anaconda_work }}'
+    - name: Remove private connection files
+      bootwright.core.lifecycle_scratch:
+        root: '{{ bootwright_run_scratch }}'
+        scope: managedos-install
         state: absent
-      changed_when: false
-      when: not (managedos_install_anaconda_observed.observation.work | bool)
+        remove_root: "{{ bootwright_os_install_request.placement.connection == 'ssh' }}"
+      when: managedos_install_anaconda_scratch_ready is succeeded
 
 - name: Read the power state and media its controller reports
   bootwright.core.redfish_system_read:

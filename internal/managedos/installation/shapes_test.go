@@ -93,7 +93,7 @@ func TestExternalNameAndTimeServicesAreUsedByTheirDeclaredAddress(t *testing.T) 
 	if len(needs.DNSServers) != 0 || len(needs.NTPServers) != 0 {
 		t.Fatalf("requirements = %+v", needs)
 	}
-	want := []reconciliation.ObjectRef{{Kind: "Machine", Object: "rhel-01"}, {Kind: "ArtifactServer", Object: "lab-artifacts"}}
+	want := []reconciliation.ObjectRef{{Kind: "Machine", Object: "rhel-01"}, {Kind: "ArtifactServer", Object: "lab-artifacts"}, {Kind: TreeKind, Object: "rhel-9-8"}}
 	if requires := planRequires(t, catalog); !slices.Equal(requires, want) {
 		t.Fatalf("requires = %v", requires)
 	}
@@ -333,7 +333,7 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 // tooling list it once named must leave its input, and every frozen plan,
 // unchanged.
 func TestTheContentDigestIsPinned(t *testing.T) {
-	if digest := ContentDigest(); digest != "061b55ae8e72f109a21e114e488ca4412f8de130c8950468270d65d8936e2132" {
+	if digest := ContentDigest(); digest != "30af8814554a8c3b89f52589a26b1b4aa38a2f7a3d157dbfd4a8e174e9e508fc" {
 		t.Fatalf("content digest = %s", digest)
 	}
 }

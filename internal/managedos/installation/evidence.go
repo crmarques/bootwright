@@ -28,20 +28,13 @@ type Evidence struct {
 	// does, so one rule governs both paths.
 	Reachable bool   `json:"reachable"`
 	Request   string `json:"request"`
-	// Tree is the published package tree complete, its .treeinfo in place, and
-	// TreeContent anything at all at the tree's published path. A removal
-	// withdraws the marker before the rest of the tree, so one stopped part
-	// way leaves the directory without it: content a removal still takes
-	// back, though no complete tree.
+	// Tree fields observe the immutable profile dependency, never owned effects.
 	Tree        bool `json:"tree"`
 	TreeContent bool `json:"treeContent"`
 	// TreeIdentity is the digest of the image the published tree was
 	// extracted from, empty when none.
 	TreeIdentity string `json:"treeIdentity"`
-	// TreeStaging is anything at the path the tree is extracted at before its
-	// rename: an apply killed while it extracted leaves a partial tree there,
-	// beneath the served root. Work is the area the installer image is built
-	// in, outside the served root, which any attempt killed part way leaves.
+	// TreeStaging belongs to the shared publisher; Work belongs to this machine.
 	TreeStaging bool `json:"treeStaging"`
 	Work        bool `json:"work"`
 }
@@ -49,7 +42,7 @@ type Evidence struct {
 // published reports whether anything this installation leaves beneath the
 // served root is there.
 func (e Evidence) published() bool {
-	return e.Image || e.Private || e.Tree || e.TreeContent || e.TreeStaging
+	return e.Image || e.Private
 }
 
 // left reports whether anything a removal takes back is there: the served

@@ -31,7 +31,7 @@
         "machine": "controller"
       },
       "poolName": "bootwright-lab-lab-libvirt-vmedia",
-      "poolPath": "/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia",
+      "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
       "provisioned": false,
       "services": [
         "virtqemud.service",
@@ -39,7 +39,7 @@
         "virtstoraged.service"
       ],
       "uri": "qemu:///system",
-      "version": "substrate-host-libvirt-v3"
+      "version": "substrate-host-libvirt-v4"
     }
   ],
   "libvirtMachines": [
@@ -52,11 +52,11 @@
         "port": 8000,
         "unit": "bootwright-lab-bmc-rhel-01"
       },
-      "directory": "/var/lib/libvirt/images/bootwright/lab/rhel-01",
+      "directory": "/var/lib/libvirt/images/bootwright/lab/machines/rhel-01",
       "disks": [
         {
           "name": "root",
-          "path": "/var/lib/libvirt/images/bootwright/lab/rhel-01/root.qcow2",
+          "path": "/var/lib/libvirt/images/bootwright/lab/machines/rhel-01/root.qcow2",
           "sizeGiB": 60,
           "target": "vda"
         }
@@ -84,12 +84,12 @@
         "machine": "controller"
       },
       "poolName": "bootwright-lab-lab-libvirt-vmedia",
-      "poolPath": "/var/lib/libvirt/images/bootwright/lab/lab-libvirt/vmedia",
+      "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
       "tpm": true,
       "uri": "qemu:///system",
       "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
       "vcpu": 4,
-      "version": "machine-libvirt-v3"
+      "version": "machine-libvirt-v4"
     }
   ],
   "installations": [
@@ -161,7 +161,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v7"
+      "version": "os-install-anaconda-v8"
     }
   ]
 }

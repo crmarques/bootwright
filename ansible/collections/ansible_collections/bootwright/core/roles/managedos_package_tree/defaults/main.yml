@@ -1,0 +1,4 @@
+---
+managedos_package_tree_staging: '{{ bootwright_os_tree_request.publication.path }}.staging'
+managedos_package_tree_media: '/var/lib/bootwright/media/{{ bootwright_os_tree_request.media.name }}'
+managedos_package_tree_served_root: '{{ bootwright_os_tree_request.publication.path | dirname | dirname | dirname }}'

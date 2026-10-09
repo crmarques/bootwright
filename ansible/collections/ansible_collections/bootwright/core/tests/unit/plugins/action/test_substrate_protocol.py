@@ -240,23 +240,20 @@ def test_an_installation_removal_proves_the_published_content_is_gone():
     assert not remaining["postcondition"]
 
 
-# A removal stopped while it deleted the package tree can leave the directory
-# without its .treeinfo. That is content the removal still takes back, so it is
-# carried as evidence, keeps the removal's absence unproved and is named.
-def test_a_tree_left_without_its_marker_is_content_a_removal_still_takes_back():
-    left = {"observation": {"image": False, "tree": False, "treeContent": True}}
-    assert managedos_install_protocol.presence(dict(install_arguments(), **left), DIGEST)["treeContent"] is True
+@pytest.mark.parametrize("shared", ["tree", "treeContent", "treeStaging"])
+def test_shared_tree_presence_never_prevents_machine_withdrawal(shared):
+    left = {"observation": {"image": False, shared: True}}
+    assert managedos_install_protocol.presence(dict(install_arguments(), **left), DIGEST)[shared] is True
     evidence = managedos_install_protocol.absence(left, DIGEST)
-    assert not evidence["postcondition"]
-    assert evidence["treeContent"] is False
-    assert managedos_install_protocol.remaining(left) == ["treeContent"]
-    assert managedos_install_protocol.presence(install_arguments(), DIGEST)["treeContent"] is False
+    assert evidence["postcondition"]
+    assert evidence[shared] is False
+    assert managedos_install_protocol.remaining(left) == []
 
 
 # An apply killed part way leaves the staging tree beneath the served root and
 # its work area. Each is carried as evidence, keeps a removal's absence
 # unproved and is named, so a removal that did not take one back fails.
-@pytest.mark.parametrize("remnant", ["treeStaging", "work"])
+@pytest.mark.parametrize("remnant", ["work"])
 def test_what_a_killed_apply_leaves_is_content_a_removal_still_takes_back(remnant):
     left = {"observation": {"image": False, "tree": False, remnant: True}}
     assert managedos_install_protocol.presence(dict(install_arguments(), **left), DIGEST)[remnant] is True

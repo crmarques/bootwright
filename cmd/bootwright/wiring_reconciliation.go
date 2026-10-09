@@ -134,6 +134,9 @@ func operationPlaybook() map[string]string {
 		agentinstall.MediaImplementation + "/apply":     "containercluster/media_apply.yml",
 		agentinstall.MediaImplementation + "/observe":   "containercluster/media_observe.yml",
 		agentinstall.MediaImplementation + "/destroy":   "containercluster/media_destroy.yml",
+		installation.TreeImplementation + "/apply":      "managedos/tree_apply.yml",
+		installation.TreeImplementation + "/observe":    "managedos/tree_observe.yml",
+		installation.TreeImplementation + "/destroy":    "managedos/tree_destroy.yml",
 		installation.Implementation + "/apply":          "managedos/install_apply.yml",
 		installation.Implementation + "/observe":        "managedos/install_observe.yml",
 		installation.Implementation + "/destroy":        "managedos/install_destroy.yml",
@@ -174,6 +177,9 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		kind: baremetal.Kind, implementation: baremetal.Implementation,
 		capability: baremetal.NewMachine(runner),
 	}, {
+		kind: installation.TreeKind, implementation: installation.TreeImplementation,
+		capability: installation.NewTree(runner).WithMedia(records),
+	}, {
 		kind: installation.Kind, implementation: installation.Implementation,
 		capability: installation.New(runner).WithIdentities(provedIdentities{}).WithMedia(records),
 	}, {
@@ -213,16 +219,16 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 		return lifecycle.Service{}
 	}
 	clock := systemClock{}
-	var capabilities lifecycle.CapabilityResolver = buildCapabilities(clock, controller, lifecycleMedia(deps))
+	runner := ansiblerunner.New(operationPlaybook())
+	var capabilities lifecycle.CapabilityResolver = buildCapabilitiesWith(clock, controller, runner, lifecycleMedia(deps))
 	if deps.Capabilities != nil {
 		capabilities = deps.Capabilities
 	}
 	return lifecycle.New(deps.Workspace, deps.Inputs, compiler, binder, deps.Host, automationDigest{}, deps.Guard, capabilities, lifecycle.Options{
 		Confirmer: deps.Confirmer, Presenter: deps.Presenter, Progress: deps.Progress,
 		Clock: clock, Entropy: rand.Read, Selection: currentSelection(deps.Selection),
-		// One block at a time: roles still share fixed host-global scratch paths.
-		Concurrency: 1,
-		Executable:  deps.Executable,
+		BeginInvocation: runner.BeginInvocation,
+		Executable:      deps.Executable,
 		Operations: func(area operationstore.Area) lifecycle.OperationStore {
 			return operationstore.New(area, clock.Now)
 		},

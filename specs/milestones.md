@@ -17,7 +17,7 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X48, then X44; B470 gates it |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | B470, then closing run |
 | [M2](milestones/m2.md) | Full IBM Ceph 9.9.x on libvirt+sushy and bare metal/BMC | M1 | in progress | after M1: X47, B73; define B472 |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
@@ -25,13 +25,13 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44 and X49 to X51 are implemented; B470 blocks verification (D126).
+X44 and X48 to X51 are implemented; B470 blocks verification (D126).
 
-- **Next for agents:** deliver X48; B470's upgrade remains deferred (D126),
-  then rerun X44 and X49 to X51 gates.
+- **Next for agents:** B470's upgrade remains deferred (D126); when authorized,
+  rerun X44 and X48 to X51 gates.
 - **Next for operator:** before a build that contains X46 touches a host,
   destroy every live context with the build that applied it, then run `setup`
-  once: X21, X29 to X32, X43, X24, X45 and X46 moved request and record
+  once: X21, X29 to X32, X43, X24, X45, X46 and X48 moved request and record
   versions, the keyring format, the automation digest and the plan encoding.
   M1's [closing validation](../docs/operator-guide.md#m1-closing-validation)
   covers D59, B19, B20, B270, B339 and [B466](milestones/m1.md#b466).

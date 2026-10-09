@@ -26,7 +26,7 @@ PACKAGE = "ansible_collections.bootwright.core.plugins.action."
 # loaded record every entry point hands first.
 PROTOCOLS = {
     "artifact_server_protocol", "containercluster_install_protocol", "containercluster_media_protocol",
-    "controller_protocol", "infra_service_protocol", "machine_power_protocol", "managedos_install_protocol",
+    "controller_protocol", "infra_service_protocol", "machine_power_protocol", "managedos_install_protocol", "managedos_tree_protocol",
     "substrate_host_protocol", "substrate_machine_protocol", "substrate_physical_protocol",
 }
 

@@ -1,0 +1,33 @@
+argument_specs:
+  apply:
+    short_description: Publish one shared package tree.
+    options: &request
+      bootwright_os_tree_request:
+        type: dict
+        required: true
+        options:
+          identity:
+            type: dict
+            required: true
+          media:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          publication:
+            type: dict
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [os-package-tree-v1]
+      bootwright_os_tree_material:
+        type: dict
+        required: true
+  observe:
+    short_description: Observe a shared package tree.
+    options: *request
+  destroy:
+    short_description: Withdraw a shared package tree.
+    options: *request

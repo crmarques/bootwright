@@ -296,7 +296,7 @@
     "records": [],
     "result": {
       "failed": true,
-      "msg": "the installation did not reach its postcondition; still present: image, treeStaging"
+      "msg": "the installation did not reach its postcondition; still present: image"
     }
   },
   {

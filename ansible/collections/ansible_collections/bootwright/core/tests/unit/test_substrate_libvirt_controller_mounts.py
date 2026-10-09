@@ -29,7 +29,7 @@ REQUEST = {
     },
     "identity": {"context": "lab", "object": "rhel-01"},
     "poolName": "bootwright-lab-hypervisor-vmedia",
-    "poolPath": "/var/lib/libvirt/images/bootwright/lab/hypervisor/vmedia",
+    "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/hypervisor/vmedia",
     "uri": "qemu:///system",
     "uuid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
 }

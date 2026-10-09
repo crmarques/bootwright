@@ -2,7 +2,11 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v7'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v8'
+      - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
+        ~ bootwright_os_install_request.identity.context ~ '/' ~ bootwright_os_install_request.identity.object ~ '/work'
       - (bootwright_os_install_request.image is defined) != (bootwright_os_install_request.private is defined)
       - (bootwright_os_install_request.image.path if bootwright_os_install_request.image is defined
          else bootwright_os_install_request.private.path).startswith('/var/lib/bootwright-services/')
@@ -14,6 +18,17 @@
   bootwright.core.managedos_install_protocol:
     phase: loaded
   no_log: true
+
+- name: Prove each ancestor of this Machine's durable work area
+  ansible.builtin.include_tasks: work.yml
+  loop:
+    - '{{ managedos_install_anaconda_work_parent }}'
+    - '{{ managedos_install_anaconda_work | dirname | dirname }}'
+    - '{{ managedos_install_anaconda_work | dirname }}'
+  loop_control:
+    loop_var: managedos_install_anaconda_work_ancestor
+  vars:
+    managedos_install_anaconda_work_create: false
 
 - name: Report published content removal
   bootwright.core.managedos_install_protocol:
@@ -37,63 +52,6 @@
     state: absent
   when: bootwright_os_install_request.image is defined
   register: managedos_install_anaconda_image_removed
-
-# The file module deletes a directory in the order it lists its entries, so a
-# removal stopped part way could leave the marker over a partial tree, which
-# the inspection and the next apply take as a tree published whole. Withdrawn
-# first, the marker is gone from whatever tree a stopped removal leaves.
-- name: Withdraw the package tree's marker before the tree itself
-  ansible.builtin.file:
-    path: '{{ bootwright_os_install_request.tree.path }}/.treeinfo'
-    state: absent
-  when: bootwright_os_install_request.tree is defined
-  register: managedos_install_anaconda_tree_marker_removed
-
-- name: Remove the published package tree
-  ansible.builtin.file:
-    path: '{{ bootwright_os_install_request.tree.path }}'
-    state: absent
-  when: bootwright_os_install_request.tree is defined
-  register: managedos_install_anaconda_tree_removed
-
-# An apply killed while it extracted the tree leaves the staging copy beside
-# it, served beneath the same root, so it leaves with the tree.
-- name: Remove the staging tree an interrupted apply left beside it
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_staged_tree }}'
-    state: absent
-  when: bootwright_os_install_request.tree is defined
-  register: managedos_install_anaconda_staging_removed
-
-# The apply created the profile's directory for the tree and its staging copy,
-# so it goes once they have. rmdir removes a directory only while it is empty,
-# so anything else found there stays where it is. It reports success either
-# way, so the removal counts the directory only when it was there before and
-# is gone after.
-- name: Read the profile directory the tree was published in
-  ansible.builtin.stat:
-    path: '{{ bootwright_os_install_request.tree.path | dirname }}'
-  when: bootwright_os_install_request.tree is defined
-  register: managedos_install_anaconda_profile_found
-
-- name: Remove the profile directory the tree was published in once it is empty
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/rmdir
-      - --ignore-fail-on-non-empty
-      - '{{ bootwright_os_install_request.tree.path | dirname }}'
-  changed_when: false
-  when:
-    - managedos_install_anaconda_profile_found is not skipped
-    - managedos_install_anaconda_profile_found.stat.exists
-
-- name: Read whether the profile directory is gone
-  ansible.builtin.stat:
-    path: '{{ bootwright_os_install_request.tree.path | dirname }}'
-  when:
-    - managedos_install_anaconda_profile_found is not skipped
-    - managedos_install_anaconda_profile_found.stat.exists
-  register: managedos_install_anaconda_profile_left
 
 - name: Remove the private subtree this block owns
   ansible.builtin.file:
@@ -144,11 +102,6 @@
     outcome: >-
       {{ 'changed'
          if (managedos_install_anaconda_image_removed is changed
-             or managedos_install_anaconda_tree_marker_removed is changed
-             or managedos_install_anaconda_tree_removed is changed
-             or managedos_install_anaconda_staging_removed is changed
-             or (managedos_install_anaconda_profile_left is not skipped
-                 and not managedos_install_anaconda_profile_left.stat.exists)
              or managedos_install_anaconda_private_removed is changed
              or managedos_install_anaconda_work_removed is changed)
          else 'unchanged' }}

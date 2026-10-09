@@ -2,9 +2,11 @@
 - name: Validate the frozen provider host request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v3'
-      - bootwright_substrate_host_request.poolPath.startswith('/var/lib/libvirt/images/bootwright/')
-      - bootwright_substrate_host_request.poolPath | dirname | dirname | dirname == '/var/lib/libvirt/images/bootwright'
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v4'
+      - bootwright_substrate_host_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_substrate_host_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_substrate_host_request.poolPath == '/var/lib/libvirt/images/bootwright/'
+        ~ bootwright_substrate_host_request.identity.context ~ '/providers/' ~ bootwright_substrate_host_request.identity.object ~ '/vmedia'
       - bootwright_substrate_host_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -180,10 +182,7 @@
     state: absent
   register: substrate_libvirt_host_pool_directory
 
-# The pool directory is <prefix>/<context>/<provider>/<pool>, as the validation
-# above requires, so these are the provider's and the context's directories,
-# each removed only once empty and never recursively; the retained prefix
-# itself is never reached.
+# Empty ancestors stop at the context; the shared prefix stays.
 - name: Remove the provider's and the context's image directories once empty
   ansible.builtin.command:
     argv:
@@ -192,6 +191,7 @@
   loop:
     - '{{ bootwright_substrate_host_request.poolPath | dirname }}'
     - '{{ bootwright_substrate_host_request.poolPath | dirname | dirname }}'
+    - '{{ bootwright_substrate_host_request.poolPath | dirname | dirname | dirname }}'
   environment:
     LC_ALL: C
   register: substrate_libvirt_host_parents

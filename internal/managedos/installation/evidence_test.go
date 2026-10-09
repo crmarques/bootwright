@@ -27,9 +27,6 @@ func TestNoEffectRequiresAPoweredOffMachineWithNothingPublished(t *testing.T) {
 		"running":          {Power: "On", Request: "digest"},
 		"marker present":   {Marker: "{}", Power: "Off", Request: "digest"},
 		"image published":  {Image: true, Power: "Off", Request: "digest"},
-		"tree published":   {Power: "Off", Request: "digest", Tree: true},
-		"tree unmarked":    {Power: "Off", Request: "digest", TreeContent: true},
-		"tree staged":      {Power: "Off", Request: "digest", TreeStaging: true},
 		"no power reading": {Request: "digest"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -67,9 +64,6 @@ func TestAbsenceRequiresPositiveRemovalOfPublishedContent(t *testing.T) {
 		"not absent":        {Postcondition: true, Request: "digest"},
 		"no postcondition":  {Absent: true, Request: "digest"},
 		"image remains":     {Absent: true, Postcondition: true, Image: true, Request: "digest"},
-		"tree remains":      {Absent: true, Postcondition: true, Request: "digest", Tree: true},
-		"tree unmarked":     {Absent: true, Postcondition: true, Request: "digest", TreeContent: true},
-		"tree staged":       {Absent: true, Postcondition: true, Request: "digest", TreeStaging: true},
 		"work area remains": {Absent: true, Postcondition: true, Request: "digest", Work: true},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -88,9 +82,6 @@ func TestAbsenceRequiresPositiveRemovalOfPublishedContent(t *testing.T) {
 func TestPartialRequiresThisOperationsOwnUnfinishedWork(t *testing.T) {
 	for name, evidence := range map[string]Evidence{
 		"image published, guest never booted": {Image: true, Power: "Off", Request: "digest"},
-		"tree published, guest never booted":  {Power: "Off", Request: "digest", Tree: true},
-		"tree unmarked, guest never booted":   {Power: "Off", Request: "digest", TreeContent: true},
-		"tree staged, guest never booted":     {Power: "Off", Request: "digest", TreeStaging: true},
 		"installed, media still inserted":     {Marker: "{}", Media: "http://ip/os/m/install.iso", Power: "On", Image: true, Request: "digest"},
 		"installed, content withdrawn":        {Marker: "{}", Power: "On", Request: "digest"},
 	} {
@@ -256,5 +247,18 @@ func TestPresenceOfAPrivateInstallationRequiresItsImageWithdrawn(t *testing.T) {
 	expectRefusal(t, err, "lifecycle.state")
 	if reported := diagnostics.Of(err)[0]; reported.Message != "the installation did not publish everything its boot needs" {
 		t.Fatalf("message = %q", reported.Message)
+	}
+}
+
+func TestSharedTreeAloneIsNoMachineEffect(t *testing.T) {
+	evidence := Evidence{Power: "Off", Request: "digest", Tree: true, TreeContent: true, TreeStaging: true}
+	if err := ValidateNoEffect(encode(t, evidence), "digest"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidatePartial(encode(t, evidence), "digest", "{}"); err == nil {
+		t.Fatal("shared tree counted as installation effect")
+	}
+	if err := ValidateWithdrawn(encode(t, evidence), "digest"); err != nil {
+		t.Fatal(err)
 	}
 }

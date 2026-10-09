@@ -72,9 +72,20 @@ def checkpw(password, hashed_password):
 '''
 
 
+def flatten(listed):
+    for task in listed:
+        if not isinstance(task, dict):
+            continue
+        if "block" in task:
+            for section in ("block", "always"):
+                yield from flatten(task.get(section, []))
+        else:
+            yield task
+
+
 def load(role, name):
     loaded = LOADER.load_from_file(str(ROLES / role / "tasks" / name), trusted_as_template=True)
-    return [task for task in loaded if isinstance(task, dict)]
+    return list(flatten(loaded))
 
 
 def defaults(role):
@@ -120,7 +131,7 @@ def host_scope(observed, restarts=(), pool_autostart=True):
     variables.update(
         bootwright_substrate_host_request={"identity": {"context": "lab"}, "networks": [MANAGED, EXTERNAL],
                                            "poolName": "bootwright-lab-host-vmedia",
-                                           "poolPath": "/var/lib/libvirt/images/bootwright/lab/host/vmedia",
+                                           "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/host/vmedia",
                                            "uri": "qemu:///system"},
         bootwright_substrate_host_digest=DIGEST,
         substrate_libvirt_host_running={"observation": {"drifted": list(restarts), "networks": [observed, UPLINK],

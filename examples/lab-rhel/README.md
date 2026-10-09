@@ -162,7 +162,7 @@ systemctl list-units 'bootwright-*'
 ./bin/bootwright status
 ./bin/bootwright machine list
 ./bin/bootwright machine list --power-status
-sudo qemu-img info --force-share --output json /var/lib/libvirt/images/bootwright/lab-rhel/rhel-01/root.qcow2
+sudo qemu-img info --force-share --output json /var/lib/libvirt/images/bootwright/lab-rhel/machines/rhel-01/root.qcow2
 ./bin/bootwright machine exec --name rhel-01 cat /etc/os-release
 ./bin/bootwright machine rsh --name rhel-01
 ./bin/bootwright machine restart --name rhel-01

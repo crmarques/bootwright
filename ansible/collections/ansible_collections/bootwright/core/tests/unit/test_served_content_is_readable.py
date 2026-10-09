@@ -77,9 +77,20 @@ PUBLISHED = {
 }
 
 
+def flattened(tasks):
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        if "block" in task:
+            for section in ("block", "rescue", "always"):
+                yield from flattened(task.get(section, []))
+        else:
+            yield task
+
+
 def load(path):
     parsed = yaml.safe_load(path.read_text()) or []
-    return [task for task in parsed if isinstance(task, dict)]
+    return list(flattened(parsed))
 
 
 def worker():
@@ -237,7 +248,8 @@ def test_the_published_image_is_fetched_through_the_listener_before_its_receipt(
                  lambda task: str((task.get("ansible.builtin.file") or {}).get("path", "")).endswith("/agent.iso")),
         position(tasks, "label the published subtree", lambda task: argv(task)[:1] == ["/usr/bin/chcon"]),
         position(tasks, "fetch through the listener", lambda task: "ansible.builtin.uri" in task),
-        position(tasks, "refuse a failed fetch", lambda task: "ansible.builtin.fail" in task),
+        position(tasks, "refuse a failed fetch", lambda task: "ansible.builtin.fail" in task
+                 and "containercluster_media_agent_probe" in repr(task.get("when"))),
         position(tasks, "record the receipt",
                  lambda task: "receipt" in str((task.get("ansible.builtin.copy") or {}).get("dest", ""))),
     ]
@@ -247,7 +259,9 @@ def test_the_published_image_is_fetched_through_the_listener_before_its_receipt(
 def test_the_fetch_verifies_the_served_certificate_directly_and_refuses_anything_but_success():
     tasks = build_tasks()
     probe = tasks[position(tasks, "fetch through the listener", lambda task: "ansible.builtin.uri" in task)]
-    guard = tasks[position(tasks, "refuse a failed fetch", lambda task: "ansible.builtin.fail" in task)]
+    guard = tasks[position(
+        tasks, "refuse a failed fetch", lambda task: "ansible.builtin.fail" in task
+        and "containercluster_media_agent_probe" in repr(task.get("when")))]
     uri = probe["ansible.builtin.uri"]
     assert uri.get("validate_certs", True) is True and uri.get("use_proxy") is False
     assert uri.get("follow_redirects") == "none" and uri["headers"] == {"Range": "bytes=0-0"}
@@ -351,7 +365,9 @@ OUTCOMES = [
 
 def test_a_refused_fetch_fails_with_its_diagnosed_cause_and_never_the_token():
     probe = trusted_build_task("fetch through the listener", lambda task: "ansible.builtin.uri" in task)
-    guard = trusted_build_task("refuse a failed fetch", lambda task: "ansible.builtin.fail" in task)
+    guard = trusted_build_task(
+        "refuse a failed fetch", lambda task: "ansible.builtin.fail" in task
+        and "containercluster_media_agent_probe" in repr(task.get("when")))
     assert TOKEN in UNREAD, "no outcome carries the token, so its redaction is unproved"
     for result, diagnosis in OUTCOMES:
         rendering = templar(MEDIA, media_scope(IMAGE, **guard.get("vars", {}), **{probe["register"]: result}))
@@ -454,7 +470,9 @@ def test_the_probe_verifies_the_listener_against_the_bound_certificate_alone(pre
     port = listening(request, tmp_path, *certificates[presented])
     image = {"path": str(root / "public/private/clusters/sno"), "url": "https://127.0.0.1:%d/private/clusters/sno" % port}
     probe = trusted_build_task("fetch through the listener", lambda task: "ansible.builtin.uri" in task)
-    guard = trusted_build_task("refuse a failed fetch", lambda task: "ansible.builtin.fail" in task)
+    guard = trusted_build_task(
+        "refuse a failed fetch", lambda task: "ansible.builtin.fail" in task
+        and "containercluster_media_agent_probe" in repr(task.get("when")))
     result = probed(templar(MEDIA, media_scope(image, str(bound))).template(probe["ansible.builtin.uri"]), tmp_path, capsys)
     rendering = templar(MEDIA, media_scope(image, str(bound), **guard.get("vars", {}), **{probe["register"]: result}))
     if presented == "bound":

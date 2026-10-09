@@ -139,6 +139,7 @@ func TestPlanRequiresTheMachineAndEveryServiceItUses(t *testing.T) {
 		{Kind: "ArtifactServer", Object: "lab-artifacts"},
 		{Kind: "DNSServer", Object: "lab-dns"},
 		{Kind: "NTPServer", Object: "lab-ntp"},
+		{Kind: TreeKind, Object: "rhel-9-8"},
 	}
 	if !slices.Equal(plan.Definitions[0].Requires, want) {
 		t.Fatalf("requires = %v", plan.Definitions[0].Requires)
@@ -196,18 +197,15 @@ func TestTwoInstallationsShareOneMediaClaim(t *testing.T) {
 	if claims != 1 {
 		t.Fatalf("two installations produced %d media claims", claims)
 	}
-	// The package tree is published per install profile, so both installations
-	// publish the same one. Each names it as a resource it will not share, so
-	// the two never extract and rename over that path at the same time.
 	for _, definition := range plan.Definitions {
-		if len(definition.Exclusive) != 1 || !strings.HasPrefix(definition.Exclusive[0], "path:") {
-			t.Fatalf("%s exclusive = %v", definition.ID, definition.Exclusive)
+		if len(definition.Exclusive) != 0 {
+			t.Fatalf("machine held shared tree: %v", definition.Exclusive)
+		}
+		if !slices.Contains(definition.Requires, reconciliation.ObjectRef{Kind: TreeKind, Object: "rhel-9-8"}) {
+			t.Fatalf("missing tree dependency: %v", definition.Requires)
 		}
 	}
-	if plan.Definitions[0].Exclusive[0] != plan.Definitions[1].Exclusive[0] {
-		t.Fatalf("two installations of one profile named different trees: %v and %v",
-			plan.Definitions[0].Exclusive, plan.Definitions[1].Exclusive)
-	}
+
 }
 
 // An installation that publishes no package tree shares nothing, so it never
@@ -394,8 +392,8 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 		"nothing yet": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: fresh}}, reconciliation.EffectNoEffect},
 		// An apply killed while it extracted the tree left a partial copy
 		// beneath the served root, which is an effect this operation owns.
-		"killed while staging the tree": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: staged}}, reconciliation.EffectPartial},
-		"another marker":                {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: foreign}}, reconciliation.EffectUnknown},
+		"shared staging is not a machine effect": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: staged}}, reconciliation.EffectNoEffect},
+		"another marker":                         {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: foreign}}, reconciliation.EffectUnknown},
 		// The absence form reports no power, so it can never prove that an
 		// apply stopped before it published anything had no effect; the
 		// observation publishes the presence form, which carries the power.
@@ -442,8 +440,8 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		"private left":                   {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Marker: string(marker), Power: "On", Private: true, Request: "digest"})}}, reconciliation.EffectPartial},
 		"content read alone, none left":  {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Request: "digest"})}}, reconciliation.EffectCompleted},
 		"content read alone, image left": {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Image: true, Request: "digest"})}}, reconciliation.EffectPartial},
-		"tree left without its marker":   {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Request: "digest", TreeContent: true})}}, reconciliation.EffectPartial},
-		"staging tree left":              {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Request: "digest", TreeStaging: true})}}, reconciliation.EffectPartial},
+		"tree left without its marker":   {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Request: "digest", TreeContent: true})}}, reconciliation.EffectCompleted},
+		"staging tree left":              {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Request: "digest", TreeStaging: true})}}, reconciliation.EffectCompleted},
 		"work area left":                 {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Power: "Off", Request: "digest", Work: true})}}, reconciliation.EffectPartial},
 		"another request":                {&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(Evidence{Absent: true, Postcondition: true, Request: "another"})}}, reconciliation.EffectUnknown},
 		"failed":                         {&fakeRunner{err: errors.New("unreachable")}, reconciliation.EffectUnknown},

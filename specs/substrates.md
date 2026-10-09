@@ -67,7 +67,6 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` or `kubevirt` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal or libvirt provider` |
 | A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
 | An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulationDefaults.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulationDefaults.bindAddress on <provider> to one unicast host address` |
-| A Machine sharing its libvirt provider's name | a libvirt provider whose name a Machine on a libvirt provider also takes | `<machine> shares this provider's name, and its disk directory, which its destroy removes with everything in it, would hold this provider's virtual-media pool` | `rename <provider> or <machine>, with every reference to the one renamed` |
 | A provider with more managed attachments than its reservation holds | a libvirt provider with more than 20 `networkAttachments[]` entries of `management: managed` | `a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool, within the 64 keys one reservation holds, so it declares at most 20 managed attachments` | `declare at most 20 attachments with management: managed in spec.networkAttachments of <provider>, or make the others external` |
 
 ## Provider host realization
@@ -152,7 +151,7 @@ adapter's own: the operator receives `lifecycle.state` and finds the names in
 the adapter output retained beside the attempt's log.
 
 **Virtual-media pool.** One directory pool `bootwright-<context>-<provider>-vmedia`
-beneath `/var/lib/libvirt/images/bootwright/<context>/<provider>/vmedia`,
+beneath `/var/lib/libvirt/images/bootwright/<context>/providers/<provider>/vmedia`,
 targeting exactly that directory, active and set to autostart, is the only
 location the provider's emulated BMCs may fetch media into. It is started
 before it is set to autostart. A pool carries no ownership metadata, so a
@@ -190,7 +189,7 @@ The inverse refuses before its first effect when the `uri` does not answer,
 or when the network driver did not answer for a managed network or the storage
 driver for the pool, or when a same-named network or pool is foreign, then
 destroys and undefines the networks and pool this context owns, removes the
-pool directory, then removes the provider's and the context's directories
+pool directory, then removes the provider's, `providers` and context directories
 beneath `/var/lib/libvirt/images/bootwright` each only once it is empty, never
 recursively, retaining `/var/lib/libvirt/images/bootwright` itself, and proves
 each absent: the networks
@@ -241,16 +240,15 @@ deterministic UUID derived from the context and Machine names, `q35` machine
 type with KVM and BIOS firmware, the selected profile's vCPU count and memory,
 a root disk of `diskGiB` and one disk per `dataDisks[]` entry, at most seven,
 as `qcow2` images beneath
-`/var/lib/libvirt/images/bootwright/<context>/<machine>/`, one interface per
+`/var/lib/libvirt/images/bootwright/<context>/machines/<machine>/`, one interface per
 effective attachment with a deterministic locally administered MAC, an
 emulated TPM 2.0 when the profile declares `tpm`, a serial console, and
-ownership metadata naming the context and Machine. Admission refuses a libvirt
-provider whose name a Machine on a libvirt provider of the context also takes,
-because that Machine's disk directory
-`/var/lib/libvirt/images/bootwright/<context>/<machine>/` is the parent of the
-pool directory `<context>/<provider>/vmedia` and the Machine's destroy removes
-its disk directory with what it holds; selection keeps the refusal
-([refusal table](#refusal-table)). Each disk is presented on
+ownership metadata naming the context and Machine. Provider media and machine
+disks occupy separate `providers` and `machines` subtrees, including when a
+provider and Machine share a name. X48 retires the former name-collision
+refusal with tests proving disjoint ownership and cleanup. Host requests use
+`substrate-host-libvirt-v4` and Machine requests use `machine-libvirt-v4`; the
+new frozen paths change their request and plan digests. Each disk is presented on
 the virtio bus, the root disk as `vda` and the data disks as `vdb` through
 `vdh` in declared order, and carries no WWN, SCSI address or serial number for a
 [root-device hint](api/machines.md#bmc-and-root-device-shape) to match. Each

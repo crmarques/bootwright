@@ -599,7 +599,7 @@ func TestTheMarkerNamesTheRequestItProves(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v6", "os-install-anaconda-v8"} {
+	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v6", "os-install-anaconda-v7", "os-install-anaconda-v9"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)

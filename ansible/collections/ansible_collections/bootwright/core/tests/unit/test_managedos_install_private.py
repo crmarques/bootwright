@@ -80,9 +80,10 @@ def scope(private=True, **extra):
     """The variables an apply sees: the role defaults, the frozen request of
     one arm, the material files the runner wrote and the minted token."""
     values = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
-    request = {"identity": {"object": "metal-01"}, "tlsCertificateRef": "lab-artifacts-tls"}
+    request = {"identity": {"context": "lab", "object": "metal-01"}, "tlsCertificateRef": "lab-artifacts-tls"}
     request.update({"private": dict(PRIVATE)} if private else {"image": dict(PUBLIC)})
     values.update({
+        "bootwright_run_scratch": "/var/tmp/bootwright-run-scratch-1-1",
         "bootwright_os_install_request": request,
         "bootwright_os_install_material": {"artifactCertificate": "/run/material/artifact-ca"},
         "managedos_install_anaconda_token": {"stdout": TOKEN + "\n"},
@@ -158,7 +159,8 @@ def test_an_installer_image_is_readable_before_publication_under_a_restrictive_u
         destination = publication / "install.iso"
         request["image"]["path"] = str(destination)
     destination.parent.mkdir(parents=True)
-    variables = {"private": private, "bootwright_os_install_request": request,
+    variables = {"private": private, "bootwright_run_scratch": "/var/tmp/bootwright-run-scratch-1-1",
+                 "bootwright_os_install_request": request,
                  "managedos_install_anaconda_work": str(work)}
 
     tasks = flattened("apply.yml")

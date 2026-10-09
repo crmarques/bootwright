@@ -29,7 +29,7 @@
     substrate_baremetal_machine_identity_file: '{{ bootwright_os_install_material.fleetIdentity }}'
     substrate_baremetal_machine_identity_key: '{{ bootwright_os_install_material.hostKey | default("") }}'
     substrate_baremetal_machine_identity_marker_path: '{{ bootwright_os_install_request.markerPath }}'
-    substrate_baremetal_machine_identity_work: '{{ managedos_install_anaconda_work }}'
+    substrate_baremetal_machine_identity_work: '{{ managedos_install_anaconda_scratch }}'
     substrate_baremetal_machine_identity_retries: '{{ managedos_install_anaconda_identity_retries | default(0) | int }}'
     substrate_baremetal_machine_identity_delay: '{{ bootwright_os_install_request.budgets.identity.delaySeconds | int }}'
   when: bootwright_os_install_request.target.channel == 'delivered-key'

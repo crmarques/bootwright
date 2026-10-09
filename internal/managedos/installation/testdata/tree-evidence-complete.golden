@@ -1,0 +1,10 @@
+{
+  "absent": false,
+  "content": true,
+  "identity": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+  "postcondition": true,
+  "request": "1111111111111111111111111111111111111111111111111111111111111111",
+  "staging": false,
+  "tree": true,
+  "version": "os-package-tree-evidence-v1"
+}

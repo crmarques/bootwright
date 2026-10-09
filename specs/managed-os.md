@@ -299,24 +299,18 @@ Both image forms receive mode 0640 owned by root:root and the served root's
 label in the work area before atomic rename, independent of the process umask;
 the private identity files also receive that mode, ownership and label. An apply first
 clears whatever an earlier attempt left beneath `private/os/<machine>/`, whose
-token it does not know; and, for `hostedTree`, the DVD's
-complete tree at `os/<profile>/tree/`, copied once from the frozen image with
-its `.treeinfo` and repositories intact, and published by atomic rename so a
-fetching installer never sees a partial tree. The tree carries
-`.bootwright-tree-identity`, holding the frozen DVD's SHA-256, written before
-the rename; a published tree whose identity is not that digest, or that has
-none, is withdrawn, its `.treeinfo` first, and extracted again. Evidence
-reports the identity, and completion requires it to be the frozen digest.
-The tree is extracted beside that path, at `os/<profile>/tree.staging`, and the
-image is built in a work area outside the served root, `work` beneath
-`/var/lib/bootwright-install`, a parent only root may enter (owner root, mode
-0700) that an apply and an observation create and prove, refusing a link or
-any other owner or mode, before the work area, and that a removal leaves. An attempt stopped part
-way leaves either behind, and a removal stopped part way leaves the tree's
-directory without its `.treeinfo`, which is never a complete tree and which the
-rename cannot replace. An apply therefore clears its work area before its first
-write, and, when it publishes the tree, the staging tree and any such tree
-directory before it extracts.
+token it does not know. A hosted package tree belongs to the
+[shared publication block](#shared-package-tree-publication), which this
+installation requires and reads without mutating or claiming it.
+
+The image is built outside the served root, in
+`/var/lib/bootwright-install/<context>/<machine>/work`. The root-only parent
+and its identity subdirectories are proved before use, refusing links,
+another owner or any mode other than 0700. A partial image build may leave
+this machine's work behind; its next apply clears only that work before
+writing. Transient SSH configuration and known hosts use the runner's private
+invocation scratch, never this durable work or a host-global path. A removal
+takes back its own work and retains the shared root.
 A Machine and a profile of one name that publish through one server are
 refused at admission, at the profile's hosted-tree `serverRef`, because both
 would own `os/<name>/` there and the Machine's removal would take the tree.
@@ -411,15 +405,10 @@ realization to be destroyed and applied again. A powered-off Machine with no
 marker installs.
 
 **Inverse.** Destroy removes the published image, the private subtree when one was
-published, with a delivered-key Machine's image inside it, the work area, and, when no other block of the same operation still
-needs it, the published package tree with the staging tree beside it, then
-proves each absent. It withdraws the tree's `.treeinfo` before the rest of the
-tree, so a removal stopped part way never leaves the marker over a partial
-tree, which the inspection and the next apply would take as published whole.
-The `os/<profile>/` directory the apply created for the tree goes with it, but
-only while it is empty, so anything else found there stays. It counts as a
-change only when it was there and the removal took it, so a removal that finds
-nothing of its own beside another entry there reports `unchanged`.
+published, with a delivered-key Machine's image inside it, and the machine's
+work area, then proves each absent. It never deletes the shared package tree;
+inverse dependencies remove that publication only after every installation
+consumer has been removed, and before the artifact server is removed.
 The installed system leaves
 the host with the Machine's disks, so this block consumes no authorization of
 its own on removal. Destroy touches no management controller: a virtual-media
@@ -447,16 +436,13 @@ the published content, which the removal withdraws whatever the guest holds, so
 it reads neither the identity channel, the fleet account nor the controller:
 none left is its completion; the whole completion, which content alone never
 proves, is positive no effect; and any content left is a positive partial
-realization. The package tree counts as
-content left whenever anything is at its published path, because a removal
-withdraws the `.treeinfo` that marks it complete before the rest, so one
-stopped while it deleted the tree leaves the directory without it. Anything at
-the staging tree's path counts too, since it is served part way extracted. The
+realization. A shared package tree alone is never this machine's installation
+effect; its own block observes and resolves that publication. The
 work area is never served, so an
 apply that left only it still had no effect, but a removal takes it back and
-counts it as left. The observation reports the work area before it creates one
-for its identity and reachability reads, and removes one it created however
-those reads end, so it leaves behind only a work area it found.
+counts it as left. Observation reads durable work without creating it;
+identity and reachability reads use private invocation scratch, which is
+cleaned when those reads end.
 
 **Quiescence and cancellation.** This block owns published installer content,
 which an installed Machine no longer reads, so its quiescence follows the
@@ -464,6 +450,61 @@ Machines under the
 [removal gate](state-reconciliation.md#quiescence-before-removal). An installer
 that was already booted keeps running on the guest after cancellation; the
 attempt becomes unknown and is resolved from the marker.
+
+### Shared package-tree publication
+
+For a hosted package source, Managed OS plans one block per context and
+referenced install profile in the `machines` stage. It realizes the
+`MachineInstallProfile` publication under implementation and request version
+`os-package-tree-v1`; each machine installation requires that profile
+publication alongside its own Machine realization and referenced services.
+An installation uses request version `os-install-anaconda-v8`. Profiles using
+a URL package source contribute no publication block.
+
+The request freezes only context and profile identity, artifact-server
+placement, publication path and URL, serving certificate reference, and the
+source media name, exact SHA-256 and size. It carries no machine identity,
+Kickstart, completion marker or machine key. Conflicting source pins for the
+same publication path refuse. This block alone owns and exclusively claims
+the tree path; installation waits carry no tree claim.
+
+**Publication and replay.** The complete tree lives at `os/<profile>/tree/`,
+copied from the frozen DVD with its `.treeinfo` and repositories intact.
+Extraction uses `os/<profile>/tree.staging`; the source pin is proved before
+extraction, and `.bootwright-tree-identity` contains its SHA-256 before an
+atomic rename publishes the tree. A complete matching tree is reused.
+Incomplete staging or a tree without a complete marker is this owner's
+partial effect and is cleared before extraction. A different nonempty source
+identity is drift and stays unknown during apply resolution. Consumers read
+the completed tree without mutating it.
+
+**Evidence and continuation.** Evidence version
+`os-package-tree-evidence-v1` binds the frozen request digest and reports
+complete tree, source identity, content and staging presence, absence and
+postcondition. A complete tree with matching source identity, content present
+and no staging proves completion; no content or staging proves no effect;
+unfinished owned publication proves partial effect. Malformed evidence,
+another request or version, or a different source identity proves no apply
+completion. A continuation reuses the exact frozen source and publication;
+unknown outcomes are observed before any consumer starts.
+
+**Inverse.** Once every consumer is removed, destroy withdraws `.treeinfo`
+before deleting the rest of the tree and its staging area, then proves both
+absent. An intact matching publication with no staging proves a removal had
+no effect; unfinished removal content proves a partial removal. Complete absence is
+completion, including when publication never completed or no consumer ever
+started. Removal proves the exact frozen context-owned path and its safe
+ancestors, and may withdraw this owned publication even when its source
+identity has drifted; changed payload bytes grant no ownership of another path
+and do not strand teardown. Contradictory evidence remains unknown. The empty
+profile directory is removed without recursively deleting unrelated siblings.
+Removal consumes no data-loss authorization. Its
+quiescence follows the consumers under the lifecycle removal gate.
+
+The new block, installation request version, libvirt path versions and
+automation digest change frozen plans. Retire live contexts with the build
+that applied them before setup with this build, then start fresh. An old
+incomplete apply cannot silently continue across these changes.
 
 ### Physical installation
 

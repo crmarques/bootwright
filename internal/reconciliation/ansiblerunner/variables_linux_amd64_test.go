@@ -110,6 +110,7 @@ func TestTheAdapterReadsEveryRequestStringAsData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	values["bootwright_run_scratch"] = unmarked(t, decodeExact(t, written), "$").(map[string]any)["bootwright_run_scratch"]
 	values["bootwright_artifact_server_output"] = map[string]any{"kubeconfig": filepath.Join(job, outputsDirectory, "kubeconfig")}
 	encoded, err := json.Marshal(values)
 	if err != nil {

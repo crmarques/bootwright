@@ -67,5 +67,5 @@
   },
   "tlsCertificateRef": "lab-artifacts-tls",
   "user": "bootwright",
-  "version": "os-install-anaconda-v7"
+  "version": "os-install-anaconda-v8"
 }

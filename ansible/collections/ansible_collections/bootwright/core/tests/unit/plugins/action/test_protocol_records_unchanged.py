@@ -144,6 +144,13 @@ CASES = {
         ("observed gone", completed(observed=True, observation=MACHINE_GONE)),
         ("removal observed", completed(removed=True, observed=True, observation=MACHINE_GONE)),
     ],
+    "managedos_tree_protocol": common([]) + completions(
+        {"observation": {"tree": True, "content": True, "identity": DIGEST}},
+        {"observation": {"staging": True}},
+        {"observation": {}},
+        {"observation": {"content": True}},
+        {"observation": {"identity": "invalid"}},
+    ),
     "managedos_install_protocol": common([
         {"reason": "hardware-mismatch"}, {"reason": "identity-mismatch"}, {"reason": "machine-running"},
         {"reason": "media-changed-boot"}, {"reason": "media-changed-tree"},

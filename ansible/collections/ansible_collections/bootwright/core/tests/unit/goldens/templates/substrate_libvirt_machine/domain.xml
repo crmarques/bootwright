@@ -21,12 +21,12 @@
   <devices>
     <disk type="file" device="disk">
       <driver name="qemu" type="qcow2" discard="unmap"/>
-      <source file="/var/lib/libvirt/images/bootwright/lab-rhel/rhel-01/root.qcow2"/>
+      <source file="/var/lib/libvirt/images/bootwright/lab-rhel/machines/rhel-01/root.qcow2"/>
       <target dev="vda" bus="virtio"/>
     </disk>
     <disk type="file" device="disk">
       <driver name="qemu" type="qcow2" discard="unmap"/>
-      <source file="/var/lib/libvirt/images/bootwright/lab-rhel/rhel-01/data.qcow2"/>
+      <source file="/var/lib/libvirt/images/bootwright/lab-rhel/machines/rhel-01/data.qcow2"/>
       <target dev="vdb" bus="virtio"/>
     </disk>
     <interface type="network">

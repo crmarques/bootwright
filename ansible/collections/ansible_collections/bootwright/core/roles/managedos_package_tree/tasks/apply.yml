@@ -1,0 +1,163 @@
+---
+- name: Validate the frozen package tree request
+  ansible.builtin.assert:
+    that:
+      - bootwright_os_tree_request.version == 'os-package-tree-v1'
+      - bootwright_os_tree_request.identity.context is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+      - bootwright_os_tree_request.identity.profile is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+      - bootwright_os_tree_request.publication.path.startswith('/var/lib/bootwright-services/' ~ bootwright_os_tree_request.identity.context ~ '/')
+      - bootwright_os_tree_request.publication.path.endswith('/public/os/' ~ bootwright_os_tree_request.identity.profile ~ '/tree')
+      - "'/../' not in bootwright_os_tree_request.publication.path"
+      - bootwright_os_tree_request.media.name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+      - bootwright_os_tree_request.media.sha256 is match('^[0-9a-f]{64}$')
+      - bootwright_os_tree_request.media.size | int > 0
+      - bootwright_os_tree_digest is match('^[0-9a-f]{64}$')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.managedos_tree_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Read the frozen source media
+  ansible.builtin.stat:
+    path: '{{ managedos_package_tree_media }}'
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: managedos_package_tree_source
+
+- name: Refuse source media that changed after planning
+  ansible.builtin.assert:
+    that:
+      - managedos_package_tree_source.stat.isreg | default(false)
+      - not (managedos_package_tree_source.stat.islnk | default(true))
+      - managedos_package_tree_source.stat.size | default(-1) == bootwright_os_tree_request.media.size
+      - managedos_package_tree_source.stat.checksum | default('') == bootwright_os_tree_request.media.sha256
+    quiet: true
+
+- name: Read the shared tree before publication
+  bootwright.core.managedos_tree_inspect:
+    request: '{{ bootwright_os_tree_request }}'
+  register: managedos_package_tree_observed
+
+- name: Refuse an existing tree from another source
+  ansible.builtin.assert:
+    that:
+      - managedos_package_tree_observed.observation.identity in ['', bootwright_os_tree_request.media.sha256]
+    quiet: true
+
+- name: Publish the frozen tree when incomplete
+  when: not (managedos_package_tree_observed.observation.tree | bool)
+  block:
+    - name: Create the package tree parent
+      ansible.builtin.file:
+        path: '{{ bootwright_os_tree_request.publication.path | dirname }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Clear incomplete publication and staging content
+      ansible.builtin.file:
+        path: '{{ item }}'
+        state: absent
+      loop:
+        - '{{ bootwright_os_tree_request.publication.path }}/.treeinfo'
+        - '{{ bootwright_os_tree_request.publication.path }}'
+        - '{{ managedos_package_tree_staging }}'
+
+    - name: Extract the frozen media into staging
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/xorriso
+          - -osirrox
+          - 'on'
+          - -indev
+          - '{{ managedos_package_tree_media }}'
+          - -extract
+          - /
+          - '{{ managedos_package_tree_staging }}'
+        expand_argument_vars: false
+      changed_when: true
+
+    - name: Verify the extracted tree has its complete marker
+      ansible.builtin.stat:
+        path: '{{ managedos_package_tree_staging }}/.treeinfo'
+        follow: false
+      register: managedos_package_tree_marker
+
+    - name: Refuse source media without an installation tree
+      ansible.builtin.assert:
+        that:
+          - managedos_package_tree_marker.stat.isreg | default(false)
+          - not (managedos_package_tree_marker.stat.islnk | default(true))
+        quiet: true
+
+    - name: Record the frozen source in the staged tree
+      ansible.builtin.copy:
+        content: "{{ bootwright_os_tree_request.media.sha256 }}\n"
+        dest: '{{ managedos_package_tree_staging }}/.bootwright-tree-identity'
+        owner: root
+        group: root
+        mode: '0640'
+
+    - name: Label the tree for its serving process
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/chcon
+          - --recursive
+          - --reference
+          - '{{ managedos_package_tree_served_root }}'
+          - '{{ managedos_package_tree_staging }}'
+        expand_argument_vars: false
+      changed_when: true
+
+    - name: Publish the complete tree by atomic rename
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/mv
+          - --no-target-directory
+          - '{{ managedos_package_tree_staging }}'
+          - '{{ bootwright_os_tree_request.publication.path }}'
+        expand_argument_vars: false
+      changed_when: true
+  always:
+    - name: Remove this publication's staging area
+      ansible.builtin.file:
+        path: '{{ managedos_package_tree_staging }}'
+        state: absent
+
+- name: Clear stale staging beside an already complete tree
+  ansible.builtin.file:
+    path: '{{ managedos_package_tree_staging }}'
+    state: absent
+  register: managedos_package_tree_staging_removed
+
+- name: Prove the published tree answers through its trusted listener
+  ansible.builtin.uri:
+    url: '{{ bootwright_os_tree_request.publication.url }}/.treeinfo'
+    method: GET
+    headers:
+      Range: bytes=0-0
+    ca_path: '{{ bootwright_os_tree_material.certificate | default(omit) }}'
+    validate_certs: true
+    use_proxy: false
+    follow_redirects: none
+    status_code: [200, 206]
+    timeout: 30
+  changed_when: false
+
+- name: Read the published tree proof
+  bootwright.core.managedos_tree_inspect:
+    request: '{{ bootwright_os_tree_request }}'
+  register: managedos_package_tree_after
+
+- name: Publish bounded package tree completion evidence
+  bootwright.core.managedos_tree_protocol:
+    phase: completed
+    outcome: "{{ 'unchanged' if managedos_package_tree_observed.observation.tree and not managedos_package_tree_staging_removed.changed else 'changed' }}"
+    digest: '{{ bootwright_os_tree_digest }}'
+    observation: '{{ managedos_package_tree_after.observation }}'
+  no_log: true

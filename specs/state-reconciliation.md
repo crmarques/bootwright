@@ -751,7 +751,7 @@ digest. A stage names the kind of platform work its block performs:
 | `controller` | The [context prerequisites](controller.md) this Environment adds to its controller host: the target clients its graph selects; the libvirt client a declared `libvirt` capability, a libvirt provider hosted on the controller or any Machine a libvirt provider hosts selects, [and nothing else](controller.md#the-controller-stage); the hypervisor closure a hosted provider selects; and the installer-media tooling an artifact server on the controller selects. |
 | `infra-components` | Managed shared services: proxying, name resolution, time, artifact serving, registries and load balancing. |
 | `substrates` | [Provider host realization](substrates.md#provider-host-realization) for a declared `InfraProvider`: its virtualization runtime, managed networks and virtual-media pool. |
-| `machines` | [Machine realization](substrates.md#machine-realization) with its management controller, the [claim and proof](substrates.md#physical-machine-realization) of a physical machine, and [managed operating-system installation](managed-os.md#installation). |
+| `machines` | [Machine realization](substrates.md#machine-realization) with its management controller, the [claim and proof](substrates.md#physical-machine-realization) of a physical machine, [shared package-tree publication](managed-os.md#shared-package-tree-publication), and [managed operating-system installation](managed-os.md#installation). |
 | `clusters` | Container and storage cluster installation. |
 | `add-ons` | Add-on instances bound to a cluster. |
 
@@ -793,10 +793,31 @@ together is the graph's answer and does not change between invocations. A
 continuation of an operation frozen by another build therefore runs under this
 build's bound, which changes no effect, no order and no evidence.
 
-Not yet met: shared role scratch and same-invocation adapter admission keep
-the production bound at one, and the package-tree claim spans an entire
-installation; tracked as [B303](milestones/m1.md#b303),
-[B304](milestones/m1.md#b304) and [B466](milestones/m1.md#b466).
+Production uses the engine's bound of eight running blocks. Independent
+services and machines are admitted together; a fast dependency chain advances
+while unrelated work remains running. A hosted package tree is its own durable
+block: installations require its completion and hold no exclusive tree claim
+while they build images, boot or wait for guests. Replay and inverse dependency
+ordering use that same ownership boundary.
+
+The lifecycle opens a private invocation scope at its execution boundary and
+closes it after every admitted adapter has joined. Runner copies share its
+synchronized live-job registry. An adapter's held job is exempt from the
+running-adapter refusal only while that exact job's original lock and holder
+files belong to this live scope. Matching context, operation or attribution
+bytes alone grants no exemption. Another invocation, an unattributed held job,
+or a descendant holding a job after its owner released it still refuses.
+Sweep and claim publication, and unregister and release, are synchronized;
+adapter processes run concurrently outside that critical section.
+
+Each adapter receives the runner's private scratch path as execution material,
+outside its frozen request and digest. A role proves its own root-only child
+before writing, and cleans only that child, including on a remote placement.
+Durable machine work and published artifacts remain beneath the disjoint paths
+their capabilities freeze. Cancellation and cleanup never remove a sibling's
+scratch or retained effects. [B303](milestones/m1.md#b303),
+[B304](milestones/m1.md#b304) and [B466](milestones/m1.md#b466) qualify these
+boundaries in production composition and the closing operator run.
 
 An operation is `paused` when execution stops because no block is startable,
 nothing is still running, no block is failed or unknown, and pending blocks

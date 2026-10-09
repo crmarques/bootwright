@@ -1,7 +1,7 @@
 ---
 # Derived from the frozen request only. Nothing here is authored by desired
 # state, and no value selects an executable, a role or a task file.
-substrate_libvirt_host_definitions: /run/bootwright-substrate
+substrate_libvirt_host_definitions: '{{ bootwright_run_scratch }}/libvirt-host'
 substrate_libvirt_host_managed: >-
   {{ bootwright_substrate_host_request.networks | selectattr('managed') | list }}
 # The managed networks that were not already active and owned once the drivers

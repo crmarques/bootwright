@@ -1,0 +1,13 @@
+---
+- name: Execute one shared package tree capability
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the shared package tree observe
+      ansible.builtin.import_role:
+        name: bootwright.core.managedos_package_tree
+        tasks_from: observe

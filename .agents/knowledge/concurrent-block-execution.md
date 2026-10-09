@@ -92,12 +92,35 @@ gets a wave, including one nothing waits for.
 ## Exclusive resources: the graph does not order writers
 
 Two blocks the graph never ordered can still write to one place. The first case
-is the Anaconda package tree, published per **install profile**: two Machines
-on one profile extract and rename over the same path, and the role guards it
-only by observing first. `Request.ExclusiveKeys` names `path:<tree>` and the
-scheduler never runs two holders together. The key is frozen with the plan and
-kept verbatim by a removal, because what must not run together to create
-something must not run together to remove it.
+was the Anaconda package tree, published per **install profile**: two Machines
+on one profile extracted and renamed over the same path. The original fix
+put `path:<tree>` in each installation's `Request.ExclusiveKeys`, protecting
+publication while serializing the full installer waits too.
+
+X48 gives the shared publication its own durable block. Only it claims that
+path; every installation requires its completion and reads the immutable
+tree. Inverse dependencies retain it until its consumers are removed. This
+separates a short shared effect from long independent machine work.
 
 Watch for the same shape elsewhere: anything derived from something other than
 the block's own object is a candidate.
+
+## Production admission also needs live invocation ownership
+
+The scheduler's bound was eight, but production bound one until X48. Raising
+it exposed the runner's same-context sweep: a sibling adapter held a job lock
+and was refused as another active invocation. Context and operation strings
+cannot prove ownership because another invocation can continue the same
+operation.
+
+X48 opens a private lifecycle invocation scope. Runner copies share a live
+registry that proves exact lock and holder file identity. Sweep and claim
+publication, and unregister and release, are synchronized; process execution
+remains concurrent. A sibling's cleanup cannot pass through an unregistered
+claim, and a descendant holding a released job is no longer exempt. Foreign,
+unknown and ended jobs still refuse. Role scratch uses the same runner-issued
+job boundary; durable machine work has a separate context/machine path.
+
+The three-node example's compiled production DAG and controlled real-runner
+barriers qualify these boundaries in-tree. Operator overlap remains an M1
+closing gate; no live run is implied by those tests.

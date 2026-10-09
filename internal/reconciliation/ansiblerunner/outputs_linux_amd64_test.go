@@ -177,7 +177,7 @@ func TestNoOutputsLeaveTheVariablesUnchanged(t *testing.T) {
 			t.Fatalf("a request without outputs carries %s", key)
 		}
 	}
-	if len(requested) != 3 {
+	if len(requested) != 4 || requested["bootwright_run_scratch"] == nil {
 		t.Fatalf("the request carries %v", requested)
 	}
 }

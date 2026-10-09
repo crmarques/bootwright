@@ -83,10 +83,9 @@ def machine_reads():
     found = [task for task in tasks()
              if READ in task
              or task.get("ansible.builtin.include_tasks") in ("identity.yml", "reachable.yml")
-             or (task.get("ansible.builtin.file") or {}).get("state") == "directory"]
-    # The work area's root-only parent and the work area itself, the identity
-    # and fleet-account reads, and the controller read.
-    assert len(found) == 5
+             or (task.get("bootwright.core.lifecycle_scratch") or {}).get("state", "present") == "present" and "bootwright.core.lifecycle_scratch" in task]
+    # Private connection files, the identity, fleet and controller reads.
+    assert len(found) == 4
     return found
 
 

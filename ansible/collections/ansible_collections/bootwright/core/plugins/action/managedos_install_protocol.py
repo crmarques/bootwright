@@ -24,12 +24,8 @@ MEDIA_REFUSALS = ("media-changed-boot", "media-changed-tree")
 POWER_STATES = ("", "On", "Off")
 MAX_MARKER = 4096
 MAX_HOST_KEY = 4096
-# Every piece of content this installation publishes, as its inspection names
-# it; treeContent is anything left at the package tree's path, which a removal
-# stopped part way can leave without the marker that makes the tree complete.
-# treeStaging and work are what an attempt killed part way leaves: the tree it
-# was extracting beneath the served root and the area it built the image in.
-CONTENT = ("image", "private", "tree", "treeContent", "treeStaging", "work")
+# Shared package tree presence does not belong to a machine installation.
+CONTENT = ("image", "private", "work")
 
 
 def tree_identity(value):

@@ -158,6 +158,9 @@ func contractRows() []contractRow {
 			noEffectUnreported:     "specs/substrates.md proves no effect only from a claim never published, which the controller's reservations hold, not the adapter's evidence",
 			removalObservesNothing: "specs/substrates.md, Physical machine realization, releases only the claim and never contacts the machine",
 			drift:                  map[string]any{"power": ""}},
+		{kind: installation.TreeKind, implementation: installation.TreeImplementation, example: "lab-rhel", presence: contractTreePresence,
+			noEffect: map[string]any{"version": installation.TreeEvidenceVersion}, absence: map[string]any{"version": installation.TreeEvidenceVersion},
+			drift: map[string]any{"identity": strings.Repeat("a", 64)}},
 		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true,
 			noEffect: map[string]any{"power": "Off"}, drift: map[string]any{"reachable": false}},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
@@ -1348,4 +1351,13 @@ func TestEveryBindingJoinsTheCapabilityContractSuite(t *testing.T) {
 	for binding := range rows {
 		t.Errorf("the capability contract suite has a row for %s/%s, which this build does not offer", binding.Kind, binding.Implementation)
 	}
+}
+
+func contractTreePresence(t *testing.T, execution lifecycle.Execution) map[string]any {
+	t.Helper()
+	request, err := installation.DecodeTreeRequest(execution.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return map[string]any{"postcondition": true, "content": true, "tree": true, "identity": request.Media.SHA256, "version": installation.TreeEvidenceVersion}
 }

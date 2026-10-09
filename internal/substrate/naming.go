@@ -50,7 +50,7 @@ func PoolName(contextName, provider string) string {
 }
 
 func PoolPath(contextName, provider string) string {
-	return ImagePrefix + "/" + contextName + "/" + provider + "/vmedia"
+	return ImagePrefix + "/" + contextName + "/providers/" + provider + "/vmedia"
 }
 
 func DomainName(contextName, machine string) string {
@@ -58,26 +58,7 @@ func DomainName(contextName, machine string) string {
 }
 
 func DiskDirectory(contextName, machine string) string {
-	return ImagePrefix + "/" + contextName + "/" + machine
-}
-
-// DirectoryOwner answers the Machine named after a libvirt provider that is
-// itself realized on a libvirt provider of the catalog, whatever its
-// os.provided, because a Machine may change lifecycle. That Machine's disk
-// directory DiskDirectory(context, name) is the parent of the provider's pool
-// directory PoolPath(context, name), and the Machine's destroy removes its
-// directory with everything in it. It is meaningful only for a libvirt
-// provider; callers check that.
-func DirectoryOwner(catalog api.Catalog, provider api.Object) (api.Object, bool) {
-	machine, ok := catalog.Find(api.Machine, provider.Name())
-	if !ok {
-		return api.Object{}, false
-	}
-	host, ok := catalog.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
-	if !ok || !host.Spec().Has(ArmLibvirt) {
-		return api.Object{}, false
-	}
-	return machine, true
+	return ImagePrefix + "/" + contextName + "/machines/" + machine
 }
 
 // ControllerUnitName is the host unit one Machine's emulated management

@@ -2,9 +2,11 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_machine_request.version == 'machine-libvirt-v3'
-      - bootwright_substrate_machine_request.directory.startswith('/var/lib/libvirt/images/bootwright/')
-      - bootwright_substrate_machine_request.directory | dirname | dirname == '/var/lib/libvirt/images/bootwright'
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v4'
+      - bootwright_substrate_machine_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_substrate_machine_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_substrate_machine_request.directory == '/var/lib/libvirt/images/bootwright/'
+        ~ bootwright_substrate_machine_request.identity.context ~ '/machines/' ~ bootwright_substrate_machine_request.identity.object
       - bootwright_substrate_machine_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -178,7 +180,10 @@
   ansible.builtin.command:
     argv:
       - /usr/bin/rmdir
-      - '{{ bootwright_substrate_machine_request.directory | dirname }}'
+      - '{{ item }}'
+  loop:
+    - '{{ bootwright_substrate_machine_request.directory | dirname }}'
+    - '{{ bootwright_substrate_machine_request.directory | dirname | dirname }}'
   environment:
     LC_ALL: C
   register: substrate_libvirt_machine_disks_parent

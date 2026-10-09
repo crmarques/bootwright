@@ -147,6 +147,11 @@ func publishRecord(job string, record jobRecord) error {
 // after the lock, so no sweep advises ending the processes that hold a job
 // while this invocation is still one of them.
 func (r Runner) release(job, scratch string, lock, holder *os.File) {
+	if r.invocation != nil {
+		r.invocation.mu.Lock()
+		defer r.invocation.mu.Unlock()
+		delete(r.invocation.jobs, job)
+	}
 	held, statErr := lock.Stat()
 	_ = lock.Close()
 	_ = holder.Close()
@@ -162,11 +167,19 @@ func (r Runner) release(job, scratch string, lock, holder *os.File) {
 	_, _, _ = dirs.reap(filepath.Base(job), paired, held)
 }
 
-// sweep refuses while a job of contextName, or a job attributed to no context,
-// still holds its lock, and removes every job on the host whose lock is free,
+// sweep refuses an unowned held job of contextName, or any unattributed job,
+// and removes every job on the host whose lock is free,
 // with its scratch, and every scratch whose job is gone. A held job of another
 // context neither refuses nor goes.
 func (r Runner) sweep(contextName string) error {
+	if r.invocation != nil {
+		r.invocation.mu.Lock()
+		defer r.invocation.mu.Unlock()
+	}
+	return r.sweepLocked(contextName)
+}
+
+func (r Runner) sweepLocked(contextName string) error {
 	dirs, err := r.openRunDirectories()
 	if err != nil {
 		return failure("lifecycle.state", "private adapter invocation storage is unavailable", "")
@@ -201,7 +214,7 @@ func (r Runner) sweep(contextName string) error {
 }
 
 // heldRefusal is what one held job says to a run of contextName. A job of
-// another context says nothing. A job of this context names what it is doing,
+// another context or a live sibling says nothing. Other jobs name their work,
 // and advises ending processes only once the invocation that started it no
 // longer holds its holder lock, when what remains are descendants it left. A
 // job attributed to no context, as one an earlier build started, refuses every
@@ -213,6 +226,8 @@ func (r Runner) heldRefusal(contextName, lock string, held holding) error {
 		return failure("lifecycle.adapter-running", "an earlier lifecycle adapter still runs and holds its job lock",
 			"wait for it to end, or end the processes that hold "+lock+", then repeat the command")
 	case record.Context != contextName:
+		return nil
+	case r.owns(lock, held):
 		return nil
 	case held.alive:
 		return failure("lifecycle.adapter-running", "context "+record.Context+" is still running "+record.doing()+
@@ -283,9 +298,10 @@ const (
 // job has its holder; alive is set while the invocation that started it still
 // holds that holder.
 type holding struct {
-	record     jobRecord
-	attributed bool
-	alive      bool
+	record       jobRecord
+	attributed   bool
+	alive        bool
+	lock, holder os.FileInfo
 }
 
 // reap removes one job directory, with the scratch paired with it, once no
@@ -374,6 +390,7 @@ func (d runDirectories) seize(name string, held os.FileInfo) (seized *seizedJob,
 			return nil, jobSkipped, holding{}, err
 		}
 		if stillHeld {
+			found.lock = opened
 			return nil, jobHeld, found, nil
 		}
 	}
@@ -473,13 +490,13 @@ func (d runDirectories) attribute(job *os.Root, file *os.File) holding {
 	if decoder.Decode(&record) != nil || decoder.Decode(new(any)) != io.EOF || !recordable(record) {
 		return holding{}
 	}
-	holder, _, ok := d.file(job, holderName)
+	holder, identity, ok := d.file(job, holderName)
 	if !ok {
 		return holding{}
 	}
 	defer holder.Close()
 	alive := syscall.Flock(int(holder.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil
-	return holding{record: record, attributed: true, alive: alive}
+	return holding{record: record, attributed: true, alive: alive, holder: identity}
 }
 
 // orphaned removes scratch whose job is gone. A job is removed only once no
