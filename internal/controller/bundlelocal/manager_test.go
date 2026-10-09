@@ -3,11 +3,11 @@ package bundlelocal
 import (
 	"context"
 	"errors"
-	"github.com/crmarques/bootwright/ansible"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )

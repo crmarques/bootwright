@@ -29,10 +29,10 @@ type Service struct {
 	runner      Runner
 	confirmer   Confirmer
 	reporter    Reporter
-	selection   machine.CurrentSelection
+	selection   CurrentSelection
 }
 
-func New(state EffectiveState, realization Realization, identities Identities, runtime Runtime, runner Runner, confirmer Confirmer, reporter Reporter, selection machine.CurrentSelection) Service {
+func New(state EffectiveState, realization Realization, identities Identities, runtime Runtime, runner Runner, confirmer Confirmer, reporter Reporter, selection CurrentSelection) Service {
 	return Service{
 		state: state, realization: realization, identities: identities, runtime: runtime, runner: runner,
 		confirmer: confirmer, reporter: reporter, selection: selection,

@@ -176,7 +176,13 @@ listen; claims on two hosts never conflict. The socket claims of a managed
 service, an artifact server or an
 [emulated BMC](substrates.md#machine-realization) placed on an SSH host are
 compared only within their context and never published, because two contexts
-targeting one SSH host are not coordinated. One claim's keys never conflict with each other, and
+targeting one SSH host are not coordinated.
+
+Not yet met: an SSH placement recognized as the controller still publishes no
+host-wide claim, so it does not exclude another context's local claim; tracked
+as [B247](milestones/backlog.md#b247).
+
+One claim's keys never conflict with each other, and
 no other key class is compared within a context, because one context's claims
 may share a key by design, such as the `path:` of a package tree two
 installations of one profile publish.
@@ -313,6 +319,10 @@ the unit absent, neither defined nor listed failed, the container absent, the
 content root absent and every reserved socket free. An already-absent service reports `completed`
 with that same absence evidence. Destroy removes no image from the host store
 and no unrelated file.
+
+Not yet met: managed-service and artifact-server absence checks release socket
+reservations without proving every reserved socket free; tracked as
+[B323](milestones/backlog.md#b323).
 
 **Unknown resolution.** Observation is read-only against the frozen request and
 exact identity. Live state matching the frozen request in full is positive

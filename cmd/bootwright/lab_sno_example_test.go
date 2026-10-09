@@ -85,6 +85,14 @@ func TestLabSNOExampleSelectsItsInstallerFromTheDeclaredRelease(t *testing.T) {
 	}
 }
 
+func TestLabSNOExampleBMCListenerUsesLoopback(t *testing.T) {
+	state, _ := compileAcceptance(t, snoExampleSources(t))
+	provider := requireObject(t, state.Effective(), api.InfraProvider, "lab-libvirt")
+	if got := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text(); got != "127.0.0.1" {
+		t.Fatalf("BMC bindAddress = %q; want loopback", got)
+	}
+}
+
 // A single-node cluster answers at its own node, so normalization resolves all
 // three endpoint slots from that one address rather than repeating it.
 func TestLabSNOExampleResolvesEveryEndpointFromItsOneNode(t *testing.T) {

@@ -12,10 +12,10 @@ type Service struct {
 	state     EffectiveState
 	ownership Ownership
 	power     PowerReader
-	selection machine.CurrentSelection
+	selection CurrentSelection
 }
 
-func New(state EffectiveState, ownership Ownership, power PowerReader, selection machine.CurrentSelection) Service {
+func New(state EffectiveState, ownership Ownership, power PowerReader, selection CurrentSelection) Service {
 	return Service{state: state, ownership: ownership, power: power, selection: selection}
 }
 

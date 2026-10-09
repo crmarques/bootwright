@@ -49,7 +49,13 @@ fixtures, crash reports, inventory, facts, or caches. Names, public keys, public
 certificates, fingerprints, endpoints, image references and digests,
 desired-state hashes, and ownership identifiers are non-secret only when they
 embed no credential; private-estate identifiers still do not belong in public
-examples.
+examples. The prohibition covers Bootwright-owned sinks. A management
+controller necessarily receives a private virtual-media URL to fetch an image
+and may retain it or log it in its own access records; treat those records as
+confidential too. An emulated controller has the same behavior.
+Not yet met: cluster media insertion reuses the private publication token
+instead of giving every insert a fresh capability; tracked as
+[B314](milestones/m3.md#b314).
 
 `validate` and `render effective` read no Secret material under the
 [compiler boundary](api.md#compiler-boundary), and desired state names no
@@ -357,6 +363,34 @@ unknown. Secrets reach Ansible only by the channels
 that could carry one uses `no_log` and no-diff behavior and must not persist it
 in inventory, facts, caches, evidence, logs, or adapter results.
 
+### Listener exposure
+
+The operator owns host firewall policy; Bootwright does not open ports or
+change zones. A listener serves only its declared consumers. A privileged
+listener or one carrying cleartext credentials binds loopback or a host-only
+address unless the operator explicitly places it on a trusted network. A
+wildcard bind exposes all matching host interfaces and requires source
+restrictions on each reachable interface. The
+[operator guide](../docs/operator-guide.md#network-exposure) owns the firewall
+procedure and ports by source.
+
+| Listener | Clients | Transport and authentication | Privilege | Client restriction |
+| --- | --- | --- | --- | --- |
+| Managed Proxy | Selected graph's Machine addresses, network CIDRs and loopback | HTTP proxy; no client credential | Root container with host networking | Squid source ACL derived from the graph; other clients refused |
+| Managed DNSServer | Selected Machines and the controller; cluster consumers when declared | DNS over UDP and TCP; no client authentication | Root container with host networking | Bind address and operator firewall; every reachable client can query and use declared forwarders |
+| Managed NTPServer | Selected graph's Machine addresses, network CIDRs and loopback | NTP over UDP; no client credential | Root container with host networking, without host clock adjustment | Chrony source ACL derived from the graph |
+| Managed ArtifactServer | BMCs fetching virtual media, installers fetching packages or private material, and controller probes | Authored HTTP or HTTPS; HTTPS verifies the declared serving certificate; private URL is a capability | Root container master with application-user workers and host networking | Bind address and operator firewall; private subtree needs its token |
+| Emulated BMC | Controller/provider-host clients | Plain HTTP with basic authentication | Root container with host networking, SELinux label disabled and access to the libvirt socket | Lab examples bind loopback; other binds require a trusted network |
+
+Private URL capabilities travel over verified TLS, subject only to the
+[emulated-controller boot-media exception](container-clusters.md#boot-media).
+Public package trees carry no credentials.
+Not yet met: preflight and plan do not prove per-socket firewall reachability;
+tracked as [B318](milestones/m4.md#b318).
+Not yet met: the emulated BMC does not refuse a non-loopback bind and has no
+confined SELinux type; tracked as [B334](milestones/backlog.md#b334). Its TLS
+transport is tracked separately as [B446](milestones/m4.md#b446).
+
 ### Direct SSH sessions
 
 An [explicit SSH session](cli.md#machine-ssh-sessions) runs one pinned client
@@ -495,8 +529,10 @@ Each effect defines idempotence/replay, retries, timeout, cancellation, safe
 compensation where available, and success evidence before implementation.
 Recovery evidence survives cleanup and partial failure. Confirmation and
 irreversible authorization are separate typed decisions, and neither bypasses
-validation, identity, ownership, bounds, logging, or live probes. No force
-input exists.
+validation, identity, ownership, bounds, logging, or live probes. The
+explicit `machine stop --force` power-off choice does not override those
+proofs or authorize adoption; [machine power](substrates.md#identity-and-power-operations)
+owns its bounded behavior.
 
 ## Required security proof
 

@@ -45,9 +45,9 @@
   "libvirtMachines": [
     {
       "controller": {
-        "address": "192.0.2.1",
+        "address": "127.0.0.1",
         "credentialsRef": "lab-bmc-credentials",
-        "endpoint": "http://192.0.2.1:8000/redfish/v1/Systems/99fb0e65-44db-88dc-80ee-660148714293",
+        "endpoint": "http://127.0.0.1:8000/redfish/v1/Systems/99fb0e65-44db-88dc-80ee-660148714293",
         "image": "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e",
         "port": 8000,
         "unit": "bootwright-lab-bmc-sno-01"

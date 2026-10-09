@@ -1,0 +1,20 @@
+Manage completion
+
+Usage:
+  bootwright completion [command]
+
+Available Commands:
+  bash        Generate a Bash completion script
+  fish        Generate a Fish completion script
+  powershell  Generate a PowerShell completion script
+  zsh         Generate a Zsh completion script
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+
+Use "bootwright completion [command] --help" for more information about a command.

@@ -2,7 +2,10 @@ module github.com/crmarques/bootwright/tools
 
 go 1.26.8
 
-tool golang.org/x/vuln/cmd/govulncheck
+tool (
+	golang.org/x/tools/cmd/goimports
+	golang.org/x/vuln/cmd/govulncheck
+)
 
 require (
 	golang.org/x/mod v0.41.0 // indirect

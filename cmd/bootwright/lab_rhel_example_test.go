@@ -158,7 +158,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 	}
 	provider := requireObject(t, effective, api.InfraProvider, "lab-libvirt")
 	libvirt := provider.Spec().Get("libvirt")
-	if libvirt.Get("machineRef").Text() != "controller" || libvirt.Get("bmcEmulationDefaults", "port").Text() != "8000" || libvirt.Get("bmcEmulationDefaults", "bindAddress").Text() != "192.0.2.1" {
+	if libvirt.Get("machineRef").Text() != "controller" || libvirt.Get("bmcEmulationDefaults", "port").Text() != "8000" || libvirt.Get("bmcEmulationDefaults", "bindAddress").Text() != "127.0.0.1" {
 		t.Fatal("libvirt provider lost its emulated BMC defaults", provider.Spec())
 	}
 	attachment := provider.Spec().Get("networkAttachments").Items()[0].Get("libvirt")

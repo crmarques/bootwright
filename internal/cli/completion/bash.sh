@@ -1,5 +1,5 @@
 _bootwright_complete() {
-    local line item previous current i
+    local line item previous current i directive=0
     local -a request=()
     COMPREPLY=()
     for ((i=1; i<=COMP_CWORD; i++)); do
@@ -17,11 +17,19 @@ _bootwright_complete() {
     done
     current=${COMP_WORDS[COMP_CWORD]}
     while IFS= read -r line; do
-        [[ $line == :* ]] && continue
+        if [[ $line == :* ]]; then
+            directive=${line#:}
+            continue
+        fi
         if [[ $current != --* && $line == --*=* ]]; then
             line=${line#*=}
         fi
         COMPREPLY+=("$line")
     done < <("${COMP_WORDS[0]}" @PROTOCOL@ "${request[@]}" 2>/dev/null)
+    if (( directive & 2 )); then
+        compopt -o nospace 2>/dev/null || true
+    else
+        compopt +o nospace 2>/dev/null || true
+    fi
 }
 complete -F _bootwright_complete bootwright

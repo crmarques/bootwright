@@ -29,11 +29,11 @@ type Options struct {
 type Service struct {
 	state     EffectiveState
 	trust     HostKeyStore
-	selection machine.CurrentSelection
+	selection CurrentSelection
 	options   Options
 }
 
-func New(state EffectiveState, store HostKeyStore, selection machine.CurrentSelection, options Options) Service {
+func New(state EffectiveState, store HostKeyStore, selection CurrentSelection, options Options) Service {
 	return Service{state: state, trust: store, selection: selection, options: options}
 }
 
@@ -154,13 +154,13 @@ func evaluate(entry candidate, observed observation, records trust.Store, replac
 	if !replace && unchanged {
 		return HostReport{}, trust.Record{}, failure("trust.identity",
 			"the SSH host key for "+entry.name+" is unchanged ("+host.Fingerprint+"), but this context trusts it at "+
-				token(previous.Address, previous.Port)+", not at "+token(entry.address, entry.port),
+				trust.HostToken(previous.Address, previous.Port)+", not at "+trust.HostToken(entry.address, entry.port),
 			"if "+entry.name+" moved, rerun bootwright machine trust --context "+contextName+" --replace "+entry.name+
 				" to trust its key at the new address")
 	}
 	if !replace {
 		return HostReport{}, trust.Record{}, failure("trust.identity",
-			"the SSH host key for "+entry.name+" at "+token(entry.address, entry.port)+
+			"the SSH host key for "+entry.name+" at "+trust.HostToken(entry.address, entry.port)+
 				" changed from "+previous.Fingerprint+" to "+host.Fingerprint,
 			"verify the new fingerprint out of band, then rerun bootwright machine trust --context "+contextName+
 				" --machines "+entry.name+" --replace "+entry.name)

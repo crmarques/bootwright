@@ -228,6 +228,10 @@ whole; key-pair and split-key choices are never combined through defaults.
 The reference must still resolve. Public-only material is sufficient to
 declare installation but cannot authorize a cluster SSH command.
 
+Not yet met: an opaque public-only `publicKeyRef` passes admission and planning
+but the media apply reads only an `sshKeyPair` public part and fails; tracked
+as [B306](../milestones/m3.md#b306).
+
 `servingCertificates` admits only:
 
 | Field | Type | Required | Rule |

@@ -9,6 +9,8 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
+type CurrentSelection func(context.Context) (string, error)
+
 // EffectiveState compiles the selected context's immutable input into the
 // graph a power operation resolves its target in.
 type EffectiveState interface {

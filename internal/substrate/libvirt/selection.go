@@ -2,7 +2,6 @@ package libvirt
 
 import (
 	"fmt"
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"net/netip"
 	"slices"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )

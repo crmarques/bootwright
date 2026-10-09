@@ -1,0 +1,16 @@
+Print an SSH access descriptor for independent operator execution; do not launch a client or connect. Success prints a bounded access descriptor for independent operator execution. Applicable to OpenShift/OKD ContainerClusters and managed Ceph StorageClusters with declared nodes. External StorageClusters are inapplicable.. This command is recognized but not implemented.
+
+Usage:
+  bootwright cluster rsh [flags]
+
+Flags:
+      --name string   Select the exact object name (required)
+      --node string   Select a declared node, FQDN, or role-ordinal
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

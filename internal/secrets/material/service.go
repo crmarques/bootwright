@@ -386,13 +386,6 @@ func stripFinalLF(value []byte) []byte {
 	return value
 }
 
-func nonempty(value []byte, name string) error {
-	if len(value) == 0 {
-		return failure("input", name+" is empty", "")
-	}
-	return nil
-}
-
 func line(value []byte, name string) error {
 	if len(value) == 0 || !utf8.Valid(value) || bytes.IndexByte(value, 0) >= 0 || bytes.ContainsAny(value, "\r\n") {
 		return failure("input", name+" must be one nonempty UTF-8 line", "")

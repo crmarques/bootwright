@@ -38,8 +38,11 @@ authored here; both follow from the one node.
 The conventions are [`lab-rhel`](../lab-rhel/README.md#lab-conventions)'s, with
 one addition. `192.0.2.1` is the controller's own existing address and must
 already exist on the host; `198.51.100.0/24` is the guest network Bootwright
-defines on `virbr-lab` and must not exist yet. Six sockets on `192.0.2.1` must
-be free: `3128`, `53`, `123`, `8443`, `8080` and `8000`.
+defines on `virbr-lab` and must not exist yet. Five sockets on `192.0.2.1`
+must be free: `3128`, `53`, `123`, `8443` and `8080`, plus the emulated BMC
+on `127.0.0.1:8000`, which stays loopback in the local copy. Follow the
+[network exposure guide](../../docs/operator-guide.md#network-exposure) for
+source-scoped access to the managed services.
 
 The addition is name resolution for the controller itself. `openshift-install`
 polls the cluster API from the controller, so the controller must resolve
@@ -81,10 +84,21 @@ chmod 600 ~/pull-secret.json
 
 ## Run it
 
+Build from a clean committed checkout and adjust the lab conventions in a
+copy outside Git. Keep the variable in the shell that runs the journey:
+
+```sh
+lab_sno_input=$(mktemp -d /tmp/bootwright-lab-sno.XXXXXX)
+cp -R examples/lab-sno/. "$lab_sno_input/"
+```
+
+Edit that copy before running the following block one line at a time.
+
 ```sh
 make build
-./bin/bootwright validate -f examples/lab-sno
-sudo ./bin/bootwright context init --name lab-sno --input-dir "$PWD/examples/lab-sno"
+./bin/bootwright version
+./bin/bootwright validate -f "$lab_sno_input"
+sudo ./bin/bootwright context init --name lab-sno --input-dir "$lab_sno_input"
 chmod 600 ~/pull-secret.json
 sudo ./bin/bootwright secret set --name openshift-pull-secret --value-file ~/pull-secret.json
 sudo ./bin/bootwright secret generate

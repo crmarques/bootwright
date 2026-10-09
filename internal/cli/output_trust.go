@@ -2,11 +2,11 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"strconv"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 )
 
@@ -24,9 +24,7 @@ func validTrustReport(report *enrollment.Report) bool {
 
 func writeTrustReport(out io.Writer, command string, report *enrollment.Report, jsonMode bool) error {
 	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{
+		return writeEnvelope(out, commandEnvelope{
 			SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
 			Result: displayTrustReport(report), Diagnostics: []diagnostic{}, Logs: []string{},
 		})
@@ -120,10 +118,7 @@ func endpointToken(address string, port int) string {
 	if address == "" {
 		return ""
 	}
-	if port == 0 || port == 22 {
-		return address
-	}
-	return "[" + address + "]:" + strconv.Itoa(port)
+	return trust.HostToken(address, port)
 }
 
 // trustDetail shows the fingerprint an operator compares, for a supersede the

@@ -41,15 +41,16 @@ func TestGeneratedIntegrations(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workspace, "fixture-alpha", "input.yaml"), nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	// Bash is the qualified shell for this delivery. The other generated
-	// integrations still ship and are still exercised by the same cases; select
-	// them with BOOTWRIGHT_TEST_ALL_SHELLS=1 on a runner that provides them.
+	// Bash is mandatory. An explicitly supplied Zsh runtime qualifies its
+	// no-space behavior without changing the portable gate dependencies.
 	shells := []struct{ name, executable, variable string }{
 		{"bash", "bash", "BOOTWRIGHT_TEST_BASH"},
 	}
+	if os.Getenv("BOOTWRIGHT_TEST_ZSH") != "" || os.Getenv("BOOTWRIGHT_TEST_ALL_SHELLS") == "1" {
+		shells = append(shells, struct{ name, executable, variable string }{"zsh", "zsh", "BOOTWRIGHT_TEST_ZSH"})
+	}
 	if os.Getenv("BOOTWRIGHT_TEST_ALL_SHELLS") == "1" {
 		shells = append(shells,
-			struct{ name, executable, variable string }{"zsh", "zsh", "BOOTWRIGHT_TEST_ZSH"},
 			struct{ name, executable, variable string }{"fish", "fish", "BOOTWRIGHT_TEST_FISH"},
 			struct{ name, executable, variable string }{"powershell", "pwsh", "BOOTWRIGHT_TEST_POWERSHELL"},
 		)
@@ -98,6 +99,7 @@ func TestGeneratedIntegrations(t *testing.T) {
 						{"no withdrawn watch flag", []string{"status", "--w"}, nil},
 						{"no withdrawn verbose flag", []string{"apply", "--v"}, nil},
 						{"input directory flag", []string{"context", "init", "--input"}, []string{"--input-dir"}},
+						{"single directory candidate", []string{"context", "init", "--input-dir", "fixture-alp"}, []string{"fixture-alpha/"}},
 						{"directory paths", []string{"context", "init", "--input-dir", "fixture"}, []string{"fixture-alpha/", "fixture-beta/"}},
 						{"directory paths exclude files", []string{"context", "init", "--input-dir", "fixture-alpha/"}, []string{"fixture-alpha/nested/"}},
 						{"file paths include directories", []string{"validate", "--file", "fixture-alpha/"}, []string{"fixture-alpha/input.yaml", "fixture-alpha/nested/"}},
@@ -118,11 +120,19 @@ func TestGeneratedIntegrations(t *testing.T) {
 								t.Fatalf("query completion: %v\n%s", err, output)
 							}
 							var candidates []string
+							noSpace := false
 							for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+								if line == ":nospace" {
+									noSpace = true
+									continue
+								}
 								candidate, _, _ := strings.Cut(line, "\t")
 								if candidate != "" {
 									candidates = append(candidates, candidate)
 								}
+							}
+							if (shell.name == "bash" || shell.name == "zsh") && test.name == "single directory candidate" && !noSpace {
+								t.Fatalf("shell appends a space after a directory candidate: %q", output)
 							}
 							if !reflect.DeepEqual(candidates, test.want) {
 								t.Fatalf("candidates = %q; want %q; output = %q", candidates, test.want, output)
@@ -146,17 +156,27 @@ func shellQuery(t *testing.T, ctx context.Context, shell, runtime, script string
 	line := "bootwright " + strings.Join(words, " ")
 	switch shell {
 	case "bash":
-		program := `source "$1"
+		program := `bootwright_no_space=0
+compopt() {
+    if [[ $1 == -o && $2 == nospace ]]; then bootwright_no_space=1; fi
+    if [[ $1 == +o && $2 == nospace ]]; then bootwright_no_space=0; fi
+}
+source "$1"
 shift
 COMP_WORDS=(bootwright "$@")
 COMP_CWORD=$((${#COMP_WORDS[@]}-1))
 _bootwright_complete
-if ((${#COMPREPLY[@]})); then printf '%s\n' "${COMPREPLY[@]}"; fi`
+if ((${#COMPREPLY[@]})); then printf '%s\n' "${COMPREPLY[@]}"; fi
+if ((bootwright_no_space)); then printf '%s\n' :nospace; fi`
 		return exec.CommandContext(ctx, runtime, append([]string{"--noprofile", "--norc", "-c", program, "completion-test", script}, words...)...)
 	case "zsh":
-		program := `compdef() { :; }
+		program := `bootwright_no_space=0
+compdef() { :; }
 compadd() {
-    while (( $# )) && [[ $1 != -- ]]; do shift; done
+    while (( $# )) && [[ $1 != -- ]]; do
+        if [[ $1 == -S && $2 == "" ]]; then bootwright_no_space=1; fi
+        shift
+    done
     shift
     local index=1 candidate
     for candidate in "$@"; do
@@ -172,7 +192,8 @@ source "$1"
 shift
 words=(bootwright "$@")
 CURRENT=${#words}
-_bootwright_complete`
+_bootwright_complete
+if ((bootwright_no_space)); then printf '%s\n' :nospace; fi`
 		return exec.CommandContext(ctx, runtime, append([]string{"-f", "-c", program, "completion-test", script}, words...)...)
 	case "fish":
 		return exec.CommandContext(ctx, runtime, "--no-config", "-c", `source $argv[1]; complete --do-complete=$argv[2]`, script, line)

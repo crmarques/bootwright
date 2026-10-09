@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -69,7 +70,7 @@ func validateFlagValues(flags *pflag.FlagSet, path string, spec commandSpec) str
 			continue
 		}
 		if len(flag.enum) > 0 && !contains(flag.enum, value) {
-			return "--" + flag.name + " has an unsupported value"
+			return "--" + flag.name + " must be one of: " + strings.Join(flag.enum, ", ")
 		}
 	}
 	return ""
@@ -225,7 +226,7 @@ func allowsEmpty(path, name string) bool {
 }
 
 func dnsLabel(value string) bool {
-	return len(value) <= 63 && regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`).MatchString(value)
+	return api.ValidLexical("name", value)
 }
 
 func contains(values []string, target string) bool {

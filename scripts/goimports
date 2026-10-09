@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+tools=$("$repository/scripts/cache-dir")/tools
+mkdir -p "$tools"
+"$repository/scripts/go" -C "$repository/scripts/tools" build -mod=readonly \
+    -trimpath -o "$tools/goimports" golang.org/x/tools/cmd/goimports
+GOTOOLCHAIN=$("$repository/scripts/go" env GOTOOLCHAIN)
+export GOTOOLCHAIN
+exec "$tools/goimports" "$@"

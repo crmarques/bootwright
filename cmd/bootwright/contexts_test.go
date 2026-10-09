@@ -225,7 +225,7 @@ func TestAHandRemovedContextIsNamedAndAbandonedByItsPurge(t *testing.T) {
 func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) {
 	services, repository, input, root := contextFixture(t)
 	out, stderr := contextRun(t, services, 0, "context", "init", "--name", "test")
-	if stderr != "" || !strings.Contains(out, "Input configured  false") || strings.Contains(out, "Files copied") {
+	if stderr != "" || !strings.Contains(out, "Input    not imported") || strings.Contains(out, "Files copied") {
 		t.Fatal("unexpected empty context result", out, stderr)
 	}
 	registry, err := repository.View(context.Background())

@@ -1,0 +1,19 @@
+Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Stop every Machine it takes back first (bootwright machine stop); a plan that deletes disks needs --authorize data-loss. Review the plan before confirming; --yes skips ordinary confirmation.
+
+Usage:
+  bootwright destroy [flags]
+
+Examples:
+  bootwright destroy --context lab
+
+Flags:
+      --authorize stringArray   Acknowledge a planned risk (data-loss) (values: data-loss)
+      --yes                     Confirm the command's ordinary confirmation
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

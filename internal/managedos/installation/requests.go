@@ -2,11 +2,11 @@ package installation
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
-	"slices"
 )
 
 // Identity names the block, context and Machine one request belongs to.

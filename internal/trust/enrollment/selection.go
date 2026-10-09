@@ -2,7 +2,6 @@ package enrollment
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -77,11 +76,4 @@ func replaceable(selection []candidate, selected, replace []string, contextName 
 		}
 	}
 	return nil
-}
-
-func token(address string, port int) string {
-	if port == 0 || port == 22 {
-		return address
-	}
-	return "[" + address + "]:" + strconv.Itoa(port)
 }

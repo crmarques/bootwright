@@ -357,12 +357,14 @@ func TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst(t *testing.T) {
 		{"a malformed record", "not a record", "the adapter structured result was incomplete"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			script := `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; printf '` + strings.Repeat(group, 8) + test.record +
-				`\n' >&3; (exec >/dev/null 2>&1 4<&-; sleep 5) & exit 2`
 			for round := range 6 {
+				gate := filepath.Join(t.TempDir(), "progress-entered")
+				script := `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; printf '` + group + `' >&3; ` +
+					`while ! test -f "$1"; do sleep 0.01; done; printf '` + strings.Repeat(group, 8) + test.record +
+					`\n' >&3; (exec >/dev/null 2>&1 4<&-; sleep 5) & exit 2`
 				var adapter *exec.Cmd
 				runner := sweepingRunner(t, func() *exec.Cmd {
-					adapter = exec.Command("/bin/sh", "-c", script)
+					adapter = exec.Command("/bin/sh", "-c", script, "adapter", gate)
 					return adapter
 				})
 				runner.drain = time.Nanosecond
@@ -375,6 +377,11 @@ func TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst(t *testing.T) {
 						return
 					}
 					held = true
+					// The adapter cannot exit until this callback holds the run;
+					// after an exit, progress is intentionally suppressed.
+					if err := os.WriteFile(gate, nil, 0600); err != nil {
+						t.Fatal(err)
+					}
 					for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
 						if _, err := os.Stat(fmt.Sprintf("/proc/%d", adapter.Process.Pid)); errors.Is(err, os.ErrNotExist) {
 							break
@@ -385,6 +392,9 @@ func TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				_, err := runner.Run(ctx, request)
 				cancel()
+				if !held {
+					t.Fatal("the adapter exited without entering the progress handshake")
+				}
 				reported := diagnostics.Of(err)
 				if len(reported) != 1 || reported[0].Message != test.message {
 					t.Fatalf("round %d reported %+v (%v), want %q", round, reported, err, test.message)

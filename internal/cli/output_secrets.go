@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"io"
 	"slices"
 	"strconv"
@@ -233,9 +232,7 @@ func writeSecretCheck(out, errOut io.Writer, command string, result *custody.Che
 	presentation := displaySecretCheck(result)
 	diagnostics = displayDiagnostics(diagnostics)
 	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: exitCode == 0, ExitCode: exitCode, Result: presentation, Diagnostics: diagnostics, Logs: []string{}})
+		return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: exitCode == 0, ExitCode: exitCode, Result: presentation, Diagnostics: diagnostics, Logs: []string{}})
 	}
 	if err := writeHumanDiagnostics(errOut, diagnostics); err != nil {
 		return err
@@ -246,9 +243,7 @@ func writeSecretCheck(out, errOut io.Writer, command string, result *custody.Che
 func writeSecretList(out io.Writer, command string, result *custody.ListResult, jsonMode bool) error {
 	presentation := displaySecretList(result)
 	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0, Result: presentation, Diagnostics: []diagnostic{}, Logs: []string{}})
+		return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0, Result: presentation, Diagnostics: []diagnostic{}, Logs: []string{}})
 	}
 	return writeSecretListText(out, result)
 }
@@ -323,9 +318,7 @@ func writeEncryptionMutation(out io.Writer, path string, result *encryption.Muta
 
 func writeEncryptionStatus(out io.Writer, command string, result *encryption.StatusResult, jsonMode bool) error {
 	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0, Result: displayEncryptionStatus(result), Diagnostics: []diagnostic{}, Logs: []string{}})
+		return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0, Result: displayEncryptionStatus(result), Diagnostics: []diagnostic{}, Logs: []string{}})
 	}
 	var text display
 	text.headline("", "Secret encryption")

@@ -33,7 +33,6 @@ type SecretService interface {
 }
 
 type EncryptionService interface {
-	Types() []string
 	Init(context.Context, encryption.EncryptionInitRequest) (*encryption.MutationResult, error)
 	Status(context.Context, encryption.EncryptionStatusRequest) (*encryption.StatusResult, error)
 	Rotate(context.Context, encryption.EncryptionRotateRequest) (*encryption.MutationResult, error)

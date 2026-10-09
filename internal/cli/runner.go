@@ -62,6 +62,7 @@ func New(config Config) *Runner {
 
 func newCommandTree(r *Runner) (*cobra.Command, error) {
 	root := &cobra.Command{Use: "bootwright", Short: "Coordinate declarative day-0 platform bootstrap", SilenceErrors: true, SilenceUsage: true, DisableSuggestions: true}
+	root.Example = "  bootwright help context init\n  bootwright version\n  bootwright validate --file ./input"
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetOut(r.config.Out)
 	root.SetErr(r.config.ErrOut)
@@ -79,7 +80,22 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 			parent = child
 		}
 		parent.Short, parent.Long = spec.short, spec.long
+		parent.Example = helpExample(spec.path)
 		parent.Annotations = map[string]string{"bootwright.command": spec.path}
+		if spec.payload {
+			parent.Annotations["bootwright.payload"] = "true"
+		}
+		if spec.stopAtPayload {
+			parent.Annotations["bootwright.stop-at-payload"] = "true"
+		}
+		if !spec.implemented && !presentationCommand(spec.path) {
+			parent.Short += " (unavailable)"
+			parent.Long = spec.long
+			if parent.Long == "" {
+				parent.Long = spec.short
+			}
+			parent.Long += ". This command is recognized but not implemented."
+		}
 		if spec.payload {
 			parent.Use += " <command>..."
 		}
@@ -93,11 +109,7 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 		}
 		parent.RunE = func(*cobra.Command, []string) error { return nil }
 	}
-	var catalog completionCatalog
-	if r.config.Services.Encryption != nil {
-		catalog.secretEncryptionTypes = r.config.Services.Encryption.Types
-	}
-	catalog.paths = r.config.CompletionPaths
+	catalog := completionCatalog{paths: r.config.CompletionPaths}
 	if err := configureCompletion(root, catalog); err != nil {
 		return nil, err
 	}

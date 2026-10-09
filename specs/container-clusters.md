@@ -135,6 +135,11 @@ applies its own default.
 
 ## Boot media
 
+Not yet met: cluster names admitted by the API can exceed the block identity
+bound once `cluster-media-` or `cluster-install-` is prefixed; planning then
+refuses as an object-less `lifecycle.state` instead of admission naming
+`metadata.name`; tracked as [B411](milestones/backlog.md#b411).
+
 The block `cluster-media-<cluster>` produces the cluster's agent boot image. It
 requires the managed `ArtifactServer` its `agent.redfishVirtualMedia` selection
 names, because that is where the image is published, and nothing else: the name

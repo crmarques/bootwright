@@ -1,0 +1,19 @@
+Validate a complete desired-state input universe
+
+Usage:
+  bootwright validate [flags]
+
+Examples:
+  bootwright validate --file ./input --output json
+
+Flags:
+  -f, --file stringArray   Supply an input file or directory (repeatable)
+      --output string      Select output mode (values: text, json) (default "text")
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

@@ -877,9 +877,9 @@ func cliGoldens() []cliGolden {
 		// whose use case this build does not provide.
 		{
 			args: "status --output yaml", code: 2,
-			stderr: "[FAIL] cli.usage: --output has an unsupported value\nUsage: bootwright status [flags]\nRun 'bootwright help' for available commands.\n",
+			stderr: "[FAIL] cli.usage: --output must be one of: text, json\nUsage: bootwright status [flags]\nRun 'bootwright help' for available commands.\n",
 		},
-		{golden: "cli-usage-json", args: "status --output json --verbose", code: 2},
+		{golden: "cli-usage-json", args: "status --output json --yes", code: 2},
 		{
 			args: "status", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented },
 			stderr: "[FAIL] cli.not-implemented: bootwright status is not implemented\n",

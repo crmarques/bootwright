@@ -3,7 +3,6 @@ package inventory
 type ListRequest struct {
 	ContextName string
 	Clusters    []string
-	Silent      bool
 	// Power asks each selected Machine's own management controller what its
 	// power is. It is the one thing this command contacts a host for, so it is
 	// opt-in: without it the command reads local state alone.

@@ -156,19 +156,29 @@ sudo journalctl -u bootwright-lab-baremetal-artifacts-lab-artifacts
 
 ## Run it
 
-Run the block one line at a time from the repository root; the
+Build from a clean committed checkout and change the host conventions only
+in a copy outside Git:
+
+```sh
+lab_baremetal_input=$(mktemp -d /tmp/bootwright-lab-baremetal.XXXXXX)
+cp -R examples/lab-baremetal/. "$lab_baremetal_input/"
+```
+
+Edit that copy and keep the variable in the shell that runs the journey. Run
+the block one line at a time from the repository root; the
 [operator guide](../../docs/operator-guide.md#prepare-a-host) covers the build
 and privileges. `setup`, `apply` and `destroy` present what they will do and
 ask for confirmation, and any command may ask for sudo authorization.
 
 ```sh
 make build
+./bin/bootwright version
 ./bin/bootwright setup
 ./bin/bootwright media add --name rhel-9.8-x86_64-boot.iso --from-file /path/to/rhel-9.8-x86_64-boot.iso
 ./bin/bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.8-x86_64-dvd.iso
-./bin/bootwright validate -f examples/lab-baremetal
+./bin/bootwright validate -f "$lab_baremetal_input"
 ./bin/bootwright context init --name lab-baremetal
-./bin/bootwright context update --name lab-baremetal --input-dir "$PWD/examples/lab-baremetal" --yes
+./bin/bootwright context update --name lab-baremetal --input-dir "$lab_baremetal_input" --yes
 ./bin/bootwright secret generate
 ./bin/bootwright secret set --context lab-baremetal --name lab-bmc-credentials --username <account> --password-stdin
 ./bin/bootwright secret set --context lab-baremetal --name lab-bmc-ca --certificate-file /path/to/lab-bmc-ca.pem

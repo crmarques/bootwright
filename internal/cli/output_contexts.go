@@ -41,8 +41,9 @@ func contextSummaryFields(text *display, summary contexts.Summary) {
 	text.fields(
 		field{Label: "Name", Value: summary.Name},
 		field{Label: "Mode", Value: string(summary.Mode)},
-		field{Label: "Current", Value: strconv.FormatBool(summary.Current)},
-		field{Label: "Input configured", Value: strconv.FormatBool(summary.Configured)},
+		field{Label: "Current", Value: contextCurrent(summary.Current)},
+		field{Label: "Input", Value: contextInput(summary.Configured)},
+		field{Label: "Next", Value: contextNext(summary)},
 	)
 }
 
@@ -95,7 +96,7 @@ func writeContextList(out io.Writer, result *contexts.ListResult) error {
 	slices.SortStableFunc(summaries, func(a, b contexts.Summary) int { return strings.Compare(a.Name, b.Name) })
 	rows := make([][]string, 0, len(summaries))
 	for _, summary := range summaries {
-		rows = append(rows, []string{summary.Name, string(summary.Mode), strconv.FormatBool(summary.Current), strconv.FormatBool(summary.Configured)})
+		rows = append(rows, []string{summary.Name, string(summary.Mode), contextCurrent(summary.Current), contextInput(summary.Configured)})
 	}
 	text.table([]string{"NAME", "MODE", "CURRENT", "INPUT"}, rows)
 	return text.writeTo(out)
@@ -131,4 +132,31 @@ func writeContextDelete(out, errOut io.Writer, result *contexts.DeleteResult) er
 	}
 	text.fields(fields...)
 	return text.writeTo(out)
+}
+
+func contextCurrent(selected bool) string {
+	if selected {
+		return "yes"
+	}
+	return "no"
+}
+
+func contextInput(configured bool) string {
+	if configured {
+		return "imported"
+	}
+	return "not imported"
+}
+
+func contextNext(summary contexts.Summary) string {
+	switch summary.Mode {
+	case contexts.Initializing:
+		return "bootwright context init --name " + summary.Name
+	case contexts.Deleting:
+		return "bootwright context delete --name " + summary.Name + " --purge"
+	}
+	if !summary.Configured {
+		return "bootwright context update --name " + summary.Name + " --input-dir <directory>"
+	}
+	return "bootwright validate --context " + summary.Name
 }

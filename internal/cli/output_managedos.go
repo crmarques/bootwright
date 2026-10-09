@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"strconv"
 	"strings"
@@ -59,9 +58,7 @@ func writeMediaMutation(out io.Writer, result *media.MutationResult) error {
 
 func writeMediaList(out io.Writer, command string, result *media.ListResult, jsonMode bool) error {
 	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{
+		return writeEnvelope(out, commandEnvelope{
 			SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
 			Result: displayMediaList(result), Diagnostics: []diagnostic{}, Logs: []string{},
 		})

@@ -380,3 +380,21 @@ func TestJSONModeProgressWritesNothing(t *testing.T) {
 		t.Fatalf("text-mode progress = %q, want %q", out.String(), want)
 	}
 }
+
+func TestDeferredWidthDeclinesTerminalRedraw(t *testing.T) {
+	presenter, clock, out := newTestProgress()
+	presenter.columns = func() int { return 0 }
+	ctx := context.Background()
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "running"})
+	clock.advance(2 * progressHeartbeat)
+	if strings.Count(out.String(), "still running") != 2 {
+		t.Fatalf("heartbeat rows = %q", out.String())
+	}
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Detail: "one step", Status: "running", Nested: true})
+	clock.advance(progressHeartbeat)
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "changed"})
+	presenter.finish()
+	if strings.ContainsAny(out.String(), "\r\x1b") || !strings.HasSuffix(out.String(), "\n") {
+		t.Fatalf("non-terminal got cursor controls: %q", out.String())
+	}
+}

@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"strings"
+
 	"github.com/spf13/pflag"
 )
 
@@ -19,6 +21,9 @@ func (v *scalarValue) Set(value string) error {
 
 func registerFlags(flags *pflag.FlagSet, specs []flagSpec) {
 	for _, spec := range specs {
+		if len(spec.enum) > 0 {
+			spec.help += " (values: " + strings.Join(spec.enum, ", ") + ")"
+		}
 		if spec.required {
 			spec.help += " (required)"
 		}
@@ -33,9 +38,6 @@ func registerFlags(flags *pflag.FlagSet, specs []flagSpec) {
 		annotations := map[string][]string{}
 		if len(spec.enum) > 0 {
 			annotations["bootwright.enum"] = append([]string(nil), spec.enum...)
-		}
-		if spec.catalog != "" {
-			annotations["bootwright.catalog"] = []string{spec.catalog}
 		}
 		if spec.path != "" {
 			annotations["bootwright.path"] = []string{spec.path}

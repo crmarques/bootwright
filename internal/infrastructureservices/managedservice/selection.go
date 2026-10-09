@@ -1,7 +1,6 @@
 package managedservice
 
 import (
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -9,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 )
 
 // ContentRootPrefix is outside the Bootwright state root, so an owned service

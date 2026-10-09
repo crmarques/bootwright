@@ -171,6 +171,10 @@ mismatched, duplicate or ambiguous marker grants no exception. It grants
 selection only, never package authenticity or execution authority; see
 [the add-on boundary](../add-ons.md#trust-boundary).
 
+Not yet met: a hard-linked marker refuses the whole input read as
+`input.symlink` rather than only withholding the selection exception; tracked
+as [B365](../milestones/backlog.md#b365).
+
 An excluded-file warning identifies its relative path, Bootwright object
 identities and safe recovery guidance under the
 [validation-report contract](../cli/output.md#json-output). Only a path within

@@ -1,9 +1,9 @@
 package baremetal
 
 import (
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )

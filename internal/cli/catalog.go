@@ -1,5 +1,7 @@
 package cli
 
+import "strings"
+
 type commandSpec struct {
 	path          string
 	short         string
@@ -30,7 +32,6 @@ type flagSpec struct {
 	// enumList marks a comma-separated list whose members come from enum, so
 	// validation checks each member instead of the whole value.
 	enumList bool
-	catalog  string
 	path     string
 	// undisclosed marks a value no output repeats.
 	undisclosed bool
@@ -80,12 +81,6 @@ func enumFlag(name, value, help string, values ...string) flagSpec {
 func requiredEnumFlag(name, help string, values ...string) flagSpec {
 	f := enumFlag(name, "", help, values...)
 	f.required = true
-	return f
-}
-
-func requiredCatalogFlag(name, help, catalog string) flagSpec {
-	f := requiredFlag(name, help)
-	f.catalog = catalog
 	return f
 }
 
@@ -182,6 +177,7 @@ func preflightFlags() []flagSpec {
 // they did not choose, over a host key they may be asked to confirm, whose
 // exit status is the client's rather than a Bootwright result.
 func sessionCommand(spec commandSpec) commandSpec {
+	spec.short += " as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status"
 	spec.long = spec.short + ". The session runs as the identity the Machine's desired state authorizes," +
 		" over a host key proved before any credential is offered; an unproved key is confirmed" +
 		" interactively or refused. The exit status is the client's."
@@ -193,6 +189,7 @@ func sessionCommand(spec commandSpec) commandSpec {
 }
 
 func accessCommand(spec commandSpec, applicability string) commandSpec {
+	spec.short = strings.Replace(spec.short, "; do not", " for independent operator execution; do not", 1)
 	spec.long = spec.short + ". Success prints a bounded access descriptor for independent operator execution."
 	if spec.payload {
 		spec.long += " Use -- before a flag-shaped first payload value to preserve it as data."

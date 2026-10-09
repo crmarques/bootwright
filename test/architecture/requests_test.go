@@ -19,18 +19,6 @@ import (
 	"testing/fstest"
 )
 
-// unreadRequestFieldsAwaitingRemoval are the request fields no production code
-// reads yet which are not an ignored flag: each copies a presentation choice
-// the CLI already honors by reading its own flag, so only the copy is dead.
-// Removing a field removes its entry, and an entry that is read or gone fails
-// the test, so the list only shrinks.
-func unreadRequestFieldsAwaitingRemoval() map[string]string {
-	return map[string]string{
-		"github.com/crmarques/bootwright/internal/machine/inventory.ListRequest.Silent":    "machine list --silent is read from the flag when the CLI writes the result (internal/cli/results.go)",
-		"github.com/crmarques/bootwright/internal/workspace/contexts.CurrentRequest.Short": "context current --short is read from the flag when the CLI writes the result (internal/cli/results.go)",
-	}
-}
-
 // TestEveryRequestFieldIsRead refuses a request field that production code
 // never reads: every exported field of a request type a capability declares in
 // its requests.go is read by non-test code of the module, or it is removed with
@@ -39,17 +27,8 @@ func unreadRequestFieldsAwaitingRemoval() map[string]string {
 // json-tagged field of a request with a Canonical method is read by the
 // encoder that freezes the request; a json tag alone exempts nothing.
 func TestEveryRequestFieldIsRead(t *testing.T) {
-	awaiting := unreadRequestFieldsAwaitingRemoval()
-	unread := unreadRequestFields(t, os.DirFS(filepath.Join("..", "..")))
-	for _, field := range unread {
-		if _, ok := awaiting[field]; !ok {
-			t.Errorf("%s is never read by production code: read it where the request is served, or remove it and whatever sets it", field)
-		}
-	}
-	for _, field := range slices.Sorted(maps.Keys(awaiting)) {
-		if !slices.Contains(unread, field) {
-			t.Errorf("%s is no longer an unread request field: remove it from unreadRequestFieldsAwaitingRemoval", field)
-		}
+	for _, field := range unreadRequestFields(t, os.DirFS(filepath.Join("..", ".."))) {
+		t.Errorf("%s is never read by production code: read it where the request is served, or remove it and whatever sets it", field)
 	}
 }
 

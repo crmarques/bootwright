@@ -25,16 +25,16 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-No slice is active; X43, X24, X45 and X46 are delivered.
+X44 implementation is finished; verification is blocked by B470 (D126).
 
-- **Next for agents:** deliver X48, then X44, including
-  [B470](milestones/m1.md#b470), the toolchain move its gates need; X47 follows.
+- **Next for agents:** deliver X48; X44 implementation is finished, with
+  [B470](milestones/m1.md#b470)'s upgrade deferred (D126). Then rerun its gates.
 - **Next for operator:** before a build that contains X46 touches a host,
   destroy every live context with the build that applied it, then run `setup`
   once: X21, X29 to X32, X43, X24, X45 and X46 moved request and record
   versions, the keyring format, the automation digest and the plan encoding.
-  After X44, run M1's closing lab-rhel gate (D59): B19, B20, B270, B339 and
-  [B466](milestones/m1.md#b466).
+  M1's [closing validation](../docs/operator-guide.md#m1-closing-validation)
+  covers D59, B19, B20, B270, B339 and [B466](milestones/m1.md#b466).
   After M1: X47, [B73](milestones/m2.md#b73)'s rehearsal,
   [B305](milestones/m2.md#b305)'s observation and M2's cluster gates, then
   M3's [B61](milestones/m3.md#b61) and cluster gates. Record runs per the

@@ -3,12 +3,12 @@ package ansiblerunner
 import (
 	"bytes"
 	"encoding/json"
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"io"
 	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"io"
 	"strconv"
 
@@ -136,9 +135,7 @@ func displayStatusClusters(clusters []lifecycle.ClusterSummary) []statusCluster 
 // human text passes raw values, because display escapes each one it writes.
 func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMode bool) error {
 	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{
+		return writeEnvelope(out, commandEnvelope{
 			SchemaVersion: "v1alpha1", Command: "status", OK: true, ExitCode: 0,
 			Result: displayStatus(result), Diagnostics: []diagnostic{}, Logs: []string{},
 		})

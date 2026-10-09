@@ -72,7 +72,7 @@ func TestContextSuccessJourneysHaveCompleteTextResults(t *testing.T) {
 					t.Fatal(out.String())
 				}
 			default:
-				if !strings.Contains(out.String(), "Mode              ready\n  Current           true\n") {
+				if !strings.Contains(out.String(), "Mode     ready\n  Current  yes\n") {
 					t.Fatal("missing current details", out.String())
 				}
 			}
@@ -121,7 +121,7 @@ func TestContextAdmissionWarningsArePrintedOnceAndEscaped(t *testing.T) {
 	if err := writeContextCurrent(&out, result.current, false); err != nil {
 		t.Fatal("context identity display", out.String(), err)
 	}
-	if strings.Count(out.String(), escaped) != 1 || strings.Contains(out.String(), raw) {
+	if strings.Count(out.String(), escaped) != 2 || strings.Contains(out.String(), raw) {
 		t.Fatal("context identity display", out.String())
 	}
 }
@@ -204,7 +204,7 @@ func TestNewJourneysDiscardResultsWhenServiceCancels(t *testing.T) {
 		var out, errOut bytes.Buffer
 		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(ctx, args)
 		cancel()
-		if code != 1 || record.calls != 1 || !strings.Contains(out.String()+errOut.String(), "runtime.canceled") || strings.Contains(out.String(), "Input configured") || args[0] == "context" && out.Len() != 0 {
+		if code != 1 || record.calls != 1 || !strings.Contains(out.String()+errOut.String(), "runtime.canceled") || strings.Contains(out.String(), "Input") || args[0] == "context" && out.Len() != 0 {
 			t.Fatal("canceled service leaked result", args, code, out.String(), errOut.String())
 		}
 	}
@@ -216,7 +216,7 @@ func TestContextInitWithoutInputUsesDefaults(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"context", "init", "--name", "test"})
 	request, ok := record.request.(contexts.InitRequest)
-	if code != 0 || !ok || request != (contexts.InitRequest{Name: "test"}) || errOut.Len() != 0 || !strings.Contains(out.String(), "Input configured  false") || strings.Contains(out.String(), "Files copied") {
+	if code != 0 || !ok || request != (contexts.InitRequest{Name: "test"}) || errOut.Len() != 0 || !strings.Contains(out.String(), "Input    not imported") || strings.Contains(out.String(), "Files copied") {
 		t.Fatalf("default init contract: code=%d request=%#v stdout=%q stderr=%q", code, record.request, out.String(), errOut.String())
 	}
 }

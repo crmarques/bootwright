@@ -1,9 +1,10 @@
 [OK] Context initialized
 
-  Name              lab
-  Mode              ready
-  Current           true
-  Input configured  true
+  Name     lab
+  Mode     ready
+  Current  yes
+  Input    imported
+  Next     bootwright validate --context lab
 
 Admitted input
   Files copied     14

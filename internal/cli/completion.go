@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 
-	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -13,12 +12,10 @@ import (
 const (
 	completionRequest               = "__bootwright_complete"
 	completionRequestNoDescriptions = "__bootwright_complete_no_desc"
-	secretEncryptionTypeCatalog     = "secret-encryption-types"
 )
 
 type completionCatalog struct {
-	secretEncryptionTypes func() []string
-	paths                 PathCandidates
+	paths PathCandidates
 }
 
 // PathCandidates lists completion candidates for a path-valued flag, where kind
@@ -43,10 +40,6 @@ func configureCompletion(root *cobra.Command, catalog completionCatalog) error {
 		})
 	}
 	return nil
-}
-
-func completionCandidates(root *cobra.Command, words []string, descriptions bool) []string {
-	return completionCandidatesWithCatalog(root, words, descriptions, completionCatalog{})
 }
 
 func completionCandidatesWithCatalog(root *cobra.Command, words []string, descriptions bool, catalog completionCatalog) []string {
@@ -218,17 +211,12 @@ func completionValues(flag *pflag.Flag, prefix, attached string, catalog complet
 		return slices.Compact(candidates)
 	}
 	values := flag.Annotations["bootwright.enum"]
-	dynamic := false
-	if names := flag.Annotations["bootwright.catalog"]; len(names) == 1 && names[0] == secretEncryptionTypeCatalog && catalog.secretEncryptionTypes != nil {
-		values = catalog.secretEncryptionTypes()
-		dynamic = true
-	}
 	if flag.Value.Type() == "bool" {
 		values = []string{"0", "1", "F", "FALSE", "False", "T", "TRUE", "True", "f", "false", "t", "true"}
 	}
 	var candidates []string
 	for _, value := range values {
-		if strings.HasPrefix(value, prefix) && (!dynamic || api.ValidLexical("name", value)) {
+		if strings.HasPrefix(value, prefix) {
 			candidates = append(candidates, attached+value)
 		}
 	}

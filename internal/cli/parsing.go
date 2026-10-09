@@ -40,6 +40,7 @@ type resolutionError string
 
 const (
 	separatorNotAccepted    resolutionError = "separator is not accepted"
+	unknownFlag             resolutionError = "unknown flag"
 	flagNotAccepted         resolutionError = "flag is not accepted at this position"
 	flagValueMissing        resolutionError = "flag value is missing"
 	unknownCommand          resolutionError = "unknown command"
@@ -54,7 +55,7 @@ func trustedResolutionMessage(err error) string {
 	resolution, ok := err.(resolutionError)
 	if ok {
 		switch resolution {
-		case separatorNotAccepted, flagNotAccepted, flagValueMissing, unknownCommand,
+		case separatorNotAccepted, unknownFlag, flagNotAccepted, flagValueMissing, unknownCommand,
 			localFlagNotInherited, commandResolutionFailed, unknownHelpCommand:
 			return resolution.Error()
 		}
@@ -96,7 +97,10 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 		if strings.HasPrefix(arg, "-") && arg != "-" && !operands {
 			flag, attached := tokenFlag(root, current, arg)
 			if flag == nil {
-				return failure(args[i:], flagNotAccepted)
+				if knownFlag(root, arg) {
+					return failure(args[i:], flagNotAccepted)
+				}
+				return failure(args[i:], unknownFlag)
 			}
 			start := len(forwarded)
 			forwarded = append(forwarded, arg)
@@ -129,7 +133,7 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 		}
 		forwarded = append(forwarded, arg)
 		pathComplete = true
-		if current.CommandPath() == "bootwright cluster oc" || current.CommandPath() == "bootwright cluster kubectl" {
+		if current.Annotations["bootwright.stop-at-payload"] == "true" {
 			operands = true
 		}
 	}
@@ -218,10 +222,17 @@ func tokenFlag(root, current *cobra.Command, token string) (*pflag.Flag, bool) {
 }
 
 func hasPayload(command *cobra.Command) bool {
-	switch command.CommandPath() {
-	case "bootwright machine exec", "bootwright cluster exec", "bootwright cluster oc", "bootwright cluster kubectl":
+	return command.Annotations["bootwright.payload"] == "true"
+}
+
+func knownFlag(command *cobra.Command, token string) bool {
+	if flag, _ := tokenFlag(command.Root(), command, token); flag != nil {
 		return true
-	default:
-		return false
 	}
+	for _, child := range command.Commands() {
+		if !child.Hidden && knownFlag(child, token) {
+			return true
+		}
+	}
+	return false
 }

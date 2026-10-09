@@ -1,0 +1,19 @@
+Delete one stored image and its record. An image any context reserves is refused, because a frozen operation still needs exactly those bytes.
+
+Usage:
+  bootwright media delete [flags]
+
+Examples:
+  bootwright media delete --name installer.iso
+
+Flags:
+      --name string   Select the exact object name (required)
+      --yes           Confirm the command's ordinary confirmation
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

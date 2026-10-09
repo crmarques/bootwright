@@ -273,6 +273,63 @@ reaches on the artifact ports
 not yet run, as [development](development.md#qualified-hosts-and-images)
 records.
 
+## Network exposure
+
+Bootwright binds the listeners the graph declares and leaves the host firewall
+to the operator. Read the
+[listener contract](../specs/security.md#listener-exposure) before choosing a
+bind address: wildcard addresses expose every matching interface, DNS has no
+client authentication, and the emulated BMC has root access to libvirt and
+serves a basic-auth credential over HTTP. The emulated lab BMC stays on
+`127.0.0.1:8000`; it needs no LAN firewall opening.
+
+Open only the listeners a declared client needs. The lab defaults below are
+examples; use the graph's actual ports and source subnets. A physical BMC
+fetches from the controller's artifact server, so its network must route to
+that address and certificate.
+
+| Source | Destination on the service host | Use |
+| --- | --- | --- |
+| Selected Machine networks and controller | `3128/tcp` | Managed HTTP proxy, when selected |
+| Selected Machine/installer networks and controller | `53/udp`, `53/tcp` | Managed DNS |
+| Selected Machine/installer networks and controller | `123/udp` | Managed NTP |
+| BMC network | `8443/tcp`, or the declared HTTPS artifact port | Installer virtual media |
+| Installer network | `8443/tcp` | Private host-key and image delivery, when declared |
+| Installer network | `8080/tcp`, or the declared public artifact port | Public package tree, when declared |
+| Controller on the provider host | Loopback `8000/tcp` | Emulated BMC; no remote access |
+
+With firewalld, inspect the active zone and its existing grants first. Adding a
+source-scoped rule does not narrow an existing broad port/service grant or a
+trusted zone. Use a zone whose existing grants fit the intended client set.
+For one IPv4 source and listener, substitute the zone, source CIDR and port:
+
+```sh
+sudo firewall-cmd --get-active-zones
+sudo firewall-cmd --zone=<zone> --list-all
+sudo firewall-cmd --zone=<zone> --add-rich-rule='rule family="ipv4" source address="<source-cidr>" port port="8443" protocol="tcp" accept'
+```
+
+Repeat per permitted source, port and protocol, using `family="ipv6"` for an
+IPv6 source. Verify access from each actual client network before persisting
+the same rule:
+
+```sh
+sudo firewall-cmd --permanent --zone=<zone> --add-rich-rule='rule family="ipv4" source address="<source-cidr>" port port="8443" protocol="tcp" accept'
+sudo firewall-cmd --permanent --zone=<zone> --list-rich-rules
+```
+
+Runtime changes act immediately; permanent changes survive reboot and become
+runtime rules after a reload. The
+[firewall-cmd manual](https://firewalld.org/documentation/man-pages/firewall-cmd.html)
+owns those semantics. Remove the same rule with `--remove-rich-rule` from both
+configurations when its exposure is no longer needed.
+
+A local readiness answer proves that listener on the host, not its route or
+firewall from another network. Check the declared artifact endpoint from a
+BMC-network host and the DNS, NTP, proxy and artifact endpoints from a Machine
+network. An empty artifact root answers `404`; a TLS probe used only for that
+connectivity check does not qualify certificate trust.
+
 ## Run a lab journey
 
 Each lab makes the host the controller and the host of the managed services it
@@ -389,6 +446,62 @@ refuses while another Bootwright command holds the store:
 ```sh
 sudo flock --nonblock /var/lib/bootwright rm -- /var/lib/bootwright/media/<name>
 ```
+
+## M1 closing validation
+
+Run every repository gate from the M1 worktree:
+
+```sh
+make -k check docs-check race
+git diff --check
+```
+
+`-k` runs independent gates even when another fails; the command still fails
+if any gate fails. A known reachable vulnerability on the pinned Go toolchain
+is not a pass. The owner has deferred the Go upgrade, so
+[B466](../specs/milestones/m1.md#b466) remains open until its vulnerability
+check can pass. This command installs no controller packages and runs no lab
+effects.
+
+M1 also needs D59's extended [lab-rhel journey](../examples/lab-rhel/README.md#run-it)
+on a clean committed build. Before the new build touches a host, retire live
+contexts with the build that applied them as the
+[milestone status](../specs/milestones.md#status) requires. Use a disposable host
+missing at least one native root so setup or the controller stage acquires a
+package through the private Python path; an already-prepared host does not
+qualify that part of the gate. Keep a local run record outside Git.
+
+Besides the runbook's time, running-disk, machine-access, replay, restart,
+removal-refusal and final-unit checks, run these JSON status cases after the
+first complete apply as an unprivileged account under password-required sudo,
+with no matching `NOPASSWD` grant. A root or passwordless invocation does not
+qualify the missing-password refusal. Each case emits exactly one JSON
+document, no normal stderr output, and the indicated result:
+
+```sh
+sudo -v
+./bin/bootwright status --context lab-rhel --output json
+./bin/bootwright status --context lab-rhel --output json </dev/null
+sudo -k
+./bin/bootwright status --context lab-rhel --output json </dev/null
+```
+
+The first two exit `0`. The third exits `1` with `runtime.privilege` naming the
+missing password. Under a temporary sudoers policy on the disposable host
+that denies both the executable and its verified descriptor path, cache sudo
+credentials and repeat the redirected command: it exits `1` with
+`runtime.privilege` carrying the denial. Restore the policy before proceeding.
+
+During an interactive apply on Fedora with sudo's `use_pty`, and separately on
+RHEL 9.8, send one Ctrl-C: the command waits for bounded cleanup. Send a second:
+it exits at once with status `130`, leaving a usable terminal. Record both
+observations for [B339](../specs/milestones/m1.md#b339); an unavailable platform
+leaves its observation unrun.
+
+Record command results, build commit, clean source stamp and operation-log
+digests following [record a run](#record-a-run); the human owner accepts the
+[ledger row](acceptance.md#row-format). These host gates and B466 remain requirements before the
+owner can declare M1 done.
 
 ## Record a run
 

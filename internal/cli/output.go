@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf16"
@@ -24,6 +23,12 @@ type commandEnvelope struct {
 	Result        jsonResult   `json:"result"`
 	Diagnostics   []diagnostic `json:"diagnostics"`
 	Logs          []string     `json:"logs"`
+}
+
+func writeEnvelope(out io.Writer, envelope commandEnvelope) error {
+	encoder := json.NewEncoder(out)
+	encoder.SetEscapeHTML(false)
+	return encoder.Encode(envelope)
 }
 
 // jsonResult is a command's documented JSON result. Only the result types this
@@ -67,9 +72,7 @@ func writeFailure(out, errOut io.Writer, command, code, message string, exitCode
 func writeDiagnostics(out, errOut io.Writer, command string, diagnostics []diagnostic, exitCode int, jsonMode bool, logs []string) error {
 	diagnostics = displayDiagnostics(diagnostics)
 	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{
+		return writeEnvelope(out, commandEnvelope{
 			SchemaVersion: "v1alpha1",
 			Command:       escapeDisplayLine(command),
 			ExitCode:      exitCode,
@@ -96,9 +99,7 @@ func writeValidation(out, errOut io.Writer, command string, report *compilation.
 		Advisories:                advisories,
 	}
 	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0, Result: result, Diagnostics: diagnostics, Logs: []string{}})
+		return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0, Result: result, Diagnostics: diagnostics, Logs: []string{}})
 	}
 	if err := writeHumanDiagnostics(errOut, diagnostics); err != nil {
 		return err
@@ -108,9 +109,7 @@ func writeValidation(out, errOut io.Writer, command string, report *compilation.
 }
 
 func displayNames(values []string) []string {
-	values = append([]string{}, values...)
-	slices.Sort(values)
-	values = slices.Compact(values)
+	values = compilation.SortedNames(values)
 	for i := range values {
 		values[i] = escapeDisplayLine(values[i])
 	}

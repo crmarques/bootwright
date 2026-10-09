@@ -5,6 +5,7 @@ package nativelocal
 import (
 	"context"
 	"errors"
+
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )

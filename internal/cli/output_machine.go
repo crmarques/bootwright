@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"io"
 	"slices"
 	"strings"
@@ -61,9 +60,7 @@ func presentablePower(reading string) bool {
 
 func writeMachineList(out io.Writer, command string, result *inventory.ListResult, silent, jsonMode bool) error {
 	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{
+		return writeEnvelope(out, commandEnvelope{
 			SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
 			Result: displayMachineList(result), Diagnostics: []diagnostic{}, Logs: []string{},
 		})
@@ -133,9 +130,7 @@ func validMachinePower(result *power.Result) bool {
 
 func writeMachinePower(out io.Writer, command string, result *power.Result, jsonMode bool) error {
 	if jsonMode {
-		encoder := json.NewEncoder(out)
-		encoder.SetEscapeHTML(false)
-		return encoder.Encode(commandEnvelope{
+		return writeEnvelope(out, commandEnvelope{
 			SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
 			Result: machinePowerPresentation{
 				Context: escapeDisplayLine(result.Context), Machine: escapeDisplayLine(result.Machine),

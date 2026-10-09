@@ -7,6 +7,8 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
+type CurrentSelection func(context.Context) (string, error)
+
 // EffectiveState compiles the selected context's immutable input into the
 // graph a cluster name resolves in. Compiling it opens no host and writes
 // nothing.

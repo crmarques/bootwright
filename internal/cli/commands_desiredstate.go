@@ -66,7 +66,7 @@ func (s Services) nameRetiredFileSourceContext(ctx context.Context, err error, r
 	}
 	name := request.ContextName
 	if name == "" && len(request.Files) == 0 && s.Contexts != nil {
-		if current, currentErr := s.Contexts.Current(ctx, contexts.CurrentRequest{Short: true}); currentErr == nil && current != nil {
+		if current, currentErr := s.Contexts.Current(ctx, contexts.CurrentRequest{}); currentErr == nil && current != nil {
 			name = current.Context.Name
 		}
 	}

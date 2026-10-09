@@ -40,8 +40,11 @@ Build and verification tools are development dependencies; running the
 Bootwright executable never installs them. Dependency acquisition during a
 build may need network access. See [build knowledge](../.agents/knowledge/build-toolchain.md)
 for the exact toolchain selection and release metadata injection points.
-`scripts/tools` separately locks `govulncheck` v1.8.0 and its
-dependencies, keeping check tooling out of the application module graph.
+`scripts/tools` separately locks `govulncheck` v1.8.0, `goimports` from
+`golang.org/x/tools` v0.51.0, and their dependencies, keeping check tooling out
+of the application module graph. Run import formatting through
+`./scripts/goimports`; the architecture suite also rejects duplicate imports
+and mixed or misordered standard-library and module groups.
 Development checks keep their own pinned tool versions for reproducible
 verification: the [Ansible check tool lock and setup](../scripts/tools/ansible-check.md)
 is separate from the product execution bundle and builds its own pinned
@@ -90,11 +93,12 @@ operator-run harnesses below and the journeys in the
 ### Shell completion
 
 Completion tests require `bash` on the test runner's `PATH`, or
-`BOOTWRIGHT_TEST_BASH` set to an absolute executable path. The other generated
-integrations still ship and are covered by the same cases; select them with
-`BOOTWRIGHT_TEST_ALL_SHELLS=1`, which additionally requires `zsh`, `fish` and
-`pwsh` or their `BOOTWRIGHT_TEST_ZSH`, `BOOTWRIGHT_TEST_FISH` and
-`BOOTWRIGHT_TEST_POWERSHELL` overrides. These variables belong only to the test
+`BOOTWRIGHT_TEST_BASH` set to an absolute executable path. Set
+`BOOTWRIGHT_TEST_ZSH` to an absolute Zsh executable to additionally exercise
+Zsh, including the single-directory no-space behavior. The other generated
+integrations use the same cases with `BOOTWRIGHT_TEST_ALL_SHELLS=1`, which
+requires `zsh`, `fish` and `pwsh` or their `BOOTWRIGHT_TEST_ZSH`,
+`BOOTWRIGHT_TEST_FISH` and `BOOTWRIGHT_TEST_POWERSHELL` overrides. These variables belong only to the test
 harness; the Bootwright CLI does not read them. The gate fails if a selected
 runtime is missing.
 
@@ -105,6 +109,9 @@ runner provides them. PowerShell completion requires that preview release or
 later because stable `7.6` lacks the
 [empty-result fix](https://github.com/PowerShell/PowerShell/pull/27398). The
 generated script rejects older versions; it does not enable filename fallback.
+X44 additionally qualified the Bash and Zsh directory no-space cases on Zsh
+`5.9.2`, built from the [official release](https://www.zsh.org/pub/zsh-5.9.2.tar.xz)
+with its [published checksum](https://www.zsh.org/mla/announce/msg00136.html).
 A broader release-platform matrix remains part of release qualification.
 
 Completion verification sources and exercises the generated Bash script, and

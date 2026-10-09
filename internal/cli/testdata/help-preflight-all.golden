@@ -1,0 +1,17 @@
+Check all prerequisites. This command is recognized but not implemented.
+
+Usage:
+  bootwright preflight all [flags]
+
+Flags:
+      --dry-run              Limit work to the command's dry-run boundary
+      --output string        Select output mode (values: text, json) (default "text")
+      --trust-on-first-use   Observe unknown SSH keys without accepting them (default true)
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

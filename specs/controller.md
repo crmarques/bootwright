@@ -244,7 +244,13 @@ that resolution's own approved sources from the retained bundle holding them,
 projects them again under the embedded automation, and publishes the result as
 the new bundle that identity names. Every release, byte count, signer and
 publisher origin is preserved, no publisher or repository is consulted, and the
-native transaction is reused unless a selected root is missing. A retained
+native transaction is reused unless a selected root is missing.
+
+Not yet met: resuming an interrupted carry-forward reacquires its sources from
+the publisher instead of reading the retained approved bytes; tracked as
+[B261](milestones/backlog.md#b261).
+
+A retained
 bundle that cannot serve one of those sources as its approved bytes, because it
 lost or changed one or is gone, has nothing to carry: setup resolves afresh, as
 it does for a resolution it cannot use, and that resolution's publishers supply
@@ -667,7 +673,13 @@ stage resolves the client only when it is selected, so a context that selects
 only the installer-media tooling resolves no libvirt client, and no hypervisor
 or installer-media selection forces one into the transaction. Exact releases
 are not frozen with the block, because a `latest` intent is resolved by the
-attempt that installs it and retained from then on. A context that selects nothing beyond the host
+attempt that installs it and retained from then on.
+
+Not yet met: stage recovery and context preflight can select a newer client
+release another context retained under the same `latest` intent; tracked as
+[B239](milestones/m3.md#b239).
+
+A context that selects nothing beyond the host
 baseline contributes no block at all.
 
 The block extends the resolution setup froze; it never resolves the host
@@ -695,6 +707,10 @@ sealing rules the setup bundle has; the native transaction publishes its
 before-state into the running attempt before it is authorized. The block
 completes only after every selected client is proved present by presence alone
 and the area is sealed.
+
+Not yet met: recovery after client publication but before sealing can prove the
+stage complete while its client area remains writable; tracked as
+[B237](milestones/m3.md#b237).
 
 Every other block of the plan runs the clients this stage installed, and
 locates each executable through this block alone, from what the block proved

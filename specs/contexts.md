@@ -806,7 +806,12 @@ the guard reads that evidence as pristine.
 
 Context commands are text-only. Details include name, initialization and
 input readiness, and the invoking user's current marker. List sorts by name;
-`current --short` emits only the name and LF. Input admission reports counts
+`current --short` emits only the name and LF. Human details show `Current` as
+`yes` or `no`, `Input` as `imported` or `not imported`, and retain the context
+`Mode`. Their `Next` names validation with `--context <name>` for a ready
+context with imported input, input update with `--name <name>` otherwise,
+`context init` to resume initialization, or `context delete` to resume
+deletion. Input admission reports counts
 and copied files; default creation does not invent compilation counts.
 Warnings appear once on stderr. No private paths, payloads or digests appear:
 a refusal naming damaged store state names its entry relative to the state

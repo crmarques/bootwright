@@ -1,7 +1,6 @@
 package power
 
 import (
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -50,18 +49,18 @@ func requestFor(catalog api.Catalog, contextName, name, verb string, force bool,
 // substrate realizes is reached through the controller that realization
 // created, so it answers only while that realization stands; a physical
 // Machine's controller exists without Bootwright and is never asked about.
-func controllerFor(catalog api.Catalog, object api.Object, contextName, controllerMachine string, realized realizations) (Controller, machineref.Placement, bool, error) {
+func controllerFor(catalog api.Catalog, object api.Object, contextName, controllerMachine string, realized realizations) (Controller, machine.Placement, bool, error) {
 	target, err := managedTarget(catalog, object, contextName, controllerMachine)
 	if err != nil {
-		return Controller{}, machineref.Placement{}, false, err
+		return Controller{}, machine.Placement{}, false, err
 	}
 	if !target.Physical {
 		admitted, err := reachable(realized, object.Name())
 		if err != nil {
-			return Controller{}, machineref.Placement{}, false, err
+			return Controller{}, machine.Placement{}, false, err
 		}
 		if !admitted {
-			return Controller{}, machineref.Placement{}, false, failure("access.unavailable",
+			return Controller{}, machine.Placement{}, false, failure("access.unavailable",
 				"this Machine's emulated management controller is not realized",
 				"bootwright apply --context "+contextName+" realizes "+object.Identity()+" and its controller")
 		}
@@ -101,10 +100,10 @@ func reachable(realized realizations, name string) (bool, error) {
 	return false, nil
 }
 
-func endpointFor(target substrate.Target, controllerMachine string) (Controller, machineref.Placement, bool, error) {
-	placement, err := machineref.PlacementFor(target.PlacementMachine, controllerMachine)
+func endpointFor(target substrate.Target, controllerMachine string) (Controller, machine.Placement, bool, error) {
+	placement, err := machine.PlacementFor(target.PlacementMachine, controllerMachine)
 	if err != nil {
-		return Controller{}, machineref.Placement{}, false, err
+		return Controller{}, machine.Placement{}, false, err
 	}
 	return Controller{
 		CredentialsRef: target.Controller.CredentialsRef,

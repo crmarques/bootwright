@@ -1,0 +1,38 @@
+Coordinate declarative day-0 platform bootstrap
+
+Usage:
+  bootwright [command]
+
+Examples:
+  bootwright help context init
+  bootwright version
+  bootwright validate --file ./input
+
+Available Commands:
+  add-ons                       Manage add-ons
+  apply                         Apply the complete selected lifecycle unit
+  cluster                       Manage cluster
+  completion                    Manage completion
+  context                       Manage context
+  destroy                       Destroy the complete selected lifecycle unit
+  help                          Show human help for an exact command path
+  machine                       Manage machine
+  media                         Manage media
+  plan                          Preview the next complete lifecycle operation
+  preflight                     Manage preflight
+  render                        Render external-tool artifacts (unavailable)
+  secret                        Manage secret
+  setup                         Set up context-independent controller prerequisites
+  status                        Show context readiness and lifecycle state
+  validate                      Validate a complete desired-state input universe
+  version                       Show executable and dependency build identities
+
+Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+
+Use "bootwright [command] --help" for more information about a command.

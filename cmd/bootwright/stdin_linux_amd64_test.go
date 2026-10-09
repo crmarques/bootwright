@@ -60,7 +60,7 @@ func TestTerminalColumnsFollowTheWindowSize(t *testing.T) {
 	}
 	defer read.Close()
 	defer write.Close()
-	if terminalColumns(write) != nil {
+	if width := terminalColumns(write); width == nil || width() != 0 {
 		t.Fatal("pipe reported a terminal width")
 	}
 }
@@ -220,5 +220,23 @@ func TestReadyInputRestoresFlagsOnReadFailure(t *testing.T) {
 	after, _, errno := syscall.Syscall(syscall.SYS_FCNTL, descriptor, syscall.F_GETFL, 0)
 	if errno != 0 || after != before {
 		t.Fatal("read failure changed descriptor flags", before, after, errno)
+	}
+}
+
+func TestTerminalColumnsDefersProbeUntilProgressNeedsIt(t *testing.T) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer read.Close()
+	if err := write.Close(); err != nil {
+		t.Fatal(err)
+	}
+	width := terminalColumns(write)
+	if width == nil {
+		t.Fatal("construction probed a closed descriptor")
+	}
+	if width() != 0 {
+		t.Fatal("closed descriptor was admitted as a terminal")
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/crmarques/bootwright/internal/trust"
 )
 
+type CurrentSelection func(context.Context) (string, error)
+
 // EffectiveState compiles the selected context's immutable input into the
 // graph enrollment selects its Machines from.
 type EffectiveState interface {

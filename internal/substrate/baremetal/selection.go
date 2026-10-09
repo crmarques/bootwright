@@ -1,12 +1,12 @@
 package baremetal
 
 import (
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 

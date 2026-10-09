@@ -183,7 +183,7 @@ func (p *progressPresenter) arm(now time.Time) {
 	// changes nothing and immediately asks for the next.
 	waiting := false
 	delay := progressRefresh
-	if p.columns == nil {
+	if !p.terminal() {
 		delay = progressHeartbeat
 	}
 	for _, step := range p.steps {
@@ -191,7 +191,7 @@ func (p *progressPresenter) arm(now time.Time) {
 			continue
 		}
 		waiting = true
-		if p.columns != nil {
+		if p.terminal() {
 			continue
 		}
 		if remaining := progressHeartbeat - now.Sub(step.reported); remaining < delay {
@@ -216,7 +216,7 @@ func (p *progressPresenter) beat(generation int) {
 		return
 	}
 	now := p.clock.now()
-	if p.columns != nil {
+	if p.terminal() {
 		redrawn := false
 		for _, step := range p.steps {
 			if step.ctx != nil && step.ctx.Err() != nil {
@@ -288,7 +288,7 @@ func (p *progressPresenter) closeLine() {
 // running writes the row of a step that is still going. On a terminal the
 // whole block is rewritten, because one step's row may now sit above another's.
 func (p *progressPresenter) running(step *progressStep, now time.Time) {
-	if p.columns == nil {
+	if !p.terminal() {
 		p.append(step, "running", step.detail, "", now)
 		return
 	}
@@ -299,7 +299,7 @@ func (p *progressPresenter) running(step *progressStep, now time.Time) {
 // holds exactly the steps that are still running.
 func (p *progressPresenter) settle(step *progressStep, status, detail string, now time.Time) {
 	elapsed := formatElapsed(now.Sub(step.started))
-	if p.columns == nil {
+	if !p.terminal() {
 		p.remove(step)
 		p.append(step, status, detail, elapsed, now)
 		return
@@ -380,7 +380,7 @@ func (p *progressPresenter) row(status string, step *progressStep, detail, suffi
 	if suffix != "" {
 		tail = strings.Repeat(" ", displayGap) + suffix
 	}
-	if p.columns == nil {
+	if !p.terminal() {
 		return lead + subject + tail
 	}
 	return fitTerminalRow(lead, subject, tail, p.columns())
@@ -453,3 +453,5 @@ func progressStatusToken(status string) string {
 	}
 	return "[UNKNOWN]"
 }
+
+func (p *progressPresenter) terminal() bool { return p.columns != nil && p.columns() > 0 }

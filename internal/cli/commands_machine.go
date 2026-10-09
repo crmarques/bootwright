@@ -23,8 +23,8 @@ func machineCommands() []commandSpec {
 				boolFlag("silent", "Print only sorted machine names"), outputFlag(),
 			},
 		}),
-		available(sessionCommand(commandSpec{path: "machine rsh", short: "Open an SSH session on a machine as its resolved identity", flags: []flagSpec{nameFlag()}})),
-		available(sessionCommand(commandSpec{path: "machine exec", short: "Run a command on a machine over SSH and return its exit status", flags: []flagSpec{nameFlag()}, payload: true})),
+		available(sessionCommand(commandSpec{path: "machine rsh", short: "Open an SSH session", flags: []flagSpec{nameFlag()}})),
+		available(sessionCommand(commandSpec{path: "machine exec", short: "Run a command over SSH", flags: []flagSpec{nameFlag()}, payload: true})),
 		available(powerCommand("machine start", "Power one machine on through its management controller", false)),
 		available(powerCommand("machine stop", "Shut one machine down through its management controller", true)),
 		available(powerCommand("machine restart", "Restart one machine through its management controller", true)),
@@ -68,7 +68,6 @@ func (s Services) invokeMachineInventory(ctx context.Context, path string, value
 		result, err := invokeResult(ctx, values, inventory.ListRequest{
 			ContextName: values.text("context"),
 			Clusters:    values.names("clusters"),
-			Silent:      values.boolean("silent"),
 			Power:       values.boolean("power-status"),
 		}, s.MachineInventory.List)
 		return commandResult{machines: result}, err

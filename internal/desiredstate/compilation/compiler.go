@@ -150,7 +150,8 @@ func canonicalCatalog(objects []api.Object) api.Catalog {
 	})
 	return api.NewCatalog(objects)
 }
-func sortedNames(values []string) []string {
+
+func SortedNames(values []string) []string {
 	values = append([]string{}, values...)
 	slices.Sort(values)
 	return slices.Compact(values)

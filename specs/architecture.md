@@ -234,8 +234,8 @@ only shrinks: a package over its ceiling fails, and one more than a tenth
 below it fails until the ceiling is lowered, so narration that leaves a
 package cannot return unnoticed. A package with no ceiling fails until its
 count is added, and a ceiling naming no package fails until it is removed.
-Reducing the narration that remains is parked work
-([B98](milestones/backlog.md#b98)).
+Not yet met: production comments still contain narration beyond the retained
+forms above; tracked as [B98](milestones/backlog.md#b98).
 
 Preserve a finding only when it can change a future implementation, review, or
 diagnosis. Record observed constraints, non-obvious implementation rationale,

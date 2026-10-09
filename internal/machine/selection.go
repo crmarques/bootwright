@@ -6,15 +6,11 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-// CurrentSelection resolves the invoking user's context when none is explicit.
-// Every Machine command binds the same reader, so a stale or absent marker is
-// caught in one place for all of them.
-type CurrentSelection func(context.Context) (string, error)
-
 // SelectedContext fixes the context one invocation acts on, so its result
 // names the exact context its answer came from rather than the selection it
-// happened to read.
-func SelectedContext(ctx context.Context, selection CurrentSelection, name string) (string, error) {
+// happened to read. selection is each consumer's own port; a domain root
+// declares none.
+func SelectedContext(ctx context.Context, selection func(context.Context) (string, error), name string) (string, error) {
 	if name != "" {
 		return name, nil
 	}

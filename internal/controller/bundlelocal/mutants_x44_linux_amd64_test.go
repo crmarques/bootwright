@@ -37,3 +37,27 @@ func TestABootstrapRunpathIsReadAndHeldToThePrivateProjection(t *testing.T) {
 		t.Fatalf("a RUNPATH outside the projection was accepted: %+v", found)
 	}
 }
+
+func TestABootstrapRpathIsSearchedBeforeTheFixedLibraryPath(t *testing.T) {
+	projected := newProjection()
+	if err := projected.add("python/lib/private/libdep.so.1", []byte("library"), false); err != nil {
+		t.Fatal(err)
+	}
+	decoded, _, err := decodeBootstrapELF("/python/lib/libtool.so", syntheticSharedObject([]string{"libdep.so.1"}, "$ORIGIN/private", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := qualifyPrivateDependencies(projected, decoded, map[string]bool{}); err != nil {
+		t.Fatalf("a dependency its RPATH provides was refused: %v", err)
+	}
+	if err := projected.add("python/lib/libdep.so.1", []byte("library"), false); err != nil {
+		t.Fatal(err)
+	}
+	escaping, _, err := decodeBootstrapELF("/python/lib/libtool.so", syntheticSharedObject([]string{"libdep.so.1"}, "/usr/lib64", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found := diagnostics.Of(qualifyPrivateDependencies(projected, escaping, map[string]bool{})); len(found) != 1 || !strings.Contains(found[0].Message, "unqualified external dependency") {
+		t.Fatalf("an external RPATH before a qualified fixed-path library was accepted: %+v", found)
+	}
+}

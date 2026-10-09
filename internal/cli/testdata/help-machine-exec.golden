@@ -1,0 +1,18 @@
+Run a command over SSH as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status. The session runs as the identity the Machine's desired state authorizes, over a host key proved before any credential is offered; an unproved key is confirmed interactively or refused. The exit status is the client's. Use -- before a flag-shaped first payload value to preserve it as data. Recognized Bootwright flags remain active in the command tail until --.
+
+Usage:
+  bootwright machine exec <command>... [flags]
+
+Examples:
+  bootwright machine exec --context lab --name node -- uname -a
+
+Flags:
+      --name string   Select the exact object name (required)
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

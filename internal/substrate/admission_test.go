@@ -1,8 +1,9 @@
 package substrate
 
 import (
-	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 func m(kv ...any) api.Value {

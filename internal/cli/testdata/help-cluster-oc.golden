@@ -1,0 +1,15 @@
+Print an oc access descriptor for independent operator execution; do not launch a client or connect. Success prints a bounded access descriptor for independent operator execution. Use -- before a flag-shaped first payload value to preserve it as data. After the first payload value, all remaining tokens belong to the payload. Applicable to OpenShift/OKD ContainerClusters only.. This command is recognized but not implemented.
+
+Usage:
+  bootwright cluster oc <command>... [flags]
+
+Flags:
+      --name string   Select the exact object name (required)
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

@@ -250,10 +250,8 @@ func validFrozenPath(path, category string) bool {
 	if len(parts) > desiredstate.MaxPathDepth {
 		return false
 	}
-	for _, part := range parts[:len(parts)-1] {
-		if strings.HasPrefix(part, ".") || slices.Contains([]string{"vendor", "node_modules", "playbooks", "roles", "collections", "manifests", "secrets"}, part) {
-			return false
-		}
+	if slices.ContainsFunc(parts[:len(parts)-1], desiredstate.SkippedDirectory) {
+		return false
 	}
 	if category == "yaml" {
 		return strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")

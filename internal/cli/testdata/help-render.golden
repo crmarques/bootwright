@@ -1,0 +1,27 @@
+Render external-tool artifacts. Without --input-dir or --output-dir, print this help. Context-free rendering requires both paths and conflicts with --context and --sensitive. Context-backed rendering requires --output-dir and --sensitive.. This command is recognized but not implemented.
+
+Usage:
+  bootwright render [flags]
+  bootwright render [command]
+
+Available Commands:
+  effective   Show normalized effective desired state
+  installer   Render container-cluster installer artifacts (unavailable)
+  storage     Render storage artifacts (unavailable)
+
+Flags:
+      --clusters string     Select comma-separated cluster names (default: all)
+      --input-dir string    Read a context-free input file or directory
+      --output string       Select output mode (values: text, json) (default "text")
+      --output-dir string   Write artifacts to the selected directory
+      --sensitive           Authorize sensitive artifact materialization
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+
+Use "bootwright render [command] --help" for more information about a command.

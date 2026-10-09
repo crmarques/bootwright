@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sync"
 	"syscall"
 	"unsafe"
 )
@@ -33,15 +34,23 @@ func terminalDescriptor(fd uintptr) (bool, error) {
 // keeps a redrawn row within the narrowest width an operator is likely to use.
 const defaultTerminalColumns = 80
 
-// terminalColumns reports how wide the terminal behind writer is, measured
-// again on every call so a resize takes effect. A writer that is not a
-// terminal has no width and receives appended output instead.
+// terminalColumns creates a width reader without probing the descriptor. Its
+// first call admits a terminal; subsequent calls measure it again for resizes.
+// A stream that is not a terminal reports zero and receives appended output.
 func terminalColumns(writer io.Writer) func() int {
-	file, ok := terminalFile(writer)
+	file, ok := writer.(*os.File)
 	if !ok {
 		return nil
 	}
-	return func() int { return terminalWidth(file.Fd()) }
+	var once sync.Once
+	var terminal bool
+	return func() int {
+		once.Do(func() { terminal, _ = terminalDescriptor(file.Fd()) })
+		if !terminal {
+			return 0
+		}
+		return terminalWidth(file.Fd())
+	}
 }
 
 func terminalWidth(fd uintptr) int {

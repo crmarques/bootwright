@@ -1,0 +1,22 @@
+Import one installer image into this host's media store, where every context shares it. A download requires --sha256 and follows no redirect. Replacing a stored image needs ordinary confirmation; --yes skips it.
+
+Usage:
+  bootwright media add [flags]
+
+Examples:
+  bootwright media add --name installer.iso --from-file ./installer.iso
+
+Flags:
+      --from-file string   Import a local image
+      --from-url string    Import an HTTPS image
+      --name string        Select the exact object name (required)
+      --sha256 string      Verify a SHA-256 digest
+      --yes                Confirm the command's ordinary confirmation
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

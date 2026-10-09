@@ -122,6 +122,7 @@ func TestCLIImportsOnlyServicePackagesAndSharedValues(t *testing.T) {
 		"github.com/crmarques/bootwright/internal/diagnostics":  true,
 		"github.com/crmarques/bootwright/internal/machine":      true,
 		"github.com/crmarques/bootwright/internal/secrets":      true,
+		"github.com/crmarques/bootwright/internal/trust":        true,
 	}
 	const module = "github.com/crmarques/bootwright/"
 	imports := map[string]bool{}

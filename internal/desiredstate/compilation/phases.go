@@ -134,8 +134,8 @@ func (r *run) closeGraph() {
 		return
 	}
 	selection := r.compiler.selectGraph(catalogOf(r.records))
-	r.report.ExcludedContainerClusters = sortedNames(selection.ExcludedContainerClusters)
-	r.report.ExcludedStorageClusters = sortedNames(selection.ExcludedStorageClusters)
+	r.report.ExcludedContainerClusters = SortedNames(selection.ExcludedContainerClusters)
+	r.report.ExcludedStorageClusters = SortedNames(selection.ExcludedStorageClusters)
 	for _, problem := range selection.Problems {
 		if r.ds.undecodable[problem.Target] {
 			continue

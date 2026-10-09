@@ -39,8 +39,6 @@ type dispatchRecord struct {
 	request   any
 	err       error
 	afterCall func()
-	types     []string
-	typeCalls int
 	// mediaChange is the stored image a media spy shows on out before it
 	// answers, as the service does before its confirmation.
 	mediaChange *media.Change
@@ -123,11 +121,6 @@ func (s secretsSpy) Delete(ctx context.Context, request custody.DeleteRequest) (
 }
 
 type encryptionSpy struct{ record *dispatchRecord }
-
-func (s encryptionSpy) Types() []string {
-	s.record.typeCalls++
-	return append([]string(nil), s.record.types...)
-}
 
 func (s encryptionSpy) Init(ctx context.Context, request encryption.EncryptionInitRequest) (*encryption.MutationResult, error) {
 	return s.record.result.encryptionMutation, s.record.called(ctx, "secret encryption init", request)

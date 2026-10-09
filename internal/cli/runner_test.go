@@ -82,7 +82,7 @@ func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
 		want string
 	}{
 		{"separator", []string{"version", "--", privateArgument}, "separator is not accepted"},
-		{"flag-position", []string{"version", "--" + privateArgument}, "flag is not accepted at this position"},
+		{"unknown-flag", []string{"version", "--" + privateArgument}, "unknown flag"},
 		{"missing-value", []string{"context", "init", "--name"}, "flag value is missing"},
 		{"command", []string{privateArgument}, "unknown command"},
 		{"flag-owner", []string{"render", "--output", "text", "effective"}, "flag does not apply to the selected subcommand"},
@@ -101,6 +101,7 @@ func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
 	}
 	for _, reason := range []resolutionError{
 		separatorNotAccepted,
+		unknownFlag,
 		flagNotAccepted,
 		flagValueMissing,
 		unknownCommand,
@@ -132,7 +133,7 @@ func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(args)
-			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "[FAIL] cli.usage: flag is not accepted at this position\n") {
+			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "[FAIL] cli.usage: unknown flag\n") {
 				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 			}
 		})

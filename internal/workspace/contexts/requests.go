@@ -22,7 +22,7 @@ type UseRequest struct{ Name string }
 
 type ListRequest struct{}
 
-type CurrentRequest struct{ Short bool }
+type CurrentRequest struct{}
 
 type DeleteRequest struct {
 	Name             string

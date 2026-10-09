@@ -1,7 +1,7 @@
 # Multi-datacenter platform
 
 This synthetic example follows the [Bootwright API](../../specs/api.md).
-It contains 100 Bootwright objects across 22 of the 26 kinds, plus four native
+It contains 106 Bootwright objects across 22 of the 26 kinds, plus four native
 add-on manifests. The graph has four container clusters, one storage cluster,
 32 Machines, and three reusable NMState configurations. `Registry`, `LoadBalancer`,
 `StorageNFSExport`, and `CustomPlaybook` are not needed for this topology.
@@ -19,8 +19,9 @@ are synthetic. Infrastructure IPv4 uses documentation ranges and domains use
 an API example, not a runnable deployment or evidence of release compatibility.
 
 Desired-state validation, effective rendering, durable contexts and local
-Secret storage are implemented. Native rendering and platform lifecycle
-operations remain [future implementation work](../../specs/milestones.md).
+Secret storage are implemented. The [command catalog](../../specs/cli/commands.md)
+names the available lifecycle commands; this graph includes platform kinds
+whose realization remains [future implementation work](../../specs/milestones.md).
 Admission does not establish executable service support, certificate validity,
 or installation success.
 
@@ -165,8 +166,8 @@ explicit-list replacement, input typing, and namespace/OperatorGroup behavior.
 
 ## Secret declarations and verification
 
-The 20 [Secret descriptors](secret-descriptors/) include 12 explicit
-`source.contextStore: {}` choices and eight generated sources. Six SSH keys
+The 26 [Secret descriptors](secret-descriptors/) include 12 explicit
+`source.contextStore: {}` choices and 14 generated sources. Six SSH keys
 retain RSA generation, the gateway certificate retains its parameters, and the
 recovery token retains its entropy setting. No values are included, read,
 imported, generated, encrypted, or populated by this example. The eventual
@@ -179,7 +180,7 @@ Its eventual certificate must cover IP `192.0.2.127` and DNS name
 `utility-01.example.com`; no certificate bytes are available to verify this.
 The image checksum is a quoted synthetic sentinel, not a verified hash.
 
-The example contains 104 YAML files: 100 Bootwright declarations and four
+The example contains 110 YAML files: 106 Bootwright declarations and four
 native add-on payloads. Validate the complete graph without reading payload
 or Secret bytes:
 

@@ -1,0 +1,17 @@
+Render container-cluster installer artifacts. This command is recognized but not implemented.
+
+Usage:
+  bootwright render installer [flags]
+
+Flags:
+      --clusters string   Select comma-separated cluster names (default: all)
+      --output string     Select output mode (values: text, json) (default "text")
+      --sensitive         Authorize sensitive artifact materialization
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

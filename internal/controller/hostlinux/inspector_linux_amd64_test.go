@@ -5,12 +5,13 @@ package hostlinux
 import (
 	"context"
 	"errors"
-	"github.com/crmarques/bootwright/internal/diagnostics"
-	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"golang.org/x/sys/unix"
 )
 
 const testMachineID = "1234567890abcdef1234567890abcdef"

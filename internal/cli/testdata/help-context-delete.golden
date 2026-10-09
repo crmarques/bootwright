@@ -1,0 +1,21 @@
+Permanently delete a context and its verified local files with --purge=true. --yes skips ordinary confirmation. A context that still owns realized objects refuses deletion: remove them with bootwright destroy first, or abandon them with --allow-orphans. Over lifecycle evidence it cannot read, --allow-orphans abandons the context, whose objects cannot be listed; a live lease refuses either way.
+
+Usage:
+  bootwright context delete [flags]
+
+Examples:
+  bootwright context delete --name lab --purge
+
+Flags:
+      --allow-orphans   Delete although the context still owns realized objects
+      --name string     Select the exact object name (required)
+      --purge           Acknowledge permanent context data deletion
+      --yes             Confirm the command's ordinary confirmation
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

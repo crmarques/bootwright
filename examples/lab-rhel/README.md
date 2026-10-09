@@ -60,10 +60,12 @@ against RHEL 9.8 boot media, are described in
 Two documentation ranges keep the two roles apart, and the domain is
 `lab.example.test`, so nothing here identifies a real machine.
 
-`192.0.2.1` is the controller's own existing address. Every managed service and
-every emulated BMC binds it, so it must already exist on the host before the
-first apply. Replace it with an address that exists there, in the Machine, all
-four services, the provider's `bmcEmulationDefaults` and the certificate.
+`192.0.2.1` is the controller's own existing address. Every managed service
+binds it, so it must already exist on the host before the first apply. In a
+local copy of this example, replace it with an address that exists there, in
+the Machine, all four services and the certificate. The emulated BMC keeps
+`127.0.0.1:8000`: its privileged, plain-HTTP listener is reached only from its
+provider host and must not be exposed to the LAN.
 Replace `192.0.2.53` and `192.0.2.123` with an upstream resolver and time
 source the host can reach, or remove those lists to serve only what the graph
 declares.
@@ -74,8 +76,8 @@ It must not exist yet: the `substrates` stage creates it and the destroy
 removes it. The guest reaches the managed services through that host address,
 so the services need no interface on the guest network.
 
-Six sockets on `192.0.2.1` must be free: `3128`, `53`, `123`, `8443`, `8080`
-and `8000`. The apply refuses rather than taking a socket another context
+Five sockets on `192.0.2.1` must be free: `3128`, `53`, `123`, `8443` and
+`8080`, plus `8000` on `127.0.0.1`. The apply refuses rather than taking a socket another context
 reserved, and the operating system refuses a port another process already
 holds. Two collisions are worth checking by hand:
 
@@ -101,7 +103,9 @@ the addresses it should serve and reload it, or stop it for the duration of the
 test and start it again afterwards.
 
 The run restarts the host, so make the controller address and any chronyd
-change persist across a reboot.
+change persist across a reboot. Configure source-scoped firewall access as the
+[operator guide](../../docs/operator-guide.md#network-exposure) describes;
+listener readiness on the controller does not prove a guest can reach it.
 
 ## Media
 
@@ -115,6 +119,18 @@ froze it is destroyed.
 
 ## Run it
 
+Build from a clean committed checkout. Before adjusting the lab conventions,
+copy the example outside the checkout and edit only that copy:
+
+```sh
+lab_rhel_input=$(mktemp -d /tmp/bootwright-lab-rhel.XXXXXX)
+cp -R examples/lab-rhel/. "$lab_rhel_input/"
+```
+
+Keep `lab_rhel_input` in the shell that runs the block below. The imported copy
+is adjusted without changing the original example, preserving a clean
+checkout and the built executable's reproducible `Source clean` stamp.
+
 Run the block one line at a time from the repository root. `setup`, `apply`,
 `machine restart`, `machine stop` and `destroy` present what they will do and
 ask for confirmation, and any command may ask for sudo authorization. The
@@ -123,12 +139,13 @@ automation is embedded in the executable, so run `setup` again after any
 
 ```sh
 make build
+./bin/bootwright version
 ./bin/bootwright setup
 ./bin/bootwright media add --name rhel-9.8-x86_64-boot.iso --from-file /path/to/rhel-9.8-x86_64-boot.iso
 ./bin/bootwright media add --name rhel-9.8-x86_64-dvd.iso --from-file /path/to/rhel-9.8-x86_64-dvd.iso
 ./bin/bootwright media list --checksums
 ./bin/bootwright context init --name lab-rhel
-./bin/bootwright context update --name lab-rhel --input-dir "$PWD/examples/lab-rhel" --yes
+./bin/bootwright context update --name lab-rhel --input-dir "$lab_rhel_input" --yes
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
 ./bin/bootwright apply --stage controller

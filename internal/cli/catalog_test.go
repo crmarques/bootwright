@@ -48,9 +48,7 @@ func TestPublicCatalog(t *testing.T) {
 				if flag.Name == "output" && !reflect.DeepEqual(flag.Annotations["bootwright.enum"], []string{"text", "json"}) {
 					t.Errorf("%s output enum", path)
 				}
-				if path == "secret encryption init" && flag.Name == "type" && !reflect.DeepEqual(flag.Annotations["bootwright.catalog"], []string{secretEncryptionTypeCatalog}) {
-					t.Errorf("%s type catalog", path)
-				}
+
 			})
 			slices.Sort(flags)
 			found[path] = strings.Join(flags, " ")

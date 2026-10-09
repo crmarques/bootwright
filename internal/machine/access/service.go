@@ -32,11 +32,11 @@ type Options struct {
 
 type Service struct {
 	state     EffectiveState
-	selection machine.CurrentSelection
+	selection CurrentSelection
 	options   Options
 }
 
-func New(state EffectiveState, selection machine.CurrentSelection, options Options) Service {
+func New(state EffectiveState, selection CurrentSelection, options Options) Service {
 	return Service{state: state, selection: selection, options: options}
 }
 

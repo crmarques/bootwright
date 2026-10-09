@@ -1,0 +1,18 @@
+Preview the next legal full-context operation, or the exact continuation point of an incomplete one. It reads durable state and changes nothing. With --stage it also shows which blocks that selection would start.
+
+Usage:
+  bootwright plan [flags]
+
+Examples:
+  bootwright plan --context lab --stage machines
+
+Flags:
+      --stage string   Select comma-separated stages to start (default: all) (values: controller, infra-components, substrates, machines, clusters, add-ons)
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

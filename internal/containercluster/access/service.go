@@ -19,10 +19,10 @@ type Service struct {
 	state     EffectiveState
 	reader    ProducedReader
 	locate    AccessLocator
-	selection machine.CurrentSelection
+	selection CurrentSelection
 }
 
-func New(state EffectiveState, reader ProducedReader, locate AccessLocator, selection machine.CurrentSelection) Service {
+func New(state EffectiveState, reader ProducedReader, locate AccessLocator, selection CurrentSelection) Service {
 	return Service{state: state, reader: reader, locate: locate, selection: selection}
 }
 

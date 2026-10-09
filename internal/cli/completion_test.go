@@ -106,16 +106,16 @@ func TestCompletionProtocolIgnoresAmbientConfiguration(t *testing.T) {
 }
 
 func TestSecretEncryptionCompletionUsesConfiguredStore(t *testing.T) {
-	record := &dispatchRecord{types: []string{"local-keyring"}}
+	record := &dispatchRecord{}
 	var stdout, stderr bytes.Buffer
 	runner := New(Config{Out: &stdout, ErrOut: &stderr, Services: dispatchSpies(record)})
 	code := runner.Run(context.Background(), []string{completionRequest, "secret", "encryption", "init", "--t"})
-	if code != 0 || strings.Contains(stdout.String(), "--type") || stderr.Len() != 0 || record.calls != 0 || record.typeCalls != 0 {
+	if code != 0 || strings.Contains(stdout.String(), "--type") || stderr.Len() != 0 || record.calls != 0 {
 		t.Fatalf("removed selection surfaced: %d %q %q %#v", code, stdout.String(), stderr.String(), record)
 	}
 	stdout.Reset()
 	code = runner.Run(context.Background(), []string{"secret", "encryption", "init", "--help"})
-	if code != 0 || strings.Contains(stdout.String(), "--type") || record.calls != 0 || record.typeCalls != 0 {
+	if code != 0 || strings.Contains(stdout.String(), "--type") || record.calls != 0 {
 		t.Fatal("help queried implementation selection")
 	}
 }
@@ -161,4 +161,8 @@ func TestCompletionLocalFlagOwnership(t *testing.T) {
 			t.Errorf("%q offered inapplicable candidates: %q", args, got)
 		}
 	}
+}
+
+func completionCandidates(root *cobra.Command, words []string, descriptions bool) []string {
+	return completionCandidatesWithCatalog(root, words, descriptions, completionCatalog{})
 }

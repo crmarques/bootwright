@@ -1,0 +1,23 @@
+Manage cluster
+
+Usage:
+  bootwright cluster [command]
+
+Available Commands:
+  exec        Print a command access descriptor for independent operator execution; do not launch a client or connect (unavailable)
+  info        Show cluster details and static access applicability (unavailable)
+  kubeconfig  Export raw sensitive kubeconfig bytes to standard output
+  kubectl     Print a kubectl access descriptor for independent operator execution; do not launch a client or connect (unavailable)
+  list        List container and storage clusters (unavailable)
+  oc          Print an oc access descriptor for independent operator execution; do not launch a client or connect (unavailable)
+  rsh         Print an SSH access descriptor for independent operator execution; do not launch a client or connect (unavailable)
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+
+Use "bootwright cluster [command] --help" for more information about a command.

@@ -2,11 +2,11 @@ package ansiblerunner
 
 import (
 	"encoding/json"
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 	"strings"
 	"testing"
 
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 )

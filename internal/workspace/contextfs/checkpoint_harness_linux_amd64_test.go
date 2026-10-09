@@ -602,7 +602,7 @@ func checkpointShapeDifference(reached, pinned map[checkpoint]int) string {
 }
 
 // TestEveryCheckpointIsACataloguedConstant parses the package's production
-// files: every checkpoint a publication passes to the hook is a catalogued
+// files and test catalog: every publication passes a catalogued checkpoint
 // constant, checkpoints() lists each constant once, and none goes unused.
 func TestEveryCheckpointIsACataloguedConstant(t *testing.T) {
 	paths, err := filepath.Glob("*.go")
@@ -612,7 +612,7 @@ func TestEveryCheckpointIsACataloguedConstant(t *testing.T) {
 	files := token.NewFileSet()
 	var syntax []*ast.File
 	for _, path := range paths {
-		if strings.HasSuffix(path, "_test.go") {
+		if strings.HasSuffix(path, "_test.go") && path != "checkpoints_catalog_test.go" {
 			continue
 		}
 		parsed, err := parser.ParseFile(files, path, nil, 0)
@@ -718,6 +718,9 @@ func TestEveryCheckpointIsACataloguedConstant(t *testing.T) {
 	}
 	declared := map[string]int{}
 	for _, file := range syntax {
+		if strings.HasSuffix(files.Position(file.Pos()).Filename, "_test.go") {
+			continue
+		}
 		for _, declaration := range file.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
 			if !ok || function.Body == nil {

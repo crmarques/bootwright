@@ -52,7 +52,7 @@ func (s Services) invokeContexts(ctx context.Context, path string, values *reque
 	case "context list":
 		result.list, err = invokeResult(ctx, values, contexts.ListRequest{}, s.Contexts.List)
 	case "context current":
-		result.current, err = invokeResult(ctx, values, contexts.CurrentRequest{Short: values.boolean("short")}, s.Contexts.Current)
+		result.current, err = invokeResult(ctx, values, contexts.CurrentRequest{}, s.Contexts.Current)
 	case "context delete":
 		result.deletion, err = invokeResult(ctx, values, contexts.DeleteRequest{
 			Name:             values.text("name"),

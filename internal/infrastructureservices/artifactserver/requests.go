@@ -1,10 +1,10 @@
 package artifactserver
 
 import (
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 

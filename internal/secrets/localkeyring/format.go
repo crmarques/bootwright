@@ -2,7 +2,6 @@ package localkeyring
 
 import (
 	"bytes"
-	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
@@ -675,16 +674,6 @@ func validateMaterial(declaration secrets.Declaration, material secrets.Material
 		clear(value)
 	}
 	return nil
-}
-
-func interrupted(ctx context.Context, err error) error {
-	if err == nil {
-		return nil
-	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	return err
 }
 
 func validateVersionDeclaration(declaration secrets.VersionDeclaration) bool {

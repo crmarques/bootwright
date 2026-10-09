@@ -194,10 +194,6 @@ func fileBase(ctx context.Context) (string, error) {
 	return base, nil
 }
 
-func resolveSecretPath(ctx context.Context, base, authored, code string) (string, error) {
-	return resolveSecretPathFor(ctx, base, authored, code, "")
-}
-
 func resolveSecretPathFor(ctx context.Context, base, authored, code, home string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -294,12 +290,6 @@ func (s *Service) begin(ctx context.Context, code string) (FileSession, error) {
 		return nil, failure(code, "secret files cannot be opened under the invoking account", "")
 	}
 	return session, nil
-}
-
-// newSecureFiles opens with this process's own credentials, as a Service bound
-// to no Files does.
-func newSecureFiles(ctx context.Context, code string) (*secureFiles, error) {
-	return secureFilesThrough(ctx, code, processFiles{})
 }
 
 func secureFilesThrough(ctx context.Context, code string, session FileSession) (*secureFiles, error) {
@@ -578,10 +568,6 @@ func sameStableFile(left, right syscall.Stat_t) bool {
 
 func sameFileIdentity(left, right syscall.Stat_t) bool {
 	return left.Dev == right.Dev && left.Ino == right.Ino && left.Mode == right.Mode && left.Uid == right.Uid && left.Gid == right.Gid
-}
-
-func readSecretFile(ctx context.Context, file *os.File) ([]byte, error) {
-	return readSecretFileEncoded(ctx, file, transportExact)
 }
 
 func readSecretFileEncoded(ctx context.Context, file *os.File, encoding transportEncoding) ([]byte, error) {
