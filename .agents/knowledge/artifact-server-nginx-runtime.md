@@ -42,12 +42,13 @@ against podman 5.8.4 on Fedora 43 with nginx 1.24.0 inside the image.
   self-signed P-256 certificate served by this image.
 - Workers open served files as `default` (1001) with group `root` (0), and the
   container is rootful with no user namespace, so those are host identities. A
-  file `0600 root:root` is therefore unreadable by the worker; that is inferred
-  from the configuration, not yet observed on a host (X14's fetch-through probe
-  reports the status a fetch returns). Private files are published `0640 root:root`:
-  owning them by uid 1001 instead would grant whichever host account holds that
-  uid. `tests/unit/test_served_content_is_readable.py` ties every served file
-  task to the worker the template names.
+  file `0600 root:root` is therefore unreadable by the worker. Both public and
+  private installer images receive `0640 root:root` in staging before atomic
+  publication, independent of the builder's umask. Owning them by uid 1001
+  instead would grant whichever host account holds that uid.
+  `tests/unit/test_served_content_is_readable.py` ties served-file permissions
+  to the worker the template names; `test_managedos_install_private.py` checks
+  both image forms under a restrictive umask before publication.
 - The publication probe (`ansible.builtin.uri` with `ca_path` on the server's
   `tls/server.crt`, `Range: bytes=0-0`, `use_proxy: false`) was run locally,
   not against this image: ansible-core 2.21.4 on CPython 3.13.15 with OpenSSL

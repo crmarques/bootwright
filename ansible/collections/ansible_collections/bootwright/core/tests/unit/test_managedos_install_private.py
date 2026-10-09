@@ -16,7 +16,11 @@ which ansible-test does not offer to unit tests under tests/unit/plugins.
 
 from __future__ import annotations
 
+import os
 import pathlib
+import stat
+
+import pytest
 
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
@@ -120,13 +124,60 @@ def test_a_private_installation_publishes_its_image_only_beneath_the_token():
     assert expand("{{ managedos_install_anaconda_image_url }}", private=False) == PUBLIC["url"]
     created = tasks[index_of(tasks, named("Create the published image directory"), "create the public directory")]
     assert not holds(created["when"]) and holds(created["when"], private=False)
-    served = tasks[index_of(tasks, named("Keep the private installer image readable only by the serving process"), "mode")]
-    assert render(served[FILE]["path"]) == destination and served[FILE]["mode"] == "0640" and served.get("no_log") is True
+    built = index_of(tasks, lambda task: argv(task)[:1] == ["/usr/bin/mkksiso"], "build the image")
+    readable = index_of(tasks, named("Keep the built installer image readable only by the serving process"), "mode")
+    assert built < readable < index_of(tasks, renamed, "publish the image by rename")
+    served = tasks[readable]
+    assert render(served[FILE]["path"]) == expand("{{ managedos_install_anaconda_work }}") + "/install.iso"
+    assert served[FILE]["mode"] == "0640" and served.get("no_log") is True and "when" not in served
     for arm in (True, False):
         assert expand("{{ managedos_install_anaconda_served_root }}", private=arm) == SERVED
     boot = flattened("boot.yml")
     insert = boot[index_of(boot, lambda task: (task.get("bootwright.core.redfish_boot") or {}).get("operation") == "insert", "insert")]
     assert render(insert["bootwright.core.redfish_boot"]["image"]) == PRIVATE["url"] + "/" + TOKEN + "/install.iso"
+
+
+@pytest.mark.parametrize("private", [False, True], ids=["public", "private"])
+def test_an_installer_image_is_readable_before_publication_under_a_restrictive_umask(tmp_path, private):
+    work = tmp_path / "work"
+    work.mkdir(mode=0o700)
+    staged = work / "install.iso"
+    previous = os.umask(0o077)
+    try:
+        staged.write_bytes(b"installer")
+    finally:
+        os.umask(previous)
+    assert stat.S_IMODE(staged.stat().st_mode) == 0o600
+
+    request = scope(private=private)["bootwright_os_install_request"]
+    publication = tmp_path / "publication"
+    if private:
+        request["private"]["path"] = str(publication)
+        destination = publication / TOKEN / "install.iso"
+    else:
+        destination = publication / "install.iso"
+        request["image"]["path"] = str(destination)
+    destination.parent.mkdir(parents=True)
+    variables = {"private": private, "bootwright_os_install_request": request,
+                 "managedos_install_anaconda_work": str(work)}
+
+    tasks = flattened("apply.yml")
+    built = index_of(tasks, lambda task: argv(task)[:1] == ["/usr/bin/mkksiso"], "build the image")
+    published = index_of(tasks, renamed, "publish the image by rename")
+    for task in tasks[built + 1:published]:
+        if FILE not in task or not holds(task.get("when", []), **variables):
+            continue
+        attributes = render(task[FILE], **variables)
+        assert attributes["path"] == str(staged)
+        assert attributes["owner"] == "root" and attributes["group"] == "root"
+        staged.chmod(int(attributes["mode"], 8))
+    assert stat.S_IMODE(staged.stat().st_mode) == 0o640
+    source, target = render(argv(tasks[published])[-2:], **variables)
+    assert source == str(staged) and target == str(destination)
+    os.rename(source, target)
+    assert not staged.exists()
+    assert destination.read_bytes() == b"installer"
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o640
 
 
 def write_targets(task):

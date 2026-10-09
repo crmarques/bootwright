@@ -73,7 +73,7 @@ LOOPED = re.compile(r"\{\{\s*item\.([a-z_]+)\s*\}\}")
 PUBLISHED = {
     ("containercluster_media_agent/tasks/build.yml", "Keep the published image readable only by the serving process"),
     ("managedos_install_anaconda/tasks/private.yml", "Publish the host key pair this installation delivers"),
-    ("managedos_install_anaconda/tasks/apply.yml", "Keep the private installer image readable only by the serving process"),
+    ("managedos_install_anaconda/tasks/apply.yml", "Keep the built installer image readable only by the serving process"),
 }
 
 
@@ -128,17 +128,26 @@ def role_defaults(role):
 
 
 def served_file_tasks():
-    """Each file task beneath a served root: where it is, and the arguments it sets."""
+    """Each served file task, including staged files renamed beneath a served root."""
     found = []
     for role in sorted(path for path in ROLES.iterdir() if (path / "tasks").is_dir()):
         names = served_variables(role_defaults(role))
-        for path in sorted((role / "tasks").glob("*.yml")):
-            for task in load(path):
+        task_files = [(path, load(path)) for path in sorted((role / "tasks").glob("*.yml"))]
+        staged = {
+            arguments[-2]
+            for _path, tasks in task_files
+            for task in tasks
+            for arguments in [argv(task)]
+            if arguments[:1] == ["/usr/bin/mv"] and len(arguments) >= 3 and served(arguments[-1], names)
+        }
+        for path, tasks in task_files:
+            for task in tasks:
                 module = next((name for name in FILE_MODULES if isinstance(task.get(name), dict)), None)
                 if module is None or task[module].get("state") == "absent":
                     continue
                 for arguments in instances(task[module], task.get("loop")):
-                    if served(str(arguments.get("path", arguments.get("dest", ""))), names):
+                    destination = str(arguments.get("path", arguments.get("dest", "")))
+                    if destination in staged or served(destination, names):
                         found.append((path.relative_to(ROLES).as_posix(), task.get("name", ""), module, arguments))
     return found
 

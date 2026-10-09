@@ -328,6 +328,18 @@
   register: managedos_install_anaconda_built
   changed_when: true
 
+# The server's workers run as the image's application user in group root
+# (infra_artifact_server_nginx/templates/nginx.conf.j2), so the group grants
+# them read and nothing is granted to any other account.
+- name: Keep the built installer image readable only by the serving process
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_work }}/install.iso'
+    state: file
+    owner: root
+    group: root
+    mode: '0640'
+  no_log: true
+
 - name: Label the built image so the serving process can read it
   ansible.builtin.command:
     argv:
@@ -348,18 +360,6 @@
       - '{{ managedos_install_anaconda_image_path }}'
   changed_when: true
   no_log: '{{ managedos_install_anaconda_delivers_key | bool }}'
-
-# The server's workers run as the image's application user in group root
-# (infra_artifact_server_nginx/templates/nginx.conf.j2), so the group grants
-# them read and nothing is granted to any other account.
-- name: Keep the private installer image readable only by the serving process
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_image_path }}'
-    owner: root
-    group: root
-    mode: '0640'
-  when: managedos_install_anaconda_delivers_key | bool
-  no_log: true
 
 # Before any machine is given the image, the block fetches its first byte, and
 # the first byte of the tree's marker, through the listener a consumer uses:

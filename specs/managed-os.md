@@ -294,8 +294,10 @@ with the derived Kickstart implanted and the media check removed from every
 boot entry, at `os/<machine>/install.iso` for a Machine proved through its
 guest agent, and for a delivered-key Machine at
 `private/os/<machine>/<token>/install.iso`, beside `identity` and
-`identity.pub`, mode 0640 owned by root:root and labelled as the served root,
-under the [private publication](#physical-installation) below. An apply first
+`identity.pub`, under the [private publication](#physical-installation) below.
+Both image forms receive mode 0640 owned by root:root and the served root's
+label in the work area before atomic rename, independent of the process umask;
+the private identity files also receive that mode, ownership and label. An apply first
 clears whatever an earlier attempt left beneath `private/os/<machine>/`, whose
 token it does not know; and, for `hostedTree`, the DVD's
 complete tree at `os/<profile>/tree/`, copied once from the frozen image with
