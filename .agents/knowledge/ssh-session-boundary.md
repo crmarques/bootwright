@@ -5,32 +5,36 @@ Observed 2026-09-16 building `machine rsh`/`machine exec` on OpenSSH 10.0p2
 [the session contract](../../specs/cli.md#machine-ssh-sessions) and
 [security](../../specs/security.md#direct-ssh-sessions).
 
-## Material reaches the client as its own descriptors
+## Material stays on the launcher's held descriptors
 
 `internal/machine/sshlocal` creates each file the client reads — the private
 key, the pinned `known_hosts` line and the client configuration — under a
-`0700` scratch directory, unlinks the name before writing, and passes the open
-handle through `exec.Cmd.ExtraFiles`. The client names them
-`/proc/self/fd/<n>`, resolved **in its own process**.
+`0700` scratch directory and unlinks its name before writing. The launcher
+holds each actual descriptor until the waited client exits. The client names
+`/proc/<launcher-pid>/fd/<fd>` and reopens it under the same credentials.
 
-The pre-rewrite branch used `/proc/<bootwright-pid>/fd/<n>` instead. That works
-only while the reader shares the writer's credentials; it is not a form to copy
-if the child is ever given different ones, and it is needlessly indirect. The
-child's own `self` is always correct. Go clears `O_CLOEXEC` when it dups an
-`ExtraFiles` entry into place, so no extra handling is needed, and the index is
-`3 + position`, which is why `paths` records the number as each file is added
-rather than assuming a fixed layout: an identity arm with no key shifts
-`known_hosts` from 5 to 4.
+OpenSSH closes descriptors above standard error before processing its
+arguments ([OpenSSH 10.0p2 startup](https://github.com/openssh/openssh-portable/blob/V_10_0_P2/ssh.c)).
+`exec.Cmd.ExtraFiles` therefore cannot make `/proc/self/fd/<n>` work: the
+client closes those inherited handles before reading configuration or keys.
+Shell stubs that preserve descriptors hid this defect. Parent-held paths
+survive that startup cleanup, and their descriptor numbers come from each
+`file.Fd()`, never a synthetic child slot. The launcher and client share local
+credentials; this is not a handoff across an identity change.
 
-OpenSSH's "permissions are too open" check stats through `/proc/self/fd/<n>` to
-the real inode, so the `0600` mode of the unlinked file is what it sees.
+OpenSSH's private-key permission check follows the procfs handle to the real
+unlinked `0600` inode. Completion, launch failure and cancellation close the
+launcher's handles, leaving no named plaintext. Pinned by
+`TestTheClientReadsItsMaterialThroughParentDescriptors`,
+`TestSSHMaterialSurvivesClientDescriptorClosure` and
+`TestCancelledSSHSessionReleasesParentDescriptors`.
 
 ## An offered key is copied, never handed on
 
 `--ssh-id-file` is opened by the invoking account's opener
 (`internal/workspace/invokerfs`), so a key in a network home that squashes
 root is readable at all. Handing the client that descriptor is not enough: the
-client runs as root in the elevated child, and naming `/proc/self/fd/<n>` makes
+client runs as root in the elevated child, and reopening a procfs descriptor makes
 it **reopen** the file through the magic link, an open that runs with root's
 credentials, which a server squashing root maps to its anonymous account and
 so refuses for a `0600` key. The session therefore reads the key through the
@@ -86,7 +90,7 @@ allow-list is `TERM`, `COLORTERM`, `NO_COLOR` alone — which is what keeps a
 caller-selected askpass helper, agent socket or `LD_PRELOAD` out of the client.
 
 Pinned by `TestSupervisorForwardsOnlyASafeTerminalIdentity`,
-`TestTheClientReadsItsMaterialThroughItsOwnDescriptors`,
+`TestTheClientReadsItsMaterialThroughParentDescriptors`,
 `TestTheClientInheritsOnlyTerminalEnvironment` and
 `TestAPolicyThatWouldRedirectTheSessionRefusesIt`.
 

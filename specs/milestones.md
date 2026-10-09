@@ -25,10 +25,10 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44, X49 and X51 implementation is finished; B470 blocks verification (D126).
+X44 and X49 to X51 are implemented; B470 blocks verification (D126).
 
 - **Next for agents:** deliver X48; B470's upgrade remains deferred (D126),
-  then rerun X44, X49 and X51 gates.
+  then rerun X44 and X49 to X51 gates.
 - **Next for operator:** before a build that contains X46 touches a host,
   destroy every live context with the build that applied it, then run `setup`
   once: X21, X29 to X32, X43, X24, X45 and X46 moved request and record

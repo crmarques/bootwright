@@ -404,9 +404,12 @@ key is superseded only by an explicit re-trust. A host-key observation offers
 no credential, proves nothing by itself, and is never the source of a record.
 
 Session material — the private key, the pinned host key and the client
-configuration — is passed as open descriptors the client inherits, never as
-named paths, arguments or environment values, and is released when the session
-ends. An operator-offered key file joins that material: it is opened under the
+configuration — stays in anonymous mode-0600 files held by the launcher until
+the client exits. The client reopens the launcher's actual descriptors through
+`/proc/<launcher-pid>/fd/<fd>` under the same credentials, so client startup
+closing its inherited descriptors cannot remove access. Material contents
+reach no named file, argument or environment value. An operator-offered key
+file joins that material: it is opened under the
 invoking account's credentials without following a link at its name, proved on
 the received handle to be a regular file the invoking account owns and no other
 account can read, and copied through that handle into anonymous session

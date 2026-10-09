@@ -28,7 +28,13 @@ import (
 func stubClient(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "ssh")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+`previous=
+for argument in "$@"; do
+ case "$previous" in -F) config="$argument";; -i) identity="$argument";; esac
+ case "$argument" in UserKnownHostsFile=*) known_hosts="${argument#UserKnownHostsFile=}";; esac
+ previous="$argument"
+done
+`+body+"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	return path
@@ -103,10 +109,9 @@ func keySession() machine.Session {
 	return s
 }
 
-// The client reads its material through its own descriptors, so the key never
-// exists under a name another process could open.
-func TestTheClientReadsItsMaterialThroughItsOwnDescriptors(t *testing.T) {
-	client := stubClient(t, `cat /proc/self/fd/4; cat /proc/self/fd/5; exit 7`)
+// The client reads material held by the parent until the session ends.
+func TestTheClientReadsItsMaterialThroughParentDescriptors(t *testing.T) {
+	client := stubClient(t, `cat "$identity"; cat "$known_hosts"; exit 7`)
 	var out bytes.Buffer
 	code, err := launcher(t, client).Run(context.Background(), keySession(), nil, &out, &out)
 	if err != nil {
@@ -368,7 +373,7 @@ func TestAnOfferedIdentityFileOwnedByAnotherAccountIsRefused(t *testing.T) {
 // proved on, never through its name, so replacing the name after the key was
 // resolved changes nothing the client can read.
 func TestTheClientReadsTheOfferedKeyThroughTheDescriptorItWasProvedOn(t *testing.T) {
-	client := stubClient(t, `echo "$@"; cat /proc/self/fd/4; exit 0`)
+	client := stubClient(t, `echo "$@"; cat "$identity"; exit 0`)
 	l := launcher(t, client)
 	key := offeredKey(t, "OFFERED KEY\n")
 	resolved, err := l.IdentityFile(context.Background(), key)
@@ -381,7 +386,7 @@ func TestTheClientReadsTheOfferedKeyThroughTheDescriptorItWasProvedOn(t *testing
 	if _, err := l.Run(context.Background(), offered, nil, &out, &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "-i /proc/self/fd/4 ") || strings.Contains(out.String(), key) {
+	if !strings.Contains(out.String(), "-i /proc/"+strconv.Itoa(os.Getpid())+"/fd/") || strings.Contains(out.String(), key) {
 		t.Fatalf("the client was not handed the held key: %q", out.String())
 	}
 	if !strings.Contains(out.String(), "OFFERED KEY") {
@@ -447,9 +452,9 @@ exit 255`)
 
 // An offered key is opened by the invoking account's opener, at the exact
 // path the flag resolved to, and never by this process; the client still
-// reads its bytes through its own descriptor.
+// reads its bytes through the parent's descriptor.
 func TestAnOfferedKeyOpensThroughTheInvokingAccountsOpener(t *testing.T) {
-	client := stubClient(t, `cat /proc/self/fd/4; exit 0`)
+	client := stubClient(t, `cat "$identity"; exit 0`)
 	l := launcher(t, client)
 	home := t.TempDir()
 	l.Home = func() (string, error) { return home, nil }
@@ -476,10 +481,10 @@ func TestAnOfferedKeyOpensThroughTheInvokingAccountsOpener(t *testing.T) {
 }
 
 // The client runs as root and would reopen a handed descriptor through
-// /proc/self/fd, which a root-squashed home refuses, so it is given a private
+// procfs, which a root-squashed home refuses, so it is given a private
 // copy of the proved key rather than the descriptor the opener issued.
 func TestTheClientReadsACopyOfTheOfferedKey(t *testing.T) {
-	client := stubClient(t, `stat -L -c '%d:%i' /proc/self/fd/4; cat /proc/self/fd/4; exit 0`)
+	client := stubClient(t, `stat -L -c '%d:%i' "$identity"; cat "$identity"; exit 0`)
 	l := launcher(t, client)
 	key := offeredKey(t, "OFFERED KEY\n")
 	var stat syscall.Stat_t
@@ -574,7 +579,7 @@ func TestAnOversizedOfferedKeyRefusesBeforeTheClientRuns(t *testing.T) {
 			read, 4*maxOfferedKeyBytes, maxOfferedKeyBytes+1)
 	}
 
-	exact := launcher(t, stubClient(t, `wc -c < /proc/self/fd/4; exit 0`))
+	exact := launcher(t, stubClient(t, `wc -c < "$identity"; exit 0`))
 	offered.IdentityFile = offeredKey(t, strings.Repeat("k", maxOfferedKeyBytes))
 	out.Reset()
 	if _, err := exact.Run(context.Background(), offered, nil, &out, &out); err != nil {
@@ -627,7 +632,7 @@ func TestARootSquashedKeyRefusesNamingALocalCopy(t *testing.T) {
 // opened by this process instead.
 func TestAnUnboundOpenerRefusesAnOfferedKey(t *testing.T) {
 	key := offeredKey(t, "OFFERED KEY\n")
-	l := launcher(t, stubClient(t, `cat /proc/self/fd/4; exit 0`))
+	l := launcher(t, stubClient(t, `cat "$identity"; exit 0`))
 	l.Files = nil
 	_, err := l.IdentityFile(context.Background(), key)
 	refusedAccess(t, err, "a key with no opener")

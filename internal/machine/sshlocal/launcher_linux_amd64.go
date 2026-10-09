@@ -98,7 +98,6 @@ func (l Launcher) Run(ctx context.Context, session machine.Session, in io.Reader
 	command := exec.CommandContext(ctx, client, arguments(session, held)...)
 	command.Stdin, command.Stdout, command.Stderr = in, out, errOut
 	command.Env = l.environment()
-	command.ExtraFiles = files
 	command.Dir = "/"
 	command.Cancel = func() error { return command.Process.Signal(syscall.SIGTERM) }
 	command.WaitDelay = terminationGrace
@@ -141,9 +140,8 @@ func (l Launcher) Observe(ctx context.Context, address string, port int) (trust.
 	observe, cancel := context.WithTimeout(ctx, observationTimeout)
 	defer cancel()
 	command := exec.CommandContext(observe, client,
-		observation(address, port, 3, recorded, int(observationTimeout/time.Second))...)
+		observation(address, port, int(config.Fd()), recorded, int(observationTimeout/time.Second))...)
 	command.Env = l.environment()
-	command.ExtraFiles = []*os.File{config}
 	command.Dir = "/"
 	command.Stdin, command.Stdout, command.Stderr = nil, io.Discard, io.Discard
 	command.WaitDelay = terminationGrace
@@ -295,7 +293,7 @@ func (l Launcher) receive(ctx context.Context, path string) (*os.File, error) {
 
 // offeredCopy reads a proved key through its received descriptor into private
 // session material. The client runs as root and would reopen a handed
-// descriptor through /proc/self/fd, which a root-squashed home refuses, so it
+// descriptor through procfs, which a root-squashed home refuses, so it
 // is given this copy instead.
 func (l Launcher) offeredCopy(ctx context.Context, directory, path string) (*os.File, error) {
 	held, err := l.openIdentity(ctx, path)
@@ -348,8 +346,7 @@ func (l Launcher) policy() ([]byte, error) {
 	return cryptographicPolicy(data, true)
 }
 
-// materialize places everything the client reads into files it inherits as
-// open descriptors. Each is created privately and unlinked before it is
+// materialize places everything the client reads into parent-held files. Each is created privately and unlinked before it is
 // written, so the material exists under no name at all and an interruption
 // leaves no plaintext behind.
 func (l Launcher) materialize(ctx context.Context, policy []byte, session machine.Session) (paths, []*os.File, error) {
@@ -368,14 +365,14 @@ func (l Launcher) materialize(ctx context.Context, policy []byte, session machin
 		return paths{}, files, err
 	}
 	files = append(files, config)
-	held.config = 2 + len(files)
+	held.config = int(config.Fd())
 	if session.IdentityFile != "" {
 		offered, err := l.offeredCopy(ctx, directory, session.IdentityFile)
 		if err != nil {
 			return paths{}, files, err
 		}
 		files = append(files, offered)
-		held.identityFile = 2 + len(files)
+		held.identityFile = int(offered.Fd())
 	}
 	if session.Kind == machine.IdentityKey {
 		if len(session.PrivateKey) == 0 {
@@ -386,19 +383,19 @@ func (l Launcher) materialize(ctx context.Context, policy []byte, session machin
 			return paths{}, files, err
 		}
 		files = append(files, key)
-		held.privateKey = 2 + len(files)
+		held.privateKey = int(key.Fd())
 	}
 	known, err := anonymous(directory, []byte(session.HostKey.Line(session.Address, session.Port)))
 	if err != nil {
 		return paths{}, files, err
 	}
 	files = append(files, known)
-	held.knownHosts = 2 + len(files)
+	held.knownHosts = int(known.Fd())
 	return held, files, nil
 }
 
 // anonymous creates one private file, removes its name, and returns the open
-// handle the child will inherit.
+// handle this process holds until the child exits.
 func anonymous(directory string, data []byte) (*os.File, error) {
 	file, err := os.CreateTemp(directory, "material-")
 	if err != nil {

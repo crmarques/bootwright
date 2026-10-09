@@ -1,16 +1,19 @@
 package sshlocal
 
 import (
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
-// descriptorPath names one of the client's own inherited descriptors. The
-// client resolves it in its own process, so material never exists under a name
-// any other process could open.
-func descriptorPath(fd int) string { return "/proc/self/fd/" + strconv.Itoa(fd) }
+// descriptorPath names material this process holds until the client exits.
+// OpenSSH closes inherited descriptors before reading its configuration. The
+// client retains this process's credentials so it can reopen the held files.
+func descriptorPath(fd int) string {
+	return "/proc/" + strconv.Itoa(os.Getpid()) + "/fd/" + strconv.Itoa(fd)
+}
 
 // paths names where one invocation's material was placed for the client. An
 // absent descriptor is zero, which is never a material descriptor.

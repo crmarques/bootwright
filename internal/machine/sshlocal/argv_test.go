@@ -1,7 +1,9 @@
 package sshlocal
 
 import (
+	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -27,9 +29,9 @@ const fixedSuffix = "-o GSSAPIAuthentication=no -o HostbasedAuthentication=no -o
 
 func TestTheKeyArmOffersExactlyTheResolvedCredential(t *testing.T) {
 	got := strings.Join(arguments(session(machine.IdentityKey), paths{config: 3, privateKey: 4, knownHosts: 5}), " ")
-	want := "-F /proc/self/fd/3 -i /proc/self/fd/4 -o IdentitiesOnly=yes -o IdentityAgent=none " +
+	want := "-F /proc/" + strconv.Itoa(os.Getpid()) + "/fd/3 -i /proc/" + strconv.Itoa(os.Getpid()) + "/fd/4 -o IdentitiesOnly=yes -o IdentityAgent=none " +
 		"-o PreferredAuthentications=publickey -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no " +
-		fixedSuffix + " -o UserKnownHostsFile=/proc/self/fd/5 -o StrictHostKeyChecking=yes " +
+		fixedSuffix + " -o UserKnownHostsFile=/proc/" + strconv.Itoa(os.Getpid()) + "/fd/5 -o StrictHostKeyChecking=yes " +
 		"-o HostKeyAlgorithms=ssh-ed25519 -l bootwright 198.51.100.11"
 	if got != want {
 		t.Fatalf("arguments =\n%s\nwant\n%s", got, want)
@@ -38,12 +40,12 @@ func TestTheKeyArmOffersExactlyTheResolvedCredential(t *testing.T) {
 
 // An offered key is preferred, and the declared credential stays behind it as
 // the fallback rather than being dropped. The client reads the offered key
-// through its own descriptor, never by the name it was offered as.
+// through the parent's descriptor, never by the name it was offered as.
 func TestAnOfferedKeyPrecedesTheDeclaredCredential(t *testing.T) {
 	with := session(machine.IdentityKey)
 	with.IdentityFile = "/home/operator/.ssh/id_ed25519"
 	got := strings.Join(arguments(with, paths{config: 3, identityFile: 4, privateKey: 5, knownHosts: 6}), " ")
-	if !strings.Contains(got, "-i /proc/self/fd/4 -i /proc/self/fd/5 -o IdentitiesOnly=yes") {
+	if !strings.Contains(got, "-i /proc/"+strconv.Itoa(os.Getpid())+"/fd/4 -i /proc/"+strconv.Itoa(os.Getpid())+"/fd/5 -o IdentitiesOnly=yes") {
 		t.Fatalf("arguments = %s", got)
 	}
 	if strings.Contains(got, with.IdentityFile) {
@@ -53,10 +55,10 @@ func TestAnOfferedKeyPrecedesTheDeclaredCredential(t *testing.T) {
 
 func TestTheOperatorArmOffersNoMaterialFromThisContext(t *testing.T) {
 	got := strings.Join(arguments(session(machine.IdentityOperator), paths{config: 3, knownHosts: 4}), " ")
-	if strings.Contains(got, "/proc/self/fd/4 -o IdentitiesOnly") || strings.Contains(got, "-i ") {
+	if strings.Contains(got, "/proc/"+strconv.Itoa(os.Getpid())+"/fd/4 -o IdentitiesOnly") || strings.Contains(got, "-i ") {
 		t.Fatalf("the operator arm offered a credential: %s", got)
 	}
-	if !strings.Contains(got, "-o UserKnownHostsFile=/proc/self/fd/4") {
+	if !strings.Contains(got, "-o UserKnownHostsFile=/proc/"+strconv.Itoa(os.Getpid())+"/fd/4") {
 		t.Fatalf("arguments = %s", got)
 	}
 	if !strings.Contains(got, "-o IdentityAgent=none") {
@@ -138,7 +140,7 @@ func TestACommandReachesTheRemoteShellAsTheExactWordsGiven(t *testing.T) {
 func TestAnObservationOffersNoCredential(t *testing.T) {
 	got := strings.Join(observation("198.51.100.11", 2222, 3, "/tmp/scratch/known_hosts", 10), " ")
 	for _, required := range []string{
-		"-F /proc/self/fd/3",
+		"-F /proc/" + strconv.Itoa(os.Getpid()) + "/fd/3",
 		"-o StrictHostKeyChecking=accept-new",
 		"-o UserKnownHostsFile=/tmp/scratch/known_hosts",
 		"-o BatchMode=yes",

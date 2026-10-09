@@ -836,8 +836,8 @@ writes only diagnostics and the host-key confirmation, on standard error,
 before the connection opens. `machine exec` runs the exact argument vector and
 reports the remote command's exit status; `machine rsh` accepts no command
 tail. The client reads no ambient SSH configuration, inherits no agent,
-receives only terminal-identifying environment values, and is given the
-session's material as open descriptors rather than named files.
+receives only terminal-identifying environment values, and reads anonymous
+session material through descriptors the launcher holds until the client exits.
 
 Resolution follows explicit access: an unknown or excluded name fails
 `access.target`, a Machine reached locally fails `access.unavailable` naming
