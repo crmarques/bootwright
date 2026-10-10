@@ -21,14 +21,14 @@ Alias cell.
 | [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
 | [B98](#b98) | C30; B336 split from it on 2026-10-05 (D101) | enabling | Architecture | Production comments reduced to what the clarity contract keeps | D101: M1 amends the rule, and a ratchet holds the count |
 | [B99](#b99) | C1 (vSphere) | product | Substrate | One vSphere provisioning variant | No milestone names vSphere |
-| [B100](#b100) | C2 (LoadBalancer) | product | Infrastructure services | One managed `LoadBalancer` lifecycle | No consumer; M5's MetalLB is an in-cluster add-on |
+| [B100](#b100) | C2 (LoadBalancer) | product | Infrastructure services | One managed `LoadBalancer` lifecycle | No consumer; M4's MetalLB is an in-cluster add-on |
 | [B101](#b101) | C6 (rest) | product | CLI | One more view of evidence or access, or a dashboard | No milestone names a view or dashboard |
-| [B102](#b102) | C8 | product | Custom automation | One typed, invertible executable playbook journey | M7's packages are add-ons, not playbooks |
+| [B102](#b102) | C8 | product | Custom automation | One typed, invertible executable playbook journey | M6's packages are add-ons, not playbooks |
 | [B103](#b103) | C14 | safety | Workspace and Secrets | Explicit complete-store restore | No milestone needs backup and restore |
 | [B104](#b104) | C15; B337 split from it on 2026-10-05 (D85) | safety | Secrets | Bounded lifetime allocation for secret reservations | D85: after B337 only applies and new versions consume the budget; waits on B103 |
 | [B105](#b105) | C19 | product | Secrets | One more secret-store implementation | `local-keyring` meets the current scope |
 | [B106](#b106) | M4 (day-2 surface) | product | Container cluster | The day-2 surface a completed cluster exposes | A product non-goal |
-| [B107](#b107) | new, 2026-09-28 | product | Add-ons and Storage | Data Foundation over an external Ceph cluster | M5 integrates a managed Ceph cluster (D19) |
+| [B107](#b107) | new, 2026-09-28 | product | Add-ons and Storage | Data Foundation over an external Ceph cluster | M4 integrates a managed Ceph cluster (D19, D128) |
 | [B161](#b161) | new, 2026-09-30 (X28) | enabling | Architecture | The walk guard follows every write | Parked under the 2026-09-30 triage rule: test tooling |
 | [B162](#b162) | new, 2026-09-30 (X28) | enabling | Architecture | The diagnostic registry follows every call shape | Parked under the 2026-09-30 triage rule: test tooling |
 | [B163](#b163) | new, 2026-09-30 (X28) | enabling | Architecture | Test-loop wording and counts | Parked under the 2026-09-30 triage rule: tooling polish |
@@ -179,7 +179,7 @@ to the result.
 One vSphere machine-provisioning variant. An arm is a capability package plus
 one case of the [target derivation](../substrates.md#selection-and-refusal),
 and no consumer of a realized Machine changes; its KubeVirt counterpart is
-[B87](m6.md#b87). **Exit evidence:** the exact release, adapter contract, its
+[B87](m5.md#b87). **Exit evidence:** the exact release, adapter contract, its
 two fixed identity and pre-boot task files, failure and replay tests and
 real-system qualification; [refused machine arms](../deferred/machine-arms.md)
 records the admitted arm.
@@ -266,8 +266,8 @@ evidence:** set by that change.
 ### B107
 
 OpenShift Data Foundation, through IBM Fusion Data Foundation, integrating an
-OpenShift cluster with a Ceph cluster Bootwright does not manage. M5 integrates
-the Ceph cluster M4 manages instead (D19). **Exit evidence:** set when it is
+OpenShift cluster with a Ceph cluster Bootwright does not manage. M4 integrates
+the Ceph cluster M2 manages instead (D19, D128). **Exit evidence:** set when it is
 attached to a milestone.
 
 ### B161
@@ -482,7 +482,7 @@ A DNSServer's bind address defaults to the wildcard address, which collides with
 
 ### B334
 
-The emulated BMC runs as root, unconfined, with the libvirt socket, and serves plain HTTP with a basic-auth credential; [B301](m1.md#b301) binds the examples' BMCs to loopback. A refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). D120 split the emulator's TLS with a generated certificate its client verifies out as [B446](m4.md#b446), in M4. **Exit evidence:** the refusal and the confined type, each with tests.
+The emulated BMC runs as root, unconfined, with the libvirt socket, and serves plain HTTP with a basic-auth credential; [B301](m1.md#b301) binds the examples' BMCs to loopback. A refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). D120 split the emulator's TLS with a generated certificate its client verifies out as [B446](m2.md#b446), in M4. **Exit evidence:** the refusal and the confined type, each with tests.
 
 ### B335
 
@@ -498,7 +498,7 @@ In a human invocation sudo's sudoers denial, such as `Sorry, user ... is not all
 
 ### B346
 
-The libvirt guest-agent identity proof and `machine rsh` and `exec` pin `ssh-ed25519` host keys, and it is unverified whether a FIPS-mode RHEL 9.8 controller's OpenSSH verifies an explicitly pinned Ed25519 key; if it refuses, lab-rhel cannot complete on such a controller and the identity path needs the key-type work [B73](m4.md#b73) does for physical installation (found in X39). **Exit evidence:** a recorded check on the D109 controller in FIPS mode before the real-hardware run, and, if it refuses, a pinned type the controller's policy admits on that path.
+The libvirt guest-agent identity proof and `machine rsh` and `exec` pin `ssh-ed25519` host keys, and it is unverified whether a FIPS-mode RHEL 9.8 controller's OpenSSH verifies an explicitly pinned Ed25519 key; if it refuses, lab-rhel cannot complete on such a controller and the identity path needs the key-type work [B73](m2.md#b73) does for physical installation (found in X39). **Exit evidence:** a recorded check on the D109 controller in FIPS mode before the real-hardware run, and, if it refuses, a pinned type the controller's policy admits on that path.
 
 ### B348
 
@@ -867,7 +867,7 @@ collection and members on a powered-off server; the artifact unit's journal
 volume during a streamed ISO fetch against journald's rate limit, since one line
 is logged per completed range request; and the disk figures and the firewall
 zone opening the lab-baremetal README gives, written as the brief stated them.
-The device's `VerifyCertificate` is [B447](m4.md#b447)'s. **Exit evidence:**
+The device's `VerifyCertificate` is [B447](m2.md#b447)'s. **Exit evidence:**
 each observed on a host and recorded in the
 [acceptance ledger](../../docs/acceptance.md) or the knowledge page with the
 build commit, or withdrawn by the owner.
@@ -1003,7 +1003,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | C27 | before 2026-09 | Delivered by [X3](delivered.md#x3--machine-ssh-sessions-and-host-trust). |
 | R1 | 2026-09-28 | Merged into [B19](m1.md#b19) with C28, whose outcome it was. |
 | M2a, M2b, M3, M4, M5, M6 | 2026-09-28 | These rows became items whose Alias cells name them; the numbers M3 to M6 now name milestones. |
-| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), [B73](m4.md#b73), [B61](m3.md#b61) and [B71](m3.md#b71); M-letter IDs are no longer issued. |
+| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), [B73](m2.md#b73), [B61](m3.md#b61) and [B71](m3.md#b71); M-letter IDs are no longer issued. |
 | N1 to N5, L2, L4, L5, L6 | 2026-09-28 | Became items whose Alias cells name them; L1 and L3 never existed. |
 | K01 to K73 | 2026-09-28 | The audit plan's cluster tokens, defined nowhere in the repository; the grouping stays in Git history. |
 | Phase 0 to Phase 4 | 2026-09-28 | The audit plan's ordering; slices carry order now. |
@@ -1166,3 +1166,4 @@ Requires cell as `owner decision: <question>`.
 - **D123** (2026-10-08, the owner accepted the session's recommendation): B440: D119's destroy resolution must not lose produced material: a destroy that resolves an unknown apply block first runs that block's apply observation (the capability's read-only Observe) and, when it proves the operation completed, captures the produced material into custody exactly as a completed apply's finalization does (for example the agent-install admin kubeconfig) before any inverse runs; a drifted machine whose observation does not prove completion is still resolved by the removal's ownership proof as D119 says; the state-reconciliation spec states the capture.
 - **D124** (2026-10-08, the owner accepted the session's recommendation): B440: an installer's kept administrator kubeconfig is never deleted while custody holds none for that cluster: when a removal (the agent-install media block's inverse, or any inverse that deletes the installer's work area) would delete the kept kubeconfig and custody holds no kubeconfig for that ContainerCluster, it first moves the kept copy into custody as produced material marked unproved access, its completion never proved, under the custody path and bounds a completed apply's capture uses, and only then removes the work area, so a crash between the two leaves the copy in one durable place or both and never in neither; `bootwright cluster kubeconfig` exports it with a warning that its access was not proved; deleting the context removes it as it removes any custody entry; this holds whatever the nodes' power state, so the destroy's `Stop first` path loses nothing.
 - **D125** (2026-10-09, the owner): bounded concurrent execution is required for M1 to be implemented. B303 and B304 return from M3 to M1 with their IDs, and B466 adds separate shared package-tree publication and production concurrency, with contract definition required before its implementation. X48 is planned after X46 and before X44; D59's closing gate must prove independent service and machine work, including three same-profile installations, actually overlapping, with replay, cleanup and safe destroy. Prior serial acceptance does not discharge this gate. This request authorizes review and backlog planning; implementation remains subject to the scope rules.
+- **D128** (2026-10-10, the owner): keep M1's scope, sequence and completion gates unchanged. M2 is full managed IBM Ceph 9.9.x provisioning on libvirt+sushy and physical bare metal/BMC, with every provider provisioning feature qualified through B472, B80 and B81; M3 is full OpenShift cluster provisioning on those two provider paths, with complete coverage defined by B473. Move the former M4 Ceph scope to M2, former M5 first add-ons to M4, former M6 OpenShift Virtualization to M5, former M7 ACM/Argo CD/GitLab to M6, and former M2 standalone native rendering to the final M7. Move B70's shared physical erase gate from M3 to M2; managed storage projection and lifecycle qualification no longer wait for standalone rendering or OpenShift. B, X and prior D identifiers remain fixed, and dated history retains its original milestone numbers. Each scope transferred as a whole keeps its items and delivery evidence.

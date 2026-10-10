@@ -2,7 +2,7 @@
 
 The parked item [B101](../milestones/backlog.md#b101) revives this page's
 cluster inspection, access and node-selection detail, the items
-[B52](../milestones/m2.md#b52) and [B55](../milestones/m2.md#b55) its rendering
+[B52](../milestones/m7.md#b52) and [B55](../milestones/m7.md#b55) its rendering
 detail, and the first slice that implements an Environment preflight family its
 preflight detail. None of it is a contract until that slice moves it back into
 the [CLI](../cli.md), the [command catalog](../cli/commands.md) or the

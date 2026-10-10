@@ -39,7 +39,7 @@ and the cluster that installs onto it. Its README walks the journey.
 one operator-owned server that RHEL is installed on through its own Redfish
 management controller. Its installation publishes the installer image and the
 delivered host key privately and needs a verified controller leg
-([B73](../specs/milestones/m4.md#b73)); its README states the
+([B73](../specs/milestones/m2.md#b73)); its README states the
 [host prerequisites](lab-baremetal/README.md#host-prerequisites) and
 [the run](lab-baremetal/README.md#run-it), proved in-tree only, and the
 rehearsal against an emulated controller that is not provided yet.

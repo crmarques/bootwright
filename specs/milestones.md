@@ -18,12 +18,12 @@ every other command `bootwright --help` lists returns the
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
 | [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | X46, then X48, then X44 |
-| [M2](milestones/m2.md) | Native input files for `openshift-install` and the cephadm and ceph CLIs | none | not started | define B51 |
-| [M3](milestones/m3.md) | Provision and destroy OpenShift clusters on bare metal | M1 | in progress | B61's operator gate |
-| [M4](milestones/m4.md) | Provision and destroy IBM Ceph clusters on bare metal | M1, M2, M3 | in progress | after M1: X47, B73's gate |
-| [M5](milestones/m5.md) | First add-ons: MetalLB ingress and IBM Fusion Data Foundation | M3, M4 | not started | nothing until M3 and M4 |
-| [M6](milestones/m6.md) | Provision and destroy OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
-| [M7](milestones/m7.md) | Add-ons ACM, Argo CD and GitLab | M5 | not started | nothing until M5 |
+| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x on libvirt+sushy and bare metal/BMC | M1 | in progress | after M1: X47, B73; define B472 |
+| [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
+| [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
+| [M5](milestones/m5.md) | OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
+| [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
+| [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
 X46 is active; X43, X24 and X45 are delivered.
 
@@ -33,13 +33,12 @@ X46 is active; X43, X24 and X45 are delivered.
   destroy every live context with the build that applied it, then run `setup`
   once: X21, X29 to X32, X43, X24, X45 and X46 moved request and record
   versions, the keyring format, the automation digest and the plan encoding.
-  On a clean build, run [lab-sno](../examples/lab-sno/README.md) for
-  [B61](milestones/m3.md#b61) and record it per the
-  [operator guide](../docs/operator-guide.md). After X44, run M1's
-  closing lab-rhel run (D59): B19, B20, B270, B339 and
+  After X44, run M1's closing lab-rhel gate (D59): B19, B20, B270, B339 and
   [B466](milestones/m1.md#b466).
-  [B73](milestones/m4.md#b73)'s rehearsal follows X47, then one xFusion
-  observation ([B305](milestones/m4.md#b305)).
+  After M1: X47, [B73](milestones/m2.md#b73)'s rehearsal,
+  [B305](milestones/m2.md#b305)'s observation and M2's cluster gates, then
+  M3's [B61](milestones/m3.md#b61) and cluster gates. Record runs per the
+  [operator guide](../docs/operator-guide.md).
 
 ## Scope rules
 
@@ -103,8 +102,9 @@ X46 is active; X43, X24 and X45 are delivered.
 
 ## Identifiers
 
-- **M\<n\>, milestone.** A positive integer, never reused or suffixed; its
-  number is its place in the delivery sequence. A new milestone is appended.
+- **M\<n\>, milestone.** A positive integer for a delivery sequence position;
+  never reused or suffixed except D128's renumbering of unfinished scopes.
+  New milestones append; dated history and B, X and D identifiers stay fixed.
 - **B\<n\>, item.** One bounded outcome on exactly one milestone page, or
   parked in the backlog. The number encodes nothing and never changes: a new
   item takes one above the largest B under `specs/milestones/`, and a branch

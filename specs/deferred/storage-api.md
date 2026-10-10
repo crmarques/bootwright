@@ -1,12 +1,13 @@
 # Storage field detail
 
-[B55](../milestones/m2.md#b55) revives this detail when
-it qualifies a Ceph release and its renderer. Until then the
+[B472](../milestones/m2.md#b472) revives this detail when it qualifies
+IBM Ceph 9.9.x lifecycle inputs; [B55](../milestones/m7.md#b55) later reuses
+that qualification for standalone native files. Until then the
 [storage admission contract](../api/storage.md) owns the kinds, references,
 replicated protection and graph invariants, and the closed schema in
 `api/v1alpha1/storage.go` is authoritative for field names, types and shapes.
 The tables below record that schema, the field-local rules `internal/storage`
-admission enforces as written, and the renderer defaults B55 must confirm or
+admission enforces as written, and the native projection defaults B472 must confirm or
 revise.
 
 ## Shared shapes

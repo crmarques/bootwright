@@ -2,7 +2,7 @@
 
 One physical server installed with RHEL through its own Redfish management
 controller. It is the smallest complete shape
-[B73](../../specs/milestones/m4.md#b73) supports: a controller
+[B73](../../specs/milestones/m2.md#b73) supports: a controller
 Machine running the managed services, a bare-metal `InfraProvider`, and one
 Machine that declares the hardware it must be proved to be.
 
@@ -216,7 +216,7 @@ That rehearsal does not run yet. A private delivery refuses an unverified
 controller leg, and the emulated controller serves plain HTTP
 (`internal/substrate/naming.go`), so the copy needs an https emulated
 controller whose authority it names in `tls.trustBundleRef`, which is not
-provided yet ([B446](../../specs/milestones/m4.md#b446)). Keep any such copy out
+provided yet ([B446](../../specs/milestones/m2.md#b446)). Keep any such copy out
 of the repository: its addresses belong to one workstation, and
 `examples/wip/` is ignored for exactly this.
 

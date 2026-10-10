@@ -5,8 +5,10 @@ This page owns admission of `StorageCluster`, `StoragePlacementPolicy`,
 and `StorageExport`. The closed schema in `api/v1alpha1/storage.go` is
 authoritative for field names, types, defaults and shapes. The
 [storage field detail](../deferred/storage-api.md) records its tables, the
-field-local rules `internal/storage` admission enforces, and the renderer
-defaults [B55](../milestones/m2.md#b55) revives; changing an enforced rule is an API change under
+field-local rules `internal/storage` admission enforces, and the native
+projection defaults [B472](../milestones/m2.md#b472) qualifies for managed
+Ceph; [B55](../milestones/m7.md#b55) later reuses them for standalone rendering.
+Changing an enforced rule is an API change under
 [version authority](../api.md#version-authority). Fields use Bootwright camel case; only the
 explicitly declared `config`, `spec` and `parameters` maps accept open payloads.
 [The compiler boundary](../api.md#compiler-boundary) and

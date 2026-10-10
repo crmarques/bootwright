@@ -260,7 +260,7 @@ domains, a disabled IPv6 family, an `mtu` of 1500 and a `table-id` or
 them, as the lab-rhel example declares them: 1500 is the MTU
 the installed system takes by default, and the installed system applies none
 of the others until post-install network convergence
-([B326](milestones/m4.md#b326)).
+([B326](milestones/m2.md#b326)).
 
 What the `%post` does about the host key follows the
 [identity channel](substrates.md#identity-and-power-operations). For the guest
@@ -477,7 +477,7 @@ operator to destroy the operation and plan again, while its destroy and
 observation still run.
 
 This arm is proved in-tree only. The emulated rehearsal, B73's operator gate,
-and an installation on real hardware ([B78](milestones/m4.md#b78)) have not
+and an installation on real hardware ([B78](milestones/m2.md#b78)) have not
 run, so no firmware is claimed supported.
 
 Installing a physical server differs from installing a virtual one in three

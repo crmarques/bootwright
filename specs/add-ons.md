@@ -36,5 +36,5 @@ add-on as a workflow. `CustomPlaybook` is a separate
 The package standard, catalogs, versioned host interface, closed execution
 vocabulary, ordering, GitOps handoff, qualification suite and step semantics
 are recorded in the [add-ons design](deferred/add-ons-design.md), which
-[B83](milestones/m5.md#b83), [B89](milestones/m7.md#b89) and
-[B90](milestones/m7.md#b90) revive.
+[B83](milestones/m4.md#b83), [B89](milestones/m6.md#b89) and
+[B90](milestones/m6.md#b90) revive.

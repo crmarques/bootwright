@@ -1297,7 +1297,7 @@ bare-metal claim, a power request or a cluster media block frozen by an earlier
 build refuses both continuation and removal under this build, and a keyring
 written before it refuses, so such contexts are destroyed with the build that
 applied them before `setup` runs with this one. The import flow is proved only
-in-tree ([B73](m4.md#b73)); the media probe names the controller's file because
+in-tree ([B73](m2.md#b73)); the media probe names the controller's file because
 media blocks run only on the controller; and every cluster read still uses the
 installer's kubeconfig (B170 ([X31](#x31--recovery-setup-custody-refusals-and-adapter-defects))). New items B168 to B170 entered M1,
 B171 was parked, and B67 records the refusal its physical nodes lift.
@@ -1903,7 +1903,7 @@ ones. Tracked elsewhere:
 refuses ([B226](backlog.md#b226)); a bind-time refusal naming its Secret
 ([B285](#x40--machine-commands-status-secrets-and-validate-refusals)); the emulator's URI rendered as data
 ([B295](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); the FIPS key types of the bare-metal README
-([B73](m4.md#b73)); a cancellation inside a binding's publication, which
+([B73](m2.md#b73)); a cancellation inside a binding's publication, which
 bounded runs lose with [B337](#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs); and a context whose reservation
 is damaged or that owns live objects, now clauses of
 [B325](backlog.md#b325). Under D48 every other follow-up was parked: B339
@@ -2376,7 +2376,7 @@ of its context opened beside it, which no later build can change. Tracked
 elsewhere: the uninitialized-store refusal the bounded read shares with a
 binding ([B361](#x46--the-safety-and-defect-sweep-of-m1)); container-cluster admission remedies
 ([B313](m3.md#b313)); content the install line still drops, search domains
-and IPv6 policy among it ([B338](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation), [B326](m4.md#b326)); RHEL 9.8's
+and IPv6 policy among it ([B338](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation), [B326](m2.md#b326)); RHEL 9.8's
 `rpm` output and the snapshot read as the helper account
 ([B335](backlog.md#b335), and the RHEL 9.8 controller run D60 plans); the
 glibc and libgcc builds a RHEL 9.8 controller must hold, and building on a
@@ -2530,7 +2530,7 @@ network or broadcast address; and `hardware.nics` MACs or `management.bmc` on
 a libvirt provider's Machine. The emulated BMC port range counts only the
 Machines allocation realizes. The libvirt provider's
 `bmcEmulationDefaults.disableCertificateVerification`, the bare-metal
-attachment's `vlan` (with [B74](m4.md#b74)) and `hardware.boot` leave
+attachment's `vlan` (with [B74](m2.md#b74)) and `hardware.boot` leave
 v1alpha1 and refuse as unknown fields, and bare metal no longer requires an
 `attachmentRef` (D94). An invalid Machine name or an unresolved fleet key
 yields only its own diagnostic, and the fqdn grammar is the API's DNS rule.
@@ -3117,8 +3117,8 @@ M4 delivered out of sequence on the owner's request (D60), on 2026-10-08 as one
 commit, the third slice to move request versions and the automation digest, in
 the window X43 opened. **Decisions:** D60, D103, D104,
 D110, D113, and, recorded after the run, D120, D121 and D122. **In-tree gates
-passed, operator gates awaiting acceptance:** [B73](m4.md#b73), whose
-acceptance baseline is this commit, and [B305](m4.md#b305); their rows stay on
+passed, operator gates awaiting acceptance:** [B73](m2.md#b73), whose
+acceptance baseline is this commit, and [B305](m2.md#b305); their rows stay on
 M4 with Delivery `awaiting operator acceptance`.
 
 **Outcome, B73:** a physical installation no longer refuses before
@@ -3193,8 +3193,8 @@ and the bytes, with the error log kept at warn. The MAC proof stays strict and
 its refusal names each declared NIC the inventory lacks and each member that
 proved nothing by position, never a reported value. The knowledge page on
 physical BMCs is rewritten from the captures without host names or serials, with
-the RSA premise and its check, and each of [B74](m4.md#b74) to
-[B77](m4.md#b77) points to the pre-rewrite page that holds its field lessons.
+the RSA premise and its check, and each of [B74](m2.md#b74) to
+[B77](m2.md#b77) points to the pre-rewrite page that holds its field lessons.
 
 **Review:** four sub-items in two lanes integrated without a conflict and with
 one integration fix: the insert bound grew by 3 minutes (36m20s to 39m20s) for
@@ -3232,7 +3232,7 @@ compare the rendered file, so it reports no drift before then. **Before a build
 that contains X43, X24 or X45 touches a host, destroy every live context with
 the build that applied it, then run `setup` once, with `--purge-old-bundles`
 when the host is at its bundle bound;** one such destroy and setup serve the
-three slices, and the next window opens with M4's [X47](m4.md#planned-slices) and M1's [X46](m1.md#planned-slices).
+three slices, and the next window opens with M4's [X47](m2.md#planned-slices) and M1's [X46](m1.md#planned-slices).
 
 **Operator-visible effects:** a physical installation whose controller leg is
 verified plans, applies and proves completion against its delivered key, and an
@@ -3264,24 +3264,24 @@ that did not write the diff, is the independent review the safety-class items
 name. No real-host run: the rehearsal, the xFusion observation and every effect
 on a host are unrun, and each depends on X47.
 
-**Constraints left behind:** [B73](m4.md#b73) completes on an owner-accepted
+**Constraints left behind:** [B73](m2.md#b73) completes on an owner-accepted
 ledger row of the lab-baremetal rehearsal on a build that descends from this
-commit, which X47's [B446](m4.md#b446) makes runnable (D120), and
-[B305](m4.md#b305) on the first xFusion server, which D60 records as an
-observation and which needs [B447](m4.md#b447)'s rule (D121) first; real
-hardware is [B78](m4.md#b78)'s (D17). A
+commit, which X47's [B446](m2.md#b446) makes runnable (D120), and
+[B305](m2.md#b305) on physical hardware, which D60 records as an
+observation and which needs [B447](m2.md#b447)'s rule (D121) first; real
+hardware is [B78](m2.md#b78)'s (D17). A
 [residual race](../state-reconciliation.md#mutation-safety) between the last
 controller proof and the installer's first write, and physical destroy that
-retains the system ([B70](m3.md#b70)), stay. None of the follow-ups joins M1:
+retains the system ([B70](m2.md#b70)), stay. None of the follow-ups joins M1:
 each lies in the physical-installation or the Redfish journey, so four joined
-M4, the emulated controller's TLS ([B446](m4.md#b446)) and the read-back's rule
-with the silent `disable-verification` ([B447](m4.md#b447)), which D120 and
+M4, the emulated controller's TLS ([B446](m2.md#b446)) and the read-back's rule
+with the silent `disable-verification` ([B447](m2.md#b447)), which D120 and
 D121 put on the new slice X47, a key type the controller's policy excludes
-([B448](m4.md#b448)) and the insert bound ([B449](m4.md#b449)); under D48 three
+([B448](m2.md#b448)) and the insert bound ([B449](m2.md#b449)); under D48 three
 were parked: the private subtree on plain listeners ([B450](backlog.md#b450)),
 the host observations ([B451](backlog.md#b451)) and the wording and tests
 ([B452](backlog.md#b452)). Already tracked: the iBMC's privilege refusal, HTTP
-400, joined [B319](m4.md#b319)'s definition; the libvirt identity path's FIPS
+400, joined [B319](m2.md#b319)'s definition; the libvirt identity path's FIPS
 key is [B346](backlog.md#b346); and the TLS half of [B334](backlog.md#b334)
 moved to B446 (D120).
 

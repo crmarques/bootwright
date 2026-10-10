@@ -154,7 +154,7 @@ discovered under [the API input rules](input.md#discovery):
   invalid.
 
 A native add-on descriptor published by the add-on registration journey
-([B89](../milestones/m7.md#b89) owns its storage and publication) is the sole selection exception.
+([B89](../milestones/m6.md#b89) owns its storage and publication) is the sole selection exception.
 `add-ons/_store/<name>/add-on.yaml` is selected when it contains exactly one
 `ClusterAddon/<name>` and the same directory contains the exact sibling basename
 `.bootwright-addon`. `<name>` is a DNS label of at most 63 ASCII bytes, and the

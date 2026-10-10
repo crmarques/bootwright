@@ -509,7 +509,7 @@ retains the machine and lists no impact. It consumes no authorization, because
 it destroys nothing. The removal's resolution observes nothing and is always
 its completion, because the removal changes nothing on the machine. Physical
 erasure is deliberately not part of this contract
-and remains [B70](milestones/m3.md#b70).
+and remains [B70](milestones/m2.md#b70).
 
 **Quiescence.** The removal takes back only a claim, which nothing reads, so
 this block is always quiescent under the

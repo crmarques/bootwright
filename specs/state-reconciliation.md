@@ -1513,7 +1513,7 @@ supported.
 
 Physical destroy and offline disk erase are outside this contract: a removal
 retains the machine and the system installed on it, and erasing one requires a
-separate safety contract ([B70](milestones/m3.md#b70)).
+separate safety contract ([B70](milestones/m2.md#b70)).
 
 ### Controller-host protection
 

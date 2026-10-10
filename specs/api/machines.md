@@ -106,7 +106,7 @@ the `templateClone` installer arm are admitted by the closed schema and refused
 before registration by [substrate selection](../substrates.md#selection-and-refusal)
 and [managed-OS installation](../managed-os.md#installation). Their field
 detail is recorded in [refused machine arms](../deferred/machine-arms.md),
-which [B87](../milestones/m6.md#b87) and [B99](../milestones/backlog.md#b99) revive.
+which [B87](../milestones/m5.md#b87) and [B99](../milestones/backlog.md#b99) revive.
 A Machine's [`network.interfaceAttachments`](#network-configuration), which
 only the KubeVirt arm reads, refuses at admission on every realized substrate.
 
@@ -135,7 +135,7 @@ materializes `0`, which admission refuses at that profile's size.
 
 | Arm | Exact fields | Rule |
 | --- | --- | --- |
-| `baremetal` | none | Names a physical network a Machine may select; it configures nothing. A VLAN interface is [B74](../milestones/m4.md#b74)'s. |
+| `baremetal` | none | Names a physical network a Machine may select; it configures nothing. A VLAN interface is [B74](../milestones/m2.md#b74)'s. |
 | `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `bridge` is 1 to 15 bytes of letters, digits, `_`, `.` or `-`, and neither `.` nor `..`; a `+` is refused because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. On one host, no two providers declare a managed attachment of one name, a bridge a managed attachment defines is named by no other attachment, of the same provider or another, and no two managed attachments, of one provider or two, declare overlapping prefixes, IPv4 or IPv6; each refuses at admission, naming both providers. A libvirt provider declares at most 20 managed attachments (its host reservation's key bound). |
 
 ## Machine

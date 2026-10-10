@@ -158,7 +158,7 @@ privilege answered **400** `iBMC.1.0.PropertyModificationNeedPrivilege`, not
 401 or 403 (the capture of 15:09Z, the HTTPS transfer verification PATCH). The
 client's restore reads a 400 as a read-only property, which is harmless there
 because the device property answers 501 and the restore never writes the
-manager; but [B319](../../specs/milestones/m4.md#b319), which takes the
+manager; but [B319](../../specs/milestones/m2.md#b319), which takes the
 manager's import, must read that 400 as a privilege refusal.
 
 ## Virtual-media certificate trust
@@ -247,7 +247,7 @@ completed install, so they settle shapes, not an end-to-end run.
   `Oem.<vendor>`. It carries `HttpsTransferCertVerification`, `false` in every
   capture, and the actions `ImportRemoteHttpsServerRootCA` and
   `DeleteRemoteHttpsServerRootCA`; the import is
-  [B319](../../specs/milestones/m4.md#b319)'s.
+  [B319](../../specs/milestones/m2.md#b319)'s.
 
 **Reachability is the BMC's.** The BMC fetches the image itself, over its own
 network. The host-name image URL failed with `iBMC.1.0.ConnectionFailed` (the
@@ -393,7 +393,7 @@ the metadata decide**. A vendor name never appears in a condition.
 
 The reference used one fixed value, the iBMC certificate slot (`RootCertId` 8);
 which slot the manager's import takes is
-[B319](../../specs/milestones/m4.md#b319)'s to settle.
+[B319](../../specs/milestones/m2.md#b319)'s to settle.
 
 ## Prove by observation, not by response status
 
