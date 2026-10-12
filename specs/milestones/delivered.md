@@ -3963,7 +3963,7 @@ guard only, verified with its own tests and `make fmt-check vet docs-check`.
 
 **Digest and version effects:** none. No request, record, plan or automation
 digest moves; `version` now prints the embedded automation digest instead of
-`none`, and the usage JSON golden and five help goldens changed for the review's
+`none`, and the usage JSON golden and eight help goldens changed for the review's
 wording.
 
 **Operator-visible effects:** help names enum values and marks unavailable
@@ -4160,8 +4160,8 @@ state was running with the group SIGKILL pending in 43 cases, a zombie awaiting
 the adopter's reap in 24, running and then zombie in 5, and gone between check
 and read in 3, and every one disappeared within 35 ms. The cause is reaping
 latency after the group SIGKILL, the death plus the adopter's reap, and not a
-live descendant or a lasting unreaped zombie; no canceled production run leaks a
-process. The current test read a reaped task's record as the process vanished
+live descendant or a lasting unreaped zombie; no production defect was found.
+The current test read a reaped task's record as the process vanished
 and got ESRCH, which its loop took for a probe failure, once in 1500; `fixtureGone`
 now accepts ENOENT or ESRCH, `TestAFixtureProcessReapedDuringItsReadIsGone`
 holds it, and the test passed 1500 of 1500 under the same load. The same lane
@@ -4220,9 +4220,10 @@ the second kept as its own. The reviewer approved every lane, the integration an
 the follow-ups after those fixes. The shell-fixture audit of the follow-up found
 no other fixture that depends on a shell's trap.
 
-**Gates:** the gate run of 2026-10-12 at 78d71adab, whose last commit,
-dfb627dbf, adds only the dot-import guard and was verified with its own tests
-and `make fmt-check vet docs-check`: every step of `make check` passed except
+**Gates:** the gate run of 2026-10-12 at 78d71adab, the integrated head before
+dfb627dbf, which adds only the dot-import guard and was verified with its own
+tests and `make fmt-check vet docs-check`; at 78d71adab every step of
+`make check` passed except
 `make vulncheck`, which reported exactly B470's ten go1.26.8 standard-library
 findings, GO-2026-6603, 6604, 6605, 6607, 6608, 6610, 6611, 6612, 6613 and 6617
 (D139), and so did `make race` (115 s), `make docs-check`, `make completion-test`
@@ -4231,7 +4232,7 @@ and the Python 3.9 floor, and the safe integration suites; the collection's unit
 suite passed 1713 tests). The summary and per-step logs are kept outside Git,
 directory `gates-followups-78d71adab`.
 
-**Digest and version effects:** the fifth slice to move them. The installation
+**Digest and version effects:** X48 moves request versions and the automation digest. The installation
 request moves from `os-install-anaconda-v7` to `os-install-anaconda-v8`; the
 libvirt host and Machine requests to `substrate-host-libvirt-v4` and
 `machine-libvirt-v4`, whose frozen paths changed; the tree request and evidence
