@@ -917,3 +917,74 @@ def test_a_controller_refusal_outside_no_log_passes_the_refusal_rule(tasks):
 def test_the_refusal_rule_rejects(tasks, reason):
     problems = refusal_problems("synthetic", tasks)
     assert any(reason in problem for problem in problems), problems
+
+
+# A literal host path under a world-writable or runtime directory. A role works
+# in the invocation scratch the runner hands it, never in a path every run
+# shares. The pattern reads the text: it does not parse an argv or follow a
+# variable, so a path a variable builds is the scratch rule's own business.
+SCRATCH_ROOTS = re.compile(r"(?<![\w.{}/-])/(?:var/tmp|tmp|run)(?:/[^\s'\"{}:;,)]*|(?![\w.-]))")
+
+# The two literals that name a host fact rather than scratch, each with why.
+SCRATCH_ALLOWED = {
+    "/run/libvirt": "the libvirt socket directory a container mounts, not a file a role writes",
+    "/run/nginx.pid": "the daemon's own pid file, named in the configuration it reads",
+}
+
+
+def fixed_scratch_problems(where, text):
+    """Each literal path under /tmp, /var/tmp or /run the text names, other
+    than an allowlisted host fact."""
+    found = []
+    for match in SCRATCH_ROOTS.finditer(text):
+        path = match.group(0)
+        if not any(path == allowed or path.startswith(allowed + "/") for allowed in SCRATCH_ALLOWED):
+            found.append("%s: names the fixed path %s; use the invocation scratch" % (where, path))
+    return found
+
+
+def test_no_role_but_the_controller_stage_names_a_fixed_scratch_path():
+    problems, scanned = [], 0
+    for role in sorted(ROLES.iterdir()):
+        if role.name.startswith("controller"):
+            continue
+        for folder in ("tasks", "defaults", "vars", "templates"):
+            for path in sorted((role / folder).rglob("*")):
+                if path.is_file() and path.suffix in (".yml", ".j2"):
+                    scanned += 1
+                    problems.extend(fixed_scratch_problems(label(path), path.read_text()))
+    assert scanned > 50, "the walk no longer sees the roles' files"
+    assert not problems, "\n".join(problems)
+
+
+def test_the_allowlisted_host_paths_are_still_named_by_a_role():
+    text = "\n".join(path.read_text() for path in ROLES.rglob("*.j2"))
+    assert all(allowed in text for allowed in SCRATCH_ALLOWED), "an allowlist entry no template names any longer"
+
+
+@pytest.mark.parametrize("text", [
+    "dest: {{ bootwright_run_scratch }}/x",
+    "src: '{{ substrate_libvirt_host_scratch }}/x'",
+    "pid /run/nginx.pid;",
+    "Volume=/run/libvirt:/run/libvirt:rw",
+    "path: /run/libvirt/libvirt-sock",
+    "path: /var/lib/bootwright-install/lab/node/work",
+    "path: /usr/lib/tmp/x",
+], ids=["the run scratch", "a role scratch", "the pid allowance", "the socket allowance", "under the socket allowance",
+        "durable work", "a longer path that ends in tmp"])
+def test_the_scratch_rule_passes(text):
+    assert not fixed_scratch_problems("sound", text)
+
+
+@pytest.mark.parametrize("text, path", [
+    ("dest: /tmp/domain.xml", "/tmp/domain.xml"),
+    ("path: /run/substrate/network.xml", "/run/substrate/network.xml"),
+    ("- /var/tmp/libvirt-defs", "/var/tmp/libvirt-defs"),
+    ("path: '/tmp/bootwright-x'", "/tmp/bootwright-x"),
+    ("dest: /run/nginx.pid.bak", "/run/nginx.pid.bak"),
+    ("path: /run/libvirtd/x", "/run/libvirtd/x"),
+], ids=["a file under tmp", "a file under run", "a directory under var tmp", "a quoted path", "past the pid allowance",
+        "past the socket allowance"])
+def test_the_scratch_rule_rejects(text, path):
+    problems = fixed_scratch_problems("synthetic", text)
+    assert problems == ["synthetic: names the fixed path %s; use the invocation scratch" % path], problems

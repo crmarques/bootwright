@@ -3,7 +3,6 @@
 import pathlib
 import os
 import stat
-import re
 
 import pytest
 from ansible.parsing.dataloader import DataLoader
@@ -25,14 +24,6 @@ def walk(tasks):
             yield from walk(task.get("always", []))
         else:
             yield task
-
-
-def test_no_lifecycle_role_uses_a_fixed_host_scratch_path():
-    for role in ROLES.iterdir():
-        if role.name.startswith("controller"):
-            continue
-        for path in role.rglob("*.yml"):
-            assert not re.search(r"/(?:run|tmp|var/tmp)/bootwright", path.read_text()), path
 
 
 @pytest.mark.parametrize("role,scope", [
