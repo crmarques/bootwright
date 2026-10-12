@@ -20,7 +20,7 @@ Available Commands:
   media                         Manage media
   plan                          Preview the next complete lifecycle operation
   preflight                     Manage preflight
-  render                        Render external-tool artifacts (unavailable)
+  render                        Render external-tool artifacts
   secret                        Manage secret
   setup                         Set up context-independent controller prerequisites
   status                        Show context readiness and lifecycle state

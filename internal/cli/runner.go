@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -86,7 +87,9 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 			parent.Annotations["bootwright.payload"] = "true"
 		}
 		if !spec.implemented && !presentationCommand(spec.path) {
-			parent.Short += " (unavailable)"
+			if !hasAvailableSubcommand(parent.Annotations["bootwright.command"]) {
+				parent.Short += " (unavailable)"
+			}
 			parent.Long = spec.long
 			if parent.Long == "" {
 				parent.Long = spec.short
@@ -111,6 +114,12 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 		return nil, err
 	}
 	return root, nil
+}
+
+func hasAvailableSubcommand(path string) bool {
+	return slices.ContainsFunc(commandCatalog(), func(spec commandSpec) bool {
+		return spec.implemented && strings.HasPrefix(spec.path, path+" ")
+	})
 }
 
 func exactChild(parent *cobra.Command, name string) *cobra.Command {
