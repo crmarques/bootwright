@@ -224,7 +224,13 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 	if deps.Capabilities != nil {
 		capabilities = deps.Capabilities
 	}
-	return lifecycle.New(deps.Workspace, deps.Inputs, compiler, binder, deps.Host, automationDigest{}, deps.Guard, capabilities, lifecycle.Options{
+	return lifecycle.New(deps.Workspace, deps.Inputs, compiler, binder, deps.Host, automationDigest{}, deps.Guard, capabilities, lifecycleOptions(deps, clock, runner))
+}
+
+// lifecycleOptions opens each execution's invocation scope through the runner
+// every capability shares, so its copies admit their siblings' live jobs.
+func lifecycleOptions(deps lifecycleDependencies, clock systemClock, runner ansiblerunner.Runner) lifecycle.Options {
+	return lifecycle.Options{
 		Confirmer: deps.Confirmer, Presenter: deps.Presenter, Progress: deps.Progress,
 		Clock: clock, Entropy: rand.Read, Selection: currentSelection(deps.Selection),
 		BeginInvocation: runner.BeginInvocation,
@@ -232,7 +238,7 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 		Operations: func(area operationstore.Area) lifecycle.OperationStore {
 			return operationstore.New(area, clock.Now)
 		},
-	})
+	}
 }
 
 // currentSelection resolves an omitted context name through the invoking
