@@ -884,13 +884,16 @@ superseded only by `--replace` naming that Machine. A plan that would still pin
 one endpoint to two keys, because a Machine that still uses this context's
 trust holds it with another, fails `trust.identity` before it is shown, in a
 dry run too, naming both Machines, the endpoint and the re-trust of the other
-Machine.
+Machine with `--replace`, after its new fingerprint is verified out of band.
 
 A stored trust file that already pins one endpoint to two keys, which only a
 hand edit produces, is refused by every reader, an SSH session included, with
 `trust.identity` naming both Machines, the endpoint and the repair: `machine
-trust` with `--machines` and `--replace` naming each of the two Machines that
-still uses context trust, or plain `machine trust` when neither does. Only
+trust` with `--machines` naming each of the two Machines that still uses
+context trust, or plain `machine trust` when neither does. That repair never
+names `--replace`: a named Machine whose observed key differs from its record
+refuses it as a changed key, writing nothing, until its new fingerprint is
+verified out of band and named in `--replace`. Only
 `machine trust` reads such a file: at each endpoint pinned to two keys, its
 plan removes the record of every Machine the context no longer declares or
 that no longer uses context trust, as a `remove` row naming why and that the

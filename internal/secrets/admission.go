@@ -133,17 +133,45 @@ func SSHComment(value string) bool {
 // remedy carries until the invocation that reports it names its context.
 const FileSourceContextPlaceholder = "--context <context>"
 
+const (
+	FileSourceInit   = "context init"
+	FileSourceUpdate = "context update"
+)
+
+type FileSourceRerun struct {
+	Command           string
+	ConfigurationFile bool
+}
+
+const (
+	fileSourceDeclare = "declare source: {contextStore: {}} and run "
+	fileSourceInherit = ", then for each Secret that inherits it run "
+)
+
 // NameFileSourceContext fills, in a copy of err, the context placeholder of
-// each retired file-source remedy with contextName.
-func NameFileSourceContext(err error, contextName string) error {
+// each retired file-source remedy with contextName, after admitting's rerun.
+func NameFileSourceContext(err error, contextName string, admitting FileSourceRerun) error {
 	var failure *diagnostics.Failure
 	if contextName == "" || !errors.As(err, &failure) || !slices.ContainsFunc(failure.Diagnostics, retiredFileSource) {
 		return err
 	}
+	rerun := ""
+	if admitting.Command == FileSourceInit || admitting.Command == FileSourceUpdate {
+		rerun = "rerun bootwright " + admitting.Command + " --name " + contextName
+		if admitting.ConfigurationFile {
+			rerun += " -f <file>"
+		}
+		rerun += " --input-dir <dir>"
+	}
 	named := &diagnostics.Failure{Diagnostics: slices.Clone(failure.Diagnostics), Usage: failure.Usage}
 	for index, d := range named.Diagnostics {
 		if retiredFileSource(d) {
-			named.Diagnostics[index].Remediation = strings.ReplaceAll(d.Remediation, FileSourceContextPlaceholder, "--context "+contextName)
+			remedy := strings.ReplaceAll(d.Remediation, FileSourceContextPlaceholder, "--context "+contextName)
+			if rerun != "" {
+				remedy = strings.Replace(remedy, fileSourceDeclare, "declare source: {contextStore: {}} in the input, "+rerun+", then run ", 1)
+				remedy = strings.Replace(remedy, fileSourceInherit, ", "+rerun+fileSourceInherit, 1)
+			}
+			named.Diagnostics[index].Remediation = remedy
 		}
 	}
 	return named
@@ -157,7 +185,8 @@ func retiredFileSource(d diagnostics.Diagnostic) bool {
 func fileSourceRemedy(name, kind string, kindDefault bool) string {
 	flags := setFileFlags(kind)
 	if kindDefault {
-		remedy := "replace source.file in the Environment's Secret kind default with source: {contextStore: {}}, then for each Secret that inherits it run bootwright secret set --name <name> --context <context> with the file flags of its type"
+		remedy := "replace source.file in the Environment's Secret kind default with source: {contextStore: {}}" + fileSourceInherit +
+			"bootwright secret set --name <name> --context <context> with the file flags of its type"
 		if flags != "" {
 			remedy += " (" + flags + " for " + kind + ")"
 		}
@@ -169,7 +198,7 @@ func fileSourceRemedy(name, kind string, kindDefault bool) string {
 	if flags == "" {
 		flags = "with the file flags of its type"
 	}
-	return "declare source: {contextStore: {}} and run bootwright secret set --name " + name + " --context <context> " + flags
+	return fileSourceDeclare + "bootwright secret set --name " + name + " --context <context> " + flags
 }
 
 func setFileFlags(kind string) string {

@@ -526,7 +526,7 @@ func TestAFirstUseThatWouldPinTwoKeysRefusesBeforeAsking(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	if reported := diagnostics.Of(err)[0]; !strings.Contains(reported.Message, "[192.0.2.10]:2222") ||
-		reported.Remediation != "re-trust secured with bootwright machine trust --context lab --machines secured --replace secured" {
+		reported.Remediation != "verify the new fingerprint out of band, then re-trust secured with bootwright machine trust --context lab --machines secured --replace secured" {
 		t.Fatalf("refusal = %+v", reported)
 	}
 	if len(h.prompt.asked) != 0 || len(h.trust.written) != 0 || len(h.client.sessions) != 0 {

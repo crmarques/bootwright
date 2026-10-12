@@ -239,7 +239,7 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 	if request.InputDirectory != "" {
 		sources, environment, _, report, err = s.admit(ctx, request.InputDirectory)
 		if err != nil {
-			return nil, secrets.NameFileSourceContext(err, request.Name)
+			return nil, secrets.NameFileSourceContext(err, request.Name, secrets.FileSourceRerun{Command: secrets.FileSourceInit, ConfigurationFile: request.ConfigurationFile != ""})
 		}
 	}
 	var result *AdmissionResult
@@ -353,7 +353,7 @@ func (s Service) admitUpdate(ctx context.Context, request UpdateRequest) (admitt
 	if request.InputDirectory != "" {
 		admitted.sources, admitted.environment, admitted.controller, admitted.report, err = s.admit(ctx, request.InputDirectory)
 		if err != nil {
-			return admittedUpdate{}, secrets.NameFileSourceContext(err, request.Name)
+			return admittedUpdate{}, secrets.NameFileSourceContext(err, request.Name, secrets.FileSourceRerun{Command: secrets.FileSourceUpdate, ConfigurationFile: request.ConfigurationFile != ""})
 		}
 	}
 	return admitted, nil

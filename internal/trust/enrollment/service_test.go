@@ -761,20 +761,28 @@ func divergentStore(t *testing.T, records ...trust.Record) []byte {
 
 // A stored file that pins one endpoint to two keys refuses its readers with a
 // remedy, and the machine trust that remedy names repairs it into a store
-// every reader accepts, removing each record nothing reads any more.
+// every reader accepts, removing each record nothing reads any more. The
+// remedy never pre-authorizes --replace: a Machine whose key changed refuses
+// that machine trust, writing nothing, until its new fingerprint is verified
+// out of band and named in --replace.
 func TestAStoredDivergentPinIsRepairedByTheMachineTrustItsRefusalNames(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		records []trust.Record
-		remedy  string
-		request EnrollRequest
-		check   func(*testing.T, *harness, *Report)
+		name     string
+		records  []trust.Record
+		observed string
+		remedy   string
+		request  EnrollRequest
+		changed  string
+		repair   EnrollRequest
+		check    func(*testing.T, *harness, *Report)
 	}{
 		{
 			name:    "both in use",
 			records: []trust.Record{storedRecord("node-a", "192.0.2.10", 22, otherKey), storedRecord("node-b", "192.0.2.10", 22, publicKey)},
-			remedy:  "re-trust node-a and node-b with bootwright machine trust --context lab --machines node-a,node-b --replace node-a,node-b",
-			request: EnrollRequest{Machines: []string{"node-a", "node-b"}, Replace: []string{"node-a", "node-b"}},
+			remedy:  "re-trust node-a and node-b with bootwright machine trust --context lab --machines node-a,node-b",
+			request: EnrollRequest{Machines: []string{"node-a", "node-b"}},
+			changed: "verify the new fingerprint out of band, then rerun bootwright machine trust --context lab --machines node-a --replace node-a",
+			repair:  EnrollRequest{Machines: []string{"node-a", "node-b"}, Replace: []string{"node-a", "node-b"}},
 			check: func(t *testing.T, h *harness, _ *Report) {
 				after, _ := trust.Decode(h.trust.data)
 				a, _ := after.Find("node-a")
@@ -787,9 +795,9 @@ func TestAStoredDivergentPinIsRepairedByTheMachineTrustItsRefusalNames(t *testin
 		{
 			name:    "one in use",
 			records: []trust.Record{storedRecord("declared", "192.0.2.10", 22, otherKey), storedRecord("node-a", "192.0.2.10", 22, publicKey)},
-			remedy: "re-trust node-a with bootwright machine trust --context lab --machines node-a --replace node-a; " +
+			remedy: "re-trust node-a with bootwright machine trust --context lab --machines node-a; " +
 				"its confirmed write removes the record of declared, which no longer uses this context's SSH trust",
-			request: EnrollRequest{Machines: []string{"node-a"}, Replace: []string{"node-a"}},
+			request: EnrollRequest{Machines: []string{"node-a"}},
 			check: func(t *testing.T, h *harness, report *Report) {
 				row := HostReport{
 					Machine: "declared", Address: "192.0.2.10", Port: 22, Action: ActionRemove, KeyType: "ssh-ed25519",
@@ -802,6 +810,23 @@ func TestAStoredDivergentPinIsRepairedByTheMachineTrustItsRefusalNames(t *testin
 				after, _ := trust.Decode(h.trust.data)
 				if len(after.Hosts) != 1 || after.Hosts[0].Machine != "node-a" {
 					t.Fatalf("records = %+v", after.Hosts)
+				}
+			},
+		},
+		{
+			name:     "one in use whose key changed",
+			records:  []trust.Record{storedRecord("declared", "192.0.2.10", 22, otherKey), storedRecord("node-a", "192.0.2.10", 22, publicKey)},
+			observed: otherKey,
+			remedy: "re-trust node-a with bootwright machine trust --context lab --machines node-a; " +
+				"its confirmed write removes the record of declared, which no longer uses this context's SSH trust",
+			request: EnrollRequest{Machines: []string{"node-a"}},
+			changed: "verify the new fingerprint out of band, then rerun bootwright machine trust --context lab --machines node-a --replace node-a",
+			repair:  EnrollRequest{Machines: []string{"node-a"}, Replace: []string{"node-a"}},
+			check: func(t *testing.T, h *harness, report *Report) {
+				after, _ := trust.Decode(h.trust.data)
+				if action(report, "node-a").Action != ActionReplace || len(after.Hosts) != 1 ||
+					after.Hosts[0].Machine != "node-a" || after.Hosts[0].PublicKey != otherKey {
+					t.Fatalf("report = %+v, records = %+v", report.Hosts, after.Hosts)
 				}
 			},
 		},
@@ -849,9 +874,29 @@ func TestAStoredDivergentPinIsRepairedByTheMachineTrustItsRefusalNames(t *testin
 			if reported := diagnostics.Of(pin.Retrust("lab", nil, usingMachines(catalog()))); len(reported) != 1 || reported[0].Remediation != test.remedy {
 				t.Fatalf("refusal = %+v", reported)
 			}
+			observe := func(h *harness) {
+				if test.observed != "" {
+					h.observer.keys["192.0.2.10"] = trust.HostKey{Type: "ssh-ed25519", PublicKey: test.observed}
+				}
+			}
+			repair := test.request
+			if test.changed != "" {
+				refused := newHarness(t)
+				refused.trust.data = data
+				observe(refused)
+				named := test.request
+				named.SkipConfirmation = true
+				_, err := enroll(t, refused, named)
+				if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" ||
+					reported[0].Remediation != test.changed || len(refused.trust.written) != 0 {
+					t.Fatalf("the named machine trust over a changed key = %+v (%v), wrote %d", reported, err, len(refused.trust.written))
+				}
+				repair = test.repair
+			}
 			dry := newHarness(t)
 			dry.trust.data = data
-			preview := test.request
+			observe(dry)
+			preview := repair
 			preview.DryRun = true
 			if report, err := enroll(t, dry, preview); err != nil || len(dry.trust.written) != 0 || report.Pending == 0 {
 				t.Fatalf("dry run = %+v, %v, wrote %d", report, err, len(dry.trust.written))
@@ -860,7 +905,8 @@ func TestAStoredDivergentPinIsRepairedByTheMachineTrustItsRefusalNames(t *testin
 			}
 			h := newHarness(t)
 			h.trust.data = data
-			request := test.request
+			observe(h)
+			request := repair
 			request.SkipConfirmation = true
 			report, err := enroll(t, h, request)
 			if err != nil || len(h.trust.written) != 1 {

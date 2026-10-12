@@ -67,7 +67,14 @@ declared type, as `bootwright secret set --name <n> --context <context>`
 followed by the type's flags. A name that is not a valid object name prints as
 `<name>`. `<context>` is the context the invocation reads: the one `validate`
 names, or the selected one when `validate` reads no file; the one a `secret`
-command acts on; and the one `context init` or `context update` names.
+command acts on; and the one `context init` or `context update` names. Since
+the input those two refuse reaches no context, their remedy first reruns that
+command, `bootwright context init` or `context update` `--name <context>
+--input-dir <dir>`, after the declaration is fixed in the input, then names
+`secret set`; this holds for the kind-default remedy below too. A rerun of an
+invocation also given a Context configuration file keeps it, as `--name
+<context> -f <file> --input-dir <dir>`, so following the remedy never drops
+that configuration.
 `validate -f`, which reads no context, prints the placeholder:
 
 | Secret type | Remedy after `bootwright secret set --name <n> --context <context>` |

@@ -372,10 +372,16 @@ func (p presenter) PresentDeletion(ctx context.Context, plan contexts.DeletionPl
 }
 
 // The retired file-source remedy context init or context update reports names
-// the context it names, before any transaction.
+// the context it names, before any transaction, and reruns that command with
+// the fixed input before the secret set that needs its context's input; a
+// rerun of an invocation also given a Context configuration file keeps its -f.
 func TestInitAndUpdateNameTheirContextInTheRetiredFileSourceRemedy(t *testing.T) {
 	input := sourceFixture("/synthetic/input")
 	input.Files = append(input.Files, desiredstate.NewSourceFile("/synthetic/input/secret.yaml", []byte("apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: material\nspec:\n  type: token\n  source: {file: {path: secrets/token}}\n")))
+	configured := func(r *repository) *repository {
+		r.configInput = contexts.DefaultConfiguration("example").Canonical()
+		return r
+	}
 	for name, invoke := range map[string]func() (*repository, error){
 		"init": func() (*repository, error) {
 			r := newRepository(t)
@@ -387,13 +393,29 @@ func TestInitAndUpdateNameTheirContextInTheRetiredFileSourceRemedy(t *testing.T)
 			_, err := service(t, r, input).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
 			return r, err
 		},
+		"init -f": func() (*repository, error) {
+			r := configured(newRepository(t))
+			_, err := service(t, r, input).Init(context.Background(), contexts.InitRequest{Name: "example", ConfigurationFile: "context.yaml", InputDirectory: "/synthetic/input"})
+			return r, err
+		},
+		"update -f": func() (*repository, error) {
+			r := configured(existingRepository(t))
+			_, err := service(t, r, input).Update(context.Background(), contexts.UpdateRequest{Name: "example", ConfigurationFile: "context.yaml", InputDirectory: "/synthetic/input"})
+			return r, err
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r, err := invoke()
 			named := false
+			command, file, _ := strings.Cut(name, " ")
+			flags := " --name example --input-dir <dir>"
+			if file != "" {
+				flags = " --name example -f <file> --input-dir <dir>"
+			}
+			want := "declare source: {contextStore: {}} in the input, rerun bootwright context " + command + flags +
+				", then run bootwright secret set --name material --context example --value-file <path>"
 			for _, d := range diagnostics.Of(err) {
-				named = named || d.Code == "api.field" && d.Field == "$.spec.source.file" &&
-					strings.Contains(d.Remediation, "bootwright secret set --name material --context example --value-file <path>") && !strings.Contains(d.Remediation, "<context>")
+				named = named || d.Code == "api.field" && d.Field == "$.spec.source.file" && d.Remediation == want
 			}
 			if !named || slices.Contains(r.calls, "transaction") {
 				t.Fatalf("the retired file source was not refused naming its context before a transaction: %v %#v %v", err, diagnostics.Of(err), r.calls)

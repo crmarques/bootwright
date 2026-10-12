@@ -169,7 +169,8 @@ func (e *DivergentPin) Retrust(contextName string, writing, uses func(string) bo
 	}
 	command := "bootwright machine trust --context " + contextName
 	if written != "" && (uses == nil || uses(other)) {
-		return failure(message, "re-trust "+other+" with "+command+" --machines "+other+" --replace "+other)
+		return failure(message, "verify the new fingerprint out of band, then re-trust "+other+" with "+command+
+			" --machines "+other+" --replace "+other)
 	}
 	var used, unused []string
 	for _, name := range e.Machines {
@@ -183,10 +184,9 @@ func (e *DivergentPin) Retrust(contextName string, writing, uses func(string) bo
 	slices.Sort(unused)
 	switch len(unused) {
 	case 0:
-		list := strings.Join(used, ",")
-		return failure(message, "re-trust "+used[0]+" and "+used[1]+" with "+command+" --machines "+list+" --replace "+list)
+		return failure(message, "re-trust "+used[0]+" and "+used[1]+" with "+command+" --machines "+strings.Join(used, ","))
 	case 1:
-		return failure(message, "re-trust "+used[0]+" with "+command+" --machines "+used[0]+" --replace "+used[0]+
+		return failure(message, "re-trust "+used[0]+" with "+command+" --machines "+used[0]+
 			"; its confirmed write removes the record of "+unused[0]+", which no longer uses this context's SSH trust")
 	default:
 		return failure(message, "repair it with "+command+"; its confirmed write removes the records of "+
