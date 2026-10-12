@@ -1,4 +1,4 @@
-Print an SSH access descriptor for independent operator execution; do not launch a client or connect. Success prints a bounded access descriptor for independent operator execution. Applicable to OpenShift/OKD ContainerClusters and managed Ceph StorageClusters with declared nodes. External StorageClusters are inapplicable.. This command is recognized but not implemented.
+Print an SSH access descriptor for independent operator execution; do not launch a client or connect. Success prints a bounded access descriptor. Applicable to OpenShift/OKD ContainerClusters and managed Ceph StorageClusters with declared nodes. External StorageClusters are inapplicable. This command is recognized but not implemented.
 
 Usage:
   bootwright cluster rsh [flags]

@@ -163,6 +163,46 @@ func TestCompletionLocalFlagOwnership(t *testing.T) {
 	}
 }
 
+func completionResponse(t *testing.T, candidates []string, args ...string) string {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	runner := New(Config{Out: &stdout, ErrOut: &stderr, Services: dispatchSpies(&dispatchRecord{}), CompletionPaths: func(kind, prefix string) []string {
+		return candidates
+	}})
+	if code := runner.Run(context.Background(), append([]string{completionRequestNoDescriptions}, args...)); code != 0 || stderr.Len() != 0 {
+		t.Fatalf("completion = %d %q", code, stderr.String())
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	return lines[len(lines)-1]
+}
+
+// TestPathCompletionAppendsNoSpaceOnlyAfterADirectory pins the directive that
+// reaches the shell: no space after a directory candidate, whose separator
+// would otherwise be followed by one, and the shell's own space after a file,
+// which completes the word. A mixed menu keeps no-space so Zsh still reads it.
+func TestPathCompletionAppendsNoSpaceOnlyAfterADirectory(t *testing.T) {
+	const plain, noSpace = ":36", ":38"
+	for _, test := range []struct {
+		name       string
+		candidates []string
+		want       string
+	}{
+		{"no candidate", nil, plain},
+		{"files only", []string{"alpha/input.yaml", "alpha/other.yaml"}, plain},
+		{"directories only", []string{"alpha/nested/", "alpha/other/"}, noSpace},
+		{"mixed", []string{"alpha/input.yaml", "alpha/nested/"}, noSpace},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := completionResponse(t, test.candidates, "validate", "--file", "alpha/"); got != test.want {
+				t.Fatalf("directive = %q; want %q", got, test.want)
+			}
+		})
+	}
+	if got := completionResponse(t, []string{"alpha/nested/"}, "validate", "--output", ""); got != plain {
+		t.Fatalf("a value flag that is not a path reported %q", got)
+	}
+}
+
 func completionCandidates(root *cobra.Command, words []string, descriptions bool) []string {
 	return completionCandidatesWithCatalog(root, words, descriptions, completionCatalog{})
 }

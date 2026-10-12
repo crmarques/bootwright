@@ -222,8 +222,10 @@ some of its matching entries. A prefix longer than 4096 bytes, or one carrying
 a NUL, carriage return or line feed, reads nothing and offers no candidate. A
 directory-valued flag offers directories; a file-valued flag offers files and
 directories, so a path can be completed one segment at a time. A directory
-candidate carries a trailing separator and the request reports that the shell
-must append nothing of its own. A dot entry is offered only once the prefix
+candidate carries a trailing separator, and a request with at least one
+directory candidate reports that the shell must append nothing of its own; a
+request that offers only files leaves the shell its own space, so a completed
+file ends the word. A dot entry is offered only once the prefix
 names one, and an entry whose name is longer than 255 bytes, or which carries a
 control character, whitespace, or a character significant to a shell word, is
 withheld rather than escaped, because such a candidate could not be inserted

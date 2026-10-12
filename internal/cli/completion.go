@@ -29,12 +29,13 @@ func configureCompletion(root *cobra.Command, catalog completionCatalog) error {
 		root.AddCommand(&cobra.Command{
 			Use: name, Hidden: true, DisableFlagParsing: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				for _, candidate := range completionCandidatesWithCatalog(root, args, cmd.Name() == completionRequest, catalog) {
+				candidates, flag := completionResolve(root, args, cmd.Name() == completionRequest, catalog)
+				for _, candidate := range candidates {
 					if _, err := fmt.Fprintln(cmd.OutOrStdout(), candidate); err != nil {
 						return err
 					}
 				}
-				_, err := fmt.Fprintf(cmd.OutOrStdout(), ":%d\n", completionDirective(root, args))
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), ":%d\n", completionDirective(flag, candidates))
 				return err
 			},
 		})
@@ -49,15 +50,18 @@ func completionCandidatesWithCatalog(root *cobra.Command, words []string, descri
 
 // completionDirective tells the shell what it may add to the fixed candidates.
 // Only a path-valued flag opens filesystem completion, and it opens exactly the
-// kind of entry that flag accepts.
-func completionDirective(root *cobra.Command, words []string) cobra.ShellCompDirective {
-	if _, flag := completionResolve(root, words, false, completionCatalog{}); flag != nil && flagPathKind(flag) != "" {
-		// Candidates are supplied in full, so the shell must still add nothing
-		// of its own. A directory candidate keeps its trailing separator, which
-		// only reads correctly without an appended space.
-		return cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace | cobra.ShellCompDirectiveKeepOrder
+// kind of entry that flag accepts. A directory candidate keeps its separator,
+// so any directory in the set asks for no appended space; "any" keeps a Zsh
+// menu of mixed entries correct, and files alone keep the shell's space.
+func completionDirective(flag *pflag.Flag, candidates []string) cobra.ShellCompDirective {
+	directive := cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveKeepOrder
+	if flag != nil && flagPathKind(flag) != "" && slices.ContainsFunc(candidates, func(candidate string) bool {
+		value, _, _ := strings.Cut(candidate, "\t")
+		return strings.HasSuffix(value, "/")
+	}) {
+		directive |= cobra.ShellCompDirectiveNoSpace
 	}
-	return cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveKeepOrder
+	return directive
 }
 
 func flagPathKind(flag *pflag.Flag) string {

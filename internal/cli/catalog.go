@@ -3,12 +3,11 @@ package cli
 import "strings"
 
 type commandSpec struct {
-	path          string
-	short         string
-	long          string
-	flags         []flagSpec
-	payload       bool
-	stopAtPayload bool
+	path    string
+	short   string
+	long    string
+	flags   []flagSpec
+	payload bool
 	// implemented marks a command whose application use case is available.
 	// Every such command also needs the privileged context store, so available
 	// records both facts with the declaration instead of a separate list.
@@ -172,6 +171,10 @@ func preflightFlags() []flagSpec {
 	return []flagSpec{clustersFlag(), dryRunFlag(), outputFlag(), trustFlag()}
 }
 
+const payloadHelp = " Bootwright flags go before the command." +
+	" Use -- before a flag-shaped first payload value to preserve it as data." +
+	" After the first payload value, all remaining tokens belong to the payload."
+
 // sessionCommand describes one command that opens an SSH session. Its help
 // states what the operator is actually getting: a live session as an identity
 // they did not choose, over a host key they may be asked to confirm, whose
@@ -182,22 +185,16 @@ func sessionCommand(spec commandSpec) commandSpec {
 		" over a host key proved before any credential is offered; an unproved key is confirmed" +
 		" interactively or refused. The exit status is the client's."
 	if spec.payload {
-		spec.long += " Use -- before a flag-shaped first payload value to preserve it as data." +
-			" Recognized Bootwright flags remain active in the command tail until --."
+		spec.long += payloadHelp
 	}
 	return spec
 }
 
 func accessCommand(spec commandSpec, applicability string) commandSpec {
 	spec.short = strings.Replace(spec.short, "; do not", " for independent operator execution; do not", 1)
-	spec.long = spec.short + ". Success prints a bounded access descriptor for independent operator execution."
+	spec.long = spec.short + ". Success prints a bounded access descriptor."
 	if spec.payload {
-		spec.long += " Use -- before a flag-shaped first payload value to preserve it as data."
-		if spec.stopAtPayload {
-			spec.long += " After the first payload value, all remaining tokens belong to the payload."
-		} else {
-			spec.long += " Recognized Bootwright flags remain active in the command tail until --."
-		}
+		spec.long += payloadHelp
 	}
 	spec.long += applicability
 	return spec

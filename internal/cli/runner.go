@@ -85,16 +85,13 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 		if spec.payload {
 			parent.Annotations["bootwright.payload"] = "true"
 		}
-		if spec.stopAtPayload {
-			parent.Annotations["bootwright.stop-at-payload"] = "true"
-		}
 		if !spec.implemented && !presentationCommand(spec.path) {
 			parent.Short += " (unavailable)"
 			parent.Long = spec.long
 			if parent.Long == "" {
 				parent.Long = spec.short
 			}
-			parent.Long += ". This command is recognized but not implemented."
+			parent.Long = strings.TrimSuffix(parent.Long, ".") + ". This command is recognized but not implemented."
 		}
 		if spec.payload {
 			parent.Use += " <command>..."
@@ -104,7 +101,7 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 			root.SetHelpCommand(parent)
 		}
 		registerFlags(parent.Flags(), spec.flags)
-		if spec.stopAtPayload {
+		if spec.payload {
 			parent.Flags().SetInterspersed(false)
 		}
 		parent.RunE = func(*cobra.Command, []string) error { return nil }

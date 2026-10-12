@@ -1,4 +1,4 @@
-Print an oc access descriptor for independent operator execution; do not launch a client or connect. Success prints a bounded access descriptor for independent operator execution. Use -- before a flag-shaped first payload value to preserve it as data. After the first payload value, all remaining tokens belong to the payload. Applicable to OpenShift/OKD ContainerClusters only.. This command is recognized but not implemented.
+Print an oc access descriptor for independent operator execution; do not launch a client or connect. Success prints a bounded access descriptor. Bootwright flags go before the command. Use -- before a flag-shaped first payload value to preserve it as data. After the first payload value, all remaining tokens belong to the payload. Applicable to OpenShift/OKD ContainerClusters only. This command is recognized but not implemented.
 
 Usage:
   bootwright cluster oc <command>... [flags]

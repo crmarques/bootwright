@@ -29,22 +29,18 @@ func TestCLIVocabulariesMatchOwners(t *testing.T) {
 	}
 }
 
-func TestEveryCatalogPayloadCommandAcceptsOperandsAndSeparator(t *testing.T) {
+func TestEveryCatalogPayloadCommandKeepsAFlagShapedTailAsPayload(t *testing.T) {
 	for _, spec := range commandCatalog() {
 		if !spec.payload {
 			continue
 		}
 		for _, separator := range []bool{false, true} {
 			args := append(strings.Fields(spec.path), "--name", "example")
-			payload := []string{"echo", "--help"}
+			payload := []string{"echo", "-n", "--help", "--name", "other"}
 			if separator {
 				args = append(args, "--")
 			}
 			args = append(args, payload...)
-			if !separator && !spec.stopAtPayload {
-				payload = []string{"echo", "operand"}
-				args[len(args)-1] = "operand"
-			}
 			code, _, _, record := runRecorded(args)
 			if code == 2 || record.calls != 1 {
 				t.Fatalf("%s separator %v failed: code %d calls %d", spec.path, separator, code, record.calls)
@@ -63,7 +59,9 @@ func TestUsageDistinguishesUnknownAndMisplacedFlags(t *testing.T) {
 		message string
 	}{
 		{[]string{"version", "--not-a-flag"}, "unknown flag"},
-		{[]string{"version", "--output", "json"}, "flag is not accepted at this position"},
+		{[]string{"version", "--output", "json"}, "flag is not accepted by this command"},
+		{[]string{"machine", "list", "--yes"}, "flag is not accepted by this command"},
+		{[]string{"context", "--purge", "list"}, "flag is not accepted at this position"},
 		{[]string{"--name", "example", "context", "init"}, "flag is not accepted at this position"},
 	} {
 		code, out, errOut, record := runRecorded(test.args)

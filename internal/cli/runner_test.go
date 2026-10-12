@@ -103,6 +103,7 @@ func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
 		separatorNotAccepted,
 		unknownFlag,
 		flagNotAccepted,
+		flagNotAcceptedHere,
 		flagValueMissing,
 		unknownCommand,
 		localFlagNotInherited,
@@ -217,8 +218,15 @@ func TestPayloadParsing(t *testing.T) {
 		want []string
 		code int
 	}{
-		{"machine exec", []string{"echo", "one", "--context", "other", "two"}, []string{"echo", "one", "two"}, 255},
-		{"cluster exec", []string{"echo", "one", "--context", "other", "two"}, []string{"echo", "one", "two"}, 1},
+		{"machine exec", []string{"echo", "one", "--context", "other", "two"}, []string{"echo", "one", "--context", "other", "two"}, 255},
+		{"cluster exec", []string{"echo", "one", "--context", "other", "two"}, []string{"echo", "one", "--context", "other", "two"}, 1},
+		{"machine exec", []string{"ls", "-la"}, []string{"ls", "-la"}, 255},
+		{"machine exec", []string{"journalctl", "-u", "sshd", "--no-pager"}, []string{"journalctl", "-u", "sshd", "--no-pager"}, 255},
+		{"machine exec", []string{"tail", "-f", "x"}, []string{"tail", "-f", "x"}, 255},
+		{"machine exec", []string{"kubectl", "--context", "prod", "get", "pods"}, []string{"kubectl", "--context", "prod", "get", "pods"}, 255},
+		{"machine exec", []string{"ls", "--help"}, []string{"ls", "--help"}, 255},
+		{"cluster exec", []string{"ls", "-la", "--node", "n1"}, []string{"ls", "-la", "--node", "n1"}, 1},
+		{"machine exec", []string{"--", "-v"}, []string{"-v"}, 255},
 		{"cluster oc", []string{"get", "pods", "--context", "other", "--help"}, []string{"get", "pods", "--context", "other", "--help"}, 1},
 		{"cluster kubectl", []string{"get", "pods", "--context", "other", "--help"}, []string{"get", "pods", "--context", "other", "--help"}, 1},
 		{"machine exec", []string{"--", "--help", "", "a b", "$(payload)"}, []string{"--help", "", "a b", "$(payload)"}, 255},
@@ -259,6 +267,56 @@ func TestPayloadParsing(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("payload=%q want=%q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A payload belongs to the remote command from its first operand on, so a
+// token spelling a Bootwright flag in it must never retarget the session.
+func TestPayloadTailNeverRetargetsTheSession(t *testing.T) {
+	for _, path := range []string{"machine exec", "cluster exec", "cluster oc", "cluster kubectl"} {
+		t.Run(path, func(t *testing.T) {
+			args := append(strings.Fields(path), "--context", "lab", "--name", "demo", "kubectl", "--context", "prod", "--name", "other", "get")
+			_, _, _, record := runRecorded(args)
+			if record.calls != 1 {
+				t.Fatalf("calls = %d", record.calls)
+			}
+			request := reflect.ValueOf(record.request)
+			if got := request.FieldByName("ContextName"); !got.IsValid() || got.String() != "lab" {
+				t.Fatalf("session context = %v; want lab", got)
+			}
+			if got := request.FieldByName("Name"); !got.IsValid() || got.String() != "demo" {
+				t.Fatalf("session target = %v; want demo", got)
+			}
+			if got := request.FieldByName("Command").Interface().([]string); !reflect.DeepEqual(got, []string{"kubectl", "--context", "prod", "--name", "other", "get"}) {
+				t.Fatalf("payload = %q", got)
+			}
+		})
+	}
+}
+
+// A required Bootwright flag written after the remote command became payload,
+// so the refusal says where Bootwright flags go without echoing the arguments.
+func TestAFlagWrittenAfterThePayloadIsRefusedWithWhereFlagsGo(t *testing.T) {
+	const privateArgument = "do-not-display-private-argument"
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"machine", "exec", "ls", "--name", "n"}, "--name is required; Bootwright flags go before the remote command"},
+		{[]string{"machine", "exec", "ls", "--name=n"}, "--name is required; Bootwright flags go before the remote command"},
+		{[]string{"cluster", "exec", "ls", "--name", "n"}, "--name is required; Bootwright flags go before the remote command"},
+		{[]string{"cluster", "oc", "get", "--name", "n"}, "--name is required; Bootwright flags go before the remote command"},
+		{[]string{"machine", "exec", privateArgument}, "--name is required"},
+	} {
+		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
+			code, out, errOut, record := runRecorded(test.args)
+			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "[FAIL] cli.usage: "+test.want+"\n") {
+				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
+			}
+			if strings.Contains(errOut, privateArgument) {
+				t.Fatalf("diagnostic exposed argv: %q", errOut)
 			}
 		})
 	}

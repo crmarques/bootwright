@@ -103,6 +103,7 @@ func TestGeneratedIntegrations(t *testing.T) {
 						{"directory paths", []string{"context", "init", "--input-dir", "fixture"}, []string{"fixture-alpha/", "fixture-beta/"}},
 						{"directory paths exclude files", []string{"context", "init", "--input-dir", "fixture-alpha/"}, []string{"fixture-alpha/nested/"}},
 						{"file paths include directories", []string{"validate", "--file", "fixture-alpha/"}, []string{"fixture-alpha/input.yaml", "fixture-alpha/nested/"}},
+						{"single file candidate", []string{"validate", "--file", "fixture-alpha/inp"}, []string{"fixture-alpha/input.yaml"}},
 						{"no paths for value flags", []string{"context", "use", "--name", "forbidden"}, nil},
 						{"no names", []string{"context", "use", "--name", ""}, nil},
 						{"no hidden handlers", []string{"__"}, nil},
@@ -133,6 +134,12 @@ func TestGeneratedIntegrations(t *testing.T) {
 							}
 							if (shell.name == "bash" || shell.name == "zsh") && test.name == "single directory candidate" && !noSpace {
 								t.Fatalf("shell appends a space after a directory candidate: %q", output)
+							}
+							if (shell.name == "bash" || shell.name == "zsh") && test.name == "single file candidate" && noSpace {
+								t.Fatalf("shell withholds the space after a completed file: %q", output)
+							}
+							if (shell.name == "bash" || shell.name == "zsh") && test.name == "file paths include directories" && !noSpace {
+								t.Fatalf("shell appends a space after a mixed file and directory menu: %q", output)
 							}
 							if !reflect.DeepEqual(candidates, test.want) {
 								t.Fatalf("candidates = %q; want %q; output = %q", candidates, test.want, output)

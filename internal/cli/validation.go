@@ -30,12 +30,25 @@ func validateInvocation(command *cobra.Command, path string) string {
 		return "this command accepts no positional operands"
 	}
 	if message := validateFlagValues(flags, path, spec); message != "" {
-		return message
+		return payloadFlagRemedy(command, message)
 	}
 	if message := validateSharedFlags(command, path); message != "" {
 		return message
 	}
 	return validateCommandFlags(command, path)
+}
+
+func payloadFlagRemedy(command *cobra.Command, message string) string {
+	name, ok := strings.CutSuffix(strings.TrimPrefix(message, "--"), " is required")
+	if !ok || !hasPayload(command) {
+		return message
+	}
+	for _, operand := range command.Flags().Args() {
+		if operand == "--"+name || strings.HasPrefix(operand, "--"+name+"=") {
+			return message + "; Bootwright flags go before the remote command"
+		}
+	}
+	return message
 }
 
 func validateFlagValues(flags *pflag.FlagSet, path string, spec commandSpec) string {

@@ -1,4 +1,4 @@
-Run a command over SSH as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status. The session runs as the identity the Machine's desired state authorizes, over a host key proved before any credential is offered; an unproved key is confirmed interactively or refused. The exit status is the client's. Use -- before a flag-shaped first payload value to preserve it as data. Recognized Bootwright flags remain active in the command tail until --.
+Run a command over SSH as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status. The session runs as the identity the Machine's desired state authorizes, over a host key proved before any credential is offered; an unproved key is confirmed interactively or refused. The exit status is the client's. Bootwright flags go before the command. Use -- before a flag-shaped first payload value to preserve it as data. After the first payload value, all remaining tokens belong to the payload.
 
 Usage:
   bootwright machine exec <command>... [flags]

@@ -188,16 +188,19 @@ Environment selection, duplicate-object rules, and source provenance remain
 API-owned.
 
 Commands accept no positional operands except those shown in the catalog.
-`machine exec` and `cluster exec` accept a non-empty command argument vector;
-`--` is optional, but is required to preserve a flag-shaped first argument or
-prevent a recognized Bootwright flag from being consumed. The
-`cluster oc` and `cluster kubectl` commands accept global
-and local flags until the first positional payload token. Parsing then stops
-and every remaining token is payload. A flag-shaped first payload token
-therefore requires `--`; for example, `--name c -- --help` treats `--help` as
-payload, while `--name c --help` requests Bootwright help. The `--` separator
-is syntax only for these four payload-bearing commands and is a usage error on
-every other command.
+`machine exec`, `cluster exec`, `cluster oc` and `cluster kubectl` accept a
+non-empty command argument vector and share one rule, as `oc` and `kubectl`
+do. They accept global and local flags until the first positional payload
+token. Parsing then stops and every remaining token is payload verbatim,
+flag-shaped or not, including a token that spells a Bootwright flag such as
+`--name` or `--context`, so a remote `kubectl --context prod get pods` never
+retargets the session. A flag-shaped first payload token therefore requires
+`--`; for example, `--name c -- --help` treats `--help` as payload, while
+`--name c --help` requests Bootwright help, and `--name c ls -la` runs `ls -la`.
+A required Bootwright flag written after the payload is missing, and the usage
+refusal adds that Bootwright flags go before the remote command. The `--`
+separator is syntax only for these four payload-bearing commands and is a usage
+error on every other command.
 
 Standard input is read only for an ordinary confirmation, the host-key
 confirmation and the session of [`machine rsh` and `machine exec`](#machine-ssh-sessions),

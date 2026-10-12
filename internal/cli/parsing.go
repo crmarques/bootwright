@@ -42,6 +42,7 @@ const (
 	separatorNotAccepted    resolutionError = "separator is not accepted"
 	unknownFlag             resolutionError = "unknown flag"
 	flagNotAccepted         resolutionError = "flag is not accepted at this position"
+	flagNotAcceptedHere     resolutionError = "flag is not accepted by this command"
 	flagValueMissing        resolutionError = "flag value is missing"
 	unknownCommand          resolutionError = "unknown command"
 	localFlagNotInherited   resolutionError = "flag does not apply to the selected subcommand"
@@ -55,7 +56,7 @@ func trustedResolutionMessage(err error) string {
 	resolution, ok := err.(resolutionError)
 	if ok {
 		switch resolution {
-		case separatorNotAccepted, unknownFlag, flagNotAccepted, flagValueMissing, unknownCommand,
+		case separatorNotAccepted, unknownFlag, flagNotAccepted, flagNotAcceptedHere, flagValueMissing, unknownCommand,
 			localFlagNotInherited, commandResolutionFailed, unknownHelpCommand:
 			return resolution.Error()
 		}
@@ -97,8 +98,11 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 		if strings.HasPrefix(arg, "-") && arg != "-" && !operands {
 			flag, attached := tokenFlag(root, current, arg)
 			if flag == nil {
-				if knownFlag(root, arg) {
+				if knownFlag(current, arg) {
 					return failure(args[i:], flagNotAccepted)
+				}
+				if knownFlag(root, arg) {
+					return failure(args[i:], flagNotAcceptedHere)
 				}
 				return failure(args[i:], unknownFlag)
 			}
@@ -133,7 +137,7 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 		}
 		forwarded = append(forwarded, arg)
 		pathComplete = true
-		if current.Annotations["bootwright.stop-at-payload"] == "true" {
+		if hasPayload(current) {
 			operands = true
 		}
 	}

@@ -1,4 +1,4 @@
-Render external-tool artifacts. Without --input-dir or --output-dir, print this help. Context-free rendering requires both paths and conflicts with --context and --sensitive. Context-backed rendering requires --output-dir and --sensitive.. This command is recognized but not implemented.
+Render external-tool artifacts. Without --input-dir or --output-dir, print this help. Context-free rendering requires both paths and conflicts with --context and --sensitive. Context-backed rendering requires --output-dir and --sensitive. This command is recognized but not implemented.
 
 Usage:
   bootwright render [flags]
