@@ -3,6 +3,7 @@ package installation
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -114,6 +115,54 @@ func TestTreeContinuationClassifiesPartialAndInterruptedRemoval(t *testing.T) {
 				t.Fatalf("remove: %+v (%v)", removed, err)
 			}
 		})
+	}
+}
+
+// A tree apply refuses a source image changed after the plan froze it, and a
+// tree another image published at its path, before it extracts anything, and
+// each refusal reaches the operator naming the profile, what changed and the
+// way back. Neither is named outside an apply.
+func TestATreeApplyNamesItsRefusalsWithTheirRemedy(t *testing.T) {
+	execution, request := treeFixture(t)
+	execution.Context = "lab-b"
+	for reason, test := range map[string]struct{ message, remediation string }{
+		"media-changed-tree": {
+			"the media store's image " + dvdImageName + " no longer has the size and SHA-256 this operation froze, so nothing was published or booted",
+			"take this context back with bootwright destroy --context lab-b, import the image again with bootwright media add --name " +
+				dvdImageName + " --from-file <path>, or --from-url <url> --sha256 <digest>, then run bootwright apply --context lab-b",
+		},
+		"tree-source-drift": {
+			"the package tree at " + request.Publication.Path + " was extracted from another image than the " + dvdImageName +
+				" this operation froze, so it was left unchanged and nothing was published",
+			"take this context back with bootwright destroy --context lab-b, which removes that tree, then run bootwright apply --context lab-b",
+		},
+	} {
+		t.Run(reason, func(t *testing.T) {
+			result, err := NewTree(refusingRunner{reason: reason}).Apply(context.Background(), execution)
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Kind != string(api.MachineInstallProfile) ||
+				reported[0].Object.Name != request.Identity.Profile {
+				t.Fatalf("diagnostics = %#v (%v)", reported, err)
+			}
+			if reported[0].Message != test.message || reported[0].Remediation != test.remediation {
+				t.Fatalf("diagnostic = %q / %q", reported[0].Message, reported[0].Remediation)
+			}
+			if result.Outcome == reconciliation.OutcomeChanged || result.Outcome == reconciliation.OutcomeUnchanged {
+				t.Fatalf("a refused publication reports outcome %v", result.Outcome)
+			}
+		})
+	}
+	runner := &fakeRunner{}
+	capability := NewTree(runner)
+	_, _ = capability.Apply(context.Background(), execution)
+	_, _ = capability.Destroy(context.Background(), execution)
+	_, _ = capability.Observe(context.Background(), execution)
+	named := map[string]int{}
+	for _, sent := range runner.requests {
+		named[sent.Operation] = len(sent.Refusals)
+	}
+	if want := map[string]int{"apply": 2, "destroy": 0, "observe": 0}; len(runner.requests) != 3 || !maps.Equal(named, want) {
+		t.Fatalf("refusals named by operation = %v, want %v", named, want)
 	}
 }
 

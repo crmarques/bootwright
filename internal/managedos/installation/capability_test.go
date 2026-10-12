@@ -702,24 +702,28 @@ func (r refusingRunner) Run(_ context.Context, request lifecycle.RunRequest) (li
 	return lifecycle.RunResult{}, named
 }
 
-// A store entry changed after the plan froze it is refused by the attempt
+// A boot image changed after the plan froze it is refused by the attempt
 // before its first use, and that refusal reaches the operator naming the
-// Machine, the image and the way back.
+// Machine, the image and the way back. The tree image is the shared
+// publication's to name, so an installation names no refusal for it.
 func TestAnApplyNamesAChangedStoreEntry(t *testing.T) {
 	call, _ := execution(t, strings.Repeat("1", 64))
 	call.Context = "lab-b"
-	_, err := New(refusingRunner{reason: "media-changed-tree"}).Apply(context.Background(), call)
+	_, err := New(refusingRunner{reason: "media-changed-boot"}).Apply(context.Background(), call)
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Kind != "Machine" || reported[0].Object.Name != "rhel-01" {
 		t.Fatalf("diagnostics = %#v (%v)", reported, err)
 	}
-	if !strings.Contains(reported[0].Message, dvdImageName) {
-		t.Fatalf("the message %q does not name the DVD", reported[0].Message)
+	if !strings.Contains(reported[0].Message, bootImageName) {
+		t.Fatalf("the message %q does not name the boot image", reported[0].Message)
 	}
 	want := "take this context back with bootwright destroy --context lab-b, import the image again with bootwright media add --name " +
-		dvdImageName + " --from-file <path>, or --from-url <url> --sha256 <digest>, then run bootwright apply --context lab-b"
+		bootImageName + " --from-file <path>, or --from-url <url> --sha256 <digest>, then run bootwright apply --context lab-b"
 	if reported[0].Remediation != want {
 		t.Fatalf("remediation = %q", reported[0].Remediation)
+	}
+	if _, err := New(refusingRunner{reason: "media-changed-tree"}).Apply(context.Background(), call); len(diagnostics.Of(err)) != 0 {
+		t.Fatalf("an installation names the shared tree's changed source image: %v", err)
 	}
 }
 

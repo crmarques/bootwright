@@ -103,8 +103,10 @@ naming `bootwright media delete` and `media add`; one whose bytes no longer
 have the size its record names; and one whose MachineImage `checksum` declares
 another digest than the record. Each apply attempt reads the size and SHA-256
 again before the image's first use and refuses a changed entry through a named
-refusal for its Machine, whose remedy takes the context back, imports the
-image again and applies.
+refusal, whose remedy takes the context back, imports the image again and
+applies: an installation names its boot image's for its Machine, and the
+[shared publication block](#shared-package-tree-publication) names a hosted
+tree's DVD's for its `MachineInstallProfile`, since only that block reads it.
 
 ## Installation
 
@@ -310,7 +312,10 @@ another owner or any mode other than 0700. A partial image build may leave
 this machine's work behind; its next apply clears only that work before
 writing. Transient SSH configuration and known hosts use the runner's private
 invocation scratch, never this durable work or a host-global path. A removal
-takes back its own work and retains the shared root.
+takes back its own work, then its per-Machine and per-context work
+directories, each only when empty, and retains the shared root. A
+directory a concurrent sibling removal already took is that absence, never
+a failure.
 A Machine and a profile of one name that publish through one server are
 refused at admission, at the profile's hosted-tree `serverRef`, because both
 would own `os/<name>/` there and the Machine's removal would take the tree.
@@ -476,7 +481,15 @@ atomic rename publishes the tree. A complete matching tree is reused.
 Incomplete staging or a tree without a complete marker is this owner's
 partial effect and is cleared before extraction. A different nonempty source
 identity is drift and stays unknown during apply resolution. Consumers read
-the completed tree without mutating it.
+the completed tree without mutating it, proving only that its source identity
+is the frozen DVD's.
+
+An apply refuses, before it extracts or changes anything, through a named
+refusal for its `MachineInstallProfile`: `media-changed-tree` when the DVD is
+no longer a regular file of the frozen size and SHA-256, whose remedy is the
+[media store's](#media-store); and `tree-source-drift` when a tree at the
+path names another source identity, whose remedy takes the context back,
+which withdraws that tree, then applies.
 
 **Evidence and continuation.** Evidence version
 `os-package-tree-evidence-v1` binds the frozen request digest and reports

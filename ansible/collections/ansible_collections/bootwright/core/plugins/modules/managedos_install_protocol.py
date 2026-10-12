@@ -30,8 +30,8 @@ options:
         which the runner reports as the installation's own diagnostic for its
         Machine. One of the target's pre-boot refusals C(hardware-mismatch),
         C(identity-mismatch) or C(machine-running), or C(media-changed-boot)
-        or C(media-changed-tree) for a store entry that no longer has the size
-        and SHA-256 the operation froze.
+        for a boot image that no longer has the size and SHA-256 the
+        operation froze.
     type: str
     required: false
   outcome:

@@ -23,7 +23,20 @@ def completion(arguments):
     return evidence, adapter_protocol.unreached("the package tree", "not proved", ["publication"])
 
 
-CAPABILITY = adapter_protocol.Capability("package-tree", "the package tree result could not be published", completion)
+# The refusals this publication names to its runner before the run fails, each
+# one the runner reports as the publication's own diagnostic for its profile
+# (internal/managedos/installation, tree.go): a source image that no longer has
+# the size and SHA-256 the operation froze, and a published tree another image
+# was extracted into.
+REFUSALS = ("media-changed-tree", "tree-source-drift")
+
+CAPABILITY = adapter_protocol.Capability(
+    "package-tree",
+    "the package tree result could not be published",
+    completion,
+    phases=adapter_protocol.REFUSING_PHASES,
+    refusals=REFUSALS,
+)
 
 
 class ActionModule(ActionBase):

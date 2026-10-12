@@ -36,6 +36,10 @@ class ReadFailed(Exception):
     """A read of the machine failed."""
 
 
+class TaskFailed(Exception):
+    """A task failed, by its failed_when or by a command's nonzero exit."""
+
+
 def tasks(name):
     return [task for task in LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True)
             if isinstance(task, dict)]
@@ -84,7 +88,9 @@ class Host:
         })
         self.emitted = []
         self.reads = {}
-        monkeypatch.setattr(protocol, "emit", lambda message, **kwargs: self.emitted.append(message))
+        self.after = {}
+        self.environment = {}
+        self.monkeypatch = monkeypatch
 
     def run(self, name, through=None):
         """Run one task file in order, stopping after the task named through."""
@@ -117,12 +123,31 @@ class Host:
             if not all(templar.evaluate_conditional(condition) for condition in conditions):
                 result = {"changed": False, "skipped": True}
             else:
+                self.environment = task.get("environment") or {}
                 result = getattr(self, module.rsplit(".", 1)[-1])(templar.template(task[module]))
+                self.failed(task, result)
             if "register" in task:
                 self.variables[task["register"]] = result
+            self.after.get(task.get("name"), lambda: None)()
             if task.get("name") == through:
                 return True
         return False
+
+    def failed(self, task, result):
+        """Fail a task as ansible-core would: by its failed_when, evaluated
+        over its registered result, or else by a command's nonzero exit."""
+        if "failed_when" not in task:
+            if result.get("rc", 0) != 0:
+                raise TaskFailed("%s: %s" % (task.get("name"), result.get("stderr")))
+            return
+        variables = dict(self.variables)
+        if "register" in task:
+            variables[task["register"]] = result
+        conditions = task["failed_when"]
+        conditions = conditions if isinstance(conditions, list) else [conditions]
+        templar = Templar(loader=LOADER, variables=variables)
+        if all(templar.evaluate_conditional(condition) for condition in conditions):
+            raise TaskFailed("%s: %s" % (task.get("name"), result.get("stderr")))
 
     def inside(self, path):
         path = pathlib.Path(path)
@@ -133,6 +158,7 @@ class Host:
         return {"changed": False, "observation": observe(arguments["request"], arguments["staging"], arguments["work"])}
 
     def managedos_install_protocol(self, arguments):
+        self.monkeypatch.setattr(protocol, "emit", lambda message, **kwargs: self.emitted.append(message))
         module = protocol.ActionModule.__new__(protocol.ActionModule)
         module._task = SimpleNamespace(args=arguments)
         result = module.run(task_vars={})
@@ -183,9 +209,24 @@ class Host:
             output = self.inside(argv[-1])
             assert not output.exists(), "%s already exists" % output
             output.write_bytes(b"built")
+        elif argv[0] == "/usr/bin/rmdir":
+            # GNU rmdir --ignore-fail-on-non-empty leaves a directory that is
+            # not empty and succeeds; any other failure still fails, and a
+            # missing directory exits 1 naming strerror(ENOENT), as coreutils
+            # src/rmdir.c ignorable_failure and remove_parents read: only
+            # ENOTEMPTY and EEXIST are ignored. LC_ALL=C keeps that text.
+            assert argv[1:-1] == ["--ignore-fail-on-non-empty"], argv
+            assert self.environment.get("LC_ALL") == "C", "rmdir's diagnostic would be localized"
+            directory = self.inside(argv[-1])
+            assert directory != self.parent, "a removal would take the shared work root"
+            if not os.path.lexists(directory):
+                return {"changed": True, "rc": 1, "stdout": "",
+                        "stderr": "/usr/bin/rmdir: failed to remove '%s': No such file or directory" % directory}
+            if not any(directory.iterdir()):
+                directory.rmdir()
         else:
             assert argv[0] == "/usr/bin/chcon", argv
-        return {"changed": True, "rc": 0}
+        return {"changed": True, "rc": 0, "stdout": "", "stderr": ""}
 
     def completion(self):
         completed = [message for message in self.emitted if message.get("phase") == "completed"]
@@ -253,6 +294,74 @@ def test_a_removal_reports_its_own_work_only(tmp_path, monkeypatch, left):
     assert not host.work.exists()
     assert host.completion()["outcome"] == ("changed" if left else "unchanged")
     assert host.completion()["evidence"]["postcondition"] is True
+
+
+def test_a_removal_takes_back_the_directories_its_apply_created(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch)
+    host.parent.mkdir(parents=True)
+    host.run("apply.yml", through=BUILD)
+    assert host.work.is_dir()
+    host.run("destroy.yml")
+    assert not os.path.lexists(host.work.parent) and not os.path.lexists(host.work.parent.parent)
+    assert host.parent.is_dir()
+    assert host.completion()["outcome"] == "changed"
+    assert host.completion()["evidence"]["postcondition"] is True
+
+
+# Directories an earlier removal left empty are still this Machine's to take
+# back, so taking them back is a change even when no work area remains.
+def test_a_removal_of_only_empty_directories_is_a_change(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch)
+    host.work.parent.mkdir(parents=True)
+    host.run("destroy.yml")
+    assert not os.path.lexists(host.work.parent.parent) and host.parent.is_dir()
+    assert host.completion()["outcome"] == "changed"
+
+
+def test_a_removal_leaves_a_sibling_machines_work(tmp_path, monkeypatch):
+    first, second = Host(tmp_path, monkeypatch), Host(tmp_path, monkeypatch, "rhel-02", 2)
+    first.run("apply.yml", through=BUILD)
+    second.run("apply.yml", through=BUILD)
+    first.run("destroy.yml")
+    assert not os.path.lexists(first.work.parent)
+    assert second.work.parent.parent.is_dir()
+    assert (second.work / "install.iso").read_bytes() == b"built"
+
+
+# Sibling Machines' removals run concurrently on one installer host, so both can
+# read the context directory present before either removes it; the one whose
+# rmdir then finds it gone already holds the absence it wants.
+def test_sibling_removals_racing_for_the_context_directory_both_complete(tmp_path, monkeypatch):
+    first, second = Host(tmp_path, monkeypatch), Host(tmp_path, monkeypatch, "rhel-02", 2)
+    first.run("apply.yml", through=BUILD)
+    second.run("apply.yml", through=BUILD)
+    second.after["Read this context's work directory before empty directory removal"] = (
+        lambda: first.run("destroy.yml"))
+    second.run("destroy.yml")
+    assert first.variables["managedos_install_anaconda_context_dir_removed"]["rc"] == 0
+    assert second.variables["managedos_install_anaconda_context_dir_before"]["stat"]["isdir"] is True
+    assert second.variables["managedos_install_anaconda_context_dir_removed"]["rc"] == 1
+    assert not os.path.lexists(first.work.parent.parent) and first.parent.is_dir()
+    for host in (first, second):
+        assert host.completion()["evidence"]["postcondition"] is True
+
+
+# Any other rmdir failure is still the removal's failure.
+def test_a_removal_fails_when_rmdir_fails_otherwise(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch)
+    host.work.parent.mkdir(parents=True)
+    denied = host.command
+
+    def refused(arguments):
+        if arguments["argv"][0] == "/usr/bin/rmdir":
+            return {"changed": True, "rc": 1, "stdout": "",
+                    "stderr": "/usr/bin/rmdir: failed to remove '%s': Permission denied" % arguments["argv"][-1]}
+        return denied(arguments)
+
+    host.command = refused
+    with pytest.raises(TaskFailed, match="Permission denied"):
+        host.run("destroy.yml")
+    assert host.work.parent.is_dir()
 
 
 # Observation leaves durable work as found and cleans its own connection files.

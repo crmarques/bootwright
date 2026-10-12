@@ -3,8 +3,8 @@
 The plan freezes each store entry's size and SHA-256 from its record. An apply
 reads both again with the stat module, which reports size and, given
 get_checksum and checksum_algorithm sha256, the file's SHA-256 as checksum
-(ansible/modules/stat.py, main, ansible-core 2.21), and refuses an entry that
-no longer has them before the extract and the image build first read it.
+(ansible/modules/stat.py, main, ansible-core 2.21), and refuses a boot image
+that no longer has them before the image build first reads it.
 
 The published package tree carries the digest of the DVD it was extracted
 from, written inside the staged tree before the rename publishes it, so an
@@ -72,13 +72,15 @@ def stat_of(media, **changed):
             "stat": result}
 
 
-def unchanged(boot, tree):
-    templar = Templar(loader=LOADER, variables=variables(managedos_install_anaconda_media_present={"results": [boot, tree]}))
-    return (templar.evaluate_conditional(trust_as_template("managedos_install_anaconda_boot_media_unchanged | bool")),
-            templar.evaluate_conditional(trust_as_template("managedos_install_anaconda_tree_media_unchanged | bool")))
+def unchanged(boot):
+    templar = Templar(loader=LOADER, variables=variables(managedos_install_anaconda_media_present={"results": [boot]}))
+    return templar.evaluate_conditional(trust_as_template("managedos_install_anaconda_boot_media_unchanged | bool"))
 
 
-def test_an_apply_proves_each_store_entrys_size_and_digest_before_first_use():
+# The tree image is read and proved only by the shared package-tree
+# publication (test_managedos_package_tree.py); an installation reads only its
+# boot image and proves the published tree names the frozen DVD.
+def test_an_apply_proves_its_boot_images_size_and_digest_before_first_use():
     tasks = applied()
     read = index_of(tasks, lambda task: STAT in task and task.get("loop") == "{{ managedos_install_anaconda_required_media }}",
                     "read the required media")
@@ -86,7 +88,7 @@ def test_an_apply_proves_each_store_entrys_size_and_digest_before_first_use():
     assert tasks[read][STAT]["checksum_algorithm"] == "sha256"
     named = [index for index, task in enumerate(tasks)
              if PROTOCOL in task and str(task[PROTOCOL].get("reason", "")).startswith("media-changed-")]
-    assert [tasks[index][PROTOCOL]["reason"] for index in named] == ["media-changed-boot", "media-changed-tree"]
+    assert [tasks[index][PROTOCOL]["reason"] for index in named] == ["media-changed-boot"]
     first_use = index_of(tasks, lambda task: argv0(task, "/usr/bin/mkksiso"), "build the image")
     assert read < min(named) and max(named) + 1 < first_use
     for index in named:
@@ -97,17 +99,18 @@ def test_an_apply_proves_each_store_entrys_size_and_digest_before_first_use():
     templar = Templar(loader=LOADER, variables=variables())
     assert templar.template(trust_as_template("{{ managedos_install_anaconda_required_media }}")) == [
         {"path": "/var/lib/bootwright/media/" + BOOT["name"], "size": BOOT["size"], "sha256": BOOT["sha256"]},
-        {"path": "/var/lib/bootwright/media/" + DVD["name"], "size": DVD["size"], "sha256": DVD["sha256"]},
     ]
-    assert unchanged(stat_of(BOOT), stat_of(DVD)) == (True, True)
-    assert unchanged(stat_of(BOOT, checksum="a" * 64), stat_of(DVD)) == (False, True)
-    assert unchanged(stat_of(BOOT), stat_of(DVD, checksum="a" * 64)) == (True, False)
-    assert unchanged(stat_of(BOOT, size=BOOT["size"] - 1), stat_of(DVD)) == (False, True)
-    assert unchanged(stat_of(BOOT), stat_of(DVD, size=DVD["size"] + 1)) == (True, False)
-    absent = {"item": stat_of(DVD)["item"], "stat": {"exists": False}}
-    assert unchanged(stat_of(BOOT), absent) == (True, False)
-    directory = stat_of(DVD, isreg=False, isdir=True)
-    assert unchanged(stat_of(BOOT), directory) == (True, False)
+    assert unchanged(stat_of(BOOT)) is True
+    assert unchanged(stat_of(BOOT, checksum="a" * 64)) is False
+    assert unchanged(stat_of(BOOT, size=BOOT["size"] - 1)) is False
+    assert unchanged({"item": stat_of(BOOT)["item"], "stat": {"exists": False}}) is False
+    assert unchanged(stat_of(BOOT, isreg=False, isdir=True)) is False
+
+    proof = index_of(tasks, lambda task: task.get("name") == "Prove the shared package tree dependency before building or booting",
+                     "prove the shared tree")
+    assert "managedos_install_anaconda_before.observation.treeIdentity == bootwright_os_install_request.treeMedia.sha256" in (
+        tasks[proof]["ansible.builtin.assert"]["that"])
+    assert proof < first_use
 
 
 ROLES = ROLE.parent

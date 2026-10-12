@@ -102,11 +102,41 @@
     }
   },
   {
+    "case": "refused media-changed-tree",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "media-changed-tree"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused tree-source-drift",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "tree-source-drift"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
     "case": "refused unnamed",
     "records": [],
     "result": {
       "failed": true,
-      "msg": "unsupported package-tree protocol phase"
+      "msg": "the package tree result could not be published"
     }
   },
   {

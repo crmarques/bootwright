@@ -2,3 +2,14 @@
 managedos_package_tree_staging: '{{ bootwright_os_tree_request.publication.path }}.staging'
 managedos_package_tree_media: '/var/lib/bootwright/media/{{ bootwright_os_tree_request.media.name }}'
 managedos_package_tree_served_root: '{{ bootwright_os_tree_request.publication.path | dirname | dirname | dirname }}'
+# Whether the source image is still the regular file of the size and SHA-256
+# the operation froze, read from the stat taken before extraction.
+managedos_package_tree_media_unchanged: >-
+  {{ managedos_package_tree_source.stat.isreg | default(false)
+     and not (managedos_package_tree_source.stat.islnk | default(true))
+     and managedos_package_tree_source.stat.size | default(-1) == bootwright_os_tree_request.media.size
+     and managedos_package_tree_source.stat.checksum | default('') == bootwright_os_tree_request.media.sha256 }}
+# Whether a tree already published at the path, if any, was extracted from the
+# frozen source image.
+managedos_package_tree_source_matches: >-
+  {{ managedos_package_tree_observed.observation.identity in ['', bootwright_os_tree_request.media.sha256] }}

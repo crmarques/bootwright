@@ -341,24 +341,25 @@ func mediaAdd(name, digest string) string {
 	return "bootwright media add --name " + name + " --from-file <path> --sha256 " + digest + ", or --from-url <url> --sha256 " + digest
 }
 
-// mediaRefusals are the diagnostics an apply names for a store entry that no
-// longer has the size and SHA-256 its operation froze, which the attempt
-// proves before the entry's first use.
+// mediaRefusals are the diagnostics an apply names for its boot image when it
+// no longer has the size and SHA-256 its operation froze, which the attempt
+// proves before the image's first use. The tree image is the shared
+// package-tree publication's to prove.
 func mediaRefusals(contextName string, request Request) map[string]error {
-	refused := func(name string) error {
-		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-			Severity: "error", Code: "lifecycle.state",
-			Message: "the media store's image " + name + " no longer has the size and SHA-256 this operation froze, so nothing was published or booted",
-			Remediation: "take this context back with bootwright destroy --context " + contextName + ", import the image again with " +
-				mediaAdd(name, "") + ", then run bootwright apply --context " + contextName,
-			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object},
-		}}}
-	}
-	refusals := map[string]error{"media-changed-boot": refused(request.BootMedia.Name)}
-	if request.TreeMedia != nil {
-		refusals["media-changed-tree"] = refused(request.TreeMedia.Name)
-	}
-	return refusals
+	machine := diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object}
+	return map[string]error{"media-changed-boot": changedMedia(contextName, request.BootMedia.Name, machine)}
+}
+
+// changedMedia is the diagnostic for a store entry that no longer has the size
+// and SHA-256 its operation froze, refused for the object whose block read it.
+func changedMedia(contextName, name string, object diagnostics.ObjectIdentity) error {
+	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+		Severity: "error", Code: "lifecycle.state",
+		Message: "the media store's image " + name + " no longer has the size and SHA-256 this operation froze, so nothing was published or booted",
+		Remediation: "take this context back with bootwright destroy --context " + contextName + ", import the image again with " +
+			mediaAdd(name, "") + ", then run bootwright apply --context " + contextName,
+		Object: &object,
+	}}}
 }
 
 type hostedTree struct {

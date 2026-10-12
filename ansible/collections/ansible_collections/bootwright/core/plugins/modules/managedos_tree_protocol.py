@@ -24,6 +24,15 @@ options:
     description: The status a progress phase reports for its group.
     type: str
     required: false
+  reason:
+    description:
+      - The refusal a refused phase names to the runner before the run fails,
+        which the runner reports as the publication's own diagnostic for its
+        install profile. C(media-changed-tree) for a source image that no
+        longer has the size and SHA-256 the operation froze, or
+        C(tree-source-drift) for a published tree extracted from another image.
+    type: str
+    required: false
   outcome:
     description: The terminal outcome a completion phase publishes.
     type: str

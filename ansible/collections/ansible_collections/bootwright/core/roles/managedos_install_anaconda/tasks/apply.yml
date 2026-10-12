@@ -87,8 +87,8 @@
       when: not item.stat.exists
 
     # The plan froze each store entry's size and SHA-256 from its record. An entry
-    # deleted, replaced or damaged since is refused here, before the extract and
-    # the image build first read it, naming only the first entry that changed.
+    # deleted, replaced or damaged since is refused here, before the image build
+    # first reads it.
     - name: Read the size and SHA-256 of every store entry this installation names
       ansible.builtin.stat:
         path: '{{ item.path }}'
@@ -112,24 +112,6 @@
           {{ managedos_install_anaconda_boot_media }} differs from the size and
           SHA-256 this operation froze, so nothing was published or booted
       when: not (managedos_install_anaconda_boot_media_unchanged | bool)
-
-    - name: Name a tree image that changed since this operation froze it
-      bootwright.core.managedos_install_protocol:
-        phase: refused
-        reason: media-changed-tree
-      when:
-        - bootwright_os_install_request.treeMedia is defined
-        - not (managedos_install_anaconda_tree_media_unchanged | bool)
-      no_log: true
-
-    - name: Refuse a tree image that changed since this operation froze it
-      ansible.builtin.fail:
-        msg: >-
-          {{ managedos_install_anaconda_tree_media }} differs from the size and
-          SHA-256 this operation froze, so nothing was published or booted
-      when:
-        - bootwright_os_install_request.treeMedia is defined
-        - not (managedos_install_anaconda_tree_media_unchanged | bool)
 
     - name: Observe what this installation has already published
       bootwright.core.managedos_install_inspect:

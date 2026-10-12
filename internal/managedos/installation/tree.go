@@ -10,6 +10,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -175,14 +176,36 @@ func (c TreeCapability) run(ctx context.Context, execution lifecycle.Execution, 
 		return lifecycle.RunResult{}, request, err
 	}
 	var materials []lifecycle.MaterialFile
-	if operation == "apply" && request.Publication.CertificateRef != "" {
-		materials = append(materials, lifecycle.MaterialFile{Name: "tree-ca", Secret: request.Publication.CertificateRef, Part: secrets.CertificatePart, Variable: "certificate"})
+	var refusals map[string]error
+	if operation == "apply" {
+		refusals = treeRefusals(execution.Context, request)
+		if request.Publication.CertificateRef != "" {
+			materials = append(materials, lifecycle.MaterialFile{Name: "tree-ca", Secret: request.Publication.CertificateRef, Part: secrets.CertificatePart, Variable: "certificate"})
+		}
 	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: TreeImplementation,
 		Operation: operation, Variable: "bootwright_os_tree", Canonical: canonical, Placement: request.Placement,
-		Materials: materials, Deadline: time.Hour,
+		Materials: materials, Refusals: refusals, Deadline: time.Hour,
 	}))
 	return result, request, err
+}
+
+// treeRefusals are the diagnostics an apply names before it extracts anything:
+// a source image that no longer has the size and SHA-256 the operation froze,
+// and a tree already published at the path from another image.
+func treeRefusals(contextName string, request TreeRequest) map[string]error {
+	profile := diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.MachineInstallProfile), Name: request.Identity.Profile}
+	return map[string]error{
+		"media-changed-tree": changedMedia(contextName, request.Media.Name, profile),
+		"tree-source-drift": &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+			Severity: "error", Code: "lifecycle.state",
+			Message: "the package tree at " + request.Publication.Path + " was extracted from another image than the " + request.Media.Name +
+				" this operation froze, so it was left unchanged and nothing was published",
+			Remediation: "take this context back with bootwright destroy --context " + contextName +
+				", which removes that tree, then run bootwright apply --context " + contextName,
+			Object: &profile,
+		}}},
+	}
 }
 func (c TreeCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	return c.mutate(ctx, execution, "apply")

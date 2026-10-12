@@ -17,10 +17,11 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 # The refusals this installation names to its runner before the run fails,
 # each one the runner reports as the installation's own diagnostic for its
 # Machine: those of the target's pre-boot proof (internal/substrate,
-# preboot.go), and those of a store entry that no longer has the size and
+# preboot.go), and that of a boot image that no longer has the size and
 # SHA-256 the operation froze (internal/managedos/installation, selection.go).
+# The tree image is the shared package-tree publication's to prove.
 REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
-MEDIA_REFUSALS = ("media-changed-boot", "media-changed-tree")
+MEDIA_REFUSALS = ("media-changed-boot",)
 POWER_STATES = ("", "On", "Off")
 MAX_MARKER = 4096
 MAX_HOST_KEY = 4096

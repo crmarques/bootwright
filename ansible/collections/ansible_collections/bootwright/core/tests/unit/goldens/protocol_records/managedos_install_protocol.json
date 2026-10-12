@@ -163,17 +163,10 @@
   },
   {
     "case": "refused media-changed-tree",
-    "records": [
-      [
-        {
-          "phase": "refused",
-          "reason": "media-changed-tree"
-        },
-        false
-      ]
-    ],
+    "records": [],
     "result": {
-      "changed": false
+      "failed": true,
+      "msg": "the installation capability result could not be published"
     }
   },
   {

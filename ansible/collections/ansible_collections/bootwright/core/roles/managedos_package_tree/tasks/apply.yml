@@ -28,13 +28,17 @@
     checksum_algorithm: sha256
   register: managedos_package_tree_source
 
+- name: Name source media that changed after planning
+  bootwright.core.managedos_tree_protocol:
+    phase: refused
+    reason: media-changed-tree
+  when: not (managedos_package_tree_media_unchanged | bool)
+  no_log: true
+
 - name: Refuse source media that changed after planning
   ansible.builtin.assert:
     that:
-      - managedos_package_tree_source.stat.isreg | default(false)
-      - not (managedos_package_tree_source.stat.islnk | default(true))
-      - managedos_package_tree_source.stat.size | default(-1) == bootwright_os_tree_request.media.size
-      - managedos_package_tree_source.stat.checksum | default('') == bootwright_os_tree_request.media.sha256
+      - managedos_package_tree_media_unchanged | bool
     quiet: true
 
 - name: Read the shared tree before publication
@@ -42,10 +46,17 @@
     request: '{{ bootwright_os_tree_request }}'
   register: managedos_package_tree_observed
 
+- name: Name an existing tree from another source
+  bootwright.core.managedos_tree_protocol:
+    phase: refused
+    reason: tree-source-drift
+  when: not (managedos_package_tree_source_matches | bool)
+  no_log: true
+
 - name: Refuse an existing tree from another source
   ansible.builtin.assert:
     that:
-      - managedos_package_tree_observed.observation.identity in ['', bootwright_os_tree_request.media.sha256]
+      - managedos_package_tree_source_matches | bool
     quiet: true
 
 - name: Publish the frozen tree when incomplete

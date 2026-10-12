@@ -68,6 +68,71 @@
     state: absent
   register: managedos_install_anaconda_work_removed
 
+# The per-Machine and per-context directories an apply proved or created hold
+# nothing once the work area is gone, unless a sibling Machine of this context
+# still works beneath them. Each is removed only when empty, the Machine's
+# first, and the shared root is never touched. A sibling apply that finds the
+# context directory gone creates it again, because creating its own directory
+# creates every missing parent with the same owner and mode. Sibling removals
+# run concurrently, so a directory a sibling removed between the read and the
+# rmdir is already the absence this removal wants: rmdir's "No such file or
+# directory" is success, and any other failure still fails.
+- name: Read this Machine's work directory before empty directory removal
+  ansible.builtin.stat:
+    path: '{{ managedos_install_anaconda_work | dirname }}'
+    follow: false
+  register: managedos_install_anaconda_machine_dir_before
+
+- name: Remove this Machine's work directory only when empty
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - --ignore-fail-on-non-empty
+      - '{{ managedos_install_anaconda_work | dirname }}'
+    expand_argument_vars: false
+  environment:
+    LC_ALL: C
+  register: managedos_install_anaconda_machine_dir_removed
+  failed_when:
+    - managedos_install_anaconda_machine_dir_removed.rc != 0
+    - '"No such file or directory" not in managedos_install_anaconda_machine_dir_removed.stderr'
+  when: managedos_install_anaconda_machine_dir_before.stat.isdir | default(false)
+  changed_when: false
+
+- name: Read whether this Machine's work directory remains
+  ansible.builtin.stat:
+    path: '{{ managedos_install_anaconda_work | dirname }}'
+    follow: false
+  register: managedos_install_anaconda_machine_dir_after
+
+- name: Read this context's work directory before empty directory removal
+  ansible.builtin.stat:
+    path: '{{ managedos_install_anaconda_work | dirname | dirname }}'
+    follow: false
+  register: managedos_install_anaconda_context_dir_before
+
+- name: Remove this context's work directory only when empty
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - --ignore-fail-on-non-empty
+      - '{{ managedos_install_anaconda_work | dirname | dirname }}'
+    expand_argument_vars: false
+  environment:
+    LC_ALL: C
+  register: managedos_install_anaconda_context_dir_removed
+  failed_when:
+    - managedos_install_anaconda_context_dir_removed.rc != 0
+    - '"No such file or directory" not in managedos_install_anaconda_context_dir_removed.stderr'
+  when: managedos_install_anaconda_context_dir_before.stat.isdir | default(false)
+  changed_when: false
+
+- name: Read whether this context's work directory remains
+  ansible.builtin.stat:
+    path: '{{ managedos_install_anaconda_work | dirname | dirname }}'
+    follow: false
+  register: managedos_install_anaconda_context_dir_after
+
 - name: Report published content removal completion
   bootwright.core.managedos_install_protocol:
     phase: group
@@ -103,7 +168,11 @@
       {{ 'changed'
          if (managedos_install_anaconda_image_removed is changed
              or managedos_install_anaconda_private_removed is changed
-             or managedos_install_anaconda_work_removed is changed)
+             or managedos_install_anaconda_work_removed is changed
+             or (managedos_install_anaconda_machine_dir_before.stat.exists
+                 and not managedos_install_anaconda_machine_dir_after.stat.exists)
+             or (managedos_install_anaconda_context_dir_before.stat.exists
+                 and not managedos_install_anaconda_context_dir_after.stat.exists))
          else 'unchanged' }}
     digest: '{{ bootwright_os_install_digest }}'
     observation: '{{ managedos_install_anaconda_after.observation }}'

@@ -31,7 +31,8 @@ def test_each_pre_boot_refusal_is_named_to_the_runner(reason, monkeypatch):
     assert published == [{"phase": "refused", "reason": reason}]
 
 
-@pytest.mark.parametrize("reason", [None, "", "release-stamp", "machine-running-node-0", "machine-running "], ids=repr)
+@pytest.mark.parametrize("reason", [None, "", "release-stamp", "machine-running-node-0", "machine-running ", "media-changed-tree"],
+                         ids=repr)
 def test_a_refusal_the_installation_does_not_name_is_never_published(reason, monkeypatch):
     args = {"phase": "refused"}
     if reason is not None:
@@ -41,13 +42,13 @@ def test_a_refusal_the_installation_does_not_name_is_never_published(reason, mon
     assert not published
 
 
-# A store entry the attempt finds changed since the plan froze it is named by
-# which image it is, each with the diagnostic Go gave it (selection.go).
-@pytest.mark.parametrize("reason", ["media-changed-boot", "media-changed-tree"])
-def test_each_changed_store_entry_is_named_to_the_runner(reason, monkeypatch):
-    result, published = run({"phase": "refused", "reason": reason}, monkeypatch)
+# A boot image the attempt finds changed since the plan froze it is named with
+# the diagnostic Go gave it (selection.go). The tree image is the shared
+# package-tree publication's to name, so the installation never names it.
+def test_a_changed_boot_image_is_named_to_the_runner(monkeypatch):
+    result, published = run({"phase": "refused", "reason": "media-changed-boot"}, monkeypatch)
     assert result == {"changed": False}
-    assert published == [{"phase": "refused", "reason": reason}]
+    assert published == [{"phase": "refused", "reason": "media-changed-boot"}]
 
 
 DIGEST = "1" * 64

@@ -14,8 +14,6 @@ managedos_install_anaconda_tooling:
   - /usr/bin/xorriso
 managedos_install_anaconda_boot_media: >-
   {{ managedos_install_anaconda_media }}/{{ bootwright_os_install_request.bootMedia.name }}
-managedos_install_anaconda_tree_media: >-
-  {{ managedos_install_anaconda_media }}/{{ bootwright_os_install_request.treeMedia.name | default('') }}
 # The public image's directory, and nothing for a delivered-key Machine,
 # whose image is published beneath its private subtree instead.
 managedos_install_anaconda_image_dir: >-
@@ -32,28 +30,21 @@ managedos_install_anaconda_staged_tree: >-
   {{ (bootwright_os_install_request.tree.path ~ '.staging')
      if bootwright_os_install_request.tree is defined else '' }}
 # Every store entry this installation reads, with the size and SHA-256 the
-# operation froze, so each attempt proves both before the entry's first use:
-# the boot image, then the tree.
+# operation froze, so each attempt proves both before the entry's first use.
+# Only the boot image: the shared package-tree publication proves the tree
+# image it extracts, and this installation proves only that the published
+# tree names it.
 managedos_install_anaconda_required_media: >-
   {{ [{'path': managedos_install_anaconda_boot_media,
        'size': bootwright_os_install_request.bootMedia.size,
-       'sha256': bootwright_os_install_request.bootMedia.sha256}]
-     + ([{'path': managedos_install_anaconda_tree_media,
-          'size': bootwright_os_install_request.treeMedia.size,
-          'sha256': bootwright_os_install_request.treeMedia.sha256}]
-        if bootwright_os_install_request.treeMedia is defined else []) }}
-# Whether the boot image, and the tree image, still have the size and SHA-256
-# the operation froze, read from the stat of each required entry in order.
+       'sha256': bootwright_os_install_request.bootMedia.sha256}] }}
+# Whether the boot image still has the size and SHA-256 the operation froze,
+# read from the stat of the required entry.
 managedos_install_anaconda_boot_media_unchanged: >-
   {{ managedos_install_anaconda_media_present.results[0].stat.exists | default(false)
      and managedos_install_anaconda_media_present.results[0].stat.isreg | default(false)
      and managedos_install_anaconda_media_present.results[0].stat.size | default(-1) == managedos_install_anaconda_media_present.results[0].item.size
      and managedos_install_anaconda_media_present.results[0].stat.checksum | default('') == managedos_install_anaconda_media_present.results[0].item.sha256 }}
-managedos_install_anaconda_tree_media_unchanged: >-
-  {{ managedos_install_anaconda_media_present.results[1].stat.exists | default(false)
-     and managedos_install_anaconda_media_present.results[1].stat.isreg | default(false)
-     and managedos_install_anaconda_media_present.results[1].stat.size | default(-1) == managedos_install_anaconda_media_present.results[1].item.size
-     and managedos_install_anaconda_media_present.results[1].stat.checksum | default('') == managedos_install_anaconda_media_present.results[1].item.sha256 }}
 # A machine that already holds exactly the marker this operation froze is
 # installed: the attempt boots nothing and reports the same evidence. This is
 # read only by the apply's set_fact right after the first identity read, which

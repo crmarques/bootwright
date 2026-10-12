@@ -144,7 +144,7 @@ CASES = {
         ("observed gone", completed(observed=True, observation=MACHINE_GONE)),
         ("removal observed", completed(removed=True, observed=True, observation=MACHINE_GONE)),
     ],
-    "managedos_tree_protocol": common([]) + completions(
+    "managedos_tree_protocol": common([{"reason": "media-changed-tree"}, {"reason": "tree-source-drift"}]) + completions(
         {"observation": {"tree": True, "content": True, "identity": DIGEST}},
         {"observation": {"staging": True}},
         {"observation": {}},
