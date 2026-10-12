@@ -1696,7 +1696,7 @@ then run `python3 scripts/tools/ansible_check_bootstrap.py`. A cache serves one
 lock at a time, so a worktree whose tree predates X37 refuses a rebuilt cache
 and needs its own `BOOTWRIGHT_CACHE_DIR`. The first CI run after X37 starts
 with cold caches: the `.cache` key hashes the tool locks X37 changed and has no
-restore keys, and setup-go's key names the Go version. Under D48 every follow-up was parked: [B272](m1.md#b272), CI's race job,
+restore keys, and setup-go's key names the Go version. Under D48 every follow-up was parked: [B272](#x44--help-completion-contracts-and-ratchets), CI's race job,
 which never runs although two pages say it runs nightly;
 [B273](backlog.md#b273), Go 1.27; and [B274](backlog.md#b274), the gate on
 CPython 3.14.
@@ -1728,7 +1728,7 @@ met and the log digests.
 which B49 also named ([B277](m1.md#b277)). It found [B275](#x40--machine-commands-status-secrets-and-validate-refusals) and
 [B276](m1.md#b276) and a new sighting of [B270](m1.md#b270), all parked
 under D48 until D56 attached them to M1. Lifecycle concurrency may now rise
-above one through [B303](m1.md#b303), and the adapter protocol, roles and
+above one through [B303](#x48--bounded-concurrent-execution), and the adapter protocol, roles and
 codecs may collapse through [B19](m1.md#b19), [B20](m1.md#b20) and
 [B22](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json), each with the real-host evidence its own item names.
 
@@ -2023,7 +2023,7 @@ Machine with `access.ssh.addressRef: ip` where it showed `fqdn`, so their
 sessions dial the install address. Output contracts change: the
 `machine list` JSON row's `address` and `ips` become `contact` and
 `addresses` and absent scalars are omitted (D70, with the `media list` row
-left to [B300](m1.md#b300)); the status JSON's `secrets.bound` becomes
+left to [B300](#x44--help-completion-contracts-and-ratchets)); the status JSON's `secrets.bound` becomes
 `secrets.bindings`, its setup check `dependency-bundle` becomes
 `execution-bundle`, and its cluster and shared-service rows take the new
 values; the fleet-key refusal moves from `api.invariant` to `api.required`;
@@ -2101,8 +2101,8 @@ re-import from another directory stales it once ([B362](backlog.md#b362)).
 Tracked elsewhere: the confirmation prompts of `secret set`, `delete` and
 rotation, which still call the Secret a context
 ([B287](#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs), D75);
-the `media list` row ([B300](m1.md#b300)); the `secret set` help
-([B95](m1.md#b95)); codes the registry scan cannot see
+the `media list` row ([B300](#x44--help-completion-contracts-and-ratchets)); the `secret set` help
+([B95](#x44--help-completion-contracts-and-ratchets)); codes the registry scan cannot see
 ([B162](backlog.md#b162)); `auth.operatorIdentity` under the invoking account
 ([B332](backlog.md#b332)); `status` over input a new rule refuses
 ([B226](backlog.md#b226)); `--ssh-id-file` through the helper as root,
@@ -2266,7 +2266,7 @@ areas, and a capacity refusal names the storage it would overfill.
 **Toward B95:** `bootwright destroy --help` says that destroy removes what the
 apply owns whether or not it completed, that a failed destroy is replaced,
 that Machines are stopped first and that a disk-deleting plan needs
-`--authorize data-loss`. [B95](m1.md#b95) keeps every other command's help for
+`--authorize data-loss`. [B95](#x44--help-completion-contracts-and-ratchets) keeps every other command's help for
 X44.
 
 **Operator-visible effects:** `machine exec` and `rsh` exit 255 for a refusal
@@ -2380,8 +2380,8 @@ and IPv6 policy among it ([B338](#x43--libvirt-roles-managed-os-installation-net
 `rpm` output and the snapshot read as the helper account
 ([B335](backlog.md#b335), and the RHEL 9.8 controller run D60 plans); the
 glibc and libgcc builds a RHEL 9.8 controller must hold, and building on a
-workstation ([B292](#x42--media-contexts-setup-service-and-machine-admission)); help beyond destroy ([B95](m1.md#b95)); an
-invocation's own in-flight jobs ([B304](m1.md#b304)); and a bounded run
+workstation ([B292](#x42--media-contexts-setup-service-and-machine-admission)); help beyond destroy ([B95](#x44--help-completion-contracts-and-ratchets)); an
+invocation's own in-flight jobs ([B304](#x48--bounded-concurrent-execution)); and a bounded run
 beside another context's exclusive apply lock ([B18](m3.md#b18)). Under D48
 (D116) the other follow-ups were parked: B385 to B397, B385 and B393 split
 from B94 and B289.
@@ -2914,7 +2914,7 @@ B382, B383, B404, B406, B359, B378. **Decisions:** D11, D56, D57, D66, D77,
 D99, D114, D116. **In-tree gates passed, host gate awaiting operator
 acceptance:** [B19](m1.md#b19), [B20](m1.md#b20) and [B270](m1.md#b270); their
 rows stay on M1 with Delivery `awaiting operator acceptance`. **Partly
-delivered:** [B233](m1.md#b233), its dead reporters.
+delivered:** [B233](#x44--help-completion-contracts-and-ratchets), its dead reporters.
 
 **Outcome, B19, B242 and B298:** the lifecycle runner and the controller
 runner decode the adapter result protocol with one decoder and supervise their
@@ -3030,7 +3030,7 @@ and missing bound material refuses on its Secret with a remedy carrying
 
 **Outcome, B233 in part:** the managed service's list of unsupported names and
 the test-only reporters of the libvirt, managed-OS and agent-install
-capabilities are removed. [B233](m1.md#b233) stays on M1 for the unreachable
+capabilities are removed. [B233](#x44--help-completion-contracts-and-ratchets) stays on M1 for the unreachable
 agent-install checks, the refusal-table tests in `make docs-check` and the
 engine's table, and for the artifact server's `Unsupported`, which now also
 lists placement-row refusals.
@@ -3104,8 +3104,8 @@ real-host run.
 [B270](m1.md#b270) complete on an owner-accepted ledger row of D59's closing
 run, which carries their real-host apply, destroy and no-failed-unit proofs; the
 other host observations are [B442](backlog.md#b442). The binding-proof port
-stays [B302](m1.md#b302)'s and the artifact server's `Unsupported`
-[B233](m1.md#b233)'s. Under D116 three follow-ups join M1 on X46: a destroy that
+stays [B302](#x44--help-completion-contracts-and-ratchets)'s and the artifact server's `Unsupported`
+[B233](#x44--help-completion-contracts-and-ratchets)'s. Under D116 three follow-ups join M1 on X46: a destroy that
 refuses a content root with a `..` component ([B435](#x46--the-safety-and-defect-sweep-of-m1)), the reset of
 a failed unit after a failed apply ([B436](#x46--the-safety-and-defect-sweep-of-m1)) and three continuation
 edges ([B437](#x46--the-safety-and-defect-sweep-of-m1)). Under D48 eight were parked: B438 to B445.
@@ -3193,8 +3193,9 @@ and the bytes, with the error log kept at warn. The MAC proof stays strict and
 its refusal names each declared NIC the inventory lacks and each member that
 proved nothing by position, never a reported value. The knowledge page on
 physical BMCs is rewritten from the captures without host names or serials, with
-the RSA premise and its check, and each of [B74](m2.md#b74) to
-[B77](m2.md#b77) points to the pre-rewrite page that holds its field lessons.
+the RSA premise and its check. The field lessons the page held before the
+rewrite stay in Git history, and [B74](m2.md#b74) to [B77](m2.md#b77) no longer
+cite them.
 
 **Review:** four sub-items in two lanes integrated without a conflict and with
 one integration fix: the insert bound grew by 3 minutes (36m20s to 39m20s) for
@@ -3343,12 +3344,16 @@ concurrency test is rewritten and the secrets spec says so.
 **Outcome, B373:** an elevated `secret set` with `--value-stdin` or
 `--password-stdin` refuses `secret.input`, naming the Secret, before sudo starts
 the child and before any input is read, when the listing the supervisor already
-reads (`sudo -n -ll`) sets `log_input` or `log_stdin` as an explicit,
-non-negated option in the matching Defaults, in a Runas, host, user or
+reads (`sudo -n -ll`) sets `log_input`, `log_stdin` or `log_ttyin` as an
+explicit, non-negated option in the matching Defaults, in a Runas, host, user or
 command-specific Defaults line with several members or a member that carries
 arguments, or in a rule's Options. It is a refusal, not a warning, because a
 warning cannot protect piped input and JSON keeps standard error empty; the
-remedy, a file flag or running as root, always works. A listing that cannot be
+remedy, a file flag or a root login session that sudo did not start (a console
+or SSH login, or `su -`), always works, and the refusal says that a command run
+through `sudo`, even from a `sudo -i` shell, stays under sudo's I/O log. The
+2026-10-11 review added `log_ttyin`, which logs what is typed at the terminal,
+and the corrected root wording. A listing that cannot be
 read without a password proves nothing and the command proceeds, which the
 secrets spec and the operator guide state and [B458](#x46--the-safety-and-defect-sweep-of-m1) closes. The
 sudo argument vector, the child's environment and D73's acquisition order do not
@@ -3651,18 +3656,32 @@ only to a graceful stop or restart.
 
 **Outcome, B453:** the keyring's cleanup refusals name `bootwright secret
 encryption init --context <ctx>`, and the retired file-source remedy carries
-the context in the secret commands, `context init` and `context update`.
+the context in the secret commands, `context init` and `context update`. The
+2026-10-11 review made the remedy name the command to repeat first: from
+`context init` or `context update` it says to declare `source: {contextStore:
+{}}` in the input, rerun that command with `--input-dir`, then run `secret set`,
+and from a secret command on a context whose stored input still holds the
+retired source it names `context update --name <ctx> --input-dir <dir>` first.
 
 **Outcome, B454:** `machine trust` alone reads a stored trust file that pins an
 endpoint to two keys, and its plan removes, as shown `remove` rows, the records
 at that endpoint of Machines that no longer use context trust; the refusal of
-every other reader names that repair, with `--machines --replace` for each
-Machine that still uses it.
+every other reader names that repair: `machine trust --machines` with the
+Machines in use, so that a Machine whose key changed then refuses as a changed
+key with its out-of-band remedy and nothing is written. Only a refused write
+names `--replace`, after the operator verifies the new fingerprint out of band;
+the 2026-10-11 review removed the earlier remedy that pre-authorized it.
 
 **Outcome, B455:** the deletion walk names the context, the store-relative entry
 and why, with the exit to remove the entry and repeat the purge; a state root
 behind a link or a non-directory ancestor names that path, its type and the
-repair, and a root that is itself a link is refused as a root of another type.
+repair, and a root that is itself a link is refused as a root of another type
+with the ancestor's exit: replace it with a directory, such as the directory the
+link names or a mount of that storage. An entry on another filesystem is told to
+be unmounted and its contents never removed, since a removal could descend into
+a mount; an entry whose device differs without the walk crossing a mount is
+told to be unmounted if it is a mount point and otherwise removed. The 2026-10-11
+review added both exits.
 
 **Outcome, B456:** an unlocated scanner or parser reason reports line 1, and a
 control character its line and column computed from the bytes; composer reasons
@@ -3676,7 +3695,9 @@ refusals carry remedies, each in the validate refusals golden.
 **Outcome, B458:** an elevated standard-input secret is read only after sudo's
 policy listing was read. An interactive invocation validates with `sudo -v`
 and reads it again; a JSON or non-terminal one, or a listing still unreadable,
-refuses `secret.input` before sudo starts the child. Commands without a
+refuses `secret.input` before sudo starts the child. A readable listing that
+sets `log_input`, `log_stdin` or `log_ttyin` keeps its refusal, whose text names
+the Secret's input, whether typed at the terminal or piped. Commands without a
 standard-input secret are unchanged.
 
 **Outcome, B459:** the reproduction held: a wildcard Proxy with 62 endpoint
@@ -3692,7 +3713,42 @@ for byte, and in-process admission reports only the twelve known
 
 **Review:** the coordinator read each lane's diff against its item. Lane B380's
 contract changes reached no spec, so its commit states them in the substrates,
-contexts, state-reconciliation and CLI specs. No finding blocked.
+contexts, state-reconciliation and CLI specs. No finding blocked. The lanes
+were B379 with B458, B380 with B455 and B453 with B454, by other tools on
+2026-10-08, beside B456 with B457 and B459 from the earlier session.
+
+That read was not independent, though B380 is lifecycle safety and B458 is
+privilege safety (F010). On 2026-10-11 an independent multi-reviewer review of
+180b423ac and f6c540fd9, and of the remedy wording of bf9f6f6de, with three
+lenses on each finding, found one blocking and several smaller defects, all
+fixed on 2026-10-12:
+
+- `log_ttyin` was not detected, so a stdin secret typed at a terminal under
+  `Defaults log_ttyin` was read while sudo recorded the keystrokes (F001,
+  blocking; B458 and B373), and the remedy's "run it as root, where sudo logs
+  nothing" also covered `sudo bootwright` (F002). The commit "fix(privilege):
+  refuse stdin secrets under log_ttyin; limit root remedy" (4c4a443a7) fixes both
+  and "fix(privilege): the input-logging refusal names input, not only stdin"
+  (113c6a88d) corrects the refusal's wording.
+- A state root that is itself a link got "nothing repairs it" (F004) and a mount
+  point in the deletion walk was told "remove" (F005; B455): "fix(contextfs):
+  exits for a linked state root and a mounted entry" (5a405b927), and, after a
+  second reviewer found that an entry on another device which is no mount point
+  was forbidden every exit, "fix(contextfs): an entry on another device that is
+  no mount is removable" (ef02ec8b2).
+- The divergent-pin remedy pre-authorized `--replace` (F006; B454) and the
+  file-source remedy named a command that cannot work before the input is
+  corrected (F008; B453): "fix(trust): stop remedies pre-authorizing replace or
+  skipping a rerun" (23d84adab). A secret command on a context whose stored
+  input still holds the retired source had the same gap in custody: "fix(secrets):
+  a stored retired file source names its re-import first" (5c6672073).
+- The sibling chart rendered a BMC `trustBundleRef` that names a Secret it never
+  declared, and its commit 3a93e6e declares it (F009; B465).
+
+One fact stays unobserved: that a user- or group-bound `Defaults log_ttyin`
+appears among the Defaults `sudo -ll` prints for the invoking user is read from
+sudo's source comments, not from a recorded listing, and D59's closing run can
+observe it.
 
 **Gates:** at the task head, `make quick` passed on its second run; its first
 failed once in `TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst`, which
@@ -3702,11 +3758,505 @@ test, `./scripts/ansible-check --suite units` (264, 240 and 1618 passed) and
 `--suite lint`, `./scripts/check-commits` and `git diff --check` passed. `make
 check` stopped at `make vulncheck`: ten reachable go1.26.8 standard-library
 vulnerabilities, reported identically at `main`, which this slice did not
-introduce and [B470](m1.md#b470) records. The sibling chart passed `helm lint`
+introduce and [B470](m1.md#b470) records. D139 (2026-10-11) leaves that failure
+to B470 alone, so the second pass stays delivered rather than blocked on it;
+the 2026-10-12 review fixes ran the full gates on a later head, which
+[X48](#x48--bounded-concurrent-execution)'s record gives. The sibling chart passed `helm lint`
 on both values files, its schema parsed and `git diff --check`. No real-host run.
 
 **Digest effects:** none. No request, record, plan or automation digest moves;
 only refusal texts and admission refusals change, so no context is stranded.
 
-**Constraints left behind:** [B470](m1.md#b470) joins X44 first, because no
-slice's `make check` passes until it lands.
+**Constraints left behind:** [B470](m1.md#b470) holds `make vulncheck` alone,
+on X67, and under D139 no item waits on it. The 2026-10-11 audit's F030 asked to
+put the second pass back on M1 as blocked; D139 settled it in favour of
+completion.
+
+### X44 — help, completion, contracts and ratchets
+
+**Owner:** CLI, Architecture and Infrastructure services, with each spec's owner,
+each test's owner and Substrate. Made by other tools on branch M1 over `main`
+c85e406a6 on 2026-10-08 and 2026-10-09, and reviewed and fixed on 2026-10-11 and
+2026-10-12 (D139). **Integrated:** on 2026-10-08, "docs(m1): X31's wording, CI's
+race job and the lab-rhel checks" (8afcceee4), "fix(lifecycle): settle the
+refusal tables X31 left" (90d33c01a), "test(architecture): a shrink-only ceiling
+on each package's comment lines" (ec086b551), "fix(cli): version prints the
+embedded automation digest as its bundle" (ee5bf4ed7) and "test: give each X33
+mutant that still survived a failing test" (5cd382b9b); on 2026-10-09, "fix(m1):
+finish CLI and contract hardening" (6f11e8fc2) and, outside any item, "docs(agents):
+route OpenAI and Anthropic models by quality and cost" (46cca1f8c); and, as the
+review's fixes on 2026-10-12, "fix(cli): complete files with a space and keep an
+exec tail as payload" (2a8da99b1), "test(architecture): gate Not-yet-met
+paragraphs, state the ratchet slack" (c4e938829), "fix(cli): root help marks a
+group unavailable only if all of it is" (78d71adab), "docs(agents): restore the
+owner's Anthropic routing policy" (789e0a926) and, for B272 and B302, "test(lifecycle):
+make the lingering-adapter and reaping probes exact" (5ee8176d4, recorded with
+[X48](#x48--bounded-concurrent-execution)). **Items:** B95, B300, B224, B272,
+B336, B233, B301, B302, B255. **Decisions:** D59, D70, D100, D101, D102, D110,
+D115, and, recorded after the work, D126, D139 and D140. **In-tree gates passed,
+operator gates awaiting acceptance:** [B276](m1.md#b276) and
+[B277](m1.md#b277), whose rows stay on M1 with Delivery
+`awaiting operator acceptance`.
+
+**Outcome, B95:** every visible command has complete help with examples, its enum
+values are named in the help and in the scalar-enum refusal, the root listing and
+each unavailable command say so, and a usage refusal tells an unknown flag from
+one that belongs to another command. Goldens hold the root and every available
+command's help. The review fixed two defects the goldens had frozen: the
+help of an unavailable command ended in a doubled period and cluster access help
+repeated its phrase "for independent operator execution" (F015, F041), and a flag
+of another command was reported as "not accepted at this position", which now
+names only a descendant's flag (F014). The root help marked `render` unavailable
+although `render effective` works; a group is now marked only when neither it
+nor any command under it is available, as
+`TestAGroupWithAnAvailableSubcommandIsNotListedUnavailable` holds, while
+`render installer` and `render storage` keep the marker.
+
+**Outcome, B300:** `version` prints `Dependency bundle` as `sha256:` followed by
+the embedded automation digest, the identity setup publishes and every
+operation records, composed at startup (D100); the unused link variable is gone.
+Every catalog payload command accepts `--` and operands with parsing derived
+from the catalog, so the parser re-lists none. One writer encodes the JSON
+envelope that eleven places encoded, with the goldens unchanged and the raw
+secret and kubeconfig streams retained. Sorted names and the SSH host-token
+rules have one owner each, the diagnostics sort order has a table test, the
+stage enum equals the reconciliation stages, and dead and test-only code is
+removed. The terminal probe is deferred, as its wiring comment says, without
+losing a non-terminal run's progress heartbeats. Context results carry
+guidance. Completion appended no
+space after any path-flag candidate, so a completed regular file kept the cursor
+glued to it; the private protocol now reports no-space only when at least one
+candidate ends in `/` (F011, F040), as
+`TestPathCompletionAppendsNoSpaceOnlyAfterADirectory` and the shell harness's
+single-file case hold. Under D140, `machine exec` and `cluster exec` stop at the
+payload, as `cluster oc` and `cluster kubectl` did: the first operand that is not
+a flag starts the remote command and every later token is payload verbatim, so
+`machine exec --name m1 kubectl --context prod get pods` no longer retargets the
+session and `ls -la` is no longer an unknown flag (F012, F013;
+`TestPayloadParsing`, `TestPayloadTailNeverRetargetsTheSession` and
+`TestAFlagWrittenAfterThePayloadIsRefusedWithWhereFlagsGo`). A required
+Bootwright flag written after the payload is refused with where flags go, never
+echoing the arguments.
+
+**Outcome, B224:** the destroy row of the command catalog names its housekeeping
+of operation claims that hold nothing; the dependency-safety section says a
+continuation of either verb uses its operation's frozen dependencies while a
+fresh removal runs under the build and bundle in hand; the architecture spec
+names the frozen Python and Ansible execution closure; and the bundle manager's
+and install evidence's comments describe the retained setup bundle and the kept
+copy of the installer's kubeconfig as they are.
+
+**Outcome, B272:** CI's `race` job ran only on the `schedule` event, which GitHub
+starts only from the default branch, `main-v1`, which holds no `check.yml`, so
+the job had never run. It now runs on every push and pull request beside `make
+check`, and the development guide and the Go reference say so. The first CI run
+of it, on the work as the other tools left it, was red: the lingering-adapter
+fixture of `TestAnAcknowledgementAfterAFailedExitKeepsThatExit` depended on the
+shell running its TERM trap, failed at the 2 second drain under dash and
+reproduced 2 times in 10 (F018, F038). The review replaced it with a Go helper
+child and found no other trap-dependent shell fixture. `make race` passes
+locally; the race job is separate from the `check` job, which stays red at
+vulncheck until B470, and the first race run after the owner's next push is
+expected green but has not run.
+
+**Outcome, B336:** the clarity contract keeps short rationale and
+safety-invariant comments (D101), and `TestProductionCommentLinesOnlyShrink`
+holds each production Go package's comment lines, directives aside, to a
+per-package ceiling set at 79 packages' counts of the day: a package above its
+ceiling fails, one more than a tenth below it fails until the ceiling is lowered
+(any shrink below ten lines), and a package with no ceiling or a ceiling naming
+no package fails. `TestCommentCeilingsFailWithMoreThanATenthToSpare` drives each
+violation. The review corrected the spec, which said narration that leaves a
+package cannot return unnoticed: it can return up to that tenth, and the
+ceilings bound the module's total (F017). Reducing what narration remains is
+B98's, parked.
+
+**Outcome, B233:** the two agent-install checks that admitted input cannot reach
+are removed (a method other than agent, which the closed enum refuses, and the
+import-certificate virtual-media trust, which only a physical node carries and a
+physical node is refused first); the artifact server keeps its `Refusals`, which
+its capability's `Unsupported` returns with the shared placement and reservation
+rows, and loses the unused helper; the engine's refusal of kinds no capability
+claims has its table in the state-reconciliation spec, held by
+`TestUnclaimedObjectTableMatchesTheEngine`; and `make docs-check` runs the
+capability refusal-table tests and that one.
+
+**Outcome, B301:** the specs record only what is still unmet, and
+`TestDocsNotYetMetNamesAnUndeliveredItem`, which `make docs-check` runs, now
+enforces that every "Not yet met:" paragraph links a B item that has its
+heading and row on a milestone page or the backlog and is not completed (F042;
+its matcher test rejects a missing link, a delivered-record target, a wrong
+anchor, an unresolved path, a wrong page, a completed row and a row without a
+heading). The security spec has a listener-exposure table naming each listener's
+clients, transport, authentication, privilege and client restriction; the
+operator guide has a network-exposure section with ports by source and firewalld
+commands (D110); the examples bind their emulated BMCs to loopback (D115), with
+their effective-state goldens and example tests updated; the runbooks import a
+copy of the example so a build is not stamped modified; the multidc-platform
+README's counts match; and the lab-rhel README gains the checks D59's closing
+run follows.
+
+**Outcome, B302:** the packages that consume a selection port declare it in their
+own contracts, and the boundary test refuses an exported function-typed port in
+a domain root; owned-rule parity tests tie each remaining
+copy to its owner, among them the context-name rule, the discovery rule and the
+pristine evidence bytes; imports are grouped and unduplicated with `goimports`
+pinned in the tools module and `scripts/goimports`; presentation-only request fields and
+unused production helpers are removed; and the JSON and plan goldens are
+unchanged. `make race` passes locally; as for B272, the first CI race run after
+the owner's next push is expected green but has not run.
+
+**Outcome, B255:** X44 re-ran X33's fourteen mutants at its base. Six were
+already killed; the eight that survived each have a test in a `mutants_x44` file
+of their package that fails with the mutant in place: a bootstrap whose wheels
+lack ansible-core or urllib3, the ELF RPATH and RUNPATH search (proved through an
+x86-64 shared object built in memory, so the network-tagged test is no longer the
+only reach, and shown failing when the search is disabled), a recovered native
+transaction whose evidence is not recorded, podman's request swapped for
+libvirt's, the keyring's initialization-root predicate, two held files claiming
+one part, a receipt listing a proxy bypass twice and a fresh reservation over a
+directory that already holds one.
+
+**Outcome, B276 and B277 (in-tree):** the lab-rhel README checks the managed time
+service with `chronyd -Q -t 10`, since a managed chrony server takes about four
+seconds to select its source and the timeout bounds the whole query, says a
+printed offset is success, and lists chrony, bind-utils and qemu-img among the
+prerequisites; its runbook reads the running guest's root disk with `qemu-img
+info --force-share`, which must answer at the frozen 60 GiB, and runs `status`
+after the last destroy. The real-host records are D59's closing run's.
+
+**Review:** the other tools' work carried independent safety and correctness
+reviews of its own, which found no blocker. The audit of 2026-10-11, an
+independent multi-reviewer review with three lenses on each finding, found for
+these items the red CI race job (F018, F038, blocking, above), completion's
+no-space after files (F011, F040), the exec tail rejecting `ls -la` contrary to
+the spec and the debate over a flag in the tail (F012, F013, now D140), the
+misplaced-flag classification (F014), the doubled period (F015, F041), the
+overstated ratchet (F017) and the unenforced Not-yet-met rule (F042); the fixes
+are named under Integrated. It also found that "docs(agents): route OpenAI and
+Anthropic models by quality and cost" had rewritten the agents' routing guidance
+away from the owner's policy with no decision, allowing the exceptional tier as
+a first line and inheritance of the session model, replacing many cheaper
+workers with one strong reviewer by fewer agents, dropping the escalation and
+vote rules and two measured lessons, and gating a cheaper model on a comparison
+with nowhere to record it
+(F036, F037). "docs(agents): restore the owner's Anthropic routing policy"
+restores the owner's tier table and workflow rules, keeps the OpenAI mapping as
+a separate section marked unqualified on this repository, and keeps the
+runtime-model check and the total-cost accounting; the owner's review of that
+session decision is pending.
+
+**Gates:** the gate run of 2026-10-12 at 78d71adab, the integrated head before the
+test-architecture guard fix [X48](#x48--bounded-concurrent-execution) records,
+passed every step of `make check` except `make vulncheck`: the format, module
+and tidy checks, `vet`, every Go test, `make completion-test` (the Bash cases;
+the Zsh cases need `BOOTWRIGHT_TEST_ZSH` and Zsh is not installed on the host,
+though the original commit ran them under Zsh 5.9.2), `make docs-check` and
+`make race`. `make vulncheck` reported exactly B470's ten go1.26.8 standard-library
+findings, GO-2026-6603, 6604, 6605, 6607, 6608, 6610, 6611, 6612, 6613 and 6617,
+which D139 leaves to B470 alone. `./scripts/ansible-check` passed (syntax, lint,
+sanity, units on the controller and on the Python 3.9 floor, and the safe
+integration suites), and `git diff --check` was clean. The summary and per-step
+logs of that run are kept outside Git in the review's scratch area, directory
+`gates-followups-78d71adab`. The head's last commit adds a test-architecture
+guard only, verified with its own tests and `make fmt-check vet docs-check`.
+
+**Digest and version effects:** none. No request, record, plan or automation
+digest moves; `version` now prints the embedded automation digest instead of
+`none`, and the usage JSON golden and five help goldens changed for the review's
+wording.
+
+**Operator-visible effects:** help names enum values and marks unavailable
+commands; a completed file is followed by a space and a directory is not; the
+remote command of `machine exec` and `cluster exec` is payload from its first
+operand on, so Bootwright flags go before it; `version` shows the automation
+digest; the examples' emulated BMCs listen on loopback, and the operator guide
+lists each listener's ports by source; and CI starts the race job on each push.
+
+**Constraints left behind:** [B276](m1.md#b276) and [B277](m1.md#b277) complete
+on D59's owner-accepted closing run; the Zsh cases of the completion harness are
+unrun on hosts without Zsh; D140 awaits the owner's review, as does the routing
+guidance's restoration; the narration that remains is [B98](backlog.md#b98)'s,
+and the unproved listener-socket release is [B323](backlog.md#b323)'s. Whether
+tracked text names the BMC firmware family in B305, B319 and B447 stays the
+owner's question (audit F033).
+
+### X51 — native RPM snapshot queries
+
+**Owner:** Controller. Made by another tool on branch M1 on 2026-10-09 as one
+commit, reviewed and fixed on 2026-10-11 and 2026-10-12 (D139). **Integrated:**
+"fix(controller): query the platform's staged RPM database" (b2164e75d) and, as
+the review's fix, "fix(nativelocal): refuse a snapshot that lost its rpm
+database" (3a749e9ca). **Items:** B471. **Decisions:** D126, D139.
+
+**Outcome, B471:** native RPM queries read the retained snapshot at the
+admitted platform's database directory, `usr/lib/sysimage/rpm` for Fedora and
+`var/lib/rpm` for RHEL, where the queries used RHEL's path for both, so Fedora's
+foundation qualification and the operator queries read the evidence they staged.
+Process isolation, output bounds and signature and digest verification are
+unchanged, and an unsupported platform refuses without a live-database
+fallback. Host-independent regressions cover Fedora and RHEL foundation
+queries, RHEL operator queries and unsupported platforms. No foundation
+qualification requirement changes.
+
+**Review:** the audit (F020) found that the claim of a refusal for a missing
+snapshot held only in a fake: rpm's SQLite backend retries a read-only open of a
+missing file with creation and answers "not installed", so a snapshot that lost
+its database read as a package Missing. The query now proves, before rpm runs,
+that the snapshot holds a regular, non-empty `rpmdb.sqlite` under the platform's
+directory (a link is refused too) and otherwise refuses with
+`controller.setup`, "the native database snapshot no longer holds the package
+database it was copied with". The test's fake answers as the observed rpm does
+and `TestRPMQueryReadsThePlatformSnapshot` asserts, for a removed, empty, linked
+and directory database, that the query refuses and rpm never ran. The
+controller spec states the refusal.
+
+**Gates:** as in [X44](#x44--help-completion-contracts-and-ratchets): the gate run
+of 2026-10-12 at 78d71adab passed every step of `make check` except `make
+vulncheck`, which reports B470's ten findings (D139); `make race`, `make
+docs-check` and `./scripts/ansible-check` passed.
+
+**Digest and version effects:** none. **Operator-visible effects:** a Fedora
+controller's native queries read its own snapshot; a snapshot that lost its
+package database is refused by name. **Constraints left behind:** none.
+
+### X49 — installer image publication permissions
+
+**Owner:** Managed OS. Made by another tool on branch M1 on 2026-10-09 as one
+commit, reviewed on 2026-10-11 and 2026-10-12 (D139). **Integrated:** "fix(managed-os):
+set installer image permissions before publication" (87cf9b15f). **Items:**
+B468. **Decisions:** D126, D139.
+
+**Outcome, B468:** a public installer image inherited the builder process's
+umask and only a private image received explicit serving permissions, after
+publication. Both staged forms are now set to root:root 0640 before labeling and
+the atomic rename, so the selected nginx worker can read them without access
+for other accounts and no mode changes after exposure. Token isolation and the
+fetch-through-listener proof before media insertion are kept. The role's
+public and private filesystem regressions start at 0600 under umask 077
+(`test_managedos_install_private.py`), and the worker-permission contract
+(`test_served_content_is_readable.py`) covers the staged rename sources.
+
+**Review:** the audit (F021, F032) found that the lists of slices that move the
+automation digest left X49 out and that the operator's retirement trigger still
+keyed on X46, which `main` already contains. The trigger now keys on a build
+that contains X48 ([M1](m1.md) and the milestones page), and X49 is among the
+movers.
+
+**Gates:** as in [X44](#x44--help-completion-contracts-and-ratchets): every step
+of `make check` except `make vulncheck` (B470's ten findings, D139), `make race`,
+`make docs-check` and `./scripts/ansible-check` at 78d71adab, on 2026-10-12.
+
+**Digest and version effects:** the automation digest moves, and every plan
+digest with it; no request or record version changes. An apply frozen under an
+earlier build cannot continue across it. **Operator-visible effects:** an image
+published under a restrictive umask is readable by the serving worker. **Before
+a build that contains X48 touches a host,** destroy every live context with the
+build that applied it, then run `setup` once with `--purge-old-bundles`; X49
+shares that window with X48. **Constraints left behind:** none.
+
+### X50 — direct SSH session material
+
+**Owner:** Machine. Made by another tool on branch M1 on 2026-10-09 as one
+commit, reviewed and fixed on 2026-10-11 and 2026-10-12 (D139). **Integrated:**
+"fix(machine): keep SSH material readable through client startup" (18ed2d794)
+and, as the review's fix, "fix(nativelocal): refuse a snapshot that lost its rpm
+database" (3a749e9ca), which also holds the real-client tests. **Items:** B469.
+**Decisions:** D126, D139.
+
+**Outcome, B469:** OpenSSH closes inherited descriptors before it reads the
+files its arguments select, so material passed as extra files at a path in the
+child's own descriptor directory disappeared. The waited launcher now holds
+anonymous mode-0600 files for configuration, credentials and pinned host keys
+and names their actual descriptors under the launcher's process directory; the
+invoking-account opener, the offered-key copy, the environment bounds,
+cancellation and cleanup are kept, and host-key observation uses the same
+correction. Host-independent regressions close the child's descriptors before
+reading all material and prove lifetime and cleanup through cancellation.
+
+**Review:** the audit (F022) found that only a stub client pinned the descriptor
+paths. `TestTheRealClientReadsSessionMaterialThroughLauncherDescriptors` and
+`TestTheRealClientReadsObservationPolicyThroughALauncherDescriptor` now run the
+host's own `ssh -G` (skipped where none is executable) with an empty
+environment over the real material and arguments, and prove that the client
+opens the held configuration through the launcher's descriptors and resolves the
+policy only that file sets; a negative control rewrites the configuration path
+to the child's own descriptor directory and expects the client to fail. They
+cover only the configuration file's readability, because `-G` exits before it
+loads identities.
+
+**Gates:** as in [X44](#x44--help-completion-contracts-and-ratchets): every step of
+`make check` except `make vulncheck` (B470's ten findings, D139), `make race`,
+`make docs-check` and `./scripts/ansible-check` at 78d71adab, on 2026-10-12.
+
+**Digest and version effects:** none; no request, record, plan, toolchain or
+automation digest changes. **Operator-visible effects:** a completed
+installation keeps its ownership and evidence, and direct session checks resume
+with the fixed build without setup or another installation. **Constraints left
+behind:** none.
+
+### X48 — bounded concurrent execution
+
+**Owner:** State reconciliation, with Managed OS, Substrate, Infrastructure
+services, CLI and each lifecycle role's owner. Made by another tool on branch M1
+on 2026-10-09 as one commit over the work of X44 and X49 to X51, reviewed on
+2026-10-11 and fixed on 2026-10-12 in a fix round of eighteen commits, eleven
+lane commits, two review repairs kept and five follow-ups (D139). **Integrated:** "fix(lifecycle):
+run independent provisioning blocks concurrently" (760802c6a) and the review's
+fixes: "test(lifecycle): make the lingering-adapter and reaping probes exact"
+(5ee8176d4), "fix(managedos): name tree refusals and take back empty work
+directories" (b3776f349), "test(ansible): hold the no-fixed-scratch rule as a
+function with self-tests" (3611fdabf), "test(lifecycle): qualify the composed
+invocation scope with siblings" (ddfaa90a3), "fix(ansible): the no-fixed-scratch
+rule also names /var/run" (5ceb86047), "test(architecture): production never uses
+the adapter runner test hook" (a8b10f4f7) and "fix(architecture): the test-hook
+guard refuses a dot-import of the runner" (dfb627dbf); the fix round also holds
+the commits recorded with [X44](#x44--help-completion-contracts-and-ratchets),
+[X46](#x46--the-safety-and-defect-sweep-of-m1), [X50](#x50--direct-ssh-session-material)
+and [X51](#x51--native-rpm-snapshot-queries). **Items:** B303, B304, B467.
+**Decisions:** D125, D127, D139. **In-tree gates passed, operator gate awaiting
+acceptance:** [B466](m1.md#b466), whose row stays on M1 with Delivery
+`awaiting operator acceptance` for D125's three-node closing run.
+
+**Outcome, B303:** every lifecycle role receives the runner's private scratch
+path as execution material, outside its frozen request and digest, proves its
+own root-only child before writing and cleans only that child, on a remote
+placement too; the new `lifecycle_scratch` module owns it. Both libvirt roles no
+longer create and remove the fixed host directory they shared on replay. Durable
+machine work and libvirt provider media occupy disjoint `machines` and
+`providers` subtrees beneath the context's directory, so a provider and a
+Machine may share a name and the former name-collision refusal is retired
+(D127); a destroy removes the provider's, `providers` and context directories
+only once empty, never recursively. A structural rule holds the no-fixed-scratch
+promise across every non-controller role: no task, default, variable or template
+names a literal path under `/tmp`, `/var/tmp`, `/run` or `/var/run`, apart from
+two allowances each with its reason (`/run/libvirt`, the socket volume of a
+Quadlet unit, and `/run/nginx.pid`), and the rule has pass and reject self-tests.
+The review widened the earlier rule, which matched only paths named
+`bootwright*` (F045), and a second reviewer then found that `/var/run`, the
+alias of `/run` on every systemd host, escaped it.
+
+**Outcome, B304:** the lifecycle opens a private invocation scope at its
+execution boundary and closes it after every admitted adapter has joined. Runner
+copies share its synchronized live-job registry, and an adapter's held job is
+exempt from the running-adapter refusal only while that exact job's original
+lock and holder files belong to the live scope; matching context, operation or
+attribution bytes alone grant nothing, and another invocation's job, an
+unattributed held job and a descendant that holds a job after its owner
+released it still refuse. The runner's scope tests (among them
+`TestAnInvocationsCopiedRunnersProceedBesideTheirOwnJobs`,
+`TestAnEndedOwnedJobStillRefusesWhileItsDescendantHoldsIt` and
+`TestOwnedJobsRequireTheirOriginalFilesAndReadableAttribution`) and
+`TestInvocationScopeClosesOnlyAfterEveryCanceledAdapterSettles` prove it.
+
+**Outcome, B467:** the two full-suite failures of
+`TestACanceledControllerRunNeverAcknowledges` were diagnosed in the review, not
+corrected in production. The original test run verbatim as a probe, capturing the
+process state where its existence check failed, failed 34 of 1500 and 41 of
+1500 iterations while the whole internal suite ran beside it. Every failing
+descendant had started in that iteration, so no process identity was reused; its
+parent was the user's systemd instance, the adopter of the orphaned `sleep`; its
+state was running with the group SIGKILL pending in 43 cases, a zombie awaiting
+the adopter's reap in 24, running and then zombie in 5, and gone between check
+and read in 3, and every one disappeared within 35 ms. The cause is reaping
+latency after the group SIGKILL, the death plus the adopter's reap, and not a
+live descendant or a lasting unreaped zombie; no canceled production run leaks a
+process. The current test read a reaped task's record as the process vanished
+and got ESRCH, which its loop took for a probe failure, once in 1500; `fixtureGone`
+now accepts ENOENT or ESRCH, `TestAFixtureProcessReapedDuringItsReadIsGone`
+holds it, and the test passed 1500 of 1500 under the same load. The same lane
+replaced the dash-dependent lingering-adapter fixture of
+`TestAnAcknowledgementAfterAFailedExitKeepsThatExit` (F018, F038, recorded with
+[X44](#x44--help-completion-contracts-and-ratchets)'s B272); dash is not
+installed on the host, so the old fixture's failure was not reproduced there,
+and `-race -count=50 -cpu 1,2` passed 100 runs of the new one.
+
+**Outcome, B466 (in-tree):** production uses the engine's bound of eight running
+blocks, with no flag or desired-state field, and a hosted package tree is one
+durable block per context and install profile in the `machines` stage, realizing
+`MachineInstallProfile` under `os-package-tree-v1` with evidence
+`os-package-tree-evidence-v1`. Each installation requires it and holds no
+exclusive tree claim while it builds images, boots or waits; removal follows the
+inverse order, consumers first and the tree before its artifact server. The
+[Managed OS](../managed-os.md#shared-package-tree-publication) spec owns the
+partial-effect, replay and old-plan contracts, and the
+[three-node fixture](../../examples/lab-rhel-3-nodes/README.md) (synthetic
+documentation addresses, one shared install profile) exercises it.
+[B466's section](m1.md#b466) states each step and the test that proves it. The
+review closed three gaps: no test ran the production options against the real
+runner, so wiring the invocation scope to nil left every test of `cmd/bootwright`
+green while production would have refused each sibling after the first
+(F023, F043); `TestTheComposedInvocationScopeAdmitsSiblingRunsOfItsRunner`
+now holds it and fails when the scope is unwired or replaced by a plain
+cancelable context. A DVD changed after planning, or a tree another image
+published at the path, failed the tree block through a quiet assert and read as
+"adapter operation did not complete", and every installation still hashed the
+roughly 13 GB DVD it no longer extracts (F024, F046): the tree protocol now
+admits the refused phase with `media-changed-tree` and `tree-source-drift`, the
+tree role names them before its asserts, `TestATreeApplyNamesItsRefusalsWithTheirRemedy`
+holds the remedies, and the installation role no longer requires the tree DVD.
+A destroy left the empty per-Machine and per-context work directories that apply
+created, so the operator gate's "no machine work remains" could not pass (F025,
+F028): the destroy now takes them back with a non-recursive `rmdir`, never the
+shared work root, and a sibling apply that finds the context directory gone
+re-creates it. The tree role's asserts were never evaluated by its harness
+(F026): the harness now evaluates them against a fixture carrying the validated
+request shape and the real source file. `ansiblerunner.Isolated`, the constructor
+the composition test needs, is exported from a non-test file, so an architecture
+test (`TestProductionNeverReferencesTheAdapterRunnerTestHook`, with
+`TestTestHookViolationsFindEveryReference` as its self-test) fails on any
+production reference to it, and, after an independent review planted a
+dot-import of the runner that passed the suite, on any dot-import of the runner.
+
+**Review:** the other tool's work carried independent safety reviews of the
+runner, the roles, the publication and the owning contracts. The audit of
+2026-10-11 raised the findings above for X48, and the fixes ran as lanes
+reviewed again by a reviewer that had not written them, which found a sibling
+race in the empty-directory removal (an `rmdir` landing between a parallel
+apply's existence check and its creation can only fail that attempt with a
+retryable ENOENT, and the destroy tolerates a directory a sibling took) and the
+`/var/run` hole above, each repaired, the first folded into its lane commit and
+the second kept as its own. The reviewer approved every lane, the integration and
+the follow-ups after those fixes. The shell-fixture audit of the follow-up found
+no other fixture that depends on a shell's trap.
+
+**Gates:** the gate run of 2026-10-12 at 78d71adab, whose last commit,
+dfb627dbf, adds only the dot-import guard and was verified with its own tests
+and `make fmt-check vet docs-check`: every step of `make check` passed except
+`make vulncheck`, which reported exactly B470's ten go1.26.8 standard-library
+findings, GO-2026-6603, 6604, 6605, 6607, 6608, 6610, 6611, 6612, 6613 and 6617
+(D139), and so did `make race` (115 s), `make docs-check`, `make completion-test`
+and `./scripts/ansible-check` (syntax, lint, sanity, units on the controller
+and the Python 3.9 floor, and the safe integration suites; the collection's unit
+suite passed 1713 tests). The summary and per-step logs are kept outside Git,
+directory `gates-followups-78d71adab`.
+
+**Digest and version effects:** the fifth slice to move them. The installation
+request moves from `os-install-anaconda-v7` to `os-install-anaconda-v8`; the
+libvirt host and Machine requests to `substrate-host-libvirt-v4` and
+`machine-libvirt-v4`, whose frozen paths changed; the tree request and evidence
+are new at `os-package-tree-v1` and `os-package-tree-evidence-v1`; and the
+automation digest and every plan digest move, as they move again with the
+review's tree-role and destroy edits, which add a refused phase to the tree
+protocol and move no request or evidence version. **Before a build that contains
+X48 touches a host,** destroy every live context with the build that applied
+it, then run `setup` once, keeping the host under its bundle bound with
+`--purge-old-bundles`; one destroy and setup serve every window since X43.
+
+**Operator-visible effects:** independent managed services and Machines are
+admitted together up to eight blocks and a fast chain advances while unrelated
+work runs; the package tree is published once, ahead of the installations that
+share it; a changed DVD or a foreign tree is refused by name with its remedy; a
+destroy leaves no empty per-Machine or per-context work directory; a libvirt
+provider and a Machine may share a name; and the three-node example shows the
+shape.
+
+**Constraints left behind:** [B466](m1.md#b466) completes on D125's
+owner-accepted closing run over the three-node fixture; the full lifecycle
+composition over that fixture with the real runner is parked as
+[B495](backlog.md#b495). The installation role's tooling list still names `xorriso`
+beside a comment written before the tree moved to its own block, which no item
+tracks. The structural scratch rule reads text and traces no variable.
+No audit of interleaved native effects was recorded; the closing run is the
+stated gate, and a conflict it shows needs a narrow resource boundary, never a
+host-wide claim.

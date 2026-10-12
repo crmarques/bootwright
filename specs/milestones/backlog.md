@@ -145,6 +145,7 @@ Alias cell.
 | [B462](#b462) | new, 2026-10-08 (X46) | enabling | Container cluster | The media role's keep task is qualified in an agent-install rehearsal | Found in X46; parked under D48 (D116); needs an agent-install run on a host, which B61's operator gate provides |
 | [B463](#b463) | new, 2026-10-08 (X46) | enabling | Controller (privilege), Desired state and Infrastructure services | Host observations of what X46 proved only in-tree | Found in X46; parked under D48 (D116); each needs root on a host, which D59's closing run provides |
 | [B464](#b464) | new, 2026-10-08 (X46) | enabling | Each spec's and test's owner | Wording, tests and dead code X46 left | Found in X46; parked under D48 (D116) |
+| [B495](#b495) | new, 2026-10-12 (X48 review) | enabling | State reconciliation, with Managed OS, Substrate and Infrastructure services | The three-node lifecycle composition runs end to end with the real runner and controlled adapters | Found in X48's review; parked under D48 (D116): D125's operator gate already proves overlap on a host, and X48's tests qualify each part |
 
 ### B96
 
@@ -168,7 +169,7 @@ retains. Most production comments state rationale the contract sends to the
 knowledge catalog, and some state invariants that must survive as tests or
 names rather than prose. Deciding each one is the work; a blanket strip would
 lose the findings the catalog is meant to keep. Split on 2026-10-05 into
-[B336](m1.md#b336), whose amended rule and ratchet hold the count meanwhile
+[B336](delivered.md#x44--help-completion-contracts-and-ratchets), whose amended rule and ratchet hold the count meanwhile
 (D101). **Exit evidence:** each retained comment justified by language,
 tooling or a maintained contract; every durable finding moved into
 `.agents/knowledge/` with its links and evidence; and B336's ratchet lowered
@@ -442,7 +443,7 @@ Client areas count toward the 16-area bound, but nothing removes one, so a long-
 
 ### B323
 
-Managed-service and artifact-server removals release their socket reservations without proving the sockets free (found by the 2026-10-05 audit); [B301](m1.md#b301) adds the Not-yet-met line. Each reserved socket would be probed after the stop, and its absence required in both absence checks. **Exit evidence:** absence tests in which a socket still held refuses the release.
+Managed-service and artifact-server removals release their socket reservations without proving the sockets free (found by the 2026-10-05 audit); [B301](delivered.md#x44--help-completion-contracts-and-ratchets) adds the Not-yet-met line. Each reserved socket would be probed after the stop, and its absence required in both absence checks. **Exit evidence:** absence tests in which a socket still held refuses the release.
 
 ### B324
 
@@ -482,7 +483,7 @@ A DNSServer's bind address defaults to the wildcard address, which collides with
 
 ### B334
 
-The emulated BMC runs as root, unconfined, with the libvirt socket, and serves plain HTTP with a basic-auth credential; [B301](m1.md#b301) binds the examples' BMCs to loopback. A refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). D120 split the emulator's TLS with a generated certificate its client verifies out as [B446](m2.md#b446), in M4. **Exit evidence:** the refusal and the confined type, each with tests.
+The emulated BMC runs as root, unconfined, with the libvirt socket, and serves plain HTTP with a basic-auth credential; [B301](delivered.md#x44--help-completion-contracts-and-ratchets) binds the examples' BMCs to loopback. A refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). D120 split the emulator's TLS with a generated certificate its client verifies out as [B446](m2.md#b446), in M4. **Exit evidence:** the refusal and the confined type, each with tests.
 
 ### B335
 
@@ -822,7 +823,7 @@ the path where the directory exists; the controller route selection's own
 bypass-grammar branch is unreachable since the shared proxy choice runs first,
 and that choice's refusal names no Machine in its remedy; and the binding-proof
 port still sits in its own file instead of the lifecycle contracts, which
-[B302](m1.md#b302) tracks (found in X24). **Exit evidence:** each removed or
+[B302](delivered.md#x44--help-completion-contracts-and-ratchets) tracks (found in X24). **Exit evidence:** each removed or
 made reachable, with a test that fails when its guard is removed; the port
 stays B302's.
 
@@ -977,6 +978,25 @@ reservation-key constant beside the prerequisites package's exported one, and
 the template test's host fixture names a pool path the layout does not.
 **Exit evidence:** each stated in its owner's file or covered by a test that
 fails when its guard is removed, or withdrawn by the owner.
+
+### B495
+
+X48 qualified production concurrency in parts: the composed invocation scope
+admits sibling runs of its real runner
+(`TestTheComposedInvocationScopeAdmitsSiblingRunsOfItsRunner`), the production
+DAG over the [three-node fixture](../../examples/lab-rhel-3-nodes/README.md)
+holds the right blocks ready together (`TestThreeNodeRHELExampleSharesOnePublicationAndAdmitsIndependentWork`),
+and real adapter processes held at barriers overlap wave by wave
+(`TestThreeMachineWavesRunInOneInvocationWithPrivateScratch`). No test runs the
+whole lifecycle service over the fixture with the real runner and controlled
+adapters (found in X48's review by the 2026-10-11 audit). **Exit evidence:** a
+test that applies the fixture through the lifecycle service and the real runner
+with controlled adapters, proving overlap of the services, of the machines and
+of the three installations with one tree publication first, then one failure
+and one cancellation each leaving no sibling's scratch or effect removed, and
+its destroy in inverse order, with a mutation check that unwires the
+production bound or the invocation scope; `make quick`, `make docs-check`,
+`make race` and `make check`; or withdrawn by the owner.
 
 ## Retired
 
@@ -1167,3 +1187,5 @@ Requires cell as `owner decision: <question>`.
 - **D126** (2026-10-09, the owner): finish X44's remaining implementation while deferring the Go toolchain upgrade B470 requires. B470 and the failing vulnerability gate remain unmet; the deferral changes no exit gate or security requirement and declares neither X44 nor M1 complete.
 - **D127** (2026-10-09, the owner): rebase M1 on current main and implement X48 there, so the three-node RHEL fixture and future examples use all dependency-ready parallelism within the existing bound. B466 realizes shared profile publication under implementation/request `os-package-tree-v1` and evidence `os-package-tree-evidence-v1`, advances installation requests to `os-install-anaconda-v8`, and records effect, replay, inverse and compatibility boundaries in Managed OS. This also names X48 as the slice retiring libvirt's provider/Machine name collision refusal through separate durable namespaces. B470's existing upgrade deferral and every M1 exit gate remain unchanged.
 - **D128** (2026-10-10, the owner): keep M1's scope, sequence and completion gates unchanged. M2 is full managed IBM Ceph 9.9.x provisioning on libvirt+sushy and physical bare metal/BMC, with every provider provisioning feature qualified through B472, B80 and B81; M3 is full OpenShift cluster provisioning on those two provider paths, with complete coverage defined by B473. Move the former M4 Ceph scope to M2, former M5 first add-ons to M4, former M6 OpenShift Virtualization to M5, former M7 ACM/Argo CD/GitLab to M6, and former M2 standalone native rendering to the final M7. Move B70's shared physical erase gate from M3 to M2; managed storage projection and lifecycle qualification no longer wait for standalone rendering or OpenShift. B, X and prior D identifiers remain fixed, and dated history retains its original milestone numbers. Each scope transferred as a whole keeps its items and delivery evidence.
+- **D139** (2026-10-11, the owner): "every backlog to milestone M1 done, except the ones that i need to run myself the test in real bare metal and the one related to a go version that is not available in my machine". Recorded meaning: `make vulncheck`'s go1.26.8 standard-library findings (B470) no longer hold any other M1 item. An item completes when every other exit gate passes (`make check`'s other steps, `make race`, `make docs-check`, `./scripts/ansible-check` and its own tests), or awaits operator acceptance when it also has a host gate; B470 alone carries the vulnerability gate, on its own slice X67; M1 completes only after B470 and the owner's host gates. It amends D126's sentence that the deferral "declares neither X44 nor M1 complete" for X44's items and X48 to X51 (M1 itself stays incomplete), and it settles the 2026-10-11 audit's finding that X46's second pass completed under a different standard in favour of completion, so X46's second pass stays delivered. D129 to D138 are recorded on the M2 branch, not yet merged here.
+- **D140** (2026-10-11, taken by the session, pending the owner's review): `machine exec` and `cluster exec` stop at the payload, as `cluster oc` and `cluster kubectl` already did: the first operand that is not a flag starts the remote command and every later token is payload verbatim, flag-shaped or not, so a remote command's own `--context` or `--name` can never retarget the session. Bootwright flags go before the command; `--` is needed only when the payload's first token is flag-shaped, and a required Bootwright flag written after the payload is refused with where flags go. This replaces the earlier rule under which a recognized flag after the first operand still took effect; `TestPayloadParsing`, `TestPayloadTailNeverRetargetsTheSession` and `TestAFlagWrittenAfterThePayloadIsRefusedWithWhereFlagsGo` prove it.

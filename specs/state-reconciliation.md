@@ -815,8 +815,8 @@ outside its frozen request and digest. A role proves its own root-only child
 before writing, and cleans only that child, including on a remote placement.
 Durable machine work and published artifacts remain beneath the disjoint paths
 their capabilities freeze. Cancellation and cleanup never remove a sibling's
-scratch or retained effects. [B303](milestones/m1.md#b303),
-[B304](milestones/m1.md#b304) and [B466](milestones/m1.md#b466) qualify these
+scratch or retained effects. [B303](milestones/delivered.md#x48--bounded-concurrent-execution),
+[B304](milestones/delivered.md#x48--bounded-concurrent-execution) and [B466](milestones/m1.md#b466) qualify these
 boundaries in production composition and the closing operator run.
 
 An operation is `paused` when execution stops because no block is startable,
