@@ -84,8 +84,10 @@ func refuseMountedEntry(t *testing.T, base string) {
 	fmt.Println(mountedEntryMarker)
 }
 
-// An entry whose device is not its context's is on another filesystem, and its
-// exit is to unmount it; every other reason keeps the exit to remove it.
+// An entry whose device is not its context's but which the walk's open reached
+// without crossing a mount, as a btrfs subvolume is, has the exit to unmount it
+// when it is a mount point and otherwise to remove it; every other reason
+// keeps the exit to remove it.
 func TestAnEntryOnAnotherFilesystemIsUnmountedNeverRemoved(t *testing.T) {
 	file, err := os.Open(t.TempDir())
 	if err != nil {
@@ -97,7 +99,7 @@ func TestAnEntryOnAnotherFilesystemIsUnmountedNeverRemoved(t *testing.T) {
 		identity syscall.Stat_t
 		verb     string
 	}{
-		"another device":   {identity: syscall.Stat_t{Dev: 2, Mode: syscall.S_IFDIR | 0o700, Nlink: 2}, verb: "unmount "},
+		"another device":   {identity: syscall.Stat_t{Dev: 2, Mode: syscall.S_IFDIR | 0o700, Nlink: 2}, verb: "unmount entry beneath the state root when it is a mount point, whose contents are not the context's and must never be removed, otherwise remove it, "},
 		"a symbolic link":  {identity: syscall.Stat_t{Dev: 2, Mode: syscall.S_IFLNK | 0o777, Nlink: 1}, verb: "remove "},
 		"a public mode":    {identity: syscall.Stat_t{Dev: 1, Mode: syscall.S_IFDIR | 0o755, Nlink: 2}, verb: "remove "},
 		"a hard-link file": {identity: syscall.Stat_t{Dev: 1, Mode: syscall.S_IFREG | 0o600, Nlink: 2}, verb: "remove "},
@@ -108,8 +110,12 @@ func TestAnEntryOnAnotherFilesystemIsUnmountedNeverRemoved(t *testing.T) {
 				t.Fatal("the walk admitted the entry")
 			}
 			got := diagnostics.Of(deletionDamage(context.Background(), "alpha", unverifiedEntryRefusal(dir, "entry", "context traversal contains unknown or unsafe state", reason, false)))
-			if len(got) != 1 || !strings.HasPrefix(got[0].Remediation, test.verb+"entry beneath the state root") {
-				t.Fatalf("the entry refused with %+v, want an exit that begins %q", got, test.verb)
+			want := test.verb
+			if !strings.HasPrefix(want, "unmount ") {
+				want += "entry beneath the state root"
+			}
+			if len(got) != 1 || !strings.HasPrefix(got[0].Remediation, want) {
+				t.Fatalf("the entry refused with %+v, want an exit that begins %q", got, want)
 			}
 		})
 	}

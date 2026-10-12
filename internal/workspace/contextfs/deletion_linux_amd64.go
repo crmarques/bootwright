@@ -571,12 +571,13 @@ func (e *lostContext) Unwrap() error { return e.failure }
 func (e *lostContext) Is(target error) bool { return target == contexts.ErrLostContext }
 
 // unverifiedEntry is the walk's refusal of one entry it cannot verify as its
-// context's own, carrying that entry relative to the state root, why, and
-// whether it is on another filesystem, so a deletion names them with its exit.
+// context's own: the entry relative to the state root, why, and whether it is
+// a mount or only on another device, which decide the exit a deletion names.
 type unverifiedEntry struct {
-	entry, reason     string
-	foreignFilesystem bool
-	failure           error
+	entry, reason string
+	mount         bool
+	otherDevice   bool
+	failure       error
 }
 
 func (e *unverifiedEntry) Error() string { return e.failure.Error() }
@@ -589,7 +590,7 @@ func unverifiedEntryRefusal(dir *directory, name, prefix, reason string, crossed
 	if reason != "" {
 		message += ": " + reason
 	}
-	return &unverifiedEntry{entry: entry, reason: reason, foreignFilesystem: crossed || reason == foreignFilesystemReason, failure: state(message)}
+	return &unverifiedEntry{entry: entry, reason: reason, mount: crossed, otherDevice: !crossed && reason == foreignFilesystemReason, failure: state(message)}
 }
 
 // unsafeEntryReason is why the walk refuses one entry of a context's tree, or
@@ -617,14 +618,17 @@ func unsafeEntryReason(dir *directory, path, name string, identity syscall.Stat_
 
 const foreignFilesystemReason = "it is on another filesystem than its context"
 
-// deletionEntryRemediation is the exit of an entry the deletion walk cannot
-// verify: removing it by hand, or unmounting it when it is on another
-// filesystem, then repeating the deletion; or restoring the whole store.
-func deletionEntryRemediation(name, entry string, foreignFilesystem bool) string {
+// deletionEntryRemediation names the exit of an entry the walk cannot verify:
+// unmount a mount, never removing its contents, remove anything else by hand,
+// then repeat the deletion; or restore the whole store.
+func deletionEntryRemediation(name, entry string, mount, otherDevice bool) string {
 	repeat := ", then repeat bootwright context delete --name " + name +
 		" --purge, adding --allow-orphans when the deletion abandons what the context owns; or " + restoreStoreRemediation
-	if foreignFilesystem {
+	if mount {
 		return "unmount " + entry + " beneath the state root, which is on another filesystem whose contents are not the context's and must never be removed" + repeat
+	}
+	if otherDevice {
+		return "unmount " + entry + " beneath the state root when it is a mount point, whose contents are not the context's and must never be removed, otherwise remove it, which this deletion never does because it is on another device than its context and cannot be verified as the context's own" + repeat
 	}
 	return "remove " + entry + " beneath the state root, which this deletion never removes because it cannot verify it as the context's own" + repeat
 }
@@ -640,5 +644,5 @@ func deletionDamage(ctx context.Context, name string, err error) error {
 	if unverified.reason != "" {
 		cause = state(unverified.reason)
 	}
-	return contextDamage(ctx, name, unverified.entry, cause, deletionEntryRemediation(name, unverified.entry, unverified.foreignFilesystem))
+	return contextDamage(ctx, name, unverified.entry, cause, deletionEntryRemediation(name, unverified.entry, unverified.mount, unverified.otherDevice))
 }
