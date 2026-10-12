@@ -153,19 +153,21 @@ func TestAStandardInputSecretRefusesAnOverflowingListing(t *testing.T) {
 }
 
 func TestAValidatedListingThatLogsInputStillRefuses(t *testing.T) {
-	script := &policyScript{
-		list: func(call int) (int, []byte) {
-			if call == 1 {
-				return 1, nil
-			}
-			return 0, listing("env_reset, log_stdin", "", "")
-		},
-		validate: func(context.Context) int { return 0 },
-	}
-	code, err := NewSupervisor(stdinOptions(script, true, unreadableInput{t})).Run(context.Background(), secretSet)
-	var logged *InputLogged
-	if code != 1 || !errors.As(err, &logged) || logged.Option != "log_stdin" || script.child != nil {
-		t.Fatalf("Run = %d, %v; calls = %q", code, err, script.calls)
+	for _, option := range []string{"log_stdin", "log_ttyin"} {
+		script := &policyScript{
+			list: func(call int) (int, []byte) {
+				if call == 1 {
+					return 1, nil
+				}
+				return 0, listing("env_reset, "+option, "", "")
+			},
+			validate: func(context.Context) int { return 0 },
+		}
+		code, err := NewSupervisor(stdinOptions(script, true, unreadableInput{t})).Run(context.Background(), secretSet)
+		var logged *InputLogged
+		if code != 1 || !errors.As(err, &logged) || logged.Option != option || script.child != nil {
+			t.Fatalf("%s: Run = %d, %v; calls = %q", option, code, err, script.calls)
+		}
 	}
 }
 

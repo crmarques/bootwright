@@ -180,12 +180,17 @@ func concludeSession(run elevationRun, stderr *startFilter) Outcome {
 	return Outcome{ExitCode: 255}
 }
 
+const (
+	fileFlagRemedy    = "repeat the command with --value-file <path> or --password-file <path> in place of the standard-input flag"
+	rootSessionRemedy = "or run it in a root login session sudo did not start (a console or SSH root login, or su -), since a command run through sudo, even from a sudo -i or sudo su - shell, is still subject to sudo's I/O log"
+)
+
 // inputLoggedRefusal reports, before anything was read, that sudo would log
-// a Secret's standard input; a file flag or a root invocation logs nothing.
+// a Secret's standard input; it never logs a file flag's value.
 func inputLoggedRefusal(logged *InputLogged) Outcome {
 	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "secret.input",
 		Message:     "this host's sudo policy sets " + logged.Option + ", so sudo's I/O log would record the value of Secret " + logged.Secret + " read from standard input; nothing was read",
-		Remediation: "repeat the command with --value-file <path> or --password-file <path> in place of the standard-input flag, or run it as root, where sudo logs nothing"}
+		Remediation: fileFlagRemedy + "; " + rootSessionRemedy}
 	if api.ValidLexical("name", logged.Secret) {
 		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: logged.Secret}
 	}
@@ -197,9 +202,9 @@ func inputLoggedRefusal(logged *InputLogged) Outcome {
 // noninteractive invocation is sent to validate the credential first, which an
 // interactive one already did.
 func inputUnprovenRefusal(unproven *InputUnproven) Outcome {
-	remediation := "repeat the command with --value-file <path> or --password-file <path> in place of the standard-input flag, or run it as root, where sudo logs nothing"
+	remediation := fileFlagRemedy + "; " + rootSessionRemedy
 	if !unproven.Validated {
-		remediation = "run sudo -v in this terminal so sudo can list its policy, then repeat the command; or repeat it with --value-file <path> or --password-file <path> in place of the standard-input flag, or run it as root, where sudo logs nothing"
+		remediation = "run sudo -v in this terminal so sudo can list its policy, then repeat the command; or " + fileFlagRemedy + "; " + rootSessionRemedy
 	}
 	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "secret.input",
 		Message:     "sudo did not list its policy, so whether its I/O log would record the value of Secret " + unproven.Secret + " read from standard input is unknown; nothing was read",

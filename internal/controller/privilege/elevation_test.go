@@ -694,3 +694,23 @@ func TestElevationRefusesAStandardInputSecretUnderInputLogging(t *testing.T) {
 		}
 	}
 }
+
+func TestAStandardInputRefusalLimitsRootToASessionSudoDidNotStart(t *testing.T) {
+	const (
+		files = "repeat the command with --value-file <path> or --password-file <path> in place of the standard-input flag"
+		root  = "or run it in a root login session sudo did not start (a console or SSH root login, or su -), since a command run through sudo, even from a sudo -i or sudo su - shell, is still subject to sudo's I/O log"
+	)
+	for name, test := range map[string]struct {
+		outcome Outcome
+		want    string
+	}{
+		"logged":                  {inputLoggedRefusal(&InputLogged{Option: "log_ttyin", Secret: "bmc"}), files + "; " + root},
+		"unproven after sudo -v":  {inputUnprovenRefusal(&InputUnproven{Secret: "bmc", Validated: true}), files + "; " + root},
+		"unproven, not validated": {inputUnprovenRefusal(&InputUnproven{Secret: "bmc"}), "run sudo -v in this terminal so sudo can list its policy, then repeat the command; or " + files + "; " + root},
+	} {
+		d := test.outcome.Diagnostic
+		if test.outcome.ExitCode != 1 || d == nil || d.Code != "secret.input" || d.Remediation != test.want || strings.Contains(d.Remediation, "sudo logs nothing") {
+			t.Errorf("%s: outcome = %d %+v, want remediation %q", name, test.outcome.ExitCode, d, test.want)
+		}
+	}
+}

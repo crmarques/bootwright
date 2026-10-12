@@ -22,6 +22,11 @@ func TestInputLoggingIsFoundWhereverSudoListsIt(t *testing.T) {
 	}{
 		{"matching defaults", listing("!visiblepw, env_reset,\n    log_input, secure_path=/usr/sbin\\:/usr/bin", "", ""), "log_input"},
 		{"matching defaults stdin", listing("env_reset, log_stdin", "", ""), "log_stdin"},
+		{"matching defaults ttyin", listing("env_reset, log_ttyin", "", ""), "log_ttyin"},
+		{"user- or group-bound defaults ttyin among the matching ones", listing("!visiblepw, env_reset,\n    log_ttyin, secure_path=/usr/sbin\\:/usr/bin", "", ""), "log_ttyin"},
+		{"runas binding ttyin", listing("env_reset", "Defaults>root log_ttyin", ""), "log_ttyin"},
+		{"command binding ttyin", listing("env_reset", "Defaults!/usr/local/bin/bootwright secret set log_ttyin", ""), "log_ttyin"},
+		{"negated ttyin", listing("env_reset, !log_ttyin", "", ""), ""},
 		{"negated", listing("env_reset, !log_input", "", ""), ""},
 		{"output only", listing("env_reset, log_output", "", "!authenticate, log_output"), ""},
 		{"quoted value", listing("env_reset, secure_path=\"/x/log_input\"", "", ""), ""},

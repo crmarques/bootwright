@@ -289,8 +289,8 @@ func refreshInterval(report []byte) time.Duration {
 // before its first option with only a blank between them, and a command member
 // carries its arguments after blanks too, so an option is the last word of its
 // comma field: the first option of a bound line is the last word of the field
-// that ends its members. A negated option, another option containing the word
-// and an unbalanced list name nothing.
+// that ends its members, and log_input is log_ttyin plus log_stdin. A negated
+// option, another containing the word and an unbalanced list name nothing.
 func inputLogging(report []byte) string {
 	for _, list := range optionLists(string(report)) {
 		fields, valid := defaultFields(list)
@@ -302,7 +302,7 @@ func inputLogging(report []byte) string {
 			if len(words) == 0 {
 				continue
 			}
-			if option := words[len(words)-1]; option == "log_input" || option == "log_stdin" {
+			if option := words[len(words)-1]; option == "log_input" || option == "log_ttyin" || option == "log_stdin" {
 				return option
 			}
 		}

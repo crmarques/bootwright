@@ -153,14 +153,19 @@ whose standard input is not a terminal, cannot prompt for a password, so run
 applies. A `secret set` with `--value-stdin` or `--password-stdin` reads
 nothing until Bootwright has read the sudo policy with `sudo -n -ll`, and
 refuses with `secret.input` before it reads anything where the policy sets
-`log_input` or `log_stdin`, because sudo's I/O log would record the value.
+`log_input`, `log_ttyin` or `log_stdin`, because sudo's I/O log would record
+the value, whether you type it at the terminal or pipe it in.
 Under a rule such as `%wheel ALL=(ALL) ALL` with no cached credential, sudo
 lists nothing without a password: an interactive run then validates with
 `sudo -v`, which prompts on the terminal, and reads the policy again; a JSON
 or non-terminal run, or a policy still unreadable, refuses with
 `secret.input` rather than reading the value. Run `sudo -v` in the same
 terminal first, pass the value with `--value-file` or `--password-file`, or
-run the command as root ([secret custody](../specs/secrets.md)).
+run the command in a root login session sudo did not start: a console or SSH
+root login, or `su -`. A command run through sudo is still subject to its I/O
+log, so the `sudo -i`, `sudo -s` and `sudo su -` shells that suit
+[directory accounts](#directory-accounts) do not avoid it
+([secret custody](../specs/secrets.md)).
 
 ### Directory accounts
 

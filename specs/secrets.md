@@ -89,16 +89,22 @@ the lease refuses with `secret.store.conflict`, writing nothing, a current
 version another command stored meanwhile unless `--yes` was given. An
 elevated `set` with `--value-stdin` or `--password-stdin` reads nothing until
 the supervisor has read sudo's policy listing (`sudo -n -ll`). A listing that
-sets `log_input` or `log_stdin` refuses with `secret.input` before sudo starts
-the command, since sudo's I/O log would record the value. When sudo will not
+sets `log_input`, `log_ttyin` or `log_stdin` refuses with `secret.input`
+before sudo starts the command, whether or not standard input is a terminal,
+since sudo's I/O log would record the value: `log_ttyin` logs the keystrokes
+typed at the terminal, `log_stdin` a standard input that is not the terminal,
+and `log_input` sets both (sudoers(5), I/O LOGGING). When sudo will not
 list its policy without a password, an interactive invocation (not JSON, with
 standard input a terminal) first validates the credential with `sudo -v`,
 which prompts on the terminal, and reads the listing again. A JSON or
 non-terminal invocation, a listing still unreadable, one that times out and
 one over 64 KiB each refuse with `secret.input` before sudo starts the
-command, reading nothing. The remedy is `--value-file` or `--password-file`,
-running as root, where sudo logs nothing, or, for a noninteractive invocation,
-`sudo -v` in the same terminal first. Equal material creates no new version. Multipart versions and generation batches
+command, reading nothing. The remedy is `--value-file` or
+`--password-file` in place of the standard-input flag; running the command in
+a root login session sudo did not start (a console or SSH root login, or
+`su -`), since a command run through sudo, even from a `sudo -i` or
+`sudo su -` shell, is still subject to sudo's I/O log; or, for a
+noninteractive invocation, `sudo -v` in the same terminal first. Equal material creates no new version. Multipart versions and generation batches
 publish atomically.
 
 When standard input is a terminal, "`--value-stdin` and `--password-stdin` at
