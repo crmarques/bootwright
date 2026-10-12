@@ -548,8 +548,9 @@ func TestBindCheckAndShowReadOnlyKeyringVersions(t *testing.T) {
 }
 
 // A declaration that still names the retired file source refuses every
-// command at compilation, with a remedy naming the command's context, before
-// the store is opened or a path is read.
+// command at compilation, with a remedy that re-imports the corrected input
+// into the command's context before secret set, before the store is opened or
+// a path is read.
 func TestAFileSourceRefusesEveryCommandBeforeTheStore(t *testing.T) {
 	operations := map[string]func(*Service) error{
 		"bind": func(s *Service) error {
@@ -586,7 +587,7 @@ func TestAFileSourceRefusesEveryCommandBeforeTheStore(t *testing.T) {
 			service, access, material, _ := unresolvedFixture(declarationYAML("file", "  source: {file: {path: secrets/token}}\n"))
 			refused := false
 			for _, d := range diagnostics.Of(invoke(service)) {
-				refused = refused || d.Code == "api.field" && d.Field == "$.spec.source.file" && strings.Contains(d.Remediation, "secret set --name file --context fixture --value-file <path>") && !strings.Contains(d.Remediation, "<context>")
+				refused = refused || d.Code == "api.field" && d.Field == "$.spec.source.file" && strings.Contains(d.Remediation, "in the input, rerun bootwright context update --name fixture --input-dir <dir>, then run bootwright secret set --name file --context fixture --value-file <path>") && !strings.Contains(d.Remediation, "<context>")
 			}
 			if !refused {
 				t.Fatal("the file source was not refused with its remedy")

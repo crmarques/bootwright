@@ -71,7 +71,10 @@ command acts on; and the one `context init` or `context update` names. Since
 the input those two refuse reaches no context, their remedy first reruns that
 command, `bootwright context init` or `context update` `--name <context>
 --input-dir <dir>`, after the declaration is fixed in the input, then names
-`secret set`; this holds for the kind-default remedy below too. A rerun of an
+`secret set`; this holds for the kind-default remedy below too. A `secret`
+command acting on a context whose stored input still holds the arm names the
+same `context update` rerun, since the stored input must be corrected and
+re-imported before `secret set` can load files. A rerun of an
 invocation also given a Context configuration file keeps it, as `--name
 <context> -f <file> --input-dir <dir>`, so following the remedy never drops
 that configuration.

@@ -30,7 +30,7 @@ func (s Service) resolve(ctx context.Context, name string) (secretstore.Context,
 	}
 	state, _, err := s.compiler.Compile(ctx, snapshot.Inputs)
 	if err != nil {
-		return secretstore.Context{}, nil, secrets.NameFileSourceContext(err, snapshot.Context.Name, secrets.FileSourceRerun{})
+		return secretstore.Context{}, nil, secrets.NameFileSourceContext(err, snapshot.Context.Name, secrets.FileSourceRerun{Command: secrets.FileSourceUpdate})
 	}
 	if state == nil {
 		return secretstore.Context{}, nil, secretstore.Failure("declaration", "secret declarations could not be compiled")
