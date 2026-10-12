@@ -231,9 +231,11 @@ content through its owning source or dependency workflow.
 The comment lines each production Go package holds, directives aside, are
 held by `TestProductionCommentLinesOnlyShrink` to a per-package ceiling that
 only shrinks: a package over its ceiling fails, and one more than a tenth
-below it fails until the ceiling is lowered, so narration that leaves a
-package cannot return unnoticed. A package with no ceiling fails until its
-count is added, and a ceiling naming no package fails until it is removed.
+below it fails until the ceiling is lowered. A count may recover within that
+tenth of its ceiling (below ten lines, none), so narration that leaves a
+package can return unnoticed only up to that tenth, and the ceilings bound the
+module's total. A package with no ceiling fails until its count is added, and
+a ceiling naming no package fails until it is removed.
 Not yet met: production comments still contain narration beyond the retained
 forms above; tracked as [B98](milestones/backlog.md#b98).
 

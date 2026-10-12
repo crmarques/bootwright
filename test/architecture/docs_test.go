@@ -539,3 +539,134 @@ func byteBudgetViolations(root string, tracked []string, budgets map[string]int,
 	}
 	return violations
 }
+
+var (
+	notYetMetLink    = regexp.MustCompile(`\[(B\d+)\]\(([^)\s]+)\)`)
+	notYetMetPage    = regexp.MustCompile(`^specs/milestones/(m[1-9][0-9]*|backlog)\.md$`)
+	notYetMetRowHead = regexp.MustCompile(`^\| \[(B\d+)\]\(#b\d+\) \|`)
+)
+
+func TestDocsNotYetMetNamesAnUndeliveredItem(t *testing.T) {
+	for _, violation := range notYetMetViolations(guidanceFiles(t)) {
+		t.Error(violation)
+	}
+}
+
+func TestDocsNotYetMetMatcherRejectsBadParagraphs(t *testing.T) {
+	pages := markdownFile{path: "specs/milestones/m2.md", lines: strings.Split(
+		"# M2\n\n| ID | Alias | Kind | Owner | Outcome | Requires | Definition | Delivery |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n"+
+			"| [B1](#b1) | | product | x | y | | Specified | not started |\n"+
+			"| [B2](#b2) | | product | x | y | | Specified | completed |\n"+
+			"| [B4](#b4) | | product | x | y | | Specified | not started |\n\n### B1\n\n### B2\n", "\n")}
+	backlog := markdownFile{path: "specs/milestones/backlog.md", lines: strings.Split(
+		"# Backlog\n\n| ID | Alias |\n| --- | --- |\n| [B3](#b3) | x |\n\n### B3\n", "\n")}
+	spec := func(body string) markdownFile {
+		return markdownFile{path: "specs/api/x.md", lines: strings.Split(body, "\n")}
+	}
+	cases := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{"good m2 link", "Not yet met: a; tracked as [B1](../milestones/m2.md#b1).", nil},
+		{"good backlog link", "Not yet met: a; tracked as\n[B3](../milestones/backlog.md#b3).", nil},
+		{"two paragraphs split at the next marker", "Not yet met: a; [B1](../milestones/m2.md#b1).\nNot yet met: b; [B3](../milestones/backlog.md#b3).", nil},
+		{"no link", "Not yet met: a; tracked as B1.", []string{"specs/api/x.md:1 Not yet met paragraph links no B<n> item"}},
+		{"second marker without link", "Not yet met: a; [B1](../milestones/m2.md#b1).\nNot yet met: b.", []string{"specs/api/x.md:2 Not yet met paragraph links no B<n> item"}},
+		{"delivered record", "Not yet met: a; [B1](../milestones/delivered.md#b1).", []string{"specs/api/x.md:1 B1 links ../milestones/delivered.md#b1, not a milestone page or the backlog at #b1"}},
+		{"wrong anchor", "Not yet met: a; [B1](../milestones/m2.md#b2).", []string{"specs/api/x.md:1 B1 links ../milestones/m2.md#b2, not a milestone page or the backlog at #b1"}},
+		{"target does not resolve", "Not yet met: a; [B1](milestones/m2.md#b1).", []string{"specs/api/x.md:1 B1 links milestones/m2.md#b1, not a milestone page or the backlog at #b1"}},
+		{"item on another page", "Not yet met: a; [B3](../milestones/m2.md#b3).", []string{"specs/api/x.md:1 B3 has no heading on specs/milestones/m2.md", "specs/api/x.md:1 B3 has no row on specs/milestones/m2.md"}},
+		{"delivered row", "Not yet met: a; [B2](../milestones/m2.md#b2).", []string{"specs/api/x.md:1 B2 is delivered on specs/milestones/m2.md"}},
+		{"row without heading", "Not yet met: a; [B4](../milestones/m2.md#b4).", []string{"specs/api/x.md:1 B4 has no heading on specs/milestones/m2.md"}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			got := notYetMetViolations([]markdownFile{pages, backlog, spec(test.body)})
+			if !slices.Equal(got, test.want) {
+				t.Fatalf("violations = %q, want %q", got, test.want)
+			}
+		})
+	}
+	for _, name := range []string{"specs/milestones/m2.md", "specs/deferred/x.md"} {
+		skipped := markdownFile{path: name, lines: []string{"Not yet met: a."}}
+		if got := notYetMetViolations([]markdownFile{skipped}); got != nil {
+			t.Fatalf("%s scanned: %q", name, got)
+		}
+	}
+}
+
+// notYetMetViolations reports each "Not yet met:" paragraph of a spec outside
+// specs/milestones and specs/deferred that links no item, and each linked item
+// that is not an undelivered one on its milestone page or the backlog.
+func notYetMetViolations(files []markdownFile) []string {
+	byPath := map[string]markdownFile{}
+	for _, file := range files {
+		byPath[file.path] = file
+	}
+	var violations []string
+	for _, file := range files {
+		if !strings.HasPrefix(file.path, "specs/") ||
+			strings.HasPrefix(file.path, "specs/milestones/") || strings.HasPrefix(file.path, "specs/deferred/") {
+			continue
+		}
+		start, paragraph := 0, []string(nil)
+		flush := func() {
+			if start != 0 {
+				violations = append(violations, notYetMetParagraph(byPath, file.path, start, strings.Join(paragraph, " "))...)
+			}
+			start, paragraph = 0, nil
+		}
+		proseLines(file, func(number int, line string) {
+			switch {
+			case strings.HasPrefix(strings.TrimSpace(line), "Not yet met:"):
+				flush()
+				start, paragraph = number, []string{line}
+			case strings.TrimSpace(line) == "":
+				flush()
+			case start != 0:
+				paragraph = append(paragraph, line)
+			}
+		})
+		flush()
+	}
+	return violations
+}
+
+func notYetMetParagraph(pages map[string]markdownFile, from string, line int, text string) []string {
+	links := notYetMetLink.FindAllStringSubmatch(inlineCode.ReplaceAllString(text, ""), -1)
+	if len(links) == 0 {
+		return []string{fmt.Sprintf("%s:%d Not yet met paragraph links no B<n> item", from, line)}
+	}
+	var violations []string
+	for _, link := range links {
+		item, target := link[1], link[2]
+		linked, anchor, _ := strings.Cut(target, "#")
+		resolved := path.Join(path.Dir(from), linked)
+		if !notYetMetPage.MatchString(resolved) || anchor != strings.ToLower(item) {
+			violations = append(violations, fmt.Sprintf("%s:%d %s links %s, not a milestone page or the backlog at #%s", from, line, item, target, strings.ToLower(item)))
+			continue
+		}
+		heading, row, delivered := false, false, false
+		proseLines(pages[resolved], func(_ int, text string) {
+			if strings.TrimRight(text, " ") == "### "+item {
+				heading = true
+			}
+			if match := notYetMetRowHead.FindStringSubmatch(text); match != nil && match[1] == item {
+				row = true
+				cells := strings.Split(strings.TrimSuffix(strings.TrimSpace(text), "|"), "|")
+				delivered = strings.HasPrefix(strings.TrimSpace(cells[len(cells)-1]), "completed")
+			}
+		})
+		if !heading {
+			violations = append(violations, fmt.Sprintf("%s:%d %s has no heading on %s", from, line, item, resolved))
+		}
+		if !row {
+			violations = append(violations, fmt.Sprintf("%s:%d %s has no row on %s", from, line, item, resolved))
+		}
+		if delivered {
+			violations = append(violations, fmt.Sprintf("%s:%d %s is delivered on %s", from, line, item, resolved))
+		}
+	}
+	return violations
+}
