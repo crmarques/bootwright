@@ -17,7 +17,8 @@ import (
 // directory is refused naming that ancestor's absolute path, what it is and
 // the exit, whether the store reads or creates its root, and nothing is
 // created behind it. A root that is itself a link is a root of another type,
-// refused exactly as setup's inspection refuses it.
+// refused exactly as setup's inspection refuses it, with the exit to replace
+// it with a directory.
 func TestAStateRootBehindALinkNamesTheAncestorAndItsExit(t *testing.T) {
 	ctx := context.Background()
 	uid, gid := uint32(os.Geteuid()), uint32(os.Getegid())
@@ -78,6 +79,9 @@ func TestAStateRootBehindALinkNamesTheAncestorAndItsExit(t *testing.T) {
 		store := New(testOptions(root))
 		_, viewErr := store.View(ctx)
 		want := diagnostics.Of(unsafeRoot(lstat, uid, gid))
+		if len(want) == 1 {
+			want[0].Remediation = "replace " + root + " with a directory, such as the directory the link names or a mount of that storage, then repeat the command"
+		}
 		if got := diagnostics.Of(viewErr); len(want) != 1 || !reflect.DeepEqual(got, want) {
 			t.Fatalf("view refused with %#v, want %#v", got, want)
 		}

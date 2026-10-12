@@ -57,7 +57,7 @@ func (s *Store) inspectStateRoot(ctx context.Context, path string, uid, gid uint
 	}
 	if !private(stat, syscall.S_IFDIR, uid, gid) {
 		inspection.Observed, inspection.Status = fileKind(stat.Mode)+" owned by "+ownerText(stat.Uid, stat.Gid)+" with mode "+modeText(stat.Mode), "not-ready"
-		inspection.Refusal = unsafeRoot(stat, uid, gid)
+		inspection.Refusal = refusedRoot(path, stat, uid, gid)
 		return inspection, nil
 	}
 	if !localFilesystem(filesystem.Type) {

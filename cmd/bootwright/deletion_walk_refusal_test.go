@@ -109,7 +109,9 @@ func TestTheDeletionWalkNamesItsContextEntryAndExit(t *testing.T) {
 }
 
 // A state root that is itself a symbolic link is refused as a root of another
-// type, as setup reports it, rather than as an unreadable path.
+// type, as setup reports it, rather than as an unreadable path, with the exit
+// an ancestor link has: replacing it with a directory, never the guidance for
+// a root nothing repairs.
 func TestAStateRootThatIsALinkIsRefusedAsARootOfAnotherType(t *testing.T) {
 	owner := strconv.Itoa(os.Geteuid()) + ":" + strconv.Itoa(os.Getegid())
 	services, _, input, root := contextFixture(t)
@@ -121,8 +123,8 @@ func TestAStateRootThatIsALinkIsRefusedAsARootOfAnotherType(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "[FAIL] context.state: the state root is a symbolic link owned by " + owner + " with mode 0777, but it must be a directory owned by " +
-		owner + " with mode 0700; next: nothing repairs it"
-	if _, stderr := contextRun(t, services, 1, "context", "list"); !strings.HasPrefix(stderr, want) {
-		t.Fatalf("context list refused with %q, want the prefix %q", stderr, want)
+		owner + " with mode 0700; next: replace " + root + " with a directory, such as the directory the link names or a mount of that storage, then repeat the command\n"
+	if _, stderr := contextRun(t, services, 1, "context", "list"); stderr != want {
+		t.Fatalf("context list refused with %q, want %q", stderr, want)
 	}
 }

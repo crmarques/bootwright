@@ -251,7 +251,9 @@ composition. Reject unsafe existing objects without chmod/chown repair. A root
 of another type, owner or mode refuses naming the type, the `uid:gid` owner and
 the octal mode it holds and the `root:root` `0700` directory it must be, and
 says that nothing repairs it, with the guidance below for a root another build
-created; a root that is itself a symbolic link is such a root
+created. A root that is itself a symbolic link is such a root, refused the
+same way except for its repair: replace that path with a directory, such as
+the one the link names or a mount of that storage, then repeat the command
 (`TestAStateRootThatIsALinkIsRefusedAsARootOfAnotherType`). An ancestor of the
 root that is a symbolic link or not a directory refuses `context.state` naming
 that absolute path and its type, that the store reaches its root only through
@@ -748,7 +750,12 @@ kernel's answer. Its exit is to remove that entry beneath the state root, then
 repeat `bootwright context delete --name <name> --purge`, adding
 `--allow-orphans` when the deletion abandons what the context owns, or to
 restore the whole store from a matching backup
-(`TestTheDeletionWalkNamesItsContextEntryAndExit`). A live
+(`TestTheDeletionWalkNamesItsContextEntryAndExit`). An entry on another
+filesystem, a mount point the walk never crosses or an entry whose device is
+not its context's, has the same exit except that it is unmounted, never
+removed, because its contents are not the context's
+(`TestAMountPointInAContextTreeIsUnmountedNeverRemoved`,
+`TestAnEntryOnAnotherFilesystemIsUnmountedNeverRemoved`). A live
 lease refuses under it exactly as it does without it, before the guard reads
 anything. A ready context whose directory is gone from a `contexts`
 container that still verifies is lost: what it owned cannot be listed, so its

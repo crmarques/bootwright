@@ -343,6 +343,17 @@ func unreachableRootRefusal(component string, stat syscall.Stat_t) error {
 		"replace "+component+" with a directory, such as the directory a symbolic link there names or a mount of that storage, then repeat the command")}
 }
 
+// refusedRoot is unsafeRoot with an ancestor link's exit for a root that is a link.
+func refusedRoot(path string, stat syscall.Stat_t, uid, gid uint32) error {
+	err := unsafeRoot(stat, uid, gid)
+	var failure *diagnostics.Failure
+	if stat.Mode&syscall.S_IFMT != syscall.S_IFLNK || !errors.As(err, &failure) || len(failure.Diagnostics) != 1 {
+		return err
+	}
+	return contexts.StateErrorWithRemediation(failure.Diagnostics[0].Message,
+		"replace "+path+" with a directory, such as the directory the link names or a mount of that storage, then repeat the command")
+}
+
 // unreachableAncestor names the component an open of the root's path refused
 // because it is a symbolic link or not a directory; any other error, or one
 // whose component cannot be read without following it, passes unchanged.
@@ -498,7 +509,7 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 		// another type, which setup reports the same way.
 		var unreachable *unreachableRoot
 		if errors.As(err, &unreachable) && unreachable.component == path {
-			return nil, unsafeRoot(unreachable.stat, uid, gid)
+			return nil, refusedRoot(path, unreachable.stat, uid, gid)
 		}
 		return nil, err
 	}
@@ -509,7 +520,7 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 	}
 	if !private(stat, syscall.S_IFDIR, uid, gid) {
 		file.Close()
-		return nil, unsafeRoot(stat, uid, gid)
+		return nil, refusedRoot(path, stat, uid, gid)
 	}
 	var fs syscall.Statfs_t
 	if err = syscall.Fstatfs(int(file.Fd()), &fs); err != nil || !localFilesystem(fs.Type) {

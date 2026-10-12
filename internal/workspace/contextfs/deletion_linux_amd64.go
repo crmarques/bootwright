@@ -175,13 +175,13 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 		}
 		file, err := openRelative(dir, name, pathHandle, 0)
 		if err != nil {
-			return unverifiedEntryRefusal(dir, name, "context traversal entry cannot be verified", storeCauseText(err))
+			return unverifiedEntryRefusal(dir, name, "context traversal entry cannot be verified", storeCauseText(err), errors.Is(err, syscall.EXDEV))
 		}
 		identity, statErr := statHandle(file)
 		file.Close()
 		kind := identity.Mode & syscall.S_IFMT
 		if reason := unsafeEntryReason(dir, path, name, identity, statErr); reason != "" {
-			return unverifiedEntryRefusal(dir, name, "context traversal contains unknown or unsafe state", reason)
+			return unverifiedEntryRefusal(dir, name, "context traversal contains unknown or unsafe state", reason, false)
 		}
 		if kind == syscall.S_IFDIR {
 			if err := s.checkpoint(ctx, checkpointBeforeContextSubtree); err != nil {
@@ -571,24 +571,25 @@ func (e *lostContext) Unwrap() error { return e.failure }
 func (e *lostContext) Is(target error) bool { return target == contexts.ErrLostContext }
 
 // unverifiedEntry is the walk's refusal of one entry it cannot verify as its
-// context's own, carrying that entry relative to the state root and why, so a
-// deletion names both with its exit; every other caller reports it as is.
+// context's own, carrying that entry relative to the state root, why, and
+// whether it is on another filesystem, so a deletion names them with its exit.
 type unverifiedEntry struct {
-	entry, reason string
-	failure       error
+	entry, reason     string
+	foreignFilesystem bool
+	failure           error
 }
 
 func (e *unverifiedEntry) Error() string { return e.failure.Error() }
 
 func (e *unverifiedEntry) Unwrap() error { return e.failure }
 
-func unverifiedEntryRefusal(dir *directory, name, prefix, reason string) error {
+func unverifiedEntryRefusal(dir *directory, name, prefix, reason string, crossed bool) error {
 	entry := storeEntry(dir, name)
 	message := prefix + ": " + entry
 	if reason != "" {
 		message += ": " + reason
 	}
-	return &unverifiedEntry{entry: entry, reason: reason, failure: state(message)}
+	return &unverifiedEntry{entry: entry, reason: reason, foreignFilesystem: crossed || reason == foreignFilesystemReason, failure: state(message)}
 }
 
 // unsafeEntryReason is why the walk refuses one entry of a context's tree, or
@@ -603,7 +604,7 @@ func unsafeEntryReason(dir *directory, path, name string, identity syscall.Stat_
 	case kind != syscall.S_IFDIR && kind != syscall.S_IFREG:
 		return "it is " + fileKind(identity.Mode)
 	case identity.Dev != dir.identity.Dev:
-		return "it is on another filesystem than its context"
+		return foreignFilesystemReason
 	case kind == syscall.S_IFREG && identity.Nlink != 1:
 		return "it is a regular file with " + strconv.FormatUint(uint64(identity.Nlink), 10) + " links"
 	case !private(identity, kind, dir.identity.Uid, dir.identity.Gid):
@@ -614,12 +615,18 @@ func unsafeEntryReason(dir *directory, path, name string, identity syscall.Stat_
 	return ""
 }
 
+const foreignFilesystemReason = "it is on another filesystem than its context"
+
 // deletionEntryRemediation is the exit of an entry the deletion walk cannot
-// verify: removing that entry by hand, which the deletion never does, then
-// repeating the deletion, or restoring the whole store.
-func deletionEntryRemediation(name, entry string) string {
-	return "remove " + entry + " beneath the state root, which this deletion never removes because it cannot verify it as the context's own, then repeat bootwright context delete --name " +
-		name + " --purge, adding --allow-orphans when the deletion abandons what the context owns; or " + restoreStoreRemediation
+// verify: removing it by hand, or unmounting it when it is on another
+// filesystem, then repeating the deletion; or restoring the whole store.
+func deletionEntryRemediation(name, entry string, foreignFilesystem bool) string {
+	repeat := ", then repeat bootwright context delete --name " + name +
+		" --purge, adding --allow-orphans when the deletion abandons what the context owns; or " + restoreStoreRemediation
+	if foreignFilesystem {
+		return "unmount " + entry + " beneath the state root, which is on another filesystem whose contents are not the context's and must never be removed" + repeat
+	}
+	return "remove " + entry + " beneath the state root, which this deletion never removes because it cannot verify it as the context's own" + repeat
 }
 
 // deletionDamage names the context and the entry of a walk refusal with its
@@ -633,5 +640,5 @@ func deletionDamage(ctx context.Context, name string, err error) error {
 	if unverified.reason != "" {
 		cause = state(unverified.reason)
 	}
-	return contextDamage(ctx, name, unverified.entry, cause, deletionEntryRemediation(name, unverified.entry))
+	return contextDamage(ctx, name, unverified.entry, cause, deletionEntryRemediation(name, unverified.entry, unverified.foreignFilesystem))
 }
