@@ -111,7 +111,11 @@ func runRPMQuery(ctx context.Context, platform prerequisites.Platform, snapshot,
 	if err != nil {
 		return operatorQuery{}, err
 	}
-	command := exec.CommandContext(ctx, "/usr/bin/rpm", "--dbpath", filepath.Join(snapshot, strings.TrimPrefix(directory, "/")), "-q", "--queryformat", format, "--", name)
+	database := filepath.Join(snapshot, strings.TrimPrefix(directory, "/"))
+	if err := snapshotDatabasePresent(database); err != nil {
+		return operatorQuery{}, err
+	}
+	command := exec.CommandContext(ctx, "/usr/bin/rpm", "--dbpath", database, "-q", "--queryformat", format, "--", name)
 	command.Dir = "/"
 	command.Env = helperEnvironment(filepath.Join(filepath.Dir(snapshot), "home"))
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -141,6 +145,14 @@ func runRPMQuery(ctx context.Context, platform prerequisites.Platform, snapshot,
 		result.Exit = exit.ExitCode()
 	}
 	return result, nil
+}
+
+func snapshotDatabasePresent(directory string) error {
+	info, err := os.Lstat(filepath.Join(directory, databaseMembers[0]))
+	if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+		return failure("the native database snapshot no longer holds the package database it was copied with")
+	}
+	return nil
 }
 
 // operatorPresence is what the queries of names prove. A package with no

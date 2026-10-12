@@ -133,7 +133,10 @@ exactly as a launch verifies. Another OS minor stays an unadmitted release.
 Another upstream version, an unsigned or foreign-signed build, a missing or
 second x86_64 instance, or a file whose bytes differ from its RPM digest
 refuses with `controller.unsupported` naming the package build, what
-disqualified it and the reinstall remedy. A
+disqualified it and the reinstall remedy. A snapshot whose `rpmdb.sqlite` is
+missing, empty or not a regular file refuses with `controller.setup` before
+rpm runs, because rpm's SQLite backend creates a missing database and would
+report every package as not installed. A
 qualified foundation settles the check ready, observed as the qualified builds
 (for example `glibc 2.34-276.el9_8, libgcc 11.5.0-15.el9 (vendor-signed,
 qualified within rhel 9.8)`). While a complete receipt records another

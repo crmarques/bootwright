@@ -4,6 +4,8 @@ package nativelocal
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // The runner reads synthetic evidence only from the database directory the
@@ -63,8 +66,16 @@ func TestRPMQueryReadsThePlatformSnapshot(t *testing.T) {
 					t.Fatal("rpm lost its output bounds")
 				}
 				data, err := os.ReadFile(filepath.Join(command.Args[2], "rpmdb.sqlite"))
-				if err != nil {
-					return err
+				if err != nil || len(data) == 0 {
+					if !errors.Is(err, fs.ErrNotExist) {
+						if _, err := command.Stderr.Write([]byte("error: cannot open Packages database in " + command.Args[2] + "\n")); err != nil {
+							return err
+						}
+					}
+					if _, err := command.Stdout.Write([]byte("package " + name + " is not installed\n")); err != nil {
+						return err
+					}
+					return exec.Command("/bin/sh", "-c", "exit 1").Run()
 				}
 				_, err = command.Stdout.Write(data)
 				return err
@@ -82,14 +93,38 @@ func TestRPMQueryReadsThePlatformSnapshot(t *testing.T) {
 				t.Fatalf("operator evidence = %+v (%v)", presence, err)
 			}
 
-			// A lost snapshot refuses with one attempt at the same private path;
-			// it must never retry against rpm's default live database.
-			if err := os.Remove(file); err != nil {
+			// The fake answers as RPM 6.0.2 was observed to: a removed database
+			// is created, because rpm's SQLite backend (lib/backend/sqlite.cc,
+			// sqlite_init) retries a read-only open with SQLITE_OPEN_CREATE, and
+			// every package reads "not installed", exit 1, with nothing on
+			// standard error; an empty file or a directory adds "cannot open
+			// Packages database" on standard error. Only a refusal before rpm
+			// runs keeps the first from reading as an absent package.
+			copied := filepath.Join(t.TempDir(), "rpmdb.sqlite")
+			if err := os.Rename(file, copied); err != nil {
 				t.Fatal(err)
 			}
-			calls = 0
-			if _, err := runRPMQuery(context.Background(), platform, snapshot, name, test.format, test.limit, run); err == nil || calls != 1 {
-				t.Fatalf("missing snapshot: calls = %d (%v)", calls, err)
+			for _, lost := range []struct {
+				name    string
+				replace func() error
+			}{
+				{"removed", func() error { return nil }},
+				{"empty", func() error { return os.WriteFile(file, nil, 0600) }},
+				{"a link", func() error { return os.Symlink(copied, file) }},
+				{"a directory", func() error { return os.Mkdir(file, 0700) }},
+			} {
+				if err := os.RemoveAll(file); err != nil {
+					t.Fatal(err)
+				}
+				if err := lost.replace(); err != nil {
+					t.Fatal(err)
+				}
+				calls = 0
+				result, err := runRPMQuery(context.Background(), platform, snapshot, name, test.format, test.limit, run)
+				found := diagnostics.Of(err)
+				if calls != 0 || len(found) != 1 || found[0].Code != "controller.setup" || found[0].Message != "the native database snapshot no longer holds the package database it was copied with" {
+					t.Fatalf("snapshot database %s: result = %+v, calls = %d (%v)", lost.name, result, calls, err)
+				}
 			}
 		})
 	}
