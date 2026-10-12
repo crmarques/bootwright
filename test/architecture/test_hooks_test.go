@@ -30,6 +30,9 @@ func testHookViolations(sources []sourceFile) []string {
 				aliases[imported.alias] = true
 			}
 		}
+		if aliases["."] {
+			violations = append(violations, fmt.Sprintf("%s dot-imports %s, which hides a use of %s", source.path, adapterRunnerPackage, adapterRunnerHook))
+		}
 		declaration := map[*ast.Ident]bool{}
 		ast.Inspect(source.syntax, func(node ast.Node) bool {
 			switch node := node.(type) {
@@ -83,12 +86,14 @@ func TestTestHookViolationsFindEveryReference(t *testing.T) {
 	const qualified = "package fixture\nimport runner \"" + adapterRunnerImport + "\"\nvar _ = runner.Isolated\n"
 	const other = "package fixture\nimport \"" + adapterRunnerImport + "\"\nvar _ = ansiblerunner.New\n"
 	const inside = "package ansiblerunner\nfunc Isolated() {}\nfunc use() { Isolated() }\n"
+	const dotted = "package fixture\nimport . \"" + adapterRunnerImport + "\"\nvar _ = Isolated\n"
 	got := testHookViolations([]sourceFile{
-		parse("cmd/fixture", qualified), parse("cmd/clean", other), parse(adapterRunnerPackage, inside),
+		parse("cmd/fixture", qualified), parse("cmd/clean", other), parse(adapterRunnerPackage, inside), parse("cmd/dotted", dotted),
 	})
 	want := []string{
 		"cmd/fixture/fixture.go references runner.Isolated",
 		adapterRunnerPackage + "/fixture.go references Isolated",
+		"cmd/dotted/fixture.go dot-imports " + adapterRunnerPackage + ", which hides a use of Isolated",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("violations = %q, want %q", got, want)
