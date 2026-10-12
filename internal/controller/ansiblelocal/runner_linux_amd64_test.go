@@ -523,7 +523,7 @@ func TestACanceledControllerRunNeverAcknowledges(t *testing.T) {
 	deadline = time.Now().Add(5 * time.Second)
 	for {
 		current, err := os.ReadFile("/proc/" + identity[0] + "/stat")
-		if errors.Is(err, os.ErrNotExist) {
+		if fixtureGone(err) {
 			break
 		}
 		if err != nil {
@@ -537,6 +537,31 @@ func TestACanceledControllerRunNeverAcknowledges(t *testing.T) {
 			t.Fatalf("the adapter's descendant %s remained runnable after cancellation", identity[0])
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// fixtureGone reports a process record that no longer exists. A process reaped
+// after its record was opened fails the read with ESRCH rather than ENOENT
+// (proc_single_show in the kernel's fs/proc/base.c).
+func fixtureGone(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ESRCH)
+}
+
+// A process reaped while its record is read is gone, not a failed probe; any
+// other read failure stays one.
+func TestAFixtureProcessReapedDuringItsReadIsGone(t *testing.T) {
+	for _, check := range []struct {
+		err  error
+		gone bool
+	}{
+		{&os.PathError{Op: "open", Path: "/proc/1/stat", Err: syscall.ENOENT}, true},
+		{&os.PathError{Op: "read", Path: "/proc/1/stat", Err: syscall.ESRCH}, true},
+		{&os.PathError{Op: "read", Path: "/proc/1/stat", Err: syscall.EACCES}, false},
+		{nil, false},
+	} {
+		if gone := fixtureGone(check.err); gone != check.gone {
+			t.Errorf("a record read failing with %v is gone %t, want %t", check.err, gone, check.gone)
+		}
 	}
 }
 

@@ -59,6 +59,8 @@ func TestLifecycleAdapterChild(t *testing.T) {
 		leaveAnOrphan(result, authorization)
 	case "retaining":
 		retainTheOutput(result, authorization)
+	case "lingering":
+		lingerAfterClosingTheAcknowledgement(result, authorization)
 	}
 	// One descendant shares the adapter's process group. The other waits on
 	// the authorization channel in a session of its own, beyond a group kill,
@@ -815,6 +817,37 @@ func retainTheOutput(result, authorization *os.File) {
 	os.Exit(0)
 }
 
+// lingerAfterClosingTheAcknowledgement closes its acknowledgement channel,
+// arms its termination handler, starts a descendant in its process group that
+// holds the result channel, and reports loaded. It then waits, as a supervisor
+// does: on termination it ends the descendant and exits 3; unsignaled, it exits
+// 3 when the descendant's sleep ends. The handler is armed before the record
+// is written, so no signal the runner sends after reading it can be missed.
+func lingerAfterClosingTheAcknowledgement(result, authorization *os.File) {
+	_ = authorization.Close()
+	terminated := make(chan os.Signal, 1)
+	signal.Notify(terminated, syscall.SIGTERM)
+	member := exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-member")
+	member.ExtraFiles = []*os.File{result}
+	if member.Start() != nil {
+		os.Exit(20)
+	}
+	exited := make(chan struct{})
+	go func() {
+		_ = member.Wait()
+		close(exited)
+	}()
+	_, _ = result.Write([]byte(`{"phase":"loaded"}` + "\n"))
+	_ = result.Close()
+	select {
+	case <-terminated:
+		_ = member.Process.Kill()
+		<-exited
+	case <-exited:
+	}
+	os.Exit(3)
+}
+
 // endHolder kills the descendant whose process ID the adapter recorded.
 func endHolder(t *testing.T, path string) {
 	recorded, err := os.ReadFile(path)
@@ -833,15 +866,25 @@ func endHolder(t *testing.T, path string) {
 // after, a descendant that holds only the result channel writes it once the
 // adapter has exited. An adapter that lingers after closing the channel is
 // signaled at once, and like a supervisor ends its descendant and exits, well
-// inside both its own sleep and the drain.
+// inside both its own sleep and the drain. That adapter is a Go helper whose
+// handler is armed before it reports, so the check never rests on how a shell
+// delivers a trap during its wait.
 func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
-	for _, check := range []struct{ name, script string }{
-		{"record first", `exec 4<&-; printf '{"phase":"loaded"}\n' >&3; sleep 0.3; exit 3`},
-		{"exit first", `exec 4<&-; /bin/sh -c 'sleep 0.3; printf "%s\n" "$0" >&3' '{"phase":"loaded"}' </dev/null >/dev/null 2>&1 & exit 3`},
-		{"record first, adapter lingers", `exec 4<&-; trap 'kill $!; exit 3' TERM; printf '{"phase":"loaded"}\n' >&3; sleep 3 & wait; exit 3`},
+	shell := func(script string) func() *exec.Cmd {
+		return func() *exec.Cmd { return exec.Command("/bin/sh", "-c", script) }
+	}
+	for _, check := range []struct {
+		name    string
+		adapter func() *exec.Cmd
+	}{
+		{"record first", shell(`exec 4<&-; printf '{"phase":"loaded"}\n' >&3; sleep 0.3; exit 3`)},
+		{"exit first", shell(`exec 4<&-; /bin/sh -c 'sleep 0.3; printf "%s\n" "$0" >&3' '{"phase":"loaded"}' </dev/null >/dev/null 2>&1 & exit 3`)},
+		{"record first, adapter lingers", func() *exec.Cmd {
+			return exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-lingering")
+		}},
 	} {
 		t.Run(check.name, func(t *testing.T) {
-			runner := sweepingRunner(t, func() *exec.Cmd { return exec.Command("/bin/sh", "-c", check.script) })
+			runner := sweepingRunner(t, check.adapter)
 			runner.drain = 2 * time.Second
 			var output bytes.Buffer
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
