@@ -369,3 +369,12 @@ func TestAStandardInputSecretUnderInputLoggingNeverStartsTheChild(t *testing.T) 
 		t.Fatalf("an invocation with no standard-input Secret = %d, %v; child started %v", code, err, started)
 	}
 }
+
+func TestAnInputLoggingRefusalNamesTheInputItWouldLog(t *testing.T) {
+	for _, option := range []string{"log_input", "log_ttyin", "log_stdin"} {
+		want := "the sudo policy sets " + option + ", which would log the input of Secret bmc (what is typed at the terminal or piped as standard input)"
+		if got := (&InputLogged{Option: option, Secret: "bmc"}).Error(); got != want {
+			t.Errorf("%s: Error() = %q, want %q", option, got, want)
+		}
+	}
+}

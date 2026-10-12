@@ -71,7 +71,7 @@ type SudoOptions struct {
 type InputLogged struct{ Option, Secret string }
 
 func (e *InputLogged) Error() string {
-	return "the sudo policy sets " + e.Option + ", which would log the standard input of Secret " + e.Secret
+	return "the sudo policy sets " + e.Option + ", which would log the input of Secret " + e.Secret + " (what is typed at the terminal or piped as standard input)"
 }
 
 // InputUnproven refuses a standard-input Secret before sudo starts the child,

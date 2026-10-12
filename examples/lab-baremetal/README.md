@@ -205,7 +205,7 @@ sudo -v
 printf '%s\n' "$BMC_PASSWORD" | ./bin/bootwright secret set --context lab-baremetal --name lab-bmc-credentials --username <account> --password-stdin
 ```
 
-A sudo policy that logs input (`log_input`, `log_stdin`) records the password
+A sudo policy that logs input (`log_input`, `log_ttyin`, `log_stdin`) records the password
 whichever way it is entered.
 
 `plan` lists `os-install-metal-01`, which consumes `data-loss`, so the apply
