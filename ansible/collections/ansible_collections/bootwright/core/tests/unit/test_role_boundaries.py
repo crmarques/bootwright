@@ -923,7 +923,8 @@ def test_the_refusal_rule_rejects(tasks, reason):
 # in the invocation scratch the runner hands it, never in a path every run
 # shares. The pattern reads the text: it does not parse an argv or follow a
 # variable, so a path a variable builds is the scratch rule's own business.
-SCRATCH_ROOTS = re.compile(r"(?<![\w.{}/-])/(?:var/tmp|tmp|run)(?:/[^\s'\"{}:;,)]*|(?![\w.-]))")
+# /var/run is the alias of /run on every systemd host, so it is named too.
+SCRATCH_ROOTS = re.compile(r"(?<![\w.{}/-])/(?:var/tmp|var/run|tmp|run)(?:/[^\s'\"{}:;,)]*|(?![\w.-]))")
 
 # The two literals that name a host fact rather than scratch, each with why.
 SCRATCH_ALLOWED = {
@@ -983,8 +984,9 @@ def test_the_scratch_rule_passes(text):
     ("path: '/tmp/bootwright-x'", "/tmp/bootwright-x"),
     ("dest: /run/nginx.pid.bak", "/run/nginx.pid.bak"),
     ("path: /run/libvirtd/x", "/run/libvirtd/x"),
+    ("dest: /var/run/substrate/network.xml", "/var/run/substrate/network.xml"),
 ], ids=["a file under tmp", "a file under run", "a directory under var tmp", "a quoted path", "past the pid allowance",
-        "past the socket allowance"])
+        "past the socket allowance", "a file under var run"])
 def test_the_scratch_rule_rejects(text, path):
     problems = fixed_scratch_problems("synthetic", text)
     assert problems == ["synthetic: names the fixed path %s; use the invocation scratch" % path], problems
