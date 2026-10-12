@@ -6,8 +6,10 @@ import hashlib
 import io
 import os
 from pathlib import Path
+import shutil
 import socket
 import ssl
+import stat
 import tarfile
 import tempfile
 import tracemalloc
@@ -87,6 +89,61 @@ def serve(response):
 
 def refuse_acquisition(reason):
     return mock.patch.object(files, "acquire", side_effect=AssertionError(reason))
+
+
+class HeldListing:
+    """The os module as btrfs lists a held directory: a listing shows what the
+    directory held when its descriptor was opened or last rewound to its start,
+    and the listing itself rewinds, as os.listdir does once it has read."""
+
+    def __init__(self):
+        self.held = {}
+
+    def __getattr__(self, name):
+        return getattr(os, name)
+
+    def remember(self, descriptor):
+        if stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            self.held[descriptor] = sorted(os.listdir(descriptor))
+
+    def open(self, *args, **kwargs):
+        descriptor = os.open(*args, **kwargs)
+        self.remember(descriptor)
+        return descriptor
+
+    def lseek(self, descriptor, offset, whence):
+        position = os.lseek(descriptor, offset, whence)
+        if descriptor in self.held and (offset, whence) == (0, os.SEEK_SET):
+            self.remember(descriptor)
+        return position
+
+    def listdir(self, path="."):
+        if not isinstance(path, int) or path not in self.held:
+            return os.listdir(path)
+        names = self.held[path]
+        self.remember(path)
+        return list(names)
+
+    def close(self, descriptor):
+        self.held.pop(descriptor, None)
+        os.close(descriptor)
+
+
+def stale_listing_directory():
+    """A new directory under the temporary root whose filesystem lists a held
+    descriptor as it was when opened, or nothing when it lists it as it is."""
+    root = tempfile.mkdtemp(prefix="bootwright-held-listing-")
+    descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.mkdir(os.path.join(root, "probe"))
+        stale = os.listdir(descriptor) == []
+        os.rmdir(os.path.join(root, "probe"))
+    finally:
+        os.close(descriptor)
+    if stale:
+        return Path(root)
+    os.rmdir(root)
+    return None
 
 
 def tool(data, kind="kubectl", compatibility="", version="v1.36.1"):
@@ -211,6 +268,39 @@ class ControllerFilesTests(unittest.TestCase):
             0o600,
         )
         self.assertEqual(executable.stat().st_mode & 0o7777, 0o700)
+
+    def test_capacity_lists_the_held_bundle_as_it_is_now(self):
+        held = HeldListing()
+        descriptor = held.open(str(self.root), files.DIRECTORY_FLAGS)
+        try:
+            (self.root / "added").mkdir(mode=0o700)
+            self.assertEqual(held.listdir(descriptor), [])
+            self.assertEqual(held.listdir(descriptor), ["added"])
+        finally:
+            held.close(descriptor)
+            (self.root / "added").rmdir()
+        data = b"qualified executable"
+        definition = tool(data)
+        with mock.patch.object(files, "os", held), serve(body(data)):
+            result = files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
+        self.assertTrue(result["changed"])
+        self.assertEqual((self.root / definition["files"][0]["path"]).read_bytes(), data)
+
+    def test_capacity_publishes_where_a_held_listing_is_stale(self):
+        root = stale_listing_directory()
+        if root is None:
+            self.skipTest("the temporary root lists a held directory as it is")
+        self.addCleanup(shutil.rmtree, root)
+        observed = root.stat()
+        location = dict(
+            self.location, path=str(root), device=observed.st_dev, inode=observed.st_ino
+        )
+        data = b"qualified executable"
+        definition = tool(data)
+        with serve(body(data)):
+            result = files.prepare_tool(location, definition, EGRESS, DEADLINE)
+        self.assertTrue(result["changed"])
+        self.assertEqual((root / definition["files"][0]["path"]).read_bytes(), data)
 
     def test_interrupted_atomic_source_write_leaves_no_named_partial_file(self):
         definition = tool(b"complete source")

@@ -657,6 +657,17 @@ def link_at(descriptor, parent, leaf):
         raise OSError(error, os.strerror(error))
 
 
+def listed(descriptor):
+    """The sorted names a held directory holds now.
+
+    A listing reads on from the descriptor's offset, and whether it shows an
+    entry created since the descriptor was opened or last rewound is
+    unspecified: btrfs omits it. Rewinding first lists the directory as it is,
+    through the same descriptor, so the listing stays bound to its identity."""
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    return sorted(os.listdir(descriptor))
+
+
 class Bundle:
     """Directory-fd authority for complete, exclusive artifact publication."""
 
@@ -874,7 +885,7 @@ class Bundle:
         def walk(descriptor, prefix="", depth=0):
             if depth > 32:
                 raise Refused("bundle depth")
-            names = sorted(os.listdir(descriptor))
+            names = listed(descriptor)
             totals["entries"] += len(names)
             if totals["entries"] > 32768:
                 raise Refused("bundle entry count")
@@ -912,7 +923,7 @@ class Bundle:
                     totals["targets"] += (
                         value.st_size if path.startswith("tools/") else 0
                     )
-            if names != sorted(os.listdir(descriptor)):
+            if names != listed(descriptor):
                 raise Refused("bundle entries changed")
 
         walk(self.fd)
