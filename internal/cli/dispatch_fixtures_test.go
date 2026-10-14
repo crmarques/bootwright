@@ -239,6 +239,10 @@ func (s lifecycleSpy) Status(ctx context.Context, request lifecycle.StatusReques
 	return s.record.result.lifecycleStatus, s.record.called(ctx, "status", request)
 }
 
+func (s lifecycleSpy) Diff(ctx context.Context, request lifecycle.DiffRequest) (*lifecycle.DiffResult, error) {
+	return s.record.result.lifecycleDiff, s.record.called(ctx, "diff", request)
+}
+
 func (s lifecycleSpy) Apply(ctx context.Context, request lifecycle.ApplyRequest) (*lifecycle.OperationResult, error) {
 	return s.record.result.lifecycleOperation, s.record.called(ctx, "apply", request)
 }
@@ -360,7 +364,7 @@ func dispatchFlags() *pflag.FlagSet {
 	for _, name := range []string{
 		"yes", "purge", "allow-orphans", "purge-old-bundles", "short", "renew", "checksums", "dry-run",
 		"trust-on-first-use", "sensitive", "silent", "secrets", "power-status",
-		"ssh-ask-sudo-password", "ssh-user-for-provisioned",
+		"ssh-ask-sudo-password", "ssh-user-for-provisioned", "observe",
 	} {
 		flags.Bool(name, true, "")
 	}

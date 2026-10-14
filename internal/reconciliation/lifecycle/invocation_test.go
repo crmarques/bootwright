@@ -1,8 +1,11 @@
 package lifecycle
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -97,5 +100,80 @@ func TestRunForLendsOnlyThePartsItsMaterialFilesName(t *testing.T) {
 	bound["serving"].Clear()
 	if value, _ := request.Material["serving"].Part(secrets.CertificatePart); string(value) == "CERTIFICATE" {
 		t.Fatal("the lent certificate is a copy that clearing the binding's material does not reach")
+	}
+}
+
+// RunFor marks every request an attempt does not name as its own effect
+// read-only, and every request no operation record names unrecorded, from the
+// execution's attempt and resolution numbers alone, so no call site can
+// forget either mark.
+func TestRunForDerivesReadOnlyAndUnrecorded(t *testing.T) {
+	for _, test := range []struct {
+		name                 string
+		execution            Execution
+		readOnly, unrecorded bool
+	}{
+		{"a probe", Probe{}.Execution(), true, true},
+		{"a resolution", Execution{Attempt: 2, Resolution: 1}, true, false},
+		{"an attempt", Execution{Attempt: 1}, false, false},
+		{"an attempt marked read-only", Execution{Attempt: 1, ReadOnly: true}, true, false},
+	} {
+		request := RunFor(test.execution, Invocation{Operation: "apply"})
+		if request.ReadOnly != test.readOnly || request.Unrecorded != test.unrecorded {
+			t.Fatalf("%s is read-only %t and unrecorded %t, want %t and %t", test.name, request.ReadOnly, request.Unrecorded, test.readOnly, test.unrecorded)
+		}
+	}
+}
+
+// keepingCapability is the journey's capability with a copy its removal
+// would delete, recording every execution a keep is handed.
+type keepingCapability struct {
+	*testCapability
+	kept []Execution
+}
+
+func (c *keepingCapability) Keeps(block reconciliation.Block) (KeptEntry, bool, error) {
+	return KeptEntry{Block: block.ID, Name: "kubeconfig"}, true, nil
+}
+
+func (c *keepingCapability) Keep(_ context.Context, execution Execution) ([]Produced, error) {
+	c.kept = append(c.kept, execution)
+	return nil, nil
+}
+
+// Over an apply and a destroy that each leave their block unknown and are
+// resolved, every attempt the engine makes reaches the runner able to change
+// its target, and every resolution, quiescence probe and keep reaches it
+// read-only.
+func TestEveryExecutionDeclaresItsReadOnlyness(t *testing.T) {
+	h := newHarness(t, "install")
+	capability := &keepingCapability{testCapability: h.capability}
+	h.service.capabilities = testResolver{capability: capability}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := apply(h); err == nil {
+		t.Fatal("an unknown apply completed")
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`)}}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := destroy(h); err == nil {
+		t.Fatal("an unknown removal completed")
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`)}}
+	if _, err := destroy(h); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(h.capability.calls, "observe:install") || !slices.Contains(h.capability.calls, "observe-removal:install") ||
+		len(h.capability.applies) == 0 || len(h.capability.destroys) == 0 || len(h.capability.probed) == 0 || len(capability.kept) == 0 {
+		t.Fatalf("the journey made %v, destroyed %v, probed %d times and kept %d times", h.capability.calls, h.capability.destroys, len(h.capability.probed), len(capability.kept))
+	}
+	for _, execution := range h.capability.executions {
+		if got, want := RunFor(execution, Invocation{}).ReadOnly, execution.Resolution != 0; got != want {
+			t.Fatalf("attempt %d resolution %d is read-only %t, want %t", execution.Attempt, execution.Resolution, got, want)
+		}
+	}
+	for _, execution := range append(slices.Clone(h.capability.probed), capability.kept...) {
+		if !RunFor(execution, Invocation{}).ReadOnly {
+			t.Fatalf("a probe or keep at attempt %d resolution %d is not read-only", execution.Attempt, execution.Resolution)
+		}
 	}
 }

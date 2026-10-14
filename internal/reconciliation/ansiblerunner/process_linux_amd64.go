@@ -55,6 +55,9 @@ func New(playbooks map[string]string) Runner {
 }
 
 func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+	if err := checkReadOnly(request); err != nil {
+		return lifecycle.RunResult{}, err
+	}
 	playbook, ok := r.playbookFor(request)
 	if !ok {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the lifecycle adapter operation is not recognized", "")

@@ -268,7 +268,7 @@ var contractProperties = []string{
 	"observe-removal-request", "observe-removal-unproved", "observe-removal-evidence-proves-request",
 	"observe-removal-proves-absence", "observe-removal-reads-presence", "observe-removal-reads-partial",
 	"observe-removal-ignores-readiness", "produced-only-on-proved-completion", "role-admits-request",
-	"observe-unknown-explained",
+	"observe-unknown-explained", "observation-read-only", "probe-read-only",
 }
 
 // contractRunner is a scripted runner: it records every request and answers
@@ -572,6 +572,43 @@ func contractEffects(t *testing.T, row contractRow, example contractExample, cap
 		contractObservationFailures(row, block, capability, execution, runner, findings)
 		contractUnresolved(t, row, block, capability, execution, runner, findings)
 		contractProduced(t, row, execution, capability, runner, findings)
+		contractReadOnly(row, block, capability, execution, runner, findings)
+	}
+}
+
+// contractReadOnly proves a resolution's observations and a quiescence probe
+// reach the runner only as the read-only observe operation, and a probe, which
+// no operation records, declaring no output it would take over
+// (specs/state-reconciliation.md, Attempts and unknown outcomes).
+func contractReadOnly(row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
+	resolution := execution
+	resolution.Resolution = 1
+	operations := []string{"observe"}
+	if row.removalObservesNothing == "" {
+		operations = append(operations, "observe-removal")
+	}
+	for _, operation := range operations {
+		runner.script(lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{}`)}, nil)
+		_, _, _ = contractCall(capability, operation, resolution)
+		for _, request := range runner.sent() {
+			if request.Operation != lifecycle.ObserveOperation || !request.ReadOnly {
+				findings.record(row, "observation-read-only", fmt.Sprintf("%s: a resolution's %s ran %s read-only %t", block.ID, operation, request.Operation, request.ReadOnly))
+			}
+		}
+	}
+	if !row.probes {
+		return
+	}
+	runner.script(lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{}`)}, nil)
+	_, _ = capability.Quiescent(context.Background(), lifecycle.Probe{Block: block, Launch: execution.Launch, Bundle: execution.Bundle, Material: execution.Material})
+	sent := runner.sent()
+	if len(sent) == 0 {
+		findings.record(row, "probe-read-only", block.ID+": a probing binding's probe sent no request")
+	}
+	for _, request := range sent {
+		if request.Operation != lifecycle.ObserveOperation || !request.ReadOnly || !request.Unrecorded || len(request.Outputs) != 0 {
+			findings.record(row, "probe-read-only", fmt.Sprintf("%s: a probe ran %s read-only %t unrecorded %t declaring %d outputs", block.ID, request.Operation, request.ReadOnly, request.Unrecorded, len(request.Outputs)))
+		}
 	}
 }
 

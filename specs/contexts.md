@@ -471,6 +471,14 @@ recover capacity. Never collect the selected revision or infer disposal proof
 from age. Future lifecycle consumers must define retention before their inputs
 become collectible.
 
+A lifecycle read may open a retained unselected revision under its shared
+lock, through the same no-follow, bounded and digest-verified reads as the
+selected one, with its manifest validated against its own context, revision
+and Environment directory; it writes nothing, and a mutation transaction reads
+only its selected revision. `bootwright diff` and the changed-input refusal
+read the revision the owning apply froze, which non-pristine evidence keeps. A
+collected revision reads as unknown there, never as a refusal of the command.
+
 All traversal uses held no-follow handles. Inside the root reject mount
 crossings, links, hardlinks, special files, wrong ownership/modes and path
 substitution. A listing reads the directory through the handle it holds, never

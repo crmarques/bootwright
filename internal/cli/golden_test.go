@@ -942,7 +942,7 @@ func cliGoldens() []cliGolden {
 			stderr: "[FAIL] cli.not-implemented: bootwright status is not implemented\n",
 		},
 		{golden: "cli-not-implemented-json", args: "status --output json", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented }},
-	}, clusterGoldens()...)
+	}, append(clusterGoldens(), diffGoldens()...)...)
 }
 
 // storedImage is the record a media confirmation shows before its prompt.

@@ -149,6 +149,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"plan", nil, ignoresRoute},
 		{"plan", []string{"--stage", "controller"}, ignoresRoute},
 		{"status", nil, ignoresRoute},
+		{"diff", nil, ignoresRoute},
 		{"render", []string{"--input-dir", "inputs", "--output-dir", "artifacts"}, ignoresRoute},
 		{"render effective", nil, ignoresRoute},
 		{"render installer", nil, ignoresRoute},

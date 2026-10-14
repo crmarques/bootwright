@@ -24,8 +24,7 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44 and X48 to X51 (D139), X70 (D143), X67 (D147), X83 and X84 (D149),
-X87 (D152) are delivered.
+X44, X48 to X51, X67, X70, X83, X84, X87 and X91 are delivered.
 
 - **Next for agents:** in M1, X88 once D152 and its clause 9 choice are
   recorded; in M2b, nothing until the owner's B476 run.

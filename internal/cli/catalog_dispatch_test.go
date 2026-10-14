@@ -35,7 +35,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"secret encryption rotate": true, "validate": true, "render effective": true,
 		"media add": true, "media list": true, "media delete": true,
 		"setup": true, "preflight controller": true,
-		"plan": true, "status": true, "apply": true, "destroy": true,
+		"plan": true, "status": true, "diff": true, "apply": true, "destroy": true,
 		"machine list": true, "machine rsh": true, "machine exec": true,
 		"cluster rsh": true, "cluster exec": true, "cluster list": true, "cluster info": true,
 		"machine start": true, "machine stop": true, "machine restart": true, "machine trust": true,

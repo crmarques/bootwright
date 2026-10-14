@@ -82,6 +82,7 @@ func (s Service) keepBeforeRemoval(ctx context.Context, tx Transaction, boundary
 // block that captures it once proved, and reports whether it published one.
 // A copy the removal no longer finds publishes nothing.
 func (s Service) keep(ctx context.Context, tx Transaction, keeper Keeper, entry KeptEntry, execution Execution) (bool, error) {
+	execution.ReadOnly = true
 	produced, err := keeper.Keep(ctx, execution)
 	defer ClearProduced(produced)
 	if err != nil {

@@ -15,6 +15,7 @@ Available Commands:
   completion                    Manage completion
   context                       Manage context
   destroy                       Destroy the complete selected lifecycle unit
+  diff                          Compare desired state with what this context realized
   help                          Show human help for an exact command path
   machine                       Manage machine
   media                         Manage media

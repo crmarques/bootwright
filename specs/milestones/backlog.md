@@ -167,6 +167,46 @@ Alias cell.
 | [B561](#b561) | new, 2026-10-14 (D152) | product | Controller setup | A standalone CPython for a host whose repositories offer no locked Python ABI | D152's clause 3: every supported host offers a locked ABI |
 | [B562](#b562) | new, 2026-10-14 (D152) | enabling | Controller setup | CI proposes a lock refresh when a newer ansible-core 2.21 patch or dependency appears | D152's clause 4: `outdated` is advisory and the owner regenerates the lock |
 | [B563](#b563) | new, 2026-10-14 (D152) | product | Controller setup, with State reconciliation | apply rebuilds the runtime for another Python ABI after an OS upgrade without setup | D152's clause 8: a new ABI may need dnf, which only setup and the controller stage run |
+| [B567](#b567) | new, 2026-10-14 (X91 audit) | safety | Substrate | Provider-host removal proves no domain is attached to a managed network before it stops the network | Found by the X91 audit; blocking: recommended as a dedicated safety slice before any further `destroy` on a shared libvirt host |
+| [B568](#b568) | new, 2026-10-14 (X91 audit) | safety | Substrate, Infrastructure services and Managed OS | A context incarnation identity enters every ownership marker, so a same-name context never adopts an abandoned object | Found by the X91 audit; blocking: recommended as a dedicated safety slice before any further `destroy` on a shared libvirt host; needs an owner decision |
+| [B569](#b569) | new, 2026-10-14 (X91 audit) | safety | State reconciliation | The operation store refuses a transition the block table does not admit | Found by the X91 audit; no path reaches it today: the scheduler is the only caller |
+| [B570](#b570) | new, 2026-10-14 (X91 audit) | defect | State reconciliation | A fresh destroy records a host-free removal answer on the apply's block only after quiescence is proved | Found by the X91 audit; no milestone depends on it: it changes the D119 table and rides with the check-naming item B460 |
+| [B571](#b571) | new, 2026-10-14 (X91 audit) | safety | Infrastructure services and Substrate | A retained, running physical system blocks the removal of the services it uses | Found by the X91 audit; no milestone depends on it: the operator's destroy is explicit and the contract states the quiescence rule (B70) |
+| [B572](#b572) | new, 2026-10-14 (X91 audit) | safety | State reconciliation and Workspace | Operation-area admission reserves every record a running block's completion and resolution can need | Found by the X91 audit; no milestone depends on it: it takes roughly 340 retried attempts to reach the bound; extends B243 and B267 |
+| [B573](#b573) | new, 2026-10-14 (X91 audit) | safety | Storage | A Ceph remote worker ends on cancellation or disconnect, or the engine waits out its budget | Found by the X91 audit; no milestone depends on it: the bootstrap marker fences the one destructive race |
+| [B574](#b574) | new, 2026-10-14 (X91 audit) | safety | State reconciliation | A settled apply also requires the current build to freeze the same plan | Found by the X91 audit; needs an owner decision: the recommendation is not now, because `diff` shows the drift |
+| [B575](#b575) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | One pure classifier replaces the five parallel transition derivations | Found by the X91 audit; no consumer until the first scenario slice after X91, whose first step it is |
+| [B576](#b576) | new, 2026-10-14 (X91 audit) | defect | Substrate | Libvirt machine evidence proves the frozen definition the spec claims, and a redefine reports changed | Found by the X91 audit; needs an owner decision, and `diff` does not compare the unproved fields meanwhile |
+| [B577](#b577) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph pool and client requests stop embedding the cluster request | Found by the X91 audit; no milestone depends on it: adding one pool already moves no sibling's digest; a prerequisite of the first Ceph delta scenario |
+| [B578](#b578) | new, 2026-10-14 (X91 audit) | defect | State reconciliation and CLI | `status` lists realized objects that are no longer declared | Found by the X91 audit; no milestone depends on it: `diff` already lists them and `apply` refuses before any effect |
+| [B579](#b579) | new, 2026-10-14 (X91 audit) | defect | State reconciliation | A stage refusal for an unselected failed block is decided the same whether or not a resolution ran | Found by the X91 audit; no milestone depends on it: nothing outside the selection starts either way |
+| [B580](#b580) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | One owned-bindings function replaces the three binding computations | Found by the X91 audit; no milestone depends on it: they agree while an operation holds one binding |
+| [B581](#b581) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | A lost block record reads pending through one normalization | Found by the X91 audit; no milestone depends on it: the store already normalizes, so only hand-built maps reach the copies |
+| [B582](#b582) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | `StartResolution` proves the attempt and parses entry names as `LastResolution` does | Found by the X91 audit; no milestone depends on it: the two parsers agree on every name the store writes |
+| [B583](#b583) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | Record version literals come from one declaration per record | Found by the X91 audit; no milestone depends on it: a missed site fails closed |
+| [B584](#b584) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | Goldens pin a resolution with an observation failure, an adopted attempt and `replaces` | Found by the X91 audit; no milestone depends on it: test depth |
+| [B585](#b585) | new, 2026-10-14 (X91 audit) | defect | Substrate | The spec and the role agree on which libvirt disk sizes refuse | Found by the X91 audit; no milestone depends on it: the role is the safe side |
+| [B586](#b586) | new, 2026-10-14 (X91 audit) | enabling | Controller setup | The controller-clients content digest comment says only what it hashes | Found by the X91 audit; no milestone depends on it: a comment |
+| [B587](#b587) | new, 2026-10-14 (X91 audit) | defect | Storage | Ceph pool `size` and `min_size` drift is refused or reported, not silently converged | Found by the X91 audit; needs an owner decision, and no scenario X91 admits reaches it |
+| [B588](#b588) | new, 2026-10-14 (X91 audit) | enabling | Storage and Managed OS | Image and tree observations surface decode errors as unknown with a reason | Found by the X91 audit; no milestone depends on it: the effect is the same, only the diagnostic is weaker |
+| [B589](#b589) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph core and host blocks gain an unresolved reason | Found by the X91 audit; no milestone depends on it: diagnostics only |
+| [B590](#b590) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph wires its image dependency one way | Found by the X91 audit; no milestone depends on it: the edges are correct today |
+| [B591](#b591) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | `status` and `Ownership` share one per-object derivation | Found by the X91 audit; no milestone depends on it: the two views disagree only for a released object |
+| [B592](#b592) | new, 2026-10-14 (X91 audit) | defect | CLI | The CLI spec's stage-selection text matches the retry rule | Found by the X91 audit; no milestone depends on it: stale contract text |
+| [B593](#b593) | new, 2026-10-14 (X91 audit) | enabling | Desired state | `RenderEffective` can keep the authored catalog and origins for a consumer that needs them | Found by the X91 audit; no consumer: `diff` takes the compile port |
+| [B594](#b594) | new, 2026-10-14 (X91 audit) | enabling | Desired state | One envelope shape definition serves the decoder and the encoder | Found by the X91 audit; no milestone depends on it: drift risk only |
+| [B595](#b595) | new, 2026-10-14 (X91 audit) | enabling | Storage | A Ceph refusal table test and a docs-check entry | Found by the X91 audit; no consumer until the first Ceph delta scenario |
+| [B596](#b596) | new, 2026-10-14 (X91 audit) | enabling | Storage and Container cluster | Ceph and agent-install observations run without outputs when no operation records them | Found by the X91 audit; no milestone depends on it: until then `diff --observe` reads these blocks as unknown |
+| [B597](#b597) | new, 2026-10-14 (X91 audit) | defect | State reconciliation | The state table names the paused destroy row | Found by the X91 audit; no milestone depends on it: the decision (continue) does not change |
+| [B598](#b598) | new, 2026-10-14 (X91 audit) | safety | State reconciliation and Workspace | Input restored byte for byte after an edit settles a completed apply, or keeps refusing | Found by the X91 audit; needs an owner decision |
+| [B599](#b599) | new, 2026-10-14 (X91 audit) | safety | Substrate and Managed OS | Every observe task writes only inside the runner's private directories | Found by the X91 audit; its extent is what the allowlist test finds, and the audit names two candidates |
+| [B600](#b600) | new, 2026-10-14 (X91 audit) | product | Storage | `diff --observe` proves a Ceph pool's size, minimum size and role | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
+| [B601](#b601) | new, 2026-10-14 (X91 audit) | product | Substrate | `diff --observe` names a bare-metal Machine's hardware NICs and the BMC address that answered | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
+| [B602](#b602) | new, 2026-10-14 (X91 audit) | product | Infrastructure services | `diff --observe` names a managed service's and the artifact server's bind address, ports and listeners | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
+| [B603](#b603) | new, 2026-10-14 (X91 audit) | product | Managed OS | `diff --observe` names an OS tree's and an install's address | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
+| [B604](#b604) | new, 2026-10-14 (X91 audit) | product | Container cluster | `diff --observe` names the agent install's release version and declared nodes | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
+| [B605](#b605) | new, 2026-10-14 (X91 audit) | product | Storage | `diff --observe` names a Ceph image's, host's and core's image, topology nodes and labels | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
+| [B606](#b606) | new, 2026-10-14 (X91 review) | enabling | Substrate | A libvirt machine whose only difference is a disk size reads partial under observation, so a hand-resized disk beside a running controller projects | Found in X91's review; no milestone depends on it: the resize reads unknown with the size refusal as its reason, and `diff --observe` shows no hunk for it |
 
 ### B82
 
@@ -1316,6 +1356,655 @@ dnf. **Exit evidence:** a lifecycle test in which a changed ABI with its
 interpreter present and its wheels cached rebuilds without setup, and one in
 which a missing interpreter still refuses with "run bootwright setup".
 
+### B567
+
+Blocking: recommended as a dedicated safety slice before any further `destroy`
+on a shared libvirt host. Destroying a libvirt provider host runs `virsh
+net-destroy` and `net-undefine` on every owned managed network
+(`ansible/collections/ansible_collections/bootwright/core/roles/substrate_libvirt_host/tasks/destroy.yml:101-134`)
+and never asks libvirt which running domains are plugged into the network or its
+bridge. `HostCapability.Quiescent` answers quiescent unconditionally, because its
+machines are probed in this removal (`internal/substrate/libvirt/capability.go:558-563`),
+which assumes that only this context's Machines use the network. Nothing outside
+one catalog enforces it: admission's shared-bridge check covers one context
+(`internal/substrate/admission.go:428-466`), host reservations claim `bridge:`,
+`libvirt-network:` and `prefix:` keys only for managed attachments
+(`internal/substrate/libvirt/requests.go:167-182`), and an `external` attachment,
+the default, claims nothing. Another context's Machines, or the operator's own
+domains, can therefore share a managed bridge, and `destroy` removes it from
+under them. The apply path guards the same hazard for a drifted network
+(`ansible/collections/ansible_collections/bootwright/core/roles/substrate_libvirt_host/tasks/apply.yml:177-210`
+and `network_guests` in
+`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/substrate_libvirt.py:311-336`);
+destroy has no equivalent, and the engine gate runs only for a fresh destroy
+(`internal/reconciliation/lifecycle/execution.go:1078-1093`), so a continuation
+skips it. The code matches `specs/substrates.md:167-170`, which says quiescence
+is derived rather than observed, and that sentence contradicts
+`specs/substrates.md:147-153` (stopping a network disconnects every domain
+plugged into it) and `specs/state-reconciliation.md:1787` (removal takes only
+what is out of use). **Impact:** running workloads outside the destroying context
+lose their uplink and cannot restart until the bridge exists again; the other
+context's settled apply still reports `done`, so nothing reports the damage. The
+shipped examples all attach to `virbr-lab` on the controller host. **Smallest
+fix:** the removal observation lists guests for every owned active network, not
+only a drifted one; `destroy.yml` gains, before the first `net-destroy`, the two
+refusals `apply.yml` has (the listing did not answer, or a domain that is not
+shut off is plugged in), which also covers a continuation;
+`HostCapability.Quiescent` probes instead of asserting and refuses
+`lifecycle.live` naming the attached domains, so the refusal comes before
+registration; the two spec sentences and the comment at `capability.go:558` say
+so. Under D142 and D145 the role guard continues a live operation and needs no
+destroy. A host-wide `bridge-use:` reservation, so that an external attachment
+conflicts with another context's managed bridge, is a separate item to record
+when this one is promoted. **Exit evidence:** a collection unit test that
+`destroy.yml` refuses on an unanswered listing and on a plugged-in domain that is
+not shut off, a capability test that `Quiescent` returns `lifecycle.live` naming
+the attached domains, a lifecycle test that a continuation refuses the same way,
+and `make docs-check` over the amended spec sentences.
+
+### B568
+
+Blocking: recommended as a dedicated safety slice before any further `destroy`
+on a shared libvirt host. Libvirt object identity is a pure function of the
+context name and the Machine name: `DomainName`, `DiskDirectory`,
+`ControllerUnitName`, `DomainUUID`, the MAC address and the disk serial
+(`internal/substrate/naming.go:55-80`). "Owned" means the domain metadata names
+this context and Machine and the UUID equals the derived one; nothing ties an
+object to a context incarnation, and the marker and the request digest carry no
+operation identity (`internal/managedos/installation/requests.go:203-212`,
+`internal/reconciliation/plan.go:196-212`). A fresh apply registers with no prior
+host observation and the adoption guard refuses only an unowned same-name
+domain. Two paths reach the gap: the documented recovery, `context delete
+--purge --allow-orphans` followed by "the same init"
+(`specs/contexts.md:590-596`), which omits the "remove those objects by hand"
+step of `specs/state-reconciliation.md:1479-1481`; and two controllers whose
+contexts share a name and target one libvirt host, which
+`specs/infrastructure-services.md:89-91` already calls not coordinated. The new
+apply then keeps the old disks (`creates:`), runs `virsh define` over the old
+domain, overwrites the emulator's htpasswd and TLS and restarts it
+(`ansible/collections/ansible_collections/bootwright/core/roles/substrate_libvirt_machine/tasks/apply.yml:33-44`).
+A powered-off abandoned guest gives no identity answer, the anaconda guard passes
+when nothing answered
+(`ansible/collections/ansible_collections/bootwright/core/roles/managedos_install_anaconda/tasks/apply.yml:427-440`),
+`pre_boot.yml` requires only power Off, and the Kickstart runs `clearpart --all`
+(`internal/managedos/installation/kickstart.go:367-372`), so the disk is erased.
+A running guest with the deterministic marker is silently accepted as installed.
+Ceph is not affected, because its FSID is bound to the operation
+(`specs/storage.md:155-158`). Managed services and the artifact server show the
+same pattern, because `infra_service.foreign()` skips the socket check when a
+unit of that name is active
+(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/infra_service.py:127-139`);
+that part is not fully traced. This is not a code and spec mismatch: name-derived
+ownership is the specified contract, and the promise that scenario 1 means real
+state is absent is an unproved assumption. **Impact:** silent data loss and
+takeover of BMC credentials on objects the operator abandoned or another
+controller runs; neither the plan nor the confirmation names any pre-existing
+object. **Smallest fix:** first, a spec-only interim wording at
+`specs/contexts.md:590-596` and in the orphan confirmation text: remove the
+abandoned objects by hand before initializing the name again. Then a random
+context incarnation id minted at `context init` and kept in the registry,
+written into the libvirt ownership metadata, into the derivation inputs of the
+UUID, MAC and serial, into `MarkerFor` and into the ownership markers of service
+and artifact-server units, so a leftover object reads as foreign and the
+existing "remove or rename it" refusals fire. It moves content digests across
+five capabilities and needs no compatibility reader before 1.x. Merge it with
+the Ceph lineage id of B79, because both are the identity seam any scenario
+beyond the three needs. **Exit evidence:** the owner's decision on the
+incarnation design; a test per capability that an object carrying another
+incarnation reads as foreign and its apply and destroy refuse; the contract
+guard goldens and `cmd/bootwright/contract_versions_test.go` classifying every
+new literal; the interim wording in the contexts spec.
+
+### B569
+
+`Store.StartAttempt`, `StartResolution` and `CompleteResolution` write without
+checking the block record's state: `StartAttempt` sets `Attempts+1` and
+`running` on whatever it reads, `StartResolution` allocates the next resolution,
+and `completeRecord` sets the state for any effect and state pair
+(`internal/reconciliation/operationstore/store.go:717-776`, `:889-932`,
+`:1009-1046`). The only guards are in memory: `firstAdmission` and `unproved`
+(`internal/reconciliation/lifecycle/scheduler.go:205-240`), the re-read in
+`verifyBasis`, and `ResolutionTransition`
+(`internal/reconciliation/state.go:104-116`) in the single caller. No path
+reaches a bad transition today. A second caller, such as a reconcile of only the
+new pool or a wrongly built diff, could re-run an effect over an unproved block,
+demote a `done` block or replace the completion evidence dependents read
+(`internal/reconciliation/lifecycle/evidence.go:159-168`). **Impact:** defense in
+depth; the durable record would lie silently if a future path misused the store.
+**Smallest fix:** `StartAttempt` refuses `lifecycle.state` unless the record
+reads pending (an absent record counts) or failed under a retry, leaving the
+adopt branch alone; `StartResolution` refuses unless the record reads unknown or
+running with `Attempts == attempt`; `completeRecord` refuses unless the pair
+equals `ResolutionTransition(effect)`; the tests that start after a done block
+(`internal/reconciliation/operationstore/store_test.go:519`, `:587-601`) are
+rewritten; one spec sentence under Block transitions. **Exit evidence:** a store
+test per refusal, the rewritten tests, and `TestTransitionTablesMatchSpec`
+unchanged. The parsing half is [B582](#b582).
+
+### B570
+
+A fresh destroy over an unproved apply block falls back to the removal check
+after any apply observation that does not prove completion. Four removal checks
+do not observe and synthesize `Completed`: controller clients, Ceph host, Ceph
+image, and Ceph core when `RetiredWithHosts`
+(`internal/controller/clients/capability.go:182-201`,
+`internal/storage/ceph/host.go:437-448`, `internal/storage/ceph/image.go:269-282`,
+`internal/storage/ceph/retirement.go:75-81`). That answer is recorded as
+no-effect or failed on the apply's block
+(`internal/reconciliation/lifecycle/attempts.go:182-201`, `:263-279`) before
+`proveQuiescent` runs (`internal/reconciliation/lifecycle/execution.go:1085-1094`,
+`:1187-1205`); if quiescence then refuses, the record stays. It is the specified
+D119 behavior (`specs/state-reconciliation.md` removal-check rules), but the
+record claims an absence no host observed. **Impact:** `status` and a diff read
+"never performed", and the next apply retries instead of resolving first; no
+damage, because the Apply paths converge under the FSID ownership checks.
+**Smallest fix:** mark the checks that do not observe (`Observing=false`), record
+those blocks failed with the effect unknown, and have a continuation resolve
+them before it retries. Do not leave them unknown, because that breaks destroy of
+retired Ceph. It changes the D119 table, so it rides with B460. **Exit
+evidence:** a lifecycle test that a refused quiescence leaves the apply block
+unrecorded by a removal check that observed nothing, a test that a retired Ceph
+destroy still completes, and the amended table in the state-reconciliation spec.
+
+### B571
+
+Managed services, the artifact server and the installation each derive
+quiescence from "their Machines are probed", and a retained bare-metal Machine
+always answers quiescent
+(`internal/infrastructureservices/managedservice/capability.go:405-411`,
+`internal/infrastructureservices/artifactserver/capability.go:323-328`,
+`internal/managedos/installation/capability.go:572-577`,
+`internal/substrate/baremetal/capability.go:212-217`). Destroy therefore removes
+DNS, NTP and the artifact server from under a running, retained physical host
+(the lab-baremetal example's NTP `lab-ntp` and DNS `lab-dns`). Each link is in
+the spec (`specs/infrastructure-services.md:362-365`,
+`specs/substrates.md:519-535`); the consequence is not, and "removes only what is
+out of use" (`specs/state-reconciliation.md:1787`) is overstated. **Impact:** a
+retained host loses name resolution and time sync; the operator's destroy was
+explicit and no data is lost. **Smallest fix:** state in the spec that derived
+quiescence holds only through consumers that prove their stop; the destroy plan
+names each retained consumer that still references a removed service; the three
+code comments say so. The `Quiescent` answers do not change. It sits beside B70.
+**Exit evidence:** the spec sentence, a plan test that a retained physical
+consumer is named, and `make docs-check`.
+
+### B572
+
+`capacity()` checks `entries+1 > maxOperationEntries` on every write, including
+a Replace of an existing record and an Append to an existing log, which add no
+entry (`internal/workspace/contextfs/operations_linux_amd64.go:739-750`, with
+`:623`, `:648`, `:668` and `:697` settling zero entries). Admission reserves room
+once at registration (`2*FirstPassEntries + 1024`,
+`internal/reconciliation/operationstore/records.go:52-63`), and a continuation
+re-admits nothing, so an operation's own retries and resolutions draw the
+reserve down unchecked
+(`internal/reconciliation/operationstore/store.go:168-191`, `:231-255`).
+When an append fails at the bound, `logBoundary.fail` latches the fault and
+cancels the shared work context, interrupting every sibling effect
+(`internal/reconciliation/lifecycle/logging.go:31-48`, `:99-104`);
+`CompleteAttempt` is refused, so the block stays durably `running`
+(`internal/reconciliation/lifecycle/attempts.go:102-103`, `:153-156`); and every
+exit is refused: resume restores with an Append, resolve needs a
+`WriteExclusive`, and destroy restores before it resolves. Only `context delete
+--purge --allow-orphans` remains, which leads into the same-name adoption of
+B568. The `runtime.log` remedy also names the wrong cause. **Impact:** reaching
+the entry bound takes roughly 340 retried attempts or tens of continuations with
+several persistently failing blocks. The interruption equals a crash and adapters
+tolerate it, but the promise to resume until equal is lost. This is a stronger
+form of B243 and B267. **Smallest fix:** `capacity` counts only the entries a
+write adds, so exhaustion stops at a creating write (`StartAttempt` or
+`OpenLog`) before any effect runs, with a spec edit at
+`specs/contexts.md:531`; optionally admit an attempt's whole write set before its
+effect starts; give the bound its own diagnostic; derive `FirstPassEntries` from
+one declared list of record paths. Schedule it before any scenario adds a
+per-block record. **Exit evidence:** a test double that enforces the entry bound,
+a test that hits the bound mid-attempt and leaves the block resolvable, and the
+amended contexts spec.
+
+### B573
+
+The runner's "no adapter effect outlives cancellation" holds only for the local
+process tree
+(`internal/reconciliation/ansiblerunner/process_linux_amd64.go:267-273`). A Ceph
+remote worker (setsid, `RequestTTY no`, no stdin or channel watch) runs on for
+up to 640 s, or 1800 to 1920 s for a bootstrap, after cancellation or a dropped
+link
+(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_worker.py:1-9`,
+`:186-188`, `:230-340`;
+`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:28-31`).
+The engine treats unknown or running as "the executor died" and resolves or
+retries at once
+(`internal/reconciliation/lifecycle/execution.go:1504-1506`,
+`internal/reconciliation/lifecycle/scheduler.go:276-289`, D146). A concurrent
+bootstrap is fenced by `bootstrap-attempt.json` and the daemons check
+(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:1767`,
+`:1773`, `:1788`, `:1873`); the later phases rely on idempotence, which was not
+audited for concurrency. **Impact:** a misleading partial-cluster refusal or a
+failed block during the window; no confirmed damage. A canceled `diff --observe`
+can keep a read-only worker alive for the same window. **Smallest fix:** reword
+the runner comment and add a spec clause stating the remote window
+(`specs/security.md:165-177` or `specs/storage.md:110`); then a remote-ceiling
+wait, or a worker that ends on channel EOF, before any delta re-runs a Ceph
+block. SSH qualification is already open in M2. **Exit evidence:** the spec
+clause and comment now; a test that a canceled remote worker ends, or that the
+engine waits its budget before it resolves.
+
+### B574
+
+`settleApply` returns a no-op when the input is unchanged (name, revision and
+`inputDigest` equal; `inputDigest` hashes the raw input files and markers only)
+and every frozen block reads `done`
+(`internal/reconciliation/lifecycle/execution.go:480-491`, `:516-525`). It never
+reads `PlanDigest`, `AutomationDigest` or `Executable`, never re-plans and never
+contacts a host. A newer build that would plan different or extra blocks for the
+same input still settles and reports `done`. This is the specified contract
+(`specs/state-reconciliation.md:43-53` and row `:461`), so a settled apply
+attests only that its own records are complete for the unchanged input; D153
+words the scenario that way and `diff` shows the drift. **Impact:** the target is
+never touched, so it fails safe; the output reads like a statement about the live
+target. **Smallest fix:** if the owner decides so, settle also re-plans, compares
+`PlanDigest` and reports "another build plans differently" instead of `done`,
+with no host check. The recommendation is not now. **Exit evidence:** the
+owner's decision recorded; if adopted, a lifecycle test that a build planning
+differently does not settle, with the spec row.
+
+### B575
+
+The transition rule is restated in about five derivations. `decideOver`
+(`internal/reconciliation/lifecycle/execution.go:367-423`) alone gates effects;
+`previewed` (`internal/reconciliation/lifecycle/service.go:178-198`),
+`supersedable` (`internal/reconciliation/lifecycle/execution.go:670-675`),
+`nextAction` (`internal/reconciliation/lifecycle/attempts.go:572-582`, consumed
+by `continuationCommand` and `status`) and `frozenReopenOf`
+(`internal/reconciliation/lifecycle/frozenbinding.go:168-207`) re-derive parts of
+the same facts. Only `TestTransitionTablesMatchSpec` drives `decide`;
+`previewed`, `nextAction` and `frozenReopenOf` have no row-level test. **Impact:**
+drift can only mislead `plan` or `status`, because effects pass through
+`decideOver`; every new scenario would be threaded through five places by hand.
+**Smallest fix:** `decide` reports the verb it chose, so `previewed` goes; one
+pure `classify()` over the operation's verb and state and its pending and unknown
+blocks returns a kind (fresh, continue, resolve, finalize, replace-removal,
+settle or refuse); `decideOver`, `nextAction` and `frozenReopenOf` switch on it;
+the `stateMachineRows` cases also assert the previewed verb and `nextAction`. It
+is the first step of the first scenario slice after X91. **Exit evidence:** the
+refactor with no behavior change, `TestTransitionTablesMatchSpec` green, and a
+row-level test of each derived view.
+
+### B576
+
+The spec says completion "requires the domain defined with the frozen
+definition" (`specs/substrates.md:336`), but `ValidateMachinePresence` proves
+the domain name and ownership, the active unit, the controller image, the system
+UUID, a non-empty power state and the disks
+(`internal/substrate/libvirt/evidence.go:70-105`, `:382-409`). It never reads
+back vCPU, memory, interfaces and MACs, TPM or boot order. Every apply re-runs
+`virsh define`, so apply converges the definition by construction, but
+`changed_when` is true only when the domain was absent and the outcome rollup
+ignores the define, so a redefinition is reported `unchanged`
+(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/substrate_libvirt.py:386-416`,
+`:684-694`). On the resolution path, `Observe` can resolve a block `done` with no
+redefine, after a cross-build template change or an operator `virsh edit`.
+**Impact:** a false claim of completeness and a mislabelled outcome; the target
+is not damaged, and `diff --observe` cannot compare the unproved fields. **Smallest
+fix:** narrow `specs/substrates.md:336` to what the evidence proves and say that
+the definition is rewritten on every attempt; optionally report `changed` when
+the dumpxml taken before the define differs from the rendered XML; widen
+`libvirt_domain_inspect` and `MachineEvidence` as the Machine projector item
+needs a field. The redefine semantics need the owner's decision. **Exit
+evidence:** the decision recorded; the narrowed sentence; if the outcome is
+adopted, a role test that a drifted definition reports `changed`.
+
+### B577
+
+Ceph pool and client requests embed the whole cluster request
+(`internal/storage/ceph/requests.go:426-477`,
+`internal/storage/ceph/capability.go:46-56`, `:90`,
+`internal/reconciliation/plan.go:196-212`). Adding one pool moves no sibling's
+digest, because a pool embeds the cluster and not its sibling pools; the debt
+applies only to a scenario that edits the cluster and reconciles the delta. Part
+of the embedding is load-bearing: the OSD-host count gates the pool size
+(`internal/storage/ceph/requests.go:447-458`) and the native module requires the
+hosts
+(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:352-356`).
+**Impact:** none today; a prerequisite of the recipe for one more `StoragePool`
+over a completed apply. **Smallest fix:** a pool and a client request carry only
+the cluster facts they use, so a comparison shows exactly one added block and
+every other block unchanged. It rides with the Ceph lineage id of B79. **Exit
+evidence:** a request-shape test that a pool's digest does not move with an
+unrelated host edit, and the contract guard goldens.
+
+### B578
+
+`status` builds its rows from the compiled catalog only, and
+`realizedClusters` and `realizedServices` decorate existing rows
+(`internal/reconciliation/lifecycle/status.go:194-199`, `:254-260`,
+`:515-548`, `:673-689`). After `context update --input-dir` over a completed
+apply, which only warns (`specs/contexts.md:157-160`), an object the input no
+longer declares is not listed although `lifecycle.blocks` still lists its blocks
+and `apply` refuses. **Impact:** misleading output, no harm. `diff` already shows
+the realized-only side. **Smallest fix:** build the rows from the union of
+declared and realized objects, mark the undeclared ones, and update
+`specs/cli/output.md:632`. **Exit evidence:** a `status` golden over a context
+whose edited input removed a realized object.
+
+### B579
+
+After an observation, `firstAdmission` falls through to `Startable` when the only
+failed block is outside the selection
+(`internal/reconciliation/lifecycle/scheduler.go:196-240`), while the same
+selection with nothing unproved refuses `lifecycle.stage`
+(`internal/reconciliation/lifecycle/execution.go:597-607`,
+`internal/reconciliation/stage.go:62-83`). The doc comment intends this; the
+spec says "worked" (`specs/state-reconciliation.md:876-879`) and the code does
+not count an observation as worked. **Impact:** less predictable; nothing
+outside the selection, and nothing downstream of the failed block, starts.
+**Smallest fix:** decide whether "worked or observed" applies, say so in the
+spec and add a unit test. Needs a small owner decision. **Exit evidence:** the
+decision, the spec sentence and a scheduler test for both orders.
+
+### B580
+
+The release set is computed in four places and the reopen binding in three
+(`internal/reconciliation/lifecycle/execution.go:385-391`, `:403-404`,
+`:701-702`, `:712-727`; `internal/reconciliation/lifecycle/finalization.go:106-116`;
+`internal/reconciliation/lifecycle/frozenbinding.go:186-197`). They agree only
+because `Operation.Bindings` holds at most one entry
+(`internal/reconciliation/lifecycle/execution.go:1572-1576`) while the reader
+accepts up to 64. **Impact:** drift risk when a second binding exists. **Smallest
+fix:** one `ownedBindings(store, op) (reopen, release)`, or pin `len(Bindings) <=
+1` in `validateOperation`. **Exit evidence:** one function with the three callers
+and a test that the four release sets agree for an operation of each verb.
+
+### B581
+
+"A missing state reads pending" is open-coded at about nine sites
+(`internal/reconciliation/lifecycle/execution.go:503-505`, `:1323-1330`;
+`internal/reconciliation/lifecycle/contradictions.go:92-97`;
+`internal/reconciliation/lifecycle/service.go:208-213`;
+`internal/reconciliation/lifecycle/status.go:90-93`, `:621-625`;
+`internal/reconciliation/lifecycle/attempts.go:586-591`;
+`internal/reconciliation/lifecycle/finalization.go:292-298`;
+`internal/reconciliation/stage.go:164-169`). The store already normalizes
+(`internal/reconciliation/operationstore/store.go:559-569`, `:672-673`), so the
+guards fire only for hand-built maps. **Impact:** drift risk for new readers such
+as a diff. **Smallest fix:** route every site through `blockState` in
+`internal/reconciliation/stage.go`, or guarantee a non-empty state at the
+producers. **Exit evidence:** the copies gone and one test of the shared
+function.
+
+### B582
+
+`StartResolution` and `LastResolution` parse resolution entry names differently
+(`internal/reconciliation/operationstore/store.go:903-914` against `:968-981`),
+and `StartResolution` never reads `attempt-N.json`. **Impact:** none on the names
+the store writes; part of the same gap as B569. **Smallest fix:** one shared
+parser with a strict `.json` check and a canonical number, and `StartResolution`
+proving the attempt it resolves. **Exit evidence:** a store test that a
+non-canonical entry name and a resolution of a missing attempt both refuse.
+
+### B583
+
+The index, block and attempt record versions are bare literals; only
+`OperationVersion` has a name
+(`internal/reconciliation/operationstore/records.go:147`, `:261`, `:271`,
+`:350`, `:363`; `internal/reconciliation/operationstore/store.go:82`, `:673`,
+`:758`, `:923`). **Impact:** a version bump can miss a site; it fails closed.
+**Smallest fix:** one named constant per record, classified in the contract
+guard (`cmd/bootwright/contract_versions_test.go`). **Exit evidence:** no bare
+version literal remains and the guard classifies each constant.
+
+### B584
+
+No golden covers a resolution carrying an `ObservationFailure`; its tags are
+unpinned at byte level. `replaces` is pinned only by a substring, and an adopted
+attempt has the same shape as `attempt-running`
+(`internal/reconciliation/operationstore/golden_test.go:266-273`,
+`internal/reconciliation/operationstore/records.go:210`, `:218-222`,
+`internal/reconciliation/operationstore/store_test.go:268-273`, `:1051-1054`).
+**Impact:** a tag rename passes silently. **Smallest fix:** a
+`resolution-unknown-failure.golden` and goldens for an adopted attempt and for
+`replaces`. **Exit evidence:** the three goldens.
+
+### B585
+
+`specs/substrates.md:292-293` and `:347-348` say the root disk size refuses; the
+role refuses a size mismatch on any present disk
+(`ansible/collections/ansible_collections/bootwright/core/roles/substrate_libvirt_machine/tasks/apply.yml:46-54`,
+`internal/substrate/libvirt/requests.go:140`). The role is the safe side.
+**Impact:** the spec understates the refusal. **Smallest fix:** both sentences
+say "an owned disk, root or data". **Exit evidence:** the two sentences and `make
+docs-check`.
+
+### B586
+
+The comment on the controller-clients `ContentDigest` says shape and automation
+changes invalidate a plan, but the function hashes only the label,
+Implementation and Version
+(`internal/controller/clients/requests.go:115-122`). The contract guard test is
+the real protection, and only for Go schemas (D145,
+`cmd/bootwright/contract_versions_test.go:43`). **Impact:** the comment
+over-claims. **Smallest fix:** reword it to what the function hashes, or drop it
+under the comment rule. **Exit evidence:** the reworded comment under `make
+quick`.
+
+### B587
+
+The Ceph pool phase runs `osd pool set size` and `min_size` blindly on every
+pass that is not ready and that passes the ownership check
+(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:2412-2441`,
+`:2990-2992`;
+`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:550-553`).
+Drift is written back with the declared values and not reported. **Impact:**
+silent correction of an operator's change; out of scope for the three admitted
+scenarios. **Smallest fix:** for the first Ceph delta, read the live values,
+report the drift and write only when admitted; until then the owner decides
+whether the phase refuses or reports. **Exit evidence:** the decision recorded
+and a role test that drifted values are reported, not written. The projector
+that proves them is [B600](#b600).
+
+### B588
+
+`Observe` on the Ceph image and on the installation tree drops decode errors and
+returns Unknown without an error
+(`internal/storage/ceph/image.go:262-265`,
+`internal/managedos/installation/tree.go:248-251`, against
+`internal/storage/ceph/host.go:405-408`;
+`internal/reconciliation/lifecycle/attempts.go:190`, `:301-308`;
+`internal/reconciliation/lifecycle/unresolved.go:116-148`). The effect is the
+same, but no observation-failed event or recorded failure is produced.
+**Impact:** weaker diagnostics. **Smallest fix:** return the error. **Exit
+evidence:** a test per capability that a malformed evidence reads Unknown with a
+recorded reason.
+
+### B589
+
+The Ceph core and host capabilities implement no `Unresolved`, so the generic
+"proved neither" reason applies; the image capability is the only one
+(`internal/storage/ceph/image.go:291`,
+`cmd/bootwright/wiring_reconciliation.go:203`, `:206`,
+`internal/reconciliation/lifecycle/unresolved.go:16-52`). **Impact:**
+diagnostics only. **Smallest fix:** `Unresolved` methods using
+`lifecycle.Drifted`. **Exit evidence:** a test of the reason each returns.
+
+### B590
+
+Ceph wires the image dependency two ways: a pool gets it through `Requires`,
+which also pulls in every host block, and cluster and client blocks use explicit
+edges (`internal/storage/ceph/capability.go:59-89`,
+`internal/storage/ceph/image.go:151-152`, `internal/storage/ceph/host.go:225-227`,
+`internal/reconciliation/plan.go:226-239`). The edges are correct today
+(`internal/storage/ceph/image_test.go:97-101`). **Impact:** maintainability.
+**Smallest fix:** one mechanism. **Exit evidence:** the existing edge test green
+over the single mechanism.
+
+### B591
+
+`Ownership()` and `realizations()` are two independent folds of the same
+records and disagree: a released object reads Destroy and done in one and
+pending or unknown in the other, one keeps running apart from unknown and the
+other merges them, and the rankings differ
+(`internal/reconciliation/lifecycle/status.go:59-169` against `:513-689`;
+consumers in `internal/machine/access/hostkey.go:59` and
+`internal/machine/inventory/service.go:45`). `diff` reads `realizations` and adds
+no third fold. **Impact:** consistency risk between `status` and the Machine
+commands. **Smallest fix:** one per-object fold with a test that ties the two
+views together. **Exit evidence:** one fold and that test.
+
+### B592
+
+`specs/cli.md:531-535` still says "the one failed block" is retried and other
+ready blocks wait; D144 and D146 replaced that rule, and the code and
+`specs/state-reconciliation.md:865-874` agree with each other
+(`internal/reconciliation/lifecycle/scheduler.go:165-167`). **Impact:** stale
+contract text. **Smallest fix:** reword the CLI spec to the retry rule. **Exit
+evidence:** the reworded text and `make docs-check`.
+
+### B593
+
+`RenderEffective` returns only the counts and the effective catalog, while the
+state from the compile port still exposes `Authored` and `Origin`
+(`internal/desiredstate/compilation/service.go:33-41`,
+`internal/desiredstate/compilation/requests.go:17-20`,
+`internal/reconciliation/lifecycle/contracts.go:105`). **Impact:** none, because
+`diff` uses the compile port. **Smallest fix:** `RenderEffective` can keep the
+authored catalog and origins when a consumer needs them; until one does, leave
+it. **Exit evidence:** the consumer that needs it, with a test.
+
+### B594
+
+The envelope shape is defined twice, once typed for decoding and once untyped for
+encoding (`internal/desiredstate/compilation/decoding.go:59-64`,
+`internal/desiredstate/encoding/encoding.go:72-74`). **Impact:** drift risk for
+a renderer. **Smallest fix:** one shared constructor in the API package. **Exit
+evidence:** one definition and a round-trip test.
+
+### B595
+
+Ceph has no refusal table in the spec and no
+`Test*RefusalTableMatchesUnsupported`, and the docs-check package list, kept by
+hand, omits it (`internal/storage/ceph/capability.go:104-122`,
+`internal/reconciliation/lifecycle/contracts.go:295-297`, `Makefile:54`). Ceph is
+the first scenario consumer. **Impact:** a refusal can change without the spec.
+**Smallest fix:** the table, a test over `Unsupported()`, and the package in the
+docs-check list. **Exit evidence:** that test and a docs-check entry.
+
+### B596
+
+The Ceph cluster and client observations, and the agent install and media
+observations, hand over material (dashboard, client keyring, admin kubeconfig)
+and require it
+(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:508-511`,
+`internal/containercluster/agentinstall/install.go:292-296`). The runner refuses
+`Outputs` on an invocation no operation records, so under `diff --observe` these
+blocks read unknown. **Impact:** safe, but it lowers the usefulness of `diff` for
+Ceph contexts. **Smallest fix:** their observation runs without outputs when no
+operation records it. It touches the Ansible plugin and the capability Go code.
+**Exit evidence:** a test that `diff --observe` reads the Ceph cluster, Ceph
+client and agent blocks present or absent instead of unknown, with no material in
+the run directory.
+
+### B597
+
+`destroy paused` is reachable
+(`internal/reconciliation/lifecycle/online_removal.go:165-168` sets the online
+boundary; `internal/reconciliation/lifecycle/scheduler.go:142`) but has no row in
+`specs/state-reconciliation.md:449-466`. **Impact:** the state table is
+incomplete; the decision (continue) is unchanged. **Smallest fix:** a row and a
+`stateMachineRows` case. **Exit evidence:** `TestTransitionTablesMatchSpec` over
+the new row.
+
+### B598
+
+Input restored byte for byte after an edit gets a new revision, so a completed
+apply never settles over it again: `context update` deduplicates only against the
+selected revision (`specs/contexts.md:150-157`). The X91 refusal says so. The
+owner decides whether restored bytes settle (the revision names the bytes, and a
+settle would compare content) or keep refusing with destroy named. **Impact:**
+an operator who undoes an edit still has to destroy. **Smallest fix:** per the
+decision. **Exit evidence:** the decision recorded and, if restored bytes settle,
+a test with the spec row.
+
+### B599
+
+Whatever the allowlist test over the observe entry points finds: any observe task
+that writes outside the runner's job directory or its scratch directory. The
+candidates are `work.yml` and `reachable.yml` of
+`ansible/collections/ansible_collections/bootwright/core/roles/managedos_install_anaconda/tasks/`.
+**Impact:** an observation, which the read-only guard assumes changes nothing,
+would leave files elsewhere. **Smallest fix:** observe writes nothing outside the
+runner's private directories. **Exit evidence:** the allowlist test with no entry
+that writes outside them.
+
+### B600
+
+Candidate. A projector for the Ceph StoragePool: `Ready` proves
+`spec.replicated.size`, `spec.replicated.minSize` and `spec.role` equal to the
+frozen request
+(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:2992-2993`),
+and `Exists && !Ready` renders a note. It carries the evidence widening of the
+design's per-capability item for the pool. **Requires:** the projector port that
+B565 delivers. **Definition:** Candidate. **Exit evidence:** a projection golden
+and the observable-field table row in the diff spec.
+
+### B601
+
+Candidate. A projector for the bare-metal Machine: the MAC set becomes the named
+`hardware.nics`, and the BMC address that answered is shown. It carries the
+evidence widening for that capability. **Requires:** the projector port that
+B565 delivers. **Definition:** Candidate. **Exit evidence:** a projection golden
+and the observable-field table row.
+
+### B602
+
+Candidate. A projector for managed services and the artifact server: bind
+address, ports and listeners. It carries the evidence widening for those
+capabilities. **Requires:** the projector port that B565 delivers.
+**Definition:** Candidate. **Exit evidence:** a projection golden per capability
+and the observable-field table rows.
+
+### B603
+
+Candidate. A projector for the OS tree and the install: the install address. It
+carries the evidence widening for those capabilities. **Requires:** the projector
+port that B565 delivers. **Definition:** Candidate. **Exit evidence:** a
+projection golden and the observable-field table row.
+
+### B604
+
+Candidate. A projector for the agent install: release version and declared
+nodes. It carries the evidence widening for that capability and needs
+[B596](#b596) to read the block at all. **Requires:** the projector port that
+B565 delivers. **Definition:** Candidate. **Exit evidence:** a projection golden
+and the observable-field table row.
+
+### B605
+
+Candidate. A projector for the Ceph image, host and core: image, topology nodes
+and labels. It carries the evidence widening for those capabilities and needs
+[B596](#b596) for the core. **Requires:** the projector port that B565
+delivers. **Definition:** Candidate. **Exit evidence:** a projection golden per
+capability and the observable-field table rows.
+
+### B606
+
+A libvirt machine whose owned, answered domain differs from its frozen request
+only in a disk size reads unknown under observation while its controller runs:
+the adapter's postcondition stays true, `ValidateMachinePresence` refuses the
+size, and `machineEffect` (`internal/substrate/libvirt/capability.go`) accepts
+neither the presence nor the partial reading, so the engine never calls the
+projector and `diff --observe` shows the size refusal as the reason and no
+hunk. The journey `TestALibvirtDiskResizedByHandShowsAsAHunk` reaches the hunk
+only beside a stopped controller, which reads partial. The projector also emits
+one note per missing frozen disk, so a machine missing more than eight disks
+reads unknown under the eight-note bound instead of projecting. **Outcome:** an
+owned, answered domain whose only difference is a disk size reads partial for
+the apply observation, so a running resized machine projects its observed size
+and the missing-disk notes fold into one bounded note. **Requires:** none.
+**Definition:** Specified. **Exit evidence:** a journey case with the
+controller running that asserts the InfraProvider reads changed with the
+observed size, and a projection test over nine missing disks that still
+projects.
+
 ## Retired
 
 Historical IDs no longer issued in their original meanings. D131 reuses
@@ -1636,3 +2325,4 @@ Requires cell as `owner decision: <question>`.
 - **D150** (2026-10-14, the owner): "update commands bootwright machine start|stop|restart|exec to accept a comma-separated list of machines that the command will be applied in parallel to all". `--name` of those four commands is a comma-separated list under the existing list rules; one member behaves exactly as before and several run concurrently, each power run as today's single-Machine run (at most the engine's bound at once, inside one invocation scope, behind one confirmation) and each exec session non-interactive with its output lines prefixed by their Machine. `machine rsh` stays single because it opens one interactive session, and `cluster rsh` and `cluster exec` are unchanged. Taken by the session, pending the owner's review: (1) a Machine whose resolved identity is a password refuses a several-Machine `exec`, because a password prompt cannot be shared by concurrent sessions; (2) a partial power failure exits `1` with one diagnostic for each failed Machine and still presents every admitted Machine's row; (3) a several-Machine `exec` exits with the highest status any session returned and warns `access.exit` for each nonzero one. [X85](delivered.md#x85--machine-commands-across-several-machines) delivers it as B543.
 - **D151** (2026-10-14, the owner): "when you finish, do the same for bootwright cluster commands", following the request that made `machine start|stop|restart|exec --name` a comma-separated list applied in parallel (D150). The owner answered two questions. For `cluster exec`: "BOTH `--name` and `--node` take comma lists. `--name a,b` runs on every listed cluster and `--node n1,n2` on several nodes. Each listed cluster runs on its default first node, or on the `--node` members it declares. A `--node` member no listed cluster declares is refused. Every resolved node Machine runs in parallel, exactly like `machine exec` with several names." For `cluster info`: "`--name` takes a comma list too (a selection convenience; local read, nothing to parallelize)." `cluster rsh` stays single because it opens one interactive session, and `cluster info --secrets` still reveals exactly one cluster. Taken by the session, pending the owner's review: (1) a listed cluster that declares none of the `--node` members refuses `access.target` instead of running nothing there; (2) the session prefix is the Machine name, and Machines two nodes share run once; (3) a FQDN shared by several nodes of one cluster refuses as it does for a single cluster. [X86](delivered.md#x86--cluster-commands-across-several-clusters-and-nodes) delivers it as B546.
 - **D152** (2026-10-14, the owner's request; the clauses are taken by the session, pending the owner's review): "make a full review and audit of how bootwright install/setup works. i think this is too restrict and not optimal about dependencies. for instance, i had my fedora updated from 43 to 44 and it stopped working. you actually fixed this, but i think we could review this process in a broader way. check how dependencies are defined and used. i want bootwright to require those dependencies in a general but safe way. this should work in a similar way other linux packages that requires dependencies work. other thing that is bothering me is how long it takes to run bootwright setup, to install ansible and python dependencies, even after a previous bootwright setup, with older bootwright's version. this make setup take too long (more than 3 minutes). bootwright seems to be using dedicate installation for those package. evaluate if it is really necessary or would make more sense or would be justified to used SO's package for that. how other similar community package handle that? if it makes sense to use a dedicate python installation, for instance, couldn't the bootwright setup from a newer bootwright's version reuse the previous one? ... check alternatives and impact in code and propose a plan for us to refactor this installation/setup use case, using the best alternative, considering estability and ux and community pattern/best practices. no backward compatibility needed/wanted. you can consider a new fresh installation for this new bootwright version." It carries forward the owner's rules of 2026-09-13: "bootwright should just check if dependency packages are available and only if not install; it shouldn't check for updates unless a specific min version becomes necessary", and "versioning logic for packages is over-engineering; only check the required packages exist; add version logic only when a specific version issue appears". Until the owner accepts it, D152 is a proposal and authorizes nothing; acceptance authorizes [X87 to X90](m1.md#planned-slices) on M1 as an out-of-sequence exception to D48, in the form of D149, and must carry the owner's dated sequencing choice for X88 (clause 9). The clauses: (1) The glibc and libgcc byte pin is not a security boundary and is dropped: the per-file digests, link pins, the single-link and exact-upstream rules, D107's requalification, the receipt's `foundation`, the operator guide's hold procedure, the compiled catalog and `scripts/foundation-catalog`. Root ownership with no group or other write stays on every executed or loaded path, extended to the interpreter's standard library and `lib-dynload` and to the re-executed binary (B548), and specs/security.md states the attacker model and the widenings W1 to W4 once. Declined: digests as a reproducibility check, the cause of the Fedora 44 refusal, since no attacker model was found in which digests of root-owned files stop an attacker who cannot already write them. Supersedes D107. (2) Admission is by family and floors and fails closed: `ID` is fedora or rhel or `ID_LIKE` names one, amd64, a qualified `/usr/bin/rpm` and `/usr/bin/dnf`, a locked-ABI interpreter installed or offered, and glibc at or above the lock's floor (2.34). A release outside the lock's tested list gets the informational line `controller.untested-release` and is never refused; a docs test ties that list to the development guide. Declined: exact (OS, release) rows, the cause of the Fedora 43 to 44 break, refusing untested releases or derivatives, and silent admission. (3) The interpreter is the OS CPython 3.12 to 3.14 at its versioned path `/usr/bin/python3.X`, with one venv per lock, ABI and interpreter path and no python-build-standalone fallback (parked as B561). Python TLS follows the host's OpenSSL and crypto-policy, since `OPENSSL_CONF=/dev/null` goes; D108 is amended: the Go binary and cryptography's bundled OpenSSL stay outside any FIPS claim, and B331 stays parked. Declined: a standalone CPython with a lock, wheels embedded in the binary, distribution ansible-core (no distribution ships 2.21) and an Execution Environment image. (4) Versions are chosen at build time in a lock the binary embeds (internal/controller/runtimelock/lock.json, format `bootwright.controller.runtime-lock-v1`), which `scripts/runtime-lock generate` writes with network, run by the owner or by CI, and which is committed; `verify` runs in a network CI workflow and `outdated` is advisory. Setup never discovers versions or checks for updates, the upgrade verb is a new build, and D10's and D20's "latest patch" means the latest at lock generation, which also meets the rules of 2026-09-13. (5) ansible-core is exactly the 2.21 minor the collection's `requires_ansible` admits, its patch pinned in the lock; a guard test requires the lock, `scripts/tools/ansible-requirements.txt` and the collection's `meta/runtime.yml` to agree. cryptography stays because ansible-core declares it; dropping it is parked as B559. (6) Native packages come from the host's dnf. Requirements are names or capabilities in one Go table, presence is `rpm -q --whatprovides` with no version logic, and before confirmation a root `dnf install --assumeno --setopt=install_weak_deps=False` preview is shown verbatim as display text bounded to 64 KiB; lines naming core packages (glibc, libgcc, kernel, systemd, openssl-libs, the selected python3.X) get an informational note, never a refusal. Install is `dnf install --assumeyes` with the same option, presence is checked again, and each provider's NEVRA and repository are recorded. The host's dnf configuration owns signers, versionlock, excludes, protected packages, mirrors, Satellite and `proxy=`; Bootwright never passes `--allowerasing`, `--nogpgcheck`, `--repofrompath`, `--enablerepo` or `--releasever`. The Ceph node's dnf4 core keeps its files and only the controller-only branches go. Declined: the frozen plan with a cache, a host-configured solver with vendor-only signers, and a protected-set refusal or `--exclude`. Supersedes D106; closes B330 and B542. (7) Automation leaves every setup identity: the embedded `ansible/` tree is extracted for each invocation into root 0700 staging, held by an inherited lock while descendants run; the automation digest and D145's re-proof are unchanged; the runtime digest hashes `runtime-v1`, the lock digest, the ABI and the interpreter path; the closure digest hashes `execution-closure-v2`, the lock digest and the ABI. An `ansible/`-only fix is build and apply. Closes B165, parked by D40, and supersedes D14's per-build area where it describes the runtime. Declined: a persistent automation directory per digest. (8) Retention runs at the end of each successful setup under the setup lock: the current runtime and the previous distinct one and their wheels stay, every other runtime is retired under a non-blocking exclusive lock that skips one in use, and the newest 8 run logs stay. apply, destroy and the controller stage rebuild this build's runtime without network when its directory is missing and every locked wheel is cached, and refuse with "run bootwright setup" only when a wheel is missing. Tool areas move under the controller's tools directory with their own bound of 16 and are retired when no binding names them (B557, closing B322). The bound of 16 on execution areas, retained sources and definitions, and `--purge-old-bundles` go; this supersedes D90 where it bounds execution areas. Declined: keeping only the current runtime, which would strand live operations offline after a lock change, and unbounded rebuild without retention. (9) The cut-over is a fresh install. A setup-owned subtree `/var/lib/bootwright/setup/` stays root 0700, carries the format `setup-state-v1`, lies outside the registry descriptor and heals itself: setup discards another build's format after confirmation, and launches refuse with "run bootwright setup". The controller record moves from version 2 to 3 and the registry from 5 to 6, and a version 5 store refuses with "/var/lib/bootwright holds a store an earlier Bootwright build wrote (registry version 5), which this build does not read or convert" and the remedy "with the build that wrote it, destroy each environment (bootwright destroy --context <name>) and delete each context (bootwright context delete --name <name>); then, as root, remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright setup with this build. Never remove /var/lib/bootwright while services it manages run." The owner retires m2b-ceph and the lab contexts with the old build before the first X88 build runs on the owner's host. X87 integrates on acceptance; X88 integrates only after the owner records, dated, either (a) M1's closing run (D59, D125) and B476's run complete on the current build, which the session recommends, or (b) a waiver that runs the closing validation on the X88 build. **Open: the owner's choice.** Declined: a separate world-readable setup root, which contradicts the root 0700 store rule (a readable index copy is parked as owner decision B558), and moving bindings out of the controller record. (10) `--wheel-mirror` (a `file://` directory or an `https://` base) is untrusted transport bound by the lock's sha256; `setup --download-only --dest-dir DIR` runs unprivileged and writes the wheels, the installer and the lock; `--dry-run --output json` lists every locked file's URL and sha256. The default origin is only `files.pythonhosted.org`, native packages use dnf's own configuration, and the admitted context-free `HTTPS_PROXY` and `NO_PROXY` route is forwarded to dnf as `https_proxy` and `no_proxy`, where dnf.conf's `proxy=` wins; credentials and `ALL_PROXY` stay refused. (11) nmstate leaves the baseline, since nothing consumes it; podman stays, because the container-runtime capability is mandatory. (12) The rpm read lock is not held: each launch holds a shared lock on its runtime directory for the whole Ansible block, so retirement never removes a runtime in use and the operator's dnf is never blocked; a same-minor standard-library update during a run is an accepted risk that setup's import probe repairs. (13) Pre-existing defects: the re-executed binary has no owner or mode check, which X87 fixes as B548 in its own commit; controller-record refusals name no remedy, and the registry version 6 and setup-subtree refusals that replace them each name one; the spec's missing native re-solve, the staged `other` metadata, the stale python3.13 defaults and B542 are moot with the code X89 deletes; the operator guide's Fedora 43 examples are rewritten in X89. Parked by D152: B558 to B563. The session integrated [X87](delivered.md#x87--controller-setup-v2-foundations) on 2026-10-14 ahead of this acceptance, as its workflow directed: it is additive and unwired except B548.
+- **D153** (2026-10-14, the owner): "today bootwright must accept only this scenario: non-existent real state ... half-provisioned/setup ... real state already equals desired state ... bootwright could have an command: bootwright diff ... do not implement this support yet, just make code, logic and architecture ready for this in the future ... reconciliation must be predictable and safe. target environment can never be broken with bootwright apply". Taken by the session, pending the owner's review: (1) `apply` admits exactly three scenarios: a fresh apply where the context's records show no operation or a completed destroy, a continuation of an incomplete apply over byte-identical input, and an idempotent settle of a completed apply over unchanged input. Changed input over a completed apply keeps refusing before any effect and names what changed, with destroy then apply as the remedy; `TestApplyAdmitsOnlyTheThreeScenarios` pins the placement. (2) `bootwright diff` is read-only: it compares the context's selected desired state with what its apply realized, object by object, reads durable records only, or with `--observe` each realized block's target through that block's read-only observation, writes no record, takes no lock beyond the shared read lock and exits 0 whenever it renders. (3) Every further scenario is added one per named slice by the recipe in the design: a decision, a spec row and a `stateMachineRows` case, the prerequisite items, and one branch in the changed-input path, all in one commit; none is implemented here, and this slice builds only seams with a present consumer (the comparison, the read-only guard, the retained-revision reader). (4) The settled scenario means "the records prove the frozen plan done over unchanged input": a settled apply attests its own records and reaches no host. Drift that `diff --observe` shows is reported, never repaired. [X91](delivered.md#x91--read-only-diff-and-the-delta-seam) delivers it; the audit's blocking findings [B567](#b567) and [B568](#b568) stay parked and recommended as a dedicated safety slice before any further `destroy` on a shared libvirt host. Needs the owner's decision: whether a settle also requires the current build to freeze the same plan ([B574](#b574); the recommendation is not now). Needs the owner's decision: whether input restored byte for byte after an edit settles a completed apply ([B598](#b598)). Needs the owner's decision: the libvirt redefine semantics and what machine evidence proves ([B576](#b576)). Needs the owner's decision: whether Ceph pool `size` and `min_size` drift is refused or reported ([B587](#b587)). Needs the owner's decision: the context incarnation identity design ([B568](#b568)).

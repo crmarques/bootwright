@@ -75,6 +75,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"preflight add-ons", addonpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, SSH: ssh}},
 		{"plan", lifecycle.PlanRequest{ContextName: "example", Stages: []string{"infra-components", "substrates"}}},
 		{"status", lifecycle.StatusRequest{ContextName: "example"}},
+		{"diff", lifecycle.DiffRequest{ContextName: "example", Observe: true}},
 		{"apply", lifecycle.ApplyRequest{ContextName: "example", Stages: []string{"infra-components", "substrates"}, Authorizations: []string{"data-loss"}, SkipConfirmation: true, SSH: ssh}},
 		{"destroy", lifecycle.DestroyRequest{ContextName: "example", Authorizations: []string{"data-loss"}, SkipConfirmation: true, SSH: ssh}},
 		{"render", artifactrendering.RenderRequest{ContextName: "example", InputPath: "inputs", OutputDirectory: "artifacts", Clusters: []string{"first", "second"}, Sensitive: true}},

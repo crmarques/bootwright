@@ -23,6 +23,16 @@ func (r Runner) playbookFor(request lifecycle.RunRequest) (string, bool) {
 	return playbook, ok
 }
 
+func checkReadOnly(request lifecycle.RunRequest) error {
+	if request.ReadOnly && request.Operation != lifecycle.ObserveOperation {
+		return failure("lifecycle.state", "a read-only invocation may run only its capability's observation", "")
+	}
+	if request.Unrecorded && len(request.Outputs) != 0 {
+		return failure("lifecycle.state", "an invocation no operation records may take over no material, so this observation cannot run outside an operation", "")
+	}
+	return nil
+}
+
 // inventory targets exactly one host. The SSH arm reads only the job's own
 // client configuration, pins host-key checking to the bound entry, forbids
 // every ambient identity, password, proxy and known-hosts path, and ends a

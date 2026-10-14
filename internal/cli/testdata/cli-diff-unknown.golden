@@ -1,0 +1,11 @@
+Context:  lab at input revision rev-1b7e55a0
+Against:  apply op-3f9a0c12 (done) of input revision rev-1b7e55a0, as its records prove; no host was contacted
+Input:    unchanged since op-3f9a0c12; bootwright apply settles over it and repairs nothing shown here
+Plan:     this executable plans the same blocks
+
+diff applied/StorageClient/rbd-fenced desired/StorageClient/rbd-fenced
+# plan: same (ceph-client-rbd-fenced); realized: failed
+# its blocks read failed: ceph-client-rbd-fenced
+# remedy: review its durable state with bootwright status --context lab
+
+1 object differs: 0 changed, 0 added, 0 removed, 1 unknown; 1 unchanged

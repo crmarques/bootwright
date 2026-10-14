@@ -11,6 +11,7 @@ func lifecycleInspectionCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "plan", short: "Preview the next complete lifecycle operation", flags: []flagSpec{stageFlag()}, long: "Preview the next legal full-context operation, or the exact continuation point of an incomplete one. It reads durable state and changes nothing. With --stage it also shows which blocks that selection would start."}),
 		available(commandSpec{path: "status", short: "Show context readiness and lifecycle state", flags: []flagSpec{outputFlag()}, long: "Report context readiness, desired state and lifecycle progress from durable records. It performs no probe."}),
+		available(commandSpec{path: "diff", short: "Compare desired state with what this context realized", flags: []flagSpec{boolFlag("observe", "Read each realized block's target through its read-only observation"), outputFlag()}, long: "Compare the context's desired state with what its apply realized, object by object. Without --observe it reads durable records only and contacts no host; with --observe it reads each realized block's target through that block's read-only observation. It changes nothing."}),
 	}
 }
 
@@ -24,6 +25,7 @@ func lifecycleMutationCommands() []commandSpec {
 type LifecycleService interface {
 	Plan(context.Context, lifecycle.PlanRequest) (*lifecycle.PlanResult, error)
 	Status(context.Context, lifecycle.StatusRequest) (*lifecycle.StatusResult, error)
+	Diff(context.Context, lifecycle.DiffRequest) (*lifecycle.DiffResult, error)
 	Apply(context.Context, lifecycle.ApplyRequest) (*lifecycle.OperationResult, error)
 	Destroy(context.Context, lifecycle.DestroyRequest) (*lifecycle.OperationResult, error)
 }
@@ -44,6 +46,11 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 		result.lifecycleStatus, err = invokeResult(ctx, values, lifecycle.StatusRequest{
 			ContextName: values.text("context"),
 		}, s.Lifecycle.Status)
+	case "diff":
+		result.lifecycleDiff, err = invokeResult(ctx, values, lifecycle.DiffRequest{
+			ContextName: values.text("context"),
+			Observe:     values.boolean("observe"),
+		}, s.Lifecycle.Diff)
 	case "apply":
 		result.lifecycleOperation, err = invokeResult(ctx, values, lifecycle.ApplyRequest{
 			ContextName:      values.text("context"),

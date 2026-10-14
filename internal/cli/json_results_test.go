@@ -19,6 +19,7 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[validationResult](),
 	reflect.TypeFor[effectiveResult](),
 	reflect.TypeFor[statusResult](),
+	reflect.TypeFor[diffResult](),
 	reflect.TypeFor[secretCheckResult](),
 	reflect.TypeFor[secretListResult](),
 	reflect.TypeFor[encryptionStatusResult](),

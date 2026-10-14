@@ -2,8 +2,6 @@ package lifecycle
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"path"
@@ -436,7 +434,7 @@ func stageReading(err error, block reconciliation.Block, verb reconciliation.Ver
 // the one a removal takes back, because the stage's removal retains and
 // proves no closure, and recovering the closure again from the host's shared
 // sources would move a latest client to a release another context retained.
-func (s Service) locateTool(ctx context.Context, store OperationStore, view prerequisites.StorageView, contextName string, operation operationstore.Operation, plan reconciliation.Plan, tool controller.InstalledTool) (string, error) {
+func (s Service) locateTool(ctx context.Context, store recordReader, view prerequisites.StorageView, contextName string, operation operationstore.Operation, plan reconciliation.Plan, tool controller.InstalledTool) (string, error) {
 	index := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.Stage == reconciliation.StageController })
 	if index < 0 {
 		return "", failure("controller.state",
@@ -602,9 +600,4 @@ func logFault(err error) error {
 	return failure("runtime.log",
 		"a required private operation log could not be maintained",
 		"restore the context store's private log tree before repeating the operation")
-}
-
-func digestOf(value string) string {
-	digest := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(digest[:])
 }

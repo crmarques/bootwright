@@ -123,7 +123,7 @@ func recordReleased(ctx context.Context, store OperationStore, operation operati
 
 // removedApply reads the frozen plan of the apply a removal removes and what
 // its block records reached.
-func removedApply(ctx context.Context, store OperationStore, source string) (reconciliation.Plan, map[string]reconciliation.BlockState, error) {
+func removedApply(ctx context.Context, store recordReader, source string) (reconciliation.Plan, map[string]reconciliation.BlockState, error) {
 	applied, err := store.ReadOperation(ctx, source)
 	if err != nil {
 		return reconciliation.Plan{}, nil, err
@@ -510,7 +510,7 @@ func refusedServices(services []ServiceSummary, refused []string) []ServiceSumma
 // owned leaves the objects it has not started unknown, as does an object of a
 // completed removal whose block record does not read done. An object neither
 // names has no entry.
-func realizations(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (map[string]RealizationStatus, error) {
+func realizations(ctx context.Context, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (map[string]RealizationStatus, error) {
 	reached := reachedByObject(frozen, states)
 	realized := make(map[string]RealizationStatus, len(reached))
 	if operation.Verb != reconciliation.Destroy {
@@ -555,7 +555,7 @@ func realizations(ctx context.Context, store OperationStore, operation operation
 // an attempt an earlier build recorded, which shows as naming fewer blocks
 // than the apply owned. A removal that replaces none keeps the same reading
 // over its own plan, which fewer carries.
-func replacedRemovals(ctx context.Context, store OperationStore, operation operationstore.Operation, fewer bool, owned int) (map[string]RealizationStatus, bool, error) {
+func replacedRemovals(ctx context.Context, store recordReader, operation operationstore.Operation, fewer bool, owned int) (map[string]RealizationStatus, bool, error) {
 	if operation.Replaces == "" {
 		return nil, fewer, nil
 	}

@@ -36,6 +36,7 @@ type commandResult struct {
 
 	lifecyclePlan      *lifecycle.PlanResult
 	lifecycleStatus    *lifecycle.StatusResult
+	lifecycleDiff      *lifecycle.DiffResult
 	lifecycleOperation *lifecycle.OperationResult
 
 	mediaMutation *media.MutationResult
@@ -103,7 +104,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return commandResult{}, s.invokeStoragePreflight(ctx, path, &values, args)
 	case "preflight add-ons":
 		return commandResult{}, s.invokeAddOnPreflight(ctx, path, &values, args)
-	case "plan", "status", "apply", "destroy":
+	case "plan", "status", "diff", "apply", "destroy":
 		return s.invokeLifecycle(ctx, path, &values, args)
 	case "render":
 		return commandResult{}, s.invokeArtifacts(ctx, path, &values, args)

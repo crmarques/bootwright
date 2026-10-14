@@ -108,10 +108,9 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 			if tc.prepare != nil {
 				tc.prepare(h)
 			}
+			before := countWrites(h)
 			preview, previewErr := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab", Stages: tc.stages})
-			if h.workspace.mutations != 0 || h.workspace.runs != 0 || len(h.workspace.area.files) != 0 || len(h.binder.bound) != 0 {
-				t.Fatal("the preview locked, bound or wrote durable state")
-			}
+			assertNothingWritten(t, h, before)
 			result, applyErr := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: tc.stages})
 			if tc.refusal != "" {
 				agreeOnRefusal(t, h, tc.refusal, previewErr, applyErr)

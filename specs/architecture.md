@@ -407,6 +407,9 @@ case, and implementing a stub removes it from `stubCapabilities`.
    agree with each other and the collection.
 5. Add its playbooks, role and protocol plugin to the
    [collection](#ansible-collection-structure).
+6. Optionally implement `Projector`, add its row to the [observable-field
+   table](state-reconciliation.md#observable-fields-by-implementation), and its
+   `Test<Name>ObservableFieldTableMatchesProjector`.
 
 ### Context admission and compilation
 
@@ -557,7 +560,9 @@ plan froze into that stage and absent everywhere else, so one capability's
 specifics never widen the contract the others receive. The controller stage's
 publication boundary is such a value. Which blocks receive it follows the stage
 the plan froze, which is declared domain vocabulary; no application policy reads
-an implementation identity to decide.
+an implementation identity to decide. `RunFor` derives a request's read-only
+and unrecorded marks from the execution's attempt and resolution numbers, so a
+call site cannot forget them; the runner enforces both.
 
 `LocateTool` is the one question every attempt may ask another stage: where
 the [controller stage](controller.md#the-controller-stage) installed one
@@ -567,6 +572,13 @@ or the one a removal takes back, to that block's capability through the
 `ToolLocator` port, unread, because only that capability knows what its frozen
 request selects and what its evidence names. A plan without that block has
 installed nothing to run.
+
+A capability may implement `Projector`: the engine hands it the evidence of a
+completed or partial observation, unread, with the catalog of the input
+revision the apply froze; it returns spec fragments of API objects limited to
+the leaves its `ProjectedPaths` lists, which the spec's [observable-field
+table](state-reconciliation.md#observable-fields-by-implementation) repeats;
+the engine merges, prunes and compares and never decodes evidence.
 
 The one widening is an apply attempt's `Proved`: what each block it depends on
 proved earlier in this operation, as the engine's block evidence, handed over
@@ -679,6 +691,10 @@ point's first task, and a request the role does not admit refuses there:
 and
 `test_a_request_the_role_does_not_admit_refuses_before_the_entry_points_first_task`
 hold every playbook to this.
+
+Every `observe` entrypoint runs only the modules the read-only allowlist
+names, each for a stated reason; `TestEveryObservePlaybookRunsOnlyAllowedTasks`
+holds it.
 
 ### Roles
 

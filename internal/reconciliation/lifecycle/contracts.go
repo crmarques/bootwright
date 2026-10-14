@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
@@ -34,6 +35,7 @@ type ContextIdentity struct {
 type View interface {
 	Identity() ContextIdentity
 	Inputs() desiredstate.Sources
+	Revision(context.Context, string) (desiredstate.Sources, error)
 	Controller() prerequisites.StorageView
 	Evidence() []byte
 	Operations() operationstore.Area
@@ -294,6 +296,23 @@ type UnsupportedReporter interface {
 	Unsupported(*compilation.State) []Refusal
 }
 
+type ProjectedPath struct {
+	Kind api.Kind
+	Path string
+}
+
+type Projection struct {
+	Kind     api.Kind
+	Name     string
+	Observed api.Value
+	Notes    []string
+}
+
+type Projector interface {
+	ProjectedPaths() []ProjectedPath
+	Project(applied api.Catalog, block reconciliation.Block, evidence json.RawMessage) ([]Projection, error)
+}
+
 // UnresolvedReporter lets a capability say why an observation of one of its
 // frozen blocks proved nothing, from the evidence that observation recorded,
 // which is empty when it read none, for the verb the operation froze: an
@@ -367,6 +386,16 @@ type OperationStore interface {
 	OpenAdapterOutput(context.Context, string) *operationstore.AdapterOutput
 	LogPaths(context.Context, string, reconciliation.Plan) ([]string, error)
 	LogDirectory(string) string
+}
+
+type recordReader interface {
+	Index(context.Context) (operationstore.Index, error)
+	ReadOperation(context.Context, string) (operationstore.Operation, error)
+	ReadPlan(context.Context, string) (reconciliation.Plan, error)
+	BlockStates(context.Context, string, reconciliation.Plan) (map[string]reconciliation.BlockState, error)
+	Block(context.Context, string, string) (operationstore.BlockRecord, error)
+	Attempt(context.Context, string, string, int) (operationstore.Attempt, error)
+	LastResolution(context.Context, string, string, int) (operationstore.Attempt, bool, error)
 }
 
 // OperationStoreFactory opens the record set over one held area. It is a
@@ -485,6 +514,7 @@ type Execution struct {
 	// itself; whoever opened it owns closing it.
 	Output           prerequisites.RunOutput
 	RetiredWithHosts bool
+	ReadOnly         bool
 }
 
 // ControllerStage is what extending the host's prerequisites needs and nothing

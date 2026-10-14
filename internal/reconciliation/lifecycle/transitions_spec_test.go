@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
@@ -175,6 +176,33 @@ func stateMachineRows() map[string]stateMachineRow {
 					},
 					apply: "refuse", destroy: "fresh destroy",
 				},
+				"a completed apply under an input that adds an object": {
+					arrange: changedOver(diffState(servers("v1", "alpha", "bravo", "charlie", "delta")...)),
+					apply:   "refuse", destroy: "fresh destroy",
+				},
+				"a completed apply under an input that changes an object": {
+					arrange: changedOver(diffState(append(servers("v1", "alpha", "bravo"), serverObject("charlie", "v2"))...)),
+					apply:   "refuse", destroy: "fresh destroy",
+				},
+				"a completed apply under an input that removes an object": {
+					arrange: changedOver(diffState(servers("v1", "alpha", "bravo")...)),
+					apply:   "refuse", destroy: "fresh destroy",
+				},
+				"a completed apply under an input whose bytes changed but declare the same objects": {
+					arrange: changedOver(diffState(servers("v1", "alpha", "bravo", "charlie")...)),
+					apply:   "refuse", destroy: "fresh destroy",
+				},
+				"a completed apply under an input that no longer compiles": {
+					arrange: changedOver(nil),
+					apply:   "refuse", destroy: "fresh destroy",
+				},
+				"a completed apply under another build": {
+					arrange: func(t *testing.T, h *harness) {
+						changedOver(diffState(servers("v1", "alpha", "bravo")...))(t, h)
+						otherBuilds()[0].switchTo(h)
+					},
+					apply: "refuse", destroy: "fresh destroy",
+				},
 				"a completed apply that lost a block record": {
 					arrange: func(t *testing.T, h *harness) {
 						lose(h, path.Join(completeApply(t, h), "blocks", "charlie")+"/")
@@ -217,6 +245,53 @@ func stateMachineRows() map[string]stateMachineRow {
 				},
 			},
 		},
+	}
+}
+
+// changedOver completes an apply of three servers, then publishes another
+// revision that compiles to after, or to nothing when after is nil.
+func changedOver(after *compilation.State) func(*testing.T, *harness) {
+	return func(t *testing.T, h *harness) {
+		compiler := sourcesCompiler{states: map[string]*compilation.State{}, errs: map[string]error{}}
+		compiler.states[digestOf(h.workspace.inputs)] = diffState(servers("v1", "alpha", "bravo", "charlie")...)
+		h.service.compiler = compiler
+		completeApply(t, h)
+		sources := diffSources("kind: Environment\n# edited\n")
+		if after != nil {
+			compiler.states[digestOf(sources)] = after
+		}
+		h.update("rev-edited", sources)
+	}
+}
+
+// admittedApply is where each apply decision may appear: a fresh apply only
+// over no operation, a settle only over a completed apply, a continuation only
+// over an incomplete apply and a finalization only over a failed apply whose
+// blocks are all done. Every other durable state refuses an apply.
+var admittedApply = map[string][]string{
+	"fresh apply": {"no operation, or completed destroy"},
+	"settle":      {"apply done"},
+	"continue":    {"apply running", "apply failed", "apply paused", "apply unknown"},
+	"finalize":    {"apply failed, every block `done`"},
+	"refuse":      nil,
+}
+
+// TestApplyAdmitsOnlyTheThreeScenarios holds every apply decision the state
+// machine declares to a fresh apply, a continuation or finalization of the
+// same apply, a settle, or a refusal, each in its own rows. A new scenario
+// edits this test, the row and the code together.
+func TestApplyAdmitsOnlyTheThreeScenarios(t *testing.T) {
+	for row, known := range stateMachineRows() {
+		for name, test := range known.cases {
+			rows, admitted := admittedApply[test.apply]
+			if !admitted {
+				t.Errorf("row %q, %s: the apply decides %q, which no scenario admits", row, name, test.apply)
+				continue
+			}
+			if test.apply != "refuse" && !slices.Contains(rows, row) {
+				t.Errorf("row %q, %s: the apply decides %q, admitted only in %q", row, name, test.apply, rows)
+			}
+		}
 	}
 }
 

@@ -27,9 +27,17 @@ or force path. The one reclaim this contract performs is the
 [housekeeping](#context-mutation-evidence) of operation directories that hold
 nothing. A completed apply must be destroyed before an apply of *changed*
 desired state can start, and an edited input refuses by naming that removal.
+The refusal also names what changed: up to five objects the input adds,
+changes, with up to three field paths each, or removes. It says when the bytes
+changed but declare the same objects, or repeat the bytes that apply froze, and
+points to `bootwright diff`. When the frozen revision cannot be read or
+compiled it keeps the general message.
 Unchanged input is the context's selected revision and its frozen bytes, which
 a [context update](contexts.md#frozen-input-and-provenance) of identical input
-keeps, so that update leaves a completed apply settled.
+keeps, so that update leaves a completed apply settled. A settled apply attests
+only that its own records are complete for the unchanged input; drift that
+`bootwright diff --observe` [shows](#comparing-desired-and-real-state) is
+reported, not repaired.
 
 A verb whose work durable state already proves performs none of it and
 succeeds: an `apply` repeated over the unchanged input its completed apply
@@ -1113,6 +1121,12 @@ nothing, including an attempt record beside no block record, which is how a
 lost block record reads: starting over an effect that may have begun would skip
 the observation an unproved effect requires.
 
+An invocation that names no attempt of its own, a resolution, or a keep is
+read-only: the runner refuses any adapter operation but `observe` there, before
+it creates a job. An invocation no operation record names, a quiescence probe
+or a comparison, may take over no produced material: the runner refuses one
+whose request declares an output.
+
 ### Converging an effect
 
 Every attempt converges rather than acts: it observes the target, proves what
@@ -1535,6 +1549,188 @@ from.
 
 Destroy retains evidence until positive removal or positive absence is durable.
 It accepts no stage selection.
+
+## Comparing desired and real state
+
+A comparison sets a context's desired state beside what its operations
+realized, object by object. It is a read: it registers no operation, writes no
+record, binds no Secret, reserves nothing and runs no effect. It runs under one
+shared-lock read of the context, so it refuses `lifecycle.lease` while an apply
+or destroy holds the context, refuses a retired operation index and unreadable
+or contradictory records as every lifecycle read does, and refuses with the
+compiler's own diagnostics when the selected input revision does not compile.
+Nothing else refuses it except as
+[reading the real side live](#reading-the-real-side-live) adds: what it cannot
+read is reported as unknown.
+
+It compares three sides:
+
+| Side | Source |
+| --- | --- |
+| desired | The effective catalog of the context's selected input revision, compiled under the same lock, which is exactly what `apply` reads. |
+| applied | The effective catalog of the input revision the owning apply froze, compiled by this build, and used only while that revision's bytes still match the input digest the apply recorded. |
+| real | What a read-only observation of each realized block proves, [read live](#reading-the-real-side-live) and projected by its capability. It is not read from records; without an observation the applied side stands in for it. |
+
+The owning apply is the current operation when it is an apply, the apply a
+current removal takes back, and none when the context holds no operation or
+its removal names no apply. The comparison reads, in order: the operation
+index, the current operation, its frozen plan and block records, what those
+records prove about each object (the realization `status` reports), the owning
+apply's records, the revision it froze, both compilations, a fresh plan of the
+desired side with `reconciliation.Compare` against the owning apply's plan,
+and, when another build registered the owning apply, the blocks this build
+plans differently from that frozen revision.
+
+Each object reads present, absent or unknown from records alone, contacting no
+host. A block's state, not the absence of a record, decides absence:
+
+| Condition | Real side | Reason |
+| --- | --- | --- |
+| No owning apply | absent | `no operation of this context realized it` |
+| Its blocks are done | present: the applied object | — |
+| Its blocks are pending under an apply | absent | `apply <op> has not realized it` |
+| Its blocks are pending under a destroy, which took them back | absent | `destroy <op> took it back` |
+| Its blocks read failed or unknown | unknown | `its blocks read <state>: <blocks>`, with the remedy of reviewing `bootwright status` |
+| No block realizes it, under a completed destroy | absent | `destroy <op> took it back` |
+| No block realizes it otherwise | present while the applied catalog declares it, else absent | `apply <op> did not declare it` |
+| The applied revision is collected, its bytes moved, or it no longer compiles, where the applied object would be shown | unknown | `the input revision <rev> that apply <op> froze cannot be read: <message>` |
+| Its blocks are done but the applied catalog does not declare it | unknown | `the input revision <rev> that apply <op> froze does not declare it`, with the remedy of reviewing `bootwright status` |
+
+An object both undeclared and absent is not listed. Objects are ordered by API
+kind order, then name. The input reads `none` with no owning apply or after a
+completed destroy, `unchanged` while the context holds exactly the revision and
+bytes the owning apply froze, and `changed` otherwise, a bytes-only edit
+included. The plan reads `none` with no owning apply, `same` or `differs` by
+`reconciliation.Compare`, with the count of changed, added and removed blocks,
+and `unplanned`, with the planner's message, when this executable no longer
+plans the desired side; each object carries its blocks' change. A collected
+revision reads as unknown under the [retention rule of
+contexts](contexts.md#storage-locking-and-publication), never as a refusal.
+
+Both sides are compared in canonical form: a field whose value is absent is
+dropped, and a list the schema names by key is ordered by that key, so the
+authored order of a named list is never shown as a difference. A `Secret`
+object is shown as its declaration, never its bytes.
+
+### Reading the real side live
+
+A comparison asked to observe (`bootwright diff --observe`) first reads
+everything above, then reads the real side live. Nothing else about it
+changes: it registers no operation, writes no record, binds, reserves or
+releases nothing and runs no effect.
+
+**Observed set.** It observes the owning apply's blocks its records show
+started: every block of `reconciliation.OwnedSubset` of that apply's plan under
+an apply, and under a removal only those the current removal names and has not
+recorded done. A block this executable plans differently from the build that
+froze it is not observed: it reads unknown with
+`this executable plans block <id> differently from the build that froze it, so its observation is not read`
+and the remedy `install <build>, which froze it, to observe it`. An object with
+no observed block keeps the reading its records give. With nothing to observe
+it contacts no host and reopens nothing.
+
+**Boundary.** Each block is read through its capability's `Observe` alone,
+never `ObserveRemoval`, `Apply`, `Destroy`, `Quiescent` or `Keep`, under an
+execution that names no operation, attempt or resolution, so `RunFor` marks its
+run read-only and unrecorded and the runner runs only the observation and
+takes over no material (see [Attempts and unknown
+outcomes](#attempts-and-unknown-outcomes)). The execution carries the owning
+apply as `ApplyOperation`, its dependencies' apply records as `ApplyProved`
+and the tool locator of that apply's controller stage, and no log, adapter
+output, progress or continuation. A controller-stage block receives a stage
+whose every mutator refuses `lifecycle.state`
+`an observation may not authorize a host effect`. No run directory or run
+output is opened, and material an observation produces is cleared unread. An
+observation that hands over material, today the Ceph cluster and client blocks
+and the agent install and media blocks, is refused by the runner and reads
+unknown with that refusal as its reason.
+
+**Material.** The Secret material an observation reads is the binding the
+owning apply froze, reopened read-only before the lock is taken, binding
+nothing, and cleared when the comparison returns. A binding that cannot be
+reopened refuses `lifecycle.state`
+`the Secret binding apply <op> froze cannot be reopened, so diff cannot observe its effects: <message>`,
+with the remedy of restoring the context's keyring from a complete backup or
+running `bootwright diff` without `--observe`.
+
+**Host proof and re-proof.** It then holds the context's shared lock as a
+bounded run does. It re-reads the operation records and refuses
+`lifecycle.state` `the context changed while diff read it`, with the remedy of
+repeating the command, when they, the selected input revision or its bytes
+moved since the first read. It proves this context is bound to this host as a
+continuation does, refusing `controller.identity` or `controller.state` with
+the remedy `run bootwright diff --context <name> without --observe` for an
+unbound context, and opens the approved execution bundle. It observes at most
+as many blocks at once as an operation runs, each inside its own execution
+guard, reports one check row, `observation`, and holds the lock until every
+observation returned, so an apply or destroy started meanwhile refuses
+`lifecycle.lease`. Canceling it stops further observations, and a block not
+yet observed reads unknown with `the observation was canceled`; a read-only
+Ceph remote worker an observation already started may run on until its own
+deadline.
+
+**Readings.** One block reads:
+
+| Observation | Reading |
+| --- | --- |
+| an error, a runner refusal or a cancellation | unknown |
+| `unknown`, or an effect outside the four | unknown |
+| `no-effect` | absent |
+| `partial` | partial, with the note `<block>: part of this effect is realized as its frozen request states` |
+| `completed` | present |
+
+An unknown reading's reason is the capability's explanation of what it read
+when it gives one, with its remedy; otherwise the error's first message, or
+the general reason of an observation that proved nothing, with the remedy
+`restore what the reason names, then repeat bootwright diff --context <name> --observe`.
+The header counts the blocks read (`observed`), the blocks left unknown, and
+the present or partial blocks no projection rendered (`not projected`).
+
+**Fold.** An object folds its own observed blocks: any unknown reads unknown;
+otherwise all absent read absent; otherwise any partial, or present beside
+absent, reads partial; otherwise present. An object whose only observed
+readings are other blocks' projections onto it folds those blocks. Unknown is
+never absent: an observation that proved nothing never reads as an object
+taken back. An absent object reads `its observation proves none of it exists`.
+
+**Projection.** A capability that implements `Projector` turns the evidence
+of a present or partial reading, with the catalog of the revision the apply
+froze, into spec fragments of API objects, its own or another's. It is not
+asked while that revision cannot be read; such objects read unknown with the
+applied reason. A fragment is admitted only when it names a known kind other
+than `Secret` and an object, its value is a spec mapping, every field it
+claims is a path its `ProjectedPaths` and the [table
+below](#observable-fields-by-implementation) list, and it carries at most 8
+notes of at most 200 bytes without control characters; otherwise its block
+reads unknown, naming why. Before anything is admitted, any fragment, note or
+name holding a part of 8 bytes or more of the material lent to the run refuses
+the whole comparison with `lifecycle.state`
+`a projection of block <id> carries Secret material, so diff shows nothing`.
+Fragments merge by field and named lists align by their key; a field two
+fragments observe differently is dropped from both sides and named in the note
+`<path>: <block> observes <value>, <block> observes <value>`. The declared
+object is then reduced to the fields the merged fragments carry: a named item
+keeps the fields its observed siblings carry, an item with no observed
+counterpart keeps only its key, so it shows as declared and not realized, and
+every dropped declared path, shallowest first, is listed as not compared.
+While a block whose implementation's `ProjectedPaths` name the object's kind
+reads unknown, an item with no observed counterpart is instead dropped and
+listed as not compared, because that block may hold it. A
+present or partial object no fragment renders keeps the applied side, with
+the note `observed <state>; <implementation> renders no field, so the fields shown are what apply <op> applied`.
+
+An object an abandoned context of the same name left on a host reads as this
+context's, because no native identity yet distinguishes the two.
+
+### Observable fields by implementation
+
+Each row names the API fields one implementation's projection observes; a
+projection claiming any other field is refused as above.
+
+| Implementation | Object | Observed fields | Notes |
+| --- | --- | --- | --- |
+| `machine-libvirt-v1` | `Machine` | `spec.substrate.providerRef` | domain state; controller power |
+| `machine-libvirt-v1` | `InfraProvider` | `spec.libvirt.machineProfiles[].name`, `[].diskGiB`, `[].dataDisks[].name`, `[].dataDisks[].sizeGiB`, `[].dataDisks[].media` | missing disks |
 
 ## Bootstrap completion and GitOps readiness
 

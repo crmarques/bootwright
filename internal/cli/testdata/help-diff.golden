@@ -1,0 +1,19 @@
+Compare the context's desired state with what its apply realized, object by object. Without --observe it reads durable records only and contacts no host; with --observe it reads each realized block's target through that block's read-only observation. It changes nothing.
+
+Usage:
+  bootwright diff [flags]
+
+Examples:
+  bootwright diff --context lab --observe
+
+Flags:
+      --observe         Read each realized block's target through its read-only observation
+      --output string   Select output mode (values: text, json) (default "text")
+
+Global Flags:
+      --context string             Select a context (default: current context)
+  -h, --help                       Show help for this command
+      --ssh-ask-sudo-password      Request the borrowed account's sudo password
+      --ssh-id-file string         Offer an explicit private key for eligible SSH access
+      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
+      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines

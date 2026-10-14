@@ -689,6 +689,89 @@ continuing. A completed apply is the exception, for the reason above. These are
 next steps only; the receipt's `next` still names what the operation's own
 records call for.
 
+### Desired and realized state comparison
+
+`diff` sets the context's desired state beside what its apply realized, object
+by object, by the [comparison rules](state-reconciliation.md#comparing-desired-and-real-state).
+It accepts no positional operand, input path or mode, and it reads the
+selected context's immutable input revision, which is exactly what `apply`
+reads. It reads durable records under the shared lock, so it contacts no host,
+registers no operation, allocates no identity, writes no record, binds no
+Secret and creates no log. While an apply or destroy holds the context it
+refuses `lifecycle.lease`, naming the safe retry; every other refusal is a
+lifecycle read's own.
+
+`--observe` also reads each block the context's apply realized through that
+block's bounded read-only observation, on the host that block froze, by the
+[live comparison rules](state-reconciliation.md#reading-the-real-side-live).
+It still registers no operation, writes no record and binds no Secret: it
+reopens the binding the apply froze, read-only, and adds only the refusals
+those rules name. A long `--observe` holds the context's shared lock while it
+observes, so an `apply` or `destroy` started meanwhile refuses
+`lifecycle.lease`. What it cannot read, such as a collected input revision
+or an object whose blocks failed, is shown as unknown beside the object and is
+never a refusal. It exits `0` whenever it renders a comparison, whatever the
+comparison found, and writes no [lifecycle receipt](#lifecycle-receipt).
+
+The text result opens with these header lines, each value starting at column 11:
+
+| Line | Value |
+| --- | --- |
+| `Context` | `<name> at input revision <selected revision>` |
+| `Against` | `nothing; this context holds no operation, so nothing is realized`, or `apply <id> (<state>) of input revision <revision>, as its records prove; no host was contacted`, or `destroy <id> (<state>) of apply <id>, as its records prove; no host was contacted`, or, with `--observe`, `what apply <id> (<state>) realized, read live: <n> blocks observed, <u> unknown, <p> not projected` |
+| `Input` | `not applied yet; bootwright apply --context <name> realizes it`; `unchanged since <apply>; bootwright apply settles over it and repairs nothing shown here` for a done apply; `unchanged since <apply>, which bootwright apply --context <name> continues` for an incomplete one or `..., which bootwright destroy --context <name> takes back` under a removal; or `changed since <apply>; bootwright apply refuses it until bootwright destroy --context <name> takes back what that apply owns` |
+| `Plan` | `this executable plans the same blocks`; `this executable plans <c> blocks differently, <a> more and <r> fewer`; `this executable no longer plans the input: <message>`; or `no apply froze a plan to compare with` |
+| `Build` | Only when another build than the one that registered the apply plans some of its blocks differently: `this executable plans <k> blocks of <apply> differently from the build that froze them`, followed with `--observe` by `; --observe does not read them` |
+
+Each object whose difference is not `none`, or whose real side is `partial` or
+`unknown`, follows after a blank line, in API kind order and then name:
+
+```text
+diff <source>/<Kind>/<name> desired/<Kind>/<name>
+# plan: <same|changed|added|removed> (<block ids>); realized: <realization>
+# not compared: <path>, <path>, ...
+# <note>
+# <reason>
+# remedy: <remedy>
+--- <source>/<Kind>/<name>
++++ desired/<Kind>/<name>
+@@ -<line>,<count> +<line>,<count> @@
+```
+
+`<source>` is `applied`: the object as the input revision the apply froze
+declares it, or `real`: the fields an `--observe` read projected, beside the
+desired object reduced to those same fields. A `# not compared:` line names,
+for a `real` side only, the declared paths no projection observed, at most 12
+and then `and <n> more`; they are never a difference. The plan line reads
+`# plan: none` for an object no block realizes, and `realized` reads `none`
+for an object the operation does not name. A `#` line carries a note, then the reason and remedy of an absent or
+unknown real side. The `---` side is `/dev/null` when the real side is absent,
+and the `+++` side is `/dev/null` when the object is no longer declared. The
+hunks are a unified line difference of the canonical YAML of a catalog holding
+that one object, with three lines of context, adjacent hunks merged, and every
+line shown with the display escaping of the [output contract](cli/output.md#json-output).
+Counts are always written, even when `1`, and an empty side starts at line `0`.
+A pair of sides so large that their line comparison would exceed four million
+line pairs shows the changed region between their common first and last lines
+as one replacement. An unknown object shows no hunk.
+
+Whether an object differs is decided from the encoded bytes of its two sides:
+unknown beats everything, an absent real side beside a declared object is
+`added`, an undeclared object with a real side is `removed`, equal bytes are
+`none`, and the rest are `changed`. A line the object's hunks do not hold is
+never a difference.
+
+The result closes after a blank line with
+`<d> objects differ: <c> changed, <a> added, <r> removed, <u> unknown; <n> unchanged`,
+or, when nothing differs, `No differences: <n> objects compared.` A count of
+one is singular: `1 object differs: ...` and `No differences: 1 object
+compared.` With
+`--observe` the line adds `; <k> compared as applied`, or `, <k> as applied`
+before the closing period, counting the present or partial objects whose
+real side is the applied object. The
+[JSON result](cli/output.md#diff-results) carries the same membership and the
+same patch lines.
+
 ## Resource inspection and explicit access
 
 List and info commands derive their result from validated desired state,

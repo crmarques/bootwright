@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -40,14 +43,21 @@ func exitPlan(t *testing.T) reconciliation.Plan {
 // runs, and records the operation done.
 func registerDone(ctx context.Context, t *testing.T, store *operationstore.Store, id, source string, plan reconciliation.Plan, runs ...string) {
 	t.Helper()
+	registerDoneUnder(ctx, t, store, "rev-1", strings.Repeat("a", 64), id, source, plan, runs...)
+}
+
+// registerDoneUnder is registerDone over the input revision and input digest
+// the operation froze.
+func registerDoneUnder(ctx context.Context, t *testing.T, store *operationstore.Store, revision, input, id, source string, plan reconciliation.Plan, runs ...string) {
+	t.Helper()
 	digest, err := plan.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
 	stamp := exitStamp().Format(time.RFC3339)
 	operation := operationstore.Operation{
-		Version: operationstore.OperationVersion, ID: id, Verb: plan.Verb, Context: "alpha", Revision: "rev-1",
-		InputDigest: strings.Repeat("a", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("b", 64),
+		Version: operationstore.OperationVersion, ID: id, Verb: plan.Verb, Context: "alpha", Revision: revision,
+		InputDigest: input, PlanDigest: digest, AutomationDigest: strings.Repeat("b", 64),
 		Closure: exitClosure(), Source: source, Bindings: []string{}, State: reconciliation.OperationRunning, Created: stamp, Updated: stamp,
 	}
 	if err := store.Register(ctx, operation, plan); err != nil {
@@ -205,9 +215,14 @@ func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
 func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
 	services, repository, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
-	writeRecords(t, repository, func(ctx context.Context, store *operationstore.Store) {
-		registerDone(ctx, t, store, "op-"+strings.Repeat("01", 16), "", exitPlan(t), "alpha")
-	})
+	ctx := context.Background()
+	if err := repository.MutateLifecycle(ctx, "alpha", func(tx lifecycle.Transaction) error {
+		registerDoneUnder(ctx, t, operationstore.New(tx.Operations(), exitStamp), tx.Identity().Revision, inputDigestOf(tx.Inputs()),
+			"op-"+strings.Repeat("01", 16), "", exitPlan(t), "alpha")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	mutation := filepath.Join(root, "contexts", "alpha", "state", "mutation.json")
 	if err := os.WriteFile(mutation, []byte(`{"version":1,"operation":"applied","ownership":"retained"}`+"\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -221,8 +236,31 @@ func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
 	}
 	before := stateFingerprint(t, root)
 	_, stderr = contextRun(t, services, 1, "apply", "--context", "alpha", "--yes")
-	if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, "the desired state changed after this apply completed") ||
-		!strings.Contains(stderr, "bootwright destroy --context alpha") || !sameFingerprints(before, stateFingerprint(t, root)) {
+	const named = "the desired state changed after this apply completed: it changes Environment/synthetic (spec.domains.base, spec.domains.clusters and 3 more fields), " +
+		"Machine/service-host (spec.network.addresses[fqdn].address)"
+	const remedy = "take back what it owns with bootwright destroy --context alpha, then run bootwright apply --context alpha; bootwright diff --context alpha shows each change"
+	if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, named) || !strings.Contains(stderr, remedy) ||
+		!sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("the apply over the changed input refused with %s", stderr)
 	}
+	for _, command := range regexp.MustCompile(`bootwright [a-z]+ --context alpha`).FindAllString(remedy, -1) {
+		contextRun(t, services, 0, append(strings.Fields(command)[1:], "--help")...)
+	}
+	contextRun(t, services, 2, "diffs", "--context", "alpha", "--help")
+	if !sameFingerprints(before, stateFingerprint(t, root)) {
+		t.Fatal("parsing the remedy's commands changed the context")
+	}
+}
+
+// inputDigestOf is the input digest an apply records over sources: the
+// reconciliation.input-v1 hash of each file's path and content digest.
+func inputDigestOf(sources desiredstate.Sources) string {
+	var parts []string
+	for _, file := range append(slices.Clone(sources.Files), sources.Markers...) {
+		content := sha256.Sum256(file.Bytes())
+		parts = append(parts, file.Path()+"\x00"+hex.EncodeToString(content[:]))
+	}
+	slices.Sort(parts)
+	digest := sha256.Sum256([]byte("bootwright.reconciliation.input-v1\x00" + strings.Join(parts, "\x00")))
+	return hex.EncodeToString(digest[:])
 }

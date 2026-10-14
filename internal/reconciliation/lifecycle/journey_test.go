@@ -340,7 +340,8 @@ type testWorkspace struct {
 	beforeMutation func()
 	// revision names the input the context holds now. A test that publishes
 	// another revision replaces it together with inputs, as an import does.
-	revision string
+	revision  string
+	revisions map[string]desiredstate.Sources
 	// kill runs first in every durable publication this workspace performs
 	// outside its operation area, named by the point it would publish, so a
 	// test can stop an invocation there; an error it returns fails it.
@@ -363,10 +364,11 @@ func (w *testWorkspace) view() *testView {
 func (w *testWorkspace) held(operations, runs bool) (*testView, func()) {
 	closed := &atomic.Bool{}
 	view := &testView{
-		workspace:  w,
-		operations: &heldArea{memoryArea: w.area, writable: operations, closed: closed, reference: "contexts/lab/state/operations"},
-		runs:       &heldArea{memoryArea: w.runArea, writable: runs, closed: closed, reference: "contexts/lab/state/runs"},
-		closed:     closed,
+		workspace:   w,
+		operations:  &heldArea{memoryArea: w.area, writable: operations, closed: closed, reference: "contexts/lab/state/operations"},
+		runs:        &heldArea{memoryArea: w.runArea, writable: runs, closed: closed, reference: "contexts/lab/state/runs"},
+		closed:      closed,
+		transaction: operations,
 	}
 	return view, func() { closed.Store(true) }
 }
@@ -517,12 +519,33 @@ type testView struct {
 	workspace        *testWorkspace
 	operations, runs operationstore.Area
 	closed           *atomic.Bool
+	transaction      bool
 }
 
 func (v *testView) Identity() ContextIdentity {
 	return ContextIdentity{Name: testContextName, Revision: v.workspace.revision, Mode: "ready"}
 }
 func (v *testView) Inputs() desiredstate.Sources { return v.workspace.inputs }
+
+func (v *testView) Revision(ctx context.Context, id string) (desiredstate.Sources, error) {
+	if err := ctx.Err(); err != nil {
+		return desiredstate.Sources{}, err
+	}
+	if v.closed != nil && v.closed.Load() {
+		return desiredstate.Sources{}, errors.New("bounded lifecycle capability has closed")
+	}
+	if v.transaction {
+		return desiredstate.Sources{}, errors.New("a lifecycle transaction reads only its selected input revision")
+	}
+	if id == v.workspace.revision {
+		return v.workspace.inputs, nil
+	}
+	sources, found := v.workspace.revisions[id]
+	if !found {
+		return desiredstate.Sources{}, errors.New("referenced input revision is missing or unsafe")
+	}
+	return sources, nil
+}
 
 // Controller mirrors the reservations this workspace holds into the controller
 // record, as the store's controller record carries them.
@@ -845,12 +868,14 @@ type testCapability struct {
 	// planned runs first in every plan, so a test can see where planning ran.
 	planned func()
 	// removed is the same moment of a removal.
-	removed      func()
-	applyErr     error
-	material     []map[string]secrets.Material
-	executions   []Execution
-	extraGroup   string
-	probes       []string
+	removed    func()
+	applyErr   error
+	material   []map[string]secrets.Material
+	executions []Execution
+	extraGroup string
+	probes     []string
+	// probed is every execution a probe presents, in the order it ran.
+	probed       []Execution
 	quiescence   map[string]Quiescence
 	quiescentErr error
 	observeErr   error
@@ -922,6 +947,9 @@ func (c *testCapability) Removal(_ context.Context, block reconciliation.Block) 
 // is not exercising the gate is not written as though it were.
 func (c *testCapability) Quiescent(_ context.Context, probe Probe) (Quiescence, error) {
 	c.record(&c.probes, probe.Block.ID)
+	c.mutex.Lock()
+	c.probed = append(c.probed, probe.Execution())
+	c.mutex.Unlock()
 	if c.quiescentErr != nil {
 		return Quiescence{}, c.quiescentErr
 	}
@@ -1370,6 +1398,15 @@ func (c *testClock) Now() time.Time {
 	defer c.mutex.Unlock()
 	c.moment = c.moment.Add(time.Second)
 	return c.moment
+}
+
+func (h *harness) update(revision string, sources desiredstate.Sources) {
+	if h.workspace.revisions == nil {
+		h.workspace.revisions = map[string]desiredstate.Sources{}
+	}
+	h.workspace.revisions[h.workspace.revision] = h.workspace.inputs
+	h.workspace.revision = revision
+	h.workspace.inputs = sources
 }
 
 type harness struct {
@@ -3729,10 +3766,9 @@ func TestFreshApplyRefusesWhenTheInputChangedBeforeMutation(t *testing.T) {
 	published := "rev-fedcba9876543210fedcba9876543210"
 	h.workspace.beforeMutation = func() {
 		h.workspace.beforeMutation = nil
-		h.workspace.revision = published
-		h.workspace.inputs = desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+		h.update(published, desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
 			desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\nmetadata: {name: changed}\n")),
-		}}
+		}})
 	}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	requireContextChanged(t, err, "apply", "it was planned from no operation, "+

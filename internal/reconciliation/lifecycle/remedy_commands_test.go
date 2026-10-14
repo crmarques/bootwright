@@ -2,6 +2,8 @@ package lifecycle
 
 import (
 	"context"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -184,4 +186,22 @@ func (g *admittingThenRefusingGuard) WithPython(_ context.Context, _ prerequisit
 	}
 	g.refused++
 	return g.err
+}
+
+// A changed input over a completed apply names the removal, the apply after it
+// and the comparison, each built by contextCommand; cmd/bootwright parses each
+// against the catalog (TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses).
+func TestANamedChangeRemedyNamesOnlyContextCommands(t *testing.T) {
+	f := appliedOver(t, diffState(pool("a", "3")))
+	f.publish("rev-2", "kind: Environment\n# edited\n", diffState(pool("a", "2")))
+	_, err := f.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 {
+		t.Fatalf("the apply reported %+v (%v)", reported, err)
+	}
+	named := regexp.MustCompile(`bootwright [a-z]+(?: --[a-z]+ [^ ,;]+)*`).FindAllString(reported[0].Remediation, -1)
+	want := []string{contextCommand("lab", "destroy"), contextCommand("lab", "apply"), contextCommand("lab", "diff")}
+	if !slices.Equal(named, want) {
+		t.Fatalf("the remedy %q names %q, want %q", reported[0].Remediation, named, want)
+	}
 }

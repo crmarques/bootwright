@@ -28,6 +28,7 @@ type lifecycleView struct {
 	controller prerequisites.StorageView
 	evidence   []byte
 	operations *operationArea
+	revision   func(context.Context, string) (desiredstate.Sources, error)
 }
 
 func (v *lifecycleView) Identity() lifecycle.ContextIdentity   { return v.identity }
@@ -35,6 +36,29 @@ func (v *lifecycleView) Inputs() desiredstate.Sources          { return v.inputs
 func (v *lifecycleView) Controller() prerequisites.StorageView { return v.controller }
 func (v *lifecycleView) Evidence() []byte                      { return slices.Clone(v.evidence) }
 func (v *lifecycleView) Operations() operationstore.Area       { return v.operations }
+
+func (v *lifecycleView) Revision(ctx context.Context, id string) (desiredstate.Sources, error) {
+	if v.revision == nil {
+		return desiredstate.Sources{}, state("a lifecycle transaction reads only its selected input revision")
+	}
+	return v.revision(ctx, id)
+}
+
+func retainedReader(root *directory, record contexts.Record, inputs desiredstate.Sources, active func() bool) func(context.Context, string) (desiredstate.Sources, error) {
+	return func(call context.Context, id string) (desiredstate.Sources, error) {
+		if !active() {
+			return desiredstate.Sources{}, state("bounded lifecycle capability has closed")
+		}
+		if !identifier(id, "rev-") {
+			return desiredstate.Sources{}, state("the input revision identity is invalid")
+		}
+		if id == record.Revision {
+			return inputs, nil
+		}
+		sources, err := readRetainedSnapshot(call, root, record, id)
+		return sources, safeError(err)
+	}
+}
 
 // lifecycleRun is the view one bounded operation outside the lifecycle holds.
 // It adds the area its adapter output is retained in and nothing else: it
@@ -244,6 +268,7 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 		controller: controllerView,
 		evidence:   evidence,
 		operations: &operationArea{store: s, subtree: "operations", context: dir, name: record.Name, active: live, readOnly: true},
+		revision:   retainedReader(root, record, inputs, live),
 	}
 	runs := &operationArea{store: s, subtree: runsSubtree, context: dir, name: record.Name, active: live, readOnly: !bounded}
 	return safeError(callback(view, runs))

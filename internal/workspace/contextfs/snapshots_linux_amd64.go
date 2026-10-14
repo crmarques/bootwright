@@ -213,6 +213,40 @@ func openManifest(ctx context.Context, root *directory, record contexts.Record) 
 }
 
 func openManifestBounded(ctx context.Context, root *directory, record contexts.Record, maximum int) (manifest, *directory, func(), error) {
+	m, dir, close, err := readManifestAt(ctx, root, record.Name, record.Revision, maximum)
+	if err != nil {
+		return manifest{}, nil, func() {}, err
+	}
+	if err := admitManifest(m, root, record.Name, record.Revision, record.EnvironmentDirectory); err != nil {
+		close()
+		return manifest{}, nil, func() {}, err
+	}
+	return m, dir, close, nil
+}
+
+func openRetainedManifest(ctx context.Context, root *directory, record contexts.Record, revision string) (manifest, *directory, func(), error) {
+	m, dir, close, err := readManifestAt(ctx, root, record.Name, revision, maxManifest)
+	if err != nil {
+		return manifest{}, nil, func() {}, err
+	}
+	if err := admitManifest(m, root, record.Name, revision, m.EnvironmentDirectory); err != nil {
+		close()
+		return manifest{}, nil, func() {}, err
+	}
+	return m, dir, close, nil
+}
+
+func admitManifest(m manifest, root *directory, name, revision, environment string) error {
+	if err := validateManifest(m, name, revision, environment); err != nil {
+		return err
+	}
+	if beneath(m.InputDirectory, root.path) || beneath(m.EnvironmentDirectory, root.path) {
+		return state("persisted input overlaps runtime state")
+	}
+	return nil
+}
+
+func readManifestAt(ctx context.Context, root *directory, name, revision string, maximum int) (manifest, *directory, func(), error) {
 	owned := []*directory{}
 	close := func() {
 		for i := len(owned) - 1; i >= 0; i-- {
@@ -220,8 +254,8 @@ func openManifestBounded(ctx context.Context, root *directory, record contexts.R
 		}
 	}
 	parent := root
-	for _, name := range []string{"contexts", record.Name, "desired-state", "revisions", record.Revision} {
-		next, err := openDirectory(parent, name)
+	for _, component := range []string{"contexts", name, "desired-state", "revisions", revision} {
+		next, err := openDirectory(parent, component)
 		if err != nil {
 			close()
 			return manifest{}, nil, func() {}, state("referenced input revision is missing or unsafe")
@@ -239,14 +273,6 @@ func openManifestBounded(ctx context.Context, root *directory, record contexts.R
 		close()
 		return manifest{}, nil, func() {}, err
 	}
-	if err := validateManifest(m, record.Name, record.Revision, record.EnvironmentDirectory); err != nil {
-		close()
-		return manifest{}, nil, func() {}, err
-	}
-	if beneath(m.InputDirectory, root.path) || beneath(m.EnvironmentDirectory, root.path) {
-		close()
-		return manifest{}, nil, func() {}, state("persisted input overlaps runtime state")
-	}
 	return m, parent, close, nil
 }
 
@@ -256,6 +282,36 @@ func readSnapshot(ctx context.Context, root *directory, record contexts.Record) 
 		return desiredstate.Sources{}, err
 	}
 	defer close()
+	return readFrozen(ctx, m, dir)
+}
+
+func readRetainedSnapshot(ctx context.Context, root *directory, record contexts.Record, revision string) (desiredstate.Sources, error) {
+	if !identifier(revision, "rev-") {
+		return desiredstate.Sources{}, state("the input revision identity is invalid")
+	}
+	m, dir, close, err := openRetainedManifest(ctx, root, record, revision)
+	if err != nil {
+		return desiredstate.Sources{}, err
+	}
+	defer close()
+	if !heldContext(dir, record) {
+		return desiredstate.Sources{}, state("context directory was replaced")
+	}
+	return readFrozen(ctx, m, dir)
+}
+
+func heldContext(revision *directory, record contexts.Record) bool {
+	held := revision
+	for range 3 {
+		if held.parent == nil {
+			return false
+		}
+		held = held.parent
+	}
+	return record.DirectoryInode == 0 || held.identity.Ino == record.DirectoryInode && uint64(held.identity.Dev) == record.DirectoryDevice
+}
+
+func readFrozen(ctx context.Context, m manifest, dir *directory) (desiredstate.Sources, error) {
 	result := desiredstate.Sources{Roots: []string{m.InputDirectory}, Files: []desiredstate.SourceFile{}, Markers: []desiredstate.SourceFile{}}
 	for index, file := range m.Files {
 		data, err := readBounded(ctx, dir, blobName(index), file.Size, true)

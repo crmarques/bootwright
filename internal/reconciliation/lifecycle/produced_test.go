@@ -417,3 +417,30 @@ func pristineEvidence(t *testing.T) []byte {
 	}
 	return data
 }
+
+// recordingKeeper keeps nothing and records the execution it is handed.
+type recordingKeeper struct {
+	executions []Execution
+}
+
+func (k *recordingKeeper) Keeps(block reconciliation.Block) (KeptEntry, bool, error) {
+	return KeptEntry{Block: block.ID, Name: "kubeconfig"}, true, nil
+}
+
+func (k *recordingKeeper) Keep(_ context.Context, execution Execution) ([]Produced, error) {
+	k.executions = append(k.executions, execution)
+	return nil, nil
+}
+
+// A keep runs inside a destroy attempt but only observes, so it hands its
+// keeper the attempt's execution marked read-only.
+func TestAKeepRunsReadOnly(t *testing.T) {
+	keeper := &recordingKeeper{}
+	execution := Execution{Operation: "op-x", Attempt: 1}
+	if published, err := (Service{}).keep(context.Background(), nil, keeper, KeptEntry{Block: "install", Name: "kubeconfig"}, execution); err != nil || published {
+		t.Fatalf("a keep finding nothing published %t (%v)", published, err)
+	}
+	if len(keeper.executions) != 1 || !keeper.executions[0].ReadOnly || !RunFor(keeper.executions[0], Invocation{}).ReadOnly {
+		t.Fatalf("the keeper was handed %+v", keeper.executions)
+	}
+}

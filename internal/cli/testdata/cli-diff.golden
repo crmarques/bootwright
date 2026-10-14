@@ -1,0 +1,54 @@
+Context:  lab at input revision rev-8c41d07e
+Against:  apply op-3f9a0c12 (done) of input revision rev-1b7e55a0, as its records prove; no host was contacted
+Input:    changed since op-3f9a0c12; bootwright apply refuses it until bootwright destroy --context lab takes back what that apply owns
+Plan:     this executable plans 1 block differently, 1 more and 1 fewer
+
+diff applied/StoragePool/rbd-archive desired/StoragePool/rbd-archive
+# plan: added (ceph-pool-rbd-archive); realized: none
+# no operation of this context realized it
+--- /dev/null
++++ desired/StoragePool/rbd-archive
+@@ -0,0 +1,13 @@
++apiVersion: bootwright.io/v1alpha1
++kind: StoragePool
++metadata:
++  name: rbd-archive
++spec:
++  clusterRef: ceph-lab
++  type: replicated
++  role: rbd
++  replicated:
++    size: 3
++    minSize: 2
++  autoscale:
++    mode: on
+
+diff applied/StoragePool/rbd-data desired/StoragePool/rbd-data
+# plan: changed (ceph-pool-rbd-data); realized: done
+--- applied/StoragePool/rbd-data
++++ desired/StoragePool/rbd-data
+@@ -7,7 +7,7 @@
+   type: replicated
+   role: rbd
+   replicated:
+-    size: 2
++    size: 3
+     minSize: 2
+   autoscale:
+     mode: on
+
+diff applied/StorageClient/rbd-canary desired/StorageClient/rbd-canary
+# plan: removed (ceph-client-rbd-canary); realized: done
+--- applied/StorageClient/rbd-canary
++++ /dev/null
+@@ -1,8 +0,0 @@
+-apiVersion: bootwright.io/v1alpha1
+-kind: StorageClient
+-metadata:
+-  name: rbd-canary
+-spec:
+-  clusterRef: ceph-lab
+-  poolRef: rbd-data
+-  access: read-write
+
+3 objects differ: 1 changed, 1 added, 1 removed, 0 unknown; 1 unchanged

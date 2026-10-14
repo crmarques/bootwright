@@ -1,6 +1,9 @@
 package lifecycle
 
-import "github.com/crmarques/bootwright/internal/machine"
+import (
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine"
+)
 
 type PlanRequest struct {
 	ContextName string
@@ -9,6 +12,52 @@ type PlanRequest struct {
 
 type StatusRequest struct {
 	ContextName string
+}
+
+type DiffRequest struct {
+	ContextName string
+	Observe     bool
+}
+
+type DiffResult struct {
+	Context   ContextIdentity
+	Operation DiffOperation
+	Input     string
+	Plan      DiffPlan
+	Observed  bool
+	Blocks    DiffBlocks
+	Objects   []ObjectDiff
+}
+
+type DiffOperation struct{ ID, Verb, State, Apply, Revision, Applied string }
+
+type DiffPlan struct {
+	State                   string
+	Reason                  string
+	Changed, Added, Removed int
+	Rebuilt                 []string
+}
+
+type DiffBlocks struct{ Observed, Unknown, Unprojected int }
+
+type ObjectDiff struct {
+	Kind        api.Kind
+	Name        string
+	Plan        string
+	Blocks      []string
+	Realization RealizationStatus
+	Desired     *api.Object
+	Real        RealSide
+}
+
+type RealSide struct {
+	Source      string
+	State       string
+	Object      *api.Object
+	NotCompared []string
+	Notes       []string
+	Reason      string
+	Remedy      string
 }
 
 type ApplyRequest struct {

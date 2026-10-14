@@ -90,7 +90,7 @@ func provedDependencies(ctx context.Context, store OperationStore, operation ope
 
 // applyDependencies uses the held transaction's store, never re-entering
 // Workspace: removal may hold its exclusive lock while needing apply facts.
-func applyDependencies(ctx context.Context, store OperationStore, applyOperation, blockID string) ([]BlockEvidence, error) {
+func applyDependencies(ctx context.Context, store recordReader, applyOperation, blockID string) ([]BlockEvidence, error) {
 	operation, err := store.ReadOperation(ctx, applyOperation)
 	if err != nil {
 		return nil, err
@@ -139,7 +139,7 @@ func applyDependencies(ctx context.Context, store OperationStore, applyOperation
 
 // blockEvidence reads the latest attempt's last resolution, or the attempt
 // itself. Unstarted or running records carry no evidence from earlier records.
-func blockEvidence(ctx context.Context, store OperationStore, operation string, block reconciliation.Block, verb reconciliation.Verb) (BlockEvidence, error) {
+func blockEvidence(ctx context.Context, store recordReader, operation string, block reconciliation.Block, verb reconciliation.Verb) (BlockEvidence, error) {
 	evidence := BlockEvidence{
 		Kind: block.Kind, Object: block.Object, Implementation: block.Implementation,
 		Verb: verb, State: reconciliation.BlockPending,

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -55,6 +56,7 @@ func Verify(t *testing.T, within Within) {
 		{"a binding is established once and revalidated exactly", aBindingIsEstablishedOnceAndRevalidatedExactly},
 		{"reservations are the context's own and what a later view holds", reservationsAreTheContextsOwn},
 		{"each view names the context it holds", eachViewNamesTheContextItHolds},
+		{"a view reads a retained revision and nothing else", aViewReadsARetainedRevisionAndNothingElse},
 		{"a client area opens under a reservation and reopens sealed read-only", aClientAreaOpensUnderAReservation},
 		{"retained dependencies are kept whole and never replaced", retainedDependenciesAreKeptWhole},
 		{"a stage retires the resolutions it supersedes beside the one it retains", aStageRetiresTheResolutionsItSupersedes},
@@ -396,6 +398,37 @@ func aSecretAreaIsLentOnlyInsideItsTransaction(t *testing.T, s Subject) {
 	if err := escaped.Secrets(ctx, func(secretstore.Context, secretstore.Area) error { called = true; return nil }); err == nil || called {
 		t.Fatalf("a secret loan after its transaction returned = %v, called back %t", err, called)
 	}
+}
+
+func aViewReadsARetainedRevisionAndNothingElse(t *testing.T, s Subject) {
+	ctx := context.Background()
+	missing := "rev-0123456789abcdef0123456789abcdef"
+	var escaped lifecycle.View
+	check := func(view lifecycle.View, what string) {
+		selected := view.Identity().Revision
+		sources, err := view.Revision(ctx, selected)
+		if err != nil || !reflect.DeepEqual(sources, view.Inputs()) {
+			t.Fatalf("%s read its selected revision %s as %+v (%v), want its inputs", what, selected, sources, err)
+		}
+		for _, id := range []string{"", "bad", "rev-x/../y", missing} {
+			if id == selected {
+				continue
+			}
+			_, err := view.Revision(ctx, id)
+			refuses(t, err, what+" reading revision "+strconv.Quote(id))
+		}
+	}
+	read(t, s, func(view lifecycle.View) {
+		check(view, "an inspection")
+		escaped = view
+	})
+	run(t, s, func(view lifecycle.RunView) { check(view, "a bounded run") })
+	_, err := escaped.Revision(ctx, escaped.Identity().Revision)
+	refuses(t, err, "a revision read after its callback returned")
+	mutate(t, s, func(tx lifecycle.Transaction) {
+		_, err := tx.Revision(ctx, tx.Identity().Revision)
+		refuses(t, err, "a transaction's revision read")
+	})
 }
 
 func read(t *testing.T, s Subject, use func(lifecycle.View)) {

@@ -12,6 +12,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -32,7 +33,11 @@ type capabilityBinding struct {
 // compile reads the frozen input once, so a decision never compiles the same
 // revision twice to answer two questions about it.
 func (s Service) compile(ctx context.Context, view View) (*compilation.State, error) {
-	state, report, err := s.compiler.Compile(ctx, view.Inputs())
+	return s.compileSources(ctx, view.Inputs())
+}
+
+func (s Service) compileSources(ctx context.Context, sources desiredstate.Sources) (*compilation.State, error) {
+	state, report, err := s.compiler.Compile(ctx, sources)
 	if err != nil {
 		return nil, err
 	}

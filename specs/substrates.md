@@ -346,6 +346,14 @@ the controller reads only what it started with. An apply stopped between
 publishing a file and restarting the controller is therefore completed by the
 next one. An owned domain whose root disk size differs refuses rather than
 resizing.
+A live diff observes the provider placement, the root and data disk sizes, each
+data disk's media, the domain state and the controller's power; vCPU, memory,
+interfaces and TPM are not observed. Disk sizes and media are rendered when the
+machine reads partial, such as a stopped controller or a missing disk; a running
+machine whose disk differs from its frozen size reads unknown, with the size
+refusal as its reason. The [observable
+fields](state-reconciliation.md#observable-fields-by-implementation) table owns
+the paths.
 The inverse refuses a domain that is not shut off, as Quiescence states. It then
 stops and removes the BMC unit, container and state, undefines the domain,
 deletes the disks this context owns and proves each absent. After the disks

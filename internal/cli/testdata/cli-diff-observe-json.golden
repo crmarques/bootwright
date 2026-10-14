@@ -1,0 +1,202 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "diff",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "revision": "rev-1b7e55a0"
+    },
+    "operation": {
+      "id": "op-3f9a0c12",
+      "verb": "apply",
+      "state": "done",
+      "apply": "op-3f9a0c12",
+      "revision": "rev-1b7e55a0",
+      "applied": "readable"
+    },
+    "input": "unchanged",
+    "plan": {
+      "state": "same",
+      "reason": "",
+      "changed": 0,
+      "added": 0,
+      "removed": 0,
+      "rebuilt": []
+    },
+    "observed": true,
+    "blocks": {
+      "observed": 3,
+      "unknown": 1,
+      "unprojected": 1
+    },
+    "objects": [
+      {
+        "kind": "Machine",
+        "name": "rhel-01",
+        "difference": "none",
+        "plan": "same",
+        "blocks": [
+          "machine-rhel-01"
+        ],
+        "realization": "done",
+        "real": {
+          "source": "observed",
+          "state": "partial",
+          "document": null,
+          "notCompared": [
+            "spec.capabilities",
+            "spec.substrate.profileRef",
+            "spec.hardware",
+            "spec.os",
+            "spec.network",
+            "spec.access"
+          ],
+          "notes": [
+            "machine-rhel-01: part of this effect is realized as its frozen request states",
+            "machine-rhel-01: domain running; its controller reports power On"
+          ],
+          "reason": "",
+          "remedy": ""
+        },
+        "desired": {
+          "document": null
+        },
+        "patch": []
+      },
+      {
+        "kind": "Machine",
+        "name": "rhel-02",
+        "difference": "unknown",
+        "plan": "same",
+        "blocks": [
+          "machine-rhel-02"
+        ],
+        "realization": "done",
+        "real": {
+          "source": "observed",
+          "state": "unknown",
+          "document": null,
+          "notCompared": [],
+          "notes": [],
+          "reason": "machine-rhel-02: the hypervisor did not answer for the domain",
+          "remedy": "restore what the reason names, then repeat bootwright diff --context lab --observe"
+        },
+        "desired": {
+          "document": null
+        },
+        "patch": []
+      },
+      {
+        "kind": "InfraProvider",
+        "name": "lab-libvirt",
+        "difference": "changed",
+        "plan": "same",
+        "blocks": [
+          "substrate-host-lab-libvirt"
+        ],
+        "realization": "done",
+        "real": {
+          "source": "observed",
+          "state": "present",
+          "document": {
+            "apiVersion": "bootwright.io/v1alpha1",
+            "kind": "InfraProvider",
+            "metadata": {
+              "name": "lab-libvirt"
+            },
+            "spec": {
+              "libvirt": {
+                "machineProfiles": [
+                  {
+                    "name": "rhel",
+                    "diskGiB": 100,
+                    "dataDisks": []
+                  }
+                ]
+              }
+            }
+          },
+          "notCompared": [
+            "spec.libvirt.uri",
+            "spec.libvirt.machineRef",
+            "spec.libvirt.bmcEmulationDefaults",
+            "spec.libvirt.networkAttachments",
+            "spec.libvirt.machineProfiles[rhel].cpu",
+            "spec.libvirt.machineProfiles[rhel].memoryMiB"
+          ],
+          "notes": [],
+          "reason": "",
+          "remedy": ""
+        },
+        "desired": {
+          "document": {
+            "apiVersion": "bootwright.io/v1alpha1",
+            "kind": "InfraProvider",
+            "metadata": {
+              "name": "lab-libvirt"
+            },
+            "spec": {
+              "libvirt": {
+                "machineProfiles": [
+                  {
+                    "name": "rhel",
+                    "diskGiB": 80,
+                    "dataDisks": []
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "patch": [
+          "--- real/InfraProvider/lab-libvirt",
+          "+++ desired/InfraProvider/lab-libvirt",
+          "@@ -6,5 +6,5 @@",
+          "   libvirt:",
+          "     machineProfiles:",
+          "       - name: rhel",
+          "-        diskGiB: 100",
+          "+        diskGiB: 80",
+          "         dataDisks: []"
+        ]
+      },
+      {
+        "kind": "StorageClient",
+        "name": "rbd-reader",
+        "difference": "none",
+        "plan": "same",
+        "blocks": [
+          "ceph-client-rbd-reader"
+        ],
+        "realization": "done",
+        "real": {
+          "source": "applied",
+          "state": "present",
+          "document": null,
+          "notCompared": [],
+          "notes": [
+            "observed present; client-ceph-v1 renders no field, so the fields shown are what apply op-3f9a0c12 applied"
+          ],
+          "reason": "",
+          "remedy": ""
+        },
+        "desired": {
+          "document": null
+        },
+        "patch": []
+      }
+    ],
+    "summary": {
+      "none": 2,
+      "changed": 1,
+      "added": 0,
+      "removed": 0,
+      "unknown": 1,
+      "applied": 1
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

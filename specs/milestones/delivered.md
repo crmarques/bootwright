@@ -5617,3 +5617,160 @@ specs/security.md does not yet state B548's rule or its sticky-directory
 exemption; B555's security rewrite does. `controller/hostdnf` sits in the
 architecture's port-test-support row only until B554 wires it. S0, the
 owner's baseline measurement, is still pending.
+
+### X91 — Read-only diff and the delta seam
+
+**Owner:** State reconciliation, with CLI, Workspace and Substrate. An
+out-of-sequence enabling slice, integrated on main as one commit at the owner's
+explicit request of 2026-10-14 (D153). **Items:** B564, B565, B566.
+**Decisions:** D153. **Integrated:** "feat(reconciliation): add bootwright diff
+and the delta seam".
+
+**Outcome, B564 (the audit and the seam):** a reconciliation audit of `apply`
+and `destroy` ([lessons](../../.agents/knowledge/reconciliation-audit-2026-10.md))
+found two blocking defects outside the decision engine, parked as
+[B567](backlog.md#b567) and [B568](backlog.md#b568), and the rest as
+[B569](backlog.md#b569) to [B605](backlog.md#b605) beside the existing items it
+names. The engine's frozen plan, closed records and re-proof under the
+exclusive lock held. The slice adds `reconciliation.Compare` in
+`internal/reconciliation/delta.go`, the pure comparison of two plans (added,
+removed, changed and same blocks, in frozen then fresh order, with `First`,
+`Objects` and `Count` over the result), and rebuilds the other-build proof on it
+with its message and remedy unchanged. It reads a retained input revision under
+the lock a lifecycle read already holds (`View.Revision`, see [storage, locking
+and publication](../contexts.md#storage-locking-and-publication)), and makes the
+changed-input refusal over a completed apply name what changed: the revision
+repeating the frozen bytes, bytes that changed but declare the same objects, or
+up to five objects with up to three field paths each, and the general message
+when the frozen revision cannot be read or compiled
+([lifecycle unit](../state-reconciliation.md#lifecycle-unit)). The decision
+never changed: `inputDrift` is the one predicate that tells a revision change
+from a bytes change. The slice adds no transition, record kind, record version
+or content digest; the state-table rows are unchanged, six `apply done` cases
+join `stateMachineRows`, and `TestApplyAdmitsOnlyTheThreeScenarios` pins where
+each apply decision may appear. The design for one more scenario lives in
+[reconciliation scenarios](../deferred/reconciliation-scenarios.md).
+
+**Outcome, B565 (`bootwright diff`):** `bootwright diff [--context <name>]
+[--observe]` compares the context's selected desired state with what its apply
+realized, object by object, in text and JSON, with a unified line difference of
+each object's canonical YAML (`applied/` or `real/` against `desired/`) under a
+header that names the context, the operation compared against, the input, the
+plan and the build
+([comparison](../cli.md#desired-and-realized-state-comparison),
+[results](../cli/output.md)). Without `--observe` it reads durable records only
+and contacts no host
+([comparing desired and real state](../state-reconciliation.md#comparing-desired-and-real-state)).
+With it, the Secret binding the apply froze is reopened read-only, and each
+realized block the apply started is read through its capability's `Observe`
+alone, at most `Concurrency()` at once, under an execution that names no
+operation, attempt or resolution, so the engine marks it read-only and
+unrecorded; a controller-stage block gets a stage whose every mutator refuses.
+A capability's `Projector` renders the evidence into spec fragments, the
+declared side is pruned to the observed fields, and the fields no projector
+claims are listed as not compared
+([reading the real side live](../state-reconciliation.md#reading-the-real-side-live)).
+A block this build plans differently from the build that froze it reads
+unknown, an unknown is never read as absent, and a projection that carries
+lent Secret material refuses the whole diff before any output. It exits 0
+whenever it renders, refuses `lifecycle.lease` while an apply or destroy holds
+the context ([B18](m3.md#b18)), and writes no record, run output or custody.
+The first projector is the libvirt Machine.
+
+**Outcome, B566 (the engine read-only guard):** `RunFor` derives a `ReadOnly`
+and an `Unrecorded` mark on every adapter request from the execution, and the
+Ansible runner refuses, before it resolves a playbook or creates a job, scratch
+or material directory, a read-only request whose operation is not `observe` and
+an unrecorded one that declares an output to take over
+([attempts and unknown outcomes](../state-reconciliation.md#attempts-and-unknown-outcomes),
+[lifecycle ports](../architecture.md#lifecycle-ports)). A keep marks the destroy
+attempt's execution read-only, and the capability contract suite gains the
+`observation-read-only` and `probe-read-only` properties with no known
+deviation. A static test walks every `<implementation>/observe` playbook binding
+and allows only tasks the read-only allowlist names, each with its reason. No
+production call changed: every probe, resolution and keep already ran
+`observe`, so the guard makes an inspection that cannot change a target a
+property of the engine rather than of each call site.
+
+**Guard tests:** `internal/reconciliation`: `TestCompareClassifiesEveryBlock`,
+`TestCompareKeepsFrozenOrderThenFreshOrder`,
+`TestFirstAgreesWithTheDifferingBlockItReplaces` and
+`TestObjectsFoldsBlocksByObject`;
+`internal/reconciliation/ansiblerunner`:
+`TestAReadOnlyInvocationRunsOnlyObservation` and
+`TestAnUnrecordedInvocationTakesOverNoMaterial`;
+`internal/reconciliation/lifecycle`: `TestRunForDerivesReadOnlyAndUnrecorded`,
+`TestEveryExecutionDeclaresItsReadOnlyness`, `TestAKeepRunsReadOnly`,
+`TestDiffWithNoOperationReadsEveryObjectAbsent`,
+`TestDiffOfACompletedApplyOverUnchangedInputShowsNoDifference`,
+`TestDiffNamesAddedChangedAndRemovedObjects`,
+`TestDiffOfAFailedApplyReadsItsFailedObjectUnknown`,
+`TestDiffOfAnUnreadableFrozenRevisionReadsAppliedObjectsUnknown`,
+`TestDiffUnderAnotherBuildListsTheBlocksItPlansDifferently`,
+`TestDiffRefusesWhileAnOperationHoldsTheContext`, `TestDiffWritesNothing`,
+`TestAnObservedDiffWritesNothingAndBindsNothing`,
+`TestAnObservedDiffCallsOnlyObserve`,
+`TestEveryInspectionIsReadOnlyAndUnrecorded`,
+`TestAControllerStageInspectionCannotAuthorizeAnEffect`,
+`TestAnUnreachableTargetRendersUnknownNeverAbsent`,
+`TestMixedBlocksFoldUnknownBeforePartialBeforePresent`,
+`TestABlockThisBuildPlansDifferentlyIsNotObserved`,
+`TestAnObservedDiffRefusesWhenTheContextMovedWhileItRead`,
+`TestAnObservedDiffRefusesAnUnreopenableBinding`,
+`TestProducedMaterialIsClearedAndNeverRendered`,
+`TestALentSecretInAProjectionRefusesBeforeOutput`,
+`TestObservationsStayWithinTheConcurrencyBound`,
+`TestCancellationStopsFurtherObservations`,
+`TestAnInadmissibleProjectionReadsItsObjectUnknown`,
+`TestAConflictingLeafIsOnlyANoteOnBothSides`,
+`TestMergeUnionsAndExcludesConflicts`,
+`TestPruneKeepsOnlyObservedLeavesAndNamesTheRest`,
+`TestApplyAdmitsOnlyTheThreeScenarios`,
+`TestEveryChangedInputOverACompletedApplyRefuses`,
+`TestAChangedInputOverACompletedApplyNamesWhatChanged`,
+`TestANamedChangeIsBoundedToFiveObjects`,
+`TestANamedChangeNamesAtMostThreeFieldsOfAnObject`,
+`TestABytesOnlyEditStillRefusesAndSaysSo`,
+`TestAnUnreadableFrozenRevisionRefusesWithTheGeneralMessage` and
+`TestAnUncompilableEditRefusesWithTheGeneralMessage`;
+`internal/workspace/contextfs`: `TestARetainedRevisionReadsItsOwnBytes`,
+`TestTheSelectedRevisionReadsAsTheViewsInputs`,
+`TestARevisionReadRefusesAnInvalidOrMissingIdentity`,
+`TestARevisionReadRefusesALinkedOrSubstitutedDirectory`,
+`TestARevisionReadRefusesAManifestOfAnotherContextOrRevision`,
+`TestARevisionReadRefusesATamperedBlob`,
+`TestARevisionReadRefusesAfterItsCallbackReturned` and
+`TestARevisionReadWritesNothing`; `cmd/bootwright`:
+`TestEveryObservePlaybookRunsOnlyAllowedTasks`,
+`TestEveryCapabilityHonoursTheCapabilityContract` (the two read-only
+properties) and `TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses`;
+`internal/cli`: `TestDiffEscapesHostileNamesAndReasons`,
+`TestDiffDecidesDifferenceFromEncodedBytes`,
+`TestDiffNamesWhatAnObservedComparisonReadAndDidNotCompare`,
+`TestUnifiedHunksOfMovedLinesAreMinimal` and
+`TestUnifiedHunksBeyondTheCellBoundReplaceTheWholeChangedRegion`, with the
+`cli-diff`, `cli-diff-json`, `cli-diff-none`, `cli-diff-unknown`,
+`cli-diff-observe` and `cli-diff-observe-json` goldens and `help-diff`.
+
+**Constraints left behind:** the audit's two blocking findings stay parked, and
+a dedicated safety slice is recommended before any further `destroy` on a
+shared libvirt host: [B567](backlog.md#b567), a libvirt provider-host removal
+that stops a managed network other tenants' running domains use, and
+[B568](backlog.md#b568), ownership by context name, which lets a recreated
+same-name context adopt abandoned objects. Under `diff --observe` the Ceph
+cluster and client blocks and the agent install and media blocks read unknown
+until their observation runs without outputs
+([B596](backlog.md#b596)). A read refuses `lifecycle.lease` while an apply
+runs, and an `--observe` holds the shared lock so an `apply` refuses meanwhile
+([B18](m3.md#b18)). A canceled `--observe` can leave a read-only Ceph worker
+running to its own deadline ([B573](backlog.md#b573)). Only the libvirt Machine
+has a projector: a Ceph pool, a bare-metal Machine, the managed services and
+the artifact server, an OS tree and its install, the agent install, and the
+Ceph image, host and core are the candidates [B600](backlog.md#b600) to
+[B605](backlog.md#b605), and a present object no projector renders shows the
+applied side with a note saying so. A libvirt disk resized by hand beside a
+running controller reads unknown with the size refusal as its reason rather
+than projecting the observed size ([B606](backlog.md#b606)). A newer build may not compile an old frozen
+revision, and its applied objects then read unknown. A settled apply attests
+only its own records ([B574](backlog.md#b574) holds the owner's decision on
+whether it also compares the plan).

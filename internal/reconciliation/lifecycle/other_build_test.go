@@ -423,3 +423,8 @@ func TestAnotherBuildResolvesAnUnknownApplyThenRetriesIt(t *testing.T) {
 		})
 	}
 }
+
+func differingBlock(frozen, fresh reconciliation.Plan) (string, bool) {
+	change, differs := reconciliation.Compare(frozen, fresh).First()
+	return change.Block, differs
+}

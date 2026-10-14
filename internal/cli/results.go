@@ -39,17 +39,11 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if validControllerReport(result.controller) && successfulControllerReport(path, result.controller) {
 			return true, writeControllerReport(out, errOut, path, result.controller)
 		}
-	case "plan":
-		if result.lifecyclePlan != nil {
-			return true, writeLifecyclePlan(out, result.lifecyclePlan)
-		}
+	case "plan", "status", "diff":
+		return r.writeLifecycleInspection(ctx, command, path, result)
 	case "apply", "destroy":
 		if result.lifecycleOperation != nil {
 			return true, writeLifecycleOperation(out, result.lifecycleOperation)
-		}
-	case "status":
-		if result.lifecycleStatus != nil {
-			return true, writeLifecycleStatus(out, result.lifecycleStatus, selectedJSON(command))
 		}
 	case "validate":
 		if result.validation != nil {
@@ -127,6 +121,19 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 			}
 			return true, writeEffective(ctx, out, path, result.effective, selectedJSON(command), encoder)
 		}
+	}
+	return false, nil
+}
+
+func (r *Runner) writeLifecycleInspection(ctx context.Context, command *cobra.Command, path string, result commandResult) (bool, error) {
+	out := r.config.Out
+	switch {
+	case path == "plan" && result.lifecyclePlan != nil:
+		return true, writeLifecyclePlan(out, result.lifecyclePlan)
+	case path == "status" && result.lifecycleStatus != nil:
+		return true, writeLifecycleStatus(out, result.lifecycleStatus, selectedJSON(command))
+	case path == "diff" && result.lifecycleDiff != nil:
+		return true, writeDiff(ctx, out, result.lifecycleDiff, selectedJSON(command), r.config.EncodeEffectiveYAML, r.config.EncodeEffectiveJSON)
 	}
 	return false, nil
 }

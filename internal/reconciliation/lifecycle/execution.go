@@ -394,7 +394,7 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 	}
 	if operation.Verb == reconciliation.Apply {
 		if verb == reconciliation.Apply {
-			return settleApply(view, operation, frozen, states)
+			return s.settleApply(ctx, view, operation, frozen, states)
 		}
 		owned, err := completedOwnership(name, operation, frozen, states)
 		if err != nil {
@@ -473,16 +473,14 @@ func completedOwnership(contextName string, operation operationstore.Operation, 
 }
 
 // settleApply is an apply over a completed apply. A changed input refuses by
-// naming the removal it needs. The unchanged input settles only while every
-// block of the frozen plan is done, because the settled verb reports that
-// completion: a block whose record reads anything else, a lost one included,
+// naming what changed and the removal it needs. The unchanged input settles only
+// while every block of the frozen plan is done, because the settled verb reports
+// that completion: a block whose record reads anything else, a lost one included,
 // contradicts it, and nothing then proves the input applied.
-func settleApply(view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
+func (s Service) settleApply(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (transition, error) {
 	name := view.Identity().Name
-	if !unchangedInput(view, operation) {
-		return transition{}, failure("lifecycle.state",
-			"the desired state changed after this apply completed",
-			"take back what it owns with "+contextCommand(name, string(reconciliation.Destroy))+", then run "+contextCommand(name, string(reconciliation.Apply)))
+	if inputDrift(view, operation) != "" {
+		return transition{}, s.changedInput(ctx, view, operation)
 	}
 	if unfinished := unfinishedBlocks(frozen, states); len(unfinished) != 0 {
 		return transition{}, failure("lifecycle.state",
@@ -510,14 +508,57 @@ func unfinishedBlocks(frozen reconciliation.Plan, states map[string]reconciliati
 	return unfinished
 }
 
-// unchangedInput reports whether this context still holds exactly the desired
-// state its completed operation froze. That equality is what makes repeating
-// the verb a no-op rather than a request to realize something else.
-func unchangedInput(view View, operation operationstore.Operation) bool {
+const (
+	driftRevision = "revision"
+	driftBytes    = "bytes"
+)
+
+func inputDrift(view View, operation operationstore.Operation) string {
 	identity := view.Identity()
-	return operation.Context == identity.Name &&
-		operation.Revision == identity.Revision &&
-		operation.InputDigest == inputDigest(view)
+	switch {
+	case operation.Context != identity.Name || operation.Revision != identity.Revision:
+		return driftRevision
+	case operation.InputDigest != inputDigest(view):
+		return driftBytes
+	}
+	return ""
+}
+
+func (s Service) changedInput(ctx context.Context, view View, operation operationstore.Operation) error {
+	const message = "the desired state changed after this apply completed"
+	name := view.Identity().Name
+	remedy := "take back what it owns with " + contextCommand(name, string(reconciliation.Destroy)) + ", then run " + contextCommand(name, string(reconciliation.Apply))
+	named, ok := s.namedChange(ctx, view, operation)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !ok {
+		return failure("lifecycle.state", message, remedy)
+	}
+	return failure("lifecycle.state", message+": "+named, remedy+"; "+contextCommand(name, "diff")+" shows each change")
+}
+
+func (s Service) namedChange(ctx context.Context, view View, operation operationstore.Operation) (string, bool) {
+	sources, err := view.Revision(ctx, operation.Revision)
+	if err != nil || digestOf(sources) != operation.InputDigest {
+		return "", false
+	}
+	before, err := s.compileSources(ctx, sources)
+	if err != nil {
+		return "", false
+	}
+	after, err := s.compile(ctx, view)
+	if err != nil {
+		return "", false
+	}
+	if operation.InputDigest == inputDigest(view) {
+		return "its input revision changed, though its bytes repeat the ones this apply froze", true
+	}
+	changes := objectChanges(before.Effective(), after.Effective())
+	if len(changes) == 0 {
+		return "its bytes changed, but it declares the same objects", true
+	}
+	return describeChanges(changes), true
 }
 
 // settled reports the verb whose work durable state already proves. It touches
@@ -719,7 +760,7 @@ func recorded(operation operationstore.Operation, states map[string]reconciliati
 // attempts it counts. A block retried by another invocation that failed again
 // leaves the state it found, so only its count shows the retry. A lost record
 // reads as pending with no attempt.
-func blockRecords(ctx context.Context, store OperationStore, id string, frozen reconciliation.Plan) (map[string]reconciliation.BlockState, map[string]int, error) {
+func blockRecords(ctx context.Context, store recordReader, id string, frozen reconciliation.Plan) (map[string]reconciliation.BlockState, map[string]int, error) {
 	states := make(map[string]reconciliation.BlockState, len(frozen.Blocks))
 	attempts := make(map[string]int, len(frozen.Blocks))
 	for _, block := range frozen.Blocks {
@@ -1186,7 +1227,7 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 // context between the decision and this transaction, so the plan waiting to
 // register may no longer describe what the context owns. A context that held
 // no operation must still hold none.
-func (s Service) verifyBasis(ctx context.Context, store OperationStore, planned basis, refuse func(current basis) error) (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
+func (s Service) verifyBasis(ctx context.Context, store recordReader, planned basis, refuse func(current basis) error) (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
 	fail := func(err error) (operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState, error) {
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
@@ -1680,10 +1721,10 @@ func (s Service) verifyRemovalHost(ctx context.Context, view View) error {
 // of the same blocks. status reads it without probing the host.
 func (s Service) recordedRefusal(view View, operation operationstore.Operation, proof sameBlocksProof) error {
 	identity := view.Identity()
-	if operation.Context != identity.Name || operation.Revision != identity.Revision {
+	switch inputDrift(view, operation) {
+	case driftRevision:
 		return failure("lifecycle.state", "the context input changed after this operation registered", "restore the exact input revision this operation froze")
-	}
-	if operation.InputDigest != inputDigest(view) {
+	case driftBytes:
 		return failure("lifecycle.state", "the frozen input no longer matches this operation", "restore the exact input revision this operation froze")
 	}
 	registered := registeredWith(operation.Executable)
@@ -1825,7 +1866,10 @@ func unboundExit(view View, operation operationstore.Operation) string {
 // inputDigest binds the operation to the exact frozen bytes it planned from,
 // independently of the revision identity the registry records.
 func inputDigest(view View) string {
-	sources := view.Inputs()
+	return digestOf(view.Inputs())
+}
+
+func digestOf(sources desiredstate.Sources) string {
 	parts := make([]string, 0, len(sources.Files)+len(sources.Markers))
 	for _, collection := range [][]desiredstate.SourceFile{sources.Files, sources.Markers} {
 		for _, file := range collection {

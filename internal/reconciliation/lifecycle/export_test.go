@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -168,6 +169,20 @@ func (p plannedCapability) ProbesQuiescence() bool {
 	return ok && prober.ProbesQuiescence()
 }
 
+func (p plannedCapability) ProjectedPaths() []ProjectedPath {
+	if projector, ok := p.Capability.(Projector); ok {
+		return projector.ProjectedPaths()
+	}
+	return nil
+}
+
+func (p plannedCapability) Project(applied api.Catalog, block reconciliation.Block, evidence json.RawMessage) ([]Projection, error) {
+	if projector, ok := p.Capability.(Projector); ok {
+		return projector.Project(applied, block, evidence)
+	}
+	return nil, nil
+}
+
 // FailPublication makes every later publication into custody fail with err,
 // or succeed again when err is nil.
 func (j *CapabilityJourney) FailPublication(err error) { j.harness.binder.produceErr = err }
@@ -266,4 +281,8 @@ func (j *CapabilityJourney) Unstamp(t *testing.T) int {
 		}
 	}
 	return rewritten
+}
+
+func (j *CapabilityJourney) Declaring(objects ...api.Object) {
+	j.Service.compiler = testCompiler{state: diffState(objects...)}
 }

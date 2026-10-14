@@ -98,8 +98,12 @@ type RunRequest struct {
 	// Deadline bounds the run: the capability derives it from the waits its
 	// frozen request budgets, and the runner holds it to MaxDeadline. Zero
 	// keeps the runner's default.
-	Deadline time.Duration
+	Deadline   time.Duration
+	ReadOnly   bool
+	Unrecorded bool
 }
+
+const ObserveOperation = "observe"
 
 // MaxDeadline is the longest any adapter run may take, whatever deadline its
 // request states. A capability that states one derives it from the budgets its
@@ -167,6 +171,8 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		OutputRemediation: attemptOutputRemediation(execution),
 		Refusals:          maps.Clone(invocation.Refusals),
 		Deadline:          invocation.Deadline,
+		ReadOnly:          execution.ReadOnly || execution.Attempt == 0 || execution.Resolution != 0,
+		Unrecorded:        execution.Attempt == 0 && execution.Resolution == 0,
 	}
 }
 

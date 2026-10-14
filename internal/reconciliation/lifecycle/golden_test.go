@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -153,4 +154,24 @@ func TestInputDigestMatchesItsGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	matchesGolden(t, "input-digest", data, false)
+}
+
+func TestDigestOfMatchesTheViewDigest(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	frozen := h.workspace.inputs
+	frozenDigest := inputDigest(h.workspace.view())
+	if digestOf(frozen) != frozenDigest {
+		t.Fatalf("digestOf(inputs) = %s, the view digest is %s", digestOf(frozen), frozenDigest)
+	}
+	h.update("rev-fedcba9876543210fedcba9876543210", desiredstate.Sources{Roots: []string{"/synthetic"}, Files: []desiredstate.SourceFile{
+		desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
+	}})
+	retained, err := h.workspace.view().Revision(context.Background(), testRevision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digestOf(retained) != frozenDigest || inputDigest(h.workspace.view()) == frozenDigest {
+		t.Fatalf("a retained revision digests to %s, the frozen view to %s, the current view to %s",
+			digestOf(retained), frozenDigest, inputDigest(h.workspace.view()))
+	}
 }

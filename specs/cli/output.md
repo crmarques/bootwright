@@ -283,6 +283,7 @@ Successful result objects have stable top-level fields:
 | `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `excludedResourceFiles`, `advisories` |
 | `preflight infra`, `preflight clusters`, `preflight container-cluster`, `preflight storage-cluster`, `preflight add-ons`, `preflight all` | `context`, `target`, `checks`, `summary` |
 | `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `nextSteps`, `lifecycle`, `contradictions` |
+| `diff` | `context`, `operation`, `input`, `plan`, `observed`, `blocks`, `objects`, `summary` |
 | `render` | `inputDir`, `outputDir`, `effectiveStatePath`, `lockPath`, `inventoryPath`, `varsPath`, `installer`, `storage` |
 | `render effective` | `counts`, `effectiveState` |
 | `render installer` | `clusters` |
@@ -683,6 +684,34 @@ record names no executable), and the host directory of its logs, which JSON
 leaves out, and an `Unresolved <block>` section follows it for each block that
 carries `unresolved`, with its
 `Reason` and `Remedy`.
+
+### Diff results
+
+`diff` returns the comparison as one object whose fields are in this order, each
+object of `objects` beside the unified `patch` lines the text result prints:
+
+```json
+{"context":{"name":"lab","revision":"rev-8c41d07e"},"operation":{"id":"op-3f9a0c12","verb":"apply","state":"done","apply":"op-3f9a0c12","revision":"rev-1b7e55a0","applied":"readable"},"input":"changed","plan":{"state":"differs","reason":"","changed":1,"added":0,"removed":0,"rebuilt":[]},"observed":false,"blocks":{"observed":0,"unknown":0,"unprojected":0},"objects":[{"kind":"StoragePool","name":"rbd-data","difference":"changed","plan":"changed","blocks":["ceph-pool-rbd-data"],"realization":"done","real":{"source":"applied","state":"present","document":{},"notCompared":[],"notes":[],"reason":"","remedy":""},"desired":{"document":{}},"patch":["--- applied/StoragePool/rbd-data","+++ desired/StoragePool/rbd-data"]}],"summary":{"none":0,"changed":1,"added":0,"removed":0,"unknown":0,"applied":0}}
+```
+
+| Field | Contract |
+| --- | --- |
+| `context` | `name` of the resolved context and `revision` of its selected input. |
+| `operation` | `id`, `verb` and `state` of the current operation, `apply` and `revision` of the apply the comparison reads (the current apply, or the apply a removal takes back), and `applied`: `readable`, or the reason that apply's input revision cannot be read. Every value is `""` when the context holds no operation. |
+| `input` | `none`, `unchanged` or `changed`, by the [comparison rules](../state-reconciliation.md#comparing-desired-and-real-state). |
+| `plan` | `state` (`none`, `same`, `differs` or `unplanned`), the planner's `reason` when `unplanned`, the counts of `changed`, `added` and `removed` blocks, and `rebuilt`, the ids of the blocks another build plans differently. |
+| `observed`, `blocks` | Whether the comparison read a host, and the counts of blocks `observed`, left `unknown` and `unprojected`. Without a host read they are `false` and zeros. |
+| `objects` | Every declared, applied or planned object in API kind order and then name, except one that is both undeclared and absent. |
+| `objects[].difference` | `none`, `changed`, `added`, `removed` or `unknown`. |
+| `objects[].plan`, `blocks`, `realization` | The object's plan change, its block ids in plan order and its [realization](#lifecycle-and-status-results), each `""` or empty when no block names the object. |
+| `objects[].real` | `source` (`applied`, or `observed` for a side `--observe` read), `state` (`present`, `partial`, `absent` or `unknown`), `document`, `notCompared` (the declared paths a live read did not compare), `notes`, `reason` and `remedy`. |
+| `objects[].desired` | `document` of the declared object. |
+| `document` | The effective-state encoder's canonical JSON of the one object, set only when `difference` is `changed`, `added` or `removed` and that side exists; otherwise `null`. |
+| `patch` | The unified patch lines of the text result, empty unless `difference` is `changed`, `added` or `removed`. |
+| `summary` | The counts `none`, `changed`, `added`, `removed` and `unknown` of objects by difference, and `applied`, the objects compared with the applied side because no host read projected them, which is `0` without one. |
+
+Every string passes through the display escaping above. The command adds no
+diagnostic code.
 
 ## Diagnostic taxonomy and order
 
