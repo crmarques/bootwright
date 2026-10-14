@@ -30,7 +30,7 @@ type ListClustersRequest struct {
 
 type ClusterInfoRequest struct {
 	ContextName string
-	Name        string
+	Names       []string
 	Secrets     bool
 }
 
@@ -39,7 +39,7 @@ func (s Service) ListClusters(ctx context.Context, request ListClustersRequest) 
 	if err != nil {
 		return nil, err
 	}
-	containers, storages := selectClusters(catalog, "")
+	containers, storages := selectClusters(catalog, nil)
 	result := &ListResult{Context: selected, Clusters: make([]ClusterRef, 0, len(containers)+len(storages))}
 	for _, cluster := range containers {
 		result.Clusters = append(result.Clusters, ClusterRef{Name: cluster.Name(), Kind: KindContainerCluster})
@@ -56,13 +56,13 @@ func (s Service) ClusterInfo(ctx context.Context, request ClusterInfoRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	containers, storages := selectClusters(catalog, request.Name)
-	if request.Name != "" && len(containers)+len(storages) == 0 {
-		return nil, failure("access.target", "the context "+selected+" selects no ContainerCluster or StorageCluster named "+request.Name,
-			"name a cluster the context selects; bootwright cluster info --context "+selected+" lists them")
+	names := canonicalNames(request.Names)
+	containers, storages := selectClusters(catalog, names)
+	if err := unknownClusters(selected, names, containers, storages); err != nil {
+		return nil, err
 	}
 	if request.Secrets {
-		if err := secretsTarget(selected, request.Name, containers, storages); err != nil {
+		if err := secretsTarget(selected, names, containers, storages); err != nil {
 			return nil, err
 		}
 		if s.custody == nil {
@@ -137,11 +137,41 @@ func (s Service) read(ctx context.Context, contextName string) (string, api.Cata
 	return selected, catalog, nil
 }
 
-func selectClusters(catalog api.Catalog, name string) ([]api.Object, []api.Object) {
+func canonicalNames(requested []string) []string {
+	var names []string
+	for _, name := range requested {
+		if name = strings.TrimSpace(name); name != "" {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names)
+}
+
+func unknownClusters(selected string, names []string, containers, storages []api.Object) error {
+	var unknown []string
+	for _, name := range names {
+		found := func(cluster api.Object) bool { return cluster.Name() == name }
+		if !slices.ContainsFunc(containers, found) && !slices.ContainsFunc(storages, found) {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	subject, remedy := "no ContainerCluster or StorageCluster named ", "name a cluster the context selects; "
+	if len(unknown) > 1 {
+		subject, remedy = "no ContainerClusters or StorageClusters named ", "name clusters the context selects; "
+	}
+	return failure("access.target", "the context "+selected+" selects "+subject+strings.Join(unknown, ", "),
+		remedy+"bootwright cluster info --context "+selected+" lists them")
+}
+
+func selectClusters(catalog api.Catalog, names []string) ([]api.Object, []api.Object) {
 	pick := func(kind api.Kind) []api.Object {
 		var picked []api.Object
 		for _, object := range catalog.OfKind(kind) {
-			if name == "" || object.Name() == name {
+			if len(names) == 0 || slices.Contains(names, object.Name()) {
 				picked = append(picked, object)
 			}
 		}
@@ -156,8 +186,15 @@ func external(cluster api.Object) bool {
 	return management != "" && management != ManagementManaged
 }
 
-func secretsTarget(selected, name string, containers, storages []api.Object) error {
+func secretsTarget(selected string, names []string, containers, storages []api.Object) error {
 	discovery := "bootwright cluster info --context " + selected
+	if len(names) > 1 {
+		return failure("cli.usage", "--secrets reveals one cluster's values; name one cluster", "name one cluster with --name <cluster>; "+discovery+" lists the clusters this context selects")
+	}
+	var name string
+	if len(names) == 1 {
+		name = names[0]
+	}
 	switch {
 	case name == "":
 		return failure("access.target", "bootwright cluster info --secrets requires one cluster name", discovery+" lists the clusters this context selects")

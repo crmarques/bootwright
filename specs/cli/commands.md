@@ -110,9 +110,9 @@ The three `media` commands follow the host-wide
 | `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after a proved stop and a proved start | same |
 | `bootwright setup` | `--dry-run` false; `--yes` false; `--purge-old-bundles` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys), and with `--purge-old-bundles` the [superseded bundles it retired](../controller.md#supported-host-and-dependency-selection) | bounded dependency acquisition over the [context-free route](../controller.md#the-context-free-acquisition-route) and local installation; dry-run only previews; retirement removes only superseded execution bundles, after the setup completes or, [at the bound](../controller.md#supported-host-and-dependency-selection), before it publishes; a setup left pending, at the bound or below it, that never took effect and that this executable cannot resume is first [canceled](../controller.md#publication-and-interrupted-setup) |
 | `bootwright cluster list` | `--output text\|json` default `text` | container and storage cluster names and kinds in canonical order | read local state |
-| `bootwright cluster info` | `--name <cluster>` default all unless `--secrets`; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
-| `bootwright cluster rsh` | required `--name <cluster>`; `--node <node>` default first node in canonical name order | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
-| `bootwright cluster exec` | required `--name <cluster>`; `--node <node>` default first node in canonical name order; required `<command>...` | the exact argument vector runs on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result | same as `machine exec` |
+| `bootwright cluster info` | `--name <list>` default all unless `--secrets`, which requires exactly one cluster; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
+| `bootwright cluster rsh` | required `--name <cluster>` (one cluster); `--node <node>` default first node in canonical name order (at most one) | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
+| `bootwright cluster exec` | required `--name <list>`; `--node <list>` default each cluster's first node in canonical name order; required `<command>...` | the exact argument vector runs on the resolved node's Machine, or on every resolved Machine at once with [each line prefixed by its Machine](../cli.md#several-clusters-and-nodes), under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result, the highest of them for several | same as `machine exec` |
 | `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
@@ -126,7 +126,8 @@ The three `media` commands follow the host-wide
 ### Cluster command applicability
 
 `--name` selects from the shared ContainerCluster/StorageCluster name namespace
-in the selected context. The following table owns applicability. Target
+in the selected context; that of `cluster info` and `cluster exec` is a
+comma-separated list under the [list rules](../cli.md#parsing-and-input-conventions). The following table owns applicability. Target
 resolution, readiness and diagnostics of `cluster kubeconfig` live in the
 [administrator access export](../cli.md#administrator-access-export); those of
 `cluster rsh` and `cluster exec` in the
@@ -167,6 +168,11 @@ for a cluster the resolved node's, as its resolved identity, that an unproved
 host key is confirmed interactively or refused, and that the exit status is the
 client's. The cluster commands also state how `--node` selects: by node name,
 then by FQDN, defaulting to the first node in name order.
+
+The detailed help of `cluster exec` states that `--name` and `--node` take
+comma-separated lists and that the command runs on every resolved Machine at
+once; that of `cluster info` states that `--name` takes a list and that
+`--secrets` requires exactly one cluster.
 
 The detailed help of `machine start`, `machine stop`, `machine restart` and
 `machine exec` states that `--name` takes a comma-separated list and that the
@@ -372,9 +378,10 @@ selects the catalog's declared default. Add-on registration uses only an
 embedded, content-identified catalog release; these flags do not accept a path,
 URL, or arbitrary package.
 
-`cluster info --secrets=true` requires an explicitly supplied, non-empty
-`--name`; the default-all selection applies only when sensitive values are not
-requested.
+`cluster info --secrets=true` requires an explicitly supplied `--name` naming
+exactly one cluster after list normalization, and a list of several is
+`cli.usage`; the default-all selection applies only when sensitive values are
+not requested.
 
 The [Secrets contract](../secrets.md#acquisition-and-commands) owns the exact
 type/source flag matrix, whole-version validation, generation and reveal parts.

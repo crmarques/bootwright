@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"io"
+	"sync"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -63,11 +64,14 @@ func (p labSessionProof) HostKey(context.Context, string, string) (machine.HostK
 // labSessionClient records each session it would open and the credential that
 // session carried while it ran, which is cleared once it ends.
 type labSessionClient struct {
+	mu       sync.Mutex
 	sessions []machine.Session
 	keys     []string
 }
 
 func (c *labSessionClient) Run(_ context.Context, session machine.Session, _ io.Reader, _, _ io.Writer) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.sessions = append(c.sessions, session)
 	c.keys = append(c.keys, string(session.PrivateKey))
 	return 0, nil

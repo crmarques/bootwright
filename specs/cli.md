@@ -126,7 +126,8 @@ runnable commands. An explicit `help` path still requires exact subcommands.
 
 Scalar flags follow command-line order and the last occurrence wins, including
 the scalar comma-list flags `--clusters`, `--machines`, `--replace`, `--stage`,
-and the `--name` that names several Machines.
+the `--name` that names several Machines and the `--name` and `--node` that name
+several clusters and nodes.
 Collection flags aggregate in command-line order only where this contract says
 they are repeatable. `validate -f` is repeatable. `--authorize` is repeatable
 and each occurrence may also contain commas. Supplying an empty required value
@@ -145,8 +146,9 @@ valid occurrences; enum and format validation otherwise applies to the final
 resolved scalar value under the last-occurrence-wins rule.
 
 `--clusters`, `--machines`, `--replace`, and `--stage` are comma-separated
-lists, and so is the required `--name` of `machine start`, `machine stop`,
-`machine restart` and `machine exec`.
+lists, and so are the required `--name` of `machine start`, `machine stop`,
+`machine restart` and `machine exec`, the required `--name` and the `--node` of
+`cluster exec`, and the `--name` of `cluster info`.
 Whitespace around a member is ignored, empty members are ignored, and duplicate
 members collapse to their first occurrence. Omission selects all eligible
 objects only where the command row says “default all.” Empty resolved lists
@@ -167,7 +169,13 @@ preserve these command-specific compatibility rules:
   and `machine exec` must likewise resolve to at least one member, so a
   comma-only value is a usage error. `machine rsh` opens one interactive
   session and keeps a single `--name`: a value containing a comma is a usage
-  error. `cluster rsh` and `cluster exec` keep their single cluster and node.
+  error;
+- a supplied `--name` of `cluster exec` and `cluster info`, and a supplied
+  `--node` of `cluster exec`, must likewise resolve to at least one member, so
+  a comma-only value is a usage error. `cluster rsh` opens one interactive
+  session, so a comma in its `--name` or `--node` is a usage error; and
+- `cluster info --secrets` requires `--name` to name exactly one cluster after
+  normalization, so a list of several is a usage error.
 
 A selector is applied only after the complete Environment-selected graph has
 been loaded, normalized, and validated. It filters presentation, checks,
@@ -918,8 +926,9 @@ result stand and aggregate the same way.
 
 ### Cluster sessions
 
-`cluster rsh` and `cluster exec` open one session on a node of a managed Ceph
-cluster. They resolve the explicit `--context`, or the current context, once;
+`cluster rsh` opens one session on a node of a managed Ceph cluster, and
+`cluster exec` opens one or, as [below](#several-clusters-and-nodes), several.
+They resolve the explicit `--context`, or the current context, once;
 compile that context's effective state; and resolve `--name` in the selected
 graph's shared ContainerCluster/StorageCluster name namespace, never searching
 outside it. The node's `machineRef` then opens the session exactly as
@@ -959,6 +968,46 @@ Sessions on OpenShift and OKD ContainerClusters are
 [deferred](deferred/cli-access-and-rendering.md#containercluster-access-handoffs-and-sessions)
 to the parked item [B101](milestones/backlog.md#b101).
 
+#### Several clusters and nodes
+
+`cluster exec` takes a comma-separated `--name` and a comma-separated `--node`
+under the [list rules](#parsing-and-input-conventions); `cluster rsh` names one
+cluster and at most one node. One cluster and one node is the session above,
+unchanged. Otherwise each listed cluster runs the command on the Machine behind
+its first node in canonical order, or, with `--node`, on the Machine behind
+every `--node` member it declares, each member matched in each listed cluster by
+exact node `name` and then by exact effective FQDN as above. A node name two
+listed clusters both declare selects a node in each.
+
+Every resolved node's `machineRef` joins one list, deduplicated, and that list
+is run as [`machine exec`](#machine-ssh-sessions) runs it. A list of one
+Machine, which two nodes or clusters sharing that Machine also yield, is the
+single session above. Several run as `machine exec` runs several Machines: the
+sessions are concurrent, take no standard input and never prompt, and the
+prefix of each output line is the Machine name, not the cluster or the node.
+Two nodes that share a Machine run it once. The invocation's status is the
+highest status any session returned, and a refusal before a session opens exits
+`255`.
+
+Clusters resolve in canonical order, ascending bytewise name, and each check
+below applies across every listed cluster before the next one runs:
+
+| Condition | Diagnostic | Next action |
+| --- | --- | --- |
+| Listed names no selected ContainerCluster or StorageCluster has | one `access.target` naming the context and every such name | as above |
+| A listed name is an external Ceph StorageCluster | `cluster.not-applicable` for the first such cluster | as above |
+| A listed name is an OpenShift or OKD ContainerCluster | `access.unavailable` for the first such cluster | none |
+| A `--node` member matches no node of any listed cluster | one `access.target` naming every such member; with one listed cluster, worded as above | choose declared node names; `bootwright cluster info --context <context>` lists the nodes, and with one listed cluster the remedy above |
+| A listed cluster declares none of the `--node` members | one `access.target` naming every such cluster and the members | name only nodes each listed cluster declares, or run the command per cluster |
+
+A FQDN shared by several nodes of one cluster refuses as above, for the first
+cluster and member in canonical order, after the cluster checks and before the
+two node rows. Without `--node`, a listed cluster that declares no node refuses
+`access.target` as above. Each Machine then resolves, and refuses, as the
+[`machine exec`](#machine-ssh-sessions) section states for one or for several,
+so among several Machines one whose identity is a password refuses the whole
+invocation.
+
 ### Storage dashboard access
 
 A managed Ceph cluster's apply enables the Ceph dashboard and leaves its
@@ -967,6 +1016,13 @@ administrator password in the context's
 cluster's block. `cluster info` reports the dashboard's access information in
 the [managed Ceph entry](cli/output.md#cluster-discovery) without any secret:
 its status, user, URLs and certificate SHA-256 fingerprint.
+
+`cluster info --name` takes a comma-separated list under the
+[list rules](#parsing-and-input-conventions) and selects exactly the listed
+clusters, in canonical order; unknown members fail `access.target` in one
+diagnostic naming each of them. `--secrets` reveals one cluster's values, so it
+requires `--name` to name exactly one cluster after normalization: a list of
+several is `cli.usage` with exit `2`, before any evidence is read.
 
 `cluster info --secrets --name <cluster>` additionally reveals the password as
 `passwordValue` in that entry's `dashboard`, on standard output only. Its checks

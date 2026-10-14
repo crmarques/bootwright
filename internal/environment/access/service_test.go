@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -22,6 +23,7 @@ func (g *fixedGraph) Effective(_ context.Context, contextName string) (api.Catal
 
 type openedSession struct {
 	context, machine string
+	machines         []string
 	command          []string
 	interactive      bool
 }
@@ -33,9 +35,9 @@ func (r *recordingSessions) Rsh(_ context.Context, contextName, name string, _ m
 	return &machine.SessionResult{Context: contextName, Machine: name, ExitCode: 3}, nil
 }
 
-func (r *recordingSessions) Exec(_ context.Context, contextName, name string, _ machine.SSHOptions, command []string) (*machine.SessionResult, error) {
-	r.opened = append(r.opened, openedSession{context: contextName, machine: name, command: command})
-	return &machine.SessionResult{Context: contextName, Machine: name, ExitCode: 4}, nil
+func (r *recordingSessions) Exec(_ context.Context, contextName string, names []string, _ machine.SSHOptions, command []string) (*machine.SessionResult, error) {
+	r.opened = append(r.opened, openedSession{context: contextName, machines: names, command: command})
+	return &machine.SessionResult{Context: contextName, Machine: strings.Join(names, ","), ExitCode: 4}, nil
 }
 
 func text(value string) api.Value { return api.StringValue(value) }
@@ -86,11 +88,11 @@ func TestClusterSessionsOpenTheSelectedNodesMachine(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			graph, sessions := &fixedGraph{catalog: sessionCatalog(tt.nodes...)}, &recordingSessions{}
 			service := New(graph, sessions, func(context.Context) (string, error) { return "lab", nil })
-			result, err := service.ClusterExec(context.Background(), ClusterExecRequest{Name: "ceph", Node: tt.node, Command: []string{"hostname", "--node", "rhel-03"}})
+			result, err := service.ClusterExec(context.Background(), ClusterExecRequest{Names: []string{"ceph"}, Nodes: []string{tt.node}, Command: []string{"hostname", "--node", "rhel-03"}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := openedSession{context: "lab", machine: tt.want, command: []string{"hostname", "--node", "rhel-03"}}
+			want := openedSession{context: "lab", machines: []string{tt.want}, command: []string{"hostname", "--node", "rhel-03"}}
 			if len(sessions.opened) != 1 || !equalSession(sessions.opened[0], want) || result.ExitCode != 4 {
 				t.Fatalf("opened %+v (result %+v), want %+v", sessions.opened, result, want)
 			}
@@ -106,7 +108,7 @@ func TestClusterSessionsOpenTheSelectedNodesMachine(t *testing.T) {
 }
 
 func equalSession(got, want openedSession) bool {
-	return got.context == want.context && got.machine == want.machine && got.interactive == want.interactive && slices.Equal(got.command, want.command)
+	return got.context == want.context && got.machine == want.machine && slices.Equal(got.machines, want.machines) && got.interactive == want.interactive && slices.Equal(got.command, want.command)
 }
 
 func TestClusterSessionRefusalsOpenNothing(t *testing.T) {
@@ -128,7 +130,7 @@ func TestClusterSessionRefusalsOpenNothing(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			sessions := &recordingSessions{}
 			service := New(&fixedGraph{catalog: sessionCatalog(tt.nodes...)}, sessions, nil)
-			_, err := service.ClusterExec(context.Background(), ClusterExecRequest{ContextName: "lab", Name: tt.cluster, Node: tt.node, Command: []string{"true"}})
+			_, err := service.ClusterExec(context.Background(), ClusterExecRequest{ContextName: "lab", Names: []string{tt.cluster}, Nodes: []string{tt.node}, Command: []string{"true"}})
 			if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != tt.code {
 				t.Fatalf("exec refusal = %v, want %s", err, tt.code)
 			}

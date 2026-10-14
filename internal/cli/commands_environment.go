@@ -29,9 +29,10 @@ func environmentClusterCommands() []commandSpec {
 		available(commandSpec{path: "cluster info", short: "Show cluster details and static access applicability", long: "Show cluster details and static access applicability, readiness and invocation templates from local desired state and evidence, with no host contact." +
 			" Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters." +
 			" A managed Ceph StorageCluster also reports its release, FSID, frozen image, monitors and administrator command." +
-			" --secrets requires --name and applies to managed Ceph StorageClusters only.", flags: []flagSpec{stringFlag("name", "Select one cluster (default: all)"), boolFlag("secrets", "Include explicitly selected sensitive values"), outputFlag()}}),
+			" --name takes a comma-separated list." +
+			" --secrets requires --name naming exactly one cluster and applies to managed Ceph StorageClusters only.", flags: []flagSpec{stringFlag("name", "Select comma-separated cluster names (default: all)"), boolFlag("secrets", "Include explicitly selected sensitive values"), outputFlag()}}),
 		available(clusterSessionCommand(commandSpec{path: "cluster rsh", short: "Open an SSH session on a cluster node's Machine"})),
-		available(clusterSessionCommand(commandSpec{path: "cluster exec", short: "Run a command over SSH on a cluster node's Machine", payload: true})),
+		available(clusterExecCommand()),
 	}
 }
 
@@ -40,7 +41,20 @@ func clusterSessionCommand(spec commandSpec) commandSpec {
 	spec = sessionCommand(spec)
 	spec.long += " The session opens on the Machine behind one node of a managed Ceph StorageCluster: --node selects" +
 		" the node by name, then by FQDN, and defaults to the first node in name order." +
-		" External StorageClusters are inapplicable, and sessions on OpenShift/OKD ContainerClusters are not yet available."
+		clusterSessionLimits
+	return spec
+}
+
+const clusterSessionLimits = " External StorageClusters are inapplicable, and sessions on OpenShift/OKD ContainerClusters are not yet available."
+
+func clusterExecCommand() commandSpec {
+	spec := sessionCommand(commandSpec{path: "cluster exec", short: "Run a command over SSH on cluster nodes' Machines", payload: true,
+		flags: []flagSpec{requiredFlag("name", "Select comma-separated cluster names"),
+			stringFlag("node", "Select declared nodes by comma-separated name, then FQDN (default: each cluster's first node in name order)")}})
+	spec.long += " --name takes a comma-separated list, and each cluster runs the command on the Machine behind its first node in name order." +
+		" --node takes a comma-separated list and selects those nodes, by name then by FQDN, in every listed cluster that declares them." +
+		" The command runs on every resolved Machine at once, each output line is prefixed by its Machine, and the exit status is the highest any client returned." +
+		clusterSessionLimits
 	return spec
 }
 
@@ -106,7 +120,7 @@ func (s Services) invokeEnvironmentInspection(ctx context.Context, path string, 
 	case "cluster info":
 		result, err := invokeResult(ctx, values, inspection.ClusterInfoRequest{
 			ContextName: values.text("context"),
-			Name:        values.text("name"),
+			Names:       values.names("name"),
 			Secrets:     values.boolean("secrets"),
 		}, s.EnvironmentInspection.ClusterInfo)
 		return commandResult{clusterInfo: result}, err
@@ -131,8 +145,8 @@ func (s Services) invokeEnvironmentAccess(ctx context.Context, path string, valu
 	case "cluster exec":
 		result, err := invokeResult(ctx, values, environmentaccess.ClusterExecRequest{
 			ContextName: values.text("context"),
-			Name:        values.text("name"),
-			Node:        values.text("node"),
+			Names:       values.names("name"),
+			Nodes:       values.names("node"),
 			SSH:         values.ssh(),
 			Command:     slices.Clone(args),
 		}, s.EnvironmentAccess.ClusterExec)

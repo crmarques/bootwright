@@ -5384,3 +5384,51 @@ offered key ([B544](backlog.md#b544)). The output lines of several sessions are
 interleaved by line, never within one, and carry no ordering between Machines.
 A batch of more than 16 Machines can retire the retained output of its own
 earliest runs before its result names them ([B545](backlog.md#b545)).
+
+### X86 — Cluster commands across several clusters and nodes
+
+**Owner:** Environment access, with CLI. An out-of-sequence product slice,
+integrated on main as one commit at the owner's explicit request of 2026-10-14
+(D151), following [X85](#x85--machine-commands-across-several-machines).
+**Items:** B546. **Decisions:** D151. **Integrated:** "feat(cluster): take cluster and node lists in exec and info".
+
+**Outcome, B546:** `--name` and `--node` of `cluster exec` are
+comma-separated lists under the
+[list rules](../cli.md#parsing-and-input-conventions), and so is `--name` of
+`cluster info`; `cluster rsh` stays single and refuses a comma in either flag.
+A value that resolves to no member is `cli.usage`. `cluster exec` resolves the
+listed clusters in canonical order through the existing checks, each applied
+across every member before the next: every unknown name in one `access.target`,
+then the first external StorageCluster, then the first OpenShift or OKD
+ContainerCluster. Each cluster contributes its first node, or the `--node`
+members it declares, matched by exact name and then by exact effective FQDN; a
+member no listed cluster declares, and a cluster declaring none of the members,
+each fail `access.target` in one diagnostic naming every offender. The resolved
+`machineRef`s, deduplicated, reach the Machine session service as one list, so
+one Machine is today's single session and several run the several-Machine
+session, each output line prefixed by the Machine name
+([cluster sessions](../cli.md#several-clusters-and-nodes)). `cluster info --name`
+selects exactly the listed clusters and names every unknown member in one
+`access.target`; `--secrets` still reveals one cluster and is `cli.usage` for a
+list of several ([dashboard access](../cli.md#storage-dashboard-access)).
+
+**Guard tests:** `internal/environment/access`:
+`TestClusterExecHandsEveryResolvedMachineToOneSessionCall`,
+`TestClusterExecRefusesOnceNamingEveryOffender`,
+`TestClusterExecSingleRefusalsKeepTheirMessages` and
+`TestClusterRshStaysOneSessionOnTheSelectedNode`;
+`internal/environment/inspection`:
+`TestClusterInfoSelectsExactlyTheListedClusters`,
+`TestClusterInfoNamesEveryUnknownMemberInOneRefusal` and
+`TestSecretsRevealsOneClusterNeverSeveral`; `internal/cli`:
+`TestOnlyTheClusterCommandsThatSelectSeveralTakeLists`,
+`TestAClusterListThatResolvesToNoMemberOrToSeveralWhereOneIsMeantIsAUsageError`
+and `TestClusterListsReachTheServicesNormalized`; `cmd/bootwright`:
+`TestClusterExecOnSeveralNodesRunsEachMachineOnceTogether`.
+
+**Constraints left behind:** a node name or FQDN is matched in every listed
+cluster, so a name two clusters share selects a node in each. A listed cluster
+that declares none of the `--node` members refuses the invocation instead of
+running nothing there. The Machine behind every resolved node is subject to the
+several-Machine exec rules of X85, so a Machine that signs in with a password is
+reached alone ([B544](backlog.md#b544)).

@@ -391,6 +391,18 @@ bootwright machine stop --context lab-rhel --name rhel-01,rhel-02,rhel-03 --yes
 bootwright machine exec --context lab-rhel --name rhel-01,rhel-02,rhel-03 cat /etc/os-release
 ```
 
+`cluster exec` does the same across clusters and nodes: `--name` and `--node`
+take comma-separated lists, each listed cluster runs the command on its first
+node, or on the `--node` members it declares, and every resolved Machine runs at
+once with its output lines prefixed by the Machine name. `cluster info --name`
+takes a list too, and `cluster rsh` stays on one node
+([sessions](../specs/cli.md#several-clusters-and-nodes)):
+
+```sh
+bootwright cluster exec --context lab-rhel --name ceph-a,ceph-b hostname
+bootwright cluster exec --context lab-rhel --name ceph-lab --node rhel-01,rhel-02 uptime
+```
+
 SSH placement of a managed service on a second OS-ready host, with that host's
 authored access and bound host key, is operator-run too and has no example.
 No real-hardware row has been accepted yet: [B67](../specs/milestones/m3.md#b67)

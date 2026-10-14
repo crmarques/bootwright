@@ -151,6 +151,10 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		if message := validateMachineNames(flags, path); message != "" {
 			return message
 		}
+	case "cluster rsh", "cluster exec", "cluster info":
+		if message := validateClusterNames(flags, path); message != "" {
+			return message
+		}
 	}
 	switch path {
 	case "context init", "context update":
@@ -215,10 +219,6 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 					return "every --replace name must belong to --machines"
 				}
 			}
-		}
-	case "cluster info":
-		if boolValue(flags, "secrets") && stringValue(flags, "name") == "" {
-			return "--secrets requires an explicit --name"
 		}
 	}
 	return ""

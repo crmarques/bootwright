@@ -1,4 +1,4 @@
-Show cluster details and static access applicability, readiness and invocation templates from local desired state and evidence, with no host contact. Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters. A managed Ceph StorageCluster also reports its release, FSID, frozen image, monitors and administrator command. --secrets requires --name and applies to managed Ceph StorageClusters only.
+Show cluster details and static access applicability, readiness and invocation templates from local desired state and evidence, with no host contact. Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters. A managed Ceph StorageCluster also reports its release, FSID, frozen image, monitors and administrator command. --name takes a comma-separated list. --secrets requires --name naming exactly one cluster and applies to managed Ceph StorageClusters only.
 
 Usage:
   bootwright cluster info [flags]
@@ -7,7 +7,7 @@ Examples:
   bootwright cluster info --context lab --name storage
 
 Flags:
-      --name string     Select one cluster (default: all)
+      --name string     Select comma-separated cluster names (default: all)
       --output string   Select output mode (values: text, json) (default "text")
       --secrets         Include explicitly selected sensitive values
 

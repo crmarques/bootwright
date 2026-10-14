@@ -88,8 +88,8 @@ func (m machineSessions) Rsh(ctx context.Context, contextName, name string, ssh 
 	return m.access.Rsh(ctx, machineaccess.RshRequest{ContextName: contextName, Name: name, SSH: ssh})
 }
 
-func (m machineSessions) Exec(ctx context.Context, contextName, name string, ssh machine.SSHOptions, command []string) (*machine.SessionResult, error) {
-	return m.access.Exec(ctx, machineaccess.ExecRequest{ContextName: contextName, Names: []string{name}, SSH: ssh, Command: command})
+func (m machineSessions) Exec(ctx context.Context, contextName string, names []string, ssh machine.SSHOptions, command []string) (*machine.SessionResult, error) {
+	return m.access.Exec(ctx, machineaccess.ExecRequest{ContextName: contextName, Names: names, SSH: ssh, Command: command})
 }
 
 // sessionFiles opens an offered key through the invoking account's opener, and

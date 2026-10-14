@@ -193,3 +193,42 @@ func TestClusterSessionRefusalsExitTwoFiftyFiveBeforeAnyCredential(t *testing.T)
 		}
 	}
 }
+
+func TestClusterExecOnSeveralNodesRunsEachMachineOnceTogether(t *testing.T) {
+	second := func(catalog api.Catalog) api.Catalog {
+		first := requireObject(t, catalog, api.StorageCluster, "ceph-lab")
+		nodes := first.Spec().Get("ceph", "topology", "nodes").Items()
+		spec := api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("ceph")}, api.FieldValue{Name: "management", Value: api.StringValue("managed")},
+			api.FieldValue{Name: "ceph", Value: api.MapValue(api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(nodes[:1]...)})})})
+		return api.NewCatalog(append(catalog.Objects(), api.NewObject(api.StorageCluster, "ceph-twin", api.Value{}, spec)))
+	}
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{name: "two nodes of one cluster", args: []string{"--name", "ceph-lab", "--node", "rhel-03,rhel-01"}, want: []string{"rhel-01", "rhel-03"}},
+		{name: "two clusters share a Machine", args: []string{"--name", "ceph-twin,ceph-lab"}, want: []string{"rhel-01"}},
+		{name: "two clusters and a node both declare", args: []string{"--name", "ceph-twin,ceph-lab", "--node", "rhel-01,rhel-02"}, want: []string{"rhel-01", "rhel-02"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rig := newCephSessionRig(t, second)
+			code, out, errOut := rig.run(t, append(append([]string{"cluster", "exec", "--context", "lab"}, tt.args...), "--", "true")...)
+			var ran []string
+			for _, session := range rig.client.sessions {
+				ran = append(ran, session.Machine)
+			}
+			slices.Sort(ran)
+			if code != 0 || out != "" || errOut != "" || !slices.Equal(ran, tt.want) {
+				t.Fatalf("exit %d, out %q, err %q, ran %v, want %v", code, out, errOut, ran, tt.want)
+			}
+		})
+	}
+	rig := newCephSessionRig(t, second)
+	code, out, errOut := rig.run(t, "cluster", "exec", "--context", "lab", "--name", "ceph-twin,ceph-lab", "--node", "rhel-02", "--", "true")
+	if code != 255 || out != "" || !strings.HasPrefix(errOut, "[FAIL] access.target: ") || !strings.Contains(errOut, "StorageCluster ceph-twin declares none of the nodes rhel-02") ||
+		rig.lender.requested != nil || len(rig.client.sessions) != 0 {
+		t.Fatalf("exit %d, out %q, err %q, lent %v", code, out, errOut, rig.lender.requested)
+	}
+}

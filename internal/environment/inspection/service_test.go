@@ -234,17 +234,17 @@ func TestClusterInfoReportsEachKindFromDesiredStateAndEvidence(t *testing.T) {
 func TestClusterInfoSelectsOneNameAndNeverAnExcludedOne(t *testing.T) {
 	f := newFixture(t)
 	service := f.service("lab")
-	result, err := service.ClusterInfo(context.Background(), ClusterInfoRequest{Name: "storage"})
+	result, err := service.ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}})
 	if err != nil || len(result.Clusters) != 0 || len(result.Storage) != 1 || result.Storage[0].Name != "storage" {
 		t.Fatalf("selected = %+v (%v)", result, err)
 	}
-	result, err = service.ClusterInfo(context.Background(), ClusterInfoRequest{Name: "edge"})
+	result, err = service.ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"edge"}})
 	if err != nil || len(result.Clusters) != 1 || len(result.Storage) != 0 {
 		t.Fatalf("selected container = %+v (%v)", result, err)
 	}
 	for _, name := range []string{"excluded-cluster", "Storage"} {
 		reads := f.cephCalls + f.installs + f.keyReads
-		_, err := service.ClusterInfo(context.Background(), ClusterInfoRequest{ContextName: "other", Name: name})
+		_, err := service.ClusterInfo(context.Background(), ClusterInfoRequest{ContextName: "other", Names: []string{name}})
 		found := diagnostics.Of(err)
 		if len(found) != 1 || found[0].Code != "access.target" || !strings.Contains(found[0].Message, "other") || !strings.Contains(found[0].Remediation, "bootwright cluster info --context other") {
 			t.Fatalf("%s refusal = %v", name, err)
@@ -291,7 +291,7 @@ func TestIncompleteProofsNeverReportReady(t *testing.T) {
 	} {
 		f := newFixture(t)
 		edit(f)
-		result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Name: "storage"})
+		result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}})
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -304,7 +304,7 @@ func TestIncompleteProofsNeverReportReady(t *testing.T) {
 func TestAClusterWithoutNodesOpensNoSession(t *testing.T) {
 	f := newFixture(t)
 	f.catalog = api.NewCatalog([]api.Object{storageCluster("storage", "managed", "rhel-01")})
-	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Name: "storage"})
+	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +327,7 @@ func TestSecretsRefusalsSettleTheTargetBeforeAnyEvidenceRead(t *testing.T) {
 	}
 	for _, tt := range tests {
 		f := newFixture(t)
-		result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Name: tt.name, Secrets: true})
+		result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{tt.name}, Secrets: true})
 		found := diagnostics.Of(err)
 		if result != nil || len(found) != 1 || found[0].Code != tt.code {
 			t.Fatalf("%q: result %+v, err %v, want %s", tt.name, result, err, tt.code)
@@ -369,7 +369,7 @@ func revealed(t *testing.T, d *Dashboard) string {
 
 func TestSecretsRevealTheCustodiedDashboardPasswordAfterTheTargetSettles(t *testing.T) {
 	f := newFixture(t)
-	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Name: "storage", Secrets: true})
+	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestSecretsRevealAnUnprovedCopyWithAWarning(t *testing.T) {
 	} {
 		f := newFixture(t)
 		edit(f)
-		result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Name: "storage", Secrets: true})
+		result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true})
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -412,7 +412,7 @@ func TestSecretsRevealAnUnprovedCopyWithAWarning(t *testing.T) {
 func TestSecretsWithoutCustodyFailUnavailableAndReadFailuresPropagate(t *testing.T) {
 	f := newFixture(t)
 	delete(f.passwords, "storage")
-	_, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Name: "storage", Secrets: true})
+	_, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true})
 	found := diagnostics.Of(err)
 	if len(found) != 1 || found[0].Code != "access.unavailable" || !strings.Contains(found[0].Message, "StorageCluster storage") ||
 		found[0].Remediation != "bootwright apply --context lab --stage clusters" || len(f.custody) != 1 {
@@ -420,12 +420,82 @@ func TestSecretsWithoutCustodyFailUnavailableAndReadFailuresPropagate(t *testing
 	}
 	f = newFixture(t)
 	f.readError = errors.New("the custody store is unreadable")
-	if _, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Name: "storage", Secrets: true}); !errors.Is(err, f.readError) || len(f.custody) != 1 {
+	if _, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true}); !errors.Is(err, f.readError) || len(f.custody) != 1 {
 		t.Fatalf("read failure = %v", err)
 	}
 	unwired := newFixture(t)
 	service := New(unwired, unwired, unwired, unwired, func(context.Context) (string, error) { return "lab", nil }, nil)
-	if _, err := service.ClusterInfo(context.Background(), ClusterInfoRequest{Name: "storage", Secrets: true}); err == nil {
+	if _, err := service.ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true}); err == nil {
 		t.Fatal("a service without custody revealed a password")
+	}
+}
+
+func TestClusterInfoSelectsExactlyTheListedClusters(t *testing.T) {
+	tests := []struct {
+		name              string
+		names             []string
+		containers, store []string
+	}{
+		{name: "omitted selects every cluster", containers: []string{"edge", "okd-lab"}, store: []string{"archive", "storage"}},
+		{name: "a list of both kinds", names: []string{"storage", "edge"}, containers: []string{"edge"}, store: []string{"storage"}},
+		{name: "a list keeps canonical order whatever its own", names: []string{"storage", "archive", "okd-lab", "edge"}, containers: []string{"edge", "okd-lab"}, store: []string{"archive", "storage"}},
+		{name: "members are trimmed and deduplicated", names: []string{" storage ", "storage", ""}, store: []string{"storage"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFixture(t)
+			result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: tt.names})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var containers, store []string
+			for _, entry := range result.Clusters {
+				containers = append(containers, entry.Name)
+			}
+			for _, entry := range result.Storage {
+				store = append(store, entry.Name)
+			}
+			if !slices.Equal(containers, tt.containers) || !slices.Equal(store, tt.store) {
+				t.Fatalf("selected %v and %v, want %v and %v", containers, store, tt.containers, tt.store)
+			}
+			if !slices.Equal(f.asked, []string{"lab"}) {
+				t.Fatalf("rendered %v, want once", f.asked)
+			}
+		})
+	}
+}
+
+func TestClusterInfoNamesEveryUnknownMemberInOneRefusal(t *testing.T) {
+	tests := []struct {
+		names   []string
+		message string
+	}{
+		{names: []string{"zed", "storage", "missing"}, message: "the context lab selects no ContainerClusters or StorageClusters named missing, zed"},
+		{names: []string{"missing", "storage"}, message: "the context lab selects no ContainerCluster or StorageCluster named missing"},
+	}
+	for _, tt := range tests {
+		for _, reveal := range []bool{false, true} {
+			f := newFixture(t)
+			result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: tt.names, Secrets: reveal})
+			found := diagnostics.Of(err)
+			if result != nil || len(found) != 1 || found[0].Code != "access.target" || found[0].Message != tt.message {
+				t.Fatalf("%v (secrets %v): result %+v, err %v, want access.target %q", tt.names, reveal, result, err, tt.message)
+			}
+			f.untouched()
+		}
+	}
+}
+
+func TestSecretsRevealsOneClusterNeverSeveral(t *testing.T) {
+	f := newFixture(t)
+	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage", "archive"}, Secrets: true})
+	found := diagnostics.Of(err)
+	if result != nil || len(found) != 1 || found[0].Code != "cli.usage" || !strings.Contains(found[0].Message, "name one cluster") {
+		t.Fatalf("several with --secrets: result %+v, err %v", result, err)
+	}
+	f.untouched()
+	result, err = f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{" storage", "storage"}, Secrets: true})
+	if err != nil || len(result.Storage) != 1 || !result.Storage[0].Ceph.Dashboard.Revealed || !slices.Equal(f.custody, []string{"lab/storage"}) {
+		t.Fatalf("one member twice with --secrets: %+v (%v), custody %v", result, err, f.custody)
 	}
 }

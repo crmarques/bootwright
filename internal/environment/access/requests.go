@@ -11,8 +11,8 @@ type ClusterRshRequest struct {
 
 type ClusterExecRequest struct {
 	ContextName string
-	Name        string
-	Node        string
+	Names       []string
+	Nodes       []string
 	SSH         machine.SSHOptions
 	Command     []string
 }

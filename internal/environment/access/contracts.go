@@ -15,5 +15,5 @@ type Graph interface {
 
 type Sessions interface {
 	Rsh(ctx context.Context, contextName, machineName string, ssh machine.SSHOptions) (*machine.SessionResult, error)
-	Exec(ctx context.Context, contextName, machineName string, ssh machine.SSHOptions, command []string) (*machine.SessionResult, error)
+	Exec(ctx context.Context, contextName string, machineNames []string, ssh machine.SSHOptions, command []string) (*machine.SessionResult, error)
 }
