@@ -116,8 +116,12 @@ func (i inspection) runtimeAction() string {
 	if i.dryRun {
 		verb = "Verify or prepare"
 	}
-	return fmt.Sprintf("%s the controller runtime: %s, ansible-core %s: %d of %d wheels to download (%.1f MB), %d cached",
+	action := fmt.Sprintf("%s the controller runtime: %s, ansible-core %s: %d of %d wheels to download (%.1f MB), %d cached",
 		verb, interpreter, i.ansibleCore, download, len(i.wheels), float64(size)/1e6, cached)
+	if i.mirror.Set() {
+		action += ", read from the mirror " + i.mirror.String()
+	}
+	return action
 }
 
 func (i inspection) steps() []string {
@@ -228,6 +232,7 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 			}
 		}
 	}
+	s.retain(ctx, tx, current)
 	return nil
 }
 
@@ -255,7 +260,7 @@ func (s Service) prepareRuntime(ctx context.Context, tx SetupTransaction, curren
 			return err
 		}
 	}
-	if err := s.ports.Python.Fetch(ctx, interpreter.ABI, current.route()); err != nil {
+	if err := s.ports.Python.Fetch(ctx, interpreter.ABI, current.route(), current.mirror); err != nil {
 		return err
 	}
 	runtime, err := s.ports.Python.Build(ctx, tx, interpreter)

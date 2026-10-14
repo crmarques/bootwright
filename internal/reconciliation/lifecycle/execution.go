@@ -1733,7 +1733,7 @@ func (s Service) recordedRefusal(view View, operation operationstore.Operation, 
 // and interpreter ABI, differs from this build's; nil located is located here.
 func (s Service) closureRefusal(ctx context.Context, view View, operation operationstore.Operation, located *approved) error {
 	if located == nil {
-		current, err := s.approvedRuntime(ctx)
+		current, err := s.locateRuntime(ctx, false)
 		if err != nil {
 			return err
 		}

@@ -33,6 +33,25 @@ type RuntimeWheel struct {
 	Cached   bool
 }
 
+const (
+	OriginPresent  = "present"
+	OriginCache    = "cache"
+	OriginMirror   = "mirror"
+	OriginDownload = "download"
+)
+
+type WheelExport struct {
+	Directory string
+	Files     []ExportedWheel
+}
+
+type ExportedWheel struct {
+	Filename string
+	SHA256   string
+	Size     int64
+	Origin   string
+}
+
 // RuntimeLock is the embedded lock as setup reads it: its identity, the
 // interpreter ABIs and floors it admits, and every file it names.
 type RuntimeLock struct {

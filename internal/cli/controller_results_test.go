@@ -132,7 +132,12 @@ func TestControllerInvocationPrivilegeAndHelp(t *testing.T) {
 			t.Fatal("setup dry-run requested privilege", args)
 		}
 	}
-	for _, args := range [][]string{{"setup"}, {"preflight", "controller"}, {"preflight", "controller", "--context=example"}} {
+	for _, args := range [][]string{{"setup", "--download-only", "--dest-dir", "wheels"}, {"setup", "--download-only", "--dest-dir=wheels", "--wheel-mirror", "file:///srv/wheels"}} {
+		if class := ClassifyInvocation(args); class.RequiresRoot || class.Command != "setup" || !class.AmbientRoute {
+			t.Fatal("setup download-only requested privilege or lost the ambient route", args, class)
+		}
+	}
+	for _, args := range [][]string{{"setup", "--wheel-mirror", "file:///srv/wheels"}, {"setup"}, {"preflight", "controller"}, {"preflight", "controller", "--context=example"}} {
 		if !ClassifyInvocation(args).RequiresRoot {
 			t.Fatal("effectful invocation omitted privilege", args)
 		}

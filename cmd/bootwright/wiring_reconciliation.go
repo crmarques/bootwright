@@ -241,6 +241,9 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 	options := lifecycleOptions(deps, clock, runner)
 	if controller.Lock != nil {
 		options.Lock = lifecycle.RuntimeLock{Digest: controller.Lock.Digest, AnsibleCore: controller.Lock.AnsibleCore}
+		if controller.Setup != nil && controller.Python != nil {
+			options.Rebuild = prerequisites.NewRuntimeRebuilder(controller.Setup, controller.Python, *controller.Lock)
+		}
 	}
 	return lifecycle.New(deps.Workspace, deps.Inputs, compiler, binder, deps.Host, automationDigest{}, deps.Guard, capabilities, options)
 }

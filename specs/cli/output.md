@@ -791,6 +791,7 @@ it to a variable.
 | `controller.setup` | A local controller prerequisite action definitely failed. |
 | `controller.untested-release` | Informational: the host's release is outside the releases this build was tested on; setup checks its floors and continues. Never a refusal. |
 | `controller.loader-preload` | Informational: `/etc/ld.so.preload` is not empty, so it loads libraries into every process, root dnf runs included; setup continues. Never a refusal. |
+| `controller.runtime-retention` | Informational: after a setup, a controller runtime a running command holds was kept ("kept: 3 runtimes (1 in use)"), or older runtimes and wheels could not all be removed; the next setup retries. Never a refusal and never changes the setup's outcome. |
 | `controller.unknown` | A local controller prerequisite action has an unresolved effect outcome. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
 | `lifecycle.unsupported` | This executable cannot realize a selected object: no capability claims its kind, or its capability reports the shape unsupported. |

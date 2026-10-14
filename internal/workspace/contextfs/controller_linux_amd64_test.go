@@ -393,7 +393,7 @@ func TestToolAreaRejectsUnknownSubstitutionAndSymlinks(t *testing.T) {
 	for _, mode := range []string{"unattributed", "symlink", "hardlink", "world-readable", "replace-directory"} {
 		t.Run(mode, func(t *testing.T) {
 			store := boundFixture(t)
-			path := filepath.Join(store.options.Root, "controller", "bundles", clientClosure)
+			path := filepath.Join(store.options.Root, "controller", toolAreasName, clientClosure)
 			if mode != "unattributed" {
 				if err := withClientArea(t, store, func(_ lifecycle.Transaction, area prerequisites.BundleArea) error {
 					return area.Write(context.Background(), "original", []byte("private"), false)
@@ -536,7 +536,7 @@ func TestTheControllerRecordV3HoldsNoReceipt(t *testing.T) {
 		"retained resolutions":               strings.Replace(string(encoded), `"toolAreas":[]`, `"retainedDefinitions":[],"toolAreas":[]`, 1),
 		"retained setup sources":             strings.Replace(string(encoded), `"toolAreas":[]`, `"retainedSources":[],"toolAreas":[]`, 1),
 		"execution bundles":                  strings.Replace(string(encoded), `"toolAreas":[]`, `"bundles":[],"toolAreas":[]`, 1),
-		"a retiring tool area":               strings.Replace(string(encoded), `"toolAreas":[]`, area("retiring"), 1),
+		"an unknown tool area mode":          strings.Replace(string(encoded), `"toolAreas":[]`, area("published"), 1),
 		"a reserved area naming a directory": strings.Replace(string(encoded), `"toolAreas":[]`, area("reserved"), 1),
 	} {
 		if document == string(encoded) {

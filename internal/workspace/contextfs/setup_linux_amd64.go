@@ -4,13 +4,16 @@ package contextfs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -28,13 +31,19 @@ const (
 	runtimeRecordName       = "runtime.json"
 	maxRuntimeRecord        = 64 << 10
 	maxSetupEntries         = 32
-	maxRuntimeEntries       = 64
 	maxSetupTreeEntries     = 1 << 18
 	maxSetupTreeDepth       = 32
 	unrecognizedSetupFormat = "content this build does not recognize"
+	setupLockPoll           = 10 * time.Millisecond
+	maxSetupLockPoll        = 250 * time.Millisecond
 )
 
-var _ prerequisites.SetupStore = (*Store)(nil)
+var errNoRuntimeLock = errors.New("the runtime holds no launch lock")
+
+var (
+	_ prerequisites.SetupStore  = (*Store)(nil)
+	_ prerequisites.SetupWaiter = (*Store)(nil)
+)
 
 func (s *Store) ReadSetup(ctx context.Context) (prerequisites.SetupView, error) {
 	root, err := s.openRoot(ctx, false, nil)
@@ -105,6 +114,14 @@ func readSetupState(ctx context.Context, dir *directory) (prerequisites.SetupVie
 }
 
 func (s *Store) MutateSetup(ctx context.Context, callback func(prerequisites.SetupTransaction) error) error {
+	return s.mutateSetup(ctx, callback, false)
+}
+
+func (s *Store) AwaitSetup(ctx context.Context, callback func(prerequisites.SetupTransaction) error) error {
+	return s.mutateSetup(ctx, callback, true)
+}
+
+func (s *Store) mutateSetup(ctx context.Context, callback func(prerequisites.SetupTransaction) error, wait bool) error {
 	if callback == nil {
 		return state("setup mutation callback is missing")
 	}
@@ -124,7 +141,7 @@ func (s *Store) MutateSetup(ctx context.Context, callback func(prerequisites.Set
 		return safeError(err)
 	}
 	defer dir.file.Close()
-	held, err := lockSetup(dir)
+	held, err := lockSetup(ctx, dir, wait)
 	if err != nil {
 		return err
 	}
@@ -162,7 +179,9 @@ func (s *Store) ensureSetupSubtree(ctx context.Context) error {
 	})
 }
 
-func lockSetup(dir *directory) (*os.File, error) {
+// lockSetup polls rather than blocks when it waits, so cancellation still
+// ends the wait.
+func lockSetup(ctx context.Context, dir *directory, wait bool) (*os.File, error) {
 	file, err := openRelative(dir, setupLockName, syscall.O_RDWR|syscall.O_CREAT, 0600)
 	if err != nil {
 		return nil, safeError(err)
@@ -172,12 +191,27 @@ func lockSetup(dir *directory) (*os.File, error) {
 		file.Close()
 		return nil, state("setup lock type, owner or permissions is unsafe")
 	}
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		file.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) {
+	for delay := setupLockPoll; ; delay = min(2*delay, maxSetupLockPoll) {
+		err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			file.Close()
+			return nil, state("controller setup lock could not be taken")
+		}
+		if !wait {
+			file.Close()
 			return nil, busy("controller setup is held by another command")
 		}
-		return nil, state("controller setup lock could not be taken")
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			file.Close()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
 	}
 	if err := dir.verify(); err != nil {
 		file.Close()
@@ -260,7 +294,7 @@ func (t *setupTransaction) sweepStages(ctx context.Context) error {
 		return err
 	}
 	defer runtimes.file.Close()
-	names, err := directoryNames(runtimes, maxRuntimeEntries)
+	names, err := rawNames(runtimes, maxSetupTreeEntries)
 	if err != nil {
 		return err
 	}
@@ -397,6 +431,51 @@ func (t *setupTransaction) WheelPath(ctx context.Context, sha256, filename strin
 		parent = child
 	}
 	return filepath.Join(parent.path, filename), nil
+}
+
+func (t *setupTransaction) PruneWheels(ctx context.Context, keep []string) (int, error) {
+	if err := t.owned(ctx); err != nil {
+		return 0, err
+	}
+	for _, digest := range keep {
+		if !validControllerDigest(digest) {
+			return 0, state("cached wheel identity is invalid")
+		}
+	}
+	cache, err := openDirectory(t.dir, setupCacheName)
+	if errors.Is(err, syscall.ENOENT) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	defer cache.file.Close()
+	wheels, err := openDirectory(cache, setupWheelsName)
+	if errors.Is(err, syscall.ENOENT) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	defer wheels.file.Close()
+	names, err := rawNames(wheels, maxSetupTreeEntries)
+	if err != nil {
+		return 0, err
+	}
+	pruned := 0
+	for _, name := range names {
+		if slices.Contains(keep, name) {
+			continue
+		}
+		if err := t.store.removeSetupEntry(ctx, wheels, name); err != nil {
+			return pruned, err
+		}
+		pruned++
+	}
+	if pruned == 0 {
+		return 0, nil
+	}
+	return pruned, t.store.syncDirectory(ctx, wheels)
 }
 
 func wheelName(name string) bool {
@@ -545,10 +624,11 @@ func (t *setupTransaction) Runtimes(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	defer runtimes.file.Close()
-	names, err := directoryNames(runtimes, maxRuntimeEntries)
+	names, err := rawNames(runtimes, maxSetupTreeEntries)
 	if err != nil {
 		return nil, err
 	}
+	slices.Sort(names)
 	digests := []string{}
 	for _, name := range names {
 		if validControllerDigest(name) {
@@ -574,16 +654,18 @@ func (t *setupTransaction) RetireRuntime(ctx context.Context, digest string) (bo
 	}
 	defer runtimes.file.Close()
 	held, err := holdRuntimeLock(runtimes, digest, syscall.LOCK_EX)
-	if errors.Is(err, syscall.ENOENT) {
+	switch {
+	case errors.Is(err, syscall.ENOENT):
 		return true, nil
-	}
-	if errors.Is(err, syscall.EWOULDBLOCK) {
+	case errors.Is(err, syscall.EWOULDBLOCK):
 		return false, nil
-	}
-	if err != nil {
+	case errors.Is(err, errNoRuntimeLock):
+		// No launch can hold a runtime whose lock is gone.
+	case err != nil:
 		return false, err
+	default:
+		defer held.Close()
 	}
-	defer held.Close()
 	withdrawn, err := t.store.candidate(runtimeStagePrefix)
 	if err != nil {
 		return false, err
@@ -607,6 +689,9 @@ func holdRuntimeLock(runtimes *directory, digest string, how int) (*os.File, err
 	}
 	defer dir.file.Close()
 	file, err := openRelative(dir, runtimeLockName, syscall.O_RDONLY, 0)
+	if errors.Is(err, syscall.ENOENT) {
+		return nil, errNoRuntimeLock
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -659,11 +744,44 @@ func (s *Store) HoldRuntime(ctx context.Context, digest string) (prerequisites.R
 	if err != nil {
 		return nil, runtimeUnavailable(err)
 	}
+	if err := runtimeNamed(runtimes, digest); err != nil {
+		file.Close()
+		return nil, err
+	}
 	return &runtimeHold{file: file, path: filepath.Join(runtimes.path, digest)}, nil
 }
 
+// runtimeNamed requires the held runtime's record to name its own digest, so
+// a runtime renamed into another's place is never launched as that one.
+func runtimeNamed(runtimes *directory, digest string) error {
+	dir, err := openDirectory(runtimes, digest)
+	if err != nil {
+		return runtimeUnavailable(err)
+	}
+	defer dir.file.Close()
+	file, err := openRelative(dir, runtimeRecordName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return state("runtime " + digest[:12] + " holds no readable " + runtimeRecordName)
+	}
+	defer file.Close()
+	stat, err := statHandle(file)
+	if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFREG || stat.Uid != dir.identity.Uid || stat.Dev != dir.identity.Dev || stat.Nlink != 1 || stat.Size > maxRuntimeRecord {
+		return state("runtime " + digest[:12] + " holds no readable " + runtimeRecordName)
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxRuntimeRecord+1))
+	var record struct {
+		Runtime struct {
+			Digest string `json:"digest"`
+		} `json:"runtime"`
+	}
+	if err != nil || len(data) > maxRuntimeRecord || json.Unmarshal(data, &record) != nil || record.Runtime.Digest != digest {
+		return state("runtime " + digest[:12] + " holds a " + runtimeRecordName + " that names another runtime")
+	}
+	return nil
+}
+
 func runtimeUnavailable(err error) error {
-	if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.EWOULDBLOCK) {
+	if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, errNoRuntimeLock) {
 		return prerequisites.ErrRuntimeUnavailable
 	}
 	return safeError(err)

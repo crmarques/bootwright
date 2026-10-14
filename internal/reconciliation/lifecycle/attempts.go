@@ -362,6 +362,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 				Setup:              view,
 				ClientArea:         tx.ClientArea,
 				SealClientArea:     tx.SealClientArea,
+				RetireToolAreas:    tx.RetireToolAreas,
 				RetainDependencies: tx.RetainDependencies,
 				Prepare: func(inner context.Context, preparation prerequisites.StagePreparation) error {
 					if resolution != 0 {

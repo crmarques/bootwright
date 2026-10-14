@@ -318,6 +318,10 @@ def main() -> int:
         # the unitary gate.
         if os.environ.get("BOOTWRIGHT_ANSIBLE_NATIVE_TARGET") == "1":
             suites.append(["integration", "native_transaction"])
+        # controller_prerequisites drives the shipped controller playbook over
+        # the real runner protocol, an operator-run harness like the above.
+        if os.environ.get("BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET") == "1":
+            suites.append(["integration", "controller_prerequisites"])
         for arguments in suites:
             if arguments[0] not in selected:
                 continue

@@ -290,8 +290,11 @@ type recorder struct {
 	area         *fakeArea
 	openErr      error
 	sealErr      error
-	published    map[string]bool
-	output       bytes.Buffer
+	retireErr    error
+	// current is each area a successful stage named on its binding.
+	current   []string
+	published map[string]bool
+	output    bytes.Buffer
 	// order records each effect boundary the stage crossed, in order.
 	order []string
 }
@@ -339,6 +342,11 @@ func (r *recorder) execution(t *testing.T, block reconciliation.Block, state pre
 				}
 				r.sealed = append(r.sealed, id)
 				return nil
+			},
+			RetireToolAreas: func(_ context.Context, current string) error {
+				r.current = append(r.current, current)
+				r.order = append(r.order, "retire")
+				return r.retireErr
 			},
 			RetainDependencies: func(_ context.Context, sources []prerequisites.DependencySource) error {
 				r.retained = append(r.retained, sources...)
@@ -518,6 +526,58 @@ func TestApplyProvesAPreparedHostWithoutPublisherAccess(t *testing.T) {
 	}
 }
 
+// Every successful stage ends by naming the area it proved on its binding,
+// whether it published that area or found it already published, so the
+// retirement that follows never takes an area a bound context still runs.
+func TestEverySuccessfulStageNamesItsAreaAndRetiresTheRest(t *testing.T) {
+	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
+	digest := prerequisites.ToolsDigest(selected)
+	settled := &fakeTools{selected: selected, complete: true, present: true}
+	capability := stage(settled, newDnf("libvirt-client"), &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	recorder := newRecorder(&fakeArea{sealed: true})
+	recorder.published[digest] = true
+	if result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState())); err != nil || result.Outcome != reconciliation.OutcomeUnchanged {
+		t.Fatalf("settled result = %+v (%v)", result, err)
+	}
+	if !slices.Equal(recorder.current, []string{digest}) || len(recorder.sealed) != 0 {
+		t.Fatalf("a settled stage named %v and sealed %v, want %s named and nothing sealed", recorder.current, recorder.sealed, digest[:8])
+	}
+	published := &fakeTools{resolved: selected, present: true}
+	capability = stage(published, newDnf(), &fakeSetup{}, &fakeInstaller{})
+	block = planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	recorder = newRecorder(&fakeArea{})
+	if result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState())); err != nil || result.Outcome != reconciliation.OutcomeChanged {
+		t.Fatalf("publishing result = %+v (%v)", result, err)
+	}
+	if !slices.Equal(recorder.current, []string{digest}) || !slices.Equal(recorder.order[len(recorder.order)-1:], []string{"retire"}) {
+		t.Fatalf("a publishing stage named %v with boundaries %v, want the area named last", recorder.current, recorder.order)
+	}
+}
+
+// Retirement is the stage's last step: one that fails after the area was
+// sealed leaves the attempt unknown, and one that fails on a settled stage,
+// which changed nothing on the host, leaves it failed.
+func TestARetirementFailureKeepsTheStageOutcomeHonest(t *testing.T) {
+	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
+	refusal := diagnostics.NewFailure("context.state", "retiring controller tool area could not be removed", "")
+	settled := &fakeTools{selected: selected, complete: true, present: true}
+	capability := stage(settled, newDnf(), &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	recorder := newRecorder(&fakeArea{sealed: true})
+	recorder.published[prerequisites.ToolsDigest(selected)] = true
+	recorder.retireErr = refusal
+	if result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState())); err == nil || result.Outcome != reconciliation.OutcomeFailed {
+		t.Fatalf("settled result = %+v (%v), want failed", result, err)
+	}
+	capability = stage(&fakeTools{resolved: selected, present: true}, newDnf(), &fakeSetup{}, &fakeInstaller{})
+	recorder = newRecorder(&fakeArea{})
+	recorder.retireErr = refusal
+	if result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState())); err == nil || result.Outcome != reconciliation.OutcomeUnknown {
+		t.Fatalf("publishing result = %+v (%v), want unknown", result, err)
+	}
+}
+
 // Installation records the identities it will acquire before it acquires them,
 // publishes into the shared area, and seals only after the closure is proved
 // present. The automation announces exactly the sources the stage recorded.
@@ -537,7 +597,7 @@ func TestApplyRetainsIntentBeforeItPublishes(t *testing.T) {
 	if !slices.Equal(recorder.areas, []string{digest}) || !slices.Equal(recorder.sealed, []string{digest}) {
 		t.Fatalf("areas=%v sealed=%v", recorder.areas, recorder.sealed)
 	}
-	if !slices.Equal(recorder.order, []string{"retain", "prepare", "area"}) {
+	if !slices.Equal(recorder.order, []string{"retain", "prepare", "area", "retire"}) {
 		t.Fatalf("effect boundaries = %v, want intent before the area", recorder.order)
 	}
 	if len(recorder.preparations) != 1 || !slices.Equal(recorder.preparations[0].AddedSources, []string{resolved[0].Source.ID}) || len(recorder.preparations[0].Packages) != 0 {
@@ -566,7 +626,7 @@ func TestApplyInstallsHostPackagesBeforeItPublishesTools(t *testing.T) {
 	if len(recorder.preparations) != 1 || !slices.Equal(recorder.preparations[0].Packages, []string{"libvirt-client"}) || !slices.Equal(recorder.preparations[0].AddedSources, []string{resolved[0].Source.ID}) {
 		t.Fatalf("intent = %+v", recorder.preparations)
 	}
-	if !slices.Contains(dnf.calls, "install libvirt-client (locked)") || !slices.Equal(recorder.order, []string{"retain", "prepare", "area"}) {
+	if !slices.Contains(dnf.calls, "install libvirt-client (locked)") || !slices.Equal(recorder.order, []string{"retain", "prepare", "area", "retire"}) {
 		t.Fatalf("dnf calls %q, boundaries %v", dnf.calls, recorder.order)
 	}
 }

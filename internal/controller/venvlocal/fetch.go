@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller"
@@ -37,9 +38,8 @@ func (a *Adapter) Wheels(ctx context.Context, abi string) ([]prerequisites.Runti
 	return wheels, nil
 }
 
-// Fetch fills the wheel cache with every file of the ABI and the installer.
-// A file already cached with its locked size and SHA-256 makes no request.
-func (a *Adapter) Fetch(ctx context.Context, abi string, egress prerequisites.SetupEgress) error {
+// Fetch fills the wheel cache with the ABI's files and the installer; a verified cached file makes no request.
+func (a *Adapter) Fetch(ctx context.Context, abi string, egress prerequisites.SetupEgress, mirror prerequisites.WheelMirror) error {
 	files, err := a.lockedFiles(abi)
 	if err != nil {
 		return err
@@ -53,17 +53,23 @@ func (a *Adapter) Fetch(ctx context.Context, abi string, egress prerequisites.Se
 	if len(missing) == 0 {
 		return ctx.Err()
 	}
-	client, err := a.client(ctx, egress)
+	source, err := a.source(ctx, egress, mirror)
 	if err != nil {
 		return err
 	}
+	return a.fetchAll(ctx, missing, func(ctx context.Context, file runtimelock.File) error {
+		return a.download(ctx, source, file)
+	})
+}
+
+func (a *Adapter) fetchAll(ctx context.Context, files []runtimelock.File, task func(context.Context, runtimelock.File) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var group sync.WaitGroup
 	var once sync.Once
 	var first error
 	slots := make(chan struct{}, fetchers)
-	for _, file := range missing {
+	for _, file := range files {
 		group.Go(func() {
 			select {
 			case slots <- struct{}{}:
@@ -71,7 +77,7 @@ func (a *Adapter) Fetch(ctx context.Context, abi string, egress prerequisites.Se
 				return
 			}
 			defer func() { <-slots }()
-			if err := a.download(ctx, client, file); err != nil {
+			if err := task(ctx, file); err != nil {
 				once.Do(func() { first = err; cancel() })
 			}
 		})
@@ -87,20 +93,34 @@ func (a *Adapter) cachePath(file runtimelock.File) string {
 	return filepath.Join(a.wheels, file.SHA256, file.Filename)
 }
 
-// cached proves a cached wheel is a regular file of its locked size and
-// SHA-256.
+// cached proves a cached wheel is a regular file of its locked size and SHA-256.
 func (a *Adapter) cached(file runtimelock.File) error {
-	path := a.cachePath(file)
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() != file.Size {
+	if verifiedFile(a.cachePath(file), file) != nil {
 		return failure("the wheel cache does not hold " + file.Filename)
 	}
-	handle, err := os.Open(path)
+	return nil
+}
+
+func verifiedFile(path string, file runtimelock.File) error {
+	handle, err := openRegular(path, file.Size)
 	if err != nil {
-		return failure("the wheel cache does not hold " + file.Filename)
+		return failure(file.Filename + " is not a regular file of its locked size")
 	}
 	defer handle.Close()
 	return verifyWheel(file, handle)
+}
+
+func openRegular(path string, size int64) (*os.File, error) {
+	handle, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	info, err := handle.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() != size {
+		handle.Close()
+		return nil, errors.New("not a regular file of its locked size")
+	}
+	return handle, nil
 }
 
 func verifyWheel(file runtimelock.File, reader io.Reader) error {
@@ -112,17 +132,87 @@ func verifyWheel(file runtimelock.File, reader io.Reader) error {
 	return nil
 }
 
+type wheelSource func(ctx context.Context, file runtimelock.File, destination io.Writer) error
+
+func (a *Adapter) source(ctx context.Context, egress prerequisites.SetupEgress, mirror prerequisites.WheelMirror) (wheelSource, error) {
+	if directory, local := mirror.Directory(); local {
+		return mirrored(directorySource(directory), mirror), nil
+	}
+	client, err := a.client(ctx, egress)
+	if err != nil {
+		return nil, err
+	}
+	fetch := func(ctx context.Context, file runtimelock.File, destination io.Writer) error {
+		address := file.URL
+		if mirror.Set() {
+			address = mirror.Location(file.Filename)
+		}
+		return receive(ctx, client, address, file, destination)
+	}
+	if mirror.Set() {
+		return mirrored(fetch, mirror), nil
+	}
+	return fetch, nil
+}
+
+// mirrored blames the mirror for any wheel it lacks or holds with other bytes.
+func mirrored(inner wheelSource, mirror prerequisites.WheelMirror) wheelSource {
+	return func(ctx context.Context, file runtimelock.File, destination io.Writer) error {
+		hash := sha256.New()
+		err := inner(ctx, file, io.MultiWriter(destination, hash))
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		var scoped *prerequisites.ScopedFailure
+		switch {
+		case errors.As(err, &scoped) && scoped.Routable:
+			return err
+		case err != nil:
+			return mirrorFailure(file.Filename+" is not a readable file of its locked size in the mirror "+mirror.String(), mirror)
+		case hex.EncodeToString(hash.Sum(nil)) != file.SHA256:
+			return mirrorFailure(file.Filename+" in the mirror "+mirror.String()+" does not match its locked size and SHA-256", mirror)
+		}
+		return nil
+	}
+}
+
+func mirrorFailure(message string, mirror prerequisites.WheelMirror) error {
+	return &prerequisites.ScopedFailure{
+		Message:    message,
+		Correction: "Place the locked wheels in " + mirror.String() + " (setup --download-only --dest-dir writes them), or drop --wheel-mirror",
+		Command:    "repeat this command",
+	}
+}
+
+func directorySource(directory string) wheelSource {
+	return func(ctx context.Context, file runtimelock.File, destination io.Writer) error {
+		unreadable := errors.New("unreadable")
+		if file.Filename != filepath.Base(file.Filename) || ctx.Err() != nil {
+			return errors.Join(ctx.Err(), unreadable)
+		}
+		handle, err := openRegular(filepath.Join(directory, file.Filename), file.Size)
+		if err != nil {
+			return unreadable
+		}
+		defer handle.Close()
+		if written, err := io.Copy(destination, io.LimitReader(handle, file.Size+1)); err != nil || written != file.Size {
+			return unreadable
+		}
+		return nil
+	}
+}
+
 // download writes a wheel beside its cache name and renames it into place
 // only once its size and SHA-256 match the lock.
-func (a *Adapter) download(ctx context.Context, client *http.Client, file runtimelock.File) error {
-	address, err := url.Parse(file.URL)
-	if err != nil || !approvedURL(address) {
-		return failure("the wheel URL of " + file.Filename + " is not a credential-free HTTPS URL")
-	}
+func (a *Adapter) download(ctx context.Context, source wheelSource, file runtimelock.File) error {
 	directory := filepath.Join(a.wheels, file.SHA256)
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return failure("the wheel cache cannot be written")
 	}
+	return place(ctx, source, file, directory, a.cachePath(file), 0o600)
+}
+
+func place(ctx context.Context, source wheelSource, file runtimelock.File, directory, final string, mode os.FileMode) error {
 	partial, err := os.CreateTemp(directory, ".part-*")
 	if err != nil {
 		return failure("the wheel cache cannot be written")
@@ -131,7 +221,7 @@ func (a *Adapter) download(ctx context.Context, client *http.Client, file runtim
 		partial.Close()
 		os.Remove(partial.Name())
 	}()
-	if err := receive(ctx, client, file, partial); err != nil {
+	if err := source(ctx, file, partial); err != nil {
 		return err
 	}
 	if _, err := partial.Seek(0, io.SeekStart); err != nil {
@@ -140,14 +230,18 @@ func (a *Adapter) download(ctx context.Context, client *http.Client, file runtim
 	if err := verifyWheel(file, partial); err != nil {
 		return err
 	}
-	if partial.Sync() != nil || partial.Close() != nil || os.Rename(partial.Name(), a.cachePath(file)) != nil {
+	if partial.Chmod(mode) != nil || partial.Sync() != nil || partial.Close() != nil || os.Rename(partial.Name(), final) != nil {
 		return failure("the wheel cache cannot be written")
 	}
 	return nil
 }
 
-func receive(ctx context.Context, client *http.Client, file runtimelock.File, destination io.Writer) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, file.URL, nil)
+func receive(ctx context.Context, client *http.Client, address string, file runtimelock.File, destination io.Writer) error {
+	approved, err := url.Parse(address)
+	if err != nil || !approvedURL(approved) {
+		return failure("the wheel URL of " + file.Filename + " is not a credential-free HTTPS URL")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return failure("the wheel request for " + file.Filename + " is invalid")
 	}

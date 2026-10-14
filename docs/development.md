@@ -128,6 +128,7 @@ running host and are run by hand as the code evolves:
 | Harness | Selected by |
 | --- | --- |
 | Ansible `native_transaction` target, which builds an RPM and drives a RHEL 9 host's package manager into an isolated installroot, the Ceph node's package path | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
+| Ansible `controller_prerequisites` target, which runs the shipped controller playbook and role over the real runner protocol with one `controller-prerequisites-v6` request, publishing a synthetic client from a source already retained in a temporary tool area and replaying it | `BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET=1` with `./scripts/ansible-check --suite integration` |
 
 `scripts/runtime-lock verify` checks the lock against its publisher with
 network, as [below](#lock-refresh-and-tested-hosts). A controller's host

@@ -45,7 +45,7 @@ func ClassifyInvocation(args []string) InvocationClass {
 		return InvocationClass{}
 	}
 	ambient := contextFreeAcquisition(path, command.Flags())
-	if path == "setup" && boolValue(command.Flags(), "dry-run") {
+	if path == "setup" && (boolValue(command.Flags(), "dry-run") || boolValue(command.Flags(), "download-only")) {
 		return InvocationClass{Command: path, AmbientRoute: ambient}
 	}
 	return InvocationClass{RequiresRoot: true, JSON: selectedJSON(command), Command: path, AmbientRoute: ambient, SecretStdin: secretStdin(path, command.Flags())}

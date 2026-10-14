@@ -87,7 +87,7 @@ func readControllerStored(ctx context.Context, root *directory, registry context
 		if name == "state.json" {
 			continue
 		}
-		if name == "bundles" {
+		if name == toolAreasName {
 			child, err := openDirectory(dir, name)
 			if err != nil {
 				return controllerStored{}, err
@@ -104,7 +104,7 @@ func readControllerStored(ctx context.Context, root *directory, registry context
 	}
 	data, identity, err := readBoundedIdentity(ctx, dir, "state.json", maxControllerState, true)
 	if errors.Is(err, syscall.ENOENT) && registry.Controller.Mode == "initializing" {
-		if slices.Contains(names, "bundles") {
+		if slices.Contains(names, toolAreasName) {
 			return controllerStored{}, state("uninitialized controller contains unattributable tool areas")
 		}
 		return controllerStored{}, nil
@@ -455,25 +455,10 @@ func (t *transaction) dropContextClaims(ctx context.Context, name string) error 
 	value := cloneControllerState(stored.value)
 	value.Bindings = slices.DeleteFunc(value.Bindings, func(binding prerequisites.ControllerBinding) bool { return binding.Context == name })
 	value.Reservations = slices.DeleteFunc(value.Reservations, func(reservation prerequisites.HostReservation) bool { return reservation.Context == name })
-	if len(value.Bindings) == len(stored.value.Bindings) && len(value.Reservations) == len(stored.value.Reservations) {
-		return nil
-	}
-	dir, err := openControllerDirectory(t.root, t.registry)
-	if err != nil {
-		return err
-	}
-	defer dir.file.Close()
-	record := controllerRecord(value, stored.bundles)
-	data, err := encodeRecord(record, maxControllerState)
-	if err != nil {
-		return err
-	}
-	_, err = t.store.replaceControllerRecord(ctx, dir, stored, data, deletionRetry(name))
+	// Dropping the binding releases the tool area only it named, so the same
+	// publication begins that area's retirement.
+	current, err := t.retireToolAreas(ctx, stored, value, nil, deletionRetry(name))
 	if err == nil {
-		current, readErr := readControllerStored(ctx, t.root, t.registry)
-		if readErr != nil {
-			return readErr
-		}
 		t.controllerEvidence = &current
 	}
 	return err

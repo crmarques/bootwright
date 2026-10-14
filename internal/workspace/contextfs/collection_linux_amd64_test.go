@@ -191,7 +191,7 @@ func TestTheNextExclusiveCommandCollectsControllerStages(t *testing.T) {
 			if err := command.run(context.Background(), store); err != nil {
 				t.Fatalf("the %s refused what killed publications left: %#v", command.name, diagnostics.Of(err))
 			}
-			if entries := controllerEntries(t, store); !slices.Equal(entries, []string{"bundles", "state.json"}) {
+			if entries := controllerEntries(t, store); !slices.Equal(entries, []string{"state.json", toolAreasName}) {
 				t.Fatalf("the %s left %v", command.name, entries)
 			}
 		})

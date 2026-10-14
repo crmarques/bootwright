@@ -48,7 +48,7 @@ func TestALiveBuildOnThisHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("selected %s (Python %s, glibc %s)", interpreter.Path, interpreter.Version, interpreter.Glibc)
-	if err := adapter.Fetch(ctx, interpreter.ABI, prerequisites.SetupEgress{HTTPSProxy: os.Getenv("HTTPS_PROXY")}); err != nil {
+	if err := adapter.Fetch(ctx, interpreter.ABI, prerequisites.SetupEgress{HTTPSProxy: os.Getenv("HTTPS_PROXY")}, prerequisites.WheelMirror{}); err != nil {
 		t.Fatal(err)
 	}
 	runtime, err := testBuild(adapter, ctx, interpreter)
@@ -57,6 +57,10 @@ func TestALiveBuildOnThisHost(t *testing.T) {
 	}
 	if _, ready, err := adapter.Inspect(ctx, interpreter); err != nil || !ready {
 		t.Fatalf("Inspect = %t, %v", ready, err)
+	}
+	files, _ := lock.Files(interpreter.ABI)
+	if named, err := adapter.RuntimeWheels(ctx, runtime.Digest); err != nil || len(named) != len(files)+1 {
+		t.Fatalf("the built runtime names %q (%v), want %d wheels and the installer", named, err, len(files))
 	}
 	err = adapter.WithPython(ctx, runtime, func(launch prerequisites.PythonLaunch) error {
 		arguments := append(launch.Arguments, "-c", "import ansible.release, sys; print(ansible.release.__version__, sys.flags.isolated, sys.prefix != sys.base_prefix)")

@@ -2,6 +2,8 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -102,4 +104,87 @@ func (vanishingGuard) Published(context.Context, prerequisites.Runtime) (bool, e
 
 func (vanishingGuard) WithPython(context.Context, prerequisites.Runtime, func(prerequisites.PythonLaunch) error) error {
 	return prerequisites.ErrRuntimeUnavailable
+}
+
+// cacheRebuilder stands in for the rebuild from the wheel cache: with every
+// wheel cached it publishes the runtime the guard then launches, and
+// otherwise it reports the wheel it lacks.
+type cacheRebuilder struct {
+	guard    *testGuard
+	refusal  error
+	rebuilds []prerequisites.Runtime
+}
+
+func (r *cacheRebuilder) Rebuild(_ context.Context, runtime prerequisites.Runtime) error {
+	r.rebuilds = append(r.rebuilds, runtime)
+	if r.refusal != nil {
+		return r.refusal
+	}
+	r.guard.mutex.Lock()
+	defer r.guard.mutex.Unlock()
+	r.guard.unpublished = false
+	return nil
+}
+
+func withRebuilder(h *harness, refusal error) *cacheRebuilder {
+	rebuilder := &cacheRebuilder{guard: h.guard, refusal: refusal}
+	h.service.options.Rebuild = rebuilder
+	h.guard.unpublished = true
+	return rebuilder
+}
+
+// A launch whose runtime directory is gone rebuilds it from the wheel cache,
+// once and without asking, and then runs as if setup had never lost it.
+func TestAMissingRuntimeIsRebuiltFromCachedWheels(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	rebuilder := withRebuilder(h, nil)
+	if _, err := apply(h); err != nil {
+		t.Fatalf("the apply did not run on the rebuilt runtime: %v", err)
+	}
+	if len(rebuilder.rebuilds) != 1 || rebuilder.rebuilds[0].Interpreter.Path != "/usr/bin/python3.14" || h.guard.entered() == 0 {
+		t.Fatalf("rebuilt %+v, launched %d times", rebuilder.rebuilds, h.guard.entered())
+	}
+	h.guard.unpublished = true
+	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName}, func(context.Context, Runtime) error { return nil })
+	if err != nil || len(rebuilder.rebuilds) != 2 {
+		t.Fatalf("a bounded run did not rebuild its runtime: %v after %d rebuilds", err, len(rebuilder.rebuilds))
+	}
+}
+
+// Only a wheel the cache lacks needs the network, which is setup's to use:
+// the launch refuses naming setup before it registers anything.
+func TestAMissingWheelRefusesWithRunSetup(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	withRebuilder(h, prerequisites.ErrRuntimeWheelMissing)
+	launchRefused(t, h, "the controller runtime for this build (lock 444444444444, Python 3.14) is not prepared")
+	if h.guard.entered() != 0 {
+		t.Fatalf("a runtime missing a wheel was launched %d times", h.guard.entered())
+	}
+}
+
+// A rebuild that fails once every wheel is cached names that failure and
+// still points at setup, which repeats the build with its own diagnostics.
+func TestAFailedRebuildRefusesWithRunSetup(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	withRebuilder(h, errors.Join(prerequisites.ErrRuntimeRebuildFailed, &prerequisites.ScopedFailure{
+		Message: "pip could not install the locked wheels from the cache", Correction: "Restore the host's Python interpreter and the locked controller wheels",
+	}))
+	_, err := apply(h)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "controller.state" || reported[0].Remediation != "run bootwright setup" ||
+		!strings.Contains(reported[0].Message, "could not be rebuilt from the wheel cache: pip could not install") {
+		t.Fatalf("a failed rebuild reported %+v (%v)", reported, err)
+	}
+}
+
+// Status changes nothing, so it never rebuilds; it offers setup instead.
+func TestStatusNeverRebuildsAMissingRuntime(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	rebuilder := withRebuilder(h, nil)
+	if _, err := h.service.Status(context.Background(), StatusRequest{ContextName: testContextName}); err != nil {
+		t.Fatal(err)
+	}
+	if len(rebuilder.rebuilds) != 0 {
+		t.Fatalf("status rebuilt the runtime %d times", len(rebuilder.rebuilds))
+	}
 }

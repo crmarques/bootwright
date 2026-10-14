@@ -1,0 +1,14 @@
+Controller wheel download
+
+  Directory  /srv/bootwright-wheels
+  Route      direct
+
+Files
+  [DONE]  ansible_core-2.21.5-py3-none-any.whl              downloaded
+  [DONE]  cffi-2.0.0-cp314-cp314-manylinux_2_17_x86_64.whl  from the wheel cache
+  [OK]    pip-26.0.1-py3-none-any.whl                       already there
+  [DONE]  lock.json                                         copy of the lock this build embeds
+
+  Outcome  downloaded
+  Written  4 (1 fetched, 1 from the wheel cache, 1 already there)
+  Next     bootwright setup --wheel-mirror file:///srv/bootwright-wheels

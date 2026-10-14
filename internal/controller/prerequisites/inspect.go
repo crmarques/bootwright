@@ -20,6 +20,7 @@ type inspection struct {
 	platform  Platform
 	host      controller.InstalledHostIdentity
 	dryRun    bool
+	mirror    WheelMirror
 
 	ansibleCore  string
 	interpreter  PythonInterpreter

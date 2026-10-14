@@ -32,9 +32,11 @@ type Options struct {
 	Concurrency int
 	Executable  Executable
 	Operations  OperationStoreFactory
-	// Setup and Lock locate the controller runtime every launch runs.
-	Setup SetupReader
-	Lock  RuntimeLock
+	// Setup and Lock locate the controller runtime every launch runs, and
+	// Rebuild republishes it when only its directory is missing.
+	Setup   SetupReader
+	Lock    RuntimeLock
+	Rebuild RuntimeRebuilder
 }
 
 type Service struct {

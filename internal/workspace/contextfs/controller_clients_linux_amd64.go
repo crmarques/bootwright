@@ -35,6 +35,14 @@ func (t *lifecycleTransaction) ClientArea(ctx context.Context, id string) (prere
 		return nil, controllerFailure("controller.identity", "this host has no completed controller setup", completeSetup)
 	}
 	index := slices.IndexFunc(t.stored.bundles, func(item controllerBundleReservation) bool { return item.ID == id })
+	// A closure whose area is being retired, or that finds the bound held,
+	// first lets retirement finish and free what no binding names.
+	if index >= 0 && t.stored.bundles[index].Mode == retiringArea || index < 0 && len(t.stored.bundles) >= maxControllerBundles {
+		if err := t.retire(ctx, cloneControllerState(t.stored.value)); err != nil {
+			return nil, err
+		}
+		index = slices.IndexFunc(t.stored.bundles, func(item controllerBundleReservation) bool { return item.ID == id })
+	}
 	interrupted := index >= 0 && t.stored.bundles[index].Mode == "reserved"
 	if index < 0 || t.stored.bundles[index].DirectoryInode == 0 {
 		if err := t.attributeClientArea(ctx, id, index < 0, interrupted); err != nil {
@@ -60,11 +68,14 @@ func (t *lifecycleTransaction) ClientArea(ctx context.Context, id string) (prere
 }
 
 // clientBoundFailure refuses a controller stage whose client closure finds the
-// host's bound already held. No command of this build retires a tool area.
+// host's bound held after retirement: every area is a binding's or an
+// unfinished stage's.
 func clientBoundFailure(held string) error {
-	return controllerFailure("controller.conflict", "this host already holds "+held+", so the controller stage's client closure has no room",
-		"no command of this build frees a tool area; run this context's controller stage on another controller host")
+	return controllerFailure("controller.conflict", "this host already holds "+held+", each named by a context's binding or still being published, so the controller stage's client closure has no room",
+		clientBoundRemedy)
 }
+
+const clientBoundRemedy = "delete a context this host no longer needs with bootwright context delete --name <name> --purge, which retires the tool area only it names, or run this context's controller stage on another controller host"
 
 // attributeClientArea publishes the reservation, then creates the directory,
 // then records its physical identity. The record is durable before the
@@ -86,7 +97,7 @@ func (t *lifecycleTransaction) attributeClientArea(ctx context.Context, id strin
 		return err
 	}
 	defer owner.file.Close()
-	parent, err := t.base.store.ensureDirectory(ctx, owner, "bundles")
+	parent, err := t.base.store.ensureDirectory(ctx, owner, toolAreasName)
 	if err != nil {
 		return err
 	}

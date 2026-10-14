@@ -16,6 +16,7 @@ type setupPorts struct {
 	identity controller.InstalledHostIdentity
 	reads    int
 	effects  int
+	exports  []string
 }
 
 func (p *setupPorts) Platform(context.Context) (prerequisites.Platform, error) {
@@ -78,9 +79,14 @@ func (p *setupPorts) Wheels(context.Context, string) ([]prerequisites.RuntimeWhe
 	return []prerequisites.RuntimeWheel{{Filename: "ansible_core-2.21.5-py3-none-any.whl", Size: 2_400_000}}, nil
 }
 
-func (p *setupPorts) Fetch(context.Context, string, prerequisites.SetupEgress) error {
+func (p *setupPorts) Fetch(context.Context, string, prerequisites.SetupEgress, prerequisites.WheelMirror) error {
 	p.effects++
 	return errors.New("unexpected wheel fetch")
+}
+
+func (p *setupPorts) Export(_ context.Context, destination string, _ prerequisites.SetupEgress, _ prerequisites.WheelMirror) (prerequisites.WheelExport, error) {
+	p.exports = append(p.exports, destination)
+	return prerequisites.WheelExport{Directory: destination, Files: []prerequisites.ExportedWheel{{Filename: "ansible_core-2.21.5-py3-none-any.whl", SHA256: strings.Repeat("a", 64), Size: 2_400_000, Origin: prerequisites.OriginDownload}}}, nil
 }
 
 func (p *setupPorts) Inspect(context.Context, prerequisites.PythonInterpreter) (prerequisites.Runtime, bool, error) {
@@ -90,6 +96,10 @@ func (p *setupPorts) Inspect(context.Context, prerequisites.PythonInterpreter) (
 func (p *setupPorts) Build(context.Context, prerequisites.RuntimePublisher, prerequisites.PythonInterpreter) (prerequisites.Runtime, error) {
 	p.effects++
 	return prerequisites.Runtime{}, errors.New("unexpected runtime build")
+}
+
+func (p *setupPorts) RuntimeWheels(context.Context, string) ([]string, error) {
+	return nil, prerequisites.ErrRuntimeUnavailable
 }
 
 func (p *setupPorts) WithPython(context.Context, prerequisites.Runtime, func(prerequisites.PythonLaunch) error) error {

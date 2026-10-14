@@ -2,7 +2,7 @@
 
 Workspace owns the durable shared-host state on this page: the Controller
 descriptor, the Controller record with its host identity, bindings, tool
-sources and reservations, the tool areas with their bounds, and the setup
+sources and reservations, the tool areas with their bound and retirement, and the setup
 subtree beside them.
 [Controller](../controller.md) owns what setup and the controller stage record
 in it, and [Contexts](../contexts.md#controller-relationship-and-host-binding)
@@ -10,7 +10,8 @@ owns the relationship between a context and its host.
 
 ## Location and file modes
 
-Shared host state belongs under `/var/lib/bootwright/controller/`. Host
+Shared host state belongs under `/var/lib/bootwright/controller/`, with each
+tool area in `controller/tools/<digest>/`. Host
 identity, every context binding and every reservation share one atomic
 `state.json` publication; there is no independently published per-context
 binding record, so a binding and the host it names cannot disagree after an
@@ -60,14 +61,16 @@ contains the confidential
 
 Bindings contain the context name, Machine name and the private host digest,
 ordered by context name, and `tools`, present once that context's
-[controller stage](../controller.md#the-controller-stage) sealed a tool area:
-the digest of the area it last published, which the record must hold sealed.
+[controller stage](../controller.md#the-controller-stage) proved a tool area:
+the digest of the area its last successful stage proved, which the record must
+hold sealed; a stage that selects no tool clears it.
 Tool sources bind a stable ID to its original credential-free URL, SHA-256 and
 exact byte count, ordered by ID; reusing an ID with different bytes or origin
 refuses. A tool area entry is `reserved` while its area is being published,
-`attributed` once the store owns the directory, with its device and inode, and
-`sealed` once its content is immutable; a `reserved` entry records no
-directory identity.
+`attributed` once the store owns the directory, with its device and inode,
+`sealed` once its content is immutable, and `retiring` once its
+[retirement](#tool-areas) began; a `reserved` entry records no directory
+identity, and a `retiring` one keeps the identity its directory had.
 
 Reservations record the host resources that locally hosted services claim,
 under the
@@ -86,14 +89,20 @@ so a store that never hosted a service is unchanged.
 The state record is bounded to 4 MiB, with at most 4096 tool source
 identities, 4096 bindings and 256 reservations of at most 64 keys of 256 bytes
 each. Controller records allow nesting depth 16 and 32 fields per object;
-other durable records keep their own bounds. There are at most 16 tool areas, named by the 64-character content digest of the
-closure they hold. Their entries record their mode and physical directory
-identity. A controller stage whose tool area finds all 16 held refuses with
-`controller.conflict`, naming that bound, with the remedy that no command of
-this build frees a tool area, so the context's controller stage runs on
-another controller host ([B557](../milestones/m1.md#b557)); one whose tool
-sources would pass 4096 refuses the same way, saying that no command of this
-build frees a retained tool source. A tool area is bounded to 8 GiB total,
+other durable records keep their own bounds. There are at most 16 tool areas,
+a bound of their own that nothing else counts toward, each named by the
+64-character content digest of the closure it holds. Their entries record their
+mode and physical directory identity. A controller stage whose new tool area
+finds all 16 held first retires every area no binding names; one that still
+finds all 16 held, each named by a binding or still being published, refuses
+with `controller.conflict`, naming that bound, with the remedy to delete a
+context this host no longer needs with
+`bootwright context delete --name <name> --purge`, which retires the tool area
+only it names, or to run this context's controller stage on another controller
+host (`TestAClientAreaAtTheBoundNamesItsRemedy`,
+`TestAClientAreaAtTheBoundRetiresUnnamedAreasFirst`). One whose tool sources
+would pass 4096 refuses the same way, saying that no command of this build
+frees a retained tool source. A tool area is bounded to 8 GiB total,
 1 GiB per file, 32768 entries and depth 32. Symlinks, hard links, nested
 mounts, unsafe modes, unexpected entries and replacement refuse. Sealing
 verifies and syncs the complete tree; sealed contents cannot be rewritten.
@@ -121,13 +130,29 @@ Sealing verifies and syncs the complete tree, makes the closure immutable and
 records its digest on the binding of the context that sealed it; a sealed area
 reopens read-only for every later operation and context. An unsealed
 attributed area is completed by an exact replay of the same closure, whose
-publication verifies existing bytes rather than overwriting them. Nothing
-removes a tool area: the closure is shared host state that outlives the
-context that published it.
+publication verifies existing bytes rather than overwriting them.
 
-Not yet met: tool areas move under `controller/tools/<digest>/` with their own
-bound and are retired once no binding names them; tracked as
-[B557](../milestones/m1.md#b557).
+The closure is shared host state that outlives the context that published it
+for as long as a binding names it. Every successful controller stage ends by
+naming on its context's binding the area it proved, whether it published that
+area or found it published, sealing first an area an earlier attempt
+published whole but never sealed, or by naming none when it selects no tool.
+In the same lifecycle mutation, under the root lock it already holds, it then
+retires every sealed area no binding names, except one the operation itself
+holds open; a context deletion does the same once it drops the context's
+binding. An area still `reserved` or `attributed` is an unfinished stage's
+intent and is never retired, and no other command retires one. Retirement
+publishes the areas' entries as `retiring`, removes each directory after
+proving it is still the attributed one, syncs the tools directory, then
+publishes the record without those entries. A `retiring` area is no longer
+held: no read opens it and the view omits it, and a read accepts its directory
+present, partly removed or gone. The next retirement, or a stage whose closure
+names it, finishes it before anything else
+(`TestAStageRetiresTheAreaNoBindingNames`,
+`TestAnAreaAnotherBindingNamesStaysUntilItsContextIsDeleted`,
+`TestAStageWithoutToolsReleasesItsAreaAndKeepsUnfinishedOnes`,
+`TestAnAreaTheOperationHoldsOpenStays`,
+`TestAnInterruptedRetirementIsFinishedByTheNext`).
 
 A controller stage also extends the retained tool sources it acquires under.
 Before acquisition it publishes the exact source identities it will fetch into
@@ -140,8 +165,10 @@ origin refuses.
 outside the registry: the Controller descriptor never names it, no registry
 verification decodes it, and it stays root `0700` like the rest of the store.
 `setup/lock` is the exclusive lock of setup and of runtime publication, which
-the controller stage's host-package install takes too; a holder never waits
-for it.
+the controller stage's host-package install takes too. Setup and the stage
+never wait for it and refuse a held lock as busy; a launch's
+[cache-only rebuild](../controller.md#the-controller-runtime) waits for it,
+polling so that cancellation ends the wait.
 
 `state.json` is the canonical `bootwright.setup-state-v1` record, at most
 256 KiB. Its `pending` member, `{id, planDigest, actions, startedAt}`, is
@@ -166,12 +193,22 @@ exclusively, and published at `runtimes/<runtime-digest>/` only with its
 `renameat2(RENAME_NOREPLACE)` and a synchronized parent, so a directory under
 a runtime digest always holds a whole runtime. A publisher that finds the
 runtime already published discards its stage, and setup removes the stages a
-killed run left under `setup/lock`. A launch holds the runtime's `.lock`
-shared for its whole Ansible block; retirement takes it exclusively without
-waiting, so a runtime in use is skipped. Its contents hold the ordinary modes
-a Python virtual environment creates. Locked wheels are cached at
-`cache/wheels/<sha256>/<filename>`, each verified for size and digest before
-it is renamed into place.
+killed run left under `setup/lock`, however many entries `runtimes/` holds. A
+launch holds the runtime's `.lock` shared for its whole Ansible block, and only
+while the runtime's `runtime.json` names its own digest; retirement takes the
+lock exclusively without waiting, so a runtime in use is skipped, and retires a
+runtime whose `.lock` is gone, which no launch can hold. Retirement renames
+the runtime to a stage name, synchronizes the parent and then removes it.
+Its contents hold the ordinary modes a Python virtual environment creates,
+and the `requirements.lock` its build installed from, which names each wheel's
+SHA-256. Locked wheels are cached at `cache/wheels/<sha256>/<filename>`, each
+verified for size and digest before it is renamed into place.
+
+After each setup that writes its receipt, setup keeps the record's current
+and previous runtimes and any a launch holds, retires every other one, and
+prunes `cache/wheels/` to the digests the kept runtimes' `requirements.lock`
+name, this build's locked wheels of the receipt's ABI and the installer
+([retention](../controller.md#publication-and-interrupted-setup)).
 
 `runs/` keeps what setup's dnf printed, as
 [setup run output](../cli/output.md#setup-run-output) describes. A run is a
@@ -187,10 +224,6 @@ directory handle without following a link, and made durable before the run is
 named. A runs directory holding anything else, more than 8 runs, a run holding
 anything but its private `run.output` or an output past its bound refuses.
 Nothing reads a run back.
-
-Not yet met: setup keeps only the current and previous runtimes and the wheels
-they name, and a launch rebuilds a missing runtime from cached wheels; tracked
-as [B552](../milestones/m1.md#b552).
 
 ## Publication and recovery
 

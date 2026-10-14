@@ -92,7 +92,7 @@ func decodeControllerRecord(data []byte) (prerequisites.HostState, []controllerB
 	}
 	previous := ""
 	for _, area := range record.ToolAreas {
-		attributed := area.Mode == "attributed" || area.Mode == "sealed"
+		attributed := area.Mode == "attributed" || area.Mode == "sealed" || area.Mode == retiringArea
 		if !validControllerDigest(area.ID) || area.ID <= previous || !attributed && area.Mode != "reserved" || area.DirectoryInode == 0 && (area.DirectoryDevice != 0 || attributed) || area.DirectoryInode != 0 && !attributed {
 			return prerequisites.HostState{}, nil, state("controller tool area reservation is invalid")
 		}
@@ -258,12 +258,22 @@ func validateControllerReservations(values []prerequisites.HostReservation) erro
 // maxControllerBundles bounds the tool areas a controller record holds.
 const maxControllerBundles = 16
 
+// toolAreasName is the controller directory's tool area parent.
+const toolAreasName = "tools"
+
+// retiringArea marks an area whose retirement began: its entry outlives its
+// directory, so a crash leaves an entry the next retirement finishes rather
+// than a directory no record explains.
+const retiringArea = "retiring"
+
 // heldAreas is what a view tells the controller stage about the tool areas
-// this record holds.
+// this record holds; an area being retired is no longer held.
 func heldAreas(areas []controllerBundleReservation) []prerequisites.HeldArea {
 	held := make([]prerequisites.HeldArea, 0, len(areas))
 	for _, area := range areas {
-		held = append(held, prerequisites.HeldArea{ID: area.ID})
+		if area.Mode != retiringArea {
+			held = append(held, prerequisites.HeldArea{ID: area.ID})
+		}
 	}
 	return held
 }

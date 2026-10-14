@@ -180,6 +180,11 @@ type osPython struct {
 	installed bool
 	ready     bool
 	glibcLow  bool
+	cached    bool
+	named     map[string][]string
+	mirrors   []string
+	exported  []string
+	buildErr  error
 }
 
 func (p *osPython) interpreter() PythonInterpreter {
@@ -203,12 +208,27 @@ func (p *osPython) Select(context.Context, string) (PythonInterpreter, error) {
 
 func (p *osPython) Wheels(context.Context, string) ([]RuntimeWheel, error) {
 	p.owner.record("wheels")
-	return []RuntimeWheel{{Filename: "ansible_core-2.21.5-py3-none-any.whl", Size: 2_400_000}, {Filename: "pip-26.0.1-py3-none-any.whl", Size: 1_800_000, Cached: true}}, nil
+	return []RuntimeWheel{{Filename: "ansible_core-2.21.5-py3-none-any.whl", Size: 2_400_000, Cached: p.cached}, {Filename: "pip-26.0.1-py3-none-any.whl", Size: 1_800_000, Cached: true}}, nil
 }
 
-func (p *osPython) Fetch(context.Context, string, SetupEgress) error {
+func (p *osPython) RuntimeWheels(_ context.Context, digest string) ([]string, error) {
+	named, found := p.named[digest]
+	if !found {
+		return nil, ErrRuntimeUnavailable
+	}
+	return named, nil
+}
+
+func (p *osPython) Fetch(_ context.Context, _ string, _ SetupEgress, mirror WheelMirror) error {
 	p.owner.record("fetch")
+	p.mirrors = append(p.mirrors, mirror.String())
 	return nil
+}
+
+func (p *osPython) Export(_ context.Context, destination string, _ SetupEgress, mirror WheelMirror) (WheelExport, error) {
+	p.owner.record("export")
+	p.exported = append(p.exported, destination+" "+mirror.String())
+	return WheelExport{Directory: destination, Files: []ExportedWheel{{Filename: "ansible_core-2.21.5-py3-none-any.whl", SHA256: strings.Repeat("a", 64), Size: 2_400_000, Origin: OriginDownload}}}, nil
 }
 
 func (p *osPython) Inspect(context.Context, PythonInterpreter) (Runtime, bool, error) {
@@ -218,6 +238,9 @@ func (p *osPython) Inspect(context.Context, PythonInterpreter) (Runtime, bool, e
 
 func (p *osPython) Build(ctx context.Context, publisher RuntimePublisher, _ PythonInterpreter) (Runtime, error) {
 	p.owner.record("build")
+	if p.buildErr != nil {
+		return Runtime{}, p.buildErr
+	}
 	stage, err := publisher.StageRuntime(ctx)
 	if err != nil {
 		return Runtime{}, err
@@ -238,6 +261,16 @@ type memorySetup struct {
 	view     SetupView
 	refusal  error
 	recorded []SetupState
+	// published, held and pruned stand in for the runtimes directory and
+	// the wheel cache.
+	published []string
+	held      map[string]bool
+	kept      []string
+}
+
+func (m *memorySetup) AwaitSetup(_ context.Context, callback func(SetupTransaction) error) error {
+	m.owner.record("await")
+	return callback(memoryTransaction{m})
 }
 
 func (m *memorySetup) ReadSetup(context.Context) (SetupView, error) {
@@ -295,12 +328,23 @@ func (t memoryTransaction) PublishRuntime(context.Context, RuntimeStage, string)
 }
 
 func (t memoryTransaction) DiscardRuntime(context.Context, RuntimeStage) error { return nil }
-func (t memoryTransaction) RetireRuntime(context.Context, string) (bool, error) {
+func (t memoryTransaction) RetireRuntime(_ context.Context, digest string) (bool, error) {
+	if t.m.held[digest] {
+		return false, nil
+	}
+	t.m.owner.record("retire " + digest[:4])
+	t.m.published = slices.DeleteFunc(t.m.published, func(name string) bool { return name == digest })
 	return true, nil
 }
-func (t memoryTransaction) Runtimes(context.Context) ([]string, error) { return []string{}, nil }
+func (t memoryTransaction) Runtimes(context.Context) ([]string, error) {
+	return slices.Clone(t.m.published), nil
+}
 func (t memoryTransaction) WheelPath(context.Context, string, string) (string, error) {
 	return "", errors.New("no wheel path in a setup test")
+}
+func (t memoryTransaction) PruneWheels(_ context.Context, keep []string) (int, error) {
+	t.m.kept = slices.Clone(keep)
+	return 0, nil
 }
 
 type noController struct{}

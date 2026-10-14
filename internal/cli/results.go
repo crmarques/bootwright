@@ -36,6 +36,9 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 	out, errOut := r.config.Out, r.config.ErrOut
 	switch path {
 	case "setup", "preflight controller":
+		if path == "setup" && validSetupDownload(result.controller) {
+			return true, writeSetupDownload(out, result.controller)
+		}
 		if validControllerReport(result.controller) && successfulControllerReport(path, result.controller) {
 			return true, writeControllerResult(out, errOut, path, result.controller, selectedJSON(command))
 		}

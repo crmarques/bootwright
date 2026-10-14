@@ -101,7 +101,9 @@ the tool areas and the setup subtree with its receipt and runtimes, in the
 After definitive setup completion, preserve existing lifecycle guards. A safe
 input update retains binding identity; context deletion may drop disposable
 context-specific references but never uninstalls shared packages or deletes
-tool areas, runtimes or host evidence. Package failure or process death is not disposal
+runtimes or host evidence; it retires only a
+[tool area](contexts/controller-record.md#tool-areas) no remaining binding
+names. Package failure or process death is not disposal
 proof. Complete-store restore must preserve these relationships under the
 [restore boundary](#format-and-restore-boundary); controller relocation waits
 on [B103](milestones/backlog.md#b103).
@@ -211,7 +213,7 @@ first binding; its setup subtree exists after a confirmed setup:
   registry.json
   controller/
     state.json
-    bundles/<tool-closure-digest>/
+    tools/<tool-closure-digest>/
       sources/
       tools/
   media/

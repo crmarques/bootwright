@@ -747,6 +747,38 @@ func (v *testView) SealClientArea(_ context.Context, id string) error {
 	return nil
 }
 
+// RetireToolAreas names current on this context's binding, as the store does,
+// and drops every sealed area no binding names.
+func (v *testView) RetireToolAreas(ctx context.Context, current string) error {
+	if current != "" {
+		if err := v.SealClientArea(ctx, current); err != nil {
+			return err
+		}
+	} else {
+		bindings := slices.Clone(v.workspace.controller.State.Bindings)
+		for index := range bindings {
+			if bindings[index].Context == v.Identity().Name {
+				bindings[index].Tools = ""
+			}
+		}
+		v.workspace.controller.State.Bindings = bindings
+	}
+	named := map[string]bool{}
+	for _, binding := range v.workspace.controller.State.Bindings {
+		named[binding.Tools] = true
+	}
+	for id, sealed := range v.workspace.areas {
+		if sealed && !named[id] {
+			delete(v.workspace.areas, id)
+		}
+	}
+	v.workspace.controller.Areas = slices.DeleteFunc(slices.Clone(v.workspace.controller.Areas), func(area prerequisites.HeldArea) bool {
+		_, held := v.workspace.areas[area.ID]
+		return !held
+	})
+	return nil
+}
+
 // Secrets lends the context's secret area only inside a transaction, as the
 // store does. The custody doubles these tests use keep their entries
 // themselves, so the area holds no files; it holds the store's lending rules.
@@ -4194,6 +4226,7 @@ func TestControllerBlockReceivesItsPublicationBoundary(t *testing.T) {
 	for name, supplied := range map[string]bool{
 		"ClientArea":         execution.Stage.ClientArea != nil,
 		"SealClientArea":     execution.Stage.SealClientArea != nil,
+		"RetireToolAreas":    execution.Stage.RetireToolAreas != nil,
 		"RetainDependencies": execution.Stage.RetainDependencies != nil,
 		"Prepare":            execution.Stage.Prepare != nil,
 	} {

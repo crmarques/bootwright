@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -47,9 +48,9 @@ func mutateSetup(t *testing.T, store *Store, callback func(prerequisites.SetupTr
 	}
 }
 
-func stageRuntime(t *testing.T, tx prerequisites.SetupTransaction, marker string) prerequisites.RuntimeStage {
+func stageRuntime(t *testing.T, tx prerequisites.SetupTransaction, marker, digest string) prerequisites.RuntimeStage {
 	t.Helper()
-	stage, err := buildRuntime(tx, marker)
+	stage, err := buildRuntime(tx, marker, digest)
 	if err != nil {
 		t.Fatalf("runtime stage: %#v", err)
 	}
@@ -58,7 +59,7 @@ func stageRuntime(t *testing.T, tx prerequisites.SetupTransaction, marker string
 
 // buildRuntime fills a stage the way a venv build does: directories and files
 // of ordinary modes, a link to the interpreter and runtime.json last.
-func buildRuntime(tx prerequisites.SetupTransaction, marker string) (prerequisites.RuntimeStage, error) {
+func buildRuntime(tx prerequisites.SetupTransaction, marker, digest string) (prerequisites.RuntimeStage, error) {
 	stage, err := tx.StageRuntime(context.Background())
 	if err != nil {
 		return nil, err
@@ -73,7 +74,7 @@ func buildRuntime(tx prerequisites.SetupTransaction, marker string) (prerequisit
 	if err := os.Symlink("/usr/bin/python3.14", filepath.Join(stage.Path(), "python")); err != nil {
 		return nil, err
 	}
-	return stage, os.WriteFile(filepath.Join(stage.Path(), "runtime.json"), []byte("{\"marker\":\""+marker+"\"}\n"), 0644)
+	return stage, os.WriteFile(filepath.Join(stage.Path(), "runtime.json"), []byte("{\"marker\":\""+marker+"\",\"runtime\":{\"digest\":\""+digest+"\"}}\n"), 0644)
 }
 
 func setupEntries(t *testing.T, store *Store, path ...string) []string {
@@ -114,7 +115,7 @@ func TestTheSetupSubtreeIsOutsideTheRegistryDescriptor(t *testing.T) {
 		if _, _, err := tx.OpenRun(context.Background()); err != nil {
 			return err
 		}
-		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "one"), setupDigest(2))
+		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "one", setupDigest(2)), setupDigest(2))
 		return err
 	})
 	after, err := os.ReadFile(registryPath)
@@ -277,7 +278,7 @@ func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 			mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
-				_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "kept"), setupDigest(2))
+				_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "kept", setupDigest(2)), setupDigest(2))
 				return err
 			})
 			if err := os.WriteFile(filepath.Join(store.options.Root, setupSubtree, test.entry), test.content, 0600); err != nil {
@@ -336,7 +337,7 @@ func TestRetirementSkipsARuntimeALaunchHolds(t *testing.T) {
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	digest := setupDigest(5)
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
-		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "held"), digest)
+		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "held", digest), digest)
 		return err
 	})
 	hold, err := store.HoldRuntime(context.Background(), digest)
@@ -380,7 +381,7 @@ func TestDiscardRefusesWhileALaunchHoldsARuntime(t *testing.T) {
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	digest := setupDigest(5)
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
-		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "held"), digest)
+		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "held", digest), digest)
 		return err
 	})
 	hold, err := store.HoldRuntime(context.Background(), digest)
@@ -424,7 +425,7 @@ func TestConcurrentPublishersLeaveOneRuntime(t *testing.T) {
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	digest := setupDigest(6)
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
-		first, second := stageRuntime(t, tx, "first"), stageRuntime(t, tx, "second")
+		first, second := stageRuntime(t, tx, "first", digest), stageRuntime(t, tx, "second", digest)
 		won, err := tx.PublishRuntime(context.Background(), first, digest)
 		if err != nil || !won {
 			t.Fatalf("the first publisher lost: %v", err)
@@ -449,23 +450,17 @@ func TestConcurrentPublishersLeaveOneRuntime(t *testing.T) {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			for {
-				err := store.MutateSetup(context.Background(), func(tx prerequisites.SetupTransaction) error {
-					stage, err := buildRuntime(tx, strconv.Itoa(index))
-					if err != nil {
-						return err
-					}
-					won, err := tx.PublishRuntime(context.Background(), stage, racing)
-					wins[index] = won
+			err := store.AwaitSetup(context.Background(), func(tx prerequisites.SetupTransaction) error {
+				stage, err := buildRuntime(tx, strconv.Itoa(index), racing)
+				if err != nil {
 					return err
-				})
-				var held *busyError
-				if !errors.As(err, &held) {
-					if err != nil {
-						t.Errorf("publisher %d: %#v", index, err)
-					}
-					return
 				}
+				won, err := tx.PublishRuntime(context.Background(), stage, racing)
+				wins[index] = won
+				return err
+			})
+			if err != nil {
+				t.Errorf("publisher %d: %#v", index, err)
 			}
 		}()
 	}
@@ -507,7 +502,7 @@ func TestARuntimeIsPublishedOnlyWithItsRecord(t *testing.T) {
 func TestADiscardedStageLeavesNoEntryAndPublishesNothing(t *testing.T) {
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
-		stage := stageRuntime(t, tx, "discarded")
+		stage := stageRuntime(t, tx, "discarded", setupDigest(9))
 		if err := tx.DiscardRuntime(context.Background(), stage); err != nil {
 			return err
 		}
@@ -579,6 +574,158 @@ func TestASecondSetupIsBusy(t *testing.T) {
 	})
 }
 
+// A launch's rebuild waits for the setup lock instead of refusing, and stops
+// waiting when its context ends.
+func TestAwaitingSetupWaitsForTheHolderAndHonoursCancellation(t *testing.T) {
+	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
+	release, entered := make(chan struct{}), make(chan struct{})
+	held := make(chan error, 1)
+	go func() {
+		held <- store.MutateSetup(context.Background(), func(prerequisites.SetupTransaction) error {
+			close(entered)
+			<-release
+			return nil
+		})
+	}()
+	<-entered
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := store.AwaitSetup(canceled, func(prerequisites.SetupTransaction) error {
+		t.Fatal("a canceled wait entered the setup lock")
+		return nil
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a canceled wait returned %v", err)
+	}
+	waited := make(chan error, 1)
+	go func() {
+		waited <- store.AwaitSetup(context.Background(), func(prerequisites.SetupTransaction) error { return nil })
+	}()
+	select {
+	case err := <-waited:
+		t.Fatalf("the wait entered while setup was held: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-held; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-waited; err != nil {
+		t.Fatalf("the wait failed once setup was released: %v", err)
+	}
+}
+
+// A runtime whose launch lock is gone cannot be held by any launch, so
+// retirement removes it rather than reporting it retired and leaving it.
+func TestRetiringARuntimeWithoutItsLaunchLockRemovesIt(t *testing.T) {
+	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
+	digest := setupDigest(5)
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "unlocked", digest), digest)
+		return err
+	})
+	if err := os.Remove(filepath.Join(store.options.Root, setupSubtree, setupRuntimesName, digest, runtimeLockName)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.HoldRuntime(context.Background(), digest); !errors.Is(err, prerequisites.ErrRuntimeUnavailable) {
+		t.Fatalf("a launch held a runtime without its lock: %v", err)
+	}
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		for range 2 {
+			retired, err := tx.RetireRuntime(context.Background(), digest)
+			if err != nil || !retired {
+				t.Fatalf("retirement reported %t, %v", retired, err)
+			}
+		}
+		return nil
+	})
+	if names := setupEntries(t, store, setupRuntimesName); len(names) != 0 {
+		t.Fatalf("retirement left %q", names)
+	}
+}
+
+// A hold proves the runtime's record names the digest it was asked for, so a
+// runtime renamed into another's place is never launched as that one.
+func TestAHoldRefusesARuntimeWhoseRecordNamesAnother(t *testing.T) {
+	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
+	digest := setupDigest(5)
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "renamed", setupDigest(6)), digest)
+		return err
+	})
+	hold, err := store.HoldRuntime(context.Background(), digest)
+	if err == nil {
+		hold.Release()
+		t.Fatal("a launch held a runtime whose record names another")
+	}
+	if errors.Is(err, prerequisites.ErrRuntimeUnavailable) || !strings.Contains(onlyDiagnostic(t, err).Message, "names another runtime") {
+		t.Fatalf("the refusal was %#v", diagnostics.Of(err))
+	}
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		retired, err := tx.RetireRuntime(context.Background(), digest)
+		if err != nil || !retired {
+			t.Fatalf("the misnamed runtime was not retired: %t %v", retired, err)
+		}
+		return nil
+	})
+}
+
+// Leftover stages and runtimes past any small bound never wedge setup: the
+// sweep and the listing admit them, and the sweep removes every stage.
+func TestTheSweepAdmitsManyRuntimeEntries(t *testing.T) {
+	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "kept", setupDigest(2)), setupDigest(2))
+		return err
+	})
+	runtimes := filepath.Join(store.options.Root, setupSubtree, setupRuntimesName)
+	for index := range 80 {
+		if err := os.Mkdir(filepath.Join(runtimes, runtimeStagePrefix+strconv.Itoa(index)), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		digests, err := tx.Runtimes(context.Background())
+		if err != nil || !slices.Equal(digests, []string{setupDigest(2)}) {
+			t.Fatalf("runtimes listed %q, %v", digests, err)
+		}
+		return nil
+	})
+	if names := setupEntries(t, store, setupRuntimesName); !slices.Equal(names, []string{setupDigest(2)}) {
+		t.Fatalf("the sweep left %d entries", len(names))
+	}
+}
+
+// Pruning keeps exactly the named wheel directories and removes every other
+// entry of the cache.
+func TestPruningKeepsOnlyTheNamedWheels(t *testing.T) {
+	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		if pruned, err := tx.PruneWheels(context.Background(), nil); pruned != 0 || err != nil {
+			t.Fatalf("pruning an absent cache reported %d, %v", pruned, err)
+		}
+		for _, seed := range []byte{1, 2, 3} {
+			path, err := tx.WheelPath(context.Background(), setupDigest(seed), "w"+strconv.Itoa(int(seed))+"-1-py3-none-any.whl")
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(path, []byte("wheel"), 0600); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.PruneWheels(context.Background(), []string{"not-a-digest"}); err == nil {
+			t.Fatal("an invalid keep digest was admitted")
+		}
+		pruned, err := tx.PruneWheels(context.Background(), []string{setupDigest(1), setupDigest(3), setupDigest(4)})
+		if err != nil || pruned != 1 {
+			t.Fatalf("pruning reported %d, %v", pruned, err)
+		}
+		return nil
+	})
+	if names := setupEntries(t, store, setupCacheName, setupWheelsName); !slices.Equal(names, []string{setupDigest(1), setupDigest(3)}) {
+		t.Fatalf("pruning kept %q", names)
+	}
+}
+
 // checkpointSetupScenario is one whole setup publication: the intent, the
 // runtime and the receipt that clears the intent. The design's recovery rule
 // is the retry: setup re-inspects, a runtime publishes only whole, and a
@@ -594,7 +741,7 @@ func checkpointSetupScenario() checkpointScenario {
 			if err := tx.Record(ctx, prerequisites.SetupState{Pending: &pending}); err != nil {
 				return err
 			}
-			stage, err := buildRuntime(tx, "harness")
+			stage, err := buildRuntime(tx, "harness", digest)
 			if err != nil {
 				return err
 			}

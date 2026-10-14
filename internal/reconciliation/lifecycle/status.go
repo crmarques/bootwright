@@ -349,7 +349,7 @@ func (s Service) setupGates(ctx context.Context, view View) bool {
 	if !setupComplete(view.Controller()) {
 		return true
 	}
-	_, err := s.approvedRuntime(ctx)
+	_, err := s.locateRuntime(ctx, false)
 	return err != nil
 }
 

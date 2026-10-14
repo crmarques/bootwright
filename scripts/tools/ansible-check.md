@@ -51,6 +51,12 @@ One target is excluded by default because it needs the dnf4 backend of a RHEL 9
 host: `native_transaction` builds a fixture RPM and drives the package manager
 into an isolated installroot. It is an operator-run harness rather than part of
 the unitary gate. Select it with `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` on RHEL 9.
+`controller_prerequisites` is the other operator-run harness: it runs the
+shipped `playbooks/controller/setup.yml` over the real runner protocol with one
+`controller-prerequisites-v6` request, whose single synthetic client is
+already retained in a private temporary tool area, then replays it. It needs
+no root and no network. Select it with
+`BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET=1`.
 The integration fixture requires local process communication; it never runs a
 downloaded binary or changes host packages.
 

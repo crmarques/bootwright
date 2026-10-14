@@ -62,6 +62,7 @@ type document struct {
 type Lock struct {
 	document document
 	digest   string
+	source   []byte
 }
 
 // requiredPackages is ansible-core's declared closure plus the controller's
@@ -105,12 +106,14 @@ func Parse(data []byte) (Lock, error) {
 		return Lock{}, err
 	}
 	sum := sha256.Sum256(append([]byte(Format+"\x00"), canonical...))
-	return Lock{document: doc, digest: hex.EncodeToString(sum[:])}, nil
+	return Lock{document: doc, digest: hex.EncodeToString(sum[:]), source: bytes.Clone(data)}, nil
 }
 
 // Digest is the lowercase SHA-256 of the lock's canonical re-encoding under
 // the lock's format domain, so white space in the file never moves it.
 func (l Lock) Digest() string { return l.digest }
+
+func (l Lock) Source() []byte { return bytes.Clone(l.source) }
 
 // AnsibleCore is the one ansible-core version every ABI carries.
 func (l Lock) AnsibleCore() string { return l.document.AnsibleCore }

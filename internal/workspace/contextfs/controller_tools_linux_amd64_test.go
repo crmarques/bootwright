@@ -173,7 +173,7 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 	var proved lifecycle.BlockEvidence
 	err = store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
 		result, err := stage.Apply(ctx, lifecycle.Execution{Block: block, Stage: &lifecycle.ControllerStage{
-			Setup: tx.Controller(), ClientArea: tx.ClientArea, SealClientArea: tx.SealClientArea,
+			Setup: tx.Controller(), ClientArea: tx.ClientArea, SealClientArea: tx.SealClientArea, RetireToolAreas: tx.RetireToolAreas,
 			RetainDependencies: tx.RetainDependencies,
 			Prepare:            func(context.Context, prerequisites.StagePreparation) error { return nil },
 		}})
@@ -227,7 +227,7 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 			if err != nil {
 				t.Fatalf("the install could not locate its %s: %#v", executable, diagnostics.Of(err))
 			}
-			want := filepath.Join(store.options.Root, "controller", "bundles", area, "tools", kind, "openshift", "4.19.3", executable)
+			want := filepath.Join(store.options.Root, "controller", toolAreasName, area, "tools", kind, "openshift", "4.19.3", executable)
 			if located != want {
 				t.Fatalf("the %s was located at %q, want %q", executable, located, want)
 			}

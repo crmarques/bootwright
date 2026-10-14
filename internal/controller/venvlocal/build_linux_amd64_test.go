@@ -59,7 +59,8 @@ func TestABuildPublishesAVerifiedRuntime(t *testing.T) {
 	}
 	requirements, err := os.ReadFile(filepath.Join(directory, "requirements.lock"))
 	files, _ := adapter.lock.Files("3.14")
-	if err != nil || strings.Count(string(requirements), " --hash=sha256:") != len(files) {
+	if err != nil || strings.Count(string(requirements), " --hash=sha256:") != len(files)+1 ||
+		!strings.Contains(string(requirements), "# installer pip==") {
 		t.Fatalf("requirements.lock = %q, %v", requirements, err)
 	}
 	for _, leftover := range []string{".wheels", ".home"} {

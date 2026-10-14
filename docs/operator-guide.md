@@ -129,11 +129,18 @@ the host's own dnf in the same way, on RHEL as on Fedora: register a RHEL
 controller, or enable the repositories that carry them, before that context's
 first apply.
 
-Preparing a host with no route to `files.pythonhosted.org` is not available
-yet: `setup --wheel-mirror` and an unprivileged `setup --download-only
---dest-dir` that copies the locked wheels to such a host are to be delivered
-in X90 ([B549](../specs/milestones/m1.md#b549)). Host packages already come
-from wherever the host's dnf is configured to read them, a local `file://`
+Preparing a host with no route to `files.pythonhosted.org` takes two steps.
+On any connected host, with no privilege, run
+`bootwright setup --download-only --dest-dir /srv/bootwright-wheels`: it writes
+the locked wheels of every Python ABI, the pip wheel and a copy of `lock.json`
+there. Copy that directory to the offline host, or serve it over HTTPS, and run
+`bootwright setup --wheel-mirror file:///srv/bootwright-wheels` (or
+`--wheel-mirror https://mirror.example/bootwright-wheels`) there. The mirror is
+untrusted transport: setup uses a file only when its size and SHA-256 match the
+lock this build embeds, so a stale or tampered file is refused with its name.
+`bootwright setup --dry-run --output json` lists every locked file's URL and
+SHA-256 for fetching them another way. Host packages already come from
+wherever the host's dnf is configured to read them, a local `file://`
 repository, a DVD or a Satellite mirror included.
 
 ### On a proxied network

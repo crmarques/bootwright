@@ -10,6 +10,9 @@ type CheckRequest struct{ ContextName string }
 type SetupRequest struct {
 	DryRun           bool
 	SkipConfirmation bool
+	WheelMirror      string
+	DownloadOnly     bool
+	Destination      string
 }
 
 // Check scopes tell the operator which command settles a missing prerequisite:
@@ -64,6 +67,7 @@ type Report struct {
 	Preview *HostPackagePreview
 	// Files lists every locked wheel, for a dry run's machine output.
 	Files         []LockedFile
+	Export        *WheelExport
 	PlanPresented bool
 	// Next is the one command that settles a not-ready readiness check, as
 	// preflight decided it, the setup a dry run previewed, or the bootwright

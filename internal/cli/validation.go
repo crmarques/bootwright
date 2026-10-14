@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -165,9 +166,7 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 			return "context update requires --file or --input-dir"
 		}
 	case "setup":
-		if stringValue(flags, "output") == "json" && !boolValue(flags, "dry-run") {
-			return "setup accepts --output json only with --dry-run"
-		}
+		return validateSetupFlags(flags)
 	case "context delete":
 		if !boolValue(flags, "purge") {
 			return "context delete requires --purge=true"
@@ -224,6 +223,24 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 				}
 			}
 		}
+	}
+	return ""
+}
+
+func validateSetupFlags(flags *pflag.FlagSet) string {
+	download := boolValue(flags, "download-only")
+	switch {
+	case stringValue(flags, "output") == "json" && !boolValue(flags, "dry-run"):
+		return "setup accepts --output json only with --dry-run"
+	case download && boolValue(flags, "dry-run"):
+		return "--download-only conflicts with --dry-run; setup --dry-run --output json lists the locked files"
+	case download && stringValue(flags, "dest-dir") == "":
+		return "--download-only requires --dest-dir"
+	case !download && flags.Changed("dest-dir"):
+		return "--dest-dir requires --download-only"
+	}
+	if _, err := prerequisites.ParseWheelMirror(stringValue(flags, "wheel-mirror")); err != nil {
+		return "--wheel-mirror must be " + prerequisites.WheelMirrorUsage
 	}
 	return ""
 }

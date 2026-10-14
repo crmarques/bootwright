@@ -284,7 +284,7 @@ func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (l
 	if c.tools == nil || c.installer == nil {
 		return failed, refuse("controller.unsupported", "controller prerequisite installation is not configured", "use a compatible executable")
 	}
-	if execution.Stage == nil || execution.Stage.ClientArea == nil || execution.Stage.SealClientArea == nil || execution.Stage.RetainDependencies == nil || execution.Stage.Prepare == nil {
+	if execution.Stage == nil || execution.Stage.ClientArea == nil || execution.Stage.SealClientArea == nil || execution.Stage.RetireToolAreas == nil || execution.Stage.RetainDependencies == nil || execution.Stage.Prepare == nil {
 		return failed, refuse("lifecycle.state", "the controller prerequisites block has no publication capability", "use a compatible executable")
 	}
 	request, err := admitted(execution)
@@ -501,6 +501,9 @@ func (c Capability) verify(ctx context.Context, execution lifecycle.Execution, r
 			return unknown, err
 		}
 	}
+	if err := execution.Stage.RetireToolAreas(ctx, current(tools, area)); err != nil {
+		return unknown, err
+	}
 	report(ctx, execution, "verify-clients", "ok")
 	evidence, err := newEvidence(execution.Block.RequestDigest, area, request.LibvirtClient, tools, installed).encode()
 	if err != nil {
@@ -510,14 +513,26 @@ func (c Capability) verify(ctx context.Context, execution lifecycle.Execution, r
 }
 
 // settled is the proved no-op: every selected client is already published and
-// installed, so the block completes without acquisition or effect.
+// installed, so the block completes without acquisition or host effect; its
+// binding names the area it proved and the unnamed areas are retired.
 func (c Capability) settled(ctx context.Context, execution lifecycle.Execution, request Request, tools []prerequisites.ToolDefinition, installed []prerequisites.HostPackageEvidence) (lifecycle.Result, error) {
+	if err := execution.Stage.RetireToolAreas(ctx, current(tools, prerequisites.ToolsDigest(tools))); err != nil {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+	}
 	report(ctx, execution, "verify-clients", "ok")
 	evidence, err := newEvidence(execution.Block.RequestDigest, prerequisites.ToolsDigest(tools), request.LibvirtClient, tools, installed).encode()
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
+}
+
+// current is the area a stage's binding names: none when it selects no tool.
+func current(tools []prerequisites.ToolDefinition, area string) string {
+	if len(tools) == 0 {
+		return ""
+	}
+	return area
 }
 
 func sources(tools []prerequisites.ToolDefinition) []prerequisites.DependencySource {

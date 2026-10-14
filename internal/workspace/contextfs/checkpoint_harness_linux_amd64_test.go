@@ -503,7 +503,7 @@ func checkpointStaleEntries(root string, mode checkpointMode, retried bool) ([]s
 		}
 		parts := strings.Split(relative, string(filepath.Separator))
 		secrets := len(parts) > 3 && parts[0] == "contexts" && parts[2] == "secrets"
-		bundle := len(parts) > 3 && parts[0] == "controller" && parts[1] == "bundles"
+		bundle := len(parts) > 3 && parts[0] == "controller" && parts[1] == toolAreasName
 		switch {
 		case retried:
 			stale = append(stale, relative)
@@ -846,6 +846,7 @@ func checkpointScenarios() []checkpointScenario {
 		checkpointReservationScenario(),
 		checkpointControllerRecordScenario(),
 		checkpointClientAreaScenario(),
+		checkpointToolAreaRetirementScenario(),
 		checkpointRetainedDependenciesScenario(),
 		checkpointMediaAddScenario(),
 		checkpointMediaReplaceScenario(),
@@ -946,6 +947,11 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointBeforeClientAreaAttribution: 1, checkpointBeforeControllerBundleWrite: 1,
 			checkpointAfterControllerBundleCreate: 1, checkpointBeforeControllerBundleRename: 1,
 			checkpointBeforeControllerBundleSync: 1, checkpointBeforeClientAreaSealing: 1,
+		},
+		"tool-area-retirement": {
+			checkpointBeforeToolAreaRetiring: 1, checkpointBeforeToolAreaRemoval: 1, checkpointBeforeToolAreaRelease: 1,
+			checkpointCreateFile: 2, checkpointWriteFile: 2, checkpointSyncFile: 2, checkpointSyncDirectory: 5,
+			checkpointBeforeControllerRename: 2, checkpointAfterControllerRename: 2,
 		},
 		"retained-dependencies": {
 			checkpointBeforeRetainedDependencies: 1, checkpointCreateFile: 1, checkpointWriteFile: 1,
@@ -1776,11 +1782,51 @@ func checkpointClientAreaScenario() checkpointScenario {
 			if err != nil || mode != "sealed" || inode == 0 {
 				return fmt.Errorf("client reservation is %q at inode %d (%v)", mode, inode, err)
 			}
-			info, err := os.Stat(filepath.Join(store.options.Root, "controller", "bundles", clientClosure, "tools", "helm", "helm"))
+			info, err := os.Stat(filepath.Join(store.options.Root, "controller", toolAreasName, clientClosure, "tools", "helm", "helm"))
 			if err != nil || info.Mode().Perm() != 0700 {
 				return fmt.Errorf("published client is %v (%v)", info, err)
 			}
 			return nil
+		},
+	})
+	scenario.reads = checkpointControllerReads
+	return scenario
+}
+
+func checkpointToolAreaRetirementScenario() checkpointScenario {
+	// specs/contexts/controller-record.md, Tool areas: an area no binding
+	// names turns retiring before its directory goes, so an interrupted
+	// retirement is finished by the next one.
+	retire := func(_ *testing.T, ctx context.Context, store *Store) error {
+		return checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
+			return tx.RetireToolAreas(ctx, clientClosure)
+		})
+	}
+	scenario := checkpointLifecycleScenario(checkpointScenario{
+		name: "tool-area-retirement",
+		prepare: func(t *testing.T) *Store {
+			store := checkpointSealedFixture(t)
+			if err := publishClients(store, clientClosure, true); err != nil {
+				t.Fatalf("client publication failed: %#v", diagnostics.Of(err))
+			}
+			return store
+		},
+		operate: retire,
+		retry:   retire,
+		settled: func(_ *testing.T, ctx context.Context, store *Store) error {
+			mode, inode, err := checkpointClientMode(ctx, store)
+			if err != nil || mode != "sealed" || inode == 0 {
+				return fmt.Errorf("client reservation is %q at inode %d (%v)", mode, inode, err)
+			}
+			if _, err := os.Stat(filepath.Join(store.options.Root, "controller", toolAreasName, sealedToolArea)); !errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("the unnamed area's directory remains (%v)", err)
+			}
+			return store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
+				if len(view.Areas) != 1 || view.Areas[0].ID != clientClosure {
+					return fmt.Errorf("the host holds %v", view.Areas)
+				}
+				return nil
+			})
 		},
 	})
 	scenario.reads = checkpointControllerReads

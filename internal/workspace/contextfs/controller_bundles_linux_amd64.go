@@ -31,10 +31,10 @@ const bundleStagePrefix = "pending-"
 func bundleStageName(name string) bool { return identifier(name, bundleStagePrefix) }
 
 func verifyControllerBundleReservations(ctx context.Context, owner *directory, reservations []controllerBundleReservation) error {
-	parent, err := openDirectory(owner, "bundles")
+	parent, err := openDirectory(owner, toolAreasName)
 	if errors.Is(err, syscall.ENOENT) {
 		for _, reservation := range reservations {
-			if reservation.DirectoryInode != 0 {
+			if reservation.DirectoryInode != 0 && reservation.Mode != retiringArea {
 				return state("attributed controller bundles are missing")
 			}
 		}
@@ -69,7 +69,7 @@ func verifyControllerBundleReservations(ctx context.Context, owner *directory, r
 		}
 	}
 	for _, reservation := range reservations {
-		if reservation.DirectoryInode != 0 && !slices.Contains(names, reservation.ID) {
+		if reservation.DirectoryInode != 0 && reservation.Mode != retiringArea && !slices.Contains(names, reservation.ID) {
 			return state("attributed controller bundle is missing")
 		}
 	}
@@ -106,7 +106,7 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 		return nil, state("controller bundle identity is invalid")
 	}
 	index := slices.IndexFunc(stored.bundles, func(item controllerBundleReservation) bool { return item.ID == id })
-	if index < 0 {
+	if index < 0 || stored.bundles[index].Mode == retiringArea {
 		return nil, nil
 	}
 	if stored.bundles[index].DirectoryInode == 0 {
@@ -118,7 +118,7 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 		return nil, err
 	}
 	area.owned = append(area.owned, owner)
-	parent, err := openDirectory(owner, "bundles")
+	parent, err := openDirectory(owner, toolAreasName)
 	if err == nil {
 		area.owned = append(area.owned, parent)
 	}

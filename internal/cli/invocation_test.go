@@ -104,6 +104,8 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"setup", []string{"--yes"}, readsRoute},
 		{"setup", []string{"--dry-run", "--output", "json"}, readsRoute},
 		{"setup", []string{"--context", "lab"}, readsRoute},
+		{"setup", []string{"--download-only", "--dest-dir", "wheels"}, readsRoute},
+		{"setup", []string{"--wheel-mirror", "https://mirror.example/wheels"}, readsRoute},
 		// Preflight reports the host's route only when no context is named; an
 		// explicitly empty final --context is omission.
 		{"preflight controller", nil, readsRoute},

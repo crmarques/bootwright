@@ -75,7 +75,7 @@ const bundlePayloadSize = 280000
 
 // bundlePath is where the tool area id lives beneath the store.
 func bundlePath(store *Store, id string) string {
-	return filepath.Join(store.options.Root, "controller", "bundles", id)
+	return filepath.Join(store.options.Root, "controller", toolAreasName, id)
 }
 
 // writeBundlePayload is a controller stage that publishes one executable into

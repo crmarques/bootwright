@@ -56,7 +56,7 @@ func TestACacheHitMakesNoRequest(t *testing.T) {
 	adapter := host.adapter(testLock(t, "3.14"))
 	source := &publisher{body: wheelBytes}
 	adapter.client = source.client
-	if err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}); err != nil {
+	if err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}, prerequisites.WheelMirror{}); err != nil {
 		t.Fatal(err)
 	}
 	files, _ := adapter.lock.Files("3.14")
@@ -76,7 +76,7 @@ func TestACacheHitMakesNoRequest(t *testing.T) {
 		}
 	}
 	source.requests.Store(0)
-	if err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}); err != nil {
+	if err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}, prerequisites.WheelMirror{}); err != nil {
 		t.Fatal(err)
 	}
 	if got := source.requests.Load(); got != 0 {
@@ -85,7 +85,7 @@ func TestACacheHitMakesNoRequest(t *testing.T) {
 	if err := os.WriteFile(adapter.cachePath(files[0]), []byte("tampered"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}); err != nil {
+	if err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}, prerequisites.WheelMirror{}); err != nil {
 		t.Fatal(err)
 	}
 	if got := source.requests.Load(); got != 1 {
@@ -105,7 +105,7 @@ func TestAWheelWithAnotherHashIsRefused(t *testing.T) {
 		}
 		return data
 	}}).client
-	err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{})
+	err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}, prerequisites.WheelMirror{})
 	if err == nil {
 		t.Fatal("a wheel whose bytes differ from the lock's SHA-256 was accepted")
 	}

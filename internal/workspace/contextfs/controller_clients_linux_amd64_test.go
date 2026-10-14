@@ -71,7 +71,7 @@ func TestClientAreaPublishesUnderItsOwnReservation(t *testing.T) {
 	if reservation.Mode != "sealed" || reservation.DirectoryInode == 0 {
 		t.Fatalf("reservation = %+v", reservation)
 	}
-	published := filepath.Join(store.options.Root, "controller", "bundles", clientClosure, "tools", "helm", "helm")
+	published := filepath.Join(store.options.Root, "controller", toolAreasName, clientClosure, "tools", "helm", "helm")
 	if info, err := os.Stat(published); err != nil || info.Mode().Perm() != 0700 {
 		t.Fatalf("published client = %v (%v)", info, err)
 	}
@@ -141,7 +141,7 @@ func TestClientAreaRefusesAnUnattributableDirectory(t *testing.T) {
 	_ = publishClients(store, clientClosure, true)
 	injection.release(t, store)
 
-	foreign := filepath.Join(store.options.Root, "controller", "bundles", clientClosure, "foreign")
+	foreign := filepath.Join(store.options.Root, "controller", toolAreasName, clientClosure, "foreign")
 	if err := os.WriteFile(foreign, []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}

@@ -89,7 +89,7 @@ type plainLock struct{ fd uintptr }
 func (l plainLock) Fd() uintptr { return l.fd }
 
 func targetArea() authorityArea {
-	return authorityArea{location: prerequisites.BundleLocation{Path: "/var/lib/bootwright/controller/bundles/tools", Device: 1, Inode: 2, Writable: true}}
+	return authorityArea{location: prerequisites.BundleLocation{Path: "/var/lib/bootwright/controller/tools/area", Device: 1, Inode: 2, Writable: true}}
 }
 
 func clientInstallation(output prerequisites.RunOutput) prerequisites.ClientInstallation {

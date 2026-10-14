@@ -198,6 +198,7 @@ func TestAControllerStageInspectionCannotAuthorizeAnEffect(t *testing.T) {
 	_, clientErr := inspection.Stage.ClientArea(ctx, "client")
 	for name, err := range map[string]error{
 		"ClientArea": clientErr, "SealClientArea": inspection.Stage.SealClientArea(ctx, "client"),
+		"RetireToolAreas":    inspection.Stage.RetireToolAreas(ctx, ""),
 		"RetainDependencies": inspection.Stage.RetainDependencies(ctx, nil), "Prepare": inspection.Stage.Prepare(ctx, prerequisites.StagePreparation{}),
 	} {
 		t.Run(name, func(t *testing.T) {

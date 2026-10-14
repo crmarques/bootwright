@@ -457,6 +457,7 @@ func readOnlyStage(setup prerequisites.StorageView) *ControllerStage {
 		Setup:              setup,
 		ClientArea:         func(context.Context, string) (prerequisites.BundleArea, error) { return nil, refuse() },
 		SealClientArea:     func(context.Context, string) error { return refuse() },
+		RetireToolAreas:    func(context.Context, string) error { return refuse() },
 		RetainDependencies: func(context.Context, []prerequisites.DependencySource) error { return refuse() },
 		Prepare:            func(context.Context, prerequisites.StagePreparation) error { return refuse() },
 	}

@@ -58,6 +58,7 @@ func Verify(t *testing.T, within Within) {
 		{"each view names the context it holds", eachViewNamesTheContextItHolds},
 		{"a view reads a retained revision and nothing else", aViewReadsARetainedRevisionAndNothingElse},
 		{"a client area opens under a reservation and reopens sealed read-only", aClientAreaOpensUnderAReservation},
+		{"a stage that names no area retires the one only its binding named", aStageThatNamesNoAreaRetiresItsOwn},
 		{"retained tool sources are kept whole and never replaced", retainedDependenciesAreKeptWhole},
 		{"a secret area is lent for the held context only inside its transaction", aSecretAreaIsLentOnlyInsideItsTransaction},
 	} {
@@ -319,6 +320,31 @@ func aClientAreaOpensUnderAReservation(t *testing.T, s Subject) {
 		publishes(t, area, "manifest.json", "{}\n")
 		refuses(t, area.Write(ctx, "late.json", []byte("{}\n"), false), "a write into a reopened sealed client area")
 		succeeds(t, tx.SealClientArea(ctx, closure), "sealing a sealed client area")
+	})
+}
+
+func aStageThatNamesNoAreaRetiresItsOwn(t *testing.T, s Subject) {
+	ctx := context.Background()
+	mutate(t, s, func(tx lifecycle.Transaction) {
+		succeeds(t, tx.Bind(ctx, "controller", s.Host), "the binding a sealed closure is recorded on")
+		area := clientArea(t, tx, closure)
+		succeeds(t, area.Write(ctx, "manifest.json", []byte("{}\n"), false), "a client file")
+		succeeds(t, tx.SealClientArea(ctx, closure), "sealing the client area")
+		succeeds(t, tx.RetireToolAreas(ctx, closure), "naming the sealed area")
+	})
+	read(t, s, func(view lifecycle.View) {
+		if !slices.Contains(view.Controller().Areas, prerequisites.HeldArea{ID: closure}) {
+			t.Fatalf("held areas = %+v, want the named area %s kept", view.Controller().Areas, closure)
+		}
+	})
+	mutate(t, s, func(tx lifecycle.Transaction) {
+		succeeds(t, tx.RetireToolAreas(ctx, ""), "a stage that names no area")
+	})
+	read(t, s, func(view lifecycle.View) {
+		if slices.Contains(view.Controller().Areas, prerequisites.HeldArea{ID: closure}) {
+			t.Fatalf("held areas = %+v, want the area no binding names retired", view.Controller().Areas)
+		}
+		bindings(t, view, s.Context, prerequisites.ControllerBinding{Context: s.Context, Machine: "controller", HostDigest: hostDigest(t, s)})
 	})
 }
 

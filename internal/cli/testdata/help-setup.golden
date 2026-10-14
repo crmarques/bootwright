@@ -1,4 +1,4 @@
-Prepare this host's context-independent controller prerequisites: the baseline host packages, installed through the host's own dnf, and the controller runtime, a venv on the OS Python holding exactly the wheels this build locks. Setup selects no context; the prerequisites a context adds are installed by the controller stage of apply. A ready host makes no request and no change. Otherwise the plan shows dnf's own preview before confirmation. --dry-run never elevates: it names the host package requirements without a preview and makes no changes, and --output json, accepted only with --dry-run, also lists every locked wheel's file, URL and SHA-256. Review the plan before confirming; --yes skips ordinary confirmation.
+Prepare this host's context-independent controller prerequisites: the baseline host packages, installed through the host's own dnf, and the controller runtime, a venv on the OS Python holding exactly the wheels this build locks. Setup selects no context; the prerequisites a context adds are installed by the controller stage of apply. A ready host makes no request and no change. Otherwise the plan shows dnf's own preview before confirmation. --dry-run never elevates: it names the host package requirements without a preview and makes no changes, and --output json, accepted only with --dry-run, also lists every locked wheel's file, URL and SHA-256. --wheel-mirror reads each locked wheel as <mirror>/<filename> from a file:/// directory or an HTTPS base, as untrusted transport: the lock's SHA-256 alone decides whether the bytes are used. --download-only --dest-dir DIR never elevates and changes only DIR: on any connected host it writes the locked wheels of every Python ABI, the pip wheel and a copy of lock.json, so DIR serves an offline host as a --wheel-mirror. Review the plan before confirming; --yes skips ordinary confirmation.
 
 Usage:
   bootwright setup [flags]
@@ -7,9 +7,12 @@ Examples:
   bootwright setup --dry-run
 
 Flags:
-      --dry-run         Limit work to the command's dry-run boundary
-      --output string   Select output mode (values: text, json) (default "text")
-      --yes             Confirm the command's ordinary confirmation
+      --dest-dir string       Write the locked wheels, the pip wheel and lock.json into this directory (requires --download-only)
+      --download-only         Write the locked files for an offline host and change nothing else; never elevates
+      --dry-run               Limit work to the command's dry-run boundary
+      --output string         Select output mode (values: text, json) (default "text")
+      --wheel-mirror string   Read each locked wheel as <mirror>/<filename>: file:///<directory> or https://<host>/<base>; its bytes must still match the lock
+      --yes                   Confirm the command's ordinary confirmation
 
 Global Flags:
       --context string             Ignored: setup selects no context

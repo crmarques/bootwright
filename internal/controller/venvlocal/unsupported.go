@@ -28,6 +28,10 @@ func (a *Adapter) Published(ctx context.Context, _ prerequisites.Runtime) (bool,
 	return false, errors.Join(ctx.Err(), errUnsupported)
 }
 
+func (a *Adapter) RuntimeWheels(ctx context.Context, _ string) ([]string, error) {
+	return nil, errors.Join(ctx.Err(), errUnsupported)
+}
+
 func (a *Adapter) WithPython(ctx context.Context, _ prerequisites.Runtime, _ func(prerequisites.PythonLaunch) error) error {
 	return errors.Join(ctx.Err(), errUnsupported)
 }

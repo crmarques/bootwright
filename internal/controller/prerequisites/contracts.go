@@ -63,9 +63,11 @@ type PythonRuntime interface {
 	PythonExecutionGuard
 	Select(ctx context.Context, preferred string) (PythonInterpreter, error)
 	Wheels(ctx context.Context, abi string) ([]RuntimeWheel, error)
-	Fetch(ctx context.Context, abi string, egress SetupEgress) error
+	Fetch(ctx context.Context, abi string, egress SetupEgress, mirror WheelMirror) error
+	Export(ctx context.Context, destination string, egress SetupEgress, mirror WheelMirror) (WheelExport, error)
 	Inspect(ctx context.Context, interpreter PythonInterpreter) (Runtime, bool, error)
 	Build(ctx context.Context, publisher RuntimePublisher, interpreter PythonInterpreter) (Runtime, error)
+	RuntimeWheels(ctx context.Context, digest string) ([]string, error)
 }
 
 // Staging hands dependency resolution its private scratch. Each Stage is a new
@@ -163,6 +165,11 @@ type SetupTransaction interface {
 	OpenRun(ctx context.Context) (string, SetupRun, error)
 	Runtimes(ctx context.Context) ([]string, error)
 	WheelPath(ctx context.Context, sha256, filename string) (string, error)
+	PruneWheels(ctx context.Context, keep []string) (int, error)
+}
+
+type SetupWaiter interface {
+	AwaitSetup(ctx context.Context, callback func(SetupTransaction) error) error
 }
 
 // RuntimePublisher is the setup transaction's runtime half: PublishRuntime

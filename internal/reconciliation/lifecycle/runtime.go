@@ -6,6 +6,7 @@ import (
 	"path"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -214,8 +215,15 @@ type approved struct {
 
 // approvedRuntime is this build's lock's runtime on the interpreter the setup
 // receipt names. No receipt, an interrupted or foreign setup record, or no
-// published runtime refuses before anything runs.
+// published runtime that the wheel cache alone can rebuild refuses before
+// anything runs.
 func (s Service) approvedRuntime(ctx context.Context) (approved, error) {
+	return s.locateRuntime(ctx, true)
+}
+
+// locateRuntime without rebuild is for readers, such as status, that change
+// nothing.
+func (s Service) locateRuntime(ctx context.Context, rebuild bool) (approved, error) {
 	lock := s.options.Lock
 	if s.options.Setup == nil || len(lock.Digest) != 64 {
 		return approved{}, runtimeUnprepared(lock, "")
@@ -245,10 +253,32 @@ func (s Service) approvedRuntime(ctx context.Context) (approved, error) {
 			return approved{}, err
 		}
 		if !published {
-			return approved{}, runtimeUnprepared(lock, abi)
+			return located, s.rebuild(ctx, located, rebuild)
 		}
 	}
 	return located, nil
+}
+
+func (s Service) rebuild(ctx context.Context, located approved, rebuild bool) error {
+	lock, abi := s.options.Lock, located.runtime.Interpreter.ABI
+	if !rebuild || s.options.Rebuild == nil {
+		return runtimeUnprepared(lock, abi)
+	}
+	err := s.options.Rebuild.Rebuild(ctx, located.runtime)
+	reported := diagnostics.Of(err)
+	switch {
+	case err == nil, ctx.Err() != nil:
+		return err
+	case errors.Is(err, prerequisites.ErrRuntimeUnavailable):
+		return runtimeUnprepared(lock, abi)
+	case len(reported) != 0 && !errors.Is(err, prerequisites.ErrRuntimeRebuildFailed):
+		return err
+	}
+	cause := err.Error()
+	if len(reported) != 0 {
+		cause = reported[0].Message
+	}
+	return failure("controller.state", "the controller runtime for this build ("+runtimeIdentity(lock, abi)+") could not be rebuilt from the wheel cache: "+cause, "run bootwright setup")
 }
 
 // withPython launches the approved runtime; one retired since it was located
@@ -266,9 +296,13 @@ func (s Service) withPython(ctx context.Context, runtime approved, use func(prer
 }
 
 func runtimeUnprepared(lock RuntimeLock, abi string) error {
+	return failure("controller.state", "the controller runtime for this build ("+runtimeIdentity(lock, abi)+") is not prepared", "run bootwright setup")
+}
+
+func runtimeIdentity(lock RuntimeLock, abi string) string {
 	identity := "lock " + lock.Digest[:min(12, len(lock.Digest))]
 	if abi != "" {
 		identity += ", Python " + abi
 	}
-	return failure("controller.state", "the controller runtime for this build ("+identity+") is not prepared", "run bootwright setup")
+	return identity
 }

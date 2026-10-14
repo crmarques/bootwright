@@ -2464,7 +2464,8 @@ ambient `HTTPS_PROXY` host is lowercased as the receipt requires, and routes
 read "direct (no HTTPS_PROXY)" or "direct (Machine <name>)". A bound full of
 client areas refuses saying that no command of this build frees it, and the
 stage's client-area and resolution bound refusals name the purge (D90; the
-retirement stays parked as [B322](backlog.md#b322)). A purge dry run plans the
+retirement stays parked as B322, which
+[X90](#x90--controller-setup-v2-retention-and-offline-sources) closed). A purge dry run plans the
 retirement, and a purge that removed nothing prints "Retired none". The
 execution foundation gains a named check in setup and preflight: the catalog
 attributes each release's glibc and libgcc files to their package and build
@@ -5538,7 +5539,8 @@ runtime, the newest 8 setup runs, and the refusal of another build's format,
 which setup discards after confirmation once every runtime lock is claimed.
 The store ports live in `prerequisites` and `setup-state-v1` is classified as
 a self-healing store format. Retention, wheel pruning and the cache-only
-rebuild stay on [M1](m1.md#b552) for X90.
+rebuild went with
+[X90](#x90--controller-setup-v2-retention-and-offline-sources).
 
 **Outcome, B553:** the staging root `/var/lib/bootwright-staging` moved from
 nativelocal to the new `internal/controller/stagelocal` package with unchanged
@@ -5780,7 +5782,7 @@ clause 9 choice as [X88](#x88--controller-setup-v2-cut-over). **Items:**
 B528 and B542, with B227, B231, B238, B263, B335, B429 and B527, each retired
 as moot by the deletions (with the deletions and documentation that
 [B555](m1.md#b555)'s constraints assign to X89, while B555 awaits the owner's
-fresh-install acceptance, and [B557](m1.md#b557)'s note on the deleted
+fresh-install acceptance, and B557's note on the deleted
 harness). **Decisions:** D152,
 pending the owner's review. **Integrated:** "refactor(controller): remove the
 pre-v2 setup machinery and document setup v2".
@@ -6016,3 +6018,140 @@ than projecting the observed size ([B606](backlog.md#b606)). A newer build may n
 revision, and its applied objects then read unknown. A settled apply attests
 only its own records ([B574](backlog.md#b574) holds the owner's decision on
 whether it also compares the plan).
+
+### X90 — Controller setup v2 retention and offline sources
+
+**Owner:** Controller setup, with Workspace, State reconciliation and CLI. A
+product slice of [M1](m1.md), the last of controller setup v2 (X87 to X90),
+integrated on local main as one commit by the session on 2026-10-14 without a
+push, under the same deferral of D152's review and clause 9 choice as
+[X88](#x88--controller-setup-v2-cut-over). **Items:** B552 and B557 (with the
+remainder of B549 but the owner's `verify` run, and closing the parked B322).
+**Decisions:** D152, pending the owner's review. **Integrated:**
+"feat(controller): keep two runtimes, add offline wheel sources and retire
+tool areas".
+
+**Outcome, B552:** after each setup that writes its receipt, under
+`setup/lock`, setup keeps the current runtime and the previous distinct one,
+retires every other published runtime under a non-blocking exclusive lock on
+its `.lock` (one a running command holds is kept and reported by the
+informational `controller.runtime-retention` line; one whose `.lock` is gone
+is retired), and prunes the wheel cache to the wheels every kept runtime's
+`requirements.lock` names (which now also names the installer wheel its build
+used), this build's locked wheels and its installer; setup runs are bounded to
+the newest 8. A retention fault never changes the setup's outcome. A launch
+(apply, destroy, the controller stage, a bounded run and `diff --observe`)
+that finds only its runtime directory missing waits for `setup/lock` and
+rebuilds it from the wheel cache with no network, confirmation or setup-record
+change, adopting a runtime another launch published meanwhile; it refuses with
+`run bootwright setup` when a wheel is missing, the interpreter no longer
+qualifies or the receipt is incomplete, and a build that fails with every
+wheel cached refuses naming the build's own cause. `status` never rebuilds. X88's
+contextfs nits close where the code was touched: `HoldRuntime` checks the
+digest `runtime.json` names, `RetireRuntime` retires a runtime whose `.lock` is
+missing, the stage sweep admits any number of entries, and the concurrent
+publishers test waits for the setup lock instead of spinning.
+
+**Outcome, B549 (rest):** `setup --wheel-mirror` takes a `file:///` directory
+or an `https://` base on the default port with no credentials, query or
+fragment; the mirror is untrusted transport, read only for what the cache
+lacks, opened without following a link or blocking on a pipe, and its bytes
+are used only when the lock's size and SHA-256 match, so a missing, mismatched
+or otherwise answered file refuses naming the file, the mirror and the remedy.
+`setup --download-only --dest-dir DIR` runs unprivileged, reads no setup
+record, runs no package manager and writes every locked wheel of every ABI,
+the pip wheel and a byte copy of `lock.json` through verified partial files.
+`setup --dry-run --output json` lists every locked file of the embedded lock;
+with `--wheel-mirror`, the runtime action names the mirror and the listed URLs
+stay the lock's. The operator guide documents the two-step offline
+preparation. The owner's `verify` run stays on [M1](m1.md#b549).
+
+**Outcome, B557:** tool areas move from `controller/bundles/` to
+`controller/tools/<digest>/` under a bound of 16 of their own. Every
+successful controller stage names on its context's binding the area it proved
+(or none when it selects no tool), sealing an area an earlier attempt published
+whole, then retires every sealed area no binding names except one the
+operation holds open; `context delete` does the same once it drops the
+binding, and a stage whose new area finds all 16 held retires the unnamed
+areas before it refuses, with the remedy `bootwright context delete --name
+<name> --purge`. Retirement publishes the entries as the new `retiring` mode,
+removes each proven directory, syncs and publishes the record without them, so
+an interrupted retirement is finished by the next. A retirement failure after
+sealing leaves the stage unknown, and on a stage that changed nothing, failed.
+It closes B322. The package `internal/controller/bundlelocal` keeps the tool
+acquisition, transport and trust code it held. The opt-in
+`controller_prerequisites` integration target returns as an operator-run
+harness that sends one `controller-prerequisites-v6` request to the shipped
+`playbooks/controller/setup.yml` and replays it
+(`BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET=1` with `./scripts/ansible-check
+--suite integration`, listed in docs/development.md); it needs no root or
+network. The setup result's `execution-bundle` check keeps its ID.
+
+**Guard tests:** `internal/controller/prerequisites`:
+`TestRetentionKeepsTheCurrentAndThePreviousRuntime`,
+`TestRetentionSkipsARuntimeInUse`, `TestAReadySetupRetiresNothing`,
+`TestARebuildUsesOnlyTheWheelCache`,
+`TestARebuildBuildsNothingWithoutEveryWheelCached`,
+`TestARebuildIsRefusedWhereOnlySetupCanPrepareTheRuntime`,
+`TestAFailedBuildIsARebuildFailure`,
+`TestARebuildAdoptsARuntimePublishedMeanwhile`,
+`TestAWheelMirrorIsAFileDirectoryOrAnHTTPSBase`,
+`TestAMirrorEscapesTheFilenameItReads`,
+`TestSetupReadsTheMirrorAndTheRuntimeActionNamesIt`,
+`TestADryRunNamesTheMirrorAndStillListsTheLocksURLs`,
+`TestAnInvalidMirrorRefusesBeforeAnyInspection`,
+`TestDownloadOnlyTouchesNoHostPortAndElevatesNothing`,
+`TestDownloadOnlyRefusesWhatItCannotDo` and
+`TestDownloadOnlyWithoutTheLockIsUnavailable`;
+`internal/controller/venvlocal`: `TestAFileMirrorWheelWithAnotherHashIsRefused`,
+`TestAFileMirrorMissingAWheelOrHoldingTheWrongSizeIsRefusedWithARemedy`,
+`TestAFileMirrorRefusesAPipeOrALinkNamedAsAWheel`,
+`TestAnHTTPSMirrorWheelWithAnotherHashIsRefused`,
+`TestAnHTTPSMirrorLackingAWheelIsRefusedNamingTheMirrorAndTheRemedy`,
+`TestACachedWheelIsNeverReadFromTheMirror`,
+`TestExportWritesExactlyTheLockedSetAndTheLock`,
+`TestExportFromAnUnreadableCacheFetchesAndRefusesTamperedBytes`,
+`TestARuntimeNamesTheWheelsItsBuildInstalled` and the live
+`TestALiveBuildOnThisHost`; `internal/reconciliation/lifecycle`:
+`TestAMissingRuntimeIsRebuiltFromCachedWheels`,
+`TestAMissingWheelRefusesWithRunSetup`, `TestAFailedRebuildRefusesWithRunSetup`
+and `TestStatusNeverRebuildsAMissingRuntime`; `internal/workspace/contextfs`:
+`TestAStageRetiresTheAreaNoBindingNames`,
+`TestAnAreaAnotherBindingNamesStaysUntilItsContextIsDeleted`,
+`TestAStageWithoutToolsReleasesItsAreaAndKeepsUnfinishedOnes`,
+`TestRetirementSealsTheUnsealedAreaItNames`, `TestAnAreaTheOperationHoldsOpenStays`,
+`TestAnInterruptedRetirementIsFinishedByTheNext`,
+`TestAClientAreaAtTheBoundRetiresUnnamedAreasFirst`,
+`TestAwaitingSetupWaitsForTheHolderAndHonoursCancellation`,
+`TestRetiringARuntimeWithoutItsLaunchLockRemovesIt`,
+`TestAHoldRefusesARuntimeWhoseRecordNamesAnother`,
+`TestTheSweepAdmitsManyRuntimeEntries` and `TestPruningKeepsOnlyTheNamedWheels`;
+`internal/controller/clients`: `TestEverySuccessfulStageNamesItsAreaAndRetiresTheRest`
+and `TestARetirementFailureKeepsTheStageOutcomeHonest`; `cmd/bootwright`:
+`TestComposedDownloadOnlyStaysBelowThePrivilegeBoundaryAndReadsNoState` and
+`TestTheDryRunJSONListsEveryLockedFileOfTheEmbeddedLock`; and the
+`cli-setup-download` and `help-setup` goldens.
+
+**Gates:** in the x90 worktree on main e01bf1de8, as its commit records:
+`make check` passes (mod verify, tidy, `go test ./...`, vet, the completion
+test, govulncheck with no reachable vulnerability, ansible-check with lint 0
+failures in the production profile, sanity passing and units 1852 passed and
+1 skipped, with 297, 1278 and 3428 further tests passed); `make quick`, `make
+race`, `go test -race` over contextfs and `internal/controller/...`, `make
+docs-check` and `git diff --check` pass; the live `TestALiveBuildOnThisHost`
+passes on this Fedora 44 host (Python 3.14.8, 2.8 s); and the opt-in
+`controller_prerequisites` harness passes. Not run: anything needing root.
+
+**Digest and version effects:** no contract version, store format version or
+closure moves and no content-digest golden changes; the collection change is
+under `tests/`, which the automation digest excludes. The controller record
+stays at version 3 with the added `retiring` mode, and the registry at 6.
+**Constraints left behind:** tool areas moved from `controller/bundles/` to
+`controller/tools/` without a version move, so a store an X88 or X89 build
+populated with a tool area is not read by this build; nothing was run as root,
+so no such store is known, and the fresh install covers one. Two X88 nits stay
+open: hostdnf has no preview-timeout test, and `qualifiedSystemExecutable` is
+duplicated in hostdnf and privilege. Nothing needing root was run: setup's
+install path, retention and the rebuild on a real store and the owner's fresh-install acceptance on Fedora 44 and a RHEL 9 VM
+([B555](m1.md#b555)) remain, with the owner's runtime-lock `verify` run
+([B549](m1.md#b549)) and X87's S0 baseline.

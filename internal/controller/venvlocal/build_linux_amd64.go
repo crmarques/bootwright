@@ -141,6 +141,9 @@ func (a *Adapter) install(ctx context.Context, stage string, files []runtimelock
 		}
 		requirements.WriteString(file.Name + "==" + file.Version + " --hash=sha256:" + file.SHA256 + "\n")
 	}
+	// pip skips the comment; retention reads the installer's hash from it.
+	installer := a.lock.Installer()
+	requirements.WriteString("# installer " + installer.Name + "==" + installer.Version + " --hash=sha256:" + installer.SHA256 + "\n")
 	lockFile := filepath.Join(stage, "requirements.lock")
 	if err := os.WriteFile(lockFile, []byte(requirements.String()), 0o644); err != nil {
 		return failure("the runtime stage cannot be written")

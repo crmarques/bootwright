@@ -77,6 +77,10 @@ type Transaction interface {
 	// SealClientArea makes that closure immutable after its complete tree is
 	// verified and durable, and records it on this context's binding.
 	SealClientArea(context.Context, string) error
+	// RetireToolAreas ends a successful controller stage: this context's
+	// binding names the area it proved, or none, and every sealed area no
+	// binding names is retired.
+	RetireToolAreas(context.Context, string) error
 	// RetainDependencies records the tool sources a controller stage froze,
 	// before it installs them.
 	RetainDependencies(context.Context, []prerequisites.DependencySource) error
@@ -147,6 +151,12 @@ type ExecutionGuard interface {
 // registers rather than at its first launch.
 type RuntimePresence interface {
 	Published(context.Context, prerequisites.Runtime) (bool, error)
+}
+
+// RuntimeRebuilder republishes a missing runtime from the wheel cache alone;
+// ErrRuntimeUnavailable means only setup can prepare it.
+type RuntimeRebuilder interface {
+	Rebuild(context.Context, prerequisites.Runtime) error
 }
 
 // SetupReader reads the controller setup record without writing anything.
@@ -535,6 +545,7 @@ type ControllerStage struct {
 	Setup              prerequisites.StorageView
 	ClientArea         func(context.Context, string) (prerequisites.BundleArea, error)
 	SealClientArea     func(context.Context, string) error
+	RetireToolAreas    func(context.Context, string) error
 	RetainDependencies func(context.Context, []prerequisites.DependencySource) error
 	Prepare            func(context.Context, prerequisites.StagePreparation) error
 }

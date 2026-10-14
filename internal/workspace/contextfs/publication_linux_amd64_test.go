@@ -122,7 +122,7 @@ func TestARefusedControllerPublicationLeavesNoStage(t *testing.T) {
 			if reported := diagnostics.Of(err); interruption.message != "" && (len(reported) != 1 || reported[0].Message != interruption.message) {
 				t.Fatalf("the replaced destination was not refused: %#v", reported)
 			}
-			if entries := controllerEntries(t, store); !slices.Equal(entries, []string{"bundles", "state.json"}) {
+			if entries := controllerEntries(t, store); !slices.Equal(entries, []string{"state.json", toolAreasName}) {
 				t.Fatalf("the refused publication left %v", entries)
 			}
 		})
@@ -205,7 +205,7 @@ func TestAFailureAfterTheRenameIsAnUnknownOutcome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if entries := controllerEntries(t, store); !slices.Equal(entries, []string{"bundles", "state.json"}) {
+	if entries := controllerEntries(t, store); !slices.Equal(entries, []string{"state.json", toolAreasName}) {
 		t.Fatalf("the publication left %v", entries)
 	}
 }
