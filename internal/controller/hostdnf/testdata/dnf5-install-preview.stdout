@@ -1,0 +1,19 @@
+Package                  Arch   Version          Repository      Size
+Installing:
+ lorax                   x86_64 0:44.7-1.fc44    updates    797.3 KiB
+ xorriso                 x86_64 0:1.5.8-2.fc44   updates    365.0 KiB
+Installing dependencies:
+ erofs-utils             x86_64 0:1.9.4-1.fc44   updates    632.2 KiB
+ intel-qpl               x86_64 0:1.9.0-3.fc44   updates    691.1 KiB
+ libburn                 x86_64 0:1.5.8-1.fc44   updates    378.4 KiB
+ libisoburn              x86_64 0:1.5.8-2.fc44   updates      1.2 MiB
+ libisofs                x86_64 0:1.5.8-3.fc44   updates    548.7 KiB
+ lorax-templates-generic x86_64 0:44.7-1.fc44    updates     91.9 KiB
+ pbzip2                  x86_64 0:1.1.13-16.fc44 fedora     104.2 KiB
+ python3-librepo         x86_64 0:1.21.2-1.fc44  updates    181.6 KiB
+ python3-mako            noarch 0:1.2.3-14.fc44  fedora     712.0 KiB
+ python3-pycdio          x86_64 0:2.1.1-10.fc44  fedora     591.2 KiB
+ xz-lzma-compat          x86_64 1:5.8.2-2.fc44   fedora      49.0 KiB
+
+Transaction Summary:
+ Installing:        13 packages

@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/controller/nativelocal"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/stagelocal"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -101,7 +101,7 @@ func TestTheResolverStagesTheQualifiedFoundation(t *testing.T) {
 		t.Fatal(err)
 	}
 	value := prerequisites.BootstrapDefinition{PythonExecutable: host.PythonExecutable, Execution: definition}
-	staging := nativelocal.NewStaging(filepath.Join(t.TempDir(), "staging"))
+	staging := stagelocal.NewStaging(filepath.Join(t.TempDir(), "staging"))
 	if _, _, err := stageBootstrap(t.Context(), staging, projected, value, []byte("trust")); err == nil {
 		t.Fatal("the definition's own requirement staged a libc it does not pin")
 	}

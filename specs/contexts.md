@@ -208,6 +208,13 @@ confirmed setup:
   media/
     <filename.iso>
     <filename.iso>.json
+  setup/
+    lock
+    state.json
+    runtimes/<runtime-digest>/
+    cache/wheels/<sha256>/<file>
+    runs/setup-NNNNNN/
+      run.output
   contexts/<name>/
     context.yaml
     desired-state/revisions/<revision-id>/
@@ -231,6 +238,7 @@ confirmed setup:
 | --- | --- |
 | `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once setup publishes it. |
 | `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; a pinned stage whose publication met another command's lock is kept beside its record for the command's repetition; deletion is guarded by the reservation record. |
+| `setup/` | Setup's own subtree, independently versioned and outside the registry: the registry's Controller descriptor never names it and no registry verification decodes it. `setup/lock` is the exclusive lock of setup and of runtime publication. `state.json` is the canonical `bootwright.setup-state-v1` record, at most 256 KiB, holding the pending intent setup writes and synchronizes before any effect, the receipt and the current and previous runtimes; a launch that finds an intent refuses `controller.state` naming the interrupted run, and one that finds a record it cannot read or of another format refuses `controller.state` saying another Bootwright build wrote it, both with `run bootwright setup`, which discards another build's subtree after confirmation. A runtime is built in a `runtimes/.stage-<32 hex>` directory and published only with its `runtime.json`: one `syncfs` of the store filesystem, a rename that never replaces, then a synchronized parent; a publisher that finds the runtime already published discards its stage, and setup removes stages a killed run left. A launch holds a runtime's `.lock` shared and retirement takes it exclusively without waiting, so a runtime in use is skipped. `runs/` keeps the newest 8 setup runs, each output at most 4 MiB. Its runtimes hold the ordinary modes a Python virtual environment creates. |
 | `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
 | `desired-state/revisions/<revision-id>/` | Immutable input snapshot, so publication and protected recovery can retain a complete selected revision. Collect unselected revisions only with disposal proof. |
 | `manifest.json` | Original input provenance, blob mapping, sizes and hashes needed to verify and replay the snapshot. |
@@ -245,7 +253,7 @@ confirmed setup:
 Every directory is owned by `root:root` with mode `0700`; every file is owned
 by `root:root` with mode `0600`, except the catalogued controller executables
 the [controller record](contexts/controller-record.md#location-and-file-modes)
-allows. All store access runs as root. No environment variable selects another
+allows, and the content of a setup runtime. All store access runs as root. No environment variable selects another
 production root. Isolated test storage is injected at
 composition. Reject unsafe existing objects without chmod/chown repair. A root
 of another type, owner or mode refuses naming the type, the `uid:gid` owner and
@@ -606,7 +614,8 @@ matching backup.
 
 The root admits only the store's own published objects: `registry.json`, the
 `contexts` container, the `controller` subtree once the registry declares it,
-the `media` container once a `media add` has created it,
+the `media` container once a `media add` has created it, the private `setup`
+directory once setup has created it, whose content the root admission never reads,
 and verified private, bounded `pending-<32 lowercase hexadecimal digits>.json`
 files left by an interrupted registry replacement; reads ignore them, nothing
 adopts them, and the next command that opens a registry transaction removes

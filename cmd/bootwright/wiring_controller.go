@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/nativelocal"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/stagelocal"
 )
 
 // controllerDependencies names every local capability controller setup consumes.
@@ -34,7 +35,7 @@ type controllerDependencies struct {
 // between inspections, and the invocation that took it owns removing it. Both
 // resolvers stage beneath the one Bootwright-owned staging parent.
 func localControllerDependencies(storage prerequisites.Storage, process processDependencies) (controllerDependencies, func()) {
-	staging := nativelocal.NewStaging(nativelocal.StagingParent)
+	staging := stagelocal.NewStaging(stagelocal.StagingParent)
 	native := nativelocal.New(bundlelocal.FetchMetadata, staging)
 	guard := bundlelocal.ExecutionGuard{}
 	if builds, reads := any(native).(prerequisites.FoundationBuildReader); reads {

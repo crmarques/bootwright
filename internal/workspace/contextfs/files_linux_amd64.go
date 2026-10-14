@@ -100,6 +100,7 @@ func storeFailure(message string, cause error) error {
 const (
 	openat2Trap                   = 437
 	renameat2Trap                 = 316
+	syncfsTrap                    = 306
 	renameNoReplace               = 1
 	pathHandle                    = 0x200000
 	resolveBeneathNoLinksNoMounts = 0x08 | 0x04 | 0x02 | 0x01
@@ -808,6 +809,13 @@ func renameNoReplaceAt(parent *directory, oldName, newName string) error {
 	}
 	// Publication is complete once renameat2 succeeds. Callers verify the
 	// published entry and parent before reporting success.
+	return nil
+}
+
+func syncFilesystem(file *os.File) error {
+	if _, _, errno := syscall.Syscall(syncfsTrap, file.Fd(), 0, 0); errno != 0 {
+		return storeFailure("state filesystem durability could not be established", errno)
+	}
 	return nil
 }
 

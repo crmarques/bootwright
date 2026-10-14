@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/stagelocal"
 )
 
 func fedoraPlatform() prerequisites.Platform {
@@ -84,7 +85,7 @@ func TestClosingReleasesNothingItNeverTook(t *testing.T) {
 	resolver := New(nil, nil)
 	resolver.Close()
 	resolver.Close()
-	stage, err := NewStaging(t.TempDir()).Stage(t.Context(), "rpmdb")
+	stage, err := stagelocal.NewStaging(t.TempDir()).Stage(t.Context(), "rpmdb")
 	if err != nil {
 		t.Fatal(err)
 	}

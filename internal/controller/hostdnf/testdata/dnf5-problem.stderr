@@ -1,0 +1,8 @@
+Updating and loading repositories:
+Repositories loaded.
+Failed to resolve the transaction:
+Problem: package xorriso-1.5.8-2.fc44.x86_64 requires libisoburn(x86-64) = 1.5.8-2.fc44, but none of the providers can be installed
+  - conflicting requests
+  - nothing provides libburn.so.4()(64bit) needed by libisoburn-1.5.8-2.fc44.x86_64 from updates
+You can try to add to command line:
+  --skip-broken to skip uninstallable packages

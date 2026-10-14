@@ -380,7 +380,16 @@ resolves its path, which a root-squashed home would refuse. Only the
 unprivileged supervisor resolves that path, before it elevates: an invoking
 account that cannot search a directory on it refuses `runtime.privilege`
 naming the path and that account, with the remedy of a local copy both that
-account and root can read, such as one in `/usr/local/bin`.
+account and root can read, such as one in `/usr/local/bin`. Since root runs
+that file, the supervisor refuses `runtime.privilege` before sudo when another
+account could replace it: when the resolved file or any directory above it is
+owned by a UID other than 0 or the invoking account's, or is writable by group
+or others, except a root-owned sticky directory such as `/tmp`, which lets no
+account replace another's entry. The report says sudo would run that path as
+root and names the file or directory and its owner or write bits, with the
+remedy `sudo install -m 0755 <path> /usr/local/bin/bootwright`. The invoking
+account's own build output, such as `bin/bootwright` at mode `0755` beneath its
+home, stays allowed.
 
 For a usage failure, JSON mode is established only after an exact
 JSON-capable command is resolved and its final scalar `--output` occurrence

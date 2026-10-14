@@ -48,6 +48,10 @@ func packageRoles() map[string]packageRole {
 		"internal/controller/bundlelocal":        adapterRole,
 		"internal/controller/ansiblelocal":       adapterRole,
 		"internal/controller/nativelocal":        adapterRole,
+		"internal/controller/runtimelock":        domainRole,
+		"internal/controller/hostdnf":            adapterRole,
+		"internal/controller/venvlocal":          adapterRole,
+		"internal/controller/stagelocal":         adapterRole,
 		"internal/reconciliation/ansiblerunner":  adapterRole,
 		"internal/managedos/medialocal":          adapterRole,
 		"internal/machine/sshlocal":              adapterRole,
@@ -303,6 +307,7 @@ func TestPackageDependencyDirection(t *testing.T) {
 // dependency rule shows where one lives, so the Port test support row of the
 // specs/architecture.md package table names each, and names nothing else.
 func TestDocsPackageTableNamesEveryTestOnlyPackage(t *testing.T) {
+	unwired := unwiredPackages()
 	data, err := os.ReadFile(filepath.Join("..", "..", "specs", "architecture.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -332,8 +337,13 @@ func TestDocsPackageTableNamesEveryTestOnlyPackage(t *testing.T) {
 		}
 	}
 	for _, owner := range sortedKeys(owners) {
-		if owner != "cmd/bootwright" && !imported[owner] && !named[owner] {
+		if owner != "cmd/bootwright" && !imported[owner] && !named[owner] && !slices.Contains(unwired, owner) {
 			t.Errorf("only tests import %s, which the Port test support row of the specs/architecture.md package table does not name", owner)
+		}
+	}
+	for _, name := range unwired {
+		if !owners[name] || imported[name] {
+			t.Errorf("unwiredPackages lists %s, which is no package only tests import; remove it", name)
 		}
 	}
 	for _, name := range sortedKeys(named) {
@@ -342,6 +352,10 @@ func TestDocsPackageTableNamesEveryTestOnlyPackage(t *testing.T) {
 		}
 	}
 }
+
+// unwiredPackages are packages a slice lands before the one that imports them;
+// each leaves this list in the change that wires it.
+func unwiredPackages() []string { return []string{"internal/controller/venvlocal"} }
 
 func TestAdmissionEffectBoundary(t *testing.T) {
 	grants := effectGrants()
@@ -457,7 +471,10 @@ func effectGrants() map[string][]string {
 			"net.Listen", "net.Listener", "net/http", "os", "os/exec", "syscall",
 		},
 		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
+		"internal/controller/hostdnf":      {"io", "os", "os/exec", "syscall"},
 		"internal/controller/nativelocal":  {"golang.org/x/sys/unix", "io", "net/http", "os", "os/exec", "syscall"},
+		"internal/controller/venvlocal":    {"io", "net.Dialer", "net/http", "os", "os/exec", "syscall"},
+		"internal/controller/stagelocal":   {"golang.org/x/sys/unix", "io", "os", "syscall"},
 		// The SSH session adapter runs the one pinned client as a child and
 		// hands it the operator's streams and its material descriptors. An
 		// offered key arrives as a descriptor from the invoking account's

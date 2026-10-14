@@ -125,12 +125,27 @@ type RuntimeInstaller interface {
 	Recover(context.Context, BundleArea, Platform, Definition, SetupEgress, NativePreparation, func(ProgressEvent), RunOutput) (ActionResult, error)
 }
 
+type HostPackages interface {
+	Missing(ctx context.Context, requirements []string) ([]string, error)
+	Preview(ctx context.Context, missing []string) (HostPackagePreview, error)
+	Install(ctx context.Context, missing []string, output RunOutput) ([]HostPackageEvidence, error)
+}
+
 // WithPython verifies and holds the execution foundation under the native
 // package read lock. A native installer may release that lock only after its
 // loaded helper acknowledges readiness to acquire and revalidate under the
 // native write lock. All other callers retain it through process completion.
 type PythonExecutionGuard interface {
 	WithPython(context.Context, BundleArea, ExecutionRequirement, func(PythonLaunch, func() error) error) error
+}
+
+type PythonRuntime interface {
+	Select(ctx context.Context, preferred string) (PythonInterpreter, error)
+	Wheels(ctx context.Context, abi string) ([]RuntimeWheel, error)
+	Fetch(ctx context.Context, abi string, egress SetupEgress) error
+	Inspect(ctx context.Context, interpreter PythonInterpreter) (Runtime, bool, error)
+	Build(ctx context.Context, interpreter PythonInterpreter) (Runtime, error)
+	WithPython(ctx context.Context, runtime Runtime, use func(PythonLaunch) error) error
 }
 
 // BootstrapResolver may stage and execute a wheel-only resolver in a disposable
@@ -155,6 +170,17 @@ type Staging interface {
 type Stage struct {
 	Path    string
 	Noexec  bool
+	Release func()
+}
+
+type AutomationStager interface {
+	Stage(ctx context.Context) (StagedAutomation, error)
+}
+
+type StagedAutomation struct {
+	Path    string
+	Digest  string
+	Lock    interface{ Fd() uintptr }
 	Release func()
 }
 
@@ -261,6 +287,33 @@ type SetupRun interface {
 	// open; it is built for reading, never opened through.
 	Location() string
 	Close() error
+}
+
+type SetupStore interface {
+	ReadSetup(ctx context.Context) (SetupView, error)
+	MutateSetup(ctx context.Context, callback func(SetupTransaction) error) error
+	HoldRuntime(ctx context.Context, digest string) (RuntimeHold, error)
+}
+
+type SetupTransaction interface {
+	View() SetupView
+	Record(ctx context.Context, value SetupState) error
+	DiscardForeign(ctx context.Context) error
+	OpenRun(ctx context.Context) (string, SetupRun, error)
+	StageRuntime(ctx context.Context) (RuntimeStage, error)
+	PublishRuntime(ctx context.Context, stage RuntimeStage, digest string) (bool, error)
+	Runtimes(ctx context.Context) ([]string, error)
+	RetireRuntime(ctx context.Context, digest string) (bool, error)
+	WheelPath(ctx context.Context, sha256, filename string) (string, error)
+}
+
+type RuntimeStage interface {
+	Path() string
+}
+
+type RuntimeHold interface {
+	Path() string
+	Release()
 }
 
 // BundleArea confines the qualified bundle adapter to one catalog namespace.

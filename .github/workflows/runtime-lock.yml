@@ -1,0 +1,47 @@
+name: runtime-lock
+
+on:
+  push:
+    paths:
+      - internal/controller/runtimelock/lock.json
+      - scripts/runtime-lock
+      - scripts/tools/runtime_lock.py
+      - .github/workflows/runtime-lock.yml
+  pull_request:
+    paths:
+      - internal/controller/runtimelock/lock.json
+      - scripts/runtime-lock
+      - scripts/tools/runtime_lock.py
+      - .github/workflows/runtime-lock.yml
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify every locked file
+        if: hashFiles('internal/controller/runtimelock/lock.json') != ''
+        run: ./scripts/runtime-lock verify
+
+  outdated:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report newer releases
+        if: hashFiles('internal/controller/runtimelock/lock.json') != ''
+        run: |
+          {
+            echo "## Runtime lock: newer releases (advisory)"
+            echo
+            ./scripts/runtime-lock outdated
+          } >> "$GITHUB_STEP_SUMMARY"

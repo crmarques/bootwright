@@ -1,6 +1,6 @@
 //go:build linux && amd64
 
-package nativelocal
+package stagelocal
 
 import (
 	"context"
@@ -37,7 +37,10 @@ const (
 	maxStageEntries   = 1 << 20
 )
 
-var stageKinds = []string{"resolver", "native", "rpmdb"}
+const automationKind = "automation"
+
+// suffixLengths gives each kind's suffix length in hexadecimal digits.
+var suffixLengths = map[string]int{"resolver": 16, "native": 16, "rpmdb": 16, automationKind: 32}
 
 // Staging hands out stages beneath one parent. A stage is a directory named
 // for its kind and a suffix unlikely to repeat, holding the lock its
@@ -61,18 +64,42 @@ func (s *Staging) Stage(ctx context.Context, kind string) (prerequisites.Stage, 
 	if err := ctx.Err(); err != nil {
 		return prerequisites.Stage{}, err
 	}
-	if s == nil || s.parent == "" || !slices.Contains(stageKinds, kind) {
-		return prerequisites.Stage{}, failure("native resolver staging is unavailable")
+	if _, known := suffixLengths[kind]; !known || kind == automationKind {
+		return prerequisites.Stage{}, stagingRefused()
 	}
-	parent, err := s.openParent()
+	parent, made, err := s.open(kind)
 	if err != nil {
 		return prerequisites.Stage{}, err
 	}
 	defer parent.close()
-	if err := parent.sweep(); err != nil {
-		return prerequisites.Stage{}, err
+	var once sync.Once
+	release := func() { once.Do(func() { parent.release(made.name, made.lock, made.held) }) }
+	return prerequisites.Stage{Path: filepath.Join(parent.path, made.name), Noexec: parent.noexec, Release: release}, nil
+}
+
+func stagingRefused() error {
+	return &prerequisites.ScopedFailure{Code: "controller.setup", Message: "staging is unavailable", Correction: "Run bootwright on Linux amd64"}
+}
+
+// open sweeps the parent and then claims one new stage of the kind in it.
+func (s *Staging) open(kind string) (*stagingParent, created, error) {
+	if s == nil || s.parent == "" {
+		return nil, created{}, stagingRefused()
 	}
-	return parent.create(kind)
+	parent, err := s.openParent()
+	if err != nil {
+		return nil, created{}, err
+	}
+	if err := parent.sweep(); err != nil {
+		parent.close()
+		return nil, created{}, err
+	}
+	made, err := parent.create(kind)
+	if err != nil {
+		parent.close()
+		return nil, created{}, err
+	}
+	return parent, made, nil
 }
 
 // stagingParent is the held parent: every entry beneath it is reached through
@@ -205,8 +232,9 @@ func (p *stagingParent) names() ([]string, error) {
 
 // create claims a new stage: the directory exclusively, its lock before
 // anything else, then the owner marker, and only then the traversal the
-// unprivileged helper needs to reach what the stage will hold.
-func (p *stagingParent) create(kind string) (prerequisites.Stage, error) {
+// unprivileged helper needs to reach what the stage will hold, which an
+// automation stage, read only by this identity, never grants.
+func (p *stagingParent) create(kind string) (created, error) {
 	unavailable := &prerequisites.ScopedFailure{
 		Code:       "controller.setup",
 		Message:    "a resolution stage cannot be created in " + p.path,
@@ -214,32 +242,32 @@ func (p *stagingParent) create(kind string) (prerequisites.Stage, error) {
 	}
 	var name string
 	for attempt := 0; ; attempt++ {
-		name = kind + "-" + stageSuffix()
+		name = kind + "-" + stageSuffix(suffixLengths[kind]/2)
 		err := p.root.Mkdir(name, 0700)
 		if err == nil {
 			break
 		}
 		if !errors.Is(err, fs.ErrExist) || attempt == 3 {
-			return prerequisites.Stage{}, unavailable
+			return created{}, unavailable
 		}
 	}
 	stage, stat, ok := p.directory(name)
 	if !ok {
-		return prerequisites.Stage{}, unavailable
+		return created{}, unavailable
 	}
 	defer stage.Close()
 	lock, err := stage.OpenFile(stageLock, os.O_RDWR|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
 	if err != nil {
 		_ = p.root.Remove(name)
-		return prerequisites.Stage{}, unavailable
+		return created{}, unavailable
 	}
-	discard := func() (prerequisites.Stage, error) {
+	discard := func() (created, error) {
 		remaining := p.entries
 		if emptyStage(stage, stat.Dev, 0, &remaining, stageOwner, stageLock) == nil {
 			_ = p.root.Remove(name)
 		}
 		lock.Close()
-		return prerequisites.Stage{}, unavailable
+		return created{}, unavailable
 	}
 	if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 		return discard()
@@ -251,20 +279,22 @@ func (p *stagingParent) create(kind string) (prerequisites.Stage, error) {
 			err = closeErr
 		}
 	}
-	if err == nil {
+	if err == nil && kind != automationKind {
 		err = p.root.Chmod(name, 0711)
 	}
 	held, statErr := lock.Stat()
 	if err != nil || statErr != nil {
 		return discard()
 	}
-	var once sync.Once
-	release := func() {
-		once.Do(func() {
-			p.release(name, lock, held)
-		})
-	}
-	return prerequisites.Stage{Path: filepath.Join(p.path, name), Noexec: p.noexec, Release: release}, nil
+	return created{name: name, lock: lock, held: held}, nil
+}
+
+// created is a claimed stage: its name beneath the parent and the lock this
+// invocation holds on it, which held identifies.
+type created struct {
+	name string
+	lock *os.File
+	held os.FileInfo
 }
 
 // release removes the stage while its own lock is still held, so no sweep
@@ -386,19 +416,20 @@ var stageSequence atomic.Uint64
 // stageSuffix names a new stage. Only this identity may create an entry in the
 // parent, so a name need only be unlikely to repeat, and the exclusive create
 // refuses one that does.
-func stageSuffix() string {
+func stageSuffix(bytes int) string {
 	seed := binary.BigEndian.AppendUint64(nil, uint64(os.Getpid()))
 	seed = binary.BigEndian.AppendUint64(seed, uint64(time.Now().UnixNano()))
 	seed = binary.BigEndian.AppendUint64(seed, stageSequence.Add(1))
 	digest := sha256.Sum256(seed)
-	return hex.EncodeToString(digest[:8])
+	return hex.EncodeToString(digest[:bytes])
 }
 
-// stageName reports a name Stage gives: a known kind and sixteen lowercase
-// hexadecimal digits.
+// stageName reports a name Stage gives: a known kind and its suffix length of
+// lowercase hexadecimal digits.
 func stageName(name string) bool {
 	kind, suffix, found := strings.Cut(name, "-")
-	return found && slices.Contains(stageKinds, kind) && len(suffix) == 16 && strings.Trim(suffix, "0123456789abcdef") == ""
+	length, known := suffixLengths[kind]
+	return found && known && len(suffix) == length && strings.Trim(suffix, "0123456789abcdef") == ""
 }
 
 // emptyStage removes everything beneath one verified stage. A link is removed

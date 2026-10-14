@@ -56,11 +56,10 @@ func Executable() (string, error) {
 	return verifiedExecutable(path)
 }
 
-// verifiedExecutable proves path names the running binary. Only the
-// unprivileged supervisor resolves it, before it elevates: the elevated child
-// re-executes /proc/self/exe. That account is refused the resolution when it
-// cannot search a directory on the path, as when it runs the executable from
-// a working directory it inherited beneath one, so that refusal names the path
+// verifiedExecutable proves path names the running binary that only root and
+// the invoking account can replace. Only the unprivileged supervisor resolves
+// it, before it elevates: the elevated child re-executes /proc/self/exe. A
+// directory on the path that account cannot search refuses naming the path
 // and the local copy that avoids it.
 func verifiedExecutable(path string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(path)
@@ -78,7 +77,40 @@ func verifiedExecutable(path string) (string, error) {
 	if err != nil || selfErr != nil || !info.Mode().IsRegular() || !os.SameFile(info, self) {
 		return "", errors.New("invocation executable changed")
 	}
+	if err := exclusivelyWritable(resolved, os.Getuid()); err != nil {
+		return "", err
+	}
 	return resolved, nil
+}
+
+// A root-owned sticky directory such as /tmp lets no account replace another's entry.
+func exclusivelyWritable(path string, uid int) error {
+	for current, culprit := path, "it"; ; current, culprit = filepath.Dir(current), "its directory "+filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err != nil {
+			return errors.New("invocation executable is unavailable")
+		}
+		status, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return errors.New("invocation executable is unavailable")
+		}
+		sticky := info.IsDir() && info.Mode()&fs.ModeSticky != 0 && status.Uid == 0
+		switch {
+		case status.Uid != 0 && int(status.Uid) != uid:
+			return replaceableExecutable(path, culprit+" is owned by uid "+strconv.FormatUint(uint64(status.Uid), 10))
+		case info.Mode().Perm()&0o022 != 0 && !sticky:
+			return replaceableExecutable(path, culprit+" is writable by group or others")
+		}
+		if current == "/" {
+			return nil
+		}
+	}
+}
+
+func replaceableExecutable(path, reason string) error {
+	return diagnostics.NewFailureWithRemediation("runtime.privilege",
+		"sudo would run "+path+" as root, but "+reason, "",
+		"install it to a root-owned path: sudo install -m 0755 "+path+" /usr/local/bin/bootwright")
 }
 
 func unreadableExecutable(path string) error {

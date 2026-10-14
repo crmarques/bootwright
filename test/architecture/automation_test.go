@@ -18,7 +18,8 @@ func TestOnlyTheProjectionReadsCollectionDocumentation(t *testing.T) {
 		"internal/controller/ansiblelocal/installer.go":                false,
 		"internal/reconciliation/ansiblerunner/process_linux_amd64.go": false,
 		projection: false,
-		"internal/controller/nativelocal/resolver_linux_amd64.go": false,
+		"internal/controller/nativelocal/resolver_linux_amd64.go":  false,
+		"internal/controller/stagelocal/automation_linux_amd64.go": false,
 	}
 	for _, source := range productionSources(t) {
 		if source.owner == "ansible" {

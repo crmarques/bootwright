@@ -16,7 +16,7 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | the owner's closing run (D59, D125) |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | the owner's closing run (D59, D125); X88 after D152 |
 | [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | the owner's B476 run (X54) on the latest build |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
@@ -24,13 +24,13 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44 and X48 to X51 (D139), X70 (D143), X67 (D147), X83 and X84 (D149) are
-delivered.
+X44 and X48 to X51 (D139), X70 (D143), X67 (D147), X83 and X84 (D149),
+X87 (D152) are delivered.
 
-- **Next for agents:** nothing in M1 until the owner's closing run, nor in
-  M2b until the owner's B476 run.
-- **Next for operator:** before a build that moves a version, the keyring
-  format or plan encoding (X21, X29 to X32, X43, X24, X45, X46, X48, X49, X70)
+- **Next for agents:** in M1, X88 once D152 and its clause 9 choice are
+  recorded; in M2b, nothing until the owner's B476 run.
+- **Next for operator:** review D152 and run X87's S0 baseline. Before a build
+  that moves a version, the keyring format or plan encoding (X21, X29 to X32, X43, X24, X45, X46, X48, X49, X70)
   touches a host, retire each live context with the build that applied or
   prepared it, then run `setup --purge-old-bundles`; one that moves none, such
   as an automation-only fix or X74, continues after `setup` (D145). M1's

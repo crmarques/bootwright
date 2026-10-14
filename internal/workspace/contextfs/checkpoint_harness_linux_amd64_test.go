@@ -860,6 +860,7 @@ func checkpointScenarios() []checkpointScenario {
 		checkpointSecretCleanupScenario(),
 		checkpointSecretInitializationScenario(),
 		checkpointStageCollectionScenario(),
+		checkpointSetupScenario(),
 	}
 }
 
@@ -1023,6 +1024,11 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 		},
 		"stage-collection": {
 			checkpointBeforeStageCollection: 4, checkpointSyncDirectory: 4,
+		},
+		"setup": {
+			checkpointMkdir: 3, checkpointSyncDirectory: 8, checkpointCreateFile: 2, checkpointWriteFile: 2,
+			checkpointSyncFile: 2, checkpointBeforeSetupStateRename: 2, checkpointAfterSetupStateRename: 2,
+			checkpointBeforeSetupRuntimeRename: 1,
 		},
 		"secret-initialization": {
 			checkpointBeforeSecretFileSync: 1, checkpointSyncContextFile: 2, checkpointSyncDirectory: 8,

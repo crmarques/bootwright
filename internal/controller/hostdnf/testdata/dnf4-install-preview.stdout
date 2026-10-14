@@ -1,0 +1,20 @@
+Last metadata expiration check: 0:00:42 ago on Wed 14 Oct 2026 09:12:01 AM UTC.
+Dependencies resolved.
+================================================================================
+ Package                    Architecture Version               Repository  Size
+================================================================================
+Installing:
+ lorax                      x86_64       34.9.19-1.el9         appstream   312 k
+ xorriso                    x86_64       1.5.4-5.el9           appstream   297 k
+Installing dependencies:
+ libburn                    x86_64       1.5.4-5.el9           appstream   168 k
+ libisoburn                 x86_64       1.5.4-5.el9           appstream   440 k
+ libisofs                   x86_64       1.5.4-5.el9           appstream   220 k
+ python3-mako               noarch       1.1.4-6.el9           appstream   169 k
+
+Transaction Summary
+================================================================================
+Install  6 Packages
+
+Total download size: 1.6 M
+Installed size: 5.1 M

@@ -17,8 +17,8 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
-	"github.com/crmarques/bootwright/internal/controller/nativelocal"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/stagelocal"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -45,7 +45,7 @@ func TestQualifiedRootInvocationResolver(t *testing.T) {
 	if !ok {
 		t.Fatal("unsupported current platform")
 	}
-	staging := nativelocal.NewStaging(nativelocal.StagingParent)
+	staging := stagelocal.NewStaging(stagelocal.StagingParent)
 	// This first stage contains only the repository's trusted Go test binary.
 	// No downloaded interpreter executes before the external mapping proof.
 	projected := newProjection()

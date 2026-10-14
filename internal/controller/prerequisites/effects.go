@@ -37,6 +37,8 @@ type ExecutionRequirement struct {
 }
 
 type PythonLaunch struct {
+	Program     string
+	Shim        string
 	Loader      string
 	Arguments   []string
 	Directory   string

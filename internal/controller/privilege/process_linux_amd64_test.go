@@ -452,6 +452,84 @@ func TestAnUnreadableExecutablePathNamesTheLocalCopyRemedy(t *testing.T) {
 	}
 }
 
+func reexecutionFixture(t *testing.T, directoryMode, fileMode os.FileMode) (string, string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root owns every file this fixture creates")
+	}
+	directory := filepath.Join(t.TempDir(), "bin")
+	path := filepath.Join(directory, "bootwright")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("binary"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, fileMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(directory, directoryMode); err != nil {
+		t.Fatal(err)
+	}
+	return directory, path
+}
+
+func assertReplaceableExecutable(t *testing.T, err error, path, reason string) {
+	t.Helper()
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "runtime.privilege" ||
+		reported[0].Message != "sudo would run "+path+" as root, but "+reason ||
+		reported[0].Remediation != "install it to a root-owned path: sudo install -m 0755 "+path+" /usr/local/bin/bootwright" {
+		t.Fatalf("replaceable executable = %v (%+v), want reason %q", err, reported, reason)
+	}
+	reached := false
+	outcome := Elevator{
+		Executable: func() (string, error) { return "", err },
+		Sudo:       func() (string, error) { reached = true; return "/usr/bin/sudo", nil },
+	}.Run(context.Background(), Invocation{Arguments: []string{"status"}, Output: io.Discard, Error: io.Discard})
+	if reached || outcome.ExitCode != 1 || outcome.Diagnostic == nil || *outcome.Diagnostic != reported[0] {
+		t.Fatalf("the elevation reported %#v (sudo reached: %t), want %#v", outcome.Diagnostic, reached, reported[0])
+	}
+}
+
+func TestReexecutionRefusesAGroupWritableExecutable(t *testing.T) {
+	for _, mode := range []os.FileMode{0o775, 0o757} {
+		_, path := reexecutionFixture(t, 0o755, mode)
+		assertReplaceableExecutable(t, exclusivelyWritable(path, os.Getuid()), path, "it is writable by group or others")
+	}
+}
+
+func TestReexecutionRefusesAnExecutableOwnedByAnotherAccount(t *testing.T) {
+	_, path := reexecutionFixture(t, 0o755, 0o755)
+	assertReplaceableExecutable(t, exclusivelyWritable(path, os.Getuid()+1), path, "it is owned by uid "+strconv.Itoa(os.Getuid()))
+}
+
+func TestReexecutionRefusesAWritableParentDirectory(t *testing.T) {
+	directory, path := reexecutionFixture(t, 0o775, 0o755)
+	assertReplaceableExecutable(t, exclusivelyWritable(path, os.Getuid()), path, "its directory "+directory+" is writable by group or others")
+	if err := os.Chmod(directory, 0o1777); err != nil {
+		t.Fatal(err)
+	}
+	assertReplaceableExecutable(t, exclusivelyWritable(path, os.Getuid()), path, "its directory "+directory+" is writable by group or others")
+}
+
+// The owner's own build output, such as bin/bootwright at mode 0755, and the
+// running test binary stay allowed.
+func TestReexecutionAcceptsTheInvokersOwnBinary(t *testing.T) {
+	_, path := reexecutionFixture(t, 0o755, 0o755)
+	if err := exclusivelyWritable(path, os.Getuid()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Executable(); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat("/tmp"); err == nil && info.Mode()&os.ModeSticky != 0 && info.Sys().(*syscall.Stat_t).Uid == 0 {
+		if err := exclusivelyWritable("/tmp", os.Getuid()); err != nil {
+			t.Fatalf("a root-owned sticky directory refused: %v", err)
+		}
+	}
+}
+
 // Run with a statically linked test binary in a private user/mount namespace
 // and BOOTWRIGHT_PRIVILEGED_ACCOUNT_FIXTURE=1. Ordinary root test runs do not
 // imply the mount capabilities or isolation this fixture requires.

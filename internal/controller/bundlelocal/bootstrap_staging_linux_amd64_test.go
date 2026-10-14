@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/nativelocal"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/stagelocal"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -41,7 +41,7 @@ func (r *recordingStaging) Stage(ctx context.Context, kind string) (prerequisite
 // refused it.
 func TestTheBootstrapResolverStagesBeneathTheStagingRoot(t *testing.T) {
 	parent := filepath.Join(t.TempDir(), "staging")
-	staging := &recordingStaging{staging: nativelocal.NewStaging(parent)}
+	staging := &recordingStaging{staging: stagelocal.NewStaging(parent)}
 	requirement := compiledExecution(t, fedoraPlatform)
 	requirement.PythonExecutable = "python/bin/python3.13"
 	projected := newProjection()
@@ -72,15 +72,15 @@ func TestTheBootstrapResolverStagesBeneathTheStagingRoot(t *testing.T) {
 // and in a stage's. Any other start failure, and a denial on an exec-capable
 // filesystem, keeps the resolution's own requirements.
 func TestAnExecDenialOnANoexecStageNamesTheMount(t *testing.T) {
-	stage := prerequisites.Stage{Path: nativelocal.StagingParent + "/resolver-0123456789abcdef", Noexec: true}
+	stage := prerequisites.Stage{Path: stagelocal.StagingParent + "/resolver-0123456789abcdef", Noexec: true}
 	for _, errno := range []syscall.Errno{syscall.EACCES, syscall.EPERM} {
 		denied := &os.PathError{Op: "fork/exec", Path: "/usr/lib64/ld-linux-x86-64.so.2", Err: errno}
 		err := bootstrapStartFailure(denied, stage)
 		found := diagnostics.Of(err)
-		if len(found) != 1 || found[0].Code != "controller.setup" || !strings.Contains(found[0].Message, "noexec") || !strings.Contains(found[0].Message, nativelocal.StagingParent) {
+		if len(found) != 1 || found[0].Code != "controller.setup" || !strings.Contains(found[0].Message, "noexec") || !strings.Contains(found[0].Message, stagelocal.StagingParent) {
 			t.Fatalf("%v on a noexec stage: %+v", errno, found)
 		}
-		if found[0].Remediation != "Mount the filesystem holding "+nativelocal.StagingParent+" with exec, then rerun bootwright setup." {
+		if found[0].Remediation != "Mount the filesystem holding "+stagelocal.StagingParent+" with exec, then rerun bootwright setup." {
 			t.Fatalf("%v on a noexec stage: remedy %q", errno, found[0].Remediation)
 		}
 		staged := diagnostics.Of(prerequisites.InStage(err, "lab"))
@@ -129,7 +129,7 @@ func (d deniedStart) startFails(t *testing.T) {
 // that succeeds, is judged by its run alone.
 func TestAStagedResolverDeniedItsStartNamesTheNoexecMount(t *testing.T) {
 	parent := filepath.Join(t.TempDir(), "staging")
-	stage, err := nativelocal.NewStaging(parent).Stage(t.Context(), "resolver")
+	stage, err := stagelocal.NewStaging(parent).Stage(t.Context(), "resolver")
 	if err != nil {
 		t.Fatal(err)
 	}

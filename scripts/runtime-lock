@@ -1,0 +1,10 @@
+#!/bin/sh
+# Generate, verify or report on the controller runtime lock,
+# internal/controller/runtimelock/lock.json: generate resolves and writes it,
+# verify downloads every locked file and compares its size and sha256, and
+# outdated prints newer releases without failing. The tool is
+# scripts/tools/runtime_lock.py, which uses the standard library only and runs
+# pip from its own wheel; RUNTIME_LOCK_PYTHON names another python3.
+set -eu
+script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "${RUNTIME_LOCK_PYTHON:-python3}" -I -B "$script_directory/tools/runtime_lock.py" "$@"
