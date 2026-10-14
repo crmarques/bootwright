@@ -79,15 +79,15 @@ func newTestTerminalProgress(width int) (*progressPresenter, *manualClock, *byte
 func TestProgressRowsAlignAndCloseWithElapsedTime(t *testing.T) {
 	presenter, clock, out := newTestProgress()
 	ctx := context.Background()
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "running", Position: 1, Total: 2})
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Detail: "acquiring cpython, source 1 of 2", Status: "running", Position: 1, Total: 2, Nested: true})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Status: "running", Position: 1, Total: 2})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Detail: "downloading 3 of 11 wheels", Status: "running", Position: 1, Total: 2, Nested: true})
 	clock.advance(3 * time.Second)
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "changed", Position: 1, Total: 2})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Status: "changed", Position: 1, Total: 2})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller binding", Status: "changed", Position: 2, Total: 2})
 	want := "\nProgress\n" +
-		"  [RUNNING]  [1/2] Execution bundle\n" +
-		"  [RUNNING]  [1/2] Execution bundle: acquiring cpython, source 1 of 2\n" +
-		"  [DONE]     [1/2] Execution bundle  3s\n" +
+		"  [RUNNING]  [1/2] Controller setup\n" +
+		"  [RUNNING]  [1/2] Controller setup: downloading 3 of 11 wheels\n" +
+		"  [DONE]     [1/2] Controller setup  3s\n" +
 		"  [DONE]     [2/2] Controller binding\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
@@ -170,13 +170,13 @@ func TestProgressOpensEachHeadingOnce(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Python and Ansible", Status: "running", Position: 1, Total: 2})
 	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Python and Ansible", Detail: "Python 3.14.7, Ansible 2.21.4", Status: "ok", Position: 1, Total: 2})
 	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Native packages", Status: "ok", Detail: "no changes", Position: 2, Total: 2})
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "running", Position: 1, Total: 1})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Status: "running", Position: 1, Total: 1})
 	want := "\nResolving\n" +
 		"  [RUNNING]  [1/2] Python and Ansible\n" +
 		"  [OK]       [1/2] Python and Ansible: Python 3.14.7, Ansible 2.21.4\n" +
 		"  [OK]       [2/2] Native packages: no changes\n" +
 		"\nProgress\n" +
-		"  [RUNNING]  [1/1] Execution bundle\n"
+		"  [RUNNING]  [1/1] Controller setup\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}
@@ -205,8 +205,8 @@ func TestTerminalProgressRewritesTheRunningRowInPlace(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Native packages", Status: "running", Position: 2, Total: 2})
 	clock.advance(2 * time.Second)
 	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Native packages", Detail: "no changes", Status: "ok", Position: 2, Total: 2})
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "running", Position: 1, Total: 1})
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Detail: "acquiring cpython, source 1 of 2", Status: "running", Position: 1, Total: 1, Nested: true})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Status: "running", Position: 1, Total: 1})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Detail: "downloading 3 of 11 wheels", Status: "running", Position: 1, Total: 1, Nested: true})
 	presenter.finish()
 	want := "\nResolving\n" +
 		"  [RUNNING]  [2/2] Native packages" +
@@ -214,8 +214,8 @@ func TestTerminalProgressRewritesTheRunningRowInPlace(t *testing.T) {
 		eraseLine + "  [RUNNING]  [2/2] Native packages  still running, 2s" +
 		eraseLine + "  [OK]       [2/2] Native packages: no changes  2s\n" +
 		"\nProgress\n" +
-		"  [RUNNING]  [1/1] Execution bundle" +
-		eraseLine + "  [RUNNING]  [1/1] Execution bundle: acquiring cpython, source 1 of 2\n"
+		"  [RUNNING]  [1/1] Controller setup" +
+		eraseLine + "  [RUNNING]  [1/1] Controller setup: downloading 3 of 11 wheels\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
 	}
@@ -229,14 +229,14 @@ func TestTerminalProgressGivesEveryRunningStepItsOwnLine(t *testing.T) {
 	presenter, clock, out := newTestTerminalProgress(120)
 	ctx := context.Background()
 	presenter.report(ctx, progressEvent{Heading: "Checks", Label: "Installed host", Detail: "verifying local identity", Status: "running"})
-	presenter.report(ctx, progressEvent{Heading: "Checks", Label: "Execution bundle", Detail: "verifying the retained bundle", Status: "running"})
+	presenter.report(ctx, progressEvent{Heading: "Checks", Label: "Controller setup", Detail: "verifying the controller runtime", Status: "running"})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "running", Position: 1, Total: 1})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Detail: "acquire the pinned server image", Status: "ok", Position: 1, Total: 1, Nested: true})
 	clock.advance(time.Second)
 	want := "\nChecks\n" +
 		"  [RUNNING]  Installed host: verifying local identity" +
 		eraseLine + "  [RUNNING]  Installed host: verifying local identity\n" +
-		"  [RUNNING]  Execution bundle: verifying the retained bundle\n" +
+		"  [RUNNING]  Controller setup: verifying the controller runtime\n" +
 		"\nProgress\n" +
 		"  [RUNNING]  [1/1] Serve artifacts" +
 		eraseLine + "  [RUNNING]  [1/1] Serve artifacts  still running, 1s"
@@ -385,14 +385,14 @@ func TestDeferredWidthDeclinesTerminalRedraw(t *testing.T) {
 	presenter, clock, out := newTestProgress()
 	presenter.columns = func() int { return 0 }
 	ctx := context.Background()
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "running"})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Status: "running"})
 	clock.advance(2 * progressHeartbeat)
 	if strings.Count(out.String(), "still running") != 2 {
 		t.Fatalf("heartbeat rows = %q", out.String())
 	}
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Detail: "one step", Status: "running", Nested: true})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Detail: "one step", Status: "running", Nested: true})
 	clock.advance(progressHeartbeat)
-	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Execution bundle", Status: "changed"})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Status: "changed"})
 	presenter.finish()
 	if strings.ContainsAny(out.String(), "\r\x1b") || !strings.HasSuffix(out.String(), "\n") {
 		t.Fatalf("non-terminal got cursor controls: %q", out.String())

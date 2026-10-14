@@ -16,7 +16,7 @@ import (
 // variant of the one there is.
 func TestOneExecutable(t *testing.T) {
 	root := filepath.Join("..", "..")
-	allowed := []string{"amd64", "completion", "controllerqualification", "linux", "race"}
+	allowed := []string{"amd64", "completion", "linux", "race"}
 	var mains []string
 	for _, directory := range []string{"cmd", "internal", "test"} {
 		err := filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {

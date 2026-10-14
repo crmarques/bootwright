@@ -127,10 +127,11 @@ func lineDiff(want, got string) string {
 	return out.String()
 }
 
-// The automation digest names an approved bundle's automation, and setup,
-// the lifecycle runner and bundle inspection compare it, so the bytes it
-// produces are pinned: digestOf over the automation half of a fixed map whose
-// collection documentation the split leaves out.
+// The automation digest is what stagelocal reads a staged automation tree back
+// against, so the bytes it produces are pinned: digestOf over the automation
+// half of a fixed map whose collection documentation the split leaves out. The
+// fixture keeps its controller/requirements.txt key, which the embed no longer
+// carries, so the golden stays stable.
 // TestAutomationDigestCoversEveryEmbeddedFile owns which files the real digest
 // covers; this pins only how the digest is computed from them.
 func TestAutomationDigestFormatMatchesItsGolden(t *testing.T) {

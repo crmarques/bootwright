@@ -22,12 +22,12 @@ class NativeApply(unittest.TestCase):
             name="fixture", epoch=0, version="2", release="1", architecture="x86_64"
         )
         return dict(
-            solver="dnf5",
-            solverVersion="5.4",
+            solver="dnf4",
+            solverVersion="4.20.0",
             beforeSHA256="a" * 64,
             afterSHA256="b" * 64,
             digest="c" * 64,
-            platform=dict(os="fedora", release="43", architecture="amd64"),
+            platform=dict(os="rhel", release="9.8", architecture="amd64"),
             requirements={},
             requests={},
             packages=[],
@@ -44,7 +44,7 @@ class NativeApply(unittest.TestCase):
     def test_exact_plan_refuses_extra_replacement_and_wrong_inventory(self):
         expected = self.plan()
         native_apply.same_transaction(expected, copy.deepcopy(expected))
-        for key in ("beforeSHA256", "afterSHA256", "solverVersion"):
+        for key in ("beforeSHA256", "afterSHA256", "solverVersion", "solver"):
             actual = copy.deepcopy(expected)
             actual[key] = "different"
             with self.assertRaises(ValueError):
@@ -93,13 +93,8 @@ class NativeApply(unittest.TestCase):
             plan=plan,
             payloads={},
         )
-        options = SimpleNamespace(set=lambda value: None)
-        base = SimpleNamespace(
-            get_config=lambda: SimpleNamespace(
-                get_pkg_gpgcheck_option=lambda: options,
-                get_localpkg_gpgcheck_option=lambda: options,
-            )
-        )
+        self.closed = []
+        base = SimpleNamespace(close=lambda: self.closed.append(True))
         observations = iter(
             [
                 dict(inventorySHA256=before),
@@ -114,18 +109,18 @@ class NativeApply(unittest.TestCase):
 
         helper = SimpleNamespace(
             validate_plan=lambda value: None,
-            solve5=lambda *args, **kwargs: (copy.deepcopy(plan), base, "transaction"),
+            solve4=lambda *args, **kwargs: (copy.deepcopy(plan), base, "transaction"),
             inspect=lambda *args: next(observations),
         )
         with tempfile.TemporaryDirectory() as directory, patch.multiple(
             native_resolution,
             validate_plan=helper.validate_plan,
-            solve5=helper.solve5,
+            solve4=helper.solve4,
             inspect=helper.inspect,
             snapshot_database=lambda *args: "/snapshot",
             verified_files=verify,
         ), patch.object(os, "geteuid", return_value=0), patch.object(
-            native_apply, "run5"
+            native_apply, "run4"
         ) as run, patch.object(
             native_signatures, "verify"
         ):
@@ -140,6 +135,7 @@ class NativeApply(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(calls, 0)
         self.assertIsInstance(error, ValueError)
+        self.assertEqual(self.closed, [True])
 
     def test_post_drift_and_failed_root_proof_do_not_claim_completion(self):
         for arguments in (dict(after="d" * 64), dict(roots=False), dict(files=False)):

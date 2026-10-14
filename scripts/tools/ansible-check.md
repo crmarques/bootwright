@@ -47,13 +47,12 @@ environment's pytest.
 one of those suites for a local inner loop. It is never a substitute for the
 argument-free gate, which `make check` and CI run.
 
-Two targets are excluded by default because they need a qualified native
-backend on the running host: `controller_native` builds a fixture RPM and drives
-the package manager, and `controller_prerequisites` runs the shipped setup
-playbook and role over the real runner protocol against the host inventory.
-Both are operator-run harnesses rather than part of the unitary gate. Select
-them with `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` on Fedora or RHEL. The integration fixture requires local process
-communication; it never runs a downloaded binary or changes host packages.
+One target is excluded by default because it needs the dnf4 backend of a RHEL 9
+host: `native_transaction` builds a fixture RPM and drives the package manager
+into an isolated installroot. It is an operator-run harness rather than part of
+the unitary gate. Select it with `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` on RHEL 9.
+The integration fixture requires local process communication; it never runs a
+downloaded binary or changes host packages.
 
 `ansible-test-artifacts.json` pins the separate sanity tool environments,
 including Ansible's pip bootstrap, and the floor's unit test environment, whose

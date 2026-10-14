@@ -50,9 +50,6 @@ REDIRECT_HOSTS = frozenset(
         "mirror.openshift.com",
         "dl.k8s.io",
         "cdn.dl.k8s.io",
-        "files.pythonhosted.org",
-        "cdn-ubi.redhat.com",
-        "dl.fedoraproject.org",
     )
 )
 

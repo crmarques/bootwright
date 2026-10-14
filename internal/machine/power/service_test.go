@@ -426,7 +426,7 @@ func TestARefusedRunReturnsOnlyWhereItsOutputIs(t *testing.T) {
 			}
 		})
 	}
-	refused := unlent{errors.New("the approved execution bundle is unavailable")}
+	refused := unlent{errors.New("the controller runtime is unavailable")}
 	result, err := service(refused, &adapter{power: "off"}, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, SkipConfirmation: true})
 	if !errors.Is(err, refused.err) || result == nil || len(result.Machines) != 0 {
 		t.Fatalf("a runtime that was never lent returned %+v, %v", result, err)

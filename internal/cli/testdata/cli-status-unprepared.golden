@@ -4,7 +4,7 @@
 
 Setup
   [PENDING]  Controller binding  bound by the first apply
-  [FAIL]     Execution bundle
+  [FAIL]     Controller setup
 
 Desired
   Revision         rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f

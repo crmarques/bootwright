@@ -14,9 +14,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 class Key:
     def __init__(self, fingerprint):
         self.fingerprint = fingerprint
-
-    def get_fingerprint(self):
-        return self.fingerprint
+        self.raw_key = fingerprint
 
 
 class PublisherSignatures(unittest.TestCase):
@@ -25,45 +23,65 @@ class PublisherSignatures(unittest.TestCase):
         host_trust = {approved, foreign}
         imported = []
         roots = []
+        closed = []
 
-        class Verifier:
-            CheckResult_OK = 0
+        class Transaction:
+            def __init__(self, root):
+                self.keys = None
 
-            def __init__(self, base):
-                self.keys = set()
+            def initDB(self):
+                pass
 
-            def parse_key_file(self, path):
-                return [Key(approved), Key(foreign)]
+            def pgpImportPubkey(self, key):
+                imported.append(key)
+                Transaction.trusted = key
+                return 0
 
-            def import_key(self, key):
-                self.keys.add(key.fingerprint)
-                imported.append(key.fingerprint)
+            def closeDB(self):
+                pass
 
-            def check_package_signature(self, path):
+        class Base:
+            def add_remote_rpms(self, sources, strict):
+                return list(sources)
+
+            def package_signature_check(self, path):
                 self_outer.assertIn(path, host_trust)
-                return 0 if path in self.keys else 1
+                return (0 if path == Transaction.trusted else 1,)
+
+            def close(self):
+                closed.append(True)
 
         self_outer = self
-        library = SimpleNamespace(rpm=SimpleNamespace(RpmSignature=Verifier))
 
         def setup(request, scratch, repositories, installroot):
             self.assertFalse(repositories)
             self.assertNotEqual(installroot, "/")
             self.assertTrue(installroot.startswith(scratch + "/"))
             roots.append(installroot)
-            return object()
+            return Base()
 
         request = dict(
-            platform=dict(os="fedora", release="44"),
+            platform=dict(os="rhel", release="9.8"),
             plan=dict(
-                solver="dnf5",
+                solver="dnf4",
                 packages=[dict(signer=approved, source=dict(id="source"))],
             ),
         )
+        rpm = SimpleNamespace(TransactionSet=Transaction)
+        crypto = SimpleNamespace(rawkey2infos=lambda stream: [Key(approved), Key(foreign)])
+        misc = SimpleNamespace(procgpgkey=lambda raw: raw)
+        yum = SimpleNamespace(misc=misc)
+        modules = {
+            "rpm": rpm,
+            "dnf": SimpleNamespace(crypto=crypto, yum=yum),
+            "dnf.crypto": crypto,
+            "dnf.yum": yum,
+            "dnf.yum.misc": misc,
+        }
         with tempfile.TemporaryDirectory() as directory, patch.object(
             native_signatures, "read_key", return_value=b"public fixture"
-        ), patch.object(native_resolution, "setup_dnf5", side_effect=setup), patch.dict(
-            "sys.modules", libdnf5=library
+        ), patch.object(native_resolution, "setup_dnf4", side_effect=setup), patch.dict(
+            "sys.modules", modules
         ):
             native_signatures.verify(request, directory, {"source": approved})
             with self.assertRaises(ValueError):
@@ -71,14 +89,20 @@ class PublisherSignatures(unittest.TestCase):
         self.assertEqual(imported, [approved, approved])
         self.assertEqual(len(roots), 2)
         self.assertNotEqual(roots[0], roots[1])
+        self.assertEqual(closed, [True, True])
 
-    def test_each_qualified_fedora_release_reads_its_own_primary_key(self):
-        for release in ("43", "44"):
-            self.assertEqual(
-                native_signatures.publisher_key(dict(os="fedora", release=release)),
-                "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-%s-primary" % release,
-            )
-        for platform in (dict(os="fedora", release="45"), dict(os="fedora"), dict(os="centos", release="9")):
+    def test_only_a_dnf4_plan_is_verified(self):
+        request = dict(plan=dict(solver="dnf5", packages=[]))
+        with self.assertRaises(ValueError) as refused:
+            native_signatures.verify(request, "/scratch", {})
+        self.assertEqual(str(refused.exception), "native publisher solver")
+
+    def test_only_the_rhel_release_key_is_a_publisher_key(self):
+        self.assertEqual(
+            native_signatures.publisher_key(dict(os="rhel", release="9.8")),
+            "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release",
+        )
+        for platform in (dict(os="fedora", release="44"), dict(os="centos", release="9")):
             with self.assertRaises(ValueError):
                 native_signatures.publisher_key(platform)
 
@@ -86,7 +110,7 @@ class PublisherSignatures(unittest.TestCase):
         selected = "a" * 40
         for keys in ([], [Key("b" * 40)], [Key(selected), Key(selected)]):
             with self.assertRaises(ValueError):
-                native_signatures.select_key(keys, selected, True)
+                native_signatures.select_key(keys, selected)
 
 
 if __name__ == "__main__":

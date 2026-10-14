@@ -659,7 +659,7 @@ needed paths:
 | Path | Responsibility |
 | --- | --- |
 | `ansible/ansible.cfg` | Controlled configuration. |
-| `ansible/controller/` and `ansible/collections/` | Selected dependency inputs and exact locks for the complete runtime closure. |
+| `ansible/collections/` | The embedded collection; the controller runtime's exact lock is `internal/controller/runtimelock/lock.json`. |
 | Collection `playbooks/<domain>/<operation>.yml` | One fixed application-port entrypoint; private fragments under its `tasks/`. |
 | Collection `roles/<domain>_<capability>[_<implementation>]/` | One local or remote capability adapter with only applicable standard role directories. |
 | Collection `plugins/` | Capability adapters, effect-free product translation/evidence normalization, or the adapter's output callback, which [prints nothing a `no_log` result raised](security.md#logs-output-and-diagnostics). |

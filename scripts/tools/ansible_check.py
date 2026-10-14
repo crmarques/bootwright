@@ -313,12 +313,11 @@ def main() -> int:
             ["integration", "controller_tool"],
             ["integration", "controller_supervisor"],
         ]
-        # controller_native builds an RPM and drives the running host's package
-        # manager, so it is an operator-run harness rather than part of the
-        # unitary gate.
+        # native_transaction builds an RPM and drives the running RHEL 9 host's
+        # package manager, so it is an operator-run harness rather than part of
+        # the unitary gate.
         if os.environ.get("BOOTWRIGHT_ANSIBLE_NATIVE_TARGET") == "1":
-            suites.append(["integration", "controller_native"])
-            suites.append(["integration", "controller_prerequisites"])
+            suites.append(["integration", "native_transaction"])
         for arguments in suites:
             if arguments[0] not in selected:
                 continue

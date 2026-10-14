@@ -153,7 +153,7 @@ type Closure struct {
 	Ansible string `json:"ansible"`
 }
 
-// maxRelease bounds each release a closure names, as a retained resolution
+// maxRelease bounds each release a closure names, as the runtime lock
 // bounds its ansible-core release.
 const maxRelease = 80
 

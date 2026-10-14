@@ -42,8 +42,8 @@ type View interface {
 }
 
 // RunView is what a bounded operation outside the lifecycle reads. It adds
-// exactly two things an inspection has no use for: the controller's approved
-// execution bundle, which the adapter call runs inside, and a writable area
+// exactly two things an inspection has no use for: the controller's
+// tool areas, which the adapter call runs against, and a writable area
 // holding what that adapter printed, in run directories it opens itself.
 // Neither is desired state, ownership or a continuation cursor, so a bounded
 // run still registers no operation.

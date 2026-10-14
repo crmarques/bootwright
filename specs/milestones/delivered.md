@@ -989,8 +989,8 @@ comparison of it (B16, D14).
 `TestAnIPv4CompatibleEndpointAddressIsRefused`,
 `TestAnAcquisitionDeadlineScalesWithItsSourceBytes`,
 `TestAClientClosureBeyondTheCeilingRefusesBeforeAnsibleStarts`,
-`TestAnsibleLatestIsTheNewestQualifiedPatch`,
-`TestPythonLatestIsTheNewestQualifiedMinor`,
+TestAnsibleLatestIsTheNewestQualifiedPatch,
+TestPythonLatestIsTheNewestQualifiedMinor,
 `TestALifecyclePlacementHostConnectsAsRoot`,
 `TestAPlacementNeverBindsAnEscalationSecret`,
 `TestDocumentationLeavesTheAutomationDigest`,
@@ -1170,7 +1170,7 @@ SSH-placed material test X26 added),
 `TestNoDecoderTakesMoreAsTheEndOfItsDocument`,
 `TestOperationResultTextEscapesOnce`,
 `TestAFailedPowerRunNamesItsOutputInEveryFailureEnvelope`,
-`TestReadOnlyToolInspectionStreamsTheSourceAndEachMember`,
+TestReadOnlyToolInspectionStreamsTheSourceAndEachMember,
 `TestARefreshWarningNeverReachesJSONStandardError`,
 `TestARelayedInterruptLeavesTheChildItsOwnStatus`,
 `TestAServiceBoundToAManagedBridgeRequiresItsProvider` and
@@ -1597,7 +1597,7 @@ effect keeps its `controller.unknown` refusal, and D50's resume stays for one
 this executable can prepare (B175, D55). The purge after a completed setup now
 names and reports only the areas the store holds, so it neither reports nor
 retires a controller stage's resolution, which settles
-[B238](backlog.md#b238)'s purge-report clause. The setup help text and its
+[B238](backlog.md#retired)'s purge-report clause. The setup help text and its
 command row say what the flag cancels.
 
 **Review:** seven findings, five confirmed and fixed: the purge reported the
@@ -1673,14 +1673,14 @@ the artifact lock holds cp313 wheels for ansible-test's exact sanity pins, so
 moving to 3.14, which fresh setups resolve, re-platforms the gate
 ([B274](backlog.md#b274)); the 3.9.25 floor interpreter, the last 3.9 build,
 and the artifact lock; and the product fixtures
-`ansible/controller/requirements.txt`,
-`internal/controller/bundlelocal/catalog.json` and the import probe in
-`internal/controller/bundlelocal/probe_linux_amd64.go`, which still name
+ansible/controller/requirements.txt,
+internal/controller/bundlelocal/catalog.json and the import probe in
+internal/controller/bundlelocal/probe_linux_amd64.go, which still name
 3.13.15 and the earlier wheels, so no automation or bundle digest moves.
 
 **Guard tests:** `scripts/tools/ansible_check.py` refuses any interpreter but
 the pinned one and any package whose version differs from the lock;
-`TestQualifiedAnsibleMinorAgreesEverywhere` holds the lock's ansible-core to
+TestQualifiedAnsibleMinorAgreesEverywhere holds the lock's ansible-core to
 the qualified minor; and `make modules-check` and `make tidy-check` hold both
 module files.
 
@@ -2299,8 +2299,8 @@ site-services requests and the paused, running and unknown apply results, are
 additions, and the changed ones are presentation text. `catalog.json` drops
 its dependency pins and keeps `format`, `projection` and each release's `os`,
 `release` and `execution` unchanged, while
-`TestTheCompiledExecutionFoundationIsUnchanged` and
-`TestAResolvedBundleIdentityDoesNotReadTheCatalogPins` pin the execution
+TestTheCompiledExecutionFoundationIsUnchanged and
+TestAResolvedBundleIdentityDoesNotReadTheCatalogPins pin the execution
 foundation digests and a resolved bundle's identity; the installation's
 content digest keeps the deleted tooling as a frozen literal under
 `TestTheContentDigestIsPinned`. The job record under `/run` is per-boot
@@ -2379,7 +2379,7 @@ binding ([B361](#x46--the-safety-and-defect-sweep-of-m1)); container-cluster adm
 ([B313](m3.md#b313)); content the install line still drops, search domains
 and IPv6 policy among it ([B338](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation), [B326](m2.md#b326)); RHEL 9.8's
 `rpm` output and the snapshot read as the helper account
-([B335](backlog.md#b335), and the RHEL 9.8 controller run D60 plans); the
+([B335](backlog.md#retired), and the RHEL 9.8 controller run D60 plans); the
 glibc and libgcc builds a RHEL 9.8 controller must hold, and building on a
 workstation ([B292](#x42--media-contexts-setup-service-and-machine-admission)); help beyond destroy ([B95](#x44--help-completion-contracts-and-ratchets)); an
 invocation's own in-flight jobs ([B304](#x48--bounded-concurrent-execution)); and a bounded run
@@ -2470,7 +2470,7 @@ execution foundation gains a named check in setup and preflight: the catalog
 attributes each release's glibc and libgcc files to their package and build
 beside the execution profile; a drift refuses before the plan, naming the
 file, package and build with a reinstall, versionlock and repeat remedy that
-also serves apply and destroy; and `scripts/foundation-catalog` regenerates a
+also serves apply and destroy; and scripts/foundation-catalog regenerates a
 release's record, reproducing the Fedora 43 record exactly (D107). Setup and
 preflight report the host's FIPS mode, with the statement that Bootwright's
 runtime brings its own cryptography (D108). The operator guide lists the
@@ -2572,7 +2572,7 @@ lab-baremetal to goldens written at X42's base, and they pass unchanged, as do
 the installation request goldens and the plan-digest golden, while the
 effective goldens lose only the removed fields. The catalog's per-release
 package attribution sits outside each release's execution profile, which
-`TestTheCompiledExecutionFoundationIsUnchanged` pins, and the cancellation
+TestTheCompiledExecutionFoundationIsUnchanged pins, and the cancellation
 evidence sits outside the setup plan digest. Only IPv6 moves bytes: an
 IPv6-bound service's plan digest moves through its bracketed impacts, and an
 IPv6 artifact endpoint's installation requests freeze bracketed URLs, with no
@@ -2633,7 +2633,7 @@ passes validate and refuses at plan ([B338](#x43--libvirt-roles-managed-os-insta
 prefixes across contexts ([B295](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation)); a managed service's egress
 through a managed or authenticated Proxy, refused only at plan
 ([B382](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json)); the RHEL 9.8 foundation record, for the RHEL 9.8
-controller run D60 plans to confirm ([B335](backlog.md#b335) beside it); and a
+controller run D60 plans to confirm ([B335](backlog.md#retired) beside it); and a
 guard port that lists the owned blocks ([B324](backlog.md#b324)). Under D116
 these join M1 on X46: an elevated selection refusal drops its remedy
 ([B398](#x46--the-safety-and-defect-sweep-of-m1)); the `context delete` row still promises a listing of
@@ -4787,8 +4787,8 @@ so once a build that writes `build` has worked an operation, no earlier build
 can continue or remove it, and the removal under the build in hand is the way
 out (D145). `plan` still previews a continuation its `apply` refuses on recorded
 facts ([B526](backlog.md#b526)); no gate proves the approved bundle holds this
-executable's automation before work starts ([B527](backlog.md#b527)); `setup
---purge-old-bundles` reads no operation record ([B528](backlog.md#b528)); and an
+executable's automation before work starts ([B527](backlog.md#retired)); `setup
+--purge-old-bundles` reads no operation record ([B528](backlog.md#retired)); and an
 unknown block a resolution leaves failed is retried by the next apply, so
 recovery can take two applies ([B529](#x82--resolution-and-retry-in-one-invocation)). Already present: an
 attempt record holds at most `MaxAttemptBytes` (64 KiB), the evidence bound most
@@ -5253,7 +5253,7 @@ B547 as a follow-up of 2026-10-14. **Decisions:** D149.
 **Outcome, B541:** `setup`, `preflight controller` and the controller stage
 admit Fedora 44 on Linux/amd64 beside Fedora 43 and RHEL 9.8, and their
 refusals name all three. The compiled catalog holds Fedora 44's execution
-foundation as `scripts/foundation-catalog` printed it on the owner's Fedora 44
+foundation as scripts/foundation-catalog printed it on the owner's Fedora 44
 host: glibc 2.43-9.fc44 and libgcc 16.2.1-2.fc44, whose versioned library is
 `libgcc_s-16-20260819.so.1`. A Fedora controller's native packages resolve
 from its own release's `releases` and `updates` repositories, signed by that
@@ -5289,15 +5289,15 @@ the symptom and how to read the helper's own refusal.
 **Guard tests:** `Dnf5Transaction` in the collection's
 `test_native_resolution.py` (a reason change is neither inbound nor outbound;
 other unrequested actions still refuse);
-`TestTheCatalogAdmitsOnlyItsCompiledFoundations`,
-`TestTheCompiledExecutionFoundationIsUnchanged` (Fedora 44's digest as
+TestTheCatalogAdmitsOnlyItsCompiledFoundations,
+TestTheCompiledExecutionFoundationIsUnchanged (Fedora 44's digest as
 admitted, Fedora 43's and RHEL 9.8's unchanged),
-`TestEveryCatalogFoundationFileHasOnePackage` (each record's builds belong to
-its own release), `TestALaunchRefusalNamesSetupForAQualifiableUpdate` (a
+TestEveryCatalogFoundationFileHasOnePackage (each record's builds belong to
+its own release), TestALaunchRefusalNamesSetupForAQualifiableUpdate (a
 qualified requirement of each release names that release; it fails without
-the GCC-major match), `TestARequirementInTheShapeOfTwoReleasesNamesNeither`,
+the GCC-major match), TestARequirementInTheShapeOfTwoReleasesNamesNeither,
 TestEachFedoraReleaseResolvesFromItsOwnRepositories,
-TestFoundationBuildsReadRPMFileDigests, `TestAnotherMinorStillRefuses` and
+TestFoundationBuildsReadRPMFileDigests, TestAnotherMinorStillRefuses and
 the collection's `test_each_qualified_fedora_release_reads_its_own_primary_key`.
 TestNativeCurrentOSResolution now qualifies whichever admitted Fedora release
 the host runs.
@@ -5307,7 +5307,7 @@ vet, completion-test, `make vulncheck` (no reachable vulnerability) and
 `./scripts/ansible-check` (ansible-lint production profile, sanity, and
 297, 1856, 1286 and 3440 tests passed). `make quick` and `make docs-check`
 pass, and the GCC-major test fails with that match removed. On the owner's
-Fedora 44 host, unprivileged, `TestTheResolverStagesTheQualifiedFoundation`
+Fedora 44 host, unprivileged, TestTheResolverStagesTheQualifiedFoundation
 runs and passes against every pinned file, and the collection's libdnf5 5.4.6
 snapshot, setup and inventory ran under the host's Python 3.14. The B547
 follow-up ran the resolve against the Fedora 44 repositories and the presence
@@ -5327,7 +5327,7 @@ has the host's operations complete or its contexts destroyed, then sets it up
 with a build that pins the new builds, as X84 does. **Constraints left behind:** Fedora 44
 awaits its first [acceptance ledger](../../docs/acceptance.md#ledger) run of
 setup and the controller stage; in-tree, its repository resolve and root
-presence ran on Fedora 44 unprivileged (B547), not a package installation. [B542](backlog.md#b542), parked: a Fedora plan records
+presence ran on Fedora 44 unprivileged (B547), not a package installation. [B542](backlog.md#retired), parked then and retired as moot by X89: a Fedora plan recorded
 libdnf5's version without its first part.
 
 ### X85 — Machine commands across several machines
@@ -5617,7 +5617,7 @@ D152's acceptance and its clause 9 choice. `venvlocal.Store` and the contextfs
 setup transaction differ (`PublishRuntime` takes a stage path and returns an
 error in one, a `RuntimeStage` and a published flag in the other, and
 `RetireRuntime` returns a retired flag only in contextfs), so the wiring in
-X88 reconciles them. `ansible/controller/requirements.txt`, the old bundle's
+X88 reconciles them. ansible/controller/requirements.txt, the old bundle's
 input, still pins ansible-core 2.21.4 until X89 deletes it; a shared
 `.cache/ansible-check` venv built at 2.21.4 refuses until it is rebuilt.
 specs/security.md does not yet state B548's rule or its sticky-directory
@@ -5760,8 +5760,8 @@ and run `setup` with this build. After that, an `ansible/`-only fix or any
 rebuild with the same lock is build and apply with no setup.
 **Constraints left behind:** X89 deletes the dead bundle machinery
 (`internal/controller/bundlelocal`, the native solver code, the
-controller-only Python native code, `scripts/foundation-catalog` and
-`ansible/controller/requirements.txt`, which still pins ansible-core 2.21.4),
+controller-only Python native code, scripts/foundation-catalog and
+ansible/controller/requirements.txt, which still pins ansible-core 2.21.4),
 which makes B528 and B542 moot, and rewrites the operator guide, the
 development guide and the knowledge pages that still describe bundles. X90
 delivers retention, the cache-only rebuild, the wheel mirror, download-only
@@ -5769,6 +5769,96 @@ and B557's tool areas, which closes B322. Nothing was run as root: setup's
 install path, the controller stage's dnf install and the mount-based tests
 await the owner's fresh-install acceptance on Fedora 44 and a RHEL 9 VM
 (B555), as do X87's S0 baseline and the owner's runtime-lock `verify` run.
+
+### X89 — Controller setup v2 deletion and documentation
+
+**Owner:** Controller setup, with Controller (clients), Workspace and
+Architecture. A product slice of [M1](m1.md), the third of controller setup
+v2 (X87 to X90), integrated on local main as one commit by the session on
+2026-10-14 without a push, under the same deferral of D152's review and
+clause 9 choice as [X88](#x88--controller-setup-v2-cut-over). **Items:**
+B528 and B542, with B227, B231, B238, B263, B335, B429 and B527, each retired
+as moot by the deletions (with the deletions and documentation that
+[B555](m1.md#b555)'s constraints assign to X89, while B555 awaits the owner's
+fresh-install acceptance, and [B557](m1.md#b557)'s note on the deleted
+harness). **Decisions:** D152,
+pending the owner's review. **Integrated:** "refactor(controller): remove the
+pre-v2 setup machinery and document setup v2".
+
+**Outcome, deletions:** only what X88 left unreachable goes.
+`internal/controller/bundlelocal` loses about 8,430 lines: the execution
+foundation and its probe, the bootstrap, the compiled catalog and
+`catalog.json`, the manager, metadata, the archive and tool projections,
+`launch.go` and their tests; it keeps the tool areas' acquisition, transport
+and trust, which X90's B557 moves, and its import grants narrow to them.
+`internal/controller/prerequisites` loses 1,907 lines: the bootstrap, the
+native plan, the qualified foundation, the definition, the resolution
+contracts, effects, inspection and storage types and the tool projection.
+`internal/workspace/contextfs` loses about 100 lines of execution-bundle
+publication and its test, and `cmd/bootwright` the Go-to-Python closure parity
+test of the deleted root table (about 100 lines). The collection loses about
+1,060 lines net: `controller_native.py`, `NativeRefused` and its branches,
+and the controller-only roots, dnf5 solve, apply and verify branches, Fedora
+releases and key and entry points of `native_resolution`, `native_apply` and
+`native_signatures`, which keep the dnf4 core the Ceph node worker loads; the
+stale `controller_prerequisites` integration target goes and
+`controller_native` becomes the RHEL-only `native_transaction` target.
+scripts/foundation-catalog (112 lines) and ansible/controller/requirements.txt
+(13 lines, still pinning ansible-core 2.21.4) go, the embed drops
+`controller/` and `ansible.Documentation` goes. The `qualified_ansible` test
+moves to `internal/controller/runtimelock` as the lock's statements test. In
+all, about 12,600 lines are deleted and 830 added, most of the additions
+documentation.
+
+**Outcome, documentation:** the operator guide states setup v2's admission,
+the untested-release line, what setup installs and from where, the dnf
+preview, the venv, the fresh install across the registry version 5 refusal,
+the dnf route and X90's offline preparation, and drops the execution
+foundation hold and the Fedora 43 examples; its destinations list drops the
+UBI and Fedora repositories, and the docs test reads the lock's wheel URLs.
+docs/development.md drops the deleted harnesses; docs/acceptance.md gains
+B555's [setup row template](../../docs/acceptance.md#setup-v2-fresh-install-row).
+The knowledge pages controller-runtime-isolation.md and
+controller-setup-resolution-cost.md are rewritten with the earlier design as
+dated history, native-root-reason-change.md is marked history, and
+concurrent-block-execution.md follows per-invocation automation. The setup
+result's `execution-bundle` check keeps its ID and reads "Controller setup".
+B227, B231, B238, B263, B335, B429, B527, B528 and B542 are
+[retired](backlog.md#retired) as moot, B322 now names B557's tool-area
+retirement, and D107 is marked superseded.
+
+**Guard tests:** `test/architecture`'s boundaries (bundlelocal's grants
+narrowed), comment ceilings (bundlelocal 316 to 30, prerequisites 524 to 288)
+and `TestNoCodeReadsTheWholeEmbeddedTree`;
+`TestDocsProxiedNetworkDestinationsMatchTheCode`;
+`internal/controller/runtimelock`'s
+`TestTheLintAndSanityConfigurationsNameTheLockedMinor`,
+`TestTheDevelopmentGuideStatesTheLockedMinorAndABIs` and
+`TestTheFloorLockPinsTheCollectionsRemotePythonFloor`;
+`TestAProviderHostInstallsTheStagesHypervisorClosure`; and the collection's
+`test_native_resolution`, `test_native_apply` and `test_native_signatures`
+over the kept dnf4 core.
+
+**Gates:** in the x89 worktree on main ace48daf1, as its commit records:
+`make check` passes (mod verify, tidy, `go test ./...`, vet, the completion
+test, govulncheck with no reachable vulnerability, ansible-check with lint 0
+failures in the production profile, sanity passing and units 1852 passed and
+1 skipped, with 297, 1278 and 3428 further tests passed); `make quick`, `make
+race`, `make docs-check` and `git diff --check` pass. Not run: anything
+needing root.
+
+**Digest and version effects:** the collection changed, so the automation
+digest moves; on a host set up by an X88 build that alone continues a live
+context with build and `apply` (a `setup` changes nothing), since automation
+is no part of any setup identity and every content digest hashes Go constants
+only. A host an earlier build manages still needs X88's fresh install. No
+contract version,
+store format or closure moves, and no golden is deleted. **Constraints left
+behind:** `internal/controller/bundlelocal` still holds the tool areas until
+X90's B557 moves them under the controller's tools directory; X90 also adds an
+operator-run harness for `playbooks/controller/setup.yml` in place of the
+deleted target. X88's hostdnf and contextfs review nits stay for X90 where it
+touches that code. Nothing was run as root, as for X88.
 
 ### X91 — Read-only diff and the delta seam
 

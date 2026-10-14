@@ -493,3 +493,5 @@ func toolChecksum(data []byte, filename string) (string, error) {
 	}
 	return result, nil
 }
+
+func sourcePath(source prerequisites.DependencySource) string { return path.Join("sources", source.ID) }

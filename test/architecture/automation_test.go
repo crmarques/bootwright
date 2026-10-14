@@ -7,15 +7,11 @@ import (
 
 // Documentation leaves the automation digest only because no production code
 // outside the ansible package compares the whole embedded tree: each reader
-// takes Automation, which the digest covers, and only the bootstrap projection
-// takes Documentation, to publish it beside the automation. An Assets
-// reference, called or passed as a value, would bring back a comparison no
-// digest attributes.
-func TestOnlyTheProjectionReadsCollectionDocumentation(t *testing.T) {
+// takes Automation, which the digest covers. An Assets reference, called or
+// passed as a value, would bring back a comparison no digest attributes.
+func TestNoCodeReadsTheWholeEmbeddedTree(t *testing.T) {
 	const embedded = "github.com/crmarques/bootwright/ansible"
-	const projection = "internal/controller/bundlelocal/projection.go"
 	readers := map[string]bool{
-		projection: false,
 		"internal/controller/stagelocal/automation_linux_amd64.go": false,
 	}
 	for _, source := range productionSources(t) {
@@ -47,10 +43,6 @@ func TestOnlyTheProjectionReadsCollectionDocumentation(t *testing.T) {
 			switch selector.Sel.Name {
 			case "Assets":
 				t.Errorf("%s references ansible.Assets; read ansible.Automation, which the automation digest covers", source.path)
-			case "Documentation":
-				if source.path != projection {
-					t.Errorf("%s references ansible.Documentation; only %s publishes collection documentation", source.path, projection)
-				}
 			case "Automation":
 				if _, listed := readers[source.path]; listed {
 					readers[source.path] = true

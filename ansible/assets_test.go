@@ -39,7 +39,8 @@ func TestConfigurationDeclaresNoEmptyValue(t *testing.T) {
 // one of them, so none can differ under an equal digest. Documentation is the
 // only embedded content outside it, and it stays embedded.
 func TestAutomationDigestCoversEveryEmbeddedFile(t *testing.T) {
-	files, automation, documentation := Assets(), Automation(), Documentation()
+	files := Assets()
+	automation, documentation := split(files)
 	baseline := Digest()
 	if digestOf(automation) != baseline {
 		t.Fatal("the automation digest does not cover exactly the automation files")
@@ -79,7 +80,7 @@ func TestAutomationDigestCoversEveryEmbeddedFile(t *testing.T) {
 // digest has its own domain version: no digest that covered documentation can
 // equal it.
 func TestDocumentationLeavesTheAutomationDigest(t *testing.T) {
-	documentation := Documentation()
+	_, documentation := split(Assets())
 	want := []string{
 		"collections/ansible_collections/bootwright/core/CHANGELOG.rst",
 		"collections/ansible_collections/bootwright/core/README.md",

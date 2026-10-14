@@ -203,7 +203,7 @@ func controllerActionLabel(id string) string {
 	case "fips-mode":
 		return "FIPS mode"
 	case "execution-bundle":
-		return "Execution bundle"
+		return "Controller setup"
 	case "container-runtime":
 		return "Container runtime"
 	case "host-packages":

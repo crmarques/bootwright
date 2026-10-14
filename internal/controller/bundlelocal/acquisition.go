@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,24 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
-
-type sourceFetcher func(context.Context, prerequisites.DependencySource, prerequisites.SetupEgress) ([]byte, error)
-
-func fetchSource(ctx context.Context, source prerequisites.DependencySource, egress prerequisites.SetupEgress) ([]byte, error) {
-	if source.Bytes <= 0 || source.Bytes > maxMemberBytes {
-		return nil, bundleFailure("dependency source exceeds its qualified acquisition limit")
-	}
-	origin, err := url.Parse(source.URL)
-	if err != nil || !approvedOrigin(origin) {
-		return nil, bundleFailure("dependency source is outside the approved HTTPS origins")
-	}
-	client, closeClient, err := acquisitionClient(ctx, egress, approvedOrigin, 5*time.Minute)
-	if err != nil {
-		return nil, err
-	}
-	defer closeClient()
-	return receiveSource(ctx, source, client.Do)
-}
 
 // acquisitionClient shares the fixed explicit-route transport with the
 // publisher metadata resolvers. Each consumer supplies its narrower origin
@@ -65,34 +46,6 @@ func acquisitionClient(ctx context.Context, egress prerequisites.SetupEgress, ap
 		},
 	}
 	return client, transport.CloseIdleConnections, nil
-}
-
-func receiveSource(ctx context.Context, source prerequisites.DependencySource, send func(*http.Request) (*http.Response, error)) ([]byte, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, source.URL, nil)
-	if err != nil {
-		return nil, bundleFailure("dependency acquisition request is invalid")
-	}
-	request.Header.Set("Accept-Encoding", "identity")
-	request.Header.Set("User-Agent", "Bootwright-Controller/1")
-	response, err := send(request)
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, transportFailure("approved dependency source", source.URL, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK || response.ContentLength > source.Bytes || response.Header.Get("Content-Encoding") != "" {
-		return nil, bundleFailure("dependency acquisition returned an unapproved status or representation")
-	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, source.Bytes+1))
-	if err != nil || !approvedBytes(source, data) {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, bundleFailure("acquired dependency does not match its approved size and SHA-256")
-	}
-	return data, nil
 }
 
 // transportFailure publishes only the endpoint host and one fixed condition:
@@ -137,15 +90,8 @@ func transportFailure(subject, endpoint string, err error) error {
 	return failure
 }
 
-func approvedOrigin(value *url.URL) bool {
-	if value == nil || value.Scheme != "https" || value.User != nil || value.Fragment != "" || value.Opaque != "" || value.Port() != "" && value.Port() != "443" {
-		return false
-	}
-	switch value.Hostname() {
-	case "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "files.pythonhosted.org", "cdn-ubi.redhat.com", "dl.fedoraproject.org":
-		return true
-	}
-	return false
+func bundleFailure(message string) error {
+	return &prerequisites.ScopedFailure{Message: message, Correction: "Restore approved dependency sources or the retained tool areas"}
 }
 
 // Proxy selection is request-local: the route reaches this transport as request

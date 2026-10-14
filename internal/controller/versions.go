@@ -35,7 +35,7 @@ func DefaultDependencyVersions() DependencyVersions {
 
 // Baseline is the version intent of the context-independent prerequisites
 // setup owns. A context declares only the versions its own controller stage
-// installs, so those values never select or supersede a retained resolution.
+// installs, so those values never move the controller runtime.
 func (v DependencyVersions) Baseline() DependencyVersions {
 	return DependencyVersions{Python: v.Python, Ansible: v.Ansible, Podman: v.Podman, OpenSSH: v.OpenSSH, NMState: v.NMState}
 }

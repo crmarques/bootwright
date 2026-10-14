@@ -1,154 +1,87 @@
-# Controller setup resolution and readiness cost
+# Controller setup cost
 
-Observed on 2026-09-12 and 2026-09-13 on a ready Fedora 43 controller:
-`bootwright setup` took about two minutes, then still almost a minute,
-to report `unchanged`. [Controller](../../specs/controller.md#host-packages)
-owns the rules that setup reuses a serving retained resolution, never checks
-for newer releases, and checks readiness by presence only; this page records
-why each removed step was expensive, which is the reason those rules matter.
+[Controller](../../specs/controller.md#host-packages) owns the rules that
+setup installs only what is missing, never checks for updates, and checks
+readiness by presence. This page records what setup costs since setup v2 (X88,
+2026-10-14, D152) and what it cost before, which is why those rules exist.
 
-- Setup used to resolve dependencies before checking readiness, so every run
-  paid the full resolution cost even with nothing to do. Resolution now runs
-  only when no retained resolution serves the intent or a selected native root
-  is missing. That service was replaced by setup v2 in X88, which resolves nothing at
-  setup and reads a lock the build embeds.
-- Bootstrap resolution is priced as acquisition, not as a metadata round-trip:
-  it fetches the uv Python metadata, downloads the complete standalone Python
-  archive, runs the pip resolver inside that projection, then downloads every
-  resolved wheel to compute the projection identity. Code:
-  `internal/controller/bundlelocal/bootstrap.go` (`Resolve`).
-- Native resolution stages the `primary`, `filelists` and related members of
-  every approved repository and copies the RPM database before the DNF helper
-  solves. Code: internal/controller/nativelocal/resolver_linux_amd64.go
-  (`Resolve`, `stageRepository`).
-- Bundle readiness used to re-read every retained source, re-extract the Python
-  archive and every wheel in memory, byte-compare all published files against
-  that projection, then launch the private interpreter for the import probe.
-  A sealed bundle now reports presence from one directory walk: retained
-  sources by size, published files by count and total bytes, the interpreter,
-  and tool files. Full verification and the probe still run when the bundle is
-  published. Code: `internal/controller/bundlelocal/manager.go`
-  (`Inspect`, `presentFiles`, `inspectFiles`).
-- Native readiness used to load the full installed inventory through DNF and
-  run `rpm --verify` over every package of the frozen plan, checking each
-  installed file. It now snapshots the RPM database and asks `rpm -q` for each
-  selected root by name through the helper's `present` operation; the installed
-  identity is shown as the observed release and never compared to the frozen
-  one. The helper's `inspect` operation keeps the full inventory for the native
-  transaction's own proof. Code:
-  internal/controller/nativelocal/resolver_linux_amd64.go (`Check`,
-  `decodePresence`), `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py`
-  (`present`).
-- File verification belongs to the transaction, over exactly what it installed;
-  readiness beside it is presence. Observed on 2026-09-17: the first apply on a
-  controller that already carried the whole closure failed at
-  `controller-prerequisites` with `controller.setup: Ansible did not complete
-  the authorized dependency operation`, and the next apply resolved the same
-  block as completed. The frozen transaction held no actions, so nothing was
-  installed and the transaction task was skipped; the completion phase still
-  refused with `native postcondition`, because `inspect` ran `rpm --verify` over
-  the whole frozen closure on every run and reported `......G..  g` for
-  `libvirt-daemon-driver-qemu` — which declares `/run/libvirt/qemu/swtpm` as a
-  `%ghost` owned by `qemu:qemu` while libvirt's own daemon creates that runtime
-  directory as `qemu:tss`. Excluding `%ghost` entries with `--noghost` removed
-  that instance; it did not remove the class, because any verify divergence over
-  any closure package reproduced the same symptom. `inspect` now reports
-  `rootsReady` from presence at the frozen identities alone, and the integrity
-  proof moved to `verified_files`, called once by the native transaction over
-  its own action targets. Code:
-  `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py`
-  (`inspect`, `verified_files`),
-  `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_apply.py`
-  (`apply`),
-  `ansible/collections/ansible_collections/bootwright/core/plugins/action/controller_protocol.py`
-  (`completed`).
-- What made that defect expensive to see is worth stating on its own: the block
-  had two definitions of satisfied. `Apply` reached the adapter only when a root
-  was missing — every later apply took the `settled` fast path, whose condition
-  is exactly `Observe`'s — so the strict completion gate ran on the first apply
-  and never again. A gate no repeat run can reach cannot be trusted to hold, and
-  it fails where it is least expected: on a host that already has everything.
-  Presence is now the one bar all three share. Code:
-  `internal/controller/clients/capability.go` (`Apply`, `settled`, `Observe`).
-- An automation revision still names a new bundle area, because `Digest()`
-  hashes every embedded automation file into
-  `BootstrapDefinition.AutomationDigest`, which enters the bootstrap digest and
-  through it `CatalogDigest`. The collection's root README and CHANGELOG are
-  the exception (B16): `Automation()` leaves them out, and so do the digest,
-  every comparison against an approved bundle and the projection identity, file
-  count and byte total, so a documentation-only build keeps the bundle it
-  names. Inspection requires them present as regular non-executable files and
-  never compares their bytes, and preparation writes only the ones an area
-  lacks. The narrowed digest and identity took new domain versions, so the
-  first build carrying them supersedes every retained definition once. An
-  automation revision no longer costs a resolution. `validateDefinition`
-  checks the provided execution foundation first and reports an
-  automation-only mismatch as `ErrAutomationSuperseded` beside
-  `ErrBootstrapIncompatible`; `Setup` then carries that resolution forward
-  instead of replacing it. `Manager.Rebase` reads the retained sources out of
-  the sealed area, projects them under the embedded automation and returns the
-  same resolution under its new projection identity, and `Prepare` reads each
-  source from that area before contacting a publisher. Nothing is downloaded
-  and nothing is solved when the native roots are still installed. A retained
-  area that lost a source, or is gone, returns `ErrRetainedSourceUnavailable`,
-  and `Setup` resolves afresh instead (B208). The superseded area still
-  remains. Code: `ansible/assets.go` (`Digest`,
-  `Automation`, `Documentation`),
-  `internal/controller/prerequisites/definition.go` (`resolvedContentDigest`),
-  `internal/controller/bundlelocal/projection.go` (`embed`, `describe`),
-  `internal/controller/bundlelocal/manager.go` (`validateDefinition`,
-  `qualifiedFoundation`, `Rebase`, `retainedSource`,
-  `attributableDocumentation`, `publishDocumentation`); the service's carry
-  forward went with setup v2 in X88.
-  Retiring the replaced area is `setup --purge-old-bundles` (X7); a foundation
-  shared across automation-only revisions was parked as B165, which
-  [X88](../../specs/milestones/delivered.md#x88--controller-setup-v2-cut-over)
-  closed: automation is no part of any setup identity.
-- Staging acquires every repository member the solver may open, and narrowing
-  that set by what a solver is configured to load does not work. Staging only
-  `primary` and `filelists` for DNF5, on the reasoning that
-  `optional_metadata_types` names everything else it loads, made `load_repos()`
-  fail the whole `updates` repository with `RepoDownloadError: Cannot download,
-  all mirrors were already tried without success`, because a member it does ask
-  for and cannot find fails the repository rather than that member. Measured on
-  Fedora 43, the staged set is about 104 MB and `filelists` alone is 72 MB of
-  it, so the upside was never large: dropping `other`, the only member proved
-  droppable, saves 8 MB. Code:
-  internal/controller/nativelocal/resolver_linux_amd64.go (`stageRepository`).
-- The inventory snapshot is taken once per invocation. `Resolver` retains the
-  copy and reuses it while the live database still has the identity it was
-  copied from, so a setup that proves presence three or four times copies the
-  database once; `Close`, returned through `localControllerDependencies` and
-  deferred by `run`, releases it. Code:
-  internal/controller/nativelocal/resolver_linux_amd64.go (`stageDatabase`,
-  `databaseState`, `retainedDatabase.serves`, `Close`).
-- Evidence: `internal/controller/prerequisites` tests asserting that a ready
-  controller, a retry after a terminal failure and a missing native root contact
-  no bootstrap or tool publisher (removed with that service in X88), the
-  sealed-bundle presence
-  test in `internal/controller/bundlelocal` (`TestSealedBundleReadinessIsPresenceOnly`),
-  the presence evidence test in internal/controller/nativelocal, and the
-  helper unit test `test_present_reports_roots_by_name_without_verifying_files`.
-  For readiness by presence and the integrity proof beside it:
-  `test_inspect_reports_readiness_by_presence_without_verifying_files`,
-  `test_verified_files_covers_installed_files_and_no_host_owned_path` and
-  `test_integrity_is_proved_over_exactly_what_the_transaction_installed`.
-  For carrying a resolution forward:
-  `TestRebaseKeepsEveryRetainedIdentityAndOnlyMovesTheAutomation`,
-  `TestRebaseRefusesRetainedSourcesThatAreNotTheirApprovedBytes` and
-  `TestPreparationRecoversRetainedSourcesInsteadOfAcquiringThem` in
-  `internal/controller/bundlelocal`. For staging and the snapshot:
-  TestStagingRequiresTheMembersEveryPlanDependsOn in
-  internal/controller/nativelocal and
-  TestRetainedDatabaseServesOnlyTheStateItWasCopiedFrom.
+## Since X88
 
-Applies to the Linux/amd64 `bundlelocal` and `nativelocal` adapters. Revisit if
-a publisher offers a projection identity without payload acquisition, or if a
-presence-only readiness ever admits a broken dependency in practice.
+Setup resolves nothing. The build embeds a lock that names every wheel, and
+the host's dnf owns every package, so setup only asks what is missing:
 
-Not yet qualified on a real host: that DNF5 with `optional_metadata_types` set
-to `filelists`, and DNF4's `fill_sack`, open no repository member outside the
-staged set. A solver that does opens a member the staging no longer wrote, and
-the resolve fails loudly rather than solving against partial metadata.
+- **Ready host.** `/etc/os-release`, `rpm -q --whatprovides` for the baseline
+  packages run as the invoking user, the setup record, and an ownership walk of
+  the selected interpreter and the published runtime. No network request, no
+  dnf call, no confirmation and no write. Code: `Missing` in
+  `internal/controller/hostdnf/packages_linux_amd64.go`, `Inspect` in
+  `internal/controller/venvlocal/guard_linux_amd64.go`. Evidence:
+  `TestAReadyHostMakesNoRequestAndNoWrite`,
+  `TestPresenceIsRpmWhatprovidesWithoutVersions`.
+- **A new build.** The runtime's identity is the lock digest, the Python ABI
+  and the interpreter path, and automation is no part of it, so a build with
+  the same lock, an `ansible/`-only fix included, needs no setup. A build whose
+  lock moved builds a new venv and downloads only the wheels its cache lacks,
+  often one file. Evidence: `TestACacheHitMakesNoRequest`.
+- **Fresh runtime.** Ten wheels of about 8.7 MB and the 1.8 MB pip wheel
+  (the lock of 2026-10-14), at most 4 fetches at a time, a
+  `venv --without-pip`, pip from local files with hashes, `compileall`, and
+  one `syncfs` before the publishing rename, in place of an `fsync` per file.
+  Code: `internal/controller/venvlocal/build_linux_amd64.go`, and the
+  publication in `internal/workspace/contextfs/setup_linux_amd64.go`.
+- **Missing packages** cost dnf's own time, as `dnf install` would, plus one
+  `--assumeno` preview before confirmation.
+- **An OS upgrade** that keeps `/usr/bin/python3.X` costs nothing; a Python
+  ABI that leaves the lock adds one `python(abi)` install and a new venv.
 
-X88 deleted internal/controller/nativelocal (D152): the paths and tests this page names without code formatting are history.
+D152's targets, which the owner's fresh-install run measures and records as
+[ledger rows](../../docs/acceptance.md#setup-v2-fresh-install-row) (B555):
+fresh setup within 60 s excluding dnf, the ready path and a same-lock build
+within 2 s, and a runtime of at most 60 MB and 3,000 files. None is measured
+on a host yet.
+
+One lesson carries over unchanged: readiness and completion use the same bar.
+The controller stage's `Apply`, `settled` and `Observe` all judge host packages
+by presence, so the first apply on a host that already holds everything
+succeeds as later ones do. Code: `internal/controller/clients/capability.go`.
+
+## Before X88 (history)
+
+Observed on 2026-09-12 and 2026-09-13 on a ready Fedora 43 controller,
+`bootwright setup` took about two minutes, then still almost a minute, to
+report `unchanged`; the owner's D152 request of 2026-10-14 still measured more
+than three minutes after an earlier build's setup. The causes, each removed
+in turn and then deleted with the design:
+
+- Resolution ran before readiness. Bootstrap resolution fetched the uv Python
+  metadata, downloaded the whole standalone Python archive, ran pip's resolver
+  inside it and downloaded every wheel to compute the projection identity.
+  Native resolution staged about 104 MB of repository metadata per Fedora
+  release (`filelists` alone 72 MB; staging fewer members made libdnf5 fail
+  the whole repository) and copied the RPM database before solving. From
+  2026-09-13 a retained resolution was reused when it still served.
+- Readiness re-read every retained source, re-extracted the archive and wheels,
+  byte-compared the roughly 190 MB per-build bundle area and ran
+  `rpm --verify` over every planned package. From 2026-09-13 it was a presence
+  walk and `rpm -q` per root.
+- Readiness and completion differed. On 2026-09-17 a first apply on a
+  controller that already held the closure failed with `native postcondition`,
+  because the completion phase ran `rpm --verify` over the frozen closure and
+  libvirt's daemon owns a `%ghost` directory `qemu:tss` that the package
+  declares `qemu:qemu`; the next apply took the settled path and passed. The
+  fix made presence the one bar, which the section above keeps.
+- The automation digest entered the bundle identity, so every `ansible/` edit
+  named a new bundle area: first a full re-resolution, later a 30 to 60 s
+  carry-forward (`Manager.Rebase`), and the replaced area stayed until
+  `setup --purge-old-bundles` under a bound of 16 areas.
+- Any glibc or libgcc update, and any new OS release, refused until setup ran
+  again or a build catalogued the release
+  ([runtime isolation](controller-runtime-isolation.md)).
+
+The code went with X88 and X89: internal/controller/bundlelocal's bootstrap,
+manager and projection, internal/controller/nativelocal and the Fedora dnf5
+solver in the collection's native_resolution.py.
+
+Applies to setup on Linux/amd64. Revisit if a ready-path step starts reading
+the network or the RPM database beyond presence, or if the owner's measurement
+misses a target.

@@ -9,15 +9,12 @@ gate and which build it must match.
 
 ## Prepare a host
 
-`setup` supports Fedora and RHEL, and their derivatives, on Linux/amd64
-([supported hosts](../specs/controller.md#supported-hosts)); the releases a
-build was tested on are [development](development.md#lock-refresh-and-tested-hosts)'s,
-and a newer one is admitted with an informational line. Setup installs only
-what is missing: the host packages `openssh-clients` and `podman` through the
-host's own dnf, and the controller runtime, a Python virtual environment on
-the host's `/usr/bin/python3.X` holding the locked ansible-core wheels. Every
-command that runs Ansible unpacks the automation it embeds beneath
-/var/lib/bootwright-staging, which the first of them creates. Each example's host
+`setup` prepares what every context on the host shares: the host packages
+`openssh-clients` and `podman`, and the controller runtime that runs Ansible.
+[What setup admits and installs](#what-setup-admits-and-installs) says which
+hosts it accepts and what it changes on them. Every command that runs Ansible
+unpacks the automation it embeds beneath /var/lib/bootwright-staging, which
+the first of them creates. Each example's host
 prerequisites add what its journey needs, such as `/dev/kvm` for a libvirt
 guest. Run as root, or from an account that may run
 `sudo`: Bootwright asks for authorization when a command needs it, and keeps its
@@ -30,7 +27,7 @@ the executable must live,
 [a FIPS-mode controller](#a-fips-mode-controller) what its runtime claims and
 which SSH keys it can use, and
 [a host an earlier build manages](#a-host-an-earlier-bootwright-build-manages)
-when a host is not yet a controller for this build.
+how a host an earlier build prepared becomes a controller for this one.
 
 Prepare the host once, from the repository root:
 
@@ -57,18 +54,87 @@ its `controller` stage installs the clients its graph selects
 in one host-wide store that every context shares, so `setup` runs before the
 first `media add`.
 
+### What setup admits and installs
+
+Setup admits a host by family and floors, never by release name, and refuses
+anything else with `controller.unsupported` and its remedy before it changes
+anything: Fedora or RHEL, or a derivative whose `/etc/os-release` `ID_LIKE`
+names one, such as CentOS Stream, Rocky or Alma; amd64; a root-owned `rpm`
+and `dnf` under /usr/bin; a Python the build's lock serves, installed or
+offered by the host's dnf; and a glibc at or above the lock's floor
+([supported hosts](../specs/controller.md#supported-hosts)). The releases a
+build was tested on are listed in
+[development](development.md#lock-refresh-and-tested-hosts). A newer release is
+admitted with the informational `controller.untested-release` line, such as
+"Fedora 45 is newer than the releases this build was tested on (43, 44);
+setup checks its floors and continues", which changes neither the result nor
+the exit status. A non-empty /etc/ld.so.preload is reported the same way, as
+`controller.loader-preload`.
+
+Setup installs only what is missing, and from two places:
+
+- **Host packages,** `openssh-clients` and `podman`, plus a `python(abi)`
+  capability when no Python the lock serves is installed, come from the
+  host's own dnf with its own repositories, signing keys, `proxy=`, mirrors,
+  Satellite or RHSM registration, versionlock and excludes
+  ([host packages](../specs/controller.md#host-packages)). Bootwright edits no
+  repository and never passes `--allowerasing` or `--nogpgcheck`, and a host
+  that already holds every package makes no dnf call. Register a RHEL host, or
+  enable the repositories that carry these packages, AppStream for a RHEL 9
+  Python, before setup.
+- **The controller runtime** is one Python virtual environment, beneath
+  /var/lib/bootwright/setup/runtimes, on the host's own `/usr/bin/python3.X`:
+  Python 3.12 to 3.14, newest first, or the interpreter setup chose before
+  while it still qualifies. Its ansible-core and supporting wheels are the
+  exact files the lock compiled into this build names, fetched from
+  `files.pythonhosted.org` into a cache beside it, checked for size and
+  SHA-256, and installed by pip with no index and no other source
+  ([the controller runtime](../specs/controller.md#the-controller-runtime)).
+  Nothing is installed into the host's own Python.
+
+Before it asks for confirmation, setup runs `dnf install --assumeno` as root
+for the missing packages and shows dnf's output verbatim in its plan, beside
+how many wheels the runtime downloads and how many it already has. The preview
+changes no package, though dnf may refresh its metadata cache as
+`dnf-makecache` does. When the transaction also updates core packages, such as
+glibc, the kernel, systemd, openssl-libs or the selected Python, the plan
+carries one informational note and no refusal: dnf applies them as for any
+package install. Declining the prompt changes nothing. dnf may resolve
+differently between the preview and the install when its metadata refreshes;
+the install's output and the versions setup records are the truth.
+
+A ready host is reported in under a second with the receipt table, which
+names the host, the runtime and where each package came from, and
+`Nothing to do.`, with no network request, confirmation or write;
+`preflight controller` prints the same table
+([results](../specs/controller.md#results-and-qualification)). A new
+Bootwright build with the same lock, and an operating-system upgrade that keeps
+the interpreter, need no setup at all; a build whose lock changed needs one
+setup, which downloads only the wheels it has not cached.
+
 A setup that installs host packages keeps what dnf printed in a
 [setup run](../specs/cli/output.md#setup-run-output),
 /var/lib/bootwright/setup/runs/setup-NNNNNN/run.output, which only root
 can read. The host keeps the newest 8 runs, and the `Logs` field of setup's
 result names the run; a failure that run explains names its `run.output` in
-its remedy.
+its remedy. A setup that was interrupted blocks every command that runs
+Ansible with `controller.state`, "a controller setup (`setup-000042`) was
+interrupted before it finished"; run `bootwright setup` again, which
+re-inspects the host, names the interrupted run in its plan and continues
+after confirmation.
 
 A context's controller stage installs the host packages its graph selects,
 such as `lorax` and `xorriso` for installer media or the libvirt client, with
-the host's own dnf from whatever the host's enabled repositories provide, on
-RHEL as on Fedora: register a RHEL controller, or enable the repositories that
-carry them, before that context's first apply.
+the host's own dnf in the same way, on RHEL as on Fedora: register a RHEL
+controller, or enable the repositories that carry them, before that context's
+first apply.
+
+Preparing a host with no route to `files.pythonhosted.org` is not available
+yet: `setup --wheel-mirror` and an unprivileged `setup --download-only
+--dest-dir` that copies the locked wheels to such a host are to be delivered
+in X90 ([B549](../specs/milestones/m1.md#b549)). Host packages already come
+from wherever the host's dnf is configured to read them, a local `file://`
+repository, a DVD or a Satellite mirror included.
 
 ### On a proxied network
 
@@ -80,6 +146,12 @@ reached directly, before running them; the
 says which values refuse. Everything a context drives uses that context's
 declared proxy instead, and exporting a variable does not change it.
 
+When the admitted route is a proxy, setup and the controller stage also hand
+it to the host's dnf as `https_proxy` and `no_proxy`; a `proxy=` in the
+host's dnf configuration wins over it. Nothing else from the environment
+reaches dnf, and a proxy that needs credentials stays unsupported
+([the dnf route](../specs/controller.md#egress-and-local-effects)).
+
 `sudo` clears the environment, so an unprivileged invocation forwards the
 variables to its elevated child on the sudo command line; a sudoers rule that
 grants neither `ALL` nor `SETENV` refuses that, and running as root avoids it.
@@ -90,23 +162,20 @@ which confirms that the variables crossed sudo.
 
 #### Destinations to allow
 
-Host packages come from the repositories the host's dnf is configured with,
-through dnf's own `proxy=` or the exported route, so a proxy must also admit
-those. A proxy that admits only listed destinations must admit HTTPS, on port
-443, to these hosts, which setup and the controller stage contact, directly or through
-a redirect the download follows; `media add --from-url` contacts the URL it is
-given. A proxy that inspects TLS re-signs every certificate, so its
-certificate authority must be in the host's system trust store, which every
-acquisition verifies against.
+Host packages come from the repositories the host's own dnf is configured
+with, through dnf's `proxy=` or the forwarded route, so a proxy must also
+admit those: their mirrors, metalink or Satellite, whatever `dnf repolist -v`
+names. Bootwright names no repository host of its own. A proxy that admits
+only listed destinations must also admit HTTPS, on port 443, to these hosts,
+which setup and the controller stage contact, directly or through a redirect
+the download follows; `media add --from-url` contacts the URL it is given. A
+proxy that inspects TLS re-signs every certificate, so its certificate
+authority must be in the host's system trust store, which every acquisition
+verifies against.
 
 - `api.github.com`: release metadata of helm, govc, virtctl and the OKD
   clients.
-- `cdn-ubi.redhat.com`: the UBI 9 BaseOS and AppStream repositories a RHEL 9.8
-  controller's native packages resolve from.
 - `cdn.dl.k8s.io`: where `dl.k8s.io` redirects a kubectl download.
-- `dl.fedoraproject.org`: the release and updates repositories of the
-  controller's own Fedora release, 43 or 44, which a Fedora controller's native
-  packages resolve from.
 - `dl.k8s.io`: kubectl releases and their stable version.
 - `files.pythonhosted.org`: the locked `ansible-core` wheel, its supporting
   wheels and the pip wheel that installs them.
@@ -115,8 +184,6 @@ acquisition verifies against.
 - `mirror.openshift.com`: OpenShift client and installer releases.
 - `objects.githubusercontent.com`: where `github.com` redirects a release
   download.
-- `pypi.org`: the `ansible-core` project page and wheel resolution.
-- `raw.githubusercontent.com`: the CPython release metadata setup selects from.
 - `release-assets.githubusercontent.com`: where `github.com` redirects a
   release download.
 
@@ -199,12 +266,36 @@ type.
 A host whose `/var/lib/bootwright` holds a store an earlier Bootwright build
 created is not a supported controller for this build until that build's
 environments are retired and its store removed. Store commands refuse there
-([contexts](../specs/contexts.md#storage-locking-and-publication)); a store a
-build before the setup v2 cut-over wrote refuses naming its registry version 5
-and this fresh install: with the build that wrote it, destroy each
-environment and delete each context; then, as root, remove /var/lib/bootwright
-and /var/lib/bootwright-staging and run `bootwright setup` with this build.
-Never remove or move that store aside while the services it manages run. The
+([contexts](../specs/contexts.md#storage-locking-and-publication)). Every build
+from before the setup v2 cut-over (X88) wrote registry version 5, which this
+build neither reads nor converts, so its first command, `setup` included,
+refuses before any plan with `context.state`, "/var/lib/bootwright holds a
+store an earlier Bootwright build wrote (registry version 5), which this
+build does not read or convert". The way across is a fresh install, in this
+order:
+
+1. With the build that wrote the store, the one that applied or prepared each
+   context, destroy every environment and delete every context. Keep that
+   build until this is done: this one cannot read its records.
+
+   ```sh
+   bootwright context list
+   bootwright destroy --context <name>
+   bootwright context delete --name <name>
+   ```
+
+2. Once nothing it manages runs any more, as root, remove both store roots:
+
+   ```sh
+   sudo rm -r /var/lib/bootwright /var/lib/bootwright-staging
+   ```
+
+3. With this build, prepare the host as [above](#prepare-a-host), from
+   `setup --dry-run` on.
+
+Never remove or move that store aside while the services it manages run: a
+context deleted without its destroy leaves its guests, units and listeners
+behind with nothing that owns them. The
 real-hardware test runs this build on a separate RHEL controller, in a subnet
 the BMC network reaches on the artifact ports
 ([D109](../specs/milestones/backlog.md#decisions)).
@@ -343,11 +434,17 @@ physical cluster node refuses until [B67](../specs/milestones/m3.md#b67).
 
 ## Changing the build between runs
 
-The automation is embedded in the executable and participates in the
-dependency-bundle identity, so a build that changes `ansible/` changes the
-bundle a context is bound to. Run `setup` again after such a build;
-`preflight controller` reports the incompatible retained bundle and `apply`
-refuses rather than executing automation the receipt does not cover.
+The automation is embedded in the executable and is no part of any setup
+identity: every command that runs Ansible unpacks the automation of the build
+in hand. A build that changes only `ansible/` or Go code therefore needs no
+`setup`, and neither does any build with the same runtime lock. A build whose
+lock changed needs one `setup`, which builds its runtime; until then `apply`
+refuses with `controller.state`, "the controller runtime for this build (<identity>) is not
+prepared", and the remedy `run bootwright setup`
+([the controller runtime](../specs/controller.md#the-controller-runtime)).
+A build from before the setup v2 cut-over cannot read this build's store, and
+this build cannot read its store: crossing it is the
+[fresh install](#a-host-an-earlier-bootwright-build-manages).
 
 An operation left incomplete by the previous build that the new one cannot
 continue, as the paragraph on another build below says, is removed instead: a
@@ -385,8 +482,10 @@ words a step is presented in may differ. An incomplete destroy continues when
 the removal derived again from its own frozen plan consumes the same
 authorizations and every step's capability reads its frozen request. A fix that
 changes only automation, or only Go code that moves no version or pin, therefore
-continues the failed or unknown step once `bootwright setup` has run; run
-`setup` first, since the continuation runs the bundle the setup receipt names.
+continues the failed or unknown step with no `setup` between, as long as its
+runtime lock and Python ABI are the operation's; a build with another lock
+refuses the continuation and names the build that registered it, whose
+runtime this host keeps.
 An unknown step is observed first: when that leaves it failed, the same `apply`
 retries it and goes on with the steps after it. A build that would freeze a step
 differently refuses the continuation and names that step; `bootwright destroy --context <context>`
@@ -440,13 +539,17 @@ is not a pass. This command installs no controller packages and runs no lab
 effects.
 
 M1 also needs D59's extended [lab-rhel journey](../examples/lab-rhel/README.md#run-it)
-on a clean committed build. Before the new build touches a host, retire live
-contexts with the build that applied them where the
-[milestone status](../specs/milestones.md#status) requires it, which a fix
-confined to automation does not. Use a disposable host missing at least one
-native root so setup or the controller stage acquires a
-package through the private Python path; an already-prepared host does not
-qualify that part of the gate. Keep a local run record outside Git.
+on a clean committed build. A build at or after the setup v2 cut-over (X88)
+first needs the [fresh install](#a-host-an-earlier-bootwright-build-manages) on
+a host an earlier build prepared; the
+[milestone status](../specs/milestones.md#status) names any other retirement a
+build requires, which a fix confined to automation never does. Use a
+disposable host missing at least one host package, so that setup or the
+controller stage installs it through the host's dnf after showing its preview,
+and with no runtime yet, so that setup builds one; an already-prepared host
+does not qualify that part of the gate. Record setup's timings, its plan and
+the receipt table in the [setup row](acceptance.md#setup-v2-fresh-install-row).
+Keep a local run record outside Git.
 
 X48 adds the [three-node RHEL journey](../examples/lab-rhel-3-nodes/README.md)
 to that gate. Prove actual overlapping service work, machine realization and

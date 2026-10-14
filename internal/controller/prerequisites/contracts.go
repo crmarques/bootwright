@@ -6,7 +6,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type Compiler interface {
@@ -44,93 +43,6 @@ type LoaderPreloadInspector interface {
 	LoaderPreload(context.Context) (bool, error)
 }
 
-// FoundationInspector verifies, under the native package read lock, the
-// provided execution foundation this executable was compiled against for a
-// platform: the loader, glibc and libgcc files and links the private
-// interpreter runs on, byte for byte, exactly as every private Python launch
-// verifies them.
-type FoundationInspector interface {
-	Inspect(context.Context, Platform) (FoundationInspection, error)
-}
-
-// FoundationInspection names the package builds that provide the foundation
-// and, for one that differs, the first path that differs and the refusal that
-// names that path, the package build that provides it, what was found and the
-// remedy. Its error is reserved for an inspection that could not run.
-//
-// Qualified is set when the compiled foundation differs but the host holds
-// vendor-signed builds of the same upstream versions within the qualified
-// minor whose files match the RPM database byte for byte: it is the
-// requirement those builds prove, and Refusal is nil.
-type FoundationInspection struct {
-	Required  string
-	Drift     string
-	Refusal   error
-	Qualified *QualifiedFoundation
-}
-
-// FoundationBuildReader reads, from a snapshot of the host's package database,
-// each installed instance of the named foundation packages: its identity,
-// whether a signature of the platform's vendor key covers it, its file digest
-// algorithm and the digest or link target rpm records for each file. Only a
-// foundation inspection reads it; no launch ever does.
-type FoundationBuildReader interface {
-	FoundationBuilds(context.Context, Platform, []string) ([]InstalledBuild, error)
-}
-
-// InstalledBuild is one installed package instance as the RPM database
-// records it. DigestAlgorithm is rpm's FILEDIGESTALGO, 8 for SHA-256.
-type InstalledBuild struct {
-	Name            string
-	Epoch           int
-	Version         string
-	Release         string
-	Architecture    string
-	Signed          bool
-	DigestAlgorithm int
-	Files           map[string]InstalledBuildFile
-}
-
-// InstalledBuildFile is what rpm records for one file of a build: its digest,
-// empty for a directory or a link, and its link target, empty for anything
-// but a link.
-type InstalledBuildFile struct {
-	SHA256 string
-	LinkTo string
-}
-
-// DependencyCatalog is pure: Admit refuses a platform whose provided execution
-// foundation this executable was not compiled against, before any dependency
-// is resolved or acquired, and ValidateEgress the acquisition policy.
-type DependencyCatalog interface {
-	Admit(Platform) error
-	ValidateEgress(SetupEgress) error
-}
-
-type BundleManager interface {
-	Inspect(context.Context, BundleArea, Definition, bool) (BundleInspection, error)
-	// Validate refuses, without reading any area, a definition this executable
-	// could never inspect or prepare, exactly as Inspect and Prepare refuse it:
-	// a retained resolution whose automation or provided execution foundation
-	// moved returns ErrBootstrapIncompatible.
-	Validate(Definition) error
-	// Prepare publishes the approved closure into the first area. The second is
-	// a retained area this host already holds, or nil: every approved source is
-	// read there before its publisher is contacted, so a resolution carried
-	// onto new automation acquires nothing again. A source that area cannot
-	// serve is acquired exactly as it would be without it. It returns the
-	// verification of what it published, so a complete closure is read back and
-	// qualified once rather than once by the adapter and again by its caller.
-	Prepare(context.Context, BundleArea, BundleArea, Definition, SetupEgress, func(ProgressEvent)) (BundleInspection, error)
-	// Rebase reprojects a retained resolution under the automation the running
-	// executable embeds, reading its sources from the retained area that holds
-	// them. It contacts no publisher and changes no release, byte count or
-	// signer; only the projection identity that carries the automation moves.
-	// A source that area cannot serve as its approved bytes returns
-	// ErrRetainedSourceUnavailable.
-	Rebase(context.Context, BundleArea, BootstrapDefinition) (BootstrapDefinition, error)
-}
-
 type HostPackages interface {
 	Qualify(ctx context.Context) error
 	Missing(ctx context.Context, requirements []string) ([]string, error)
@@ -154,14 +66,6 @@ type PythonRuntime interface {
 	Fetch(ctx context.Context, abi string, egress SetupEgress) error
 	Inspect(ctx context.Context, interpreter PythonInterpreter) (Runtime, bool, error)
 	Build(ctx context.Context, publisher RuntimePublisher, interpreter PythonInterpreter) (Runtime, error)
-}
-
-// BootstrapResolver may stage and execute a wheel-only resolver in a disposable
-// unprivileged workspace. It has no installed-host or shared-store authority.
-// The warnings it returns, with a resolution or with the error that stopped
-// one, are reported with setup's result.
-type BootstrapResolver interface {
-	Resolve(context.Context, Platform, controller.DependencyVersions, SetupEgress) (BootstrapDefinition, []diagnostics.Diagnostic, error)
 }
 
 // Staging hands dependency resolution its private scratch. Each Stage is a new
@@ -290,20 +194,6 @@ type BundleArea interface {
 	Entries(context.Context) ([]BundleEntry, error)
 	Verify(context.Context) error
 	Location(context.Context) (BundleLocation, error)
-}
-
-// BundleStream is how a bundle area that holds target tools lets inspection
-// prove a source or member far larger than memory should hold. consume reads
-// the file at path, no larger than maximum bytes, chunk by chunk; the stream
-// fails unless consume read it whole and the file kept its identity.
-type BundleStream interface {
-	Stream(ctx context.Context, path string, maximum int64, consume func(BundleReader) error) error
-}
-
-// BundleReader is one bundle file's stream. Its shape is declared here rather
-// than imported, as RunOutput's is.
-type BundleReader interface {
-	Read([]byte) (int, error)
 }
 
 // PlanPresenter opens the result with its scope before inspection streams the

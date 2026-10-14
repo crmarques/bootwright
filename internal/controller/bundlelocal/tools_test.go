@@ -227,28 +227,6 @@ func TestVirtctlLatestAndExactOverrideFreezeUpstreamPublisherIdentity(t *testing
 	}
 }
 
-func TestToolClosureDigestAndCopies(t *testing.T) {
-	request := controller.ToolRequest{Kind: "helm", Version: "latest"}
-	endpoint, _, _ := sourceURL(request, "v4.2.3")
-	tool, err := toolDefinition(request, "v4.2.3", prerequisites.DependencySource{ID: toolSourcePrefix(request) + "v4.2.3", URL: endpoint, SHA256: strings.Repeat("a", 64), Bytes: 100})
-	if err != nil {
-		t.Fatal(err)
-	}
-	base := prerequisites.Definition{CatalogDigest: strings.Repeat("b", 64), Sources: []prerequisites.DependencySource{}}
-	one, err := prerequisites.WithTools(base, []prerequisites.ToolDefinition{tool})
-	if err != nil || one.BaseCatalogDigest != base.CatalogDigest || one.CatalogDigest == base.CatalogDigest {
-		t.Fatal(one, err)
-	}
-	two, err := prerequisites.WithTools(base, []prerequisites.ToolDefinition{tool})
-	if err != nil || one.CatalogDigest != two.CatalogDigest {
-		t.Fatal("unstable closure", err)
-	}
-	one.Tools[0].Files[0].Path = "changed"
-	if two.Tools[0].Files[0].Path == "changed" || tool.Files[0].Path == "changed" {
-		t.Fatal("tool closure aliases input or another result")
-	}
-}
-
 func TestVirtctlLatestRefusesUnstableOrUnprovenPublisherAssets(t *testing.T) {
 	valid := `{"tag_name":"v1.8.2","draft":false,"prerelease":false,"assets":[{"name":"virtctl-v1.8.2-linux-amd64","browser_download_url":"https://github.com/kubevirt/kubevirt/releases/download/v1.8.2/virtctl-v1.8.2-linux-amd64","size":12345,"digest":"sha256:` + strings.Repeat("e", 64) + `"}]}`
 	for name, payload := range map[string]string{

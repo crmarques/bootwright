@@ -14,13 +14,7 @@ const canonicalJSONOwner = "internal/canonicaljson"
 // canonicalProofExceptions are the functions outside the canonical-JSON
 // package that both reach encoding/json and compare bytes, each with the
 // reason it is not a canonical proof or why it waits. The list only shrinks.
-var canonicalProofExceptions = map[string]string{
-	"internal/controller/bundlelocal/probe_linux_amd64.go:runImportProbe": "compares a process's output with a literal marker",
-	"internal/controller/prerequisites/bootstrap.go:ValidateBootstrap":    "compares two in-memory values, not stored bytes",
-	"internal/controller/prerequisites/definition.go:SameDefinition":      "compares two in-memory values, not stored bytes",
-	"internal/controller/prerequisites/storage.go:SameFoundation":         "compares two in-memory values, not stored bytes",
-	"internal/controller/prerequisites/native.go:ReadNativePreparation":   "a canonical proof awaiting its own item",
-}
+var canonicalProofExceptions = map[string]string{}
 
 // importNames returns the names a file imports one package under.
 func importNames(syntax *ast.File, path string) map[string]bool {

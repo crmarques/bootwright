@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/adapterprotocol"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -124,20 +123,6 @@ func superviseLikeTheCollection(mode string, result *os.File) {
 	case <-time.After(30 * time.Second):
 	}
 	os.Exit(0)
-}
-
-// embeddedArea is an approved bundle carrying exactly this build's collection.
-type embeddedArea struct {
-	prerequisites.BundleArea
-	files map[string][]byte
-}
-
-func (a embeddedArea) Read(_ context.Context, name string, _ int) ([]byte, error) {
-	data, ok := a.files[strings.TrimPrefix(name, "automation/")]
-	if !ok {
-		return nil, os.ErrNotExist
-	}
-	return data, nil
 }
 
 // running reports whether a process matching the filter still runs. A killed

@@ -86,8 +86,7 @@ so a store that never hosted a service is unchanged.
 The state record is bounded to 4 MiB, with at most 4096 tool source
 identities, 4096 bindings and 256 reservations of at most 64 keys of 256 bytes
 each. Controller records allow nesting depth 16 and 32 fields per object;
-other durable records keep their own bounds. There are at most 16 retained bundle
-namespaces, the tool areas, named by the 64-character content digest of the
+other durable records keep their own bounds. There are at most 16 tool areas, named by the 64-character content digest of the
 closure they hold. Their entries record their mode and physical directory
 identity. A controller stage whose tool area finds all 16 held refuses with
 `controller.conflict`, naming that bound, with the remedy that no command of

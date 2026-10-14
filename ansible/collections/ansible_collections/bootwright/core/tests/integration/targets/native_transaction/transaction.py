@@ -1,4 +1,4 @@
-"""Current-OS DNF signature refusal against an isolated installroot.
+"""RHEL 9 DNF signature refusal against an isolated installroot.
 
 The actual maintained solver reads a newly built unsigned fixture package. The
 production transaction wrapper must refuse it before any payload is installed.
@@ -95,51 +95,25 @@ printf 'fixture' > %{buildroot}/opt/bootwright-fixture/value
     )
     package = next((work / "RPMS").rglob("*.rpm"))
     request = dict(platform=platform)
-    if platform["os"] == "fedora":
-        import libdnf5
-
-        base = resolution.setup_dnf5(
-            request,
-            str(work / "scratch"),
-            repositories=False,
-            installroot=str(work / "root"),
-        )
-        before = resolution.inventory5(base)
-        goal = libdnf5.base.Goal(base)
-        base.get_repo_sack().add_cmdline_packages([str(package)])
-        available = libdnf5.rpm.PackageQuery(base)
-        available.filter_available()
-        available.filter_name(["bootwright-native-fixture"])
-        goal.add_rpm_install(next(iter(available)))
-        transaction = goal.resolve()
-        if transaction.get_problems() != libdnf5.base.GoalProblem_NO_PROBLEM:
-            raise RuntimeError("isolated fixture did not resolve")
-        refused = False
-        try:
-            native.run5(transaction)
-        except ValueError:
-            refused = True
-        after = resolution.inventory5(base)
-    elif platform["os"] == "rhel":
-        base = resolution.setup_dnf4(
-            request,
-            str(work / "scratch"),
-            repositories=False,
-            installroot=str(work / "root"),
-        )
-        before = resolution.inventory4(base)
-        local = base.add_remote_rpms([str(package)], strict=True)
-        base.package_install(local[0], strict=True)
-        base.resolve(allow_erasing=False)
-        refused = False
-        try:
-            native.run4(base)
-        except ValueError:
-            refused = True
-        after = resolution.inventory4(base)
-        base.close()
-    else:
-        raise RuntimeError("current OS does not provide a qualified native backend")
+    if platform["os"] != "rhel":
+        raise RuntimeError("current OS does not provide the Ceph node's dnf4 backend")
+    base = resolution.setup_dnf4(
+        request,
+        str(work / "scratch"),
+        repositories=False,
+        installroot=str(work / "root"),
+    )
+    before = resolution.inventory4(base)
+    local = base.add_remote_rpms([str(package)], strict=True)
+    base.package_install(local[0], strict=True)
+    base.resolve(allow_erasing=False)
+    refused = False
+    try:
+        native.run4(base)
+    except ValueError:
+        refused = True
+    after = resolution.inventory4(base)
+    base.close()
     if (
         not refused
         or before
@@ -147,4 +121,4 @@ printf 'fixture' > %{buildroot}/opt/bootwright-fixture/value
         or (work / "root/opt/bootwright-fixture").exists()
     ):
         raise RuntimeError("untrusted package acquired transaction authority")
-print("PASS current-OS DNF rejects unsigned local package in an isolated installroot")
+print("PASS RHEL 9 DNF rejects unsigned local package in an isolated installroot")

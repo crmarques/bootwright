@@ -749,7 +749,7 @@ func TestLifecycleTransactionOpensTheApprovedBundle(t *testing.T) {
 		}
 		view := tx.Controller()
 		if view.OpenBundle == nil {
-			t.Fatal("the lifecycle transaction offers no execution bundle")
+			t.Fatal("the lifecycle transaction offers no tool area")
 		}
 		area, err := view.OpenBundle(ctx, digest)
 		if err != nil || area == nil {
@@ -782,7 +782,7 @@ func TestABoundedRunOpensTheApprovedBundleAndRetainsItsOutput(t *testing.T) {
 		opener = view.Controller().OpenBundle
 		runs = view.Runs()
 		if opener == nil {
-			t.Fatal("the bounded run offers no execution bundle")
+			t.Fatal("the bounded run offers no tool area")
 		}
 		if err := runs.EnsureDirectory(ctx, "run-"+strings.Repeat("a", 32)); err != nil {
 			t.Fatalf("a bounded run could not open its own area: %v", err)
@@ -815,7 +815,7 @@ func TestABoundedRunOpensTheApprovedBundleAndRetainsItsOutput(t *testing.T) {
 		t.Fatalf("bounded run failed: %#v", diagnostics.Of(err))
 	}
 	if area, err := opener(ctx, digest); err == nil || area != nil {
-		t.Fatalf("the execution bundle opened after the run closed: %v (%v)", area, err)
+		t.Fatalf("the tool area opened after the run closed: %v (%v)", area, err)
 	}
 	if err := runs.Append(ctx, "run-"+strings.Repeat("a", 32)+"/run.output", []byte("late\n")); err == nil {
 		t.Fatal("an expired bounded run still retained output")
@@ -877,7 +877,7 @@ func TestALifecycleInspectionRunsNothing(t *testing.T) {
 	sealedBundleFixture(t, store, record)
 	if err := store.ReadLifecycle(ctx, "example", func(view lifecycle.View) error {
 		if view.Controller().OpenBundle != nil {
-			t.Fatal("an inspection was offered the execution bundle")
+			t.Fatal("an inspection was offered a tool area")
 		}
 		if _, ok := view.(lifecycle.RunView); ok {
 			t.Fatal("an inspection was offered a bounded run's own area")

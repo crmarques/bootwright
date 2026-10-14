@@ -20,7 +20,7 @@ func controllerReport(outcome string, dryRun bool) *prerequisites.Report {
 		status, observed = "unverified", "unverified"
 	}
 	return &prerequisites.Report{Platform: prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, DryRun: dryRun, Outcome: outcome,
-		Checks: []prerequisites.Check{{ID: "python-runtime", Required: "qualified Python and Ansible", Observed: observed, Status: status}}, Actions: []string{"Prepare the qualified execution bundle"}, Dependencies: []string{"qualified-source.tar.gz"}}
+		Checks: []prerequisites.Check{{ID: "python-runtime", Required: "qualified Python and Ansible", Observed: observed, Status: status}}, Actions: []string{"Prepare the qualified controller runtime"}, Dependencies: []string{"qualified-source.tar.gz"}}
 }
 
 // Only preflight consumes a context. Setup prepares the prerequisites every
@@ -344,7 +344,7 @@ func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "host", Status: "ok", Detail: "fedora 43/amd64"})
-	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "python-runtime", Status: "running", Detail: "verifying the retained bundle"})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "python-runtime", Status: "running", Detail: "verifying the controller runtime"})
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "python-runtime", Status: "failed", Detail: "required qualified Python and Ansible; observed missing or unverified"})
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Native packages", Status: "ok", Detail: "no changes", Step: 1, Steps: 1})
 	if err := presenter.PresentControllerPlan(ctx, *report); err != nil {
@@ -353,12 +353,12 @@ func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 	want := "Controller setup\n\n  Scope     baseline\n  Platform  fedora 43/amd64\n" +
 		"\nChecks\n" +
 		"  [OK]       Host: fedora 43/amd64\n" +
-		"  [RUNNING]  Controller runtime: verifying the retained bundle\n" +
+		"  [RUNNING]  Controller runtime: verifying the controller runtime\n" +
 		"  [FAIL]     Controller runtime: required qualified Python and Ansible; observed missing or unverified\n" +
 		"\nResolving\n" +
 		"  [OK]       [1/1] Native packages: no changes\n" +
 		"\nHost package requirements\n  qualified-source.tar.gz\n" +
-		"\nPlanned changes\n  1. Prepare the qualified execution bundle\n"
+		"\nPlanned changes\n  1. Prepare the qualified controller runtime\n"
 	if out.String() != want {
 		t.Fatalf("result = %q, want %q", out.String(), want)
 	}

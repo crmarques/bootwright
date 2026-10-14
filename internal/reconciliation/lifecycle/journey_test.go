@@ -1935,7 +1935,7 @@ func TestAnObservationThatNeverRanReportsWhy(t *testing.T) {
 		t.Fatal("an unproved effect completed")
 	}
 	h.capability.observeErr = diagnostics.NewFailureWithRemediation(
-		"controller.identity", "the approved execution bundle is unavailable", "", "run bootwright setup")
+		"controller.identity", "the controller runtime is unavailable", "", "run bootwright setup")
 	resolved, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err == nil {
 		t.Fatalf("a failed observation resolved cleanly = %+v", resolved.Receipt)

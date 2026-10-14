@@ -97,34 +97,6 @@ def run4(base):
         raise ValueError("native vendor hook failed")
 
 
-def run5(transaction):
-    import libdnf5
-
-    class Progress(libdnf5.rpm.TransactionCallbacks):
-        def __init__(self):
-            super().__init__()
-            self.failed = False
-
-        def unpack_error(self, item):
-            self.failed = True
-
-        def cpio_error(self, item):
-            self.failed = True
-
-        def script_error(self, item, nevra, script_type, return_code):
-            self.failed = True
-
-    if not transaction.check_gpg_signatures():
-        raise ValueError("native package signature")
-    progress = Progress()
-    transaction.set_callbacks(libdnf5.rpm.TransactionCallbacksUniquePtr(progress))
-    if (
-        transaction.run() != libdnf5.base.Transaction.TransactionRunResult_SUCCESS
-        or progress.failed
-    ):
-        raise ValueError("native transaction failed")
-
-
 def apply(request, scratch):
     # This import is resolved only from the same shipped automation directory by
     # the fixed platform helper entrypoint, never from an ambient Python path.
@@ -148,8 +120,7 @@ def apply(request, scratch):
         raise ValueError("native transaction authority")
     verified_payloads(plan, request["payloads"], scratch)
     native_signatures.verify(request, scratch, request["payloads"])
-    solver = native.solve5 if plan["solver"] == "dnf5" else native.solve4
-    resolved, base, transaction = solver(
+    resolved, base, _transaction = native.solve4(
         request, scratch, local_sources=request["payloads"], return_transaction=True
     )
     try:
@@ -162,12 +133,7 @@ def apply(request, scratch):
         # DNF owns its transaction lock, RPM checks, vendor hooks and history.
         # Concurrent direct RPM/operator writes are diagnosed by exact inventory
         # comparison; they are outside this supported coordination boundary.
-        if plan["solver"] == "dnf5":
-            base.get_config().get_pkg_gpgcheck_option().set(True)
-            base.get_config().get_localpkg_gpgcheck_option().set(True)
-            run5(transaction)
-        else:
-            run4(base)
+        run4(base)
         # One snapshot serves both proofs, so the closure is read back once.
         # Integrity is this transaction's own postcondition and covers exactly
         # the identities it installed; readiness after it is presence alone.
@@ -189,5 +155,4 @@ def apply(request, scratch):
             "afterSHA256": plan["afterSHA256"],
         }
     finally:
-        if plan["solver"] == "dnf4":
-            base.close()
+        base.close()

@@ -20,7 +20,7 @@ func TestOnlyAnUnaccountedAdapterFailureLeavesTheBlockUnknown(t *testing.T) {
 	for name, err := range map[string]error{
 		"adapter did not complete": diagnostics.NewFailure("lifecycle.state", "the adapter operation did not complete", ""),
 		"bound secret missing":     diagnostics.NewFailure("secret.store", "a bound Secret is not available", ""),
-		"boundary unavailable":     diagnostics.NewFailure("controller.identity", "the approved execution bundle is unavailable", ""),
+		"boundary unavailable":     diagnostics.NewFailure("controller.identity", "the controller runtime is unavailable", ""),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if outcome := AttemptOutcome(err); outcome != reconciliation.OutcomeFailed {

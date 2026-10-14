@@ -107,35 +107,35 @@ func TestAStageAttemptCarriesItsContinuation(t *testing.T) {
 	}
 }
 
-// The execution foundation can refuse a controller stage block on entry, before
-// the stage capability runs, so only the lifecycle can name the stage command
-// that settles it, with the context.
+// An unprepared controller runtime refuses a controller stage block on entry,
+// before the stage capability runs, so only the lifecycle can name the stage
+// command that settles it, with the context.
 func TestAStageBlockRefusedOnEntryNamesTheStageCommand(t *testing.T) {
-	failure := &prerequisites.ScopedFailure{Code: "controller.conflict", Message: "a native package transaction prevents coherent dependency execution", Correction: "Restore the qualified host execution foundation", Command: "repeat this command"}
+	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright setup", Command: "repeat this command"}
 	for _, test := range []struct {
 		name  string
 		stage reconciliation.Stage
 		want  string
 	}{
-		{"controller stage", reconciliation.StageController, "Restore the qualified host execution foundation, then run bootwright apply --stage controller --context lab."},
-		{"another stage", reconciliation.StageMachines, "Restore the qualified host execution foundation, then repeat this command."},
+		{"controller stage", reconciliation.StageController, "Run bootwright setup, then run bootwright apply --stage controller --context lab."},
+		{"another stage", reconciliation.StageMachines, "Run bootwright setup, then repeat this command."},
 	} {
 		block := destructive("clients")
 		block.Stage = test.stage
 		h := newPlannedHarness(t, []reconciliation.BlockDefinition{block})
 		h.service.guard = refusingGuard{failure}
 		reported := diagnostics.Of(authorizedApply(h))
-		if len(reported) == 0 || reported[0].Code != "controller.conflict" || reported[0].Remediation != test.want {
+		if len(reported) == 0 || reported[0].Code != "controller.state" || reported[0].Remediation != test.want {
 			t.Errorf("%s: reported %+v, want remediation %q", test.name, reported, test.want)
 		}
 	}
 }
 
-// The foundation can also refuse the entry of the resolution that observes an
+// The same refusal can meet the entry of the resolution that observes an
 // apply's unknown controller stage block, and that refusal names the stage
 // command too, because the observation it refused is the apply's own.
 func TestAStageResolutionRefusedOnEntryNamesTheStageCommand(t *testing.T) {
-	failure := &prerequisites.ScopedFailure{Code: "controller.conflict", Message: "a native package transaction prevents coherent dependency execution", Correction: "Restore the qualified host execution foundation", Command: "repeat this command"}
+	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright setup", Command: "repeat this command"}
 	block := destructive("clients")
 	block.Stage = reconciliation.StageController
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{block})
@@ -146,17 +146,17 @@ func TestAStageResolutionRefusedOnEntryNamesTheStageCommand(t *testing.T) {
 	h.capability.outcomeFor = nil
 	h.service.guard = refusingGuard{failure}
 	reported := diagnostics.Of(authorizedApply(h))
-	want := "Restore the qualified host execution foundation, then run bootwright apply --stage controller --context lab."
-	if len(reported) == 0 || reported[0].Code != "controller.conflict" || reported[0].Remediation != want {
+	want := "Run bootwright setup, then run bootwright apply --stage controller --context lab."
+	if len(reported) == 0 || reported[0].Code != "controller.state" || reported[0].Remediation != want {
 		t.Fatalf("the resolution reported %+v, want remediation %q", reported, want)
 	}
 }
 
-// A destroy that meets the foundation's refusal on a controller stage block's
+// A destroy that meets that refusal on a controller stage block's
 // entry keeps the failure's own remedy: an incomplete destroy refuses the
 // stage apply, so naming it would name a command that cannot run.
 func TestADestroyRefusedOnAStageBlockEntryKeepsItsOwnRemedy(t *testing.T) {
-	failure := &prerequisites.ScopedFailure{Code: "controller.conflict", Message: "a native package transaction prevents coherent dependency execution", Correction: "Restore the qualified host execution foundation", Command: "repeat this command"}
+	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright setup", Command: "repeat this command"}
 	block := destructive("clients")
 	block.Stage = reconciliation.StageController
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{block})
@@ -167,8 +167,8 @@ func TestADestroyRefusedOnAStageBlockEntryKeepsItsOwnRemedy(t *testing.T) {
 	h.service.guard = guard
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	want := "Restore the qualified host execution foundation, then repeat this command."
-	if guard.refused == 0 || len(reported) == 0 || reported[0].Code != "controller.conflict" || reported[0].Remediation != want {
+	want := "Run bootwright setup, then repeat this command."
+	if guard.refused == 0 || len(reported) == 0 || reported[0].Code != "controller.state" || reported[0].Remediation != want {
 		t.Fatalf("the destroy reported %+v after %d refusals, want remediation %q", reported, guard.refused, want)
 	}
 }

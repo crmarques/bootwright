@@ -1054,13 +1054,13 @@ and its record keeps naming the build that registered it. Every content digest
 is computed from the implementation's declared contract (its identity, its
 request and evidence versions and its effect pins) and never from automation
 bytes, so a fix confined to automation, or to Go code that moves no version or
-pin, continues once `setup` has projected it. Such a continuation resolves an
+pin, continues with no `setup` between, because automation is staged per invocation and a continuation needs only the same runtime lock and Python ABI. Such a continuation resolves an
 unknown block first and, when the observation leaves it failed, retries it in
 the same invocation (D146). Each attempt names the build that ran it, while the operation
 keeps naming the one that registered it. Each refusal names the executable
 version and commit the operation registered under, and the closure refusal
 also names the Python and
-`ansible-core` releases the operation needs and the ones the bundle holds. Each
+`ansible-core` releases the operation needs and the ones this build's runtime holds. Each
 remedy restores what the operation registered under, and where a fresh removal
 may [supersede](#continuation-and-removal) the operation, it also offers that
 removal. Once a build that writes `build` has worked the operation, the build

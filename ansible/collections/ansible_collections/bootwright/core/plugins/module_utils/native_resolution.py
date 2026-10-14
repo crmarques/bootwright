@@ -13,7 +13,6 @@ import shutil
 import stat
 import struct
 import subprocess
-import sys
 import tempfile
 import urllib.parse
 
@@ -21,37 +20,6 @@ FORMAT = "bootwright.native-plan-v1"
 MAX_PACKAGES = 512
 MAX_INVENTORY = 32768
 MAX_DATABASE = 512 << 20
-# Each requirement names the packages it installs as roots, and the version
-# intent those roots share. A requirement may name more than one package: the
-# hypervisor closure is one decision an operator makes, not eight.
-ROOTS = {
-    "podman": ("podman",),
-    "openssh": ("openssh-clients",),
-    "nmstate": ("nmstate",),
-    "libvirt": ("libvirt-client",),
-    "hypervisor": (
-        "libvirt-daemon",
-        "libvirt-daemon-driver-network",
-        "libvirt-daemon-driver-qemu",
-        "libvirt-daemon-driver-storage-core",
-        "qemu-img",
-        "qemu-kvm",
-        "swtpm",
-        "swtpm-tools",
-    ),
-    "installer-media": ("lorax", "xorriso"),
-}
-
-# The hypervisor runs the same libvirt release its client speaks to, so they
-# share one version intent rather than drifting apart.
-ROOT_VERSIONS = {
-    "podman": "podman",
-    "openssh": "openssh",
-    "nmstate": "nmstate",
-    "libvirt": "libvirt",
-    "hypervisor": "libvirt",
-    "installer-media": "installerMedia",
-}
 
 
 def canonical(value):
@@ -68,23 +36,14 @@ def inventory_digest(value):
     return digest(sorted(value, key=canonical))
 
 
-def identity(package, five=False):
-    if five:
-        result = {
-            "name": package.get_name(),
-            "epoch": int(package.get_epoch()),
-            "version": package.get_version(),
-            "release": package.get_release(),
-            "architecture": package.get_arch(),
-        }
-    else:
-        result = {
-            "name": package.name,
-            "epoch": int(package.epoch),
-            "version": package.version,
-            "release": package.release,
-            "architecture": package.arch,
-        }
+def identity(package):
+    result = {
+        "name": package.name,
+        "epoch": int(package.epoch),
+        "version": package.version,
+        "release": package.release,
+        "architecture": package.arch,
+    }
     if any(
         not isinstance(result[key], str) or len(result[key]) > 128
         for key in ("name", "version", "release", "architecture")
@@ -100,20 +59,7 @@ def inventory4(base):
     return sorted(result, key=canonical)
 
 
-def inventory5(base):
-    import libdnf5
-
-    query = libdnf5.rpm.PackageQuery(base)
-    query.filter_installed()
-    result = [identity(package, True) for package in query]
-    if len(result) > MAX_INVENTORY:
-        raise ValueError("inventory limit")
-    return sorted(result, key=canonical)
-
-
 def db_path(platform):
-    if platform["os"] == "fedora":
-        return "/usr/lib/sysimage/rpm"
     if platform["os"] == "rhel":
         return "/var/lib/rpm"
     raise ValueError("platform")
@@ -177,39 +123,24 @@ def snapshot_database(platform, scratch):
 
 
 def selected_roots(request):
-    if request.get("policy") == "ceph-packages-v1":
-        versions = {"ceph": "2:20.2.1-405.el9cp", "license": "0:9.1-1.el9cp"}
-        inherited = request["versions"] == dict(versions, inheritedPolicy="latest")
-        if (
-            request["platform"] != {"os": "rhel", "release": "9.8", "architecture": "amd64"}
-            or request["requirements"] != {"cephPackages": True}
-            or request["versions"] != versions and not inherited
-        ):
-            raise ValueError("Ceph package policy")
-        roots = [
-            ("ceph", "cephadm", request["versions"]["ceph"]),
-            ("ceph", "ceph-common", request["versions"]["ceph"]),
-            ("license", "ibm-storage-ceph-license", request["versions"]["license"]),
-        ]
-        if inherited:
-            roots.extend(("inherited-policy", name, "latest") for name in ("crypto-policies", "crypto-policies-scripts"))
-        return roots
-    if request.get("policy") is not None:
+    if request.get("policy") != "ceph-packages-v1":
         raise ValueError("native root policy")
-    keys = ["openssh", "nmstate"]
-    if request["requirements"]["containerRuntime"]:
-        keys.append("podman")
-    if request["requirements"]["libvirtClient"]:
-        keys.append("libvirt")
-    if request["requirements"]["hypervisor"]:
-        keys.append("hypervisor")
-    if request["requirements"]["installerMedia"]:
-        keys.append("installer-media")
-    return [
-        (key, name, request["versions"][ROOT_VERSIONS[key]])
-        for key in sorted(keys)
-        for name in ROOTS[key]
+    versions = {"ceph": "2:20.2.1-405.el9cp", "license": "0:9.1-1.el9cp"}
+    inherited = request["versions"] == dict(versions, inheritedPolicy="latest")
+    if (
+        request["platform"] != {"os": "rhel", "release": "9.8", "architecture": "amd64"}
+        or request["requirements"] != {"cephPackages": True}
+        or request["versions"] != versions and not inherited
+    ):
+        raise ValueError("Ceph package policy")
+    roots = [
+        ("ceph", "cephadm", request["versions"]["ceph"]),
+        ("ceph", "ceph-common", request["versions"]["ceph"]),
+        ("license", "ibm-storage-ceph-license", request["versions"]["license"]),
     ]
+    if inherited:
+        roots.extend(("inherited-policy", name, "latest") for name in ("crypto-policies", "crypto-policies-scripts"))
+    return roots
 
 
 def local_repositories(request):
@@ -277,59 +208,6 @@ def setup_dnf4(request, scratch, repositories=True, installroot=None):
     return base
 
 
-def setup_dnf5(request, scratch, repositories=True, installroot=None):
-    import libdnf5
-
-    paths = scratch_paths(scratch)
-    root = (
-        installroot
-        or request.get("snapshot")
-        or snapshot_database(request["platform"], scratch)
-    )
-    base = libdnf5.base.Base()
-    conf = base.get_config()
-    options = {
-        "installroot": root,
-        "cachedir": paths["cache"],
-        "system_cachedir": paths["cache"],
-        "logdir": paths["logs"],
-        "system_state_dir": (
-            paths["state"] if root != "/" else "/usr/lib/sysimage/libdnf5"
-        ),
-        "reposdir": [paths["empty-repos"]],
-        "varsdir": [paths["empty-vars"]],
-        "plugins": False,
-        "zchunk": False,
-        "best": True,
-        "install_weak_deps": False,
-        "allow_vendor_change": False,
-        "allow_downgrade": True,
-        "clean_requirements_on_remove": False,
-        "localpkg_gpgcheck": True,
-        "pkg_gpgcheck": True,
-        "optional_metadata_types": ["filelists"],
-    }
-    for name, value in options.items():
-        getattr(conf, "get_" + name + "_option")().set(value)
-    base.get_vars().set("releasever", request["platform"]["release"])
-    base.get_vars().set("basearch", "x86_64")
-    base.setup()
-    sack = base.get_repo_sack()
-    if repositories:
-        for record in local_repositories(request):
-            repo = sack.create_repo(record["id"])
-            config = repo.get_config()
-            config.get_baseurl_option().set([Path(record["localPath"]).as_uri()])
-            config.get_pkg_gpgcheck_option().set(True)
-            config.get_repo_gpgcheck_option().set(False)
-            config.get_metadata_expire_option().set(-1)
-            config.get_skip_if_unavailable_option().set(False)
-        sack.load_repos()
-    else:
-        sack.load_repos(libdnf5.repo.Repo.Type_SYSTEM)
-    return base
-
-
 def version_matches(value, requested):
     if requested == "latest":
         return True
@@ -354,68 +232,59 @@ def compare_identity(left, right, compare):
     )
 
 
-def choose(candidates, requested, five, compare):
+def choose(candidates, requested, compare):
     candidates = [
         pkg
         for pkg in candidates
-        if identity(pkg, five)["architecture"] in ("x86_64", "noarch")
-        and version_matches(identity(pkg, five), requested)
+        if identity(pkg)["architecture"] in ("x86_64", "noarch")
+        and version_matches(identity(pkg), requested)
     ]
     if not candidates:
         raise ValueError("requested native release unavailable")
     candidates.sort(
         key=functools.cmp_to_key(
-            lambda left, right: compare_identity(
-                identity(left, five), identity(right, five), compare
-            )
+            lambda left, right: compare_identity(identity(left), identity(right), compare)
         )
     )
     selected = candidates[-1]
-    selected_identity = identity(selected, five)
+    selected_identity = identity(selected)
     peers = [
         pkg
         for pkg in candidates
-        if compare_identity(identity(pkg, five), selected_identity, compare) == 0
+        if compare_identity(identity(pkg), selected_identity, compare) == 0
     ]
-    if any(identity(pkg, five) != selected_identity for pkg in peers):
+    if any(identity(pkg) != selected_identity for pkg in peers):
         raise ValueError("ambiguous native architecture")
     # Equal identity from distinct repositories must still identify equal bytes.
-    peers.sort(key=lambda pkg: pkg.get_repo_id() if five else pkg.repoid)
+    peers.sort(key=lambda pkg: pkg.repoid)
     return peers[0], peers
 
 
-def package_record(package, request, five=False):
-    value = identity(package, five)
+def package_record(package, request):
+    value = identity(package)
     if request.get("plan") is not None:
         for known in request["plan"]["packages"]:
             if all(known[key] == expected for key, expected in value.items()):
                 return known.copy()
         raise ValueError("local package is outside frozen plan")
-    repo_id = package.get_repo_id() if five else package.repoid
     matches = [
-        record for record in local_repositories(request) if record["id"] == repo_id
+        record for record in local_repositories(request) if record["id"] == package.repoid
     ]
     if len(matches) != 1:
         raise ValueError("native package repository")
     repo = matches[0]
-    location = package.get_location() if five else package.location
-    url = urllib.parse.urljoin(repo["baseURL"].rstrip("/") + "/", location)
+    url = urllib.parse.urljoin(repo["baseURL"].rstrip("/") + "/", package.location)
     if (
         not url.startswith(repo["baseURL"].rstrip("/") + "/")
         or urllib.parse.urlsplit(url).query
         or urllib.parse.urlsplit(url).fragment
     ):
         raise ValueError("native package source")
-    if five:
-        checksum = package.get_checksum()
-        algorithm, checksum = checksum.get_type_str().lower(), checksum.get_checksum()
-        size = package.get_download_size()
-    else:
-        import hawkey
+    import hawkey
 
-        algorithm, raw = package.chksum
-        algorithm, checksum = hawkey.chksum_name(algorithm).lower(), bytes(raw).hex()
-        size = package.downloadsize
+    algorithm, raw = package.chksum
+    algorithm, checksum = hawkey.chksum_name(algorithm).lower(), bytes(raw).hex()
+    size = package.downloadsize
     if (
         algorithm != "sha256"
         or re.fullmatch("[0-9a-f]{64}", checksum) is None
@@ -429,14 +298,14 @@ def package_record(package, request, five=False):
     return value
 
 
-def assemble(request, before, roots, inbound, outbound, five, compare, solver_version):
+def assemble(request, before, roots, inbound, outbound, compare, solver_version):
     packages, root_values = {}, []
     root_names = {}
     for key, requested, package in roots:
-        record = package_record(package, request, five)
+        record = package_record(package, request)
         packages[record["source"]["id"]] = record
         root_values.append(
-            {"key": key, "requested": requested, "package": identity(package, five)}
+            {"key": key, "requested": requested, "package": identity(package)}
         )
         root_names[record["name"]] = requested
     before_names = {}
@@ -446,14 +315,14 @@ def assemble(request, before, roots, inbound, outbound, five, compare, solver_ve
     after = {canonical(value): value for value in before}
     actions = []
     for package in inbound:
-        target = identity(package, five)
+        target = identity(package)
         if target["architecture"] not in ("x86_64", "noarch"):
             raise ValueError("native target architecture")
         matches = before_names.get(target["name"], [])
         if len(matches) > 1:
             raise ValueError("ambiguous installed package")
         previous = matches[0] if matches else None
-        record = package_record(package, request, five)
+        record = package_record(package, request)
         packages[record["source"]["id"]] = record
         action = {
             "kind": "install",
@@ -496,7 +365,7 @@ def assemble(request, before, roots, inbound, outbound, five, compare, solver_ve
     plan = {
         "format": FORMAT,
         "platform": request["platform"],
-        "solver": "dnf5" if five else "dnf4",
+        "solver": "dnf4",
         "solverVersion": solver_version,
         "requests": request["versions"],
         "requirements": request["requirements"],
@@ -546,7 +415,7 @@ def solve4(request, scratch, local_sources=None, return_transaction=False):
             else list(base.sack.query().available().filter(name=name))
         )
         package, peers = choose(
-            candidates, requested if local is None else "latest", False, compare
+            candidates, requested if local is None else "latest", compare
         )
         records = [package_record(peer, request) for peer in peers]
         if any(
@@ -566,95 +435,10 @@ def solve4(request, scratch, local_sources=None, return_transaction=False):
         roots,
         list(base.transaction.install_set),
         [identity(pkg) for pkg in base.transaction.remove_set],
-        False,
         compare,
         dnf.__version__,
     )
     return (plan, base, base.transaction) if return_transaction else plan
-
-
-def solve5(request, scratch, local_sources=None, return_transaction=False):
-    import libdnf5
-
-    base = setup_dnf5(
-        request,
-        scratch,
-        repositories=local_sources is None,
-        installroot="/" if return_transaction else None,
-    )
-    before = inventory5(base)
-    goal = libdnf5.base.Goal(base)
-    local = []
-    if local_sources is not None:
-        sources = (
-            list(local_sources.values())
-            if isinstance(local_sources, dict)
-            else local_sources
-        )
-        base.get_repo_sack().add_cmdline_packages(sources)
-        query = libdnf5.rpm.PackageQuery(base)
-        query.filter_available()
-        query.filter_repo_id(["@commandline"])
-        local = list(query)
-    roots = []
-    for key, name, requested in selected_roots(request):
-        if local_sources is None:
-            query = libdnf5.rpm.PackageQuery(base)
-            query.filter_available()
-            query.filter_name([name])
-            candidates = list(query)
-        else:
-            candidates = [pkg for pkg in local if pkg.get_name() == name]
-        package, peers = choose(
-            candidates,
-            requested if local_sources is None else "latest",
-            True,
-            libdnf5.rpm.rpmvercmp,
-        )
-        records = [package_record(peer, request, True) for peer in peers]
-        if any(
-            record["source"]["sha256"] != records[0]["source"]["sha256"]
-            for record in records
-        ):
-            raise ValueError("conflicting native repository identity")
-        roots.append((key, requested, package))
-        goal.add_rpm_install(package)
-    for package in local:
-        goal.add_rpm_install(package)
-    transaction = goal.resolve()
-    if transaction.get_problems() != libdnf5.base.GoalProblem_NO_PROBLEM:
-        raise ValueError("native dependency solve")
-    inbound, outbound = [], []
-    for entry in transaction.get_transaction_packages():
-        action = libdnf5.transaction.transaction_item_action_to_string(
-            entry.get_action()
-        ).lower()
-        if action in ("install", "upgrade", "downgrade"):
-            inbound.append(entry.get_package())
-        elif action in ("replaced", "remove"):
-            outbound.append(identity(entry.get_package(), True))
-        elif action != "reason change":
-            # An installed root asked for again only changes its reason.
-            raise ValueError("unrequested native transaction action")
-    version = libdnf5.conf.get_library_version()
-    plan = assemble(
-        request,
-        before,
-        roots,
-        inbound,
-        outbound,
-        True,
-        libdnf5.rpm.rpmvercmp,
-        ".".join(str(value) for value in (version.major, version.minor, version.micro)),
-    )
-    return (plan, base, transaction) if return_transaction else plan
-
-
-def fresh_inventory(platform, scratch):
-    request = {"platform": platform, "snapshot": snapshot_database(platform, scratch)}
-    if platform["os"] == "fedora":
-        return inventory5(setup_dnf5(request, scratch, repositories=False))
-    return inventory4(setup_dnf4(request, scratch, repositories=False))
 
 
 def validate_plan(plan):
@@ -671,75 +455,10 @@ def validate_plan(plan):
     return plan
 
 
-def installed_identity(output, name):
-    lines = output.decode("ascii", "replace").splitlines()
-    fields = lines[0].split("\t") if lines else []
-    if (
-        len(fields) != 5
-        or fields[0] != name
-        or any(not field or len(field) > 128 for field in fields)
-    ):
-        raise ValueError("installed package identity")
-    return {
-        "name": fields[0],
-        "epoch": 0 if fields[1] == "(none)" else int(fields[1]),
-        "version": fields[2],
-        "release": fields[3],
-        "architecture": fields[4],
-    }
-
-
-def present(request, scratch):
-    """Report which selected roots are installed by name; verify no files."""
-    root = request.get("snapshot") or snapshot_database(request["platform"], scratch)
-    plan = validate_plan(request["plan"])
-    dbpath = str(Path(root) / db_path(request["platform"]).lstrip("/"))
-    roots = []
-    for entry in plan["roots"]:
-        name = entry["package"]["name"]
-        # Standalone supplied-platform query; no remote module execution.
-        # pylint: disable-next=ansible-bad-function
-        result = subprocess.run(
-            [
-                "/usr/bin/rpm",
-                "--dbpath",
-                dbpath,
-                "-q",
-                "--queryformat",
-                "%{NAME}\t%{EPOCH}\t%{VERSION}\t%{RELEASE}\t%{ARCH}\n",
-                "--",
-                name,
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            check=False,
-            timeout=30,
-            env={
-                "PATH": "/usr/sbin:/usr/bin",
-                "LANG": "C",
-                "LC_ALL": "C",
-                "HOME": str(Path(scratch) / "home"),
-            },
-        )
-        installed = None
-        if result.returncode == 0:
-            installed = installed_identity(result.stdout, name)
-        roots.append({"key": entry["key"], "name": name, "installed": installed})
-    return {
-        "roots": roots,
-        "rootsReady": all(root["installed"] is not None for root in roots),
-    }
-
-
 def inspect(request, scratch):
     root = request.get("snapshot") or snapshot_database(request["platform"], scratch)
     probe = {"platform": request["platform"], "snapshot": root}
-    values = (
-        inventory5(setup_dnf5(probe, scratch, repositories=False))
-        if request["platform"]["os"] == "fedora"
-        else inventory4(setup_dnf4(probe, scratch, repositories=False))
-    )
+    values = inventory4(setup_dnf4(probe, scratch, repositories=False))
     plan = request.get("plan")
     ready = True
     if plan is not None:
@@ -797,112 +516,3 @@ def verified_files(platform, root, identities, scratch):
         if result.returncode != 0:
             return False
     return True
-
-
-def main():
-    if len(sys.argv) != 2 or not os.path.isabs(sys.argv[1]):
-        raise ValueError("native resolver launch")
-    scratch = sys.argv[1]
-    data = sys.stdin.buffer.read((4 << 20) + 1)
-    if len(data) > 4 << 20:
-        raise ValueError("native request limit")
-    request = json.loads(data)
-    private_home = Path(scratch) / "home"
-    private_home.mkdir(mode=0o700, exist_ok=True)
-    os.environ["HOME"] = str(private_home)
-    operation = request.get("operation")
-    output = os.dup(sys.stdout.fileno())
-    with open(os.devnull, "wb") as sink:
-        os.dup2(sink.fileno(), sys.stdout.fileno())
-    if operation in ("inspect", "inventory"):
-        result = inspect(request, scratch)
-    elif operation == "resolve":
-        result = (
-            solve5(request, scratch)
-            if request["platform"]["os"] == "fedora"
-            else solve4(request, scratch)
-        )
-    elif operation == "present":
-        result = present(request, scratch)
-    elif operation == "apply":
-        sys.path.insert(0, str(Path(__file__).resolve().parents[5]))
-        from ansible_collections.bootwright.core.plugins.module_utils import (
-            native_apply,
-        )
-
-        result = native_apply.apply(request, scratch)
-    else:
-        raise ValueError("native operation")
-    encoded = canonical(result)
-    if len(encoded) > 16 << 20:
-        raise ValueError("native output limit")
-    with os.fdopen(output, "wb") as destination:
-        destination.write(encoded)
-
-
-# The closed class each refusal this helper and native_apply raise names, by
-# its message, then by the maintained DNF exception's type name.
-REFUSAL_CLASSES = {
-    "native dependency solve": "solver-conflict",
-    "requested native release unavailable": "missing-candidate",
-    "native root unresolved": "missing-candidate",
-    "native package signature": "signature",
-    "native source integrity": "signature",
-    "native database lock": "database",
-    "native database snapshot": "database",
-    "native database changed": "database",
-    "native transaction failed": "transaction",
-    "native vendor hook failed": "transaction",
-    "native transaction postcondition": "postcondition",
-    "native inventory changed": "postcondition",
-    "native inventory changed before transaction": "postcondition",
-    "native transaction changed": "postcondition",
-}
-TYPE_CLASSES = {
-    "DepsolveError": "solver-conflict",
-    "MarkingError": "missing-candidate",
-    "PackageNotFoundError": "missing-candidate",
-}
-
-
-def refusal_class(error):
-    if isinstance(error, ImportError):
-        return "foundation"
-    message = error.args[0] if error.args else None
-    if isinstance(message, str) and message in REFUSAL_CLASSES:
-        return REFUSAL_CLASSES[message]
-    for kind in type(error).__mro__:
-        if kind.__name__ in TYPE_CLASSES:
-            return TYPE_CLASSES[kind.__name__]
-    return "internal"
-
-
-def refusal_detail(error):
-    """The exception's type name and the first line of its text, without
-    control characters, in at most 200 bytes."""
-    line = type(error).__name__ + ": " + str(error).split("\n", 1)[0]
-    line = "".join(
-        character
-        for character in line
-        if not (ord(character) < 32 or 127 <= ord(character) < 160)
-    )
-    return line.encode("utf-8")[:200].decode("utf-8", "ignore")
-
-
-def entry():
-    """Run main, and on a refusal write exactly two lines: 'refused <class>'
-    and one bounded detail line, then exit 1."""
-    try:
-        main()
-    except Exception as error:
-        sys.stderr.write(
-            "refused " + refusal_class(error) + "\n" + refusal_detail(error) + "\n"
-        )
-        sys.stderr.flush()
-        # Standalone bounded entrypoint uses its exit status as the protocol result.
-        # pylint: disable-next=ansible-bad-function
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    entry()

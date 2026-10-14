@@ -22,22 +22,23 @@ visible while one block runs at a time:
 - `operationstore.Store.expected` is a map every block writes as it publishes
   its own records. Each block writes only its own paths, so the map is guarded
   rather than the writes serialized.
-- The lifecycle transaction collected the bundle areas its `OpenBundle` handed
-  out in a bare slice. The lifecycle now opens the approved bundle **once per
-  operation** in `run` and passes it down, which removes the contention, and
-  the collector is guarded anyway because the opener is a published port.
-- `controllerBundleArea.Location` writes `scanned = false`. That is safe only
-  because `Location` is called once, inside `approvedBundle`, before any block
-  starts. `Read`, which every block calls through `verifyAutomation`, touches
-  no shared field.
+- History from before X88: the lifecycle transaction collected the areas its
+  `OpenBundle` handed out in a bare slice, the lifecycle opened an execution
+  bundle once per operation and `controllerBundleArea.Location` wrote
+  `scanned = false` (called once, in a symbol since deleted, before any block
+  started). No execution bundle exists now. `OpenBundle` serves only tool
+  areas (`controllerBundleArea` in `contextfs/controller_bundles_linux_amd64.go`)
+  and the automation is staged per invocation, so none of that bundle code is
+  on the block path; guard any collector of opened areas the same way, because
+  the opener is a published port.
 - The **test fakes** raced before the engine did: the memory areas, the
   capability recorder, the progress recorder, the execution guard's counter and
   both mutating test clocks. A test clock that advances on every reading is the
   least obvious one, and it is the only clock a block stamps its records with.
 
-`ExecutionGuard.WithPython` was already safe: every handle is a local, and the
-lock it takes on the native package file is a read lock, so concurrent holders
-are expected.
+`ExecutionGuard.WithPython` is safe: every handle is a local and it takes a
+shared flock on the runtime's `.lock`, so concurrent holders are expected; see
+[controller runtime isolation](controller-runtime-isolation.md).
 
 ## A shared directory created lazily is a race too
 

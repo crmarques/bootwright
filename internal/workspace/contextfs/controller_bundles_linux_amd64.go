@@ -93,8 +93,6 @@ type controllerBundleArea struct {
 	scanned      bool
 }
 
-var _ prerequisites.BundleStream = (*controllerBundleArea)(nil)
-
 func (a *controllerBundleArea) close() {
 	for index := len(a.owned) - 1; index >= 0; index-- {
 		a.owned[index].file.Close()
@@ -239,19 +237,6 @@ func (a *controllerBundleArea) Read(ctx context.Context, path string, maximum in
 	return data, nil
 }
 
-func (a *controllerBundleArea) Stream(ctx context.Context, path string, maximum int64, consume func(prerequisites.BundleReader) error) error {
-	return a.within(ctx, path, maximum, func(file *os.File, size int64) (int64, error) {
-		stream := &bundleFileStream{ctx: ctx, file: file, size: size}
-		if err := consume(stream); err != nil {
-			return 0, err
-		}
-		if stream.read != size {
-			return 0, state("controller bundle stream was not read whole")
-		}
-		return stream.read, nil
-	})
-}
-
 // within hands use one private bundle file and its size, then proves the file
 // kept its identity and its name while use read the returned byte count.
 func (a *controllerBundleArea) within(ctx context.Context, path string, maximum int64, use func(*os.File, int64) (int64, error)) error {
@@ -297,34 +282,6 @@ func (a *controllerBundleArea) within(ctx context.Context, path string, maximum 
 		return state("controller bundle file was replaced")
 	}
 	return a.available(ctx, false)
-}
-
-type bundleFileStream struct {
-	ctx  context.Context
-	file *os.File
-	size int64
-	read int64
-}
-
-func (s *bundleFileStream) Read(data []byte) (int, error) {
-	if err := s.ctx.Err(); err != nil {
-		return 0, err
-	}
-	if len(data) == 0 {
-		return 0, nil
-	}
-	n, err := s.file.Read(data[:min(int64(len(data)), s.size+1-s.read)])
-	s.read += int64(n)
-	if s.read > s.size {
-		return 0, state("controller bundle read failed or exceeded its bound")
-	}
-	if errors.Is(err, io.EOF) {
-		return n, io.EOF
-	}
-	if err != nil {
-		return n, state("controller bundle read failed or exceeded its bound")
-	}
-	return n, nil
 }
 
 func (a *controllerBundleArea) EnsureDirectory(ctx context.Context, path string) error {

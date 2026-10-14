@@ -9,15 +9,12 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_files i
     AcquisitionRefused,
     Unreleased,
 )
-from ansible_collections.bootwright.core.plugins.module_utils.controller_native import (
-    NativeRefused,
-)
 
 
 def record(error, source=None):
-    """The refused record error names, or None: the release-stamp refusal, an
-    acquisition's class with the source it was acquiring, or the native
-    helper's class. No exception text is ever part of it."""
+    """The refused record error names, or None: the release-stamp refusal or an
+    acquisition's class with the source it was acquiring. No exception text is
+    ever part of it."""
     if isinstance(error, Unreleased):
         return {"phase": "refused", "reason": "release-stamp"}
     if isinstance(error, AcquisitionRefused):
@@ -25,8 +22,6 @@ def record(error, source=None):
         if error.reason and isinstance(source, str) and source:
             return {"phase": "refused", "reason": error.reason, "source": source}
         return None
-    if isinstance(error, NativeRefused):
-        return {"phase": "refused", "reason": error.reason}
     return None
 
 
@@ -37,7 +32,7 @@ def name(error, source=None, warn=None):
     run or attempt output. Without the record the run still fails, only with
     the generic remedy."""
     detail = getattr(error, "detail", "")
-    if warn is not None and isinstance(error, (AcquisitionRefused, NativeRefused)) and detail:
+    if warn is not None and isinstance(error, AcquisitionRefused) and detail:
         warn("controller adapter: " + detail)
     named = record(error, source)
     if named is None:

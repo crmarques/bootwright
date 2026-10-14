@@ -463,14 +463,11 @@ func effectGrants() map[string][]string {
 		"internal/adapterprotocol":              {"io", "os", "os/exec", "syscall"},
 		"internal/controller/privilege":         {"io", "os", "os/exec", "os/signal", "syscall"},
 		"internal/controller/hostlinux":         {"golang.org/x/sys/unix", "io", "os"},
-		"internal/controller/bundlelocal": {
-			"golang.org/x/sys/unix", "io", "net.Conn", "net.DNSError", "net.Dialer", "net.JoinHostPort",
-			"net.Listen", "net.Listener", "net/http", "os", "os/exec", "syscall",
-		},
-		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
-		"internal/controller/hostdnf":      {"io", "os", "os/exec", "syscall"},
-		"internal/controller/venvlocal":    {"io", "net.Dialer", "net/http", "os", "os/exec", "syscall"},
-		"internal/controller/stagelocal":   {"golang.org/x/sys/unix", "io", "os", "syscall"},
+		"internal/controller/bundlelocal":       {"io", "net.DNSError", "net.Dialer", "net/http", "os", "syscall"},
+		"internal/controller/ansiblelocal":      {"io", "os", "os/exec", "syscall"},
+		"internal/controller/hostdnf":           {"io", "os", "os/exec", "syscall"},
+		"internal/controller/venvlocal":         {"io", "net.Dialer", "net/http", "os", "os/exec", "syscall"},
+		"internal/controller/stagelocal":        {"golang.org/x/sys/unix", "io", "os", "syscall"},
 		// The SSH session adapter runs the one pinned client as a child and
 		// hands it the operator's streams and its material descriptors. An
 		// offered key arrives as a descriptor from the invoking account's

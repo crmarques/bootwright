@@ -83,10 +83,6 @@ func decodeRecord(data []byte, maximum int, target any) error {
 
 // Bound representation before encoding/json allocates typed collections. The
 // decoder below remains the sole JSON grammar implementation.
-func boundedJSON(data []byte, maxItems int) error {
-	return boundedJSONLimits(data, maxItems, 8, 16)
-}
-
 func boundedJSONLimits(data []byte, maxItems, maxDepth, maxFields int) error {
 	type frame struct {
 		kind   byte

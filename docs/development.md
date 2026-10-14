@@ -47,14 +47,15 @@ of the application module graph. Run import formatting through
 and mixed or misordered standard-library and module groups.
 Development checks keep their own pinned tool versions for reproducible
 verification: the [Ansible check tool lock and setup](../scripts/tools/ansible-check.md)
-is separate from the product execution bundle and builds its own pinned
-interpreter on first use, so the collection gate does not depend on the host's
-Python.
+is separate from the product's [runtime lock](#lock-refresh-and-tested-hosts)
+and builds its own pinned interpreter on first use, so the collection gate does
+not depend on the host's Python.
 
-The embedded collection participates in the dependency-bundle identity, so a
-build that changes `ansible/` changes the bundle a live context is bound to;
+The embedded collection is no part of any setup identity: each command that
+runs Ansible unpacks the build's own automation, so a build that changes only
+`ansible/` needs a build and an `apply`, never a `setup`;
 [changing the build between runs](operator-guide.md#changing-the-build-between-runs)
-says what that requires.
+says what a lock change requires.
 
 ## Verification tiers
 
@@ -121,21 +122,19 @@ missing verification evidence, not a pass.
 ### Operator-run controller harnesses
 
 Operator-run controller harnesses are carried in the tree but excluded from
-`make test`, so they never report a silent skip as acceptance. They resolve
-real publisher metadata or touch the running host and are run by hand as the
-code evolves:
+`make test`, so they never report a silent skip as acceptance. They touch the
+running host and are run by hand as the code evolves:
 
 | Harness | Selected by |
 | --- | --- |
-| Current-OS native metadata resolution and frozen file verification, for the code X89 deletes | `BOOTWRIGHT_NATIVE_RESOLVE_QUALIFY=1`, `BOOTWRIGHT_NATIVE_INSPECT_PLAN` |
-| Bundle acquisition, projection and readiness of a resolved closure against real sources, for the code X89 deletes | `-tags controllerqualification`, `BOOTWRIGHT_RESOLVED_BOOTSTRAP_OUTPUT`, `BOOTWRIGHT_RESOLVED_NATIVE_INPUT`, `BOOTWRIGHT_BOOTSTRAP_SOURCE_FIXTURES` |
-| Bootstrap publisher resolution and root-invocation isolation, for the code X89 deletes | `-tags controllerqualification`, `BOOTWRIGHT_QUALIFY_DYNAMIC_BOOTSTRAP`, `BOOTWRIGHT_QUALIFY_ROOT_RESOLVER` |
-| Ansible `controller_native` target, which builds an RPM and drives the host package manager | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
-| Ansible `controller_prerequisites` target, which runs the shipped setup playbook and role over the real runner protocol against the host inventory | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
+| Ansible `native_transaction` target, which builds an RPM and drives a RHEL 9 host's package manager into an isolated installroot, the Ceph node's package path | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
 
-Executed native installation is not covered by any of these; it is a manual
-`setup` on a prepared host, as the
-[operator guide](operator-guide.md#prepare-a-host) describes.
+`scripts/runtime-lock verify` checks the lock against its publisher with
+network, as [below](#lock-refresh-and-tested-hosts). A controller's host
+package installation and runtime build are covered by none of these; they are
+a manual `setup` on a host missing something, as the
+[operator guide](operator-guide.md#prepare-a-host) describes, recorded as the
+[setup row](acceptance.md#setup-v2-fresh-install-row).
 
 ## Lock refresh and tested hosts
 
@@ -157,13 +156,13 @@ hosts run Python 3.9 through 3.14, the target versions in ansible-core 2.21's
 so the collection's modules and module utilities keep to 3.9 grammar, the
 sanity suite imports each of them under the CPython 3.9 that
 `scripts/tools/ansible-check-floor-interpreter.json` pins, and the units suite
-runs their unit tests under it. The ansible-core minor is one constant, in
-`internal/controller/prerequisites/qualified.go`, and the lock's patch is one
-version: `TestQualifiedAnsibleMinorAgreesEverywhere` holds every statement of
-the minor together (the collection's `requires_ansible`, both `ansible-core`
-pins, the ansible-lint supported list, the sanity ignore file and this
-paragraph), and `TestTheLockCarriesOneAnsibleCoreEverywhere` holds the lock's
-version to `scripts/tools/ansible-requirements.txt`. Qualifying another minor
+runs their unit tests under it. The lock's ansible-core is the one version:
+`TestTheLockCarriesOneAnsibleCoreEverywhere` holds it to
+`scripts/tools/ansible-requirements.txt` and to the collection's
+`requires_ansible`, `TestTheLintAndSanityConfigurationsNameTheLockedMinor`
+holds the ansible-lint supported list and the sanity ignore file to its minor,
+and `TestTheDevelopmentGuideStatesTheLockedMinorAndABIs` holds this paragraph
+to the minor and the locked interpreter ABIs. Qualifying another minor
 changes all of them in one commit.
 
 To refresh the lock, run, with network:

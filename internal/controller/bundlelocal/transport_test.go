@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"net"
-	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -89,7 +88,7 @@ func TestToolCatalogFailuresNameTheStageThatReachedThem(t *testing.T) {
 	_, _, err = (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{source, conflict})
 	stage := singleDiagnostic(t, prerequisites.InStage(err, "lab"))
 	if stage.Code != "controller.setup" || stage.Message != "retained tool release has conflicting publisher identities" ||
-		stage.Remediation != "Restore approved dependency sources or the exact retained bundle, then run bootwright apply --stage controller --context lab." {
+		stage.Remediation != "Restore approved dependency sources or the retained tool areas, then run bootwright apply --stage controller --context lab." {
 		t.Fatalf("stage failure: %+v", stage)
 	}
 }
@@ -112,16 +111,5 @@ func TestUnparsableEndpointStillRefusesWithoutInventingAHost(t *testing.T) {
 	diagnostic := singleDiagnostic(t, transportFailure("publisher metadata source", "::not a url::", errors.New("dial error")))
 	if !strings.Contains(diagnostic.Message, "its approved publisher") || strings.Contains(diagnostic.Message, "not a url") {
 		t.Fatalf("unparsable endpoint produced %q", diagnostic.Message)
-	}
-}
-
-func TestDependencyAcquisitionReportsResolutionFailureForItsOwnSource(t *testing.T) {
-	source := fixtureSource("test-artifact", []byte("approved artifact"))
-	_, err := receiveSource(t.Context(), source, func(request *http.Request) (*http.Response, error) {
-		return nil, &url.Error{Op: "Get", URL: request.URL.String(), Err: &net.DNSError{Err: "i/o timeout", Name: "files.pythonhosted.org", IsTimeout: true}}
-	})
-	diagnostic := singleDiagnostic(t, err)
-	if !strings.Contains(diagnostic.Message, "approved dependency source files.pythonhosted.org") || !strings.Contains(diagnostic.Message, "resolver timed out") {
-		t.Fatalf("dependency acquisition hid its resolution failure: %q", diagnostic.Message)
 	}
 }

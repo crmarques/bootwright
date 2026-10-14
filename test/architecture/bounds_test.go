@@ -58,7 +58,7 @@ func documentedBounds() []documentedBound {
 		{contexts, "The %s-name bound applies", store, "maxContexts", nil, false},
 		{contexts, "| Revisions per context | %s |", store, "maxRevisions", nil, false},
 		{contexts, "| Retained [controller bundle namespaces](contexts/controller-record.md#bounds), the tool areas | %s |", bundles, "maxControllerBundles", nil, false},
-		{"specs/contexts/controller-record.md", "There are at most %s retained bundle", bundles, "maxControllerBundles", nil, false},
+		{"specs/contexts/controller-record.md", "There are at most %s tool areas", bundles, "maxControllerBundles", nil, false},
 		{contexts, "| [Setup runs](contexts/controller-record.md#the-setup-subtree) the setup subtree keeps | %s |", setupRuns, "maxSetupRuns", nil, false},
 		{"specs/contexts/controller-record.md", "There are at most %s runs:", setupRuns, "maxSetupRuns", nil, false},
 		{"specs/contexts/controller-record.md", "`run.output`, which is bounded at %s.", setupRuns, "maxSetupRunOutput", nil, true},

@@ -159,8 +159,8 @@ func (s *Store) ReadLifecycle(ctx context.Context, name string, callback func(li
 }
 
 // RunLifecycle takes the same coherent read and adds the two capabilities one
-// bounded operation outside the lifecycle needs: the controller's approved
-// execution bundle, which its adapter call runs inside, and a writable area
+// bounded operation outside the lifecycle needs: the controller's tool
+// areas, whose executables its adapter call runs, and a writable area
 // for what that adapter prints. It registers no operation, freezes no plan and
 // publishes no evidence, so what it retains is troubleshooting material alone.
 func (s *Store) RunLifecycle(ctx context.Context, name string, callback func(lifecycle.RunView) error) error {

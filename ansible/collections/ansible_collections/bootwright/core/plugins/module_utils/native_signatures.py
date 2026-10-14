@@ -9,7 +9,6 @@ import tempfile
 
 IBM_CEPH_SIGNER = "005f07b2f3838aedc2c0a4d91e1850467eaa5b6e"
 RHEL_SIGNER = "567e347ad0044ade55ba8a5f199e2f91fd431d51"
-FEDORA_RELEASES = ("43", "44")
 
 
 def file_identity(info):
@@ -27,8 +26,6 @@ def file_identity(info):
 
 
 def publisher_key(platform):
-    if platform["os"] == "fedora" and platform.get("release") in FEDORA_RELEASES:
-        return "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-%s-primary" % platform["release"]
     if platform["os"] == "rhel":
         return "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release"
     raise ValueError("native publisher platform")
@@ -60,12 +57,8 @@ def read_key(path):
         os.close(descriptor)
 
 
-def select_key(keys, fingerprint, five):
-    selected = [
-        key
-        for key in keys
-        if (key.get_fingerprint() if five else key.fingerprint).lower() == fingerprint
-    ]
+def select_key(keys, fingerprint):
+    selected = [key for key in keys if key.fingerprint.lower() == fingerprint]
     if len(selected) != 1:
         raise ValueError("native publisher fingerprint")
     return selected[0]
@@ -108,7 +101,7 @@ def import_ceph_keys(request):
         with tempfile.TemporaryFile() as stream:
             stream.write(key_for(request, signer))
             stream.seek(0)
-            keys.append(select_key(dnf.crypto.rawkey2infos(stream), signer, False))
+            keys.append(select_key(dnf.crypto.rawkey2infos(stream), signer))
     for key in keys:
         transaction = rpm.TransactionSet("/")
         try:
@@ -124,6 +117,8 @@ def verify(request, scratch, payloads):
     )
 
     plan = request["plan"]
+    if plan["solver"] != "dnf4":
+        raise ValueError("native publisher solver")
     signers = sorted({package["signer"] for package in plan["packages"]})
     if not 0 < len(signers) <= 8:
         raise ValueError("native publisher closure")
@@ -134,54 +129,28 @@ def verify(request, scratch, payloads):
             root.mkdir(mode=0o700)
             key_path = Path(directory, "publisher.asc")
             key_path.write_bytes(keys)
-            if plan["solver"] == "dnf5":
-                import libdnf5
+            import dnf.crypto
+            import dnf.yum.misc
+            import rpm
 
-                base = native_resolution.setup_dnf5(
-                    request, directory, repositories=False, installroot=str(root)
-                )
-                verifier = libdnf5.rpm.RpmSignature(base)
-                key = select_key(
-                    verifier.parse_key_file(key_path.as_uri()), signer, True
-                )
-                verifier.import_key(key)
-                for package in plan["packages"]:
-                    if (
-                        package["signer"] == signer
-                        and verifier.check_package_signature(
-                            payloads[package["source"]["id"]]
-                        )
-                        != libdnf5.rpm.RpmSignature.CheckResult_OK
-                    ):
+            with key_path.open("rb") as stream:
+                key = select_key(dnf.crypto.rawkey2infos(stream), signer)
+            transaction = rpm.TransactionSet(str(root))
+            transaction.initDB()
+            if transaction.pgpImportPubkey(dnf.yum.misc.procgpgkey(key.raw_key)) != 0:
+                raise ValueError("native publisher key import")
+            transaction.closeDB()
+            base = native_resolution.setup_dnf4(
+                request, directory, repositories=False, installroot=str(root)
+            )
+            try:
+                sources = [
+                    payloads[package["source"]["id"]]
+                    for package in plan["packages"]
+                    if package["signer"] == signer
+                ]
+                for package in base.add_remote_rpms(sources, strict=True):
+                    if base.package_signature_check(package)[0] != 0:
                         raise ValueError("native approved publisher signature")
-            elif plan["solver"] == "dnf4":
-                import dnf.crypto
-                import dnf.yum.misc
-                import rpm
-
-                with key_path.open("rb") as stream:
-                    key = select_key(dnf.crypto.rawkey2infos(stream), signer, False)
-                transaction = rpm.TransactionSet(str(root))
-                transaction.initDB()
-                if (
-                    transaction.pgpImportPubkey(dnf.yum.misc.procgpgkey(key.raw_key))
-                    != 0
-                ):
-                    raise ValueError("native publisher key import")
-                transaction.closeDB()
-                base = native_resolution.setup_dnf4(
-                    request, directory, repositories=False, installroot=str(root)
-                )
-                try:
-                    sources = [
-                        payloads[package["source"]["id"]]
-                        for package in plan["packages"]
-                        if package["signer"] == signer
-                    ]
-                    for package in base.add_remote_rpms(sources, strict=True):
-                        if base.package_signature_check(package)[0] != 0:
-                            raise ValueError("native approved publisher signature")
-                finally:
-                    base.close()
-            else:
-                raise ValueError("native publisher solver")
+            finally:
+                base.close()

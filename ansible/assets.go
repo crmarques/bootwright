@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-//go:embed ansible.cfg controller collections
+//go:embed ansible.cfg collections
 var embedded embed.FS
 
 func Assets() map[string][]byte {
@@ -34,7 +34,7 @@ func Assets() map[string][]byte {
 }
 
 // documentationPaths are the collection's root README and CHANGELOG. They run
-// nothing, so they stay in every bundle but leave the automation digest.
+// nothing, so they stay embedded but leave the automation digest.
 var documentationPaths = []string{
 	"collections/ansible_collections/bootwright/core/CHANGELOG.rst",
 	"collections/ansible_collections/bootwright/core/README.md",
@@ -45,12 +45,6 @@ var documentationPaths = []string{
 func Automation() map[string][]byte {
 	automation, _ := split(Assets())
 	return automation
-}
-
-// Documentation is exactly the collection's root README and CHANGELOG.
-func Documentation() map[string][]byte {
-	_, documentation := split(Assets())
-	return documentation
 }
 
 func split(files map[string][]byte) (automation, documentation map[string][]byte) {
@@ -67,9 +61,9 @@ func split(files map[string][]byte) (automation, documentation map[string][]byte
 
 // Digest identifies the embedded automation: every file Automation returns,
 // under a domain version of its own, so no digest that covered documentation
-// equals one that does not. Each check of an approved bundle's automation
-// compares exactly these files byte for byte, so a documentation-only build
-// keeps the digest and the bundle it names. specs/controller.md owns the rule.
+// equals one that does not. Each check of the staged automation compares
+// exactly these files byte for byte, so a documentation-only build keeps the
+// digest. specs/controller.md owns the rule.
 func Digest() string { return digestOf(Automation()) }
 
 func digestOf(files map[string][]byte) string {

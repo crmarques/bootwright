@@ -14,16 +14,17 @@ import (
 	"testing"
 )
 
-// destinationSources are the files that name every host setup and the
-// controller stage contact: the publishers and repositories they resolve and
-// acquire from, the hosts their Go transports admit, and, in the collection,
-// the hosts an Ansible-owned download may be redirected to.
+// destinationSources are the files that name every host the controller stage
+// contacts: the publishers it acquires tools from and the hosts its Go
+// transports admit. The collection's redirect hosts and the runtime lock's
+// wheel URLs complete the set.
 var destinationSources = []string{
-	"acquisition.go", "bootstrap.go", "bootstrap_linux_amd64.go", "tools.go", "tools_transport.go",
+	"tools.go", "tools_transport.go",
 }
 
 const (
 	redirectHostsSource = "../../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/controller_files.py"
+	runtimeLockSource   = "../runtimelock/lock.json"
 	operatorGuide       = "../../../docs/operator-guide.md"
 	destinationsHeading = "#### Destinations to allow"
 )
@@ -106,6 +107,17 @@ func codeDestinations(t *testing.T) map[string]string {
 			t.Fatalf("%s: REDIRECT_HOSTS holds %q, which is no quoted host", redirectHostsSource, line)
 		}
 		hosts[host] = redirectHostsSource
+	}
+	lock, err := os.ReadFile(runtimeLockSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, match := range regexp.MustCompile(`"url":\s*"([^"]*)"`).FindAllSubmatch(lock, -1) {
+		parsed, err := url.Parse(string(match[1]))
+		if err != nil || parsed.Hostname() == "" {
+			t.Fatalf("%s: %q is no URL with a host", runtimeLockSource, match[1])
+		}
+		hosts[parsed.Hostname()] = runtimeLockSource
 	}
 	return hosts
 }
