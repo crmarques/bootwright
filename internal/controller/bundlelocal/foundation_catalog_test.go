@@ -27,13 +27,14 @@ func TestEveryCatalogFoundationFileHasOnePackage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tags := map[string]string{"fedora": ".fc43", "rhel": ".el9"}
+	tags := map[string]string{"fedora": ".fc", "rhel": ".el"}
 	for _, native := range record.Native {
 		owners := map[string]string{}
 		var names []string
+		major, _, _ := strings.Cut(native.Release, ".")
 		for _, pkg := range native.Packages {
 			names = append(names, pkg.Name)
-			if !strings.Contains(pkg.Build, tags[native.OS]) || len(pkg.Files) == 0 {
+			if !strings.Contains(pkg.Build, tags[native.OS]+major) || len(pkg.Files) == 0 {
 				t.Errorf("%s %s: %s %q is not a build of this release providing files", native.OS, native.Release, pkg.Name, pkg.Build)
 			}
 			for _, file := range pkg.Files {

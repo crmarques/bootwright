@@ -5242,3 +5242,68 @@ moves. **Constraints left behind:** [B510](backlog.md#b510), parked: a writer
 whose plain open lands between a concurrent creator's creation and its parent
 sync proceeds without syncing the parent, and `selectionfs` skips the parent
 sync on `EEXIST`.
+
+### X84 — Fedora 44 controllers
+
+**Owner:** Controller setup. An enabling slice of [M1](m1.md), at the owner's
+request of 2026-10-14 (D149), after the owner's controller moved to Fedora 44
+and `setup` refused it with `controller.unsupported`. **Items:** B541.
+**Decisions:** D149.
+
+**Outcome, B541:** `setup`, `preflight controller` and the controller stage
+admit Fedora 44 on Linux/amd64 beside Fedora 43 and RHEL 9.8, and their
+refusals name all three. The compiled catalog holds Fedora 44's execution
+foundation as `scripts/foundation-catalog` printed it on the owner's Fedora 44
+host: glibc 2.43-9.fc44 and libgcc 16.2.1-2.fc44, whose versioned library is
+`libgcc_s-16-20260819.so.1`. A Fedora controller's native packages resolve
+from its own release's `releases` and `updates` repositories, signed by that
+release's primary key: for Fedora 44, fingerprint
+`36F612DCF27F7D1A48A835E4DBFCF71C6D9F90A6`, which `fedora-gpg-keys-44-2`
+installs and `rpm -V` verified, and whose key ID `dbfcf71c6d9f90a6` rpm 6.0.2
+prints for the host's Fedora 44 packages. The collection reads
+`RPM-GPG-KEY-fedora-<release>-primary` for a qualified release only, and still
+imports only the key the plan's signer names. Fedora 43's and Fedora 44's
+foundations share every path but the versioned libgcc file, so a requirement
+setup qualified now matches the compiled record whose GCC major that file
+keeps, which a qualification of the same upstream version always does, and no
+record when two share that shape; a launch refusal therefore never names
+another release to qualify within. [Development](../../docs/development.md#qualified-hosts-and-images)
+records the builds and what admitting another Fedora release takes.
+
+**Guard tests:** `TestTheCatalogAdmitsOnlyItsCompiledFoundations`,
+`TestTheCompiledExecutionFoundationIsUnchanged` (Fedora 44's digest as
+admitted, Fedora 43's and RHEL 9.8's unchanged),
+`TestEveryCatalogFoundationFileHasOnePackage` (each record's builds belong to
+its own release), `TestALaunchRefusalNamesSetupForAQualifiableUpdate` (a
+qualified requirement of each release names that release; it fails without
+the GCC-major match), `TestARequirementInTheShapeOfTwoReleasesNamesNeither`,
+`TestEachFedoraReleaseResolvesFromItsOwnRepositories`,
+`TestFoundationBuildsReadRPMFileDigests`, `TestAnotherMinorStillRefuses` and
+the collection's `test_each_qualified_fedora_release_reads_its_own_primary_key`.
+`TestNativeCurrentOSResolution` now qualifies whichever admitted Fedora release
+the host runs.
+
+**Gates:** `make check` passes: fmt-check, modules-check, tidy-check, test,
+vet, completion-test, `make vulncheck` (no reachable vulnerability) and
+`./scripts/ansible-check` (ansible-lint production profile, sanity, and
+297, 1856, 1286 and 3440 tests passed). `make quick` and `make docs-check`
+pass, and the GCC-major test fails with that match removed. On the owner's
+Fedora 44 host, unprivileged, `TestTheResolverStagesTheQualifiedFoundation`
+runs and passes against every pinned file, and the collection's libdnf5 5.4.6
+snapshot, setup and inventory ran under the host's Python 3.14. Not run: a
+resolve against the Fedora 44 repositories, `setup`, the controller stage and
+`make race`.
+
+**Digest and version effects:** Fedora 43's and RHEL 9.8's execution
+foundations and bundle identities are unchanged. The collection change moves
+the automation digest, so the next `setup` reprojects the bundle, and a live
+context continues after it (D145). Moving a host from Fedora 43 to Fedora 44
+changes its glibc and libgcc upstream versions, the update before which the
+[hold procedure](../../docs/operator-guide.md#hold-the-execution-foundation)
+has the host's operations complete or its contexts destroyed, then sets it up
+with a build that pins the new builds, as X84 does. **Constraints left behind:** Fedora 44
+awaits its first [acceptance ledger](../../docs/acceptance.md#ledger) run of
+setup and the controller stage; in-tree, only its offline libdnf5 5.4
+inventory ran on Fedora 44, not a resolve against its repositories or a
+package installation. [B542](backlog.md#b542), parked: a Fedora plan records
+libdnf5's version without its first part.

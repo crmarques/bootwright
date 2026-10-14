@@ -139,22 +139,27 @@ Executed native installation is not covered by any of these; it is a manual
 
 ## Qualified hosts and images
 
-`setup` admits Fedora 43 and RHEL 9.8 on Linux/amd64 and refuses any other
-release. The compiled catalog `internal/controller/bundlelocal/catalog.json`
-holds each admitted release's provided execution foundation, the loader, glibc
-and libgcc files the private interpreter runs on, pinned by digest; setup
-resolves every dependency release itself, and the catalog pins none.
+`setup` admits Fedora 43, Fedora 44 and RHEL 9.8 on Linux/amd64 and refuses
+any other release. The compiled catalog
+`internal/controller/bundlelocal/catalog.json` holds each admitted release's
+provided execution foundation, the loader, glibc and libgcc files the private
+interpreter runs on, pinned by digest; setup resolves every dependency release
+itself, and the catalog pins none.
 
 Fedora 43 has run: the [acceptance ledger](acceptance.md#ledger) records setup
-and the controller stage on it. RHEL 9.8 is admitted but not yet run. No ledger
-row records setup or the controller stage on it, so its native path has never
-executed: the DNF4 solver under the host's Python 3.9, its rpm database
-snapshot and the publisher key import that verifies package signatures.
+and the controller stage on it. Fedora 44 is admitted but not yet run: its
+record was read from a Fedora 44 host and its libdnf5 5.4 inventory checked
+there unprivileged, but no ledger row records setup or the controller stage on
+it. RHEL 9.8 is admitted but not yet run. No ledger row records setup or the
+controller stage on it, so its native path has never executed: the DNF4 solver
+under the host's Python 3.9, its rpm database snapshot and the publisher key
+import that verifies package signatures.
 
 Each release's record also attributes every pinned file to the package build
 that provides it, outside the execution requirement, so no bundle identity
-reads it: glibc 2.42-16.fc43 and libgcc 15.3.1-1.fc43 on Fedora 43, and glibc
-2.34-275.el9_8 and libgcc 11.5.0-14.el9 on RHEL 9.8. A controller holds
+reads it: glibc 2.42-16.fc43 and libgcc 15.3.1-1.fc43 on Fedora 43, glibc
+2.43-9.fc44 and libgcc 16.2.1-2.fc44 on Fedora 44, and glibc 2.34-275.el9_8
+and libgcc 11.5.0-14.el9 on RHEL 9.8. A controller holds
 exactly those builds, as the operator guide's
 [hold procedure](operator-guide.md#hold-the-execution-foundation) keeps them,
 or vendor-signed builds of the same upstream versions within the release that
@@ -166,7 +171,10 @@ them: it prints the release's native record, files with their digests, the
 links that reach them, the preload list and each file's package build from
 `rpm -qf`, which replaces that release's record in the catalog.
 `TestTheFoundationCatalogToolRoundTrips` holds the tool to what the guard
-verifies.
+verifies. Admitting another Fedora release adds its record the same way, and
+its primary key's fingerprint, as `gpg --show-keys` prints it for
+`/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-<release>-primary`, to the native
+resolver's `fedoraSigners` and the collection's `FEDORA_RELEASES`.
 
 Setup's private runtime is qualified for `ansible-core` 2.21 at its latest
 stable patch, on controller CPython 3.12, 3.13 or 3.14 at the latest patch of

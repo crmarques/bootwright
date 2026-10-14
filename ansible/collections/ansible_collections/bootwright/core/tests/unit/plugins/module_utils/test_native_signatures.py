@@ -54,7 +54,7 @@ class PublisherSignatures(unittest.TestCase):
             return object()
 
         request = dict(
-            platform=dict(os="fedora"),
+            platform=dict(os="fedora", release="44"),
             plan=dict(
                 solver="dnf5",
                 packages=[dict(signer=approved, source=dict(id="source"))],
@@ -71,6 +71,16 @@ class PublisherSignatures(unittest.TestCase):
         self.assertEqual(imported, [approved, approved])
         self.assertEqual(len(roots), 2)
         self.assertNotEqual(roots[0], roots[1])
+
+    def test_each_qualified_fedora_release_reads_its_own_primary_key(self):
+        for release in ("43", "44"):
+            self.assertEqual(
+                native_signatures.publisher_key(dict(os="fedora", release=release)),
+                "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-%s-primary" % release,
+            )
+        for platform in (dict(os="fedora", release="45"), dict(os="fedora"), dict(os="centos", release="9")):
+            with self.assertRaises(ValueError):
+                native_signatures.publisher_key(platform)
 
     def test_missing_or_ambiguous_fingerprint_refuses_before_key_import(self):
         selected = "a" * 40

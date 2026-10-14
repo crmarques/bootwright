@@ -317,14 +317,19 @@ func decodePresence(plan prerequisites.NativeResolvedPlan, data []byte) (prerequ
 // accepts, carries a signature of this key.
 const rhel9Signer = "567e347ad0044ade55ba8a5f199e2f91fd431d51"
 
+var fedoraSigners = map[string]string{
+	"43": "c6e7f081cf80e13146676e88829b606631645531",
+	"44": "36f612dcf27f7d1a48a835e4dbfcf71c6d9f90a6",
+}
+
 func profiles(platform prerequisites.Platform, requirements prerequisites.NativeRequirements) ([]repository, error) {
 	if platform.Architecture != "amd64" {
 		return nil, failure("native dependency resolution requires Linux amd64")
 	}
 	switch {
-	case platform.OS == "fedora" && platform.Release == "43":
-		signer := "c6e7f081cf80e13146676e88829b606631645531"
-		return []repository{{ID: "fedora", BaseURL: "https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os", Signer: signer}, {ID: "updates", BaseURL: "https://dl.fedoraproject.org/pub/fedora/linux/updates/43/Everything/x86_64", Signer: signer}}, nil
+	case platform.OS == "fedora" && fedoraSigners[platform.Release] != "":
+		signer, mirror := fedoraSigners[platform.Release], "https://dl.fedoraproject.org/pub/fedora/linux/"
+		return []repository{{ID: "fedora", BaseURL: mirror + "releases/" + platform.Release + "/Everything/x86_64/os", Signer: signer}, {ID: "updates", BaseURL: mirror + "updates/" + platform.Release + "/Everything/x86_64", Signer: signer}}, nil
 	case platform.OS == "rhel" && platform.Release == "9.8":
 		if err := prerequisites.StageAdmission(platform, prerequisites.StageNative{LibvirtClient: requirements.LibvirtClient, Hypervisor: requirements.Hypervisor}); err != nil {
 			return nil, err
@@ -337,7 +342,7 @@ func profiles(platform prerequisites.Platform, requirements prerequisites.Native
 		}
 		return []repository{{ID: "ubi-baseos", BaseURL: "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os", Signer: rhel9Signer}, {ID: "ubi-appstream", BaseURL: "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/appstream/os", Signer: rhel9Signer}}, nil
 	default:
-		return nil, failure("native dependency resolution requires a supported Fedora 43 or RHEL 9.8 package-manager foundation")
+		return nil, failure("native dependency resolution requires a supported Fedora 43, Fedora 44 or RHEL 9.8 package-manager foundation")
 	}
 }
 
@@ -509,7 +514,7 @@ func databaseDirectory(platform prerequisites.Platform) (string, error) {
 	case "rhel":
 		return "/var/lib/rpm", nil
 	}
-	return "", failure("native dependency resolution requires a supported Fedora 43 or RHEL 9.8 package-manager foundation")
+	return "", failure("native dependency resolution requires a supported Fedora 43, Fedora 44 or RHEL 9.8 package-manager foundation")
 }
 
 // lockDatabase holds the provided host's own read lock, so no package

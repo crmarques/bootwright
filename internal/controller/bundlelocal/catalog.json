@@ -86,6 +86,89 @@
       ]
     },
     {
+      "os": "fedora",
+      "release": "44",
+      "execution": {
+        "loader": "/usr/lib64/ld-linux-x86-64.so.2",
+        "lockPath": "/usr/lib/sysimage/rpm/.rpm.lock",
+        "files": [
+          {
+            "path": "/usr/lib64/ld-linux-x86-64.so.2",
+            "sha256": "4e5d39355699e90fa29313d3100e82af4a23290028c58c364d6a249ef6a78e5e"
+          },
+          {
+            "path": "/usr/lib64/libc.so.6",
+            "sha256": "a5c5ad9d59d3c69eda93aa8f82930ba06cc4e893a113e66c85ad6e96243d53c8"
+          },
+          {
+            "path": "/usr/lib64/libdl.so.2",
+            "sha256": "54d56c0f10466a05cc92685f8062ee6a2eaf59c62fb6f724217e984fcfbb5031"
+          },
+          {
+            "path": "/usr/lib64/libgcc_s-16-20260819.so.1",
+            "sha256": "c71a62b5ef442ab8cf4470874dee6f2383d73a744f0006b6d287412f131c2e09"
+          },
+          {
+            "path": "/usr/lib64/libm.so.6",
+            "sha256": "16a03ce6d24c8a46742206d4a9c1d35bb6577ae2384f153dc6ef4a4b62b5357f"
+          },
+          {
+            "path": "/usr/lib64/libpthread.so.0",
+            "sha256": "41cad1a2bda56ff226e0b08db7edfaf4ec47d876ab1414a979fd157467b6c39d"
+          },
+          {
+            "path": "/usr/lib64/librt.so.1",
+            "sha256": "3a23e51370381b0ab993932341fd69643ade24869936e471e1dde2e62398d9f7"
+          },
+          {
+            "path": "/usr/lib64/libutil.so.1",
+            "sha256": "026b643368272ad0d795244548711ecd734b44cff55737005beac3b4dd178ece"
+          }
+        ],
+        "links": [
+          {
+            "path": "/lib64",
+            "target": "usr/lib64"
+          },
+          {
+            "path": "/usr/lib64/libgcc_s.so.1",
+            "target": "libgcc_s-16-20260819.so.1"
+          }
+        ],
+        "preload": [
+          "/usr/lib64/libc.so.6",
+          "/usr/lib64/libdl.so.2",
+          "/usr/lib64/libgcc_s-16-20260819.so.1",
+          "/usr/lib64/libm.so.6",
+          "/usr/lib64/libpthread.so.0",
+          "/usr/lib64/librt.so.1",
+          "/usr/lib64/libutil.so.1"
+        ]
+      },
+      "packages": [
+        {
+          "name": "glibc",
+          "build": "2.43-9.fc44",
+          "files": [
+            "/usr/lib64/ld-linux-x86-64.so.2",
+            "/usr/lib64/libc.so.6",
+            "/usr/lib64/libdl.so.2",
+            "/usr/lib64/libm.so.6",
+            "/usr/lib64/libpthread.so.0",
+            "/usr/lib64/librt.so.1",
+            "/usr/lib64/libutil.so.1"
+          ]
+        },
+        {
+          "name": "libgcc",
+          "build": "16.2.1-2.fc44",
+          "files": [
+            "/usr/lib64/libgcc_s-16-20260819.so.1"
+          ]
+        }
+      ]
+    },
+    {
       "os": "rhel",
       "release": "9.8",
       "execution": {

@@ -127,8 +127,8 @@ func compiledAttribution(requirement prerequisites.ExecutionRequirement) []found
 	return packages
 }
 
-// compiledNativeFor is the compiled record whose execution requirement is the
-// one given, exactly or in its shape, apart from the interpreter path.
+// compiledNativeFor is the only compiled record whose execution requirement is
+// the one given, exactly or in its shape, apart from the interpreter path.
 func compiledNativeFor(requirement prerequisites.ExecutionRequirement) (native nativeRecord, exact, found bool) {
 	record, err := compiledCatalog()
 	if err != nil {
@@ -140,12 +140,15 @@ func compiledNativeFor(requirement prerequisites.ExecutionRequirement) (native n
 			return native, true, true
 		}
 	}
-	for _, native := range record.Native {
-		if sameFoundationShape(native.Execution, requirement) {
-			return native, false, true
+	for _, candidate := range record.Native {
+		if sameFoundationShape(candidate.Execution, requirement) {
+			if found {
+				return nativeRecord{}, false, false
+			}
+			native, found = candidate, true
 		}
 	}
-	return nativeRecord{}, false, false
+	return native, false, found
 }
 
 func sameFoundationShape(compiled, requirement prerequisites.ExecutionRequirement) bool {
@@ -153,11 +156,20 @@ func sameFoundationShape(compiled, requirement prerequisites.ExecutionRequiremen
 		return false
 	}
 	for index, file := range compiled.Files {
-		if !prerequisites.FoundationPathShape(file.Path, requirement.Files[index].Path) {
+		qualified := requirement.Files[index].Path
+		if !prerequisites.FoundationPathShape(file.Path, qualified) || libgccMajor(file.Path) != libgccMajor(qualified) {
 			return false
 		}
 	}
 	return true
+}
+
+func libgccMajor(name string) string {
+	if !prerequisites.VersionedLibgcc(name) {
+		return ""
+	}
+	major, _, _ := strings.Cut(strings.TrimPrefix(name, "/usr/lib64/libgcc_s-"), "-")
+	return major
 }
 
 func cloneExecution(value prerequisites.ExecutionRequirement) prerequisites.ExecutionRequirement {
@@ -191,7 +203,7 @@ func selectNative(record catalogRecord, platform prerequisites.Platform) (native
 }
 
 func unsupportedPlatform() error {
-	return diagnostics.NewFailureWithRemediation("controller.unsupported", "controller setup requires qualified RHEL 9.8 or Fedora 43 on Linux amd64", "", "Use a qualified installed controller release and architecture.")
+	return diagnostics.NewFailureWithRemediation("controller.unsupported", "controller setup requires qualified RHEL 9.8, Fedora 43 or Fedora 44 on Linux amd64", "", "Use a qualified installed controller release and architecture.")
 }
 
 func bundleFailure(message string) error {

@@ -10,9 +10,10 @@ gate and which build it must match.
 ## Prepare a host
 
 `setup` supports RHEL 9 and Fedora on Linux/amd64 at the exact releases it
-[admits](development.md#qualified-hosts-and-images), Fedora 43 and RHEL 9.8,
-and refuses any other. Fedora 43 has run; RHEL 9.8 is admitted but not yet run
-until the [acceptance ledger](acceptance.md#ledger) records it. A controller
+[admits](development.md#qualified-hosts-and-images), Fedora 43, Fedora 44 and
+RHEL 9.8, and refuses any other. Fedora 43 has run; Fedora 44 and RHEL 9.8 are
+admitted but not yet run until the [acceptance ledger](acceptance.md#ledger)
+records them. A controller
 must hold exactly the glibc and libgcc builds
 [development](development.md#qualified-hosts-and-images) names, as
 [hold the execution foundation](#hold-the-execution-foundation) keeps them. Setup,
@@ -118,8 +119,9 @@ acquisition verifies against.
 - `cdn-ubi.redhat.com`: the UBI 9 BaseOS and AppStream repositories a RHEL 9.8
   controller's native packages resolve from.
 - `cdn.dl.k8s.io`: where `dl.k8s.io` redirects a kubectl download.
-- `dl.fedoraproject.org`: the Fedora 43 release and updates repositories a
-  Fedora controller's native packages resolve from.
+- `dl.fedoraproject.org`: the release and updates repositories of the
+  controller's own Fedora release, 43 or 44, which a Fedora controller's native
+  packages resolve from.
 - `dl.k8s.io`: kubectl releases and their stable version.
 - `files.pythonhosted.org`: the `ansible-core` wheel and its supporting wheels.
 - `get.helm.sh`: helm releases.

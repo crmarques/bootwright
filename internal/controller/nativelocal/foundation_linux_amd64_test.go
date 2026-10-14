@@ -36,11 +36,16 @@ func TestFoundationBuildsReadRPMFileDigests(t *testing.T) {
 	if err != nil || fedora != "829b606631645531" {
 		t.Fatalf("the Fedora 43 vendor key is %q (%v)", fedora, err)
 	}
+	if fedora44, err := vendorKeyFor(prerequisites.Platform{OS: "fedora", Release: "44", Architecture: "amd64"}); err != nil || fedora44 != "dbfcf71c6d9f90a6" {
+		t.Fatalf("the Fedora 44 vendor key is %q (%v)", fedora44, err)
+	}
 	if rhel, err := vendorKeyFor(prerequisites.Platform{OS: "rhel", Release: "9.8", Architecture: "amd64"}); err != nil || rhel != vendorKeyID {
 		t.Fatalf("the RHEL 9.8 vendor key is %q (%v)", rhel, err)
 	}
-	if _, err := vendorKeyFor(prerequisites.Platform{OS: "rhel", Release: "9.9", Architecture: "amd64"}); err == nil {
-		t.Fatal("another minor has a vendor key")
+	for _, platform := range []prerequisites.Platform{{OS: "rhel", Release: "9.9", Architecture: "amd64"}, {OS: "fedora", Release: "45", Architecture: "amd64"}} {
+		if _, err := vendorKeyFor(platform); err == nil {
+			t.Fatalf("%s %s has a vendor key", platform.OS, platform.Release)
+		}
 	}
 	if !foundationNames([]string{"glibc", "libgcc"}) || foundationNames([]string{"glibc", "glibc"}) || foundationNames([]string{"podman"}) || foundationNames(nil) {
 		t.Fatal("the foundation query admits other names")

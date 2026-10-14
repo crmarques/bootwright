@@ -123,8 +123,9 @@ and `preflight controller` read that package's installed instances from a
 snapshot of the host's RPM database, under the same read lock, and qualify the
 host's builds only when each package has exactly one x86_64 instance (an i686
 instance is ignored), of the compiled build's upstream version, signed by the
-platform's vendor key (the low 64 bits of the RHEL 9 or Fedora 43 profile's
-signer, every present signature naming it), with SHA-256 file digests. The
+platform's vendor key (the low 64 bits of the RHEL 9 profile's signer or of
+the Fedora release's primary key, every present signature naming it), with
+SHA-256 file digests. The
 qualified requirement is the compiled one with each pinned file's digest
 replaced by the RPM database's digest for that path, and the versioned
 `libgcc_s` file, the `libgcc_s.so.1` link and their preload entry taken from

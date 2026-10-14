@@ -39,6 +39,14 @@ and why each mechanism is necessary.
   launch from apply or destroy names the same file, build and remedy.
   Code: `internal/controller/bundlelocal/execution_linux_amd64.go`,
   `internal/controller/ansiblelocal/runner_linux_amd64.go`.
+- A launch over a requirement setup qualified knows no platform, so a drift
+  refusal finds its compiled record by shape. Fedora 43's and Fedora 44's
+  foundations share every path but `libgcc_s-<GCC major>-<date>.so.1`, so the
+  shape also requires the compiled GCC major, which a qualified build keeps
+  because setup admits only the compiled upstream version, and attributes a
+  requirement in the shape of two records to neither rather than name the
+  wrong release (X84). Code: `compiledNativeFor` in
+  `internal/controller/bundlelocal/catalog.go`.
 - Evidence: the `internal/controller/bundlelocal` package tests, and the
   operator-run `-tags controllerqualification` harnesses listed in
   [development](../../docs/development.md).

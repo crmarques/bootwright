@@ -9,6 +9,7 @@ import tempfile
 
 IBM_CEPH_SIGNER = "005f07b2f3838aedc2c0a4d91e1850467eaa5b6e"
 RHEL_SIGNER = "567e347ad0044ade55ba8a5f199e2f91fd431d51"
+FEDORA_RELEASES = ("43", "44")
 
 
 def file_identity(info):
@@ -26,8 +27,8 @@ def file_identity(info):
 
 
 def publisher_key(platform):
-    if platform["os"] == "fedora":
-        return "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-43-primary"
+    if platform["os"] == "fedora" and platform.get("release") in FEDORA_RELEASES:
+        return "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-%s-primary" % platform["release"]
     if platform["os"] == "rhel":
         return "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release"
     raise ValueError("native publisher platform")

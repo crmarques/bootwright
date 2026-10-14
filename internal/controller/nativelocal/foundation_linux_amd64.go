@@ -85,7 +85,7 @@ func vendorKeyFor(platform prerequisites.Platform) (string, error) {
 		return "", err
 	}
 	if len(repositories) == 0 || len(repositories[0].Signer) < 16 {
-		return "", failure("native dependency resolution requires a supported Fedora 43 or RHEL 9.8 package-manager foundation")
+		return "", failure("native dependency resolution requires a supported Fedora 43, Fedora 44 or RHEL 9.8 package-manager foundation")
 	}
 	signer := repositories[0].Signer
 	return signer[len(signer)-16:], nil

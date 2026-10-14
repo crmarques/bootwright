@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -95,15 +96,39 @@ func TestRepositoryMetadataRequiresExactBoundedPublisherMembers(t *testing.T) {
 	}
 }
 
+// Each qualified Fedora release resolves from its own release and updates
+// repositories, each package signed by that release's primary key.
+func TestEachFedoraReleaseResolvesFromItsOwnRepositories(t *testing.T) {
+	for release, signer := range map[string]string{"43": "c6e7f081cf80e13146676e88829b606631645531", "44": "36f612dcf27f7d1a48a835e4dbfcf71c6d9f90a6"} {
+		repositories, err := profiles(prerequisites.Platform{OS: "fedora", Release: release, Architecture: "amd64"}, prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true, Hypervisor: true, InstallerMedia: true})
+		want := []repository{
+			{ID: "fedora", BaseURL: "https://dl.fedoraproject.org/pub/fedora/linux/releases/" + release + "/Everything/x86_64/os", Signer: signer},
+			{ID: "updates", BaseURL: "https://dl.fedoraproject.org/pub/fedora/linux/updates/" + release + "/Everything/x86_64", Signer: signer},
+		}
+		if err != nil || !reflect.DeepEqual(repositories, want) {
+			t.Fatalf("Fedora %s resolves from %+v (%v), want %+v", release, repositories, err, want)
+		}
+	}
+	if _, err := profiles(prerequisites.Platform{OS: "fedora", Release: "45", Architecture: "amd64"}, prerequisites.NativeRequirements{ContainerRuntime: true}); err == nil {
+		t.Fatal("an unqualified Fedora release has repositories")
+	}
+}
+
 func TestNativeCurrentOSResolution(t *testing.T) {
 	if os.Getenv("BOOTWRIGHT_NATIVE_RESOLVE_QUALIFY") != "1" {
 		t.Skip("opt-in current-OS public metadata qualification")
 	}
-	release, err := os.ReadFile("/etc/os-release")
-	if err != nil || !strings.Contains(string(release), "ID=fedora\n") || !strings.Contains(string(release), "VERSION_ID=43\n") {
-		t.Skip("qualification is only applicable to the current Fedora 43 OS")
+	data, err := os.ReadFile("/etc/os-release")
+	release := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if value, found := strings.CutPrefix(line, "VERSION_ID="); found {
+			release = value
+		}
 	}
-	plan, err := New(bundlelocal.FetchMetadata, NewStaging(t.TempDir())).Resolve(t.Context(), prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, prerequisites.NativeRequirements{ContainerRuntime: true}, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{NoProxy: []string{}})
+	if err != nil || !strings.Contains(string(data), "ID=fedora\n") || fedoraSigners[release] == "" {
+		t.Skip("qualification is only applicable to a qualified Fedora release")
+	}
+	plan, err := New(bundlelocal.FetchMetadata, NewStaging(t.TempDir())).Resolve(t.Context(), prerequisites.Platform{OS: "fedora", Release: release, Architecture: "amd64"}, prerequisites.NativeRequirements{ContainerRuntime: true}, controller.DefaultDependencyVersions(), prerequisites.SetupEgress{NoProxy: []string{}})
 	if err != nil {
 		detail, _ := json.Marshal(err)
 		t.Fatal(string(detail))

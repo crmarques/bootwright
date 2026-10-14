@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -211,9 +212,9 @@ func TestAFoundationPackageNeedsOneX86_64Instance(t *testing.T) {
 // database, exactly as it was before qualification existed.
 func TestAnotherMinorStillRefuses(t *testing.T) {
 	builds := &installedBuilds{}
-	for _, platform := range []prerequisites.Platform{{OS: "rhel", Release: "9.9", Architecture: "amd64"}, {OS: "fedora", Release: "44", Architecture: "amd64"}} {
+	for _, platform := range []prerequisites.Platform{{OS: "rhel", Release: "9.9", Architecture: "amd64"}, {OS: "fedora", Release: "45", Architecture: "amd64"}} {
 		_, err := ExecutionGuard{Builds: builds}.Inspect(context.Background(), platform)
-		if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.unsupported" || found[0].Message != "controller setup requires qualified RHEL 9.8 or Fedora 43 on Linux amd64" {
+		if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.unsupported" || found[0].Message != "controller setup requires qualified RHEL 9.8, Fedora 43 or Fedora 44 on Linux amd64" {
 			t.Fatalf("%s %s inspected as %v", platform.OS, platform.Release, err)
 		}
 	}
@@ -238,7 +239,8 @@ func TestAnUnchangedFoundationQualifiesNothing(t *testing.T) {
 // A launch that meets an update setup could qualify names setup first, then
 // the reinstall and hold that keeps the pinned build; over a requirement setup
 // qualified, whose builds only the receipt names, it names the package as
-// setup qualified it.
+// setup qualified it and the release it was qualified within, which Fedora 43
+// and Fedora 44 tell apart only by their GCC major.
 func TestALaunchRefusalNamesSetupForAQualifiableUpdate(t *testing.T) {
 	f := newExecutionFixture(t)
 	f.guard.view.packages = qualificationPackages
@@ -254,22 +256,61 @@ func TestALaunchRefusalNamesSetupForAQualifiableUpdate(t *testing.T) {
 		t.Fatalf("the launch refused with %#v", found)
 	}
 
+	for _, platform := range []prerequisites.Platform{fedoraPlatform, fedora44Platform, rhelPlatform} {
+		qualified, renamed := qualifiedLibgcc(t, platform)
+		refusal := foundationRefusal(executionView{}, qualified, &foundationDrift{path: renamed, condition: driftMissing}, true)
+		found = diagnostics.Of(refusal)
+		if len(found) != 1 || found[0].Message != "the provided execution foundation differs at "+renamed+", from libgcc as setup qualified it, which is missing" ||
+			found[0].Remediation != "If dnf updated glibc or libgcc within "+platform.OS+" "+platform.Release+", run bootwright setup to qualify the new builds; otherwise install the libgcc build setup qualified again with dnf (dnf reinstall libgcc), hold it with dnf versionlock add libgcc, then repeat this command; a host that must take another build needs a Bootwright build whose execution foundation pins it." {
+			t.Fatalf("a qualified %s %s requirement's launch refused with %#v", platform.OS, platform.Release, found)
+		}
+	}
+}
+
+// A requirement in the shape of two compiled records is attributed to
+// neither, so its refusal names no release setup could qualify within.
+func TestARequirementInTheShapeOfTwoReleasesNamesNeither(t *testing.T) {
 	record, err := compiledCatalog()
 	if err != nil {
 		t.Fatal(err)
 	}
-	native, _ := selectNative(record, prerequisites.Platform{OS: "rhel", Release: "9.8", Architecture: "amd64"})
-	qualified := cloneExecution(native.Execution)
+	twin, _ := selectNative(record, fedora44Platform)
+	twin.Release = "45"
+	record.Native = append(record.Native, twin)
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := catalogData
+	catalogData = data
+	t.Cleanup(func() { catalogData = saved })
+	qualified, renamed := qualifiedLibgcc(t, fedora44Platform)
+	if _, _, found := compiledNativeFor(qualified); found {
+		t.Fatal("a requirement in the shape of two releases was attributed to one")
+	}
+	found := diagnostics.Of(foundationRefusal(executionView{}, qualified, &foundationDrift{path: renamed, condition: driftMissing}, true))
+	if len(found) != 1 || found[0].Message != "the provided execution foundation differs at "+renamed+", which is missing" ||
+		found[0].Remediation != "Restore "+renamed+" as this host's release provides it, then repeat this command; a host that must keep the change needs a Bootwright build whose execution foundation pins it." {
+		t.Fatalf("an ambiguous requirement's launch refused with %#v", found)
+	}
+}
+
+// qualifiedLibgcc is the requirement setup records for platform once a libgcc
+// errata renamed its versioned library within the compiled GCC major, and
+// that library's new path.
+func qualifiedLibgcc(t *testing.T, platform prerequisites.Platform) (prerequisites.ExecutionRequirement, string) {
+	t.Helper()
+	qualified := compiledExecution(t, platform)
 	qualified.PythonExecutable = "python/bin/python3.14"
+	renamed := ""
 	for index, file := range qualified.Files {
 		if prerequisites.VersionedLibgcc(file.Path) {
-			qualified.Files[index].Path = "/usr/lib64/libgcc_s-11-20250101.so.1"
+			renamed = "/usr/lib64/libgcc_s-" + libgccMajor(file.Path) + "-20250101.so.1"
+			qualified.Files[index].Path = renamed
 		}
 	}
-	refusal := foundationRefusal(executionView{}, qualified, &foundationDrift{path: "/usr/lib64/libgcc_s-11-20250101.so.1", condition: driftMissing}, true)
-	found = diagnostics.Of(refusal)
-	if len(found) != 1 || found[0].Message != "the provided execution foundation differs at /usr/lib64/libgcc_s-11-20250101.so.1, from libgcc as setup qualified it, which is missing" ||
-		found[0].Remediation != "If dnf updated glibc or libgcc within rhel 9.8, run bootwright setup to qualify the new builds; otherwise install the libgcc build setup qualified again with dnf (dnf reinstall libgcc), hold it with dnf versionlock add libgcc, then repeat this command; a host that must take another build needs a Bootwright build whose execution foundation pins it." {
-		t.Fatalf("a qualified requirement's launch refused with %#v", found)
+	if renamed == "" {
+		t.Fatalf("the %s %s foundation pins no versioned libgcc", platform.OS, platform.Release)
 	}
+	return qualified, renamed
 }

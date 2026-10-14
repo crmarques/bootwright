@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	fedoraPlatform = prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
-	rhelPlatform   = prerequisites.Platform{OS: "rhel", Release: "9.8", Architecture: "amd64"}
+	fedoraPlatform   = prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
+	fedora44Platform = prerequisites.Platform{OS: "fedora", Release: "44", Architecture: "amd64"}
+	rhelPlatform     = prerequisites.Platform{OS: "rhel", Release: "9.8", Architecture: "amd64"}
 )
 
 // compiledExecution is the provided execution foundation the compiled catalog
@@ -92,12 +93,14 @@ func pinnedResolution(t *testing.T, platform prerequisites.Platform, automation 
 
 // The compiled execution foundation flows into every bootstrap digest and is
 // what a retained resolution is held against, so its values never move with
-// the catalog around it. The digests are those of the foundations before the
-// catalog stopped pinning dependency artifacts.
+// the catalog around it. The Fedora 43 and RHEL 9.8 digests are those of the
+// foundations before the catalog stopped pinning dependency artifacts; Fedora
+// 44's is the one it was admitted with.
 func TestTheCompiledExecutionFoundationIsUnchanged(t *testing.T) {
 	for platform, want := range map[prerequisites.Platform]string{
-		fedoraPlatform: "b0f5d93f779697a212ff4dd56ffd54887414a6083259086b09452e69af3a790a",
-		rhelPlatform:   "de17167fe4981efb779e592e6ad59c13abdca80f769e5b39650f70e736bf198f",
+		fedoraPlatform:   "b0f5d93f779697a212ff4dd56ffd54887414a6083259086b09452e69af3a790a",
+		fedora44Platform: "3ff621b306b3018737d658ce0a54dcd5e78493428c4ba865ffd86ac7b9a9e971",
+		rhelPlatform:     "de17167fe4981efb779e592e6ad59c13abdca80f769e5b39650f70e736bf198f",
 	} {
 		encoded, err := json.Marshal(compiledExecution(t, platform))
 		if err != nil {
@@ -129,12 +132,12 @@ func TestAResolvedBundleIdentityDoesNotReadTheCatalogPins(t *testing.T) {
 // The catalog admits exactly the releases whose foundation it holds, on
 // amd64, and refuses every other before anything is resolved.
 func TestTheCatalogAdmitsOnlyItsCompiledFoundations(t *testing.T) {
-	for _, platform := range []prerequisites.Platform{fedoraPlatform, rhelPlatform} {
+	for _, platform := range []prerequisites.Platform{fedoraPlatform, fedora44Platform, rhelPlatform} {
 		if err := (Catalog{}).Admit(platform); err != nil {
 			t.Fatalf("%+v was refused: %v", platform, err)
 		}
 	}
-	for _, platform := range []prerequisites.Platform{{OS: "rhel", Release: "9.7", Architecture: "amd64"}, {OS: "fedora", Release: "44", Architecture: "amd64"}, {OS: "rhel", Release: "9.8", Architecture: "arm64"}, {OS: "centos", Release: "9", Architecture: "amd64"}} {
+	for _, platform := range []prerequisites.Platform{{OS: "rhel", Release: "9.7", Architecture: "amd64"}, {OS: "fedora", Release: "42", Architecture: "amd64"}, {OS: "fedora", Release: "45", Architecture: "amd64"}, {OS: "fedora", Release: "44", Architecture: "arm64"}, {OS: "rhel", Release: "9.8", Architecture: "arm64"}, {OS: "centos", Release: "9", Architecture: "amd64"}} {
 		if err := (Catalog{}).Admit(platform); err == nil {
 			t.Fatalf("admitted unqualified platform %+v", platform)
 		}

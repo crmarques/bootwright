@@ -72,15 +72,26 @@ func TestTheBundleProbeVerifiesTheQualifiedFoundation(t *testing.T) {
 // whose libc the definition no longer pins, the qualified digest stages it
 // and the definition's alone refuses it.
 func TestTheResolverStagesTheQualifiedFoundation(t *testing.T) {
-	host := compiledExecution(t, fedoraPlatform)
-	host.PythonExecutable = "python/bin/python3.13"
-	for _, file := range host.Files {
-		data, err := os.ReadFile(file.Path)
-		digest := sha256.Sum256(data)
-		if err != nil || hex.EncodeToString(digest[:]) != file.SHA256 {
-			t.Skip("this host does not hold the compiled Fedora 43 foundation")
+	holds := func(requirement prerequisites.ExecutionRequirement) bool {
+		for _, file := range requirement.Files {
+			data, err := os.ReadFile(file.Path)
+			digest := sha256.Sum256(data)
+			if err != nil || hex.EncodeToString(digest[:]) != file.SHA256 {
+				return false
+			}
+		}
+		return true
+	}
+	var host prerequisites.ExecutionRequirement
+	for _, platform := range []prerequisites.Platform{fedoraPlatform, fedora44Platform, rhelPlatform} {
+		if compiled := compiledExecution(t, platform); holds(compiled) {
+			host = compiled
 		}
 	}
+	if host.Loader == "" {
+		t.Skip("this host holds no compiled foundation")
+	}
+	host.PythonExecutable = "python/bin/python3.13"
 	definition := cloneExecution(host)
 	index := 1
 	definition.Files[index].SHA256 = strings.Repeat("0", 64)
