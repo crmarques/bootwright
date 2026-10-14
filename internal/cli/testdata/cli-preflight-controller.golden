@@ -6,16 +6,14 @@ Controller readiness
   Route       direct
 
 Checks
-  [OK]  Host                fedora 43/amd64
-  [OK]  Installed host      verified local identity
-  [OK]  Execution bundle    Python 3.14.7, Ansible 2.21.4
-  [OK]  Container runtime   5.6.1-1.fc43
   [OK]  Target tools        openshift-clients 4.21.15, openshift-install 4.21.15
   [OK]  Libvirt client      libvirt client
   [OK]  Controller binding  controller
 
-Planned changes
-  none
+  Host      Fedora Linux 43 (amd64), glibc 2.42 — tested
+  Runtime   Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready
+  Packages  podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before bootwright)
+  Nothing to do.
 
   Outcome  ready
   Next     bootwright plan --context lab

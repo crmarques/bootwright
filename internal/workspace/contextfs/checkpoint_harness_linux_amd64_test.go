@@ -845,9 +845,6 @@ func checkpointScenarios() []checkpointScenario {
 		checkpointBindingScenario(),
 		checkpointReservationScenario(),
 		checkpointControllerRecordScenario(),
-		checkpointControllerBundleScenario(),
-		checkpointRetirementScenario(),
-		checkpointSetupRunScenario(),
 		checkpointClientAreaScenario(),
 		checkpointRetainedDependenciesScenario(),
 		checkpointMediaAddScenario(),
@@ -937,27 +934,10 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointAfterControllerRename: 1,
 		},
 		"controller-record": {
-			checkpointCreateFile: 4, checkpointWriteFile: 4, checkpointSyncFile: 4,
-			checkpointSyncDirectory: 9, checkpointBeforeRegistryRename: 3,
+			checkpointCreateFile: 5, checkpointWriteFile: 5, checkpointSyncFile: 5,
+			checkpointSyncDirectory: 11, checkpointBeforeRegistryRename: 3,
 			checkpointAfterRegistryRename: 3, checkpointMkdir: 1, checkpointAfterControllerDirectory: 1,
-			checkpointBeforeControllerRename: 1, checkpointAfterControllerRename: 1,
-		},
-		"controller-bundle": {
-			checkpointCreateFile: 4, checkpointWriteFile: 4, checkpointSyncFile: 4,
-			checkpointSyncDirectory: 13, checkpointBeforeControllerRename: 4,
-			checkpointAfterControllerRename: 4, checkpointMkdir: 3,
-			checkpointAfterControllerBundleDirectory: 1, checkpointBeforeControllerBundleWrite: 1,
-			checkpointAfterControllerBundleCreate: 1, checkpointBeforeControllerBundleRename: 1,
-			checkpointBeforeControllerBundleSync: 1,
-		},
-		"retirement": {
-			checkpointCreateFile: 2, checkpointWriteFile: 2, checkpointSyncFile: 2,
-			checkpointSyncDirectory: 7, checkpointBeforeControllerRename: 2,
-			checkpointAfterControllerRename: 2, checkpointAfterControllerBundleRetiring: 1,
-			checkpointBeforeControllerBundleUnlink: 2,
-		},
-		"setup-run": {
-			checkpointSyncDirectory: 3, checkpointMkdir: 1,
+			checkpointBeforeControllerRename: 2, checkpointAfterControllerRename: 2, checkpointBeforeBinding: 1,
 		},
 		"client-area": {
 			checkpointBeforeClientAreaReservation: 1, checkpointCreateFile: 3, checkpointWriteFile: 3,
@@ -1600,7 +1580,7 @@ func checkpointBindingScenario() checkpointScenario {
 	// apply publishes the binding and a later one refuses only a different
 	// binding, so the retry binds again.
 	bind := func(t *testing.T, ctx context.Context, store *Store) error {
-		host := syntheticControllerState(t, prerequisites.SetupContext{}).Host
+		host := syntheticControllerState(t).Host
 		return checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
 			return tx.Bind(ctx, "controller", host)
 		})
@@ -1634,7 +1614,7 @@ var checkpointClaim = []prerequisites.HostReservation{{
 	Keys: []string{"socket:192.0.2.1:3128", "unit:bootwright-proxy"},
 }}
 
-// checkpointSealed requires a setup bundle to stay attributed and sealed.
+// checkpointSealed requires a tool area to stay attributed and sealed.
 func checkpointSealed(ctx context.Context, view prerequisites.StorageView, id string) error {
 	area, err := view.OpenBundle(ctx, id)
 	if err != nil || area == nil {
@@ -1647,6 +1627,8 @@ func checkpointSealed(ctx context.Context, view prerequisites.StorageView, id st
 	return nil
 }
 
+// checkpointSealedFixture is a bound context on a prepared host holding a
+// sealed tool area.
 func checkpointSealedFixture(t *testing.T) *Store {
 	t.Helper()
 	store, record := lifecycleFixture(t)
@@ -1673,7 +1655,7 @@ func checkpointReservationScenario() checkpointScenario {
 				if len(view.State.Reservations) != 1 || view.State.Reservations[0].Service != "lab-proxy" || !slices.Equal(view.State.Reservations[0].Keys, checkpointClaim[0].Keys) {
 					return fmt.Errorf("reservations are %+v", view.State.Reservations)
 				}
-				return checkpointSealed(ctx, view, strings.Repeat("a", 64))
+				return checkpointSealed(ctx, view, sealedToolArea)
 			})
 		},
 	})
@@ -1681,62 +1663,40 @@ func checkpointReservationScenario() checkpointScenario {
 	return scenario
 }
 
-// checkpointControllerScenario fills what the controller publications share:
-// preflight's read and a registry mutation of the host's context.
-func checkpointControllerScenario(scenario checkpointScenario, name string) checkpointScenario {
-	scenario.reads = func(_ *testing.T, ctx context.Context, store *Store) error {
-		return store.ReadController(ctx, "", func(prerequisites.StorageView) error { return nil })
-	}
-	scenario.mutate = func(_ *testing.T, ctx context.Context, store *Store) error {
-		return checkpointCommit(ctx, store, name)
-	}
-	return scenario
-}
-
 func checkpointControllerRecordScenario() checkpointScenario {
-	setup := func(t *testing.T, ctx context.Context, store *Store) error {
-		value := syntheticControllerState(t, prerequisites.SetupContext{})
-		return store.MutateController(ctx, prerequisites.SetupContext{}, true, func(tx prerequisites.StorageTransaction) error {
-			_, err := tx.Publish(ctx, value)
-			return err
+	// specs/contexts/controller-record.md, Descriptor: the first binding on a
+	// prepared host creates the record, and a retry binds again; an
+	// unattributed controller directory is never adopted.
+	bind := func(t *testing.T, ctx context.Context, store *Store) error {
+		host := syntheticHost(t)
+		return checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
+			return tx.Bind(ctx, "controller", host)
 		})
 	}
-	return checkpointControllerScenario(checkpointScenario{
+	scenario := checkpointLifecycleScenario(checkpointScenario{
 		name: "controller-record",
 		prepare: func(t *testing.T) *Store {
-			store, sources := fixture(t)
-			publish(t, store, "alpha", sources)
+			store, _ := lifecycleFixture(t)
+			recordPreparedSetup(t, store)
 			return store
 		},
-		operate: setup,
-		// specs/contexts/controller-record.md, Descriptor and Publication and
-		// recovery: only explicit setup finishes an attributable
-		// initialization, and it retries the unchanged exact record.
-		retry: func(t *testing.T, ctx context.Context, store *Store) error {
-			value := syntheticControllerState(t, prerequisites.SetupContext{})
-			published := false
-			if err := store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
-				published = view.Initialized && view.State.Receipt.ID == value.Receipt.ID
-				return nil
-			}); err != nil || published {
-				return err
-			}
-			return setup(t, ctx, store)
-		},
-		settled: func(t *testing.T, ctx context.Context, store *Store) error {
+		operate: bind,
+		retry:   bind,
+		settled: func(_ *testing.T, ctx context.Context, store *Store) error {
 			registry, err := store.View(ctx)
 			if err != nil || registry.Controller.Mode != "ready" || registry.Controller.DirectoryInode == 0 {
 				return fmt.Errorf("controller descriptor is %+v (%v)", registry.Controller, err)
 			}
-			value := syntheticControllerState(t, prerequisites.SetupContext{})
 			return store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
-				if !view.Initialized || view.State.Receipt.ID != value.Receipt.ID || view.State.Receipt.Status != "pending" {
-					return fmt.Errorf("controller receipt is %+v", view.State.Receipt)
+				if !view.Initialized || len(view.State.Bindings) != 1 || view.State.Bindings[0].Context != checkpointContext {
+					return fmt.Errorf("controller bindings are %+v", view.State.Bindings)
 				}
 				return nil
 			})
 		},
-	}, "alpha")
+	})
+	scenario.reads = checkpointControllerReads
+	return scenario
 }
 
 // checkpointReplay publishes one executable file into a bundle area as the
@@ -1763,102 +1723,6 @@ func checkpointReplay(ctx context.Context, area prerequisites.BundleArea, direct
 		return err
 	}
 	return area.Write(ctx, path, data, true)
-}
-
-func checkpointControllerBundleScenario() checkpointScenario {
-	setup := func(t *testing.T, ctx context.Context, store *Store) error {
-		digest := syntheticControllerState(t, prerequisites.SetupContext{}).Receipt.CatalogDigest
-		if err := store.MutateController(ctx, prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
-			next := tx.Snapshot().State
-			next.Receipt.Actions[0].Phase = "intent"
-			if _, err := tx.Publish(ctx, next); err != nil {
-				return err
-			}
-			area, err := tx.Bundle(ctx, digest)
-			if err != nil {
-				return err
-			}
-			return checkpointReplay(ctx, area, "bin", "bin/marker", []byte("published\n"))
-		}); err != nil {
-			return err
-		}
-		return store.MutateController(ctx, prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
-			_, err := tx.Publish(ctx, completeControllerState(tx.Snapshot().State))
-			return err
-		})
-	}
-	return checkpointControllerScenario(checkpointScenario{
-		name: "controller-bundle",
-		prepare: func(t *testing.T) *Store {
-			store, _ := controllerFixture(t)
-			return store
-		},
-		operate: setup,
-		// specs/contexts/controller-record.md, Publication and recovery and
-		// Bounds: only explicit setup retry resolves a pending receipt, and it
-		// replays the exact action into the bundle it reserved, publishing
-		// again only a file a crash left absent.
-		retry: func(t *testing.T, ctx context.Context, store *Store) error {
-			complete := false
-			if err := store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
-				complete = view.State.Receipt.Status == "complete"
-				return nil
-			}); err != nil || complete {
-				return err
-			}
-			return setup(t, ctx, store)
-		},
-		settled: func(t *testing.T, ctx context.Context, store *Store) error {
-			digest := syntheticControllerState(t, prerequisites.SetupContext{}).Receipt.CatalogDigest
-			return store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
-				if view.State.Receipt.Status != "complete" {
-					return fmt.Errorf("controller receipt is %s", view.State.Receipt.Status)
-				}
-				if err := checkpointSealed(ctx, view, digest); err != nil {
-					return err
-				}
-				area, err := view.OpenBundle(ctx, digest)
-				if err != nil {
-					return err
-				}
-				marker, err := area.Read(ctx, "bin/marker", 64)
-				if err != nil || string(marker) != "published\n" {
-					return fmt.Errorf("bundle marker is %q (%v)", marker, err)
-				}
-				return nil
-			})
-		},
-	}, "alpha")
-}
-
-func checkpointRetirementScenario() checkpointScenario {
-	// specs/controller.md, Retiring superseded bundles: retirement records
-	// its intent before it removes anything, and repeating the command
-	// completes it.
-	retire := func(t *testing.T, ctx context.Context, store *Store) error {
-		ids := []string{retiredBundle(t)}
-		return store.MutateController(ctx, prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
-			return tx.RetireBundles(ctx, ids)
-		})
-	}
-	return checkpointControllerScenario(checkpointScenario{
-		name:    "retirement",
-		prepare: retirementFixture,
-		operate: retire,
-		retry:   retire,
-		settled: func(t *testing.T, ctx context.Context, store *Store) error {
-			superseded, current := retiredBundle(t), currentBundle(t)
-			if _, err := os.Lstat(bundlePath(store, superseded)); !errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("the retired bundle remains (%v)", err)
-			}
-			return store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
-				if slices.ContainsFunc(view.State.RetainedDefinitions, func(definition prerequisites.Definition) bool { return definition.CatalogDigest == superseded }) {
-					return errors.New("the retired bundle's resolution is retained")
-				}
-				return checkpointSealed(ctx, view, current)
-			})
-		},
-	}, "")
 }
 
 // checkpointClientMode reads the client closure's reservation mode and
@@ -1931,7 +1795,7 @@ func checkpointRetainedDependenciesScenario() checkpointScenario {
 	// retry.
 	retain := func(_ *testing.T, ctx context.Context, store *Store) error {
 		return checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
-			return tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{checkpointDependency}, nil)
+			return tx.RetainDependencies(ctx, []prerequisites.DependencySource{checkpointDependency})
 		})
 	}
 	scenario := checkpointLifecycleScenario(checkpointScenario{
@@ -1941,8 +1805,8 @@ func checkpointRetainedDependenciesScenario() checkpointScenario {
 		retry:   retain,
 		settled: func(_ *testing.T, ctx context.Context, store *Store) error {
 			return store.ReadController(ctx, checkpointContext, func(view prerequisites.StorageView) error {
-				if !slices.Contains(view.State.RetainedSources, checkpointDependency) {
-					return fmt.Errorf("retained sources are %+v", view.State.RetainedSources)
+				if !slices.Contains(view.State.ToolSources, checkpointDependency) {
+					return fmt.Errorf("retained sources are %+v", view.State.ToolSources)
 				}
 				return nil
 			})

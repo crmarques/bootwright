@@ -35,7 +35,7 @@ type Manager struct {
 	probe bundleProbe
 }
 
-func New(guard prerequisites.PythonExecutionGuard) *Manager {
+func New(guard bundleGuard) *Manager {
 	return &Manager{fetch: fetchSource, probe: func(ctx context.Context, area prerequisites.BundleArea, definition prerequisites.Definition) error {
 		return probeBundle(ctx, guard, area, definition)
 	}}
@@ -198,18 +198,6 @@ func (m *Manager) Prepare(ctx context.Context, area, retained prerequisites.Bund
 	before, entries, partials, err := inspectClosure(ctx, area, record, definition.Tools)
 	if err != nil {
 		return prerequisites.BundleInspection{}, err
-	}
-	if before.Recoverable && len(partials) != 0 {
-		// An earlier build's write killed before its sync is the only way a
-		// final name holds fewer bytes than approved, so the file is
-		// removed and the exact replay publishes it again.
-		if err := discardPartials(ctx, area, partials); err != nil {
-			return prerequisites.BundleInspection{}, err
-		}
-		before, entries, partials, err = inspectClosure(ctx, area, record, definition.Tools)
-		if err != nil {
-			return prerequisites.BundleInspection{}, err
-		}
 	}
 	if !before.Recoverable || len(partials) != 0 {
 		return prerequisites.BundleInspection{}, bundleFailure("existing bundle content is not attributable to the approved closure")
@@ -448,21 +436,6 @@ type partialFile struct {
 // otherwise the file approved: a regular file of the approved mode.
 func shortOf(entry prerequisites.BundleEntry, approved int64, executable bool) bool {
 	return !entry.Directory && entry.Executable == executable && entry.Size >= 0 && entry.Size < approved
-}
-
-// discardPartials removes each partial file through the area's own removal,
-// which only its write capability grants and never in a sealed area.
-func discardPartials(ctx context.Context, area prerequisites.BundleArea, partials []partialFile) error {
-	discard, removes := area.(prerequisites.BundleDiscard)
-	if !removes {
-		return &prerequisites.ScopedFailure{Code: "controller.unsupported", Message: "the bundle file " + partials[0].path + " an earlier build left incomplete cannot be removed, because this bundle area offers no removal", Correction: "Use an executable whose controller store removes an incomplete bundle file"}
-	}
-	for _, partial := range partials {
-		if err := discard.DiscardPartial(ctx, partial.path, partial.approved); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func inspectFiles(ctx context.Context, area prerequisites.BundleArea, record closureRecord, selectedTools ...[]prerequisites.ToolDefinition) (prerequisites.BundleInspection, map[string]prerequisites.BundleEntry, error) {

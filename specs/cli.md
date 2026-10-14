@@ -263,7 +263,7 @@ parsed flags, the invocations that read the
 [context-free acquisition route](controller.md#the-context-free-acquisition-route)
 before `sudo` can prompt. Available controller setup and inspection may
 need private shared-host metadata or installation privilege; their exact
-effects follow [Controller](controller.md#selection-and-command-journeys).
+effects follow [Controller](controller.md#the-setup-flow).
 Available commands requiring context state run as root; a
 non-root invocation keeps an unprivileged supervisor and launches one exact
 Bootwright child as UID 0 through the qualified absolute sudo executable. Pin
@@ -425,7 +425,7 @@ can run away from the declared controller; it checks input relationships and
 never verifies the invoking host.
 
 `setup` and `preflight controller` follow the
-[Controller journeys](controller.md#selection-and-command-journeys), including
+[Controller journeys](controller.md#the-setup-flow), including
 preparation before context creation or Environment import and the context each
 consumes. Which invocations read the invoking environment's proxy route is
 owned by the [context-free acquisition route](controller.md#the-context-free-acquisition-route).

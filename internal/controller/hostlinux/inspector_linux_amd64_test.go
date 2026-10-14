@@ -222,3 +222,43 @@ func TestFIPSModeReadsTheKernelFlag(t *testing.T) {
 		})
 	}
 }
+
+// A non-empty /etc/ld.so.preload is reported, never refused: an absent or
+// empty file is not, and neither is changed by looking.
+func TestLoaderPreloadReportsOnlyANonEmptyFile(t *testing.T) {
+	for name, test := range map[string]struct {
+		content *string
+		want    bool
+	}{
+		"absent":    {},
+		"empty":     {content: new(string)},
+		"non-empty": {content: func() *string { value := "/usr/lib64/libfake.so\n"; return &value }(), want: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			i := fixture(t, "xfs")
+			if test.content != nil {
+				writeFixture(t, i, "/etc/ld.so.preload", *test.content, 0644)
+			}
+			before := snapshot(t, i.view.root)
+			got, err := i.LoaderPreload(context.Background())
+			if err != nil || got != test.want {
+				t.Fatalf("LoaderPreload = %t, %v, want %t", got, err, test.want)
+			}
+			if after := snapshot(t, i.view.root); len(after) != len(before) {
+				t.Fatal("reading the preload changed the filesystem")
+			}
+		})
+	}
+}
+
+func TestReleaseReadsIDLikeAndTheArchitecture(t *testing.T) {
+	i := fixture(t, "btrfs")
+	writeFixture(t, i, "/usr/lib/os-release", "NAME=\"Rocky Linux\"\nID=\"rocky\"\nID_LIKE=\"rhel centos fedora\"\nVERSION_ID=\"9.6\"\n", 0644)
+	release, err := i.Release(context.Background())
+	if err != nil || release.ID != "rocky" || release.VersionID != "9.6" || strings.Join(release.Like, ",") != "rhel,centos,fedora" || release.Architecture != "amd64" {
+		t.Fatal(release, err)
+	}
+	writeFixture(t, i, "/usr/lib/os-release", "ID=rocky\nID_LIKE=\"rhel;fedora\"\nVERSION_ID=9.6\n", 0644)
+	_, err = i.Release(context.Background())
+	assertDiagnostic(t, err, "controller.unsupported")
+}

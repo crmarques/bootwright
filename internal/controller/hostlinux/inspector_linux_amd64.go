@@ -32,6 +32,29 @@ var _ prerequisites.HostInspector = Inspector{}
 
 var _ prerequisites.FIPSInspector = Inspector{}
 
+var _ prerequisites.LoaderPreloadInspector = Inspector{}
+
+const loaderPreload = "/etc/ld.so.preload"
+
+func (i Inspector) LoaderPreload(ctx context.Context) (bool, error) {
+	fs, err := i.view.open(ctx)
+	if err != nil {
+		return false, inspectionFailure(ctx, "controller.unsupported", "host platform metadata cannot be inspected safely")
+	}
+	defer fs.close()
+	file, stat, err := fs.openPath(ctx, loaderPreload, false)
+	if file != nil {
+		file.Close()
+	}
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if errors.Is(err, unix.ENOENT) {
+		return false, nil
+	}
+	return err != nil || stat.Mode&unix.S_IFMT != unix.S_IFREG || stat.Size != 0, nil
+}
+
 // fipsFlag is the kernel's FIPS mode flag beneath /proc.
 const fipsFlag = "sys/crypto/fips_enabled"
 
@@ -87,6 +110,25 @@ func (i Inspector) Platform(ctx context.Context) (prerequisites.Platform, error)
 		return prerequisites.Platform{}, inspectionFailure(ctx, "controller.unsupported", "host OS declaration is malformed")
 	}
 	return prerequisites.Platform{OS: id, Release: release, Architecture: i.view.architecture}, nil
+}
+
+var _ prerequisites.ReleaseInspector = Inspector{}
+
+func (i Inspector) Release(ctx context.Context) (prerequisites.HostRelease, error) {
+	fs, err := i.view.open(ctx)
+	if err != nil {
+		return prerequisites.HostRelease{}, inspectionFailure(ctx, "controller.unsupported", "host platform metadata cannot be inspected safely")
+	}
+	defer fs.close()
+	data, err := fs.read(ctx, "/etc/os-release", 64<<10)
+	if err != nil {
+		return prerequisites.HostRelease{}, inspectionFailure(ctx, "controller.unsupported", "host OS declaration is missing or unsafe")
+	}
+	values, err := osReleaseValues(data)
+	if err != nil {
+		return prerequisites.HostRelease{}, inspectionFailure(ctx, "controller.unsupported", "host OS declaration is malformed")
+	}
+	return prerequisites.HostRelease{ID: values["ID"], VersionID: values["VERSION_ID"], Like: strings.Fields(values["ID_LIKE"]), Architecture: i.view.architecture}, nil
 }
 
 // Identity acquires the canonical installed-host tuple and independently checks
@@ -155,32 +197,40 @@ func (i Inspector) Identity(ctx context.Context) (controller.InstalledHostIdenti
 }
 
 func parseOSRelease(data []byte) (string, string, error) {
+	values, err := osReleaseValues(data)
+	if err != nil {
+		return "", "", err
+	}
+	return values["ID"], values["VERSION_ID"], nil
+}
+
+func osReleaseValues(data []byte) (map[string]string, error) {
 	values := map[string]string{}
 	for _, line := range strings.Split(string(data), "\n") {
 		key, value, found := strings.Cut(line, "=")
-		if !found || key != "ID" && key != "VERSION_ID" {
+		if !found || key != "ID" && key != "VERSION_ID" && key != "ID_LIKE" {
 			continue
 		}
 		if _, duplicate := values[key]; duplicate {
-			return "", "", errEvidence
+			return nil, errEvidence
 		}
 		if len(value) >= 2 && (value[0] == '"' && value[len(value)-1] == '"' || value[0] == '\'' && value[len(value)-1] == '\'') {
 			value = value[1 : len(value)-1]
 		}
 		if value == "" {
-			return "", "", errEvidence
+			return nil, errEvidence
 		}
 		for _, c := range value {
-			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == '_') {
-				return "", "", errEvidence
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == '_' || key == "ID_LIKE" && c == ' ') {
+				return nil, errEvidence
 			}
 		}
 		values[key] = value
 	}
 	if values["ID"] == "" || values["VERSION_ID"] == "" {
-		return "", "", errEvidence
+		return nil, errEvidence
 	}
-	return values["ID"], values["VERSION_ID"], nil
+	return values, nil
 }
 
 func trimTerminator(data []byte) string { return strings.TrimSuffix(string(data), "\n") }

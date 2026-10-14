@@ -1,5 +1,5 @@
 
   Outcome    changed
   Readiness  all required prerequisites verified
-  Retired    2 superseded execution bundles
+  Logs       /var/lib/bootwright/setup/runs/setup-000003
   Next       bootwright preflight controller

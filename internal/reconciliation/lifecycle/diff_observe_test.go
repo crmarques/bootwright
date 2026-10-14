@@ -198,8 +198,7 @@ func TestAControllerStageInspectionCannotAuthorizeAnEffect(t *testing.T) {
 	_, clientErr := inspection.Stage.ClientArea(ctx, "client")
 	for name, err := range map[string]error{
 		"ClientArea": clientErr, "SealClientArea": inspection.Stage.SealClientArea(ctx, "client"),
-		"RetainDependencies": inspection.Stage.RetainDependencies(ctx, nil, nil, nil), "Prepare": inspection.Stage.Prepare(ctx, prerequisites.NativePreparation{}),
-		"ReleaseFoundation": inspection.Stage.ReleaseFoundation(),
+		"RetainDependencies": inspection.Stage.RetainDependencies(ctx, nil), "Prepare": inspection.Stage.Prepare(ctx, prerequisites.StagePreparation{}),
 	} {
 		t.Run(name, func(t *testing.T) {
 			refusedWith(t, err, "lifecycle.state", "an observation may not authorize a host effect", "")
@@ -415,7 +414,7 @@ func TestAnObservedDiffRefusesAnotherHostOrAnUnboundContext(t *testing.T) {
 		"another host": {func(f diffFixture) { f.service.host = testHost{identity: other} }, "this host is not the host the context is bound to", ""},
 		"an unbound context": {func(f diffFixture) { f.workspace.controller.State.Bindings = nil },
 			"this context is not bound to a controller host", "run bootwright diff --context lab without --observe"},
-		"no setup": {func(f diffFixture) { f.workspace.controller.Initialized = false }, "this host has no completed controller setup", "run bootwright setup"},
+		"no setup": {func(f diffFixture) { f.workspace.controller.Prepared = false }, "this host has no completed controller setup", "run bootwright setup"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f, _, _ := observedFixture(t, "alpha")

@@ -16,6 +16,18 @@ var _ prerequisites.HostPackages = (*Packages)(nil)
 
 func New(controller.Route) (*Packages, error) { return &Packages{}, nil }
 
+func ForEgress(prerequisites.SetupEgress) (*Packages, error) { return &Packages{}, nil }
+
+func (*Packages) Qualify(ctx context.Context) error { return unsupported(ctx) }
+
+func (*Packages) Present(ctx context.Context, _ []string) ([]prerequisites.HostPackageEvidence, error) {
+	return nil, unsupported(ctx)
+}
+
+func (*Packages) Installed(ctx context.Context, _ []string) ([]prerequisites.HostPackageEvidence, error) {
+	return nil, unsupported(ctx)
+}
+
 func (*Packages) Missing(ctx context.Context, _ []string) ([]string, error) {
 	return nil, unsupported(ctx)
 }

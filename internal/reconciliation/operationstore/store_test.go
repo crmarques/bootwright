@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -64,7 +62,7 @@ func testOperation(t *testing.T, plan reconciliation.Plan) Operation {
 		Context: "example", Revision: "rev-" + strings.Repeat("ef", 16),
 		InputDigest: strings.Repeat("1", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("2", 64),
 		Executable: Executable{Version: "devel", Commit: "abcdef1"},
-		Closure:    &Closure{Digest: strings.Repeat("3", 64), Python: "3.14.7", Ansible: "2.21.4"},
+		Closure:    &Closure{Digest: strings.Repeat("3", 64), Python: "3.14", Ansible: "2.21.4"},
 		Bindings:   []string{}, State: reconciliation.OperationRunning,
 		Created: "2026-09-11T12:00:00Z", Updated: "2026-09-11T12:00:00Z",
 	}
@@ -162,7 +160,7 @@ func TestRegisterRefusesInconsistentOperations(t *testing.T) {
 		"earlier version":   func(o Operation) Operation { o.Version, o.Closure = 1, nil; return o },
 		"no closure":        func(o Operation) Operation { o.Closure = nil; return o },
 		"short closure": func(o Operation) Operation {
-			o.Closure = &Closure{Digest: strings.Repeat("3", 63), Python: "3.14.7", Ansible: "2.21.4"}
+			o.Closure = &Closure{Digest: strings.Repeat("3", 63), Python: "3.14", Ansible: "2.21.4"}
 			return o
 		},
 	} {
@@ -311,16 +309,12 @@ func TestStoredRecordsMustBeCanonical(t *testing.T) {
 	}
 }
 
-// A version 1 record, which a build before the execution closure was frozen
-// wrote, carries no closure and still reads back and updates as itself, so a
-// fresh verb and status can read the context it belongs to. Its bytes are the
-// ones that build published, kept in operation-apply-v1.golden, which no
-// -update rewrites. Every other pairing of version and closure refuses.
-func TestAnEarlierVersionOperationRecordStaysReadable(t *testing.T) {
+// Only the current operation record version reads back: a version 1 record,
+// which a build before the setup v2 cut-over wrote with no closure, refuses as
+// every other pairing of version and closure does (D152's fresh install).
+func TestOnlyTheCurrentOperationRecordVersionReads(t *testing.T) {
 	ctx := context.Background()
 	plan := goldenPlan(t)
-	earlier := testOperation(t, plan)
-	earlier.Version, earlier.Closure, earlier.Bindings = 1, nil, []string{"bind-" + strings.Repeat("cd", 16)}
 	store, area := newStore(t)
 	if _, err := store.Index(ctx); err != nil {
 		t.Fatal(err)
@@ -328,42 +322,26 @@ func TestAnEarlierVersionOperationRecordStaysReadable(t *testing.T) {
 	if err := store.Register(ctx, testOperation(t, plan), plan); err != nil {
 		t.Fatal(err)
 	}
-	indented, err := os.ReadFile(filepath.Join("testdata", "operation-apply-v1.golden"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var published bytes.Buffer
-	if err := json.Compact(&published, indented); err != nil {
-		t.Fatal(err)
-	}
-	target := earlier.ID + "/operation.json"
-	area.files[target] = append(published.Bytes(), '\n')
-	reader := New(area, fixedClock())
-	stored, err := reader.ReadOperation(ctx, earlier.ID)
-	if err != nil || !reflect.DeepEqual(stored, earlier) {
-		t.Fatalf("the version 1 record read back as %+v (%v)", stored, diagnostics.Of(err))
-	}
-	stored.State = reconciliation.OperationDone
-	if err := reader.UpdateOperation(ctx, stored); err != nil {
-		t.Fatalf("updating the version 1 record: %v", diagnostics.Of(err))
-	}
-	if updated := area.files[target]; !bytes.HasPrefix(updated, []byte(`{"version":1,`)) || bytes.Contains(updated, []byte(`"closure"`)) {
-		t.Fatalf("the update rewrote the version 1 record as %s", updated)
-	}
+	target := testOperation(t, plan).ID + "/operation.json"
 	current := testOperation(t, plan)
 	for name, mutate := range map[string]func(Operation) Operation{
+		"version 1 with no closure": func(o Operation) Operation { o.Version, o.Closure = 1, nil; return o },
 		"version 1 with a closure":  func(o Operation) Operation { o.Version = 1; return o },
 		"version 2 with no closure": func(o Operation) Operation { o.Closure = nil; return o },
 		"an uppercase digest": func(o Operation) Operation {
-			o.Closure = &Closure{Digest: strings.Repeat("A", 64), Python: "3.14.7", Ansible: "2.21.4"}
+			o.Closure = &Closure{Digest: strings.Repeat("A", 64), Python: "3.14", Ansible: "2.21.4"}
 			return o
 		},
 		"a Python intent": func(o Operation) Operation {
 			o.Closure = &Closure{Digest: strings.Repeat("3", 64), Python: "latest", Ansible: "2.21.4"}
 			return o
 		},
+		"a Python release in place of its ABI": func(o Operation) Operation {
+			o.Closure = &Closure{Digest: strings.Repeat("3", 64), Python: "3.14.8", Ansible: "2.21.4"}
+			return o
+		},
 		"an ansible-core minor only": func(o Operation) Operation {
-			o.Closure = &Closure{Digest: strings.Repeat("3", 64), Python: "3.14.7", Ansible: "2.21"}
+			o.Closure = &Closure{Digest: strings.Repeat("3", 64), Python: "3.14", Ansible: "2.21"}
 			return o
 		},
 		"a later version": func(o Operation) Operation { o.Version = OperationVersion + 1; return o },

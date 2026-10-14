@@ -16,23 +16,18 @@ type ToolCatalog interface {
 	Present(context.Context, prerequisites.BundleArea, []prerequisites.ToolDefinition) (bool, error)
 }
 
-// NativeResolver solves the native client transaction against the host's
-// current inventory. It applies nothing.
-type NativeResolver interface {
-	Resolve(context.Context, prerequisites.Platform, prerequisites.NativeRequirements, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error)
+// HostPackages opens the host's own package manager over the route the
+// controller Machine selected, which dnf receives as its proxy.
+type HostPackages func(prerequisites.SetupEgress) (prerequisites.HostPackages, error)
+
+// SetupLock holds setup/lock for the whole host package effect, so setup and
+// another context's stage never run dnf beside it.
+type SetupLock interface {
+	MutateSetup(context.Context, func(prerequisites.SetupTransaction) error) error
 }
 
-// NativeInspector reports whether the selected native root packages are
-// installed by name, without repository metadata or installed-state change,
-// and on a RHEL controller which named roots the operator installed under the
-// platform's qualified vendor key.
-type NativeInspector interface {
-	Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error)
-	OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error)
-}
-
-// Installer runs the fixed controller dependency automation inside an
-// execution foundation the caller already holds.
+// Installer runs the fixed controller tool automation inside a runtime the
+// caller already holds.
 type Installer interface {
 	Clients(context.Context, prerequisites.ClientInstallation) (prerequisites.ActionResult, error)
 }

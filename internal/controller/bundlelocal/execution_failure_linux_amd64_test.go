@@ -15,7 +15,7 @@ import (
 // controller stage names its own command instead.
 func TestAnExecutionFailureNamesTheCommandThatMetIt(t *testing.T) {
 	err := ExecutionGuard{}.WithPython(context.Background(), nil, prerequisites.ExecutionRequirement{},
-		func(prerequisites.PythonLaunch, func() error) error { return nil })
+		func(bundleLaunch, func() error) error { return nil })
 	for _, test := range []struct {
 		name string
 		err  error

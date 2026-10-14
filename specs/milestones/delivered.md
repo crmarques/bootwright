@@ -221,7 +221,7 @@ makes every other block wait for a controller block.
 client closure and the libvirt client a context selects on the controller
 Machine through that Machine's proxy choice; a context selecting nothing beyond
 the host baseline contributes no block. The clients go into a
-[client area](../contexts/controller-record.md#bundles-and-client-areas): a
+[client area](../contexts/controller-record.md#tool-areas): a
 shared host namespace content-addressed by the exact closure, reserved before
 its directory exists, attributed to it and sealed once the tree is durable. The
 identities a stage will acquire are retained before acquisition, the native
@@ -492,7 +492,7 @@ means a frozen request this executable cannot read refuses there instead.
 **Owner:** Controller setup, with Workspace (the area it removes and the record
 that accounts for it).
 
-**Outcome:** [`setup --purge-old-bundles`](../controller.md#supported-host-and-dependency-selection)
+**Outcome:** `setup --purge-old-bundles` (X88 removed it)
 retires the execution bundles this host no longer needs, after the setup it
 runs beside completes and only then. Superseded areas are read from the
 resolutions the host retains: every one the completed receipt does not name.
@@ -994,7 +994,7 @@ comparison of it (B16, D14).
 `TestALifecyclePlacementHostConnectsAsRoot`,
 `TestAPlacementNeverBindsAnEscalationSecret`,
 `TestDocumentationLeavesTheAutomationDigest`,
-`TestTheRunnerComparesOnlyTheDigestedAutomation`, and the collection tests
+TestTheRunnerComparesOnlyTheDigestedAutomation (X88 replaced it with `TestARunExecutesTheStagedAutomationAndHoldsItsLock`), and the collection tests
 `test_modules_parse_under_the_remote_python_floor` and
 `test_each_tool_is_given_its_own_frozen_seconds`.
 
@@ -4010,7 +4010,7 @@ that the snapshot holds a regular, non-empty `rpmdb.sqlite` under the platform's
 directory (a link is refused too) and otherwise refuses with
 `controller.setup`, "the native database snapshot no longer holds the package
 database it was copied with". The test's fake answers as the observed rpm does
-and `TestRPMQueryReadsThePlatformSnapshot` asserts, for a removed, empty, linked
+and TestRPMQueryReadsThePlatformSnapshot asserts, for a removed, empty, linked
 and directory database, that the query refuses and rpm never ran. The
 controller spec states the refusal.
 
@@ -4305,7 +4305,7 @@ under.
 `TestAContinuationWithNoSameBlocksProofRefusesUnderAnotherBuild` in
 `internal/reconciliation/lifecycle`; the refused-continuation golden and rows,
 `TestARecordWithOnlyACommitNamesDevelAndTheCommit`,
-`TestAnEarlierVersionRecordNamesNoEarlierBuildOnceSetupKeepsRuns`,
+TestAnEarlierVersionRecordNamesNoEarlierBuildOnceSetupKeepsRuns (X88 removed it with the version 1 operation record),
 `TestContinuationRefusesDriftedInputExecutableOrHost` and
 `TestARepairThatMovesABlockLeavesAFailedApplyDestroyable`, changed to move a
 block with the automation; and
@@ -5267,12 +5267,12 @@ foundations share every path but the versioned libgcc file, so a requirement
 setup qualified now matches the compiled record whose GCC major that file
 keeps, which a qualification of the same upstream version always does, and no
 record when two share that shape; a launch refusal therefore never names
-another release to qualify within. [Development](../../docs/development.md#qualified-hosts-and-images)
+another release to qualify within. [Development](../../docs/development.md#lock-refresh-and-tested-hosts)
 records the builds and what admitting another Fedora release takes.
 
 **Outcome, B547 (follow-up):** the first resolve against the Fedora 44
 repositories, run unprivileged on the owner's host through
-`TestNativeCurrentOSResolution`, refused with `controller.setup: the provided
+TestNativeCurrentOSResolution, refused with `controller.setup: the provided
 native package solver refused its isolated dependency operation`. Every
 baseline root was already installed there, and libdnf5 5.4.6.0 answers
 `add_rpm_install` of an installed package with a transaction entry whose action
@@ -5281,7 +5281,7 @@ apply-side re-solve from the plan's own RPMs reports the same entry for an
 installed build. A reason change moves no file, so `solve5` now leaves it out
 of the plan, neither inbound nor outbound, and still refuses every other
 unrequested action. After the fix the same resolve passes (3 roots, 3 sources,
-0 changes, 46 s including the metadata stage) and `TestNativeCurrentOSInspection`
+0 changes, 46 s including the metadata stage) and TestNativeCurrentOSInspection
 finds the roots by name. The
 [knowledge page](../../.agents/knowledge/native-root-reason-change.md) records
 the symptom and how to read the helper's own refusal.
@@ -5296,10 +5296,10 @@ admitted, Fedora 43's and RHEL 9.8's unchanged),
 its own release), `TestALaunchRefusalNamesSetupForAQualifiableUpdate` (a
 qualified requirement of each release names that release; it fails without
 the GCC-major match), `TestARequirementInTheShapeOfTwoReleasesNamesNeither`,
-`TestEachFedoraReleaseResolvesFromItsOwnRepositories`,
-`TestFoundationBuildsReadRPMFileDigests`, `TestAnotherMinorStillRefuses` and
+TestEachFedoraReleaseResolvesFromItsOwnRepositories,
+TestFoundationBuildsReadRPMFileDigests, `TestAnotherMinorStillRefuses` and
 the collection's `test_each_qualified_fedora_release_reads_its_own_primary_key`.
-`TestNativeCurrentOSResolution` now qualifies whichever admitted Fedora release
+TestNativeCurrentOSResolution now qualifies whichever admitted Fedora release
 the host runs.
 
 **Gates:** `make check` passes: fmt-check, modules-check, tidy-check, test,
@@ -5322,7 +5322,7 @@ foundations and bundle identities are unchanged. The collection change moves
 the automation digest, so the next `setup` reprojects the bundle, and a live
 context continues after it (D145). Moving a host from Fedora 43 to Fedora 44
 changes its glibc and libgcc upstream versions, the update before which the
-[hold procedure](../../docs/operator-guide.md#hold-the-execution-foundation)
+hold procedure (X88 removed it)
 has the host's operations complete or its contexts destroyed, then sets it up
 with a build that pins the new builds, as X84 does. **Constraints left behind:** Fedora 44
 awaits its first [acceptance ledger](../../docs/acceptance.md#ledger) run of
@@ -5596,7 +5596,14 @@ it can take, and nothing staged is executable.
 venvlocal cases skip without a locked interpreter, and the mount-based sweep
 tests skip without root.
 
-**Gates:** GATES_PLACEHOLDER
+**Gates:** in the x87 worktree after merging main 6e2a51d94, as its commit
+records: `make check` passes (fmt-check, modules-check, tidy-check, test,
+vet, completion-test, vulncheck with no reachable vulnerability,
+ansible-check with lint 0 failures, sanity 24 of 24 and units 1859 passed and
+1 skipped, and `git diff --check`); `make race` and `make docs-check` pass;
+per lane, `make quick`, the package tests, `-race` on the new packages and
+`scripts/runtime-lock verify` against PyPI passed. Not run: anything needing
+root.
 
 **Digest and version effects:** none for a live operation. The automation
 digest, every implementation's contract and content digest, the execution
@@ -5617,6 +5624,151 @@ specs/security.md does not yet state B548's rule or its sticky-directory
 exemption; B555's security rewrite does. `controller/hostdnf` sits in the
 architecture's port-test-support row only until B554 wires it. S0, the
 owner's baseline measurement, is still pending.
+
+### X88 — Controller setup v2 cut-over
+
+**Owner:** Controller setup, with Controller (clients), State reconciliation,
+Workspace and CLI. A product slice of [M1](m1.md), the second of controller
+setup v2 (X87 to X90), integrated on local main as one commit by the session
+on 2026-10-14 without a push. D152 still awaits the owner's review, and its
+clause 9 sequencing choice was deferred by the owner on 2026-10-14
+("implement whatever you can; I will test when I can run"), so the session
+integrated X88 ahead of both. **Items:** B554 and B556 (with B555, whose
+in-tree gates pass and which awaits the owner's fresh-install acceptance, and
+a part of B549's remainder). **Decisions:** D152, pending the
+owner's review. **Integrated:** "feat(controller): cut setup over to the OS
+Python venv and host dnf".
+
+**Outcome, B554:** the controller stage no longer builds a frozen native
+transaction from setup's definition. At plan time it reads which of the
+selected client closures' host package requirements are missing through
+rpm alone, so a ready host runs no dnf; at effect time, inside the attempt's
+existing intent record, it runs the root `dnf install --assumeno` preview and
+the `--assumeyes` install with `install_weak_deps=False` through the
+`hostdnf` adapter, now wired, on the stage's frozen proxy route, and then
+records each provider's NEVRA and the repository `dnf repoquery --installed`
+names. The role receives no native plan, the client request moves to
+`controller-clients-v3` and its golden moves. A RHEL host installs `lorax` and
+`xorriso` from whatever its entitled repositories provide, which supersedes
+D106 and closes B330, an entitled-source adapter no longer needed.
+
+**Outcome, B555 (in-tree):** setup inspects the host (family and floors, the
+locked-ABI interpreter, host packages and the published runtime), reports a
+ready host with no request and no write, and otherwise plans with dnf's own
+preview, confirms, records pending intent in the setup subtree, installs host
+packages, builds and publishes the venv runtime from the embedded lock and
+writes the receipt; an interrupted setup is re-inspected after confirmation,
+and another build's setup format is discarded after confirmation. The Python
+execution guard is the venv launch with no release callback, behind one
+prerequisites port that reconciles `venvlocal` with the contextfs setup
+transaction. An operation locates this build's runtime once from the setup
+receipt and the embedded lock: no receipt, a pending setup or an unpublished
+runtime refuses `controller.state` "the controller runtime for this build
+(lock …) is not prepared" with `run bootwright setup`. The closure an
+operation freezes is `execution-closure-v2` over the lock digest and the ABI,
+so a same-lock rebuild and a Python z-stream update continue a live operation,
+and a lock change refuses naming the build whose runtime the host keeps. The
+Ansible runner stages the embedded automation once per invocation into the
+root 0700 staging root, passes its lock to the run and releases it at the end,
+so an `ansible/`-only fix is build and apply. The controller prerequisites
+role loses its native and inventory tasks and its request moves to
+`controller-prerequisites-v6`; the supervisor asserts the venv. Setup's ready
+path and `preflight controller` print one table of host, runtime and packages
+with provider and origin, with the informational lines
+`controller.untested-release` and `controller.loader-preload`; `setup` takes
+`--dry-run`, `--yes` and `--output json` with `--dry-run`, which lists every
+locked wheel's file, URL and SHA-256, and `--purge-old-bundles` is gone. The
+merge of [X91](#x91--read-only-diff-and-the-delta-seam) moved `diff
+--observe` onto the same located runtime. specs/controller.md,
+specs/security.md (the attacker model, W1 to W4 and B548's rule with its
+sticky-directory exemption), specs/cli/commands.md, specs/contexts.md,
+specs/contexts/controller-record.md, specs/architecture.md and
+specs/state-reconciliation.md state the cut-over, with the real rpm and dnf
+commands X87 recorded as deviations. It closes B165: automation is no part of
+any setup identity.
+
+**Outcome, B556:** the controller record moves to version 3: it keeps host
+identity, bindings, reservations and the tool sources and areas, each binding
+names the tool closure its last stage published, and the receipt, retained sources and definitions and
+execution bundles leave it. The registry moves to version 6; a version 5
+store refuses before any preview with D152's clause 9 message and remedy. No
+converter or reader of an old record is written.
+
+**Outcome, B549 (part):** `runtime-lock-v1`, `runtime-v1` and
+`execution-closure-v2` are classified in
+`cmd/bootwright/contract_versions_test.go` as runtime-identity store formats
+now that the receipt persists the lock digest. The owner's `verify` run,
+`--wheel-mirror` and `setup --download-only` stay on [M1](m1.md#b549) for X90.
+
+**Guard tests:** `internal/controller/prerequisites`:
+`TestAReadyHostMakesNoRequestAndNoWrite`,
+`TestThePlanShowsTheDnfPreviewVerbatim`,
+`TestAnInterruptedSetupIsReinspectedAfterConfirmation`,
+`TestAnUntestedReleaseIsInformational`,
+`TestAnUnknownFamilyRefusesBeforeEffects`, `TestADerivativeIsAdmittedByIDLike`,
+`TestNoLockedInterpreterAddsThePythonABIRequirement`,
+`TestAGlibcBelowTheFloorRefusesBeforeEffects`,
+`TestAnotherBuildsSetupStateIsDiscardedAfterConfirmation`,
+`TestADeclinedPlanChangesNothing`, `TestAStoreTheSetupReadRefusesPreviewsNothing`,
+`TestTheReadyPathRendersTheReceiptTable`, `TestPreflightIsReadOnlyAndNamesWhatIsMissing`
+and `TestALoaderPreloadIsInformationalEverywhere`; `internal/controller/clients`:
+`TestTheStageInstallsMissingClosuresThroughHostDnf`,
+`TestApplyInstallsHostPackagesBeforeItPublishesTools`,
+`TestAHostPackageFailureIsFailedBeforeTheInstallAndUnknownAfter`,
+`TestALockedRereadSkipsWhatIsAlreadyInstalled`, `TestDnfReceivesTheFrozenRoute`,
+`TestTheRoleCarriesNoNativePlan` and `TestTheStageRouteReachesDnfAsSetupsDoes`;
+`internal/controller/hostdnf`: `TestInstalledReadsProvidersWithoutDnf` and
+`TestPresentNamesOnlyThePresentProvidersAndTheirRepository`;
+`internal/controller/venvlocal`:
+`TestTheGuardReportsAnUnpublishedRuntimeAsUnavailable`;
+`internal/reconciliation/ansiblerunner`:
+`TestARunExecutesTheStagedAutomationAndHoldsItsLock`,
+`TestAnInvocationStagesItsAutomationOnce` and
+`TestAStagedTreeThisExecutableCannotRunIsRefused`;
+`internal/reconciliation/lifecycle`:
+`TestARegistrationFreezesTheRuntimesExecutionClosure`,
+`TestASameLockRebuildContinuesALiveOperation`,
+`TestAPythonZStreamUpdateContinues`,
+`TestALockChangeRefusesContinuationNamingTheKeptRuntime`,
+`TestAPendingSetupBlocksALaunch`, `TestALaunchWithoutAReceiptRefusesWithSetup`,
+`TestAMissingRuntimeRefusesNamingTheBuildsLock`,
+`TestARuntimeGoneAtLaunchRefusesWithSetup`, `TestAnOperationLocatesItsRuntimeOnce`
+and `TestARemovalLocatesItsRuntimeOnce`; `internal/workspace/contextfs`:
+`TestTheControllerRecordV3HoldsNoReceipt`,
+`TestARegistryVersion5StoreNamesTheFreshInstallRemedy` and
+`TestTheFirstBindingRefusesBeforeSetupCompletes`; `cmd/bootwright`:
+`TestEveryStoreFormatIsClassified`,
+`TestComposedBaselineDryRunReadsNoSetupState` and the moved
+`TestEveryImplementationMovesItsContentDigestWithItsContract` goldens.
+
+**Gates:** in the x88 worktree after merging main b81240b62 (X91), as its
+commit records: `make check` passes (mod verify, tidy, `go test ./...`, vet,
+the completion test, govulncheck with no vulnerabilities, ansible-check with
+lint 0 failures in the production profile, sanity passing and units 1861
+passed and 1 skipped, with 297, 1278 and 3437 further tests passed); `make
+quick`, `make race`, `make docs-check` and `git diff --check` pass. Not run:
+anything needing root.
+
+**Digest and version effects:** the registry moves from 5 to 6 and the
+controller record from 2 to 3; the closure an operation freezes moves to
+`execution-closure-v2`; `controller-prerequisites-v6` and
+`controller-clients-v3` move those implementations' content digests. A
+fresh install is required: this build refuses a store an earlier build wrote,
+so retire every live context with the build that applied or prepared it,
+then, as root, remove `/var/lib/bootwright` and `/var/lib/bootwright-staging`
+and run `setup` with this build. After that, an `ansible/`-only fix or any
+rebuild with the same lock is build and apply with no setup.
+**Constraints left behind:** X89 deletes the dead bundle machinery
+(`internal/controller/bundlelocal`, the native solver code, the
+controller-only Python native code, `scripts/foundation-catalog` and
+`ansible/controller/requirements.txt`, which still pins ansible-core 2.21.4),
+which makes B528 and B542 moot, and rewrites the operator guide, the
+development guide and the knowledge pages that still describe bundles. X90
+delivers retention, the cache-only rebuild, the wheel mirror, download-only
+and B557's tool areas, which closes B322. Nothing was run as root: setup's
+install path, the controller stage's dnf install and the mount-based tests
+await the owner's fresh-install acceptance on Fedora 44 and a RHEL 9 VM
+(B555), as do X87's S0 baseline and the owner's runtime-lock `verify` run.
 
 ### X91 — Read-only diff and the delta seam
 

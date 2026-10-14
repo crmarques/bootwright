@@ -9,18 +9,15 @@ gate and which build it must match.
 
 ## Prepare a host
 
-`setup` supports RHEL 9 and Fedora on Linux/amd64 at the exact releases it
-[admits](development.md#qualified-hosts-and-images), Fedora 43, Fedora 44 and
-RHEL 9.8, and refuses any other. Fedora 43 has run; Fedora 44 and RHEL 9.8 are
-admitted but not yet run until the [acceptance ledger](acceptance.md#ledger)
-records them. A controller
-must hold exactly the glibc and libgcc builds
-[development](development.md#qualified-hosts-and-images) names, as
-[hold the execution foundation](#hold-the-execution-foundation) keeps them. Setup,
-preflight and the controller stage stage their dependency resolution and
-package inspection beneath /var/lib/bootwright-staging, which the first of them
-creates, and run what they stage from there, so that directory must be on a
-filesystem mounted with exec; /tmp may stay noexec. Each example's host
+`setup` supports Fedora and RHEL, and their derivatives, on Linux/amd64
+([supported hosts](../specs/controller.md#supported-hosts)); the releases a
+build was tested on are [development](development.md#lock-refresh-and-tested-hosts)'s,
+and a newer one is admitted with an informational line. Setup installs only
+what is missing: the host packages `openssh-clients` and `podman` through the
+host's own dnf, and the controller runtime, a Python virtual environment on
+the host's `/usr/bin/python3.X` holding the locked ansible-core wheels. Every
+command that runs Ansible unpacks the automation it embeds beneath
+/var/lib/bootwright-staging, which the first of them creates. Each example's host
 prerequisites add what its journey needs, such as `/dev/kvm` for a libvirt
 guest. Run as root, or from an account that may run
 `sudo`: Bootwright asks for authorization when a command needs it, and keeps its
@@ -30,8 +27,6 @@ state under `/var/lib/bootwright`
 [directory accounts](#directory-accounts) how an SSSD, LDAP or AD account runs
 it, [a network home with root squash](#a-network-home-with-root-squash) where
 the executable must live,
-[hold the execution foundation](#hold-the-execution-foundation) how to keep
-the glibc and libgcc builds it runs on,
 [a FIPS-mode controller](#a-fips-mode-controller) what its runtime claims and
 which SSH keys it can use, and
 [a host an earlier build manages](#a-host-an-earlier-bootwright-build-manages)
@@ -62,30 +57,18 @@ its `controller` stage installs the clients its graph selects
 in one host-wide store that every context shares, so `setup` runs before the
 first `media add`.
 
-A setup that runs its controller Ansible keeps what that Ansible printed in a
+A setup that installs host packages keeps what dnf printed in a
 [setup run](../specs/cli/output.md#setup-run-output),
-/var/lib/bootwright/controller/runs/setup-NNNNNN/run.output, which only root
+/var/lib/bootwright/setup/runs/setup-NNNNNN/run.output, which only root
 can read. The host keeps the newest 8 runs, and the `Logs` field of setup's
 result names the run; a failure that run explains names its `run.output` in
 its remedy.
 
-A RHEL controller that publishes installer media, because the artifact server
-an Anaconda installation uses is placed on it, builds that media with `lorax`
-and `xorriso`, which no public source Bootwright resolves from carries for
-RHEL. Install both from the host's own enabled Red Hat repositories, as root,
-before that context's first apply ([D106](../specs/milestones/backlog.md#decisions)):
-
-```sh
-dnf install lorax xorriso
-```
-
-Its controller stage accepts them by presence and the qualified Red Hat release
-key, and otherwise refuses before it acquires anything, naming the package that
-is missing or signed by another key; `preflight controller --context <name>`
-reports the same check and names this step first. A package another key signed
-is already installed, so the step for it removes it first, as
-`dnf remove xorriso && dnf install lorax xorriso`. A Fedora controller's stage
-installs them itself.
+A context's controller stage installs the host packages its graph selects,
+such as `lorax` and `xorriso` for installer media or the libvirt client, with
+the host's own dnf from whatever the host's enabled repositories provide, on
+RHEL as on Fedora: register a RHEL controller, or enable the repositories that
+carry them, before that context's first apply.
 
 ### On a proxied network
 
@@ -107,8 +90,10 @@ which confirms that the variables crossed sudo.
 
 #### Destinations to allow
 
-A proxy that admits only listed destinations must admit HTTPS, on port 443, to
-these hosts, which setup and the controller stage contact, directly or through
+Host packages come from the repositories the host's dnf is configured with,
+through dnf's own `proxy=` or the exported route, so a proxy must also admit
+those. A proxy that admits only listed destinations must admit HTTPS, on port
+443, to these hosts, which setup and the controller stage contact, directly or through
 a redirect the download follows; `media add --from-url` contacts the URL it is
 given. A proxy that inspects TLS re-signs every certificate, so its
 certificate authority must be in the host's system trust store, which every
@@ -123,10 +108,10 @@ acquisition verifies against.
   controller's own Fedora release, 43 or 44, which a Fedora controller's native
   packages resolve from.
 - `dl.k8s.io`: kubectl releases and their stable version.
-- `files.pythonhosted.org`: the `ansible-core` wheel and its supporting wheels.
+- `files.pythonhosted.org`: the locked `ansible-core` wheel, its supporting
+  wheels and the pip wheel that installs them.
 - `get.helm.sh`: helm releases.
-- `github.com`: the python-build-standalone CPython release and the govc,
-  virtctl and OKD client releases.
+- `github.com`: the govc, virtctl and OKD client releases.
 - `mirror.openshift.com`: OpenShift client and installer releases.
 - `objects.githubusercontent.com`: where `github.com` redirects a release
   download.
@@ -188,71 +173,13 @@ still execute Bootwright itself, so copy `bin/bootwright` to a local directory
 such as `/usr/local/bin` and run it from there. Where root cannot, sudo refuses
 with `unable to execute` and the refusal names that local copy as the remedy.
 
-### Hold the execution foundation
-
-Bootwright's private interpreter runs on the host's own loader, glibc and
-libgcc, and each build pins their exact files, so it runs on no other build
-of them. `setup` and `preflight controller` report the builds this build
-requires as the `Execution foundation` check, for example
-`glibc 2.42-16.fc43, libgcc 15.3.1-1.fc43` on Fedora 43. Hold both packages at
-those builds on a controller; on RHEL 9 the `versionlock` command comes from
-the `python3-dnf-plugin-versionlock` package, and the minor release is pinned
-too, so updates come from the release Bootwright admits:
-
-```sh
-dnf versionlock add glibc libgcc
-subscription-manager release --set=9.8
-```
-
-A z-stream errata of either package within the release Bootwright admits needs
-one `setup`: release the hold, update, run `bootwright setup`, which qualifies
-the vendor-signed builds from the RPM database and records them on its receipt
-with no other host or bundle effect, then hold the new builds. Until that setup
-runs, `preflight controller` reports the check not ready with next command
-`bootwright setup`, and an `apply` or `destroy` refuses before its private
-interpreter runs:
-
-```sh
-dnf versionlock delete glibc libgcc
-dnf update glibc libgcc
-bootwright setup
-dnf versionlock add glibc libgcc
-```
-
-The hold still keeps a controller off another upstream version or minor
-release. Before a host update that would move either package that way, destroy
-the contexts this host runs, or let their operations complete, because every
-`apply` and `destroy` runs the private interpreter, and set the host up
-afterwards with a Bootwright build whose execution foundation pins the new
-builds
-([controller](../specs/controller.md#supported-host-and-dependency-selection)).
-
-When a pinned file differs, `setup` and `preflight controller` refuse with
-`controller.unsupported` before any plan, and an `apply` or `destroy` refuses
-the same way before its private interpreter runs, naming the file, the
-package build that provides it and what was found, for
-example `the provided execution foundation differs at /usr/lib64/libc.so.6,
-from glibc 2.42-16.fc43, which holds other content than this build pins`.
-When `dnf` updated the package within the release, run `bootwright setup`
-first, as above; setup refuses a build another key signed, another upstream
-version, a second x86_64 instance or a file that differs from its RPM digest,
-naming the build. Otherwise restore that build and hold it, then repeat the
-command:
-
-```sh
-dnf install glibc-2.42-16.fc43
-dnf versionlock add glibc-2.42-16.fc43
-```
-
-`dnf reinstall` restores a file of a build that is still installed. A
-non-empty `/etc/ld.so.preload` refuses the same way; empty or remove it.
-
 ### A FIPS-mode controller
 
-Bootwright's runtime brings its own cryptography: its executable and its
-private CPython use their own cryptographic implementations, outside the
-host's FIPS-validated modules, so running it on a FIPS-mode controller claims
-no FIPS compliance ([D108](../specs/milestones/backlog.md#decisions)).
+The controller runtime's Python uses the host's OpenSSL, so its TLS follows
+the host's crypto policy; Bootwright's own executable and the `cryptography`
+wheel's bundled OpenSSL stay outside the host's FIPS-validated modules, so
+running it on a FIPS-mode controller claims no FIPS compliance
+([security](../specs/security.md#the-controller-hosts-attacker-model)).
 `preflight controller`, like `setup`, reports the kernel's FIPS mode as its
 `FIPS mode` check with that statement; the check never changes readiness,
 except that a FIPS flag that cannot be read as 0 or 1 refuses setup and
@@ -272,13 +199,15 @@ type.
 A host whose `/var/lib/bootwright` holds a store an earlier Bootwright build
 created is not a supported controller for this build until that build's
 environments are retired and its store removed. Store commands refuse there
-([contexts](../specs/contexts.md#storage-locking-and-publication)). Never move
-that store aside while the services it manages run. The real-hardware test
-runs this build on a separate RHEL 9.8 controller, in a subnet the BMC network
-reaches on the artifact ports
-([D109](../specs/milestones/backlog.md#decisions)); RHEL 9.8 is admitted but
-not yet run, as [development](development.md#qualified-hosts-and-images)
-records.
+([contexts](../specs/contexts.md#storage-locking-and-publication)); a store a
+build before the setup v2 cut-over wrote refuses naming its registry version 5
+and this fresh install: with the build that wrote it, destroy each
+environment and delete each context; then, as root, remove /var/lib/bootwright
+and /var/lib/bootwright-staging and run `bootwright setup` with this build.
+Never remove or move that store aside while the services it manages run. The
+real-hardware test runs this build on a separate RHEL controller, in a subnet
+the BMC network reaches on the artifact ports
+([D109](../specs/milestones/backlog.md#decisions)).
 
 ## Network exposure
 

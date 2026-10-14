@@ -428,26 +428,21 @@ func killCloneSources(sources desiredstate.Sources) desiredstate.Sources {
 }
 
 // killCloneWorkspace deep-copies a workspace, including its controller state
-// and both areas, and rebinds the approved bundle to the copy.
+// and both areas.
 func killCloneWorkspace(w *testWorkspace, live *memoryArea, files map[string][]byte) *testWorkspace {
 	copied := &testWorkspace{
 		area: killCloneArea(w.area, live, files), runArea: killCloneArea(w.runArea, live, files),
 		evidence: slices.Clone(w.evidence), reservations: killCloneReservations(w.reservations),
 		controller: w.controller, inputs: killCloneSources(w.inputs),
 		mutations: w.mutations, runs: w.runs, binds: w.binds,
-		areas: maps.Clone(w.areas), retained: slices.Clone(w.retained), resolutions: w.resolutions,
-		failPublish: w.failPublish, opened: w.opened, revision: w.revision,
+		areas: maps.Clone(w.areas), retained: slices.Clone(w.retained),
+		failPublish: w.failPublish, revision: w.revision,
 	}
 	state := &copied.controller.State
 	state.Bindings = slices.Clone(state.Bindings)
-	state.RetainedSources = slices.Clone(state.RetainedSources)
-	state.RetainedDefinitions = slices.Clone(state.RetainedDefinitions)
+	state.ToolSources = slices.Clone(state.ToolSources)
 	state.Reservations = killCloneReservations(state.Reservations)
 	copied.controller.Sources = killCloneSources(copied.controller.Sources)
-	copied.controller.OpenBundle = func(context.Context, string) (prerequisites.BundleArea, error) {
-		copied.opened++
-		return testBundle{}, nil
-	}
 	return copied
 }
 

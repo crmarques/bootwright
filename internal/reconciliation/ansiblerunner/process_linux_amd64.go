@@ -15,6 +15,7 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/adapterprotocol"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -44,14 +45,15 @@ type Runner struct {
 	drain       time.Duration
 	playbooks   map[string]string
 	invocation  *invocationScope
+	stager      prerequisites.AutomationStager
 }
 
 // New binds the entrypoints composition authorizes, keyed by implementation
-// identity and operation. A request naming anything else refuses.
-func New(playbooks map[string]string) Runner {
+// identity and operation, and their automation stager; anything else refuses.
+func New(playbooks map[string]string, stager prerequisites.AutomationStager) Runner {
 	// Invocation state is small and must not survive a reboot; staging is
 	// larger and must not either, so both live outside the context store.
-	return Runner{jobParent: "/run", scratchParent: "/var/tmp", owner: 0, command: exec.Command, playbooks: maps.Clone(playbooks)}
+	return Runner{jobParent: "/run", scratchParent: "/var/tmp", owner: 0, command: exec.Command, playbooks: maps.Clone(playbooks), stager: stager}
 }
 
 func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
@@ -62,7 +64,7 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if !ok {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the lifecycle adapter operation is not recognized", "")
 	}
-	if r.command == nil || !filepath.IsAbs(request.Launch.Loader) || request.Bundle.Path == "" {
+	if r.command == nil || r.stager == nil || !filepath.IsAbs(request.Launch.Program) || !filepath.IsAbs(request.Launch.Shim) {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the authorized adapter execution boundary is unavailable", setupRemediation)
 	}
 	if err := ctx.Err(); err != nil {
@@ -74,13 +76,15 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := checkMaterials(request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	if err := verifyAutomation(ctx, request); err != nil {
-		return lifecycle.RunResult{}, err
-	}
 	if err := checkIdentity(request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	r.invocation, _ = ctx.Value(invocationKey{}).(*invocationScope)
+	automation, err := r.stage(ctx)
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	defer automation.release()
 	job, lock, holder, err := r.claimRun(request)
 	if err != nil {
 		return lifecycle.RunResult{}, err
@@ -112,17 +116,13 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if outputs != nil {
 		values[request.Variable+"_output"] = outputs
 	}
-	interpreter := filepath.Join(job, interpreterName)
-	if err := os.WriteFile(interpreter, []byte(request.Launch.InterpreterScript()), 0700); err != nil {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the pinned module interpreter could not be published", "")
-	}
-	if err := writeJSON(job, inventoryName, inventory(request.Placement, interpreter, paths)); err != nil {
+	if err := writeJSON(job, inventoryName, inventory(request.Placement, request.Launch.Shim, paths)); err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	if err := writeVariables(job, values); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	result, err := r.execute(ctx, job, scratch, lock, playbook, request)
+	result, err := r.execute(ctx, job, scratch, lock, automation, playbook, request)
 	if err != nil || len(request.Outputs) == 0 {
 		return result, err
 	}
@@ -139,7 +139,6 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 // The entries the runner writes into a job beside its lock, its record and its
 // outputs directory, and the longest name one Linux path segment takes.
 const (
-	interpreterName = "interpreter"
 	inventoryName   = "inventory.json"
 	requestName     = "request.json"
 	localTemp       = "local"
@@ -153,7 +152,7 @@ const (
 
 // jobEntries are every name the runner itself gives an entry of a job. A
 // material file is written into the job too, so it may take none of them.
-var jobEntries = []string{lockName, holderName, recordName, outputsDirectory, interpreterName, inventoryName, requestName, localTemp, remoteTemp, sshConfigName}
+var jobEntries = []string{lockName, holderName, recordName, outputsDirectory, inventoryName, requestName, localTemp, remoteTemp, sshConfigName}
 
 // checkMaterials refuses a material list before anything is written: each file
 // is written once and its value cleared, so a name listed twice would be
@@ -257,7 +256,7 @@ func writeEncoded(job, name string, encoded []byte, err error) error {
 	return nil
 }
 
-func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File, playbook string, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File, automation stagedAutomation, playbook string, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, runDeadline(request.Deadline))
 	defer cancel()
 	grace := r.drain
@@ -265,15 +264,15 @@ func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File,
 		grace = resultDrain
 	}
 	judge := &lifecycleJudge{request: request, grace: grace}
-	// The adapter inherits the job lock, and so does every process its
-	// supervisor forks: the ansible-playbook child and each Ansible worker.
+	// The adapter inherits the job and automation locks, and so does every
+	// process its supervisor forks: the ansible-playbook child and each worker.
 	// Its own streams are retained as they are produced, so a run that
 	// completes is as readable afterwards as one that failed, and it dies with
 	// this invocation: its supervisor ends the whole tree it owns on the
 	// parent-death signal. No adapter effect outlives cancellation.
 	ending := adapterprotocol.Run(ctx, adapterprotocol.Invocation{
-		Loader: request.Launch.Loader, Arguments: request.Launch.Arguments, Environment: request.Launch.Environment,
-		Automation: filepath.Join(request.Bundle.Path, "automation"), Playbook: playbook,
+		Program: request.Launch.Program, Arguments: request.Launch.Arguments, Environment: request.Launch.Environment,
+		Automation: automation.path, AutomationLock: automation.lock, Playbook: playbook,
 		Inventory: filepath.Join(job, inventoryName), Variables: filepath.Join(job, requestName),
 		LocalTemp: filepath.Join(job, localTemp), RemoteTemp: filepath.Join(job, remoteTemp), Scratch: scratch,
 		Lifecycle: true, Lock: lock, Output: request.Output, StopOnBreach: true,
@@ -390,18 +389,47 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 	return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter operation has no complete result", remediation)
 }
 
-// verifyAutomation proves the approved bundle carries exactly the automation
-// this executable's digest names before any of it runs. Documentation runs
-// nothing and leaves the digest, so it is not compared.
-func verifyAutomation(ctx context.Context, request lifecycle.RunRequest) error {
-	if request.Area == nil {
-		return failure("controller.identity", "the approved execution bundle is unavailable", setupRemediation)
+// stagedAutomation is one run's extracted automation and the lock on it.
+type stagedAutomation struct {
+	path    string
+	lock    *os.File
+	release func()
+}
+
+// stage extracts the automation once per invocation, verified by the stager
+// and against this executable's digest; a run outside one stages its own.
+func (r Runner) stage(ctx context.Context) (stagedAutomation, error) {
+	if r.invocation == nil {
+		return r.extract(ctx)
 	}
-	for name, expected := range ansible.Automation() {
-		actual, err := request.Area.Read(ctx, "automation/"+name, len(expected)+1)
-		if err != nil || !slices.Equal(actual, expected) {
-			return failure("controller.identity", "the embedded automation does not match the approved execution bundle", setupRemediation)
+	r.invocation.mu.Lock()
+	defer r.invocation.mu.Unlock()
+	if !r.invocation.active {
+		return stagedAutomation{}, failure("lifecycle.state", "the lifecycle adapter invocation has ended", "")
+	}
+	if r.invocation.automation == nil {
+		staged, err := r.extract(ctx)
+		if err != nil {
+			return stagedAutomation{}, err
 		}
+		r.invocation.automation = &staged
 	}
-	return nil
+	shared := *r.invocation.automation
+	shared.release = func() {}
+	return shared, nil
+}
+
+func (r Runner) extract(ctx context.Context) (stagedAutomation, error) {
+	staged, err := r.stager.Stage(ctx)
+	if err != nil {
+		return stagedAutomation{}, err
+	}
+	lock, held := staged.Lock.(*os.File)
+	if !held || lock == nil || staged.Digest != ansible.Digest() || !filepath.IsAbs(staged.Path) {
+		if staged.Release != nil {
+			staged.Release()
+		}
+		return stagedAutomation{}, failure("controller.identity", "the staged automation does not match this executable's automation", "rerun the command")
+	}
+	return stagedAutomation{path: staged.Path, lock: lock, release: staged.Release}, nil
 }

@@ -6,7 +6,6 @@ import (
 
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/privilege"
@@ -120,7 +119,7 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 		Media:            localMediaDependencies(repository, process.Confirmer, process.LifecycleProgress, process.MediaPresenter, process.AmbientRoute, files),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: account},
-			Host: hostlinux.New(), Guard: bundlelocal.ExecutionGuard{}, Selection: account,
+			Host: hostlinux.New(), Guard: runtimeGuard(controllerPorts.Python), Setup: controllerPorts.Setup, Selection: account,
 			Presenter: process.LifecyclePresenter, Progress: process.LifecycleProgress,
 			Confirmer: process.Confirmer, Executable: process.Executable,
 			Media: repository,
@@ -145,7 +144,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 		State: services.DesiredState, Lifecycle: reconciler, Trust: deps.Trust,
 		Confirmer: deps.Confirmer, Session: deps.SessionConfirmer, Reporter: deps.Reporter,
 		Selection: deps.Selection, Streams: deps.Streams, Terminal: deps.Terminal,
-		Home: deps.Home, Owner: deps.Owner, Files: deps.Files,
+		Home: deps.Home, Owner: deps.Owner, Files: deps.Files, Stager: deps.Controller.Stager,
 	})
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
 	services.EnvironmentAccess = machine.EnvironmentAccess

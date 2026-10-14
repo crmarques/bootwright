@@ -1,5 +1,5 @@
 {
-  "status over a failed apply with no execution definition": {
+  "status over a failed apply with no setup receipt": {
     "operation": "operation-1",
     "verb": "apply",
     "state": "failed",
@@ -12,7 +12,7 @@
       "bootwright setup"
     ]
   },
-  "status over an unknown removal with no execution definition": {
+  "status over an unknown removal with no setup receipt": {
     "operation": "operation-2",
     "verb": "destroy",
     "state": "unknown",

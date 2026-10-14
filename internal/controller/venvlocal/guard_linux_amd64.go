@@ -27,8 +27,11 @@ func (a *Adapter) WithPython(ctx context.Context, runtime prerequisites.Runtime,
 		return err
 	}
 	lock, err := os.OpenFile(filepath.Join(directory, lockName), os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if errors.Is(err, fs.ErrNotExist) {
+		return prerequisites.ErrRuntimeUnavailable
+	}
 	if err != nil {
-		return failure("the controller runtime " + runtime.Digest[:12] + " is not prepared")
+		return failure("the controller runtime " + runtime.Digest[:12] + " cannot be opened")
 	}
 	defer lock.Close()
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
@@ -40,8 +43,25 @@ func (a *Adapter) WithPython(ctx context.Context, runtime prerequisites.Runtime,
 	}
 	return use(prerequisites.PythonLaunch{
 		Program: filepath.Join(directory, "bin", "python"), Shim: filepath.Join(directory, shimName),
-		Arguments: []string{"-I", "-B"}, Environment: cleanEnvironment(""),
+		Arguments: []string{"-I", "-B"}, Directory: directory, Environment: cleanEnvironment(directory),
 	})
+}
+
+// Published reports whether the runtime's launch lock exists, reading
+// nothing else, so a caller refuses before it registers work.
+func (a *Adapter) Published(ctx context.Context, runtime prerequisites.Runtime) (bool, error) {
+	directory, err := a.runtimeDirectory(runtime.Digest)
+	if err != nil {
+		return false, err
+	}
+	info, err := os.Lstat(filepath.Join(directory, lockName))
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, ctx.Err()
+	}
+	if err != nil || !info.Mode().IsRegular() {
+		return false, failure("the controller runtime " + runtime.Digest[:12] + " holds no usable launch lock")
+	}
+	return true, ctx.Err()
 }
 
 // Inspect reports whether the interpreter's runtime is published and still

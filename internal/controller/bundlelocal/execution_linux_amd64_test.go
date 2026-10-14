@@ -106,7 +106,7 @@ func TestExecutionGuardHoldsNativeReadLockAndIsolatesLaunch(t *testing.T) {
 		}
 	}
 	called := false
-	err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
+	err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(launch bundleLaunch, _ func() error) error {
 		called = true
 		if err := tryExecutionWriteLock(writer); !errors.Is(err, unix.EAGAIN) && !errors.Is(err, unix.EACCES) {
 			t.Fatalf("native write lock was not excluded: %v", err)
@@ -140,7 +140,7 @@ func TestExecutionGuardExplicitHandoffExpiresAfterCallback(t *testing.T) {
 	f := newExecutionFixture(t)
 	writer := executionLock(t, f)
 	var retained func() error
-	err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(_ prerequisites.PythonLaunch, release func() error) error {
+	err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(_ bundleLaunch, release func() error) error {
 		retained = release
 		if err := release(); err != nil {
 			return err
@@ -162,7 +162,7 @@ func TestExecutionGuardEmptyPreloadAndCallbackCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	err := f.guard.WithPython(ctx, &f.area, f.requirement, func(prerequisites.PythonLaunch, func() error) error {
+	err := f.guard.WithPython(ctx, &f.area, f.requirement, func(bundleLaunch, func() error) error {
 		cancel()
 		return nil
 	})
@@ -181,7 +181,7 @@ func TestExecutionGuardRefusesActiveNativeTransactionBeforeBundleAccess(t *testi
 	if err := tryExecutionWriteLock(writer); err != nil {
 		t.Fatal(err)
 	}
-	err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(prerequisites.PythonLaunch, func() error) error {
+	err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(bundleLaunch, func() error) error {
 		t.Fatal("execution proceeded during native transaction")
 		return nil
 	})
@@ -243,7 +243,7 @@ func TestExecutionGuardRejectsUnqualifiedExecutionAuthority(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = f.guard.WithPython(ctx, &f.area, f.requirement, func(prerequisites.PythonLaunch, func() error) error {
+			err = f.guard.WithPython(ctx, &f.area, f.requirement, func(bundleLaunch, func() error) error {
 				t.Fatal("unqualified execution reached callback")
 				return nil
 			})
@@ -333,7 +333,7 @@ func TestTheFoundationRefusalNamesPackageBuildAndFile(t *testing.T) {
 					t.Fatalf("%s refused with %#v (%v)", what, found, err)
 				}
 			}
-			err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(prerequisites.PythonLaunch, func() error) error {
+			err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(bundleLaunch, func() error) error {
 				t.Fatal("a drifted foundation reached the launch")
 				return nil
 			})

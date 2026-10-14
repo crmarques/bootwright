@@ -83,8 +83,8 @@ func TestAFreshDestroyWhoseBindingNamesAnotherHostRefuses(t *testing.T) {
 func TestAFreshDestroyOverIncompleteSetupRefuses(t *testing.T) {
 	h := newHarness(t, "alpha")
 	failedApply(t, h)
-	h.workspace.controller.State.Receipt.Status = "running"
-	requireRemovalRefusedUntouched(t, h, "controller.state", "the retained controller setup is incomplete", "run bootwright setup to resolve it")
+	h.workspace.controller.Prepared = false
+	requireRemovalRefusedUntouched(t, h, "controller.identity", "this host has no completed controller setup", "run bootwright setup")
 }
 
 // A context the controller state records no binding for is admitted once its
@@ -143,8 +143,8 @@ func TestAFreshDestroyReprovesItsHostUnderTheExclusiveLock(t *testing.T) {
 			func(_ *testing.T, h *harness) {
 				h.workspace.controller.State.Bindings[0].HostDigest = strings.Repeat("0", 64)
 			}},
-		{"incomplete setup", "controller.state", "the retained controller setup is incomplete", "run bootwright setup to resolve it",
-			func(_ *testing.T, h *harness) { h.workspace.controller.State.Receipt.Status = "running" }},
+		{"incomplete setup", "controller.identity", "this host has no completed controller setup", "run bootwright setup",
+			func(_ *testing.T, h *harness) { h.workspace.controller.Prepared = false }},
 	}
 	operations := []struct {
 		name  string

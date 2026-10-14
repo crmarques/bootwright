@@ -217,13 +217,13 @@ func claimForBeta(t *testing.T, store *Store, beta contexts.Record) ([]string, f
 	ctx := context.Background()
 	keys := []string{"unit:bootwright-beta"}
 	scope := prerequisites.SetupContext{Name: beta.Name, Revision: beta.Revision, Machine: "controller"}
-	value := completeControllerState(syntheticControllerState(t, scope))
+	value := syntheticControllerState(t)
 	hostDigest, err := value.Host.PrivateDigest()
 	if err != nil {
 		t.Fatal(err)
 	}
 	value.Bindings = []prerequisites.ControllerBinding{{Context: beta.Name, Machine: scope.Machine, HostDigest: hostDigest}}
-	publishControllerState(t, store, scope, value)
+	publishControllerState(t, store, value)
 	if err := store.MutateLifecycle(ctx, beta.Name, func(tx lifecycle.Transaction) error {
 		return tx.Reserve(ctx, []prerequisites.HostReservation{{Context: beta.Name, Kind: "substrate-machine", Service: "beta", Keys: keys}})
 	}); err != nil {

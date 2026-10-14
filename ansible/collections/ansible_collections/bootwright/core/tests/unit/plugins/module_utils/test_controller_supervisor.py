@@ -117,6 +117,30 @@ class Tree:
 TREE = {101: 100, 102: 101, 103: 102, 200: 1}
 
 
+class Flags:
+    """Stands in for sys.flags with the two flags the supervisor reads."""
+
+    def __init__(self, isolated, dont_write_bytecode):
+        self.isolated = isolated
+        self.dont_write_bytecode = dont_write_bytecode
+
+
+def test_only_the_isolated_controller_venv_runs_the_supervisor():
+    venv, base = "/var/lib/bootwright/setup/runtimes/abc", "/usr"
+    assert supervisor.controller_runtime(Flags(1, 1), venv, base)
+    assert not supervisor.controller_runtime(Flags(0, 1), venv, base)
+    assert not supervisor.controller_runtime(Flags(1, 0), venv, base)
+    # The OS interpreter itself, outside any venv, is refused.
+    assert not supervisor.controller_runtime(Flags(1, 1), base, base)
+
+
+def test_the_supervisor_pins_no_import_path():
+    with open(supervisor.__file__, encoding="utf-8") as stream:
+        source = stream.read()
+    assert "sys.path" not in source
+    assert "no_site" not in source
+
+
 def test_only_the_lifecycle_runner_ties_the_supervisor_to_its_invocation():
     argv = ["-c", "--lifecycle", "-i", "inventory.json", "apply.yml"]
     assert supervisor.lifecycle_mode(argv)
@@ -289,7 +313,7 @@ def stopped_tree_runs(tmp_path, marker, stop, watched, settle):
     have ended or settle seconds pass."""
     record = tmp_path / "record"
     record.touch()
-    command = [sys.executable, "-I", "-B", "-S", "-c", PLAYBOOK]
+    command = [sys.executable, "-I", "-B", "-c", PLAYBOOK]
     command += [supervisor.__file__, str(record)] + marker
     invocation = subprocess.Popen(
         [sys.executable, "-I", "-c", INVOCATION] + command, stdout=subprocess.PIPE

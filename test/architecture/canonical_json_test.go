@@ -19,8 +19,7 @@ var canonicalProofExceptions = map[string]string{
 	"internal/controller/prerequisites/bootstrap.go:ValidateBootstrap":    "compares two in-memory values, not stored bytes",
 	"internal/controller/prerequisites/definition.go:SameDefinition":      "compares two in-memory values, not stored bytes",
 	"internal/controller/prerequisites/storage.go:SameFoundation":         "compares two in-memory values, not stored bytes",
-	"internal/controller/prerequisites/setup.go:matchesActions":           "a canonical proof awaiting its own item",
-	"internal/controller/prerequisites/setup.go:ReadNativePreparation":    "a canonical proof awaiting its own item",
+	"internal/controller/prerequisites/native.go:ReadNativePreparation":   "a canonical proof awaiting its own item",
 }
 
 // importNames returns the names a file imports one package under.

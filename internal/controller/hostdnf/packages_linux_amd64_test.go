@@ -518,6 +518,37 @@ func TestDnfGetsACleanEnvironmentAndOnlyTheAdmittedRoute(t *testing.T) {
 	})
 }
 
+// A context's controller stage forwards the route its controller Machine
+// selected, exactly as setup forwards the admitted ambient one, and refuses a
+// route outside the grammar before dnf could see it.
+func TestTheStageRouteReachesDnfAsSetupsDoes(t *testing.T) {
+	for name, check := range map[string]struct {
+		egress prerequisites.SetupEgress
+		want   string
+	}{
+		"direct": {prerequisites.SetupEgress{NoProxy: []string{}}, baseEnv},
+		"bypass": {prerequisites.SetupEgress{HTTPSProxy: "http://proxy.example:3128", NoProxy: []string{".internal", "10.0.0.0/8"}}, baseEnv + " https_proxy=http://proxy.example:3128 no_proxy=.internal,10.0.0.0/8"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p, err := ForEgress(check.egress)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(p.dnfEnvironment(), " "); got != check.want {
+				t.Fatalf("dnf environment %q, want %q", got, check.want)
+			}
+		})
+	}
+	for name, egress := range map[string]prerequisites.SetupEgress{
+		"credentials":     {HTTPSProxy: "http://user:secret@proxy.example:3128"},
+		"HTTP proxy only": {HTTPProxy: "http://proxy.example:3128"},
+	} {
+		if _, err := ForEgress(egress); err == nil {
+			t.Errorf("%s: the route was admitted", name)
+		}
+	}
+}
+
 func TestAnUnsafeDnfExecutableIsRefused(t *testing.T) {
 	directory := t.TempDir()
 	open := filepath.Join(directory, "open")
@@ -566,6 +597,49 @@ func TestAnUnsafeDnfExecutableIsRefused(t *testing.T) {
 			if _, err := p.Install(context.Background(), []string{"podman"}, nil); err == nil {
 				t.Error("dnf was trusted for an install")
 			}
+			if err := p.Qualify(context.Background()); err == nil {
+				t.Error("setup admitted an unqualified rpm")
+			}
 		})
+	}
+}
+
+func TestPresentNamesOnlyThePresentProvidersAndTheirRepository(t *testing.T) {
+	p, double := packagesWith(t, func(c command) reply {
+		switch {
+		case c.path == "/usr/bin/dnf":
+			return reply{stdout: "podman x86_64 updates\n"}
+		case c.args[len(c.args)-1] == "podman":
+			return reply{stdout: "podman\t5:5.8.1-1.fc44.x86_64\n"}
+		}
+		return reply{exit: 1, stdout: "no package provides " + c.args[len(c.args)-1] + "\n"}
+	})
+	if err := p.Qualify(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := p.Present(context.Background(), []string{"openssh-clients", "podman"})
+	if err != nil || len(evidence) != 1 || evidence[0].Requirement != "podman" || evidence[0].Package != "podman-5:5.8.1-1.fc44.x86_64" || evidence[0].Repository != "updates" {
+		t.Fatal(evidence, err)
+	}
+	if len(double.called("install")) != 0 {
+		t.Fatal("presence ran an install")
+	}
+}
+
+// A ready host's presence read is rpm alone: no dnf runs, so no repository
+// metadata can load.
+func TestInstalledReadsProvidersWithoutDnf(t *testing.T) {
+	p, double := packagesWith(t, func(c command) reply {
+		if c.path == "/usr/bin/rpm" && c.args[len(c.args)-1] == "podman" {
+			return reply{stdout: "podman\t5:5.8.1-1.fc44.x86_64\n"}
+		}
+		return reply{exit: 1, stdout: "no package provides " + c.args[len(c.args)-1] + "\n"}
+	})
+	evidence, err := p.Installed(context.Background(), []string{"openssh-clients", "podman"})
+	if err != nil || len(evidence) != 1 || evidence[0].Requirement != "podman" || evidence[0].Package != "podman-5:5.8.1-1.fc44.x86_64" || evidence[0].Repository != "" {
+		t.Fatal(evidence, err)
+	}
+	if len(double.called("rpm")) != 2 || len(double.calls) != 2 {
+		t.Fatalf("calls = %+v", double.calls)
 	}
 }

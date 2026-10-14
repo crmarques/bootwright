@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"path"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -16,7 +17,7 @@ import (
 // next to.
 const RunOutputName = "run.output"
 
-// RuntimeRequest names the context whose approved bundle a bounded operation
+// RuntimeRequest names the context whose controller runtime a bounded operation
 // runs inside, and the Secret declarations that operation reads.
 // RetainOutput is set by a caller that names its run's output to an operator;
 // one that names none, such as a reading, leaves it unset, and its run keeps
@@ -33,8 +34,6 @@ type RuntimeRequest struct {
 type Runtime struct {
 	Context  ContextIdentity
 	Launch   prerequisites.PythonLaunch
-	Bundle   prerequisites.BundleLocation
-	Area     prerequisites.BundleArea
 	Material map[string]secrets.Material
 	// Output retains what this run's adapter prints. LogLocation names the
 	// directory holding it on this host, and Logs names the same file relative
@@ -76,15 +75,15 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 	}
 	defer clearMaterial(material)
 	return s.workspace.RunLifecycle(ctx, name, func(view RunView) error {
-		approved, err := approvedBundle(ctx, view)
+		located, err := s.approvedRuntime(ctx)
 		if err != nil {
 			return err
 		}
 		// The file is kept only once the runtime is admitted, which is where a
 		// caller first names it, so a run refused before then leaves no unnamed
 		// file behind.
-		return s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
-			runtime := Runtime{Context: view.Identity(), Launch: launch, Bundle: approved.location, Area: approved.area, Material: material}
+		return s.withPython(ctx, located, func(launch prerequisites.PythonLaunch) error {
+			runtime := Runtime{Context: view.Identity(), Launch: launch, Material: material}
 			if !request.RetainOutput {
 				return call(ctx, runtime)
 			}
@@ -155,7 +154,7 @@ func abandonRun(ctx context.Context, area operationstore.Area, identity, file st
 
 // MaterialRequest names the context whose Secret declarations one bounded
 // consumer needs opened, and nothing else: a consumer that runs no adapter
-// needs neither the approved bundle nor a run identity.
+// needs neither the controller runtime nor a run identity.
 type MaterialRequest struct {
 	ContextName string
 	Secrets     []string
@@ -206,41 +205,70 @@ func (s Service) lend(ctx context.Context, name string, references []string) (ma
 	return material, nil
 }
 
-// bundle is the approved execution boundary one operation runs inside: the
-// area itself, where it sits on this host, the requirement its runtime must
-// satisfy and the context whose setup approved it. An operation opens it once
-// and every attempt shares it, because opening it per attempt would ask the
-// transaction to record what it has open while its own blocks are running.
-type bundle struct {
-	context     string
-	area        prerequisites.BundleArea
-	location    prerequisites.BundleLocation
-	requirement prerequisites.ExecutionRequirement
+// approved is the runtime one operation runs inside and the closure it
+// carries; an operation locates it once and every attempt shares it.
+type approved struct {
+	runtime prerequisites.Runtime
+	closure operationstore.Closure
 }
 
-// approvedBundle opens the execution bundle the retained controller setup
-// approved for this context, with the requirement its runtime must satisfy:
-// the execution foundation that setup qualified and recorded, or the
-// definition's own.
-func approvedBundle(ctx context.Context, view View) (bundle, error) {
-	receipt := view.Controller().State.Receipt
-	if receipt.Definition == nil {
-		return bundle{}, failure("controller.state",
-			"the retained controller setup has no execution definition", "run bootwright setup")
+// approvedRuntime is this build's lock's runtime on the interpreter the setup
+// receipt names. No receipt, an interrupted or foreign setup record, or no
+// published runtime refuses before anything runs.
+func (s Service) approvedRuntime(ctx context.Context) (approved, error) {
+	lock := s.options.Lock
+	if s.options.Setup == nil || len(lock.Digest) != 64 {
+		return approved{}, runtimeUnprepared(lock, "")
 	}
-	if view.Controller().OpenBundle == nil {
-		return bundle{}, failure("controller.state", "the approved execution bundle is unavailable", "run bootwright setup")
-	}
-	area, err := view.Controller().OpenBundle(ctx, receipt.CatalogDigest)
+	view, err := s.options.Setup.ReadSetup(ctx)
 	if err != nil {
-		return bundle{}, err
+		return approved{}, err
 	}
-	if area == nil {
-		return bundle{}, failure("controller.state", "the approved execution bundle is missing", "run bootwright setup")
+	if err := prerequisites.SetupLaunchRefusal(view); err != nil {
+		return approved{}, err
 	}
-	location, err := area.Location(ctx)
-	if err != nil {
-		return bundle{}, err
+	receipt := view.State.Receipt
+	if receipt == nil {
+		return approved{}, runtimeUnprepared(lock, "")
 	}
-	return bundle{context: view.Identity().Name, area: area, location: location, requirement: prerequisites.LaunchRequirement(receipt)}, nil
+	abi := receipt.Runtime.ABI
+	located := approved{
+		runtime: prerequisites.Runtime{
+			Digest: prerequisites.RuntimeDigest(lock.Digest, abi, receipt.Runtime.Interpreter), LockDigest: lock.Digest,
+			Interpreter: prerequisites.PythonInterpreter{Path: receipt.Runtime.Interpreter, ABI: abi}, AnsibleCore: lock.AnsibleCore,
+		},
+		closure: operationstore.Closure{Digest: prerequisites.RuntimeClosureDigest(lock.Digest, abi), Python: abi, Ansible: lock.AnsibleCore},
+	}
+	if presence, reports := s.guard.(RuntimePresence); reports {
+		published, err := presence.Published(ctx, located.runtime)
+		if err != nil {
+			return approved{}, err
+		}
+		if !published {
+			return approved{}, runtimeUnprepared(lock, abi)
+		}
+	}
+	return located, nil
+}
+
+// withPython launches the approved runtime; one retired since it was located
+// refuses with the setup that prepares it.
+func (s Service) withPython(ctx context.Context, runtime approved, use func(prerequisites.PythonLaunch) error) error {
+	entered := false
+	err := s.guard.WithPython(ctx, runtime.runtime, func(launch prerequisites.PythonLaunch) error {
+		entered = true
+		return use(launch)
+	})
+	if !entered && errors.Is(err, prerequisites.ErrRuntimeUnavailable) {
+		return runtimeUnprepared(s.options.Lock, runtime.runtime.Interpreter.ABI)
+	}
+	return err
+}
+
+func runtimeUnprepared(lock RuntimeLock, abi string) error {
+	identity := "lock " + lock.Digest[:min(12, len(lock.Digest))]
+	if abi != "" {
+		identity += ", Python " + abi
+	}
+	return failure("controller.state", "the controller runtime for this build ("+identity+") is not prepared", "run bootwright setup")
 }

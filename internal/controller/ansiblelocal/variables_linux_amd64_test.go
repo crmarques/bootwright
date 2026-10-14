@@ -19,19 +19,16 @@ import (
 // runner writes.
 const controllerFixture = "../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/goldens/extra_vars/controller.json"
 
-// templatedSetup carries remote package metadata and authored egress that each
-// hold a delimiter ansible-core would render.
+// templatedSetup carries remote publisher metadata and authored egress that
+// each hold a delimiter ansible-core would render.
 func templatedSetup() capabilityRequest {
 	sha := strings.Repeat("a", 64)
-	source := prerequisites.DependencySource{ID: "native-one", URL: "https://packages.example.test/el9/chrony.rpm", SHA256: sha, Bytes: 9007199254740993}
+	source := prerequisites.DependencySource{ID: "tool-one", URL: "https://get.example.test/helm.tar.gz", SHA256: sha, Bytes: 9007199254740993}
 	return capabilityRequest{
-		Version: requestVersion, Operation: "setup", Identity: sha,
-		Platform:          prerequisites.Platform{OS: "rhel", Release: "9.8", Architecture: "x86_64"},
-		Bundle:            bundleLocation{Path: "/bundle", Device: 2049, Inode: 18446744073709551615, Writable: true},
+		Version: requestVersion, Identity: sha,
 		PublicationBundle: bundleLocation{Path: "/bundle", Device: 2049, Inode: 18446744073709551615, Writable: true},
-		Packages:          []prerequisites.NativePackage{{Name: "{{ lookup('pipe', 'id') }}", Version: "4.6", Release: "1.el9", Architecture: "x86_64", Signer: sha, Source: source}},
-		Tools:             []prerequisites.ToolDefinition{},
-		Acquisition:       []toolAcquisition{},
+		Tools:             []prerequisites.ToolDefinition{{Kind: "{{ lookup('pipe', 'id') }}", Version: "3.17.3", Archive: "tar.gz", Source: source, Files: []prerequisites.ToolFile{{Member: "linux-amd64/helm", Path: "bin/helm"}}}},
+		Acquisition:       []toolAcquisition{{Source: "tool-one", Seconds: 121}},
 		Egress:            prerequisites.SetupEgress{HTTPProxy: "http://proxy.example.test:8080/{% raw %}kept{% endraw %}", NoProxy: []string{"{{ 7*6 }}"}},
 	}
 }
@@ -76,14 +73,14 @@ func unmarked(t *testing.T, value any, path string) any {
 	return value
 }
 
-// Setup's own request carries remote package metadata and the controller's
+// The stage's request carries remote publisher metadata and the controller's
 // authored egress, and ansible-core reads an --extra-vars file as trusted
 // template text, so every string under the request is an __ansible_unsafe
 // object; the inventory, whose values the runner chooses, stays plain JSON.
 func TestTheControllerRunnerWritesEveryRequestStringAsData(t *testing.T) {
 	job := t.TempDir()
 	request := templatedSetup()
-	if err := writeInvocation(job, prerequisites.PythonLaunch{Loader: "/qualified/loader"}, request); err != nil {
+	if err := writeInvocation(job, prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"}, request); err != nil {
 		t.Fatal(err)
 	}
 	written, err := os.ReadFile(filepath.Join(job, "request.json"))
@@ -101,7 +98,7 @@ func TestTheControllerRunnerWritesEveryRequestStringAsData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"all":{"children":{"bootwright_controller":{"hosts":{"controller":{"ansible_connection":"local","ansible_host":"localhost","ansible_python_interpreter":` + string(mustQuote(t, filepath.Join(job, "interpreter"))) + `}}}}}}`
+	want := `{"all":{"children":{"bootwright_controller":{"hosts":{"controller":{"ansible_connection":"local","ansible_host":"localhost","ansible_python_interpreter":"/runtime/bootwright-python"}}}}}}`
 	if string(inventory) != want {
 		t.Fatalf("the inventory changed form:\n%s\nwant\n%s", inventory, want)
 	}
@@ -112,7 +109,7 @@ func TestTheControllerRunnerWritesEveryRequestStringAsData(t *testing.T) {
 // this runner writes for a request holding every delimiter.
 func TestTheControllerRunnerWritesTheCollectionsFixture(t *testing.T) {
 	job := t.TempDir()
-	if err := writeInvocation(job, prerequisites.PythonLaunch{Loader: "/qualified/loader"}, templatedSetup()); err != nil {
+	if err := writeInvocation(job, prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"}, templatedSetup()); err != nil {
 		t.Fatal(err)
 	}
 	written, err := os.ReadFile(filepath.Join(job, "request.json"))

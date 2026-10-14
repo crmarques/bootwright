@@ -4,6 +4,7 @@ package venvlocal
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,7 +17,7 @@ import (
 func built(t *testing.T) (*fakeHost, *Adapter, prerequisites.Runtime) {
 	t.Helper()
 	host, adapter, interpreter := buildable(t)
-	runtime, err := adapter.Build(context.Background(), interpreter)
+	runtime, err := testBuild(adapter, context.Background(), interpreter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,9 +49,12 @@ func TestTheGuardHoldsTheRuntimeSharedForTheBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if published, err := adapter.Published(context.Background(), runtime); !published || err != nil {
+		t.Fatalf("Published = %t, %v after the build", published, err)
+	}
 	if launch.Program != filepath.Join(directory, "bin", "python") || launch.Shim != filepath.Join(directory, shimName) ||
-		!slices.Equal(launch.Arguments, []string{"-I", "-B"}) || launch.Loader != "" ||
-		!slices.Equal(launch.Environment, []string{"LC_ALL=C.UTF-8", "LANG=C.UTF-8", "PATH=/usr/sbin:/usr/bin"}) {
+		!slices.Equal(launch.Arguments, []string{"-I", "-B"}) || launch.Directory != directory ||
+		!slices.Equal(launch.Environment, []string{"LC_ALL=C.UTF-8", "LANG=C.UTF-8", "PATH=/usr/sbin:/usr/bin", "HOME=" + directory}) {
 		t.Fatalf("launch = %+v", launch)
 	}
 	retire, err := exclusive(t, filepath.Join(directory, lockName))
@@ -118,6 +122,19 @@ func TestTheGuardRefusesARuntimeThatNoLongerVerifies(t *testing.T) {
 				t.Fatalf("WithPython = %v, launched %t", err, called)
 			}
 		})
+	}
+}
+
+func TestTheGuardReportsAnUnpublishedRuntimeAsUnavailable(t *testing.T) {
+	_, adapter, interpreter := buildable(t)
+	runtime := adapter.runtimeFor(interpreter)
+	if published, err := adapter.Published(context.Background(), runtime); published || err != nil {
+		t.Fatalf("Published = %t, %v before any build", published, err)
+	}
+	called := false
+	err := adapter.WithPython(context.Background(), runtime, func(prerequisites.PythonLaunch) error { called = true; return nil })
+	if !errors.Is(err, prerequisites.ErrRuntimeUnavailable) || called {
+		t.Fatalf("WithPython = %v, launched %t", err, called)
 	}
 }
 

@@ -216,7 +216,7 @@ func contractDependentEffects(t *testing.T, row contractRow, example contractExa
 	for _, block := range example.frozen(row.binding()) {
 		execution := lifecycle.Execution{
 			ApplyOperation: "op-0123456789abcdef0123456789abcdef", Operation: "op-0123456789abcdef0123456789abcdef", Attempt: 1, Block: block,
-			Launch: prerequisites.PythonLaunch{Loader: "/loader"}, Bundle: prerequisites.BundleLocation{Path: "/bundle"}, Material: material,
+			Launch: prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"}, Material: material,
 		}
 		for _, operation := range []string{"apply", "observe", "destroy", "observe-removal"} {
 			runner.script(lifecycle.RunResult{Outcome: "changed", Evidence: json.RawMessage(`{}`)}, nil)
@@ -559,7 +559,7 @@ func contractEffects(t *testing.T, row contractRow, example contractExample, cap
 	for _, block := range example.frozen(row.binding()) {
 		execution := lifecycle.Execution{
 			Operation: "op-0123456789abcdef0123456789abcdef", Attempt: 1, Block: block,
-			Launch: prerequisites.PythonLaunch{Loader: "/loader"}, Bundle: prerequisites.BundleLocation{Path: "/bundle"},
+			Launch:   prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"},
 			Material: material,
 			LocateTool: func(_ context.Context, tool controller.InstalledTool) (string, error) {
 				return "/var/lib/bootwright/tools/" + tool.Kind + "/" + tool.Version + "/" + tool.Executable, nil
@@ -600,7 +600,7 @@ func contractReadOnly(row contractRow, block reconciliation.Block, capability li
 		return
 	}
 	runner.script(lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{}`)}, nil)
-	_, _ = capability.Quiescent(context.Background(), lifecycle.Probe{Block: block, Launch: execution.Launch, Bundle: execution.Bundle, Material: execution.Material})
+	_, _ = capability.Quiescent(context.Background(), lifecycle.Probe{Block: block, Launch: execution.Launch, Material: execution.Material})
 	sent := runner.sent()
 	if len(sent) == 0 {
 		findings.record(row, "probe-read-only", block.ID+": a probing binding's probe sent no request")
@@ -1262,7 +1262,7 @@ func contractObservations(row contractRow, block reconciliation.Block, capabilit
 		}
 		runner.script(script.result, script.err)
 		quiescence, err := capability.Quiescent(context.Background(), lifecycle.Probe{
-			Block: block, Launch: execution.Launch, Bundle: execution.Bundle, Material: execution.Material,
+			Block: block, Launch: execution.Launch, Material: execution.Material,
 		})
 		if err == nil && quiescence.Settled() {
 			findings.record(row, "quiescence-unproved", fmt.Sprintf("%s: a probe %s reads quiescent", block.ID, script.name))

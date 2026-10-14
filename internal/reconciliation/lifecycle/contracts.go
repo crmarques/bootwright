@@ -75,15 +75,11 @@ type Transaction interface {
 	// reservation. A sealed area reopens read-only.
 	ClientArea(context.Context, string) (prerequisites.BundleArea, error)
 	// SealClientArea makes that closure immutable after its complete tree is
-	// verified and durable.
+	// verified and durable, and records it on this context's binding.
 	SealClientArea(context.Context, string) error
-	// RetainDependencies records the acquisition identities and native
-	// resolution a controller stage froze, before it installs them, and in
-	// that same publication retires the retained resolutions, named by
-	// resolution digest, that the stage says the new one supersedes. It
-	// refuses to retire the receipt's own, the one it retains, or the last
-	// naming a held bundle, and retires nothing without a resolution to keep.
-	RetainDependencies(context.Context, *prerequisites.Definition, []prerequisites.DependencySource, []string) error
+	// RetainDependencies records the tool sources a controller stage froze,
+	// before it installs them.
+	RetainDependencies(context.Context, []prerequisites.DependencySource) error
 	// Secrets lends this context's secret area to one caller at a time, under
 	// the lock and lease the transaction already holds, so produced material
 	// is published and withdrawn inside the transaction that records it. The
@@ -142,8 +138,26 @@ type AutomationIdentity interface {
 	CatalogDigest() string
 }
 
+// ExecutionGuard reports an unpublished runtime as ErrRuntimeUnavailable.
 type ExecutionGuard interface {
-	WithPython(context.Context, prerequisites.BundleArea, prerequisites.ExecutionRequirement, func(prerequisites.PythonLaunch, func() error) error) error
+	WithPython(context.Context, prerequisites.Runtime, func(prerequisites.PythonLaunch) error) error
+}
+
+// RuntimePresence lets an operation refuse an unpublished runtime before it
+// registers rather than at its first launch.
+type RuntimePresence interface {
+	Published(context.Context, prerequisites.Runtime) (bool, error)
+}
+
+// SetupReader reads the controller setup record without writing anything.
+type SetupReader interface {
+	ReadSetup(context.Context) (prerequisites.SetupView, error)
+}
+
+// RuntimeLock identifies the runtime lock this build embeds.
+type RuntimeLock struct {
+	Digest      string
+	AnsibleCore string
 }
 
 // Capability is one domain's lifecycle implementation. It plans its own blocks
@@ -237,15 +251,13 @@ type Probe struct {
 	Context          string
 	Block            reconciliation.Block
 	Launch           prerequisites.PythonLaunch
-	Bundle           prerequisites.BundleLocation
-	Area             prerequisites.BundleArea
 	Material         map[string]secrets.Material
 	RetiredWithHosts bool
 }
 
 // Execution presents a read-only adapter call without effect-attempt hooks.
 func (p Probe) Execution() Execution {
-	return Execution{ApplyOperation: p.ApplyOperation, ApplyProved: p.ApplyProved, Context: p.Context, Block: p.Block, Launch: p.Launch, Bundle: p.Bundle, Area: p.Area, Material: p.Material, RetiredWithHosts: p.RetiredWithHosts}
+	return Execution{ApplyOperation: p.ApplyOperation, ApplyProved: p.ApplyProved, Context: p.Context, Block: p.Block, Launch: p.Launch, Material: p.Material, RetiredWithHosts: p.RetiredWithHosts}
 }
 
 // QuiescenceState is what a probe proved about one block's targets.
@@ -479,8 +491,6 @@ type Execution struct {
 	Resolution   int
 	Block        reconciliation.Block
 	Launch       prerequisites.PythonLaunch
-	Bundle       prerequisites.BundleLocation
-	Area         prerequisites.BundleArea
 	Material     map[string]secrets.Material
 	// Proved is what each block this apply attempt's block depends on durably
 	// proved in this operation, read from the record that settled it, its
@@ -520,15 +530,13 @@ type Execution struct {
 // ControllerStage is what extending the host's prerequisites needs and nothing
 // else does: the evidence setup froze, the shared area a closure is published
 // into with its sealing, the durable identities recorded before any
-// acquisition, the before-state published ahead of any host change, and the
-// one handback of the native package read lock.
+// acquisition and the before-state published ahead of any host change.
 type ControllerStage struct {
 	Setup              prerequisites.StorageView
 	ClientArea         func(context.Context, string) (prerequisites.BundleArea, error)
 	SealClientArea     func(context.Context, string) error
-	RetainDependencies func(context.Context, *prerequisites.Definition, []prerequisites.DependencySource, []string) error
-	Prepare            func(context.Context, prerequisites.NativePreparation) error
-	ReleaseFoundation  func() error
+	RetainDependencies func(context.Context, []prerequisites.DependencySource) error
+	Prepare            func(context.Context, prerequisites.StagePreparation) error
 }
 
 // Result is what one attempt did. Produced is material the attempt's proved

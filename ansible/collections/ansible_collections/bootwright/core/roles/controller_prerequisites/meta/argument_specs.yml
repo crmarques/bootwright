@@ -1,6 +1,6 @@
 argument_specs:
   main:
-    short_description: Prepare one frozen controller dependency closure.
+    short_description: Publish the frozen target tools of one controller stage.
     options:
       bootwright_controller_request:
         type: dict
@@ -9,30 +9,13 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [controller-prerequisites-v5]
-          operation:
-            type: str
-            required: true
-            choices: [setup, recover]
+            choices: [controller-prerequisites-v6]
           identity:
             type: str
-            required: true
-          platform:
-            type: dict
-            required: true
-          bundle:
-            type: dict
             required: true
           publicationBundle:
             type: dict
             required: true
-          packages:
-            type: list
-            elements: dict
-            required: true
-          native:
-            type: raw
-            required: false
           tools:
             type: list
             elements: dict
@@ -41,12 +24,6 @@ argument_specs:
             type: list
             elements: dict
             required: true
-          nativeStaging:
-            type: raw
-            required: true
           egress:
             type: dict
             required: true
-          preparation:
-            type: dict
-            default: {}

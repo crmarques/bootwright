@@ -111,7 +111,7 @@ func (publisherCatalog) Present(ctx context.Context, area prerequisites.BundleAr
 type publishingInstaller struct{}
 
 func (publishingInstaller) Clients(ctx context.Context, installation prerequisites.ClientInstallation) (prerequisites.ActionResult, error) {
-	for _, tool := range installation.Definition.Tools {
+	for _, tool := range installation.Tools {
 		for _, file := range tool.Files {
 			if err := installation.Target.EnsureDirectory(ctx, path.Dir(file.Path)); err != nil {
 				return prerequisites.ActionResult{Outcome: "failed"}, err
@@ -124,60 +124,16 @@ func (publishingInstaller) Clients(ctx context.Context, installation prerequisit
 	return prerequisites.ActionResult{Outcome: "changed"}, nil
 }
 
-type noNative struct{}
-
-func (noNative) Resolve(context.Context, prerequisites.Platform, prerequisites.NativeRequirements, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
-	return prerequisites.NativeResolvedPlan{}, nil
-}
-
-func (noNative) Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
-	return prerequisites.NativePresence{}, nil
-}
-
-func (noNative) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
-	return prerequisites.OperatorPresence{}, nil
-}
-
-// resolvedSetupFixture completes a setup whose receipt carries the resolved
-// definition the controller stage extends.
+// resolvedSetupFixture binds the context to a prepared host, as the apply
+// that runs the controller stage does before it.
 func resolvedSetupFixture(t *testing.T, store *Store, record contexts.Record) {
 	t.Helper()
-	ctx := context.Background()
-	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
-	value := syntheticControllerState(t, scope)
-	definition := syntheticResolution(t)
-	value.Receipt.Definition = &definition
-	value.Receipt.CatalogDigest = definition.CatalogDigest
-	value.Receipt.Sources = slices.Clone(definition.Sources)
-	var err error
-	if value.Receipt.PlanDigest, err = prerequisites.SetupPlanDigest(value.Host, value.Receipt); err != nil {
-		t.Fatal(err)
-	}
-	publishControllerState(t, store, scope, value)
-	err = store.MutateController(ctx, scope, false, func(tx prerequisites.StorageTransaction) error {
-		intended := tx.Snapshot().State
-		intended.Receipt.Actions[0].Phase = "intent"
-		if _, err := tx.Publish(ctx, intended); err != nil {
-			return err
-		}
-		area, err := tx.Bundle(ctx, value.Receipt.CatalogDigest)
-		if err != nil {
-			return err
-		}
-		if err := area.Write(ctx, "manifest.json", []byte("{}\n"), false); err != nil {
-			return err
-		}
-		_, err = tx.Publish(ctx, completeControllerState(tx.Snapshot().State))
-		return err
-	})
-	if err != nil {
-		t.Fatalf("setup publication failed: %#v", diagnostics.Of(err))
-	}
+	reserveFixture(t, store, record)
+	bind(t, store, record.Name)
 }
 
-// The controller stage retains the sources it acquired and seals the area its
-// closure names, and the store refuses any retained resolution that carries
-// clients. The install, in a later operation, locates the installer and the
+// The controller stage retains the sources it acquired, seals the area its
+// closure names and records it on the binding. The install, in a later operation, locates the installer and the
 // client that stage installed from its proof alone, even once another context
 // on this host retained a newer helm under the same latest intent, whose
 // closure this context never published.
@@ -202,7 +158,7 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 		}
 		catalog.published = append(catalog.published, publishedSource(t, tool, version, "a"))
 	}
-	stage := clients.New(catalog, noNative{}, noNative{}, publishingInstaller{})
+	stage := clients.New(catalog, nil, nil, publishingInstaller{})
 	canonical, err := request.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -219,8 +175,7 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 		result, err := stage.Apply(ctx, lifecycle.Execution{Block: block, Stage: &lifecycle.ControllerStage{
 			Setup: tx.Controller(), ClientArea: tx.ClientArea, SealClientArea: tx.SealClientArea,
 			RetainDependencies: tx.RetainDependencies,
-			Prepare:            func(context.Context, prerequisites.NativePreparation) error { return nil },
-			ReleaseFoundation:  func() error { return nil },
+			Prepare:            func(context.Context, prerequisites.StagePreparation) error { return nil },
 		}})
 		if err == nil && result.Outcome != reconciliation.OutcomeChanged {
 			t.Fatalf("the controller stage reported %q", result.Outcome)
@@ -251,17 +206,17 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 		newer = append(newer, publishedSource(t, tool, version, "b"))
 	}
 	err = store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
-		return tx.RetainDependencies(ctx, nil, newer, nil)
+		return tx.RetainDependencies(ctx, newer)
 	})
 	if err != nil {
 		t.Fatalf("another context's stage could not retain its sources: %#v", diagnostics.Of(err))
 	}
 	err = store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
 		view := tx.Controller()
-		if slices.ContainsFunc(view.State.RetainedDefinitions, func(definition prerequisites.Definition) bool { return len(definition.Tools) != 0 }) {
-			t.Fatal("the store retained a resolution that carries clients")
+		if view.State.Bindings[0].Tools != area {
+			t.Fatalf("the binding names tool area %q, want %s", view.State.Bindings[0].Tools, area)
 		}
-		if selected, complete, err := catalog.Select(requests, view.State.RetainedSources); err != nil || !complete || prerequisites.ToolsDigest(selected) == area {
+		if selected, complete, err := catalog.Select(requests, view.State.ToolSources); err != nil || !complete || prerequisites.ToolsDigest(selected) == area {
 			t.Fatalf("the newer helm another context retained is not what the host's sources now select (%v)", err)
 		}
 		execution := lifecycle.Execution{LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {

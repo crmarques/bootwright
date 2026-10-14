@@ -36,7 +36,7 @@ type scheduler struct {
 	service   Service
 	tx        Transaction
 	store     OperationStore
-	approved  bundle
+	approved  approved
 	operation operationstore.Operation
 	plan      reconciliation.Plan
 	material  map[string]secrets.Material
@@ -78,7 +78,7 @@ type scheduler struct {
 // converge runs the operation's blocks until nothing more may start, and
 // reports whether it stopped at a stage or operator-stop boundary and what any
 // block that did not complete reported.
-func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved bundle, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) (bool, error) {
+func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) (bool, error) {
 	return s.newScheduler(tx, store, approved, logging, operation, plan, states, material, selection).converge(ctx)
 }
 
@@ -86,7 +86,7 @@ func (s Service) converge(ctx context.Context, tx Transaction, store OperationSt
 // else, leaving the block states it was given holding what each one proved.
 // removal says a fresh removal resolves an apply's blocks, by the check of the
 // block of removalPlan that takes each one back.
-func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved bundle, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, removal bool, removalPlan reconciliation.Plan) error {
+func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, removal bool, removalPlan reconciliation.Plan) error {
 	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, reconciliation.StageSelection{})
 	run.observeOnly = true
 	run.removal, run.removalPlan = removal, removalPlan
@@ -104,7 +104,7 @@ func (s Service) Concurrency() int {
 	return s.options.Concurrency
 }
 
-func (s Service) newScheduler(tx Transaction, store OperationStore, approved bundle, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) *scheduler {
+func (s Service) newScheduler(tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) *scheduler {
 	return &scheduler{
 		service: s, tx: tx, store: store, approved: approved, operation: operation,
 		plan: plan, material: material, selection: selection, bound: s.Concurrency(), logging: logging,

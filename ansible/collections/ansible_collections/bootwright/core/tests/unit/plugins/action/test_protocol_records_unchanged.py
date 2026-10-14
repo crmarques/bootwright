@@ -80,11 +80,11 @@ ENDPOINT = "https://bmc.example.test/redfish/v1/Systems/1"
 POWER = {"machine": "node-a", "verb": "start", "power": "On", "previous": "Off", "changed": True}
 POWER_UNMET = dict(POWER, power="Off")
 POWER_MALFORMED = dict(POWER, verb="bounce")
-CONTROLLER_REQUEST = {"version": "controller-prerequisites-v5", "operation": "setup", "identity": DIGEST,
-                      "platform": "rhel-9-x86_64", "bundle": "b", "publicationBundle": "p", "packages": [],
-                      "native": None, "tools": [], "acquisition": [], "nativeStaging": 0, "egress": {}}
-CONTROLLER_PREPARATION = {"inventorySHA256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-                          "addedSources": []}
+CONTROLLER_REQUEST = {"version": "controller-prerequisites-v6", "identity": DIGEST, "publicationBundle": "p",
+                      "tools": [{"source": {"id": "tool-oc"}}], "acquisition": [{"source": "tool-oc", "seconds": 121}],
+                      "egress": {}}
+CONTROLLER_PREPARATION = {"addedSources": ["tool-oc"]}
+CONTROLLER_TOOLS = [{"source": "tool-oc", "sha256": DIGEST, "files": DIGEST}]
 
 
 def completions(proving, unproving, removal, remaining, malformed):
@@ -200,15 +200,13 @@ CASES = {
         ("continue", {"phase": "continue"}),
         ("unknown phase", {"phase": "unloaded"}),
         ("loaded with arguments", {"phase": "loaded", "request": {}}),
-        ("prepared", {"phase": "prepared", "request": CONTROLLER_REQUEST, "inventory": [], "roots_ready": True}),
-        ("completed", {"phase": "completed", "request": CONTROLLER_REQUEST, "inventory": [], "roots_ready": True,
-                       "preparation": CONTROLLER_PREPARATION, "native_applied": False, "tools": [],
-                       "tools_changed": False}),
-        ("completed unproving", {"phase": "completed", "request": CONTROLLER_REQUEST, "inventory": [],
-                                 "roots_ready": False, "preparation": CONTROLLER_PREPARATION,
-                                 "native_applied": False, "tools": [], "tools_changed": False}),
-        ("malformed", {"phase": "prepared", "request": dict(CONTROLLER_REQUEST, version="v4"), "inventory": [],
-                       "roots_ready": True}),
+        ("prepared", {"phase": "prepared", "request": CONTROLLER_REQUEST}),
+        ("completed", {"phase": "completed", "request": CONTROLLER_REQUEST, "preparation": CONTROLLER_PREPARATION,
+                       "tools": CONTROLLER_TOOLS, "tools_changed": False}),
+        ("completed unproving", {"phase": "completed", "request": CONTROLLER_REQUEST,
+                                 "preparation": {"addedSources": []}, "tools": CONTROLLER_TOOLS,
+                                 "tools_changed": False}),
+        ("malformed", {"phase": "prepared", "request": dict(CONTROLLER_REQUEST, version="v5")}),
     ],
 }
 

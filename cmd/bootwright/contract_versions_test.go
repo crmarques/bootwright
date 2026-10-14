@@ -19,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/runtimelock"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
@@ -153,20 +154,28 @@ func automationFormats() map[string]automationFormat {
 		"machine-power-redfish-v2": {class: formatMirrored},
 		"machine-power-read-v2":    {class: formatMirrored},
 
-		"controller-prerequisites-v5": {class: formatController},
+		"controller-prerequisites-v6": {class: formatController},
 	}
 }
 
 // formatSelfHealing is a store format Go code writes and reads itself: another
 // build's copy is discarded by setup after confirmation and refuses a launch
 // naming setup, so it versions no implementation's contract (D152.9).
-const formatSelfHealing = "self-healing"
+// formatRuntimeIdentity is a digest domain the setup receipt records: a moved
+// one names another runtime, which setup prepares beside the old (D152.7).
+const (
+	formatSelfHealing     = "self-healing"
+	formatRuntimeIdentity = "runtime-identity"
+)
 
 // storeFormats classifies the versioned formats the store persists outside
 // any implementation's automation, by how another build's copy is met.
 func storeFormats() map[string]string {
 	return map[string]string{
-		prerequisites.SetupStateFormat: formatSelfHealing,
+		prerequisites.SetupStateFormat:     formatSelfHealing,
+		runtimelock.Format:                 formatRuntimeIdentity,
+		prerequisites.RuntimeFormat:        formatRuntimeIdentity,
+		prerequisites.RuntimeClosureFormat: formatRuntimeIdentity,
 	}
 }
 
@@ -180,15 +189,22 @@ func TestEveryStoreFormatIsClassified(t *testing.T) {
 		if !versioned.MatchString(literal) {
 			t.Errorf("store format %q does not end in a version", literal)
 		}
-		if class != formatSelfHealing {
-			t.Errorf("store format %q has class %q, want %q", literal, class, formatSelfHealing)
+		if class != formatSelfHealing && class != formatRuntimeIdentity {
+			t.Errorf("store format %q has class %q, want %q or %q", literal, class, formatSelfHealing, formatRuntimeIdentity)
 		}
 		if _, claimed := automation[literal]; claimed {
 			t.Errorf("store format %q is also classified as an automation literal", literal)
 		}
 	}
-	if prerequisites.SetupStateFormat != "bootwright.setup-state-v1" {
-		t.Errorf("the setup format moved to %q: classify the new literal", prerequisites.SetupStateFormat)
+	for literal, want := range map[string]string{
+		prerequisites.SetupStateFormat:     "bootwright.setup-state-v1",
+		runtimelock.Format:                 "bootwright.controller.runtime-lock-v1",
+		prerequisites.RuntimeFormat:        "bootwright.controller.runtime-v1",
+		prerequisites.RuntimeClosureFormat: "bootwright.controller.execution-closure-v2",
+	} {
+		if literal != want {
+			t.Errorf("the store format %q moved to %q: classify the new literal", want, literal)
+		}
 	}
 }
 

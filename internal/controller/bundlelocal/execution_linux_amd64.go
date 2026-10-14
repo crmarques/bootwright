@@ -113,7 +113,7 @@ func (guard ExecutionGuard) inspectRecord(ctx context.Context, native nativeReco
 	return inspection, nil
 }
 
-func (guard ExecutionGuard) WithPython(ctx context.Context, area prerequisites.BundleArea, requirement prerequisites.ExecutionRequirement, use func(prerequisites.PythonLaunch, func() error) error) (result error) {
+func (guard ExecutionGuard) WithPython(ctx context.Context, area prerequisites.BundleArea, requirement prerequisites.ExecutionRequirement, use func(bundleLaunch, func() error) error) (result error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -207,27 +207,27 @@ func (fs executionFilesystem) readLock(ctx context.Context, name string) (*os.Fi
 	return lock, nil
 }
 
-func openBundleLaunch(ctx context.Context, area prerequisites.BundleArea, requirement prerequisites.ExecutionRequirement, owner uint32) (prerequisites.PythonLaunch, *os.File, error) {
+func openBundleLaunch(ctx context.Context, area prerequisites.BundleArea, requirement prerequisites.ExecutionRequirement, owner uint32) (bundleLaunch, *os.File, error) {
 	if err := area.Verify(ctx); err != nil {
-		return prerequisites.PythonLaunch{}, nil, err
+		return bundleLaunch{}, nil, err
 	}
 	location, err := area.Location(ctx)
 	if err != nil {
-		return prerequisites.PythonLaunch{}, nil, err
+		return bundleLaunch{}, nil, err
 	}
 	if !executionPath(location.Path) || location.Device == 0 || location.Inode == 0 {
-		return prerequisites.PythonLaunch{}, nil, executionFailure("controller.identity", "the private dependency bundle location is unverified")
+		return bundleLaunch{}, nil, executionFailure("controller.identity", "the private dependency bundle location is unverified")
 	}
 	bundle, err := openExecutionRoot(executionView{root: location.Path, owner: owner})
 	if err != nil {
-		return prerequisites.PythonLaunch{}, nil, executionFailure("controller.identity", "the private dependency bundle execution directory is unsafe")
+		return bundleLaunch{}, nil, executionFailure("controller.identity", "the private dependency bundle execution directory is unsafe")
 	}
 	var stat unix.Stat_t
 	if unix.Fstat(int(bundle.Fd()), &stat) != nil || uint64(stat.Dev) != location.Device || stat.Ino != location.Inode {
 		bundle.Close()
-		return prerequisites.PythonLaunch{}, nil, executionFailure("controller.identity", "the private dependency bundle execution directory was replaced")
+		return bundleLaunch{}, nil, executionFailure("controller.identity", "the private dependency bundle execution directory was replaced")
 	}
-	launch := prerequisites.PythonLaunch{
+	launch := bundleLaunch{
 		Loader: requirement.Loader,
 		Arguments: []string{
 			"--inhibit-cache", "--glibc-hwcaps-mask", "",

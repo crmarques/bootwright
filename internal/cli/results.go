@@ -37,7 +37,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 	switch path {
 	case "setup", "preflight controller":
 		if validControllerReport(result.controller) && successfulControllerReport(path, result.controller) {
-			return true, writeControllerReport(out, errOut, path, result.controller)
+			return true, writeControllerResult(out, errOut, path, result.controller, selectedJSON(command))
 		}
 	case "plan", "status", "diff":
 		return r.writeLifecycleInspection(ctx, command, path, result)

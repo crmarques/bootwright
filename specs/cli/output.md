@@ -627,7 +627,7 @@ probe. Its result orders these fields:
 | Field | Contract |
 | --- | --- |
 | `context` | `name`, `mode` of the resolved context. `mode` is the context record's mode, which a lifecycle read admits only as `ready`. |
-| `setupChecks` | `{id, status}` rows derived from stored controller evidence alone, without host probes: `controller-binding`, then `execution-bundle`, the identities [controller readiness](../controller.md#results-and-qualification) gives the same prerequisites. `execution-bundle` is `ready` when the controller record exists, is initialized and holds a complete setup receipt, which is what an apply needs before it claims the host, and `not-ready` otherwise. `controller-binding` is `ready` when that record binds this context, `pending` when it does not and the context holds no operation, because the first apply publishes it, and `not-ready` when it does not while an operation exists. Readiness itself never reports `pending`. |
+| `setupChecks` | `{id, status}` rows derived from stored controller evidence alone, without host probes: `controller-binding`, then `execution-bundle`, the identities [controller readiness](../controller.md#results-and-qualification) gives the same prerequisites. `execution-bundle` is `ready` when the setup subtree holds a receipt and no interrupted setup, which is what an apply needs before it claims the host, and `not-ready` otherwise. `controller-binding` is `ready` when that record binds this context, `pending` when it does not and the context holds no operation, because the first apply publishes it, and `not-ready` when it does not while an operation exists. Readiness itself never reports `pending`. |
 | `desired` | `revision`, `environment` and admission `counts` of the selected immutable input. `counts` holds `filesSeen` and `objectsDecoded`, and an input that does not compile fails `status` with its diagnostics, so `desired` is always an object. |
 | `clusters`, `storageClusters` | Ordered `{name, kind, status}` rows for selected cluster roots, `status` in the realization vocabulary below. |
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected managed shared services, `status` in the realization vocabulary below. |
@@ -789,6 +789,8 @@ it to a variable.
 | `controller.state` | Retained setup evidence is incomplete, contradictory or no longer valid. |
 | `controller.conflict` | Another setup or context protects a shared prerequisite or holds its coordination boundary. |
 | `controller.setup` | A local controller prerequisite action definitely failed. |
+| `controller.untested-release` | Informational: the host's release is outside the releases this build was tested on; setup checks its floors and continues. Never a refusal. |
+| `controller.loader-preload` | Informational: `/etc/ld.so.preload` is not empty, so it loads libraries into every process, root dnf runs included; setup continues. Never a refusal. |
 | `controller.unknown` | A local controller prerequisite action has an unresolved effect outcome. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
 | `lifecycle.unsupported` | This executable cannot realize a selected object: no capability claims its kind, or its capability reports the shape unsupported. |
@@ -837,7 +839,7 @@ artifacts. Preflight, local setup, sensitive export, and access handoff allocate
 no lifecycle identity or log. Setup uses its
 [private recovery receipt](../controller.md#publication-and-interrupted-setup),
 separate from the lifecycle receipt and operation logs, and keeps what its
-controller Ansible printed in a [setup run](#setup-run-output) and nothing
+dnf printed in a [setup run](#setup-run-output) and nothing
 else. Only lifecycle effects and unknown-effect resolution use the state-owned
 operation, block, and attempt log tree below; a
 [bounded run](#bounded-run-output) retains what its own adapter printed and
@@ -971,39 +973,35 @@ nothing, then the directory.
 ### Setup run output
 
 Local `setup` registers no lifecycle operation and selects no context, so the
-Ansible that installs or recovers its container runtime has neither an attempt
-log nor a context's run area to sit beside. A confirmed setup that starts that
-Ansible, for a preparation or a recovery, first creates a run of its own
-beneath the controller directory and keeps exactly one file there:
+dnf it runs has neither an attempt log nor a context's run area to sit beside.
+A confirmed setup first creates a run of its own beneath its setup subtree and
+keeps exactly one file there:
 
 ```text
-/var/lib/bootwright/controller/runs/<setup-run-id>/
+/var/lib/bootwright/setup/runs/<setup-run-id>/
   run.output
 ```
 
 `<setup-run-id>` is `setup-` and six digits, numbered upward from
 `setup-000001`. The
-[controller record](../contexts/controller-record.md#setup-runs) owns its
+[setup subtree](../contexts/controller-record.md#the-setup-subtree) owns its
 grammar, modes, byte bound, admission and retention: only the newest runs are
 kept, and the oldest is removed before a new one is created. The run and its
-file are created exclusively beneath the held controller directory handle,
-never through a link and never over an existing name. The file exists before
-the Ansible starts and keeps its standard output and error, raw and unparsed,
-while it runs, under the masking obligation a bounded run's output has: every
-task that reads bound material marks itself `no_log`. It is truncated at its
-bound without a marker. Like every retained output it is troubleshooting
-material only: the receipt never names it and nothing reads it back.
+file are created exclusively beneath the held setup directory handle, never
+through a link and never over an existing name. The file exists before dnf
+starts and keeps dnf's standard output and error, raw and unparsed, while it
+runs. It is truncated at its bound without a marker. Like every retained
+output it is troubleshooting material only: the receipt never names it and
+nothing reads it back.
 
-A dry run, a no-op setup, a setup whose approved actions start no Ansible and
-the dependency helpers that resolve before the plan create no run. Neither
-creating, writing nor removing a run ever changes a setup outcome or its
-receipt: a run that cannot be created leaves that Ansible's output discarded,
-exactly as a setup kept none.
+A dry run and a no-op setup create no run. Neither creating, writing nor
+removing a run ever changes a setup outcome or its receipt: a run that cannot
+be created leaves dnf's output discarded, exactly as a setup kept none.
 
 Human setup output names the run's directory on this host as the same `Logs`
-field, once before the Ansible starts and once with the result, for the reason
-an operation names its log tree twice. Setup has no JSON output, so no `logs`
-member names it.
+field, once before dnf starts and once with the result, for the reason an
+operation names its log tree twice. A dry run's JSON output starts nothing, so
+no `logs` member names it.
 
 ## Multi-machine presentation
 

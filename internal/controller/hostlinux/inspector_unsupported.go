@@ -18,11 +18,19 @@ func (Inspector) Platform(ctx context.Context) (prerequisites.Platform, error) {
 	return prerequisites.Platform{}, unsupported(ctx)
 }
 
+func (Inspector) Release(ctx context.Context) (prerequisites.HostRelease, error) {
+	return prerequisites.HostRelease{}, unsupported(ctx)
+}
+
 func (Inspector) Identity(ctx context.Context) (controller.InstalledHostIdentity, error) {
 	return controller.InstalledHostIdentity{}, unsupported(ctx)
 }
 
 func (Inspector) FIPSMode(ctx context.Context) (bool, error) {
+	return false, unsupported(ctx)
+}
+
+func (Inspector) LoaderPreload(ctx context.Context) (bool, error) {
 	return false, unsupported(ctx)
 }
 

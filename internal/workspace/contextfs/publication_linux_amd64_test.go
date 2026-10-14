@@ -136,7 +136,7 @@ func TestAFirstControllerPublicationOverAnExistingRecordLeavesNoStage(t *testing
 	ctx := context.Background()
 	store, sources := fixture(t)
 	publish(t, store, "alpha", sources)
-	value := syntheticControllerState(t, prerequisites.SetupContext{})
+	value := syntheticControllerState(t)
 	planted := false
 	store.fail = func(point string) error {
 		if point != string(checkpointBeforeControllerRename) || planted {
@@ -145,12 +145,9 @@ func TestAFirstControllerPublicationOverAnExistingRecordLeavesNoStage(t *testing
 		planted = true
 		return os.WriteFile(filepath.Join(store.options.Root, "controller", "state.json"), []byte("{}\n"), 0600)
 	}
-	err := store.MutateController(ctx, prerequisites.SetupContext{}, true, func(tx prerequisites.StorageTransaction) error {
-		outcome, err := tx.Publish(ctx, value)
-		if err != nil && outcome != prerequisites.NotCommitted {
-			t.Errorf("the refused first receipt reported %v", outcome)
-		}
-		return err
+	recordPreparedSetup(t, store)
+	err := store.MutateLifecycle(ctx, "alpha", func(tx lifecycle.Transaction) error {
+		return tx.Bind(ctx, "controller", value.Host)
 	})
 	store.fail = nil
 	if !planted {

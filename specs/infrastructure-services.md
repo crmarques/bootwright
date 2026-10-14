@@ -62,14 +62,14 @@ rows never refuse a service placed there.
 
 | Arm | Selected when | Execution | Coordination |
 | --- | --- | --- | --- |
-| Controller | The placement Machine is the [Environment controller](api/environment.md#controller-machine) | Local, through the private controller runtime under [Controller's execution boundary](controller.md#egress-and-local-effects) | The Workspace root lock, the context lease, the verified host binding and the host reservations below |
+| Controller | The placement Machine is the [Environment controller](api/environment.md#controller-machine) | Local, through the private controller runtime under [Controller's execution boundary](controller.md#the-controller-runtime) | The Workspace root lock, the context lease, the verified host binding and the host reservations below |
 | SSH | The placement Machine authors `access.ssh` | Remote, over SSH from the controller | The context lease only |
 
 The controller arm requires this context's verified
 [host binding](contexts.md#controller-relationship-and-host-binding) and the
-setup receipt whose automation identity matches the running executable. A
-missing, contradictory or stale binding refuses before effects and names
-`setup`.
+controller runtime of the running build's lock, which a completed setup
+publishes. A missing, contradictory or stale binding refuses before effects
+and names `setup`.
 
 The SSH arm connects as root and never escalates. It consumes authored
 `access.ssh.auth.privateKeyRef` and required `access.ssh.knownHostsRef`, and

@@ -2,25 +2,29 @@ package prerequisites
 
 import "context"
 
-// ClientInstallation is one authorized controller-stage installation of the
-// clients a context selects. Execution is the sealed setup bundle the fixed
-// automation runs from; Target is the writable shared area the target tools
-// are published into, so a lifecycle operation never writes into the sealed
-// bundle it executes. Launch and Release belong to an execution foundation the
-// caller already holds, because the caller, not this installation, owns the
-// native package read lock.
+// ClientInstallation is one authorized controller-stage publication of the
+// target tools a context selects into Target, the writable shared area.
+// Identity is the frozen block's request digest. Publish receives the sources
+// the automation is about to add before it adds any. Launch belongs to the
+// controller runtime the caller already holds.
 type ClientInstallation struct {
-	Execution  BundleArea
-	Target     BundleArea
-	Platform   Platform
-	Definition Definition
-	Egress     SetupEgress
-	Launch     PythonLaunch
-	Release    func() error
-	Publish    func(context.Context, NativePreparation) error
-	Progress   func(ProgressEvent)
+	Target   BundleArea
+	Identity string
+	Tools    []ToolDefinition
+	Egress   SetupEgress
+	Launch   PythonLaunch
+	Publish  func(context.Context, []string) error
+	Progress func(ProgressEvent)
 	// Output retains what this run prints on its own standard output and
 	// error. The stage runs as one lifecycle block, so its output belongs to
 	// that block's attempt exactly as any other adapter run's does.
 	Output RunOutput
+}
+
+// StagePreparation is a controller stage attempt's durable intent, recorded
+// before its first host effect: the host package requirements it is about to
+// install and the target tool sources it is about to add.
+type StagePreparation struct {
+	Packages     []string `json:"packages"`
+	AddedSources []string `json:"addedSources"`
 }

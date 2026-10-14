@@ -1,383 +1,328 @@
 package prerequisites
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"fmt"
 	"slices"
+	"strings"
 )
 
-func object(values map[string]any) json.RawMessage {
-	data, _ := json.Marshal(values)
-	return data
+const (
+	packagesStep = "native-packages"
+	runtimeStep  = "runtime"
+	receiptStep  = "receipt"
+	discardStep  = "discard-setup-state"
+	unknownRepo  = "unknown"
+)
+
+// requested is what setup asks of dnf: the missing baseline and, without a
+// qualified interpreter, the python(abi) the preview chose.
+func (i inspection) requested() []string {
+	requested := slices.Clone(i.missing)
+	if i.python != "" {
+		requested = append(requested, i.python)
+	}
+	return requested
 }
 
-func newReceipt(i inspection) (SetupReceipt, error) {
-	actions := []SetupAction{{ID: "execution-bundle", Request: object(map[string]any{"catalogDigest": i.definition.CatalogDigest, "readyBefore": i.bundle.Ready}), Phase: "planned", Evidence: object(map[string]any{})}}
-	if i.selection.ContainerRuntime() {
-		actions = append(actions, SetupAction{ID: "container-runtime", Request: object(map[string]any{"readyBefore": i.dependenciesReady(), "version": i.definition.Runtime.Version}), Phase: "planned", Evidence: object(map[string]any{})})
-	}
-	receipt := SetupReceipt{CatalogDigest: i.definition.CatalogDigest, Context: i.view.Context, Egress: i.route(), Sources: slices.Clone(i.definition.Sources), Actions: actions, Status: "pending"}
-	if i.definition.Bootstrap != nil {
-		definition := CloneDefinition(i.definition)
-		receipt.Definition = &definition
-		receipt.Foundation = CloneQualifiedFoundation(i.qualified)
-	}
-	digest, err := SetupPlanDigest(i.host, receipt)
-	if err != nil {
-		return SetupReceipt{}, err
-	}
-	receipt.PlanDigest = digest
-	identity := sha256.Sum256([]byte("bootwright.controller.receipt-v1\x00" + digest + "\x00" + i.view.State.Receipt.ID))
-	receipt.ID = "setup-" + hex.EncodeToString(identity[:16])
-	return receipt, nil
-}
-
-// matchesActions compares a pending receipt's actions with the ones setup
-// plans, whichever context inspects it, because setup selects none.
-func (i inspection) matchesActions(actions []SetupAction) bool {
-	setup := i
-	setup.view.Context = SetupContext{}
-	expected, err := newReceipt(setup)
-	if err != nil || len(actions) != len(expected.Actions) {
-		return false
-	}
-	for index, action := range actions {
-		if action.ID != expected.Actions[index].ID {
-			return false
-		}
-		var actual, required map[string]any
-		if json.Unmarshal(action.Request, &actual) != nil || json.Unmarshal(expected.Actions[index].Request, &required) != nil {
-			return false
-		}
-		value, valid := actual["readyBefore"].(bool)
-		if !valid {
-			return false
-		}
-		required["readyBefore"] = value
-		if !bytes.Equal(action.Request, object(required)) {
-			return false
-		}
-	}
-	return true
-}
-
-// retainedArea opens the bundle a carried resolution was reprojected
-// from, so preparation can read its approved sources instead of acquiring them
-// again. It is an optimization and never a prerequisite: an area that is absent
-// or cannot be opened simply leaves every source to its publisher.
-func retainedArea(ctx context.Context, tx StorageTransaction, current inspection) BundleArea {
-	if current.retainedDigest == "" || current.retainedDigest == current.definition.CatalogDigest {
+// preview runs dnf's own --assumeno preview as root before confirmation. With
+// no qualified interpreter, the first locked ABI whose preview resolves is the
+// one setup installs.
+func (s Service) preview(ctx context.Context, current *inspection) error {
+	if len(current.requested()) == 0 {
 		return nil
 	}
-	open := tx.Snapshot().OpenBundle
-	if open == nil {
+	candidates := slices.Clone(current.candidates)
+	if len(candidates) == 0 {
+		candidates = []string{""}
+	}
+	event := ProgressEvent{Phase: ResolutionPhase, Action: packagesStep, Status: "running", Detail: "dnf install --assumeno"}
+	s.report(ctx, &current.report, event)
+	var last error
+	for _, candidate := range candidates {
+		requested := slices.Clone(current.missing)
+		if candidate != "" {
+			requested = append(requested, candidate)
+		}
+		preview, err := s.ports.Packages.Preview(ctx, requested)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err != nil {
+			last = err
+			continue
+		}
+		if candidate != "" && candidate != current.python {
+			current.python, current.abi = candidate, abiOf(candidate)
+			if current.wheels, err = s.ports.Python.Wheels(ctx, current.abi); err != nil {
+				return err
+			}
+		}
+		current.report.Preview = &preview
+		event.Status, event.Detail = "ok", strings.Join(requested, ", ")
+		s.report(ctx, &current.report, event)
 		return nil
 	}
-	area, err := open(ctx, current.retainedDigest)
-	if err != nil {
-		return nil
-	}
-	return area
+	event.Status, event.Detail = "failed", ""
+	s.report(ctx, &current.report, event)
+	return last
 }
 
-func (s Service) prepare(ctx context.Context, tx StorageTransaction, current *inspection) error {
-	ctx = WithLaunchFoundation(ctx, current.qualified)
-	state := current.view.State
-	// The receipt is the authority on what actually happened, so progress is
-	// taken from it however this attempt ends.
-	defer func() {
-		current.report.Progress = nil
-		for _, action := range state.Receipt.Actions {
-			current.report.Progress = append(current.report.Progress, ActionProgress{ID: action.ID, Phase: action.Phase, Outcome: action.Outcome})
+// plan writes the plan rows: discard-setup-state, resume, native-packages
+// and runtime, or only the receipt when nothing else is missing.
+func (i *inspection) plan() {
+	actions := []string{}
+	if i.view.Foreign != "" {
+		actions = append(actions, DiscardForeignSetupAction(i.view.Foreign))
+	}
+	if pending := i.view.State.Pending; pending != nil {
+		step := "setup"
+		if len(pending.Actions) != 0 {
+			step = pending.Actions[0]
 		}
-	}()
-	if state.Receipt.ID == "" || !state.Receipt.Incomplete() {
-		receipt, err := newReceipt(*current)
+		actions = append(actions, InterruptedSetupNotice(pending.ID, step))
+	}
+	requested := i.requested()
+	if len(requested) != 0 {
+		actions = append(actions, "Install host packages with dnf: "+strings.Join(requested, ", "))
+	}
+	if !i.runtimeReady {
+		actions = append(actions, i.runtimeAction())
+	}
+	if len(requested) == 0 && i.runtimeReady {
+		actions = append(actions, "Record the setup receipt")
+	}
+	i.report.Actions, i.report.Dependencies = actions, requested
+}
+
+func (i inspection) runtimeAction() string {
+	interpreter := "Python " + i.abi
+	if i.interpreter.Path != "" {
+		interpreter += " at " + i.interpreter.Path
+	}
+	download, cached := 0, 0
+	var size int64
+	for _, wheel := range i.wheels {
+		if wheel.Cached {
+			cached++
+		} else {
+			download++
+			size += wheel.Size
+		}
+	}
+	verb := "Prepare"
+	if i.dryRun {
+		verb = "Verify or prepare"
+	}
+	return fmt.Sprintf("%s the controller runtime: %s, ansible-core %s: %d of %d wheels to download (%.1f MB), %d cached",
+		verb, interpreter, i.ansibleCore, download, len(i.wheels), float64(size)/1e6, cached)
+}
+
+func (i inspection) steps() []string {
+	steps := []string{}
+	if len(i.requested()) != 0 {
+		steps = append(steps, packagesStep)
+	}
+	if !i.runtimeReady {
+		steps = append(steps, runtimeStep)
+	}
+	return append(steps, receiptStep)
+}
+
+func (i inspection) planDigest(lock RuntimeLock) string {
+	sum := sha256.Sum256([]byte(strings.Join(append([]string{SetupStateFormat, "plan", lock.Digest, i.interpreter.Path, i.runtime.Digest}, i.requested()...), "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+// execute repeats the inspection under the setup lock and refuses a host that
+// moved since the plan was confirmed, then performs the plan.
+func (s Service) execute(ctx context.Context, approved inspection) (*Report, error) {
+	current := approved
+	err := s.ports.Setup.MutateSetup(ctx, func(tx SetupTransaction) error {
+		fresh, err := s.inspect(ctx, tx.View(), StorageView{}, "", false)
 		if err != nil {
 			return err
 		}
-		state.Host, state.Receipt = current.host, receipt
-		if state.Bindings == nil {
-			state.Bindings = []ControllerBinding{}
+		if !approved.samePlan(fresh) {
+			return failure("controller.conflict", "the host changed after the setup plan was confirmed", setupCommand())
 		}
-		if state.RetainedSources == nil {
-			state.RetainedSources = []DependencySource{}
+		current.view = fresh.view
+		return s.apply(ctx, tx, &current)
+	})
+	if err != nil {
+		current.report.Outcome = "planned"
+		if len(current.report.Progress) != 0 {
+			current.report.Outcome = "incomplete"
 		}
-		if err := publish(ctx, tx, state); err != nil {
+		return &current.report, err
+	}
+	current.report.Outcome = "changed"
+	for index := range current.report.Checks {
+		check := &current.report.Checks[index]
+		if check.Status != "ready" {
+			check.Status, check.Observed = "ready", check.Required
+		}
+	}
+	return &current.report, nil
+}
+
+// apply records pending intent before any effect, installs, builds and
+// publishes the runtime, then writes the receipt that clears pending.
+func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspection) error {
+	if current.view.Foreign != "" {
+		if err := tx.DiscardForeign(ctx); err != nil {
 			return err
 		}
-		state = tx.Snapshot().State
+		s.report(ctx, &current.report, ProgressEvent{Phase: SetupPhase, Action: discardStep, Status: "changed"})
 	}
-	for index := range state.Receipt.Actions {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		action := &state.Receipt.Actions[index]
-		progress := func(event ProgressEvent) {
-			event.Phase, event.Action, event.Step, event.Steps = SetupPhase, action.ID, index+1, len(state.Receipt.Actions)
-			s.report(ctx, &current.report, event)
-		}
-		ready := action.ID == "execution-bundle" && current.bundle.Ready || action.ID == "container-runtime" && current.dependenciesReady()
-		var request map[string]any
-		if json.Unmarshal(action.Request, &request) != nil {
-			return failure("controller.unknown", "retained setup request is invalid", "restore the exact setup evidence")
-		}
-		if !ready && request["readyBefore"] == true {
-			return failure("controller.unknown", "a prerequisite recorded as ready before setup is missing", "restore the original prerequisite before resolving the pending setup")
-		}
-		if action.Phase == "observed" && (action.Outcome == "changed" || action.Outcome == "unchanged") {
-			if !ready {
-				return failure("controller.unknown", "a recorded setup postcondition no longer holds", "restore the exact dependency before repeating setup")
-			}
-			continue
-		}
-		outcome := "unchanged"
-		evidence := object(map[string]any{"postcondition": "verified"})
-		if action.ID == "container-runtime" && len(action.Preparation) != 0 {
-			recovered, err := s.recoverNative(ctx, tx, current, action.Preparation, progress)
-			if err != nil {
-				return err
-			}
-			ready = true
-			evidence = recovered
-			outcome = "changed"
-		}
-		if !ready {
-			var err error
-			if evidence, err = s.performAction(ctx, tx, current, &state, action, progress, evidence); err != nil {
-				return err
-			}
-			outcome = "changed"
-		}
-		progress(ProgressEvent{Status: outcome})
-		action.Phase, action.Outcome = "observed", outcome
-		action.Evidence = evidence
-		if err := publish(ctx, tx, state); err != nil {
-			return err
-		}
-	}
-	state.Receipt.Status = "complete"
-	return publish(ctx, tx, state)
-}
-
-func (s Service) recoverNative(ctx context.Context, tx StorageTransaction, current *inspection, recorded json.RawMessage, progress func(ProgressEvent)) (json.RawMessage, error) {
-	if s.runtime == nil {
-		return nil, failure("controller.unknown", "native recovery verification is not configured", "restore the exact compatible executable")
-	}
-	if (!current.runtime.Ready && current.definition.Native == nil) || !current.bundle.Ready || !current.bundle.Recoverable {
-		return nil, failure("controller.unknown", "native effects or retained tool files cannot be attributed", "restore the exact native prerequisites and setup evidence")
-	}
-	area, err := tx.Bundle(ctx, current.definition.CatalogDigest)
-	if err != nil {
-		return nil, err
-	}
-	if area == nil {
-		return nil, failure("controller.unknown", "native recovery execution bundle is missing", "restore the exact retained bundle")
-	}
-	preparation, err := ReadNativePreparation(recorded, current.definition)
-	if err != nil {
-		return nil, err
-	}
-	progress(ProgressEvent{Status: "running", Detail: "recovering the recorded native transaction"})
-	output, release := s.retain(ctx, tx, &current.report)
-	result, err := s.runtime.Recover(ctx, area, current.platform, current.definition, current.route(), preparation, progress, output)
-	release()
-	if err != nil {
-		return nil, err
-	}
-	if result.Outcome != "unchanged" && result.Outcome != "changed" || len(result.Evidence) <= 2 {
-		return nil, failure("controller.unknown", "native recovery postcondition is unproved", "resolve the original native transaction before repeating setup")
-	}
-	current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
-	if err != nil {
-		return nil, err
-	}
-	current.runtime, err = s.inspectRuntime(ctx, current.definition)
-	if err != nil {
-		return nil, err
-	}
-	if !current.bundle.Ready || !current.dependenciesReady() {
-		return nil, failure("controller.unknown", "recovered dependency postconditions are incomplete", "restore the exact setup dependencies before retrying")
-	}
-	return result.Evidence, nil
-}
-
-func (s Service) performAction(ctx context.Context, tx StorageTransaction, current *inspection, state *HostState, action *SetupAction, progress func(ProgressEvent), evidence json.RawMessage) (json.RawMessage, error) {
-	if action.Phase != "planned" && action.ID == "execution-bundle" && !current.bundle.Recoverable {
-		return nil, failure("controller.unknown", "interrupted bundle publication cannot be attributed safely", "preserve the setup state and restore its exact dependency evidence")
-	}
-	if action.Phase == "planned" {
-		action.Phase = "intent"
-		if err := publish(ctx, tx, *state); err != nil {
-			return nil, err
-		}
-	}
-	progress(ProgressEvent{Status: "running"})
-	var err error
-	switch action.ID {
-	case "execution-bundle":
-		var area BundleArea
-		area, err = tx.Bundle(ctx, current.definition.CatalogDigest)
-		if err == nil {
-			// Preparation reads back and qualifies exactly what it
-			// published, so its verification is the postcondition
-			// rather than a second full pass over the same closure.
-			current.bundle, err = s.bundle.Prepare(ctx, area, retainedArea(ctx, tx, *current), current.definition, current.route(), progress)
-			if err == nil && !current.bundle.Ready {
-				err = failure("controller.unknown", "execution bundle postcondition could not be verified", "repeat the exact setup after inspecting the retained evidence")
-			}
-		}
-	case "container-runtime":
-		if s.runtime == nil {
-			err = failure("controller.unsupported", "native runtime installation is not configured", "prepare the qualified runtime before repeating setup")
-		} else {
-			var area BundleArea
-			area, err = tx.Bundle(ctx, current.definition.CatalogDigest)
-			if err == nil && area == nil {
-				err = failure("controller.unknown", "verified runtime execution bundle is missing", "restore the exact setup bundle")
-			}
-			if err == nil {
-				var result ActionResult
-				output, release := s.retain(ctx, tx, &current.report)
-				result, err = s.runtime.Prepare(ctx, area, current.platform, current.definition, current.route(), func(call context.Context, preparation NativePreparation) error {
-					encoded := EncodeNativePreparation(preparation)
-					if _, err := ReadNativePreparation(encoded, current.definition); err != nil {
-						return err
-					}
-					if len(action.Preparation) != 0 && !bytes.Equal(action.Preparation, encoded) {
-						return failure("controller.unknown", "native before-state differs from its retained preparation", "resolve the original native transaction")
-					}
-					action.Preparation = encoded
-					return publish(call, tx, *state)
-				}, progress, output)
-				release()
-				if err == nil && len(result.Evidence) > 2 {
-					evidence = result.Evidence
-				}
-				if err != nil && result.Outcome == "failed" && len(result.Evidence) > 2 {
-					action.Phase, action.Outcome, action.Evidence = "observed", "failed", result.Evidence
-					state.Receipt.Status = "failed"
-					// A run canceled before its native authorization
-					// performed nothing, and its receipt says so even
-					// though the invocation that met it is canceled.
-					if publicationErr := publish(context.WithoutCancel(ctx), tx, *state); publicationErr != nil {
-						return nil, publicationErr
-					}
-				} else if err == nil && result.Outcome != "changed" && result.Outcome != "unchanged" {
-					err = failure("controller.unknown", "native runtime action has no definitive result", "resolve the exact native transaction before repeating setup")
-				}
-				if err == nil {
-					current.bundle, err = s.bundle.Inspect(ctx, area, current.definition, true)
-				}
-			}
-		}
-		if err == nil {
-			current.runtime, err = s.inspectRuntime(ctx, current.definition)
-			if err == nil && !current.dependenciesReady() {
-				err = failure("controller.unknown", "container runtime postcondition could not be verified", "resolve the native transaction before repeating setup")
-			}
-		}
-	default:
-		err = failure("controller.unknown", "setup contains an unsupported retained action", "restore the original compatible executable")
-	}
-	if err != nil {
-		progress(ProgressEvent{Status: "failed"})
-		return nil, err
-	}
-	return evidence, nil
-}
-
-// report never fails an operation: progress is presentation, and a setup that
-// could not describe itself has still done exactly what it recorded. The
-// report remembers that rows were streamed so the result does not repeat them.
-func (s Service) report(ctx context.Context, report *Report, event ProgressEvent) {
-	if s.options.Progress == nil || ctx.Err() != nil {
-		return
-	}
-	report.ProgressPresented = true
-	s.options.Progress.ReportProgress(ctx, event)
-}
-
-// retain opens the run the controller Ansible about to start writes to, and
-// names it first so it can be followed while it runs. The receipt never
-// records a run, so a run that cannot be opened, written or closed leaves that
-// output discarded and changes nothing else.
-func (s Service) retain(ctx context.Context, tx StorageTransaction, report *Report) (RunOutput, func()) {
-	run, err := tx.OpenRun(ctx)
-	if err != nil || run == nil {
-		return nil, func() {}
-	}
-	report.LogLocation = run.Location()
-	if s.options.Progress != nil && ctx.Err() == nil && report.LogLocation != "" {
-		s.options.Progress.ReportLogLocation(ctx, report.LogLocation)
-	}
-	return run, func() { _ = run.Close() }
-}
-
-func publish(ctx context.Context, tx StorageTransaction, state HostState) error {
-	publication, err := tx.Publish(ctx, state)
-	if publication == Unknown {
-		return failure("controller.unknown", "setup evidence publication is uncertain", "preserve state and repeat the exact setup only after storage is healthy")
-	}
+	state := tx.View().State
+	previous := state.Receipt
+	id, run, err := tx.OpenRun(ctx)
 	if err != nil {
 		return err
 	}
-	if publication != Committed {
-		return failure("controller.setup", "setup evidence was not committed", "repeat the exact setup after resolving the storage failure")
+	defer run.Close()
+	current.report.LogLocation = run.Location()
+	if s.options.Progress != nil && ctx.Err() == nil && current.report.LogLocation != "" {
+		s.options.Progress.ReportLogLocation(ctx, current.report.LogLocation)
+	}
+	steps := current.steps()
+	state.Format = SetupStateFormat
+	state.Pending = &PendingSetup{ID: id, PlanDigest: current.planDigest(s.ports.Lock), Actions: slices.Clone(steps), StartedAt: s.now()}
+	current.report.Progress = make([]ActionProgress, len(steps))
+	for index, step := range steps {
+		current.report.Progress[index] = ActionProgress{ID: step, Phase: "planned"}
+	}
+	if err := tx.Record(ctx, state); err != nil {
+		return err
+	}
+	var installed []HostPackageEvidence
+	for index, step := range steps {
+		progress := func(status string) {
+			s.report(ctx, &current.report, ProgressEvent{Phase: SetupPhase, Action: step, Status: status, Step: index + 1, Steps: len(steps)})
+		}
+		current.report.Progress[index].Phase = "intent"
+		progress("running")
+		var err error
+		switch step {
+		case packagesStep:
+			installed, err = s.install(ctx, current, run)
+		case runtimeStep:
+			err = s.prepareRuntime(ctx, tx, current)
+		case receiptStep:
+			err = s.recordReceipt(ctx, tx, current, state, id, installed, previous)
+		}
+		if err != nil {
+			current.report.Progress[index] = ActionProgress{ID: step, Phase: "observed", Outcome: "failed"}
+			progress("failed")
+			return err
+		}
+		current.report.Progress[index] = ActionProgress{ID: step, Phase: "observed", Outcome: "changed"}
+		progress("changed")
+		if step != receiptStep {
+			state.Pending.Actions = slices.Clone(steps[index+1:])
+			if err := tx.Record(ctx, state); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
 
-// ReadNativePreparation admits a container-runtime action's before-state only
-// when its bytes are exactly what EncodeNativePreparation writes, its added
-// sources belong to definition, and its native fields match definition's
-// native plan or, without one, are absent. Setup reads each preparation back
-// this way before retaining it and again before recovering from it.
-func ReadNativePreparation(data []byte, definition Definition) (NativePreparation, error) {
-	var preparation NativePreparation
-	invalid := func() (NativePreparation, error) {
-		return NativePreparation{}, failure("controller.unknown", "native preparation evidence is incomplete or incompatible", "restore the exact native setup evidence before continuing")
+func (s Service) install(ctx context.Context, current *inspection, run RunOutput) ([]HostPackageEvidence, error) {
+	requested := current.requested()
+	evidence, err := s.ports.Packages.Install(ctx, requested, run)
+	if err != nil {
+		return nil, err
 	}
-	if len(data) == 0 || len(data) > 64<<10 || json.Unmarshal(data, &preparation) != nil {
-		return invalid()
+	still, err := s.ports.Packages.Missing(ctx, requested)
+	if err != nil {
+		return nil, err
 	}
-	digest, err := hex.DecodeString(preparation.InventorySHA256)
-	if err != nil || len(digest) != 32 || hex.EncodeToString(digest) != preparation.InventorySHA256 || preparation.AddedSources == nil || len(preparation.AddedSources) > 512 {
-		return invalid()
+	if len(still) != 0 {
+		return nil, failure("controller.setup", "dnf finished but nothing provides "+strings.Join(still, ", "), "check the host's dnf configuration, then run bootwright setup again")
 	}
-	previous := ""
-	for _, id := range preparation.AddedSources {
-		if id <= previous || !slices.ContainsFunc(definition.Sources, func(source DependencySource) bool { return source.ID == id }) {
-			return invalid()
-		}
-		previous = id
-	}
-	if definition.Native != nil {
-		transitions, err := NativeTransitionsDigest(definition.Native.Actions)
-		if err != nil || preparation.PlanDigest != definition.Native.Digest || preparation.InventorySHA256 != definition.Native.BeforeSHA256 || preparation.AfterInventorySHA256 != definition.Native.AfterSHA256 || preparation.TransitionsSHA256 != transitions {
-			return invalid()
-		}
-	} else if preparation.PlanDigest != "" || preparation.AfterInventorySHA256 != "" || preparation.TransitionsSHA256 != "" {
-		return invalid()
-	}
-	encoded := EncodeNativePreparation(preparation)
-	if !bytes.Equal(data, encoded) {
-		return invalid()
-	}
-	return preparation, nil
+	return evidence, nil
 }
 
-// EncodeNativePreparation is the canonical object the container-runtime
-// action retains as its preparation, published once while its intent is held.
-func EncodeNativePreparation(preparation NativePreparation) json.RawMessage {
-	value := map[string]any{"inventorySHA256": preparation.InventorySHA256, "addedSources": slices.Clone(preparation.AddedSources)}
-	if preparation.PlanDigest != "" || preparation.AfterInventorySHA256 != "" || preparation.TransitionsSHA256 != "" {
-		value["planDigest"] = preparation.PlanDigest
-		value["afterInventorySHA256"] = preparation.AfterInventorySHA256
-		value["transitionsSHA256"] = preparation.TransitionsSHA256
+func (s Service) prepareRuntime(ctx context.Context, tx SetupTransaction, current *inspection) error {
+	interpreter := current.interpreter
+	if interpreter.Path == "" {
+		var err error
+		if interpreter, err = s.ports.Python.Select(ctx, ""); err != nil {
+			return err
+		}
 	}
-	return object(value)
+	if err := s.ports.Python.Fetch(ctx, interpreter.ABI, current.route()); err != nil {
+		return err
+	}
+	runtime, err := s.ports.Python.Build(ctx, tx, interpreter)
+	if err != nil {
+		return err
+	}
+	current.interpreter, current.abi, current.runtime, current.runtimeReady = interpreter, interpreter.ABI, runtime, true
+	return nil
+}
+
+func (s Service) recordReceipt(ctx context.Context, tx SetupTransaction, current *inspection, state SetupState, id string, installed []HostPackageEvidence, previous *HostReceipt) error {
+	if !current.runtimeReady || current.runtime.Digest == "" {
+		return failure("controller.setup", "the controller runtime could not be verified after setup", setupCommand()+" again")
+	}
+	requirements, _ := BaselineHostRequirements("")
+	if current.python != "" {
+		requirements = append(requirements, current.python)
+	}
+	present, err := s.ports.Packages.Present(ctx, requirements)
+	if err != nil {
+		return err
+	}
+	packages := make([]ReceiptPackage, 0, len(present))
+	for _, evidence := range present {
+		packages = append(packages, receiptPackage(evidence, id, installed, previous))
+	}
+	interpreter, release := current.interpreter, current.release
+	receipt := HostReceipt{
+		Platform: ReceiptPlatform{ID: release.ID, VersionID: release.VersionID, Like: slices.Clone(release.Like), Architecture: release.Architecture,
+			Glibc: interpreter.Glibc, Tested: tested(release, s.ports.Lock.Tested)},
+		Lock: s.ports.Lock.Digest,
+		Runtime: ReceiptRuntime{Digest: current.runtime.Digest, Interpreter: interpreter.Path, Python: interpreter.Version,
+			ABI: interpreter.ABI, AnsibleCore: current.runtime.AnsibleCore},
+		Closure:  RuntimeClosureDigest(s.ports.Lock.Digest, interpreter.ABI),
+		Packages: packages,
+	}
+	if state.Runtimes.Current != current.runtime.Digest {
+		if state.Runtimes.Current != "" {
+			state.Runtimes.Previous = state.Runtimes.Current
+		}
+		state.Runtimes.Current = current.runtime.Digest
+	}
+	state.Pending, state.Receipt = nil, &receipt
+	return tx.Record(ctx, state)
+}
+
+// receiptPackage names who installed a provider: this run, the run an earlier
+// receipt recorded for the same provider, or nobody Bootwright knows of.
+func receiptPackage(evidence HostPackageEvidence, id string, installed []HostPackageEvidence, previous *HostReceipt) ReceiptPackage {
+	item := ReceiptPackage{Requirement: evidence.Requirement, RequiredBy: []string{"setup"}, Provider: evidence.Package,
+		Repository: evidence.Repository, InstalledBy: PresentBeforeBootwright}
+	if item.Repository == "" {
+		item.Repository = unknownRepo
+	}
+	if strings.HasPrefix(evidence.Requirement, "python(abi)") {
+		item.RequiredBy = []string{runtimeStep}
+	}
+	if slices.ContainsFunc(installed, func(other HostPackageEvidence) bool {
+		return other.Requirement == evidence.Requirement && other.Package == evidence.Package
+	}) {
+		item.InstalledBy = id
+	} else if previous != nil {
+		for _, recorded := range previous.Packages {
+			if recorded.Requirement == evidence.Requirement && recorded.Provider == evidence.Package {
+				item.InstalledBy = recorded.InstalledBy
+			}
+		}
+	}
+	return item
 }

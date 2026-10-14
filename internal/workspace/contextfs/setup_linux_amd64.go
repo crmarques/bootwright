@@ -45,6 +45,9 @@ func (s *Store) ReadSetup(ctx context.Context) (prerequisites.SetupView, error) 
 		return prerequisites.SetupView{}, safeError(err)
 	}
 	defer root.file.Close()
+	if err := admitRegistry(ctx, root); err != nil {
+		return prerequisites.SetupView{}, safeError(err)
+	}
 	dir, err := openDirectory(root, setupSubtree)
 	if errors.Is(err, syscall.ENOENT) {
 		return prerequisites.SetupView{}, nil
@@ -57,7 +60,36 @@ func (s *Store) ReadSetup(ctx context.Context) (prerequisites.SetupView, error) 
 	return view, safeError(err)
 }
 
+// admitRegistry refuses another format's store before setup previews or
+// plans anything, as every later registry access would.
+func admitRegistry(ctx context.Context, root *directory) error {
+	data, err := readBounded(ctx, root, "registry.json", maxRegistry, false)
+	if errors.Is(err, syscall.ENOENT) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var registry contexts.Registry
+	return decodeRegistry(data, maxRegistry, &registry)
+}
+
 func readSetupView(ctx context.Context, dir *directory) (prerequisites.SetupView, error) {
+	view, err := readSetupState(ctx, dir)
+	if err != nil || view.Foreign != "" {
+		return view, err
+	}
+	known, err := recognizedSetup(ctx, dir)
+	if err != nil {
+		return prerequisites.SetupView{}, err
+	}
+	if !known {
+		return prerequisites.SetupView{Exists: true, Foreign: unrecognizedSetupFormat}, nil
+	}
+	return view, nil
+}
+
+func readSetupState(ctx context.Context, dir *directory) (prerequisites.SetupView, error) {
 	data, err := readBounded(ctx, dir, setupStateName, maxSetupState, false)
 	if errors.Is(err, syscall.ENOENT) {
 		return prerequisites.SetupView{}, nil
@@ -84,6 +116,9 @@ func (s *Store) MutateSetup(ctx context.Context, callback func(prerequisites.Set
 		return safeError(err)
 	}
 	defer root.file.Close()
+	if err := admitRegistry(ctx, root); err != nil {
+		return safeError(err)
+	}
 	dir, err := openDirectory(root, setupSubtree)
 	if err != nil {
 		return safeError(err)
@@ -184,21 +219,14 @@ func (t *setupTransaction) admit(ctx context.Context) error {
 		return err
 	}
 	t.view = view
-	recognized, err := t.recognized(ctx)
-	if err != nil {
-		return err
-	}
-	if !recognized && t.view.Foreign == "" {
-		t.view = prerequisites.SetupView{Exists: true, Foreign: unrecognizedSetupFormat}
-	}
 	if t.view.Foreign != "" {
 		return nil
 	}
 	return t.sweepStages(ctx)
 }
 
-func (t *setupTransaction) recognized(ctx context.Context) (bool, error) {
-	names, err := directoryNames(t.dir, maxSetupEntries)
+func recognizedSetup(ctx context.Context, dir *directory) (bool, error) {
+	names, err := directoryNames(dir, maxSetupEntries)
 	if err != nil {
 		return false, ctx.Err()
 	}
@@ -206,7 +234,7 @@ func (t *setupTransaction) recognized(ctx context.Context) (bool, error) {
 		switch name {
 		case setupLockName, setupStateName:
 		case setupRuntimesName, setupCacheName, setupRunsName:
-			child, err := openDirectory(t.dir, name)
+			child, err := openDirectory(dir, name)
 			if err != nil {
 				return false, ctx.Err()
 			}
@@ -349,7 +377,7 @@ func (t *setupTransaction) OpenRun(ctx context.Context) (string, prerequisites.S
 		return "", nil, unsafeSetupRun(storeEntry(t.dir, setupRunsName), "it cannot be opened as a private directory")
 	}
 	defer runs.file.Close()
-	return t.store.nextSetupRun(ctx, runs, maxSetupRunOutput)
+	return t.store.nextSetupRun(ctx, runs)
 }
 
 func (t *setupTransaction) WheelPath(ctx context.Context, sha256, filename string) (string, error) {
@@ -458,6 +486,29 @@ func (t *setupTransaction) PublishRuntime(ctx context.Context, stage prerequisit
 	}
 	staged.done = true
 	return true, t.store.syncDirectory(ctx, runtimes)
+}
+
+func (t *setupTransaction) DiscardRuntime(ctx context.Context, stage prerequisites.RuntimeStage) error {
+	if err := t.owned(ctx); err != nil {
+		return err
+	}
+	staged, handed := stage.(*runtimeStage)
+	if !handed || staged.owner != t {
+		return state("runtime stage is not one this setup holds")
+	}
+	if staged.done {
+		return nil
+	}
+	runtimes, err := openDirectory(t.dir, setupRuntimesName)
+	if err != nil {
+		return err
+	}
+	defer runtimes.file.Close()
+	staged.done = true
+	if err := t.store.removeSetupEntry(ctx, runtimes, staged.name); err != nil {
+		return err
+	}
+	return t.store.syncDirectory(ctx, runtimes)
 }
 
 func sealRuntime(dir *directory) error {

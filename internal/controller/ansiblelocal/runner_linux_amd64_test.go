@@ -58,6 +58,7 @@ func TestRunnerProtocolChild(t *testing.T) {
 		}
 	}
 	sha := strings.Repeat("a", 64)
+	completed := map[string]any{"phase": "completed", "outcome": "unchanged", "evidence": map[string]any{"request": sha, "tools": []map[string]string{fixtureEvidence}, "postcondition": true}}
 	if mode == "isolated" || mode == "authorized" || mode == "retaining" {
 		stoppedChild(mode, emit, output)
 	}
@@ -70,8 +71,9 @@ func TestRunnerProtocolChild(t *testing.T) {
 	}
 	if mode == "leak" {
 		emit(map[string]any{"phase": "loaded"}, true)
-		emit(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AddedSources: []string{}}}, true)
-		emit(map[string]any{"phase": "completed", "outcome": "unchanged", "evidence": map[string]any{"request": sha, "before": sha, "after": sha, "planDigest": "", "added": []string{}, "tools": []string{}, "postcondition": true}}, false)
+		emit(map[string]any{"phase": "prepared", "preparation": map[string]any{"addedSources": []string{fixtureTool.Source.ID}}}, true)
+		emit(map[string]any{"phase": "continue"}, true)
+		emit(completed, false)
 		// A descendant inherits the result channel and outlives this process,
 		// so the channel never reaches end of file on its own.
 		descendant := exec.Command("/bin/sleep", "3")
@@ -80,29 +82,20 @@ func TestRunnerProtocolChild(t *testing.T) {
 		os.Exit(0)
 	}
 	emit(map[string]any{"phase": "loaded"}, true)
-	if mode == "refused" || mode == "refused-native" {
-		if mode == "refused-native" {
-			emit(map[string]any{"phase": "native"}, true)
-		}
+	if mode == "refused" {
 		_, _ = output.Write([]byte("not a record\n"))
-		if mode == "refused-native" {
-			// The authorized transaction is still running when the record is
-			// refused, and it must be allowed to finish.
-			time.Sleep(300 * time.Millisecond)
-			_ = os.WriteFile(os.Getenv("BOOTWRIGHT_TEST_TRANSACTION"), []byte("done\n"), 0600)
-		}
 		// Only a closed authorization channel answers this wait.
 		_, _ = input.ReadString('\n')
 		os.Exit(19)
 	}
 	if strings.HasPrefix(mode, "unreleased") {
-		emit(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AddedSources: []string{"tool-oc"}}}, true)
+		emit(map[string]any{"phase": "prepared", "preparation": map[string]any{"addedSources": []string{"tool-oc"}}}, true)
 		if mode != "unreleased-before-continue" {
 			emit(map[string]any{"phase": "continue"}, true)
 		}
 		records := []string{`{"phase":"refused","reason":"` + os.Getenv("BOOTWRIGHT_TEST_REASON") + `"}`}
 		if strings.HasPrefix(mode, "unreleased-after-completed") {
-			completed, _ := json.Marshal(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "before": sha, "after": sha, "planDigest": "", "added": []string{}, "tools": []map[string]string{{"source": "tool-oc", "sha256": strings.Repeat("d", 64), "files": strings.Repeat("e", 64)}}, "postcondition": true}})
+			completed, _ := json.Marshal(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "tools": []map[string]string{{"source": "tool-oc", "sha256": strings.Repeat("d", 64), "files": strings.Repeat("e", 64)}}, "postcondition": true}})
 			records = append([]string{string(completed)}, records...)
 		}
 		if mode == "unreleased-after-exit" || mode == "unreleased-after-completed-exit-first" {
@@ -119,19 +112,27 @@ func TestRunnerProtocolChild(t *testing.T) {
 		}
 		os.Exit(2)
 	}
-	if mode == "recover-native" {
-		emit(map[string]any{"phase": "native"}, true)
-		emit(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "before": sha, "after": strings.Repeat("b", 64), "planDigest": strings.Repeat("c", 64), "added": []string{"native-one"}, "tools": []string{}, "postcondition": true}}, false)
-		os.Exit(0)
-	}
 	if mode == "mixed" {
 		emit(map[string]any{"phase": "continue", "evidence": map[string]bool{}}, false)
 		os.Exit(0)
 	}
-	emit(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AddedSources: []string{}}}, true)
+	emit(map[string]any{"phase": "prepared", "preparation": map[string]any{"addedSources": []string{fixtureTool.Source.ID}}}, true)
 	fmt.Fprintln(os.Stderr, "private-child-diagnostic")
-	emit(map[string]any{"phase": "completed", "outcome": "unchanged", "evidence": map[string]any{"request": sha, "before": sha, "after": sha, "planDigest": "", "added": []string{}, "tools": []string{}, "postcondition": true}}, false)
+	emit(map[string]any{"phase": "continue"}, true)
+	emit(completed, false)
 	os.Exit(0)
+}
+
+// fixtureTool is the one tool a fixture request publishes, and
+// fixtureEvidence what the role reports for it.
+var (
+	fixtureTool     = prerequisites.ToolDefinition{Kind: "kubectl", Version: "1.33.0", Source: prerequisites.DependencySource{ID: "tool-kubectl", URL: "https://dl.example.test/kubectl", SHA256: strings.Repeat("d", 64), Bytes: 1}}
+	fixtureEvidence = map[string]string{"source": "tool-kubectl", "sha256": strings.Repeat("d", 64), "files": strings.Repeat("e", 64)}
+)
+
+// treeOf is the staged tree a fixture runs from: the request's own bundle.
+func treeOf(request capabilityRequest) stagedTree {
+	return stagedTree{Path: request.PublicationBundle.Path}
 }
 
 func runnerFixture(t *testing.T, mode string) (prerequisites.PythonLaunch, capabilityRequest, processBoundary) {
@@ -140,12 +141,12 @@ func runnerFixture(t *testing.T, mode string) (prerequisites.PythonLaunch, capab
 	if err := os.Mkdir(filepath.Join(bundle, "automation"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	launch := prerequisites.PythonLaunch{Loader: "/qualified/loader", Arguments: []string{"--inhibit-cache", "/qualified/python"}, Directory: bundle, Environment: []string{"LANG=C.UTF-8"}}
-	request := capabilityRequest{Operation: "setup", Identity: strings.Repeat("a", 64), Bundle: bundleLocation{Path: bundle, Writable: true}, PublicationBundle: bundleLocation{Path: bundle, Writable: true}, Packages: []prerequisites.NativePackage{}, Tools: []prerequisites.ToolDefinition{}}
+	launch := prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python", Arguments: []string{"-I", "-B"}, Directory: "/runtime", Environment: []string{"LANG=C.UTF-8"}}
+	request := capabilityRequest{Version: requestVersion, Identity: strings.Repeat("a", 64), PublicationBundle: bundleLocation{Path: bundle, Writable: true}, Tools: []prerequisites.ToolDefinition{fixtureTool}}
 	boundary := processBoundary{owner: os.Geteuid(), jobParent: t.TempDir(), scratchParent: t.TempDir(), command: func(path string, arguments ...string) *exec.Cmd {
 		// -u belongs to the boundary: without it the child holds its output
 		// back until it exits, and nothing can be followed while it runs.
-		if path != launch.Loader || !strings.Contains(strings.Join(arguments, "\x00"), "-u\x00-I\x00-B\x00-S\x00-c") {
+		if path != launch.Program || !strings.Contains(strings.Join(arguments, "\x00"), "-u\x00-I\x00-B\x00-c") || slices.Contains(arguments, "-S") {
 			t.Fatal("qualified isolated Python boundary changed")
 		}
 		return exec.Command(os.Args[0], "-test.run=^TestRunnerProtocolChild$", "--", "controller-child-"+mode)
@@ -157,15 +158,12 @@ func TestRunnerDrainsCompletionAfterChildExit(t *testing.T) {
 	launch, request, boundary := runnerFixture(t, "complete")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	released, published := false, false
-	result, err := runProcess(ctx, launch, request, func() error { released = true; return nil }, func(ctx context.Context, value prerequisites.NativePreparation) error {
-		if !released {
-			t.Error("preparation preceded loaded handoff")
-		}
+	published := false
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error {
 		published = true
 		return nil
 	}, nil, nil, boundary)
-	if err != nil || result.Outcome != "unchanged" || !released || !published {
+	if err != nil || result.Outcome != "unchanged" || !published {
 		t.Fatalf("completion lost: %s %v", result.Outcome, err)
 	}
 	entries, err := os.ReadDir(boundary.jobParent)
@@ -174,34 +172,35 @@ func TestRunnerDrainsCompletionAfterChildExit(t *testing.T) {
 	}
 }
 
-// Every protocol phase names the work Ansible is about to do, so the native
-// transaction and each tool transfer are visible instead of one silent action.
+// Every protocol phase names the work Ansible is about to do, so each tool
+// transfer is visible instead of one silent action.
 func TestRunnerReportsProtocolPhasesAsProgress(t *testing.T) {
 	launch, request, boundary := runnerFixture(t, "complete")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var details []string
 	progress := func(event prerequisites.ProgressEvent) { details = append(details, event.Status+": "+event.Detail) }
-	if _, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, progress, nil, boundary); err != nil {
+	if _, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, progress, nil, boundary); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"running: starting the private Ansible runtime", "running: reading the native package inventory"}; !slices.Equal(details, want) {
+	if want := []string{"running: starting the private Ansible runtime", "running: preparing the target clients", "running: installing kubectl 1.33.0, tool 1 of 1"}; !slices.Equal(details, want) {
 		t.Fatalf("progress = %q, want %q", details, want)
 	}
-	launch, request, boundary = runnerFixture(t, "recover-native")
-	request.Operation = "recover"
-	request.Native = &prerequisites.NativeResolvedPlan{Digest: strings.Repeat("c", 64), BeforeSHA256: strings.Repeat("a", 64), AfterSHA256: strings.Repeat("b", 64), Actions: []prerequisites.NativeAction{{SourceID: "native-one"}}}
-	transitions, err := prerequisites.NativeTransitionsDigest(request.Native.Actions)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.Preparation = &prerequisites.NativePreparation{InventorySHA256: request.Native.BeforeSHA256, AfterInventorySHA256: request.Native.AfterSHA256, PlanDigest: request.Native.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
-	details = nil
-	if _, err := runProcess(ctx, launch, request, func() error { return nil }, nil, progress, nil, boundary); err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"running: starting the private Ansible runtime", "running: verifying the recorded native transaction", "running: installing 1 native package"}; !slices.Equal(details, want) {
-		t.Fatalf("recovery progress = %q, want %q", details, want)
+}
+
+// The role announces exactly the sources it is about to add, and the stage
+// receives them before any tool is installed.
+func TestRunnerPublishesTheAddedSourcesBeforeAnyTool(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "complete")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var published []string
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(_ context.Context, sources []string) error {
+		published = sources
+		return nil
+	}, nil, nil, boundary)
+	if err != nil || result.Outcome != "unchanged" || !slices.Equal(published, []string{"tool-kubectl"}) {
+		t.Fatalf("run = %s (%v) after publishing %v", result.Outcome, err, published)
 	}
 }
 
@@ -209,7 +208,7 @@ func TestRunnerRefusesCancellationAtDurablePreparation(t *testing.T) {
 	launch, request, boundary := runnerFixture(t, "complete")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { cancel(); return nil }, nil, nil, boundary)
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { cancel(); return nil }, nil, nil, boundary)
 	if !errors.Is(err, context.Canceled) || result.Outcome != "failed" || string(result.Evidence) != `{"intentRecorded":true,"postcondition":false}` {
 		t.Fatalf("cancellation lost durable intent: %s %s %v", result.Outcome, result.Evidence, err)
 	}
@@ -219,7 +218,7 @@ func TestRunnerSanitizesInvalidProtocol(t *testing.T) {
 	launch, request, boundary := runnerFixture(t, "mixed")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error {
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error {
 		t.Error("invalid phase published intent")
 		return nil
 	}, nil, nil, boundary)
@@ -228,84 +227,40 @@ func TestRunnerSanitizesInvalidProtocol(t *testing.T) {
 	}
 }
 
-func TestRunnerAcknowledgesFrozenNativeRecoveryWithoutNewPreparation(t *testing.T) {
-	launch, request, boundary := runnerFixture(t, "recover-native")
-	request.Operation = "recover"
-	request.Native = &prerequisites.NativeResolvedPlan{Digest: strings.Repeat("c", 64), BeforeSHA256: strings.Repeat("a", 64), AfterSHA256: strings.Repeat("b", 64), Actions: []prerequisites.NativeAction{{SourceID: "native-one"}}}
-	transitions, err := prerequisites.NativeTransitionsDigest(request.Native.Actions)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.Preparation = &prerequisites.NativePreparation{InventorySHA256: request.Native.BeforeSHA256, AfterInventorySHA256: request.Native.AfterSHA256, PlanDigest: request.Native.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// Cancellation must reap the adapter's process group: durable intent alone is
+// not installation in progress.
+func TestRunnerReapsAnUnauthorizedChildOnCancellation(t *testing.T) {
+	launch, request, boundary := runnerFixture(t, "hang")
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, nil, nil, nil, boundary)
-	if err != nil || result.Outcome != "changed" {
-		t.Fatalf("frozen native recovery failed: %s %v", result.Outcome, err)
+	// Cancel only after the child is past its handshake, so the closed
+	// authorization pipe cannot end it instead of the reap.
+	go func() { time.Sleep(500 * time.Millisecond); cancel() }()
+	started := time.Now()
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, nil, nil, boundary)
+	if elapsed := time.Since(started); elapsed > 10*time.Second {
+		t.Fatalf("unauthorized child was not reaped: took %s", elapsed)
 	}
-}
-
-// Cancellation before an authorized native transaction must reap the process
-// group. A recovery run begins with durable intent already recorded, so intent
-// must not be mistaken for installation in progress.
-func TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery(t *testing.T) {
-	for _, operation := range []string{"setup", "recover"} {
-		t.Run(operation, func(t *testing.T) {
-			launch, request, boundary := runnerFixture(t, "hang")
-			request.Operation = operation
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			// Cancel only after the child is past its handshake, so the closed
-			// authorization pipe cannot end it instead of the reap.
-			go func() { time.Sleep(500 * time.Millisecond); cancel() }()
-			started := time.Now()
-			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
-			if elapsed := time.Since(started); elapsed > 10*time.Second {
-				t.Fatalf("unauthorized child was not reaped: %s took %s", operation, elapsed)
-			}
-			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("%s cancellation = %v (outcome %s)", operation, err, result.Outcome)
-			}
-		})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation = %v (outcome %s)", err, result.Outcome)
 	}
 }
 
 // A refused record ends the protocol at once: the closed authorization channel
 // fails an adapter waiting on it instead of leaving it to the ten-minute
-// deadline. Nothing is killed, so an authorized native transaction still
-// running when its record is refused finishes first.
+// deadline.
 func TestAProtocolRefusalReleasesAWaitingAdapter(t *testing.T) {
-	for name, mode := range map[string]string{"before preparation": "refused", "during a native transaction": "refused-native"} {
-		t.Run(name, func(t *testing.T) {
-			launch, request, boundary := runnerFixture(t, mode)
-			boundary.authorizedDrain, boundary.completedDrain = 200*time.Millisecond, 200*time.Millisecond
-			transaction := filepath.Join(t.TempDir(), "transaction")
-			launch.Environment = append(launch.Environment, "BOOTWRIGHT_TEST_TRANSACTION="+transaction)
-			want := "failed"
-			if mode == "refused-native" {
-				request.Operation = "recover"
-				request.Native = &prerequisites.NativeResolvedPlan{Digest: strings.Repeat("c", 64), BeforeSHA256: strings.Repeat("a", 64), AfterSHA256: strings.Repeat("b", 64), Actions: []prerequisites.NativeAction{{SourceID: "native-one"}}}
-				transitions, err := prerequisites.NativeTransitionsDigest(request.Native.Actions)
-				if err != nil {
-					t.Fatal(err)
-				}
-				request.Preparation = &prerequisites.NativePreparation{InventorySHA256: request.Native.BeforeSHA256, AfterInventorySHA256: request.Native.AfterSHA256, PlanDigest: request.Native.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
-				want = "unknown"
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			started := time.Now()
-			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
-			if elapsed := time.Since(started); ctx.Err() != nil || elapsed > 5*time.Second {
-				t.Fatalf("the refused adapter waited %s for an acknowledgement (%v)", elapsed, err)
-			}
-			if err == nil || result.Outcome != want {
-				t.Fatalf("a refused record left the run %s (%v), want %s", result.Outcome, err, want)
-			}
-			if _, err := os.Stat(transaction); mode == "refused-native" && err != nil {
-				t.Fatalf("the authorized native transaction did not finish: %v", err)
-			}
-		})
+	launch, request, boundary := runnerFixture(t, "refused")
+	boundary.authorizedDrain, boundary.completedDrain = 200*time.Millisecond, 200*time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	started := time.Now()
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, nil, nil, boundary)
+	if elapsed := time.Since(started); ctx.Err() != nil || elapsed > 5*time.Second {
+		t.Fatalf("the refused adapter waited %s for an acknowledgement (%v)", elapsed, err)
+	}
+	if err == nil || result.Outcome != "failed" {
+		t.Fatalf("a refused record left the run %s (%v), want failed", result.Outcome, err)
 	}
 }
 
@@ -336,7 +291,7 @@ func TestAnUnstampedClientRefusalNamesTheReleaseStampCheck(t *testing.T) {
 			request.Tools = []prerequisites.ToolDefinition{{Kind: check.kind, Version: "4.21.15", Source: prerequisites.DependencySource{ID: "tool-oc", SHA256: strings.Repeat("d", 64), Bytes: 1}}}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+			result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, nil, nil, boundary)
 			// Before its continue is acknowledged the adapter installs no
 			// client, so the run is failed; after it, unknown.
 			found, want := diagnostics.Of(err), "unknown"
@@ -364,11 +319,10 @@ func TestAnUnstampedClientRefusalNamesTheReleaseStampCheck(t *testing.T) {
 // first holds the adapter until the refusal closes its acknowledgement channel;
 // one read after is written by a descendant once the adapter is reaped. Records
 // it accepts after the exit leave that failure and move the protocol on, so a
-// completed is judged after its loaded, prepared, native or continue, but
-// nothing is released, published, authorized or reported for them: release
-// and the inventory read follow only a loaded read before the exit, intent
-// only a prepared read before it, and no native or continue read after it
-// reports the installation that authorizes it.
+// completed is judged after its loaded, prepared or continue, but nothing is
+// published, authorized or reported for them: the preparation report follows
+// only a loaded read before the exit, intent only a prepared read before it,
+// and no continue read after it reports the installation it authorizes.
 // The drain's close of a channel a descendant holds is the runner's own read
 // and no record, so it leaves the failed exit too.
 func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
@@ -391,20 +345,8 @@ func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
 		return string(data) + `\n`
 	}
 	sha := strings.Repeat("a", 64)
-	prepared := `{"phase":"prepared","preparation":{"addedSources":[],"inventorySHA256":"` + sha + `"}}\n`
-	completed := `{"evidence":{"added":[],"after":"` + sha + `","before":"` + sha + `","planDigest":"","postcondition":true,"request":"` + sha + `","tools":[]},"outcome":"unchanged","phase":"completed"}\n`
-	plan := &prerequisites.NativeResolvedPlan{Digest: strings.Repeat("c", 64), BeforeSHA256: sha, AfterSHA256: strings.Repeat("b", 64), Actions: []prerequisites.NativeAction{{SourceID: "native-one"}}}
-	transitions, err := prerequisites.NativeTransitionsDigest(plan.Actions)
-	if err != nil {
-		t.Fatal(err)
-	}
-	nativePrepared := record(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AfterInventorySHA256: plan.AfterSHA256, PlanDigest: plan.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}})
-	nativeCompleted := record(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "before": sha, "after": plan.AfterSHA256, "planDigest": plan.Digest, "added": []string{"native-one"}, "tools": []string{}, "postcondition": true}})
-	tool := prerequisites.ToolDefinition{Kind: "helm", Version: "3.17.3", Source: prerequisites.DependencySource{ID: "tool-helm", SHA256: strings.Repeat("d", 64), Bytes: 1}}
-	toolPrepared := record(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AddedSources: []string{tool.Source.ID}}})
-	toolCompleted := record(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "before": sha, "after": sha, "planDigest": "", "added": []string{}, "tools": []map[string]string{{"source": tool.Source.ID, "sha256": tool.Source.SHA256, "files": strings.Repeat("e", 64)}}, "postcondition": true}})
-	withNative := func(request *capabilityRequest) { request.Native = plan }
-	withTool := func(request *capabilityRequest) { request.Tools = []prerequisites.ToolDefinition{tool} }
+	prepared := record(map[string]any{"phase": "prepared", "preparation": map[string]any{"addedSources": []string{fixtureTool.Source.ID}}})
+	completed := record(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": sha, "tools": []map[string]string{fixtureEvidence}, "postcondition": true}})
 	const (
 		malformed  = `not a record\n`
 		misplaced  = `{"phase":"refused","reason":"release-stamp"}\n`
@@ -422,10 +364,9 @@ func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
 		{"a malformed record read after the exit", readAfter(malformed), "controller.unknown", incomplete, 5 * time.Second, nil, true, false},
 		{"a record out of its place read first", readFirst(misplaced), "controller.unknown", invalid, 5 * time.Second, nil, true, false},
 		{"a record out of its place read after the exit", readAfter(misplaced), "controller.unknown", invalid, 5 * time.Second, nil, true, false},
-		{"valid records read after the exit", readAfter(prepared + completed), "controller.setup", failedExit, 5 * time.Second, nil, true, false},
-		{"a loaded record read after the exit", afterTheExit(`{"phase":"loaded"}\n` + prepared + completed), "controller.setup", failedExit, 5 * time.Second, nil, false, false},
-		{"a native record read after the exit", handoff + acknowledged(nativePrepared) + afterTheExit(`{"phase":"native"}\n`+nativeCompleted), "controller.setup", failedExit, 5 * time.Second, withNative, true, true},
-		{"a continue record read after the exit", handoff + acknowledged(toolPrepared) + afterTheExit(`{"phase":"continue"}\n`+toolCompleted), "controller.setup", failedExit, 5 * time.Second, withTool, true, true},
+		{"valid records read after the exit", readAfter(prepared + `{"phase":"continue"}\n` + completed), "controller.setup", failedExit, 5 * time.Second, nil, true, false},
+		{"a loaded record read after the exit", afterTheExit(`{"phase":"loaded"}\n` + prepared + `{"phase":"continue"}\n` + completed), "controller.setup", failedExit, 5 * time.Second, nil, false, false},
+		{"a continue record read after the exit", handoff + acknowledged(prepared) + afterTheExit(`{"phase":"continue"}\n`+completed), "controller.setup", failedExit, 5 * time.Second, nil, true, true},
 		{"a channel the drain closes after the exit", handoff + `(exec >/dev/null 2>&1 4<&-; sleep 5) & exit 2`, "controller.setup", failedExit, 200 * time.Millisecond, nil, true, false},
 	} {
 		t.Run(check.name, func(t *testing.T) {
@@ -437,9 +378,9 @@ func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
 			boundary.command = func(string, ...string) *exec.Cmd { return exec.Command("/bin/sh", "-c", check.script) }
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			released, published := 0, false
+			published := false
 			var details []string
-			result, err := runProcess(ctx, launch, request, func() error { released++; return nil }, func(context.Context, prerequisites.NativePreparation) error {
+			result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error {
 				published = true
 				return nil
 			}, func(event prerequisites.ProgressEvent) { details = append(details, event.Detail) }, nil, boundary)
@@ -456,12 +397,12 @@ func TestARecordReadAfterTheFailedExitIsJudgedAsIfReadFirst(t *testing.T) {
 			if result.Outcome != outcome || published != check.published {
 				t.Fatalf("the run left %s with intent published %v, want %s with %v", result.Outcome, published, outcome, check.published)
 			}
-			releases, progress := 0, []string{"starting the private Ansible runtime"}
+			progress := []string{"starting the private Ansible runtime"}
 			if check.released {
-				releases, progress = 1, append(progress, "reading the native package inventory")
+				progress = append(progress, "preparing the target clients")
 			}
-			if released != releases || !slices.Equal(details, progress) {
-				t.Fatalf("the run released %d times and reported %q, want %d and %q", released, details, releases, progress)
+			if !slices.Equal(details, progress) {
+				t.Fatalf("the run reported %q, want %q", details, progress)
 			}
 		})
 	}
@@ -497,7 +438,12 @@ func TestACanceledControllerRunNeverAcknowledges(t *testing.T) {
 	boundary.command = func(string, ...string) *exec.Cmd { return exec.Command("/bin/sh", "-c", script) }
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	result, err := runProcess(ctx, launch, request, func() error { cancel(); return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+	loaded := func(event prerequisites.ProgressEvent) {
+		if event.Detail == "preparing the target clients" {
+			cancel()
+		}
+	}
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, loaded, nil, boundary)
 	if !errors.Is(err, context.Canceled) || result.Outcome != "unknown" {
 		t.Fatalf("the canceled run left %s (%v), want unknown and canceled", result.Outcome, err)
 	}
@@ -578,7 +524,7 @@ func fixtureProcess(t *testing.T, stat []byte) [3]string {
 	return [3]string{pid, fields[0], fields[19]}
 }
 
-// Package staging must not land in the ambient temporary directory: the child
+// Tool staging must not land in the ambient temporary directory: the child
 // gets private durable scratch that is removed when the run ends.
 func TestRunnerStagesInPrivateDurableScratch(t *testing.T) {
 	launch, request, boundary := runnerFixture(t, "complete")
@@ -591,7 +537,7 @@ func TestRunnerStagesInPrivateDurableScratch(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary); err != nil {
+	if _, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, nil, nil, boundary); err != nil {
 		t.Fatal(err)
 	}
 	var scratch string
@@ -620,33 +566,19 @@ func clientTools(sizes ...int64) []prerequisites.ToolDefinition {
 	return tools
 }
 
-func nativePackages(sizes ...int64) []prerequisites.NativePackage {
-	packages := make([]prerequisites.NativePackage, 0, len(sizes))
-	for index, size := range sizes {
-		packages = append(packages, prerequisites.NativePackage{Source: prerequisites.DependencySource{ID: "native-" + strconv.Itoa(index), Bytes: size}})
-	}
-	return packages
-}
-
-// A run's deadline is its base plus the bound its native packages are staged
-// under and each tool's acquisition deadline. Native staging alone is held
-// within the ceiling, so a large native closure is admitted at the ceiling,
-// while one with tools past it is refused before Ansible starts.
+// A run's deadline is its base plus each tool's acquisition deadline, and a
+// closure past the ceiling is refused before Ansible starts.
 func TestAClientStageDeadlineIsDerivedFromItsSources(t *testing.T) {
 	for name, check := range map[string]struct {
-		packages []prerequisites.NativePackage
-		tools    []prerequisites.ToolDefinition
-		want     time.Duration
-		refused  bool
+		tools   []prerequisites.ToolDefinition
+		want    time.Duration
+		refused bool
 	}{
-		"no tools":                           {nil, nil, runTimeout, false},
-		"two tools":                          {nil, clientTools(1, 44_433_552), runTimeout + 121*time.Second + 205*time.Second, false},
-		"past the ceiling":                   {nil, clientTools(1<<30, 1<<30, 1<<30, 1<<30), clientStageCeiling, true},
-		"native only":                        {nativePackages(100 << 20), nil, runTimeout + 320*time.Second, false},
-		"4 GiB native":                       {nativePackages(1<<30, 1<<30, 1<<30, 1<<30), nil, clientStageCeiling, false},
-		"native plus tools past the ceiling": {nativePackages(1<<30, 1<<30, 1<<30), clientTools(1 << 30), clientStageCeiling, true},
+		"no tools":         {nil, runTimeout, false},
+		"two tools":        {clientTools(1, 44_433_552), runTimeout + 121*time.Second + 205*time.Second, false},
+		"past the ceiling": {clientTools(1<<30, 1<<30, 1<<30, 1<<30), clientStageCeiling, true},
 	} {
-		request := capabilityRequest{Packages: check.packages, Tools: check.tools}
+		request := capabilityRequest{Tools: check.tools}
 		if got := runDeadline(request); got != check.want {
 			t.Errorf("%s: runDeadline = %s, want %s", name, got, check.want)
 		}
@@ -656,12 +588,6 @@ func TestAClientStageDeadlineIsDerivedFromItsSources(t *testing.T) {
 	}
 	if runTimeout != 600*time.Second || clientStageCeiling != 7_200*time.Second {
 		t.Fatalf("runTimeout %s and clientStageCeiling %s changed; the exact seconds above assume 10 minutes and 2 hours", runTimeout, clientStageCeiling)
-	}
-	if got := nativeStaging(nativePackages(1<<30, 1<<30, 1<<30, 1<<30)); got != nativeStagingCeiling {
-		t.Errorf("4 GiB of native packages stage under %s, want the ceiling %s the adapter admits", got, nativeStagingCeiling)
-	}
-	if nativeStagingCeiling != clientStageCeiling-runTimeout {
-		t.Fatalf("nativeStagingCeiling %s is not the stage ceiling %s less the run base %s", nativeStagingCeiling, clientStageCeiling, runTimeout)
 	}
 }
 
@@ -677,7 +603,7 @@ func TestAClientClosureBeyondTheCeilingRefusesBeforeAnsibleStarts(t *testing.T) 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, nil, nil, boundary)
 	var classified *diagnostics.Failure
 	if !errors.As(err, &classified) || len(classified.Diagnostics) != 1 || classified.Diagnostics[0].Code != "controller.unsupported" || result.Outcome != "failed" {
 		t.Fatalf("a closure past the ceiling ran: %s %v", result.Outcome, err)
@@ -700,17 +626,13 @@ func TestStagingCapacityRefusesBeforeEffects(t *testing.T) {
 	if err := requireScratchCapacity(scratch, capabilityRequest{}); err != nil {
 		t.Fatalf("an empty closure was refused: %v", err)
 	}
-	small := capabilityRequest{Packages: []prerequisites.NativePackage{{Source: prerequisites.DependencySource{Bytes: 1}}}}
+	small := capabilityRequest{Tools: []prerequisites.ToolDefinition{{Source: prerequisites.DependencySource{Bytes: 1}}}}
 	if err := requireScratchCapacity(scratch, small); err != nil {
 		t.Fatalf("a one-byte closure was refused: %v", err)
 	}
-	huge := capabilityRequest{Packages: []prerequisites.NativePackage{{Source: prerequisites.DependencySource{Bytes: 1 << 60}}}}
+	huge := capabilityRequest{Tools: []prerequisites.ToolDefinition{{Source: prerequisites.DependencySource{Bytes: 1 << 60}}}}
 	if err := requireScratchCapacity(scratch, huge); err == nil {
 		t.Fatal("a closure larger than the filesystem was accepted")
-	}
-	tools := capabilityRequest{Tools: []prerequisites.ToolDefinition{{Source: prerequisites.DependencySource{Bytes: 1 << 60}}}}
-	if err := requireScratchCapacity(scratch, tools); err == nil {
-		t.Fatal("target client payloads were excluded from the capacity check")
 	}
 }
 
@@ -722,7 +644,7 @@ func TestRunnerBoundsDrainWhenDescendantRetainsResultChannel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	started := time.Now()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, nil, nil, boundary)
 	elapsed := time.Since(started)
 	if ctx.Err() != nil {
 		t.Fatal("run outlived its own drain bound and hit the test deadline")
@@ -731,9 +653,9 @@ func TestRunnerBoundsDrainWhenDescendantRetainsResultChannel(t *testing.T) {
 	if !errors.As(err, &classified) || len(classified.Diagnostics) == 0 || !strings.Contains(classified.Diagnostics[0].Message, "retained the result channel") {
 		t.Fatalf("retained channel was not reported: %s %v", result.Outcome, err)
 	}
-	// Setup's own run acknowledged no native record, so nothing it did is
-	// left to resolve: it is failed, never a proved outcome.
-	if result.Outcome != "failed" {
+	// Every acknowledgement was delivered, so the leaked channel leaves the
+	// installation unproved.
+	if result.Outcome != "unknown" {
 		t.Fatalf("retained channel claimed a proved outcome: %s", result.Outcome)
 	}
 	if elapsed > 10*time.Second {
@@ -749,8 +671,8 @@ func TestRunnerRetainsWhatAnsiblePrintsWhenGivenSomewhereToPutIt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var retained strings.Builder
-	result, err := runProcess(ctx, launch, request, func() error { return nil },
-		func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, &retained, boundary)
+	result, err := runProcess(ctx, launch, treeOf(request), request,
+		func(context.Context, []string) error { return nil }, nil, &retained, boundary)
 	if err != nil || result.Outcome != "unchanged" {
 		t.Fatalf("run = %s (%v)", result.Outcome, err)
 	}
@@ -759,26 +681,15 @@ func TestRunnerRetainsWhatAnsiblePrintsWhenGivenSomewhereToPutIt(t *testing.T) {
 	}
 }
 
-// nativeFixture is a native plan of one action and the preparation and
-// completion an adapter writes for it.
-func nativeFixture() (*prerequisites.NativeResolvedPlan, prerequisites.NativePreparation) {
-	sha := strings.Repeat("a", 64)
-	plan := &prerequisites.NativeResolvedPlan{Digest: strings.Repeat("c", 64), BeforeSHA256: sha, AfterSHA256: strings.Repeat("b", 64), Actions: []prerequisites.NativeAction{{SourceID: "native-one"}}}
-	transitions, _ := prerequisites.NativeTransitionsDigest(plan.Actions)
-	return plan, prerequisites.NativePreparation{InventorySHA256: sha, AfterInventorySHA256: plan.AfterSHA256, PlanDigest: plan.Digest, TransitionsSHA256: transitions, AddedSources: []string{"native-one"}}
-}
-
 // stoppedChild is an adapter that cancellation or its own descendants stop.
 // isolated starts a worker in a session of its own after its loaded record,
 // as an Ansible worker is, and on termination ends it as the supervisor's
-// handler does. authorized records termination if it ever gets it and finishes
-// its native transaction 500 ms after the native acknowledgement. retaining
-// completes, closes its result channel and leaves a descendant in a session of
+// handler does. retaining completes, closes its result channel and leaves a descendant in a session of
 // its own holding its output.
 func stoppedChild(mode string, emit func(any, bool), output *os.File) {
 	terminated := make(chan os.Signal, 1)
 	signal.Notify(terminated, syscall.SIGTERM)
-	marker, sha := os.Getenv("BOOTWRIGHT_TEST_TRANSACTION"), strings.Repeat("a", 64)
+	sha := strings.Repeat("a", 64)
 	emit(map[string]any{"phase": "loaded"}, true)
 	switch mode {
 	case "isolated":
@@ -792,21 +703,10 @@ func stoppedChild(mode string, emit func(any, bool), output *os.File) {
 		_ = worker.Process.Kill()
 		_ = worker.Wait()
 		os.Exit(143)
-	case "authorized":
-		_, preparation := nativeFixture()
-		emit(map[string]any{"phase": "prepared", "preparation": preparation}, true)
-		emit(map[string]any{"phase": "native"}, true)
-		select {
-		case <-terminated:
-			_ = os.WriteFile(marker+".signalled", []byte("signalled\n"), 0600)
-			os.Exit(143)
-		case <-time.After(500 * time.Millisecond):
-			_ = os.WriteFile(marker, []byte("done\n"), 0600)
-			os.Exit(0)
-		}
 	}
-	emit(map[string]any{"phase": "prepared", "preparation": prerequisites.NativePreparation{InventorySHA256: sha, AddedSources: []string{}}}, true)
-	emit(map[string]any{"phase": "completed", "outcome": "unchanged", "evidence": map[string]any{"request": sha, "before": sha, "after": sha, "planDigest": "", "added": []string{}, "tools": []string{}, "postcondition": true}}, false)
+	emit(map[string]any{"phase": "prepared", "preparation": map[string]any{"addedSources": []string{fixtureTool.Source.ID}}}, true)
+	emit(map[string]any{"phase": "continue"}, true)
+	emit(map[string]any{"phase": "completed", "outcome": "unchanged", "evidence": map[string]any{"request": sha, "tools": []map[string]string{fixtureEvidence}, "postcondition": true}}, false)
 	_ = output.Close()
 	holder := exec.Command("/bin/sleep", "5")
 	holder.Stdout = os.Stdout
@@ -851,35 +751,33 @@ func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
 	}
 }
 
-// A native record whose acknowledgement no adapter process could receive
-// authorizes no transaction: setup's own run, whose preparation was already
+// A continue record whose acknowledgement no adapter process could receive
+// authorizes no installation: the run, whose preparation was already
 // published, records failed rather than an unknown installation, whichever of
 // the record and the failed exit the runner reads first.
-func TestAnUndeliveredNativeAcknowledgementAuthorizesNoTransaction(t *testing.T) {
-	plan, preparation := nativeFixture()
-	prepared, err := canonicalRecord(map[string]any{"phase": "prepared", "preparation": preparation})
+func TestAnUndeliveredContinueAcknowledgementAuthorizesNoInstallation(t *testing.T) {
+	prepared, err := canonicalRecord(map[string]any{"phase": "prepared", "preparation": map[string]any{"addedSources": []string{fixtureTool.Source.ID}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	handoff := `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; printf '%s\n' '` + string(prepared) + `' >&3; read -r reply <&4; exec 4<&-; `
 	for _, check := range []struct{ name, script string }{
-		{"record first", handoff + `printf '{"phase":"native"}\n' >&3; sleep 0.3; exit 3`},
-		{"exit first", handoff + `/bin/sh -c 'sleep 0.3; printf "%s\n" "$0" >&3' '{"phase":"native"}' </dev/null >/dev/null 2>&1 & exit 3`},
+		{"record first", handoff + `printf '{"phase":"continue"}\n' >&3; sleep 0.3; exit 3`},
+		{"exit first", handoff + `/bin/sh -c 'sleep 0.3; printf "%s\n" "$0" >&3' '{"phase":"continue"}' </dev/null >/dev/null 2>&1 & exit 3`},
 	} {
 		t.Run(check.name, func(t *testing.T) {
-			result, found := scriptedRun(t, check.script, func(request *capabilityRequest) { request.Native = plan })
+			result, found := scriptedRun(t, check.script, nil)
 			if len(found) != 1 || found[0].Code != "controller.setup" || found[0].Message != "Ansible did not complete the authorized dependency operation" {
-				t.Fatalf("an undelivered native acknowledgement reported %+v", found)
+				t.Fatalf("an undelivered continue acknowledgement reported %+v", found)
 			}
 			if result.Outcome != "failed" {
-				t.Fatalf("an undelivered native acknowledgement left the run %s, want failed", result.Outcome)
+				t.Fatalf("an undelivered continue acknowledgement left the run %s, want failed", result.Outcome)
 			}
 		})
 	}
 }
 
-// Cancellation before a native transaction is authorized signals the
-// supervisor, which ends every descendant, including a worker in a session of
+// Cancellation signals the supervisor, which ends every descendant, including a worker in a session of
 // its own that a group kill never reaches.
 func TestCancellingAControllerRunEndsItsSessionIsolatedWorker(t *testing.T) {
 	launch, request, boundary := runnerFixture(t, "isolated")
@@ -904,7 +802,7 @@ func TestCancellingAControllerRunEndsItsSessionIsolatedWorker(t *testing.T) {
 		canceled = time.Now()
 		cancel()
 	}()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, nil, nil, boundary)
 	if elapsed := time.Since(canceled); elapsed > 2*time.Second {
 		t.Fatalf("the canceled run returned after %s", elapsed)
 	}
@@ -924,34 +822,6 @@ func TestCancellingAControllerRunEndsItsSessionIsolatedWorker(t *testing.T) {
 	}
 }
 
-// Once a native acknowledgement is delivered, cancellation signals and kills
-// nothing: the authorized transaction runs to its end.
-func TestCancellationSparesADeliveredNativeAuthorization(t *testing.T) {
-	launch, request, boundary := runnerFixture(t, "authorized")
-	boundary.completedDrain, boundary.authorizedDrain = 2*time.Second, 2*time.Second
-	plan, _ := nativeFixture()
-	request.Native = plan
-	marker := filepath.Join(t.TempDir(), "transaction")
-	launch.Environment = append(launch.Environment, "BOOTWRIGHT_TEST_TRANSACTION="+marker)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	progress := func(event prerequisites.ProgressEvent) {
-		if strings.HasPrefix(event.Detail, "installing ") {
-			cancel()
-		}
-	}
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, progress, nil, boundary)
-	if !errors.Is(err, context.Canceled) || result.Outcome != "unknown" {
-		t.Fatalf("the canceled authorized run reported %s (%v)", result.Outcome, err)
-	}
-	if _, err := os.Stat(marker + ".signalled"); err == nil {
-		t.Fatal("cancellation signaled an authorized native transaction")
-	}
-	if _, err := os.Stat(marker); err != nil {
-		t.Fatalf("the authorized native transaction did not finish: %v", err)
-	}
-}
-
 // A descendant in a session of its own that still holds Ansible's output after
 // it exits is cut at the drain: the run returns at its bound, and the
 // completed record it read is no result.
@@ -968,7 +838,7 @@ func TestARunReturnsAtItsDrainWhenADescendantHoldsItsOutput(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	started := time.Now()
-	result, err := runProcess(ctx, launch, request, func() error { return nil }, func(context.Context, prerequisites.NativePreparation) error { return nil }, nil, nil, boundary)
+	result, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, nil, nil, boundary)
 	if elapsed := time.Since(started); elapsed > 2*time.Second {
 		t.Fatalf("the run waited %s on a descendant holding its output", elapsed)
 	}
@@ -976,9 +846,8 @@ func TestARunReturnsAtItsDrainWhenADescendantHoldsItsOutput(t *testing.T) {
 	if len(found) != 1 || found[0].Code != "controller.unknown" || found[0].Message != "Ansible descendants retained its output after it exited" {
 		t.Fatalf("retained output reported %+v (%v)", found, err)
 	}
-	// Setup's own run acknowledged no native record, so its published
-	// preparation records failed.
-	if result.Outcome != "failed" {
+	// Its tool was authorized, so the installation is unproved.
+	if result.Outcome != "unknown" {
 		t.Fatalf("retained output left the run %s", result.Outcome)
 	}
 	if recordedProcess(holder) == 0 {

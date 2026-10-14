@@ -14,8 +14,8 @@ import (
 // its operation can continue or be destroyed under this build.
 func TestAMirrorAnEarlierBuildFrozeStillObservesAsNoEffect(t *testing.T) {
 	for _, mirror := range []string{"https://mirror.example.test/helm?", "https://mirror.example.test/helm#", "https://mirror.example.test/helm?#"} {
-		native := &fakeNative{}
-		capability := New(bundlelocal.NewToolCatalog(), native, native, &fakeInstaller{})
+		capability := stage(&fakeTools{}, newDnf(), &fakeSetup{}, &fakeInstaller{})
+		capability.tools = bundlelocal.NewToolCatalog()
 		downloads := field("downloads", api.MapValue(text("helmMirror", mirror)))
 		block := planBlock(t, capability, stateOf(environment(downloads), machine("container-runtime"), cluster()), reconciliation.Apply)
 		frozen := false
@@ -25,7 +25,7 @@ func TestAMirrorAnEarlierBuildFrozeStillObservesAsNoEffect(t *testing.T) {
 		if !frozen {
 			t.Fatalf("mirror %q: the stage request does not freeze it", mirror)
 		}
-		observation, err := capability.Observe(context.Background(), newRecorder(&fakeArea{sealed: true}).execution(t, block, hostState(t)))
+		observation, err := capability.Observe(context.Background(), newRecorder(&fakeArea{sealed: true}).execution(t, block, hostState()))
 		if err != nil || observation.Effect != reconciliation.EffectNoEffect {
 			t.Errorf("mirror %q: observation = %q (%v), want %q", mirror, observation.Effect, err, reconciliation.EffectNoEffect)
 		}

@@ -56,7 +56,7 @@ func TestNoAcknowledgementIsWrittenOnceTheRunIsCanceled(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			invocation := Invocation{
-				Loader: "/bin/sh", Automation: t.TempDir(), StopOnBreach: check.stop, Admission: check.admission,
+				Program: "/bin/sh", Automation: t.TempDir(), StopOnBreach: check.stop, Admission: check.admission,
 				Command: func(string, ...string) *exec.Cmd { return exec.Command("/bin/sh", "-c", script) },
 			}
 			ending := Run(ctx, invocation, cancelingJudge{cancel: cancel, spare: check.spare})

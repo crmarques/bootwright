@@ -1,29 +1,45 @@
 Controller setup
 
   Scope     baseline
-  Platform  fedora 43/amd64
+  Platform  fedora 44/amd64
   Route     direct
 
 Checks
-  [OK]       Host: fedora 43/amd64
-  [OK]       Execution bundle: qualified
-  [FAIL]     Container runtime: required 5.8.2; observed missing
+  [OK]       Host: fedora 44/amd64
+  [OK]       Controller runtime: Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5
+  [FAIL]     Host packages: required openssh-clients, podman; observed missing podman
+  [OK]       Setup state: complete
 
-Dependencies
-  podman-5.8.2-1.fc43.x86_64.rpm
+Host package requirements
+  podman
+
+dnf preview
+  Updating and loading repositories:
+  Repositories loaded.
+  Package            Arch    Version          Repository   Size
+  Installing:
+   podman            x86_64  5:5.8.1-1.fc44   updates    54.2 MiB
+  Upgrading:
+   glibc             x86_64  2.43-3.fc44      updates     6.7 MiB
+
+  Transaction Summary:
+   Installing:         1 package
+   Upgrading:          1 package
+  Operation aborted by the user.
+  Note: this install also updates core packages (glibc); dnf applies it as for any package install
 
 Planned changes
-  1. Install the baseline native packages with Ansible
+  1. Install host packages with dnf: podman
+
+  Logs  /var/lib/bootwright/setup/runs/setup-000003
 
 Progress
-  [RUNNING]  [1/1] Container runtime
-
-  Logs  /var/lib/bootwright/controller/runs/setup-000003
-  [RUNNING]  [1/1] Container runtime: starting the private Ansible runtime
-  [RUNNING]  [1/1] Container runtime: installing 3 native packages
-  [DONE]     [1/1] Container runtime
+  [RUNNING]  [1/2] Host packages
+  [DONE]     [1/2] Host packages
+  [RUNNING]  [2/2] Setup receipt
+  [DONE]     [2/2] Setup receipt
 
   Outcome    changed
   Readiness  all required prerequisites verified
-  Logs       /var/lib/bootwright/controller/runs/setup-000003
+  Logs       /var/lib/bootwright/setup/runs/setup-000003
   Next       bootwright preflight controller

@@ -467,9 +467,10 @@ func (t *lifecycleTransaction) ReleaseReservations(ctx context.Context) error {
 }
 
 // Bind records this context's controller relationship on the prepared host.
-// The first apply establishes it; every later one revalidates the exact same
-// relationship. A different Machine or host never replaces an existing
-// binding, so relocation stays an explicit operator decision.
+// The first apply establishes it, creating the controller record with this
+// host's identity when no context bound one yet; every later one revalidates
+// the exact same relationship. A different Machine or host never replaces an
+// existing binding, so relocation stays an explicit operator decision.
 func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host controller.InstalledHostIdentity) error {
 	if err := t.base.available(ctx); err != nil {
 		return err
@@ -477,8 +478,13 @@ func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host co
 	if machine == "" {
 		return state("a controller binding requires the selected Machine name")
 	}
-	if t.stored.data == nil || t.stored.value.Receipt.Status != "complete" {
+	if !t.controller.Prepared {
 		return controllerFailure("controller.identity", "this host has no completed controller setup", completeSetup)
+	}
+	if t.stored.data == nil || t.base.registry.Controller.Mode != "ready" {
+		if err := t.initializeController(ctx, host); err != nil {
+			return err
+		}
 	}
 	if !t.stored.value.Host.Equal(host) {
 		return controllerFailure("controller.identity", "this host is not the host this controller state belongs to",
@@ -504,6 +510,19 @@ func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host co
 	value := cloneControllerState(t.stored.value)
 	value.Bindings = bindings
 	return t.publishControllerState(ctx, value, t.stored.bundles, applyRetry(t.identity.Name), checkpointBeforeBinding)
+}
+
+// initializeController creates the controller record holding only this host's
+// identity, so the first binding has one to join.
+func (t *lifecycleTransaction) initializeController(ctx context.Context, host controller.InstalledHostIdentity) error {
+	stored, err := t.base.initializeController(ctx, host, applyRetry(t.identity.Name))
+	if err != nil {
+		return err
+	}
+	t.stored = stored
+	t.controller.Initialized = true
+	t.controller.State = cloneControllerState(stored.value)
+	return nil
 }
 
 func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []prerequisites.HostReservation, retry string) error {
@@ -560,7 +579,7 @@ func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value
 	if err != nil {
 		return err
 	}
-	if err := validateControllerState(value); err != nil {
+	if err := validateControllerState(value, bundles); err != nil {
 		return err
 	}
 	if _, err := t.base.store.replaceControllerRecord(ctx, dir, t.stored, data, retry); err != nil {

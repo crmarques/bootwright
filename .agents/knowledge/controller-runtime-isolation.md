@@ -1,6 +1,6 @@
 # Controller runtime isolation
 
-Observed while implementing controller setup; [Controller](../../specs/controller.md#supported-host-and-dependency-selection)
+Observed while implementing controller setup; [Controller](../../specs/controller.md#the-controller-runtime)
 owns the requirement that the private Python/Ansible runtime runs isolated from
 ambient Python, loader and Ansible configuration and that readiness rejects
 additions and substitutions. This page records how that isolation is achieved
@@ -24,7 +24,7 @@ and why each mechanism is necessary.
   because every bundle identity digests that requirement; the attribution only
   lets a drift refusal name what to reinstall, and `scripts/foundation-catalog`
   regenerates a release's record from a qualified host. Code:
-  `internal/controller/bundlelocal/catalog.go`, `internal/controller/nativelocal/resolver_linux_amd64.go`.
+  `internal/controller/bundlelocal/catalog.go`, internal/controller/nativelocal/resolver_linux_amd64.go.
 - Execution verifies the catalogued host loader, ELF library files and aliases
   under the native package read lock, then invokes that loader directly with the
   cache disabled, hardware-capability selection disabled, a fixed library path
@@ -53,3 +53,5 @@ and why each mechanism is necessary.
 
 Applies to RHEL 9 and Fedora on Linux/amd64. Revisit when a dependency release
 changes its foundation requirements or when another host family is qualified.
+
+X88 deleted internal/controller/nativelocal (D152): the paths and tests this page names without code formatting are history.

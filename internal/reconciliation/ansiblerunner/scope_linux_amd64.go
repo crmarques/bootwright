@@ -16,13 +16,14 @@ type invocationKey struct{}
 type jobOwnership struct{ lock, holder os.FileInfo }
 
 type invocationScope struct {
-	mu     sync.Mutex
-	active bool
-	jobs   map[string]jobOwnership
+	mu         sync.Mutex
+	active     bool
+	jobs       map[string]jobOwnership
+	automation *stagedAutomation
 }
 
-// BeginInvocation binds live job ownership to one execution, including every
-// copy of its runner. Releasing the scope invalidates it after its workers join.
+// BeginInvocation binds live job ownership and staged automation to one
+// execution and every copy of its runner; releasing it ends both.
 func (Runner) BeginInvocation(ctx context.Context) (context.Context, func()) {
 	scope := &invocationScope{active: true, jobs: make(map[string]jobOwnership)}
 	ctx, cancel := context.WithCancel(context.WithValue(ctx, invocationKey{}, scope))
@@ -31,6 +32,10 @@ func (Runner) BeginInvocation(ctx context.Context) (context.Context, func()) {
 		defer scope.mu.Unlock()
 		scope.active = false
 		scope.jobs = nil
+		if scope.automation != nil {
+			scope.automation.release()
+			scope.automation = nil
+		}
 		cancel()
 	})
 }

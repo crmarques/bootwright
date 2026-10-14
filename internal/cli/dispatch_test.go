@@ -62,7 +62,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"validate", compilation.ValidateRequest{ContextName: "", Files: []string{"inputs"}}},
 		{"render effective", compilation.EffectiveRequest{ContextName: "example"}},
 		{"preflight controller", prerequisites.CheckRequest{ContextName: "example"}},
-		{"setup", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true, PurgeOldBundles: true}},
+		{"setup", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true}},
 		{"preflight infra", environmentpreflight.InfrastructurePreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"preflight clusters", environmentpreflight.ClustersPreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"preflight all", environmentpreflight.AllPreflightRequest{ContextName: "example", DryRun: true, TrustOnFirstUse: true, SSH: ssh}},

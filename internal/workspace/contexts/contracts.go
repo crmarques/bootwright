@@ -18,10 +18,10 @@ const (
 	Deleting     Mode = "deleting"
 )
 
-// RegistryVersion is the durable context-registry format. Earlier formats named
-// each context by an allocated identity that no longer exists, so a store
-// written by them is refused rather than converted.
-const RegistryVersion = 5
+// RegistryVersion is the durable context-registry format. Version 6 is the
+// setup v2 store (D152); a store an earlier format wrote is refused, never
+// converted.
+const RegistryVersion = 6
 
 // Registry is an atomic context snapshot. A context's name is its identity, so
 // the registry holds no separate identifier and needs no allocation state.

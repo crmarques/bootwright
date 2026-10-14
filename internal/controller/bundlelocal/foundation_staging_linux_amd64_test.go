@@ -28,7 +28,7 @@ type verifyingGuard struct {
 
 var errNotLaunched = errors.New("not launched")
 
-func (g *verifyingGuard) WithPython(_ context.Context, _ prerequisites.BundleArea, requirement prerequisites.ExecutionRequirement, _ func(prerequisites.PythonLaunch, func() error) error) error {
+func (g *verifyingGuard) WithPython(_ context.Context, _ prerequisites.BundleArea, requirement prerequisites.ExecutionRequirement, _ func(bundleLaunch, func() error) error) error {
 	g.verified = append(g.verified, requirement)
 	return errNotLaunched
 }

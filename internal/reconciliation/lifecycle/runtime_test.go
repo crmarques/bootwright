@@ -357,7 +357,7 @@ func TestARunWhoseOutputCannotBeKeptLeavesNoDirectory(t *testing.T) {
 // transaction holding its lock does.
 type refusingGuard struct{ err error }
 
-func (g refusingGuard) WithPython(context.Context, prerequisites.BundleArea, prerequisites.ExecutionRequirement, func(prerequisites.PythonLaunch, func() error) error) error {
+func (g refusingGuard) WithPython(context.Context, prerequisites.Runtime, func(prerequisites.PythonLaunch) error) error {
 	return g.err
 }
 

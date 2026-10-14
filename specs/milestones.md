@@ -16,7 +16,7 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | the owner's closing run (D59, D125); X88 after D152 |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | the owner's closing run (D59, D125); X89 and X90 (D152) |
 | [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | the owner's B476 run (X54) on the latest build |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
@@ -24,15 +24,15 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44, X48 to X51, X67, X70, X83, X84, X87 and X91 are delivered.
+X44, X48 to X51, X67, X70, X83, X84, X87, X88 and X91 are delivered.
 
-- **Next for agents:** in M1, X88 once D152 and its clause 9 choice are
-  recorded; in M2b, nothing until the owner's B476 run.
-- **Next for operator:** review D152 and run X87's S0 baseline. Before a build
-  that moves a version, the keyring format or plan encoding (X21, X29 to X32, X43, X24, X45, X46, X48, X49, X70)
-  touches a host, retire each live context with the build that applied or
-  prepared it, then run `setup --purge-old-bundles`; one that moves none, such
-  as an automation-only fix or X74, continues after `setup` (D145). M1's
+- **Next for agents:** in M1, X89 then X90 (D152, pending the owner's
+  review); in M2b, nothing until the owner's B476 run.
+- **Next for operator:** review D152 and run X87's S0 baseline on a build
+  before X88. X88 needs a fresh install: retire each live context with the
+  build that applied or prepared it, then, as root, remove `/var/lib/bootwright`
+  and `/var/lib/bootwright-staging` and run `setup` with this build. After it,
+  an automation-only fix or a same-lock rebuild is build and `apply`. M1's
   [closing validation](../docs/operator-guide.md#m1-closing-validation) covers
   D59, D125, B19, B20, B270, B276, B277, B339 and B466. After M1: follow [M2b
   to M2e](milestones/m2.md#submilestones), then M3's [B61](milestones/m3.md#b61)

@@ -51,8 +51,8 @@ an unpromoted feature lives under `deferred/`.
 - **Reservation**: a host-wide claim, such as a socket, BMC, media or machine,
   that refuses a conflicting context
   ([host reservations](infrastructure-services.md#host-reservations)).
-- **Bundle** and **binding**: setup publishes a sealed execution bundle; a
-  context binds the controller and bundle it uses; an operation binds the exact
-  secret material it froze ([secrets](secrets.md)).
+- **Runtime** and **binding**: setup publishes the controller runtime a lock
+  and interpreter name; a context binds the controller host it uses; an
+  operation binds the exact secret material it froze ([secrets](secrets.md)).
 - **Acceptance**: an operator-run gate recorded in the
   [ledger](../docs/acceptance.md); in-tree gates are tests.

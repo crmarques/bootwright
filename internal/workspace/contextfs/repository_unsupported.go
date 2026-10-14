@@ -23,9 +23,6 @@ func unsupported(ctx context.Context) error {
 func (*Store) ReadController(ctx context.Context, _ string, _ func(prerequisites.StorageView) error) error {
 	return unsupported(ctx)
 }
-func (*Store) MutateController(ctx context.Context, _ prerequisites.SetupContext, _ bool, _ func(prerequisites.StorageTransaction) error) error {
-	return unsupported(ctx)
-}
 
 func (*Store) CheckInputDirectory(ctx context.Context, _ string) error { return unsupported(ctx) }
 

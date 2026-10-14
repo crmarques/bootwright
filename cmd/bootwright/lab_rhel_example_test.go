@@ -450,80 +450,7 @@ func TestLabRHELRequestsCarryTheirDerivedIntent(t *testing.T) {
 	}
 }
 
-type labControllerPorts struct {
-	identity controller.InstalledHostIdentity
-	effects  int
-}
-
-func (p *labControllerPorts) Platform(context.Context) (prerequisites.Platform, error) {
-	return prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, nil
-}
-
-func (p *labControllerPorts) Identity(context.Context) (controller.InstalledHostIdentity, error) {
-	return p.identity, nil
-}
-
-func (p *labControllerPorts) Admit(prerequisites.Platform) error { return nil }
-
-// labResolution is the dependency resolution setup would run. Neither a dry
-// run nor preflight reaches it, so every call is an effect.
-type labResolution struct{ ports *labControllerPorts }
-
-func (r labResolution) Resolve(context.Context, prerequisites.Platform, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.BootstrapDefinition, []diagnostics.Diagnostic, error) {
-	r.ports.effects++
-	return prerequisites.BootstrapDefinition{}, nil, errors.New("unexpected bootstrap resolution")
-}
-
-// labNative is the host's package manager. Setup's closure is not resolved
-// yet and this host is Fedora, so preflight asks it nothing.
-type labNative struct{ ports *labControllerPorts }
-
-// labFoundation is a host that holds the execution foundation the build pins.
-type labFoundation struct{}
-
-func (labFoundation) Inspect(context.Context, prerequisites.Platform) (prerequisites.FoundationInspection, error) {
-	return prerequisites.FoundationInspection{Required: "glibc 2.34-275.el9_8, libgcc 11.5.0-14.el9"}, nil
-}
-
-func (n labNative) Resolve(context.Context, prerequisites.Platform, prerequisites.NativeRequirements, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
-	n.ports.effects++
-	return prerequisites.NativeResolvedPlan{}, errors.New("unexpected native resolution")
-}
-
-func (n labNative) Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
-	n.ports.effects++
-	return prerequisites.NativePresence{}, errors.New("unexpected native inspection")
-}
-
-func (n labNative) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
-	n.ports.effects++
-	return prerequisites.OperatorPresence{}, errors.New("unexpected operator inspection")
-}
-
-func (p *labControllerPorts) ValidateEgress(egress prerequisites.SetupEgress) error {
-	if egress.HTTPProxy != "" || egress.HTTPSProxy != "" {
-		return errors.New("direct controller egress selected a proxy")
-	}
-	return nil
-}
-
-func (p *labControllerPorts) Inspect(context.Context, prerequisites.BundleArea, prerequisites.Definition, bool) (prerequisites.BundleInspection, error) {
-	return prerequisites.BundleInspection{Recoverable: true}, nil
-}
-
-func (p *labControllerPorts) Validate(prerequisites.Definition) error { return nil }
-
-func (p *labControllerPorts) Rebase(context.Context, prerequisites.BundleArea, prerequisites.BootstrapDefinition) (prerequisites.BootstrapDefinition, error) {
-	p.effects++
-	return prerequisites.BootstrapDefinition{}, errors.New("unexpected bundle rebase")
-}
-
-func (p *labControllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) (prerequisites.BundleInspection, error) {
-	p.effects++
-	return prerequisites.BundleInspection{}, errors.New("unexpected bundle preparation")
-}
-
-type labToolCatalog struct{ ports *labControllerPorts }
+type labToolCatalog struct{ ports *setupPorts }
 
 func (c labToolCatalog) Select(requests []controller.ToolRequest, _ []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error) {
 	return []prerequisites.ToolDefinition{}, len(requests) == 0, nil
@@ -540,14 +467,14 @@ func (c labToolCatalog) Present(context.Context, prerequisites.BundleArea, []pre
 	return false, nil
 }
 
-func labContextServices(t *testing.T) (cli.Services, string, *labControllerPorts) {
+func labContextServices(t *testing.T) (cli.Services, string, *setupPorts) {
 	t.Helper()
 	parent := t.TempDir()
 	input := filepath.Join(parent, "input")
 	root := filepath.Join(parent, "state")
 	copySources(t, labExampleSources(t), input)
 	repository := testRepository(root)
-	ports := &labControllerPorts{}
+	ports := &setupPorts{}
 	var err error
 	ports.identity, err = controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
 	if err != nil {
@@ -555,11 +482,8 @@ func labContextServices(t *testing.T) (cli.Services, string, *labControllerPorts
 	}
 	options := testContextWiring(t, root)
 	options.Repository, options.Workspace = repository, repository
-	options.Controller = controllerDependencies{
-		Storage: repository, Host: ports, Catalog: ports, Bundle: ports, Tools: labToolCatalog{ports},
-		Bootstrap: labResolution{ports}, Native: labNative{ports}, NativeInspector: labNative{ports},
-		Foundation: labFoundation{},
-	}
+	options.Controller = ports.setupDependencies(repository, repository)
+	options.Controller.Tools = labToolCatalog{ports}
 	return assembleServices(options), input, ports
 }
 
@@ -593,7 +517,7 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	// is selected, so its dry run names the baseline and neither the example's
 	// target tools nor its host binding.
 	plan, _ := contextRun(t, services, 0, "setup", "--dry-run")
-	for _, expected := range []string{"Scope     baseline", "[UNKNOWN]  Container runtime", "Outcome  planned", "Next     bootwright setup"} {
+	for _, expected := range []string{"Scope     baseline", "[UNKNOWN]  Controller runtime", "Outcome  planned", "Next     bootwright setup"} {
 		if !strings.Contains(plan, expected) {
 			t.Fatalf("baseline dry-run lacks %q:\n%s", expected, plan)
 		}
@@ -606,7 +530,7 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	// Preflight keeps the context arm: it reports what the example still needs
 	// on this host, including the binding its first apply publishes.
 	report, diagnostics := contextRun(t, services, 1, "preflight", "controller", "--context", "lab-rhel")
-	for _, expected := range []string{"Scope       context lab-rhel", "Controller  controller", "[FAIL]  Controller binding    required controller", "Outcome  not-ready"} {
+	for _, expected := range []string{"Scope       context lab-rhel", "Controller  controller", "[FAIL]  Controller binding  required controller", "Outcome  not-ready"} {
 		if !strings.Contains(report, expected) {
 			t.Fatalf("context preflight lacks %q:\n%s", expected, report)
 		}

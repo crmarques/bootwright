@@ -1,7 +1,6 @@
 package clients
 
 import (
-	"context"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -9,9 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 // Every refusal this package raises names what settles it, as a remediation
@@ -59,26 +56,12 @@ func TestEveryClientsRefusalNamesItsRemedy(t *testing.T) {
 	}
 }
 
-// A host without completed setup and a block another build froze each refuse
-// with the action that settles them, as a remediation and with no path.
-func TestAFoundationRefusalCarriesItsRemedy(t *testing.T) {
-	capability := New(&fakeTools{}, &fakeNative{}, &fakeNative{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
-	execution := newRecorder(&fakeArea{}).execution(t, block, prerequisites.HostState{})
-	execution.Stage.Setup.Initialized = false
-	execution.Stage.Setup.Context = prerequisites.SetupContext{Name: "lab", Revision: "rev-" + strings.Repeat("2", 32)}
-	_, err := capability.Apply(context.Background(), execution)
+// A block another build froze refuses with the action that settles it, as a
+// remediation and with no path.
+func TestAnotherBuildsRequestCarriesItsRemedy(t *testing.T) {
 	_, decoded := DecodeRequest([]byte(`{"egress":{"httpProxy":"","httpsProxy":"","noProxy":[]},"hypervisor":false,"installerMedia":false,"libvirt":"","libvirtClient":false,"machine":"controller","tools":[],"version":"controller-clients-v0"}`))
-	for _, test := range []struct {
-		name, code, remedy string
-		err                error
-	}{
-		{"unprepared host", "controller.identity", "run bootwright setup", err},
-		{"another request version", "lifecycle.state", "destroy it with the build that applied it", decoded},
-	} {
-		reported := diagnostics.Of(test.err)
-		if len(reported) != 1 || reported[0].Code != test.code || reported[0].Remediation != test.remedy || reported[0].Source != nil {
-			t.Errorf("%s: refusal = %+v", test.name, reported)
-		}
+	reported := diagnostics.Of(decoded)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Remediation != "destroy it with the build that applied it" || reported[0].Source != nil {
+		t.Errorf("refusal = %+v", reported)
 	}
 }

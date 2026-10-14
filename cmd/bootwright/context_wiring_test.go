@@ -70,8 +70,8 @@ func (testLifecycleHost) Identity(ctx context.Context) (controller.InstalledHost
 
 type testLifecycleGuard struct{}
 
-func (testLifecycleGuard) WithPython(_ context.Context, _ prerequisites.BundleArea, _ prerequisites.ExecutionRequirement, use func(prerequisites.PythonLaunch, func() error) error) error {
-	return use(prerequisites.PythonLaunch{Loader: "/loader"}, func() error { return nil })
+func (testLifecycleGuard) WithPython(_ context.Context, _ prerequisites.Runtime, use func(prerequisites.PythonLaunch) error) error {
+	return use(prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"})
 }
 
 type testLifecyclePresenter struct{}

@@ -7,7 +7,6 @@ import (
 	"maps"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -21,7 +20,6 @@ import (
 // the hosts an Ansible-owned download may be redirected to.
 var destinationSources = []string{
 	"acquisition.go", "bootstrap.go", "bootstrap_linux_amd64.go", "tools.go", "tools_transport.go",
-	filepath.Join("..", "nativelocal", "resolver_linux_amd64.go"),
 }
 
 const (

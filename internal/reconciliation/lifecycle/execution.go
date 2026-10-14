@@ -259,7 +259,7 @@ func (s Service) proveShared(ctx context.Context, name string, decided transitio
 		if removal {
 			return s.verifyRemovalHost(ctx, view)
 		}
-		return s.verifyContinuation(ctx, view, decided.operation, decided.sameBlocks)
+		return s.verifyContinuation(ctx, view, decided.operation, decided.sameBlocks, nil)
 	})
 	binding := frozenBinding(decided)
 	if err == nil || binding == "" {
@@ -438,7 +438,7 @@ func (s Service) refuseOver(ctx context.Context, view View, operation operations
 	case next == string(reconciliation.Destroy):
 		proof = s.verifyRemovalHost(ctx, view)
 	case pendingRemains(frozen, states):
-		proof = s.verifyContinuation(ctx, view, operation, s.proveSameBlocks(ctx, view, operation, frozen))
+		proof = s.verifyContinuation(ctx, view, operation, s.proveSameBlocks(ctx, view, operation, frozen), nil)
 	}
 	refused := diagnostics.Of(proof)
 	if proof != nil && len(refused) == 0 {
@@ -1074,7 +1074,8 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	// A removal proves every effect's outcome and quiescence before registering.
 	// Only Machines supporting explicitly opted-in online removal defer their
 	// stop proof until those services are durably absent. Unrelated capabilities
-	// keep the original all-or-nothing gate. Both proofs use the approved bundle.
+	// keep the original all-or-nothing gate. The proofs, the registration and
+	// every attempt share one located runtime, whose closure it freezes.
 	if decided.fresh && decided.verb == reconciliation.Destroy {
 		// The host is proved before anything is resolved, probed or
 		// registered, so no removal touches a context from a host its
@@ -1082,18 +1083,20 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		if err := s.verifyRemovalHost(ctx, tx); err != nil {
 			return nil, err
 		}
-		proving, err := approvedBundle(ctx, tx)
-		if err != nil {
+	}
+	located, err := s.approvedRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if decided.fresh && decided.verb == reconciliation.Destroy {
+		if err := s.proveRemovable(ctx, tx, store, located, decided, material); err != nil {
 			return nil, err
 		}
-		if err := s.proveRemovable(ctx, tx, store, proving, decided, material); err != nil {
-			return nil, err
-		}
-		if err := s.proveQuiescent(ctx, store, tx.Identity().Name, proving, decided.plan, material, decided.source, s.onlineRemoval(decided.plan).machines); err != nil {
+		if err := s.proveQuiescent(ctx, store, tx.Identity().Name, located, decided.plan, material, decided.source, s.onlineRemoval(decided.plan).machines); err != nil {
 			return nil, err
 		}
 	}
-	operation, plan, log, err := s.register(ctx, tx, store, decided, binding, record)
+	operation, plan, log, err := s.register(ctx, tx, store, decided, binding, record, located)
 	if err != nil {
 		return nil, err
 	}
@@ -1121,13 +1124,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	if err != nil {
 		return result, err
 	}
-	// Every attempt of this operation runs inside one approved bundle, so it is
-	// opened once here rather than by each attempt in turn.
-	approved, err := approvedBundle(ctx, tx)
-	if err != nil {
-		return result, err
-	}
-	boundary, cause := s.converge(work, tx, store, approved, logging, operation, plan, states, material, decided.selection)
+	boundary, cause := s.converge(work, tx, store, located, logging, operation, plan, states, material, decided.selection)
 	logging.close(ctx, log)
 	final, terminal := s.finish(recordingContext(ctx), tx, store, operation, plan, states, boundary, logging.faulted(), result)
 	return final, withCause(logging.err(), withCause(cause, terminal))
@@ -1151,7 +1148,7 @@ const (
 // as it found it. Resolving needs the replaced operation's logging boundary,
 // and a log fault recorded there blocks the removal until it is restored, so
 // either one restores that boundary first.
-func (s Service) proveRemovable(ctx context.Context, tx Transaction, store OperationStore, approved bundle, decided transition, material map[string]secrets.Material) error {
+func (s Service) proveRemovable(ctx context.Context, tx Transaction, store OperationStore, approved approved, decided transition, material map[string]secrets.Material) error {
 	if decided.basis.operation == "" {
 		return nil
 	}
@@ -1407,12 +1404,12 @@ func (s Service) reportResolution(ctx context.Context, event ProgressEvent) {
 // discovering the next obstacle each time they repeat the command. A probe
 // that cannot read its target reports live, because an environment that cannot
 // prove it is idle is never assumed to be.
-func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, approved bundle, plan reconciliation.Plan, material map[string]secrets.Material, applyOperation string, skip map[string]bool) error {
+func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, approved approved, plan reconciliation.Plan, material map[string]secrets.Material, applyOperation string, skip map[string]bool) error {
 	var live, stops, remedies []string
 	generic := false
 	blocks := slices.DeleteFunc(slices.Clone(plan.Blocks), func(block reconciliation.Block) bool { return skip[block.ID] })
 	retired := s.onlineRemoval(plan).retired
-	err := s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
+	err := s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
 		for index, block := range blocks {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -1432,7 +1429,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 				return err
 			}
 			state, err := capability.Quiescent(ctx, Probe{
-				ApplyOperation: applyOperation, ApplyProved: applyProved, Context: contextName, Block: block, Launch: launch, Bundle: approved.location, Area: approved.area, Material: material,
+				ApplyOperation: applyOperation, ApplyProved: applyProved, Context: contextName, Block: block, Launch: launch, Material: material,
 				RetiredWithHosts: retired[block.ID],
 			})
 			if err != nil {
@@ -1524,12 +1521,12 @@ func pendingRemains(plan reconciliation.Plan, states map[string]reconciliation.B
 // and claimed its directory in a transaction of its own, so it re-proves both
 // here and registers into that directory. Nothing is projected after the
 // registration: the evidence already protects the operation it names.
-func (s Service) register(ctx context.Context, tx Transaction, store OperationStore, decided transition, binding string, record *registering) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
+func (s Service) register(ctx context.Context, tx Transaction, store OperationStore, decided transition, binding string, record *registering, located approved) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 	fail := func(err error) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
 	if !decided.fresh {
-		operation, plan, log, err := s.resume(ctx, tx, store, decided, record)
+		operation, plan, log, err := s.resume(ctx, tx, store, decided, record, located)
 		if err != nil {
 			return fail(err)
 		}
@@ -1551,10 +1548,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		}
 		identity = allocated
 	}
-	closure, err := executionClosure(tx.Controller())
-	if err != nil {
-		return fail(err)
-	}
+	closure := located.closure
 	if err := s.reserve(ctx, tx, decided); err != nil {
 		return fail(err)
 	}
@@ -1597,7 +1591,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 // restoration that fails leaves the operation as it was and no block starts
 // under evidence that does not protect it. It returns the operation log it
 // reopened.
-func (s Service) resume(ctx context.Context, tx Transaction, store OperationStore, decided transition, record *registering) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
+func (s Service) resume(ctx context.Context, tx Transaction, store OperationStore, decided transition, record *registering, located approved) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 	fail := func(err error) (operationstore.Operation, reconciliation.Plan, *operationstore.Log, error) {
 		return operationstore.Operation{}, reconciliation.Plan{}, nil, err
 	}
@@ -1606,7 +1600,7 @@ func (s Service) resume(ctx context.Context, tx Transaction, store OperationStor
 	if err != nil {
 		return fail(err)
 	}
-	if err := s.verifyContinuation(ctx, tx, operation, decided.sameBlocks); err != nil {
+	if err := s.verifyContinuation(ctx, tx, operation, decided.sameBlocks, &located); err != nil {
 		return fail(err)
 	}
 	operation, log, err := restore(ctx, store, operation)
@@ -1687,7 +1681,7 @@ func (s Service) establishBinding(ctx context.Context, tx Transaction, machine s
 
 // verifyContinuation re-proves everything a continuation depends on before it
 // does work. Drift refuses; it never re-resolves to another implementation.
-func (s Service) verifyContinuation(ctx context.Context, view View, operation operationstore.Operation, proof sameBlocksProof) error {
+func (s Service) verifyContinuation(ctx context.Context, view View, operation operationstore.Operation, proof sameBlocksProof, located *approved) error {
 	if err := s.recordedRefusal(view, operation, proof); err != nil {
 		return err
 	}
@@ -1698,7 +1692,7 @@ func (s Service) verifyContinuation(ctx context.Context, view View, operation op
 	if err := verifyHostBinding(view.Controller(), view.Identity(), host, unboundExit(view, operation), false); err != nil {
 		return err
 	}
-	return closureRefusal(view, operation)
+	return s.closureRefusal(ctx, view, operation, located)
 }
 
 // verifyRemovalHost proves a fresh removal runs on the host the controller
@@ -1720,88 +1714,48 @@ func (s Service) verifyRemovalHost(ctx context.Context, view View) error {
 // the closure an earlier build may have left unfrozen, and another build's proof
 // of the same blocks. status reads it without probing the host.
 func (s Service) recordedRefusal(view View, operation operationstore.Operation, proof sameBlocksProof) error {
-	identity := view.Identity()
 	switch inputDrift(view, operation) {
 	case driftRevision:
 		return failure("lifecycle.state", "the context input changed after this operation registered", "restore the exact input revision this operation froze")
 	case driftBytes:
 		return failure("lifecycle.state", "the frozen input no longer matches this operation", "restore the exact input revision this operation froze")
 	}
-	registered := registeredWith(operation.Executable)
-	if operation.Closure == nil && view.Controller().SetupRuns {
-		return failure("lifecycle.state", "this operation was registered by an earlier build that froze no Python and Ansible closure, and "+
-			registered+" cannot read this host's controller directory, which now keeps setup runs", earlierBuildGone(view, operation))
-	}
-	takeBack := takeBackUnder(identity.Name, "this executable")
 	if s.otherBuild(operation) && !proof.proved {
 		if proof.refusal != nil {
 			return proof.refusal
 		}
 		return failure("lifecycle.state", "this executable has not proved it freezes the blocks this operation froze", otherBuildRemediation(view, operation))
 	}
-	if operation.Closure == nil {
-		remediation := "continue it with " + registered + ", which registered it"
-		if supersedable(operation) {
-			remediation = takeBack + ", or " + remediation
-		}
-		return failure("lifecycle.state", "this operation was registered by an earlier build that froze no Python and Ansible closure", remediation)
-	}
 	return nil
 }
 
-// closureRefusal refuses a continuation whose frozen Python and Ansible
-// closure differs from the one the approved execution bundle holds.
-func closureRefusal(view View, operation operationstore.Operation) error {
-	current, err := executionClosure(view.Controller())
-	if err != nil {
-		return err
+// closureRefusal refuses a continuation whose frozen closure, the runtime lock
+// and interpreter ABI, differs from this build's; nil located is located here.
+func (s Service) closureRefusal(ctx context.Context, view View, operation operationstore.Operation, located *approved) error {
+	if located == nil {
+		current, err := s.approvedRuntime(ctx)
+		if err != nil {
+			return err
+		}
+		located = &current
 	}
+	current := located.closure
 	if current != *operation.Closure {
 		frozen := *operation.Closure
-		registered := registeredWith(operation.Executable)
-		remediation := "restore the execution bundle of Python " + frozen.Python + " and ansible-core " + frozen.Ansible +
-			" that " + registered + " registered this operation with"
+		remediation := "continue it with " + registeredWith(operation.Executable) + ", whose runtime this host keeps (Python " + frozen.Python + ", ansible-core " + frozen.Ansible + ")"
 		if supersedable(operation) {
-			remediation = takeBackUnder(view.Identity().Name, "the approved bundle") + ", or " + remediation
+			remediation += ", or take back what it owns with " + contextCommand(view.Identity().Name, string(reconciliation.Destroy))
 		}
-		return failure("lifecycle.state", "the approved execution bundle holds another Python and Ansible closure (Python "+
+		return failure("lifecycle.state", "this build's controller runtime carries another Python and Ansible closure (Python "+
 			current.Python+", ansible-core "+current.Ansible+") than the one this operation registered with", remediation)
 	}
 	return nil
-}
-
-// earlierBuildGone is the remedy for an operation whose registering build
-// froze no closure once setup kept a run on this host. Every such build
-// predates setup runs and refuses a controller directory that keeps them, so
-// no remedy can name it: a removal under this executable supersedes the
-// operation where one may, and otherwise only deleting the context remains.
-func earlierBuildGone(view View, operation operationstore.Operation) string {
-	if supersedable(operation) {
-		return takeBackUnder(view.Identity().Name, "this executable")
-	}
-	return deletionExit(view)
 }
 
 // takeBackUnder is the removal that supersedes an operation its own build can
 // no longer continue: a fresh destroy run under what this executable holds.
 func takeBackUnder(contextName, under string) string {
 	return "take back what this operation owns under " + under + " with " + contextCommand(contextName, string(reconciliation.Destroy))
-}
-
-// executionClosure is the Python and Ansible closure of the execution bundle
-// the retained setup approves, which every effect of an operation runs in.
-// The native packages setup installs beside it are the host's: the package
-// manager may update them, so they are no part of it.
-func executionClosure(view prerequisites.StorageView) (operationstore.Closure, error) {
-	definition := view.State.Receipt.Definition
-	if definition == nil || definition.Bootstrap == nil {
-		return operationstore.Closure{}, failure("controller.state", "the retained controller setup has no execution definition", "run bootwright setup")
-	}
-	digest, err := prerequisites.ClosureDigest(*definition.Bootstrap)
-	if err != nil {
-		return operationstore.Closure{}, err
-	}
-	return operationstore.Closure{Digest: digest, Python: definition.Bootstrap.PythonVersion, Ansible: definition.Bootstrap.AnsibleVersion}, nil
 }
 
 // registeredWith names the build an operation registered under, as the
@@ -1818,11 +1772,14 @@ func registeredWith(executable operationstore.Executable) string {
 // the remedy when the controller state records no binding for the context,
 // and admitUnbound admits that context instead, once the host is proved.
 func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity, host controller.InstalledHostIdentity, unbound string, admitUnbound bool) error {
-	if !view.Exists || !view.Initialized {
+	if !view.Exists || !view.Prepared {
 		return failure("controller.identity", "this host has no completed controller setup", "run bootwright setup")
 	}
-	if view.State.Receipt.Status != "complete" {
-		return failure("controller.state", "the retained controller setup is incomplete", "run bootwright setup to resolve it")
+	if !view.Initialized {
+		if admitUnbound {
+			return nil
+		}
+		return failure("controller.identity", "this context is not bound to a controller host", unbound)
 	}
 	digest, err := host.PrivateDigest()
 	if err != nil {

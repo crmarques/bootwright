@@ -20,6 +20,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/managedos/media"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -72,23 +73,22 @@ func (c cancelOnceWritten) Err() error {
 
 const bundlePayloadSize = 280000
 
-// writeBundlePayload is a durably intended setup action that publishes one
-// executable through write, which may interrupt it, and reports the error
+// bundlePath is where the tool area id lives beneath the store.
+func bundlePath(store *Store, id string) string {
+	return filepath.Join(store.options.Root, "controller", "bundles", id)
+}
+
+// writeBundlePayload is a controller stage that publishes one executable into
+// its tool area through write, which may interrupt it, and reports the error
 // write returned and what the area lists afterwards.
 func writeBundlePayload(t *testing.T, store *Store, write func(context.Context, prerequisites.BundleArea, []byte) error) (error, []prerequisites.BundleEntry) {
 	t.Helper()
 	ctx := context.Background()
-	digest := syntheticControllerState(t, prerequisites.SetupContext{}).Receipt.CatalogDigest
 	payload := bytes.Repeat([]byte("b"), bundlePayloadSize)
 	var written error
 	var listed []prerequisites.BundleEntry
-	err := store.MutateController(ctx, prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
-		next := tx.Snapshot().State
-		next.Receipt.Actions[0].Phase = "intent"
-		if _, err := tx.Publish(ctx, next); err != nil {
-			return err
-		}
-		area, err := tx.Bundle(ctx, digest)
+	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		area, err := tx.ClientArea(ctx, clientClosure)
 		if err != nil {
 			return err
 		}
@@ -108,7 +108,7 @@ func writeBundlePayload(t *testing.T, store *Store, write func(context.Context, 
 	return written, listed
 }
 
-// replayBundlePayload is the exact replay setup retry performs: it lists the
+// replayBundlePayload is the exact replay a controller stage retry performs: it lists the
 // area and publishes the payload only when it is absent.
 func replayBundlePayload(t *testing.T, store *Store) {
 	t.Helper()
@@ -123,7 +123,7 @@ func replayBundlePayload(t *testing.T, store *Store) {
 
 func requireNoBundlePayload(t *testing.T, store *Store, listed []prerequisites.BundleEntry) {
 	t.Helper()
-	target := filepath.Join(bundlePath(store, syntheticControllerState(t, prerequisites.SetupContext{}).Receipt.CatalogDigest), "bin", "payload")
+	target := filepath.Join(bundlePath(store, clientClosure), "bin", "payload")
 	if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the interrupted write left its file under its final name (%v)", err)
 	}
@@ -135,12 +135,12 @@ func requireNoBundlePayload(t *testing.T, store *Store, listed []prerequisites.B
 	}
 }
 
-// A bundle write cancelled once its stage holds bytes removes exactly that
-// stage, so the exact replay of the setup that retries it publishes the file
+// A tool area write cancelled once its stage holds bytes removes exactly that
+// stage, so the exact replay of the stage that retries it publishes the file
 // whole.
 func TestABundleWriteCancelledAfterItsCreateLeavesNoFile(t *testing.T) {
-	store, _ := controllerFixture(t)
-	directory := filepath.Join(bundlePath(store, syntheticControllerState(t, prerequisites.SetupContext{}).Receipt.CatalogDigest), "bin")
+	store := boundFixture(t)
+	directory := filepath.Join(bundlePath(store, clientClosure), "bin")
 	written, listed := writeBundlePayload(t, store, func(ctx context.Context, area prerequisites.BundleArea, payload []byte) error {
 		return area.Write(cancelOnceWritten{Context: ctx, directory: directory}, "bin/payload", payload, true)
 	})
@@ -155,7 +155,7 @@ func TestABundleWriteCancelledAfterItsCreateLeavesNoFile(t *testing.T) {
 // file and names the kernel's answer with the free-space remedy, never a path,
 // and the replay completes once the filesystem has room again.
 func TestABundleWriteFaultedAfterItsCreateLeavesNoFile(t *testing.T) {
-	store, _ := controllerFixture(t)
+	store := boundFixture(t)
 	written, listed := writeBundlePayload(t, store, func(ctx context.Context, area prerequisites.BundleArea, payload []byte) error {
 		restore := limitFileSize(t, 64<<10)
 		defer restore()
@@ -175,9 +175,9 @@ func TestABundleWriteFaultedAfterItsCreateLeavesNoFile(t *testing.T) {
 // publishes the file under its final name, and a sealed area holding one
 // refuses.
 func TestAStageAKilledBundleWriteLeftIsSweptByTheReplay(t *testing.T) {
-	store, _ := controllerFixture(t)
+	store := boundFixture(t)
 	ctx := context.Background()
-	digest := syntheticControllerState(t, prerequisites.SetupContext{}).Receipt.CatalogDigest
+	digest := clientClosure
 	if written, _ := writeBundlePayload(t, store, func(context.Context, prerequisites.BundleArea, []byte) error { return nil }); written != nil {
 		t.Fatal(written)
 	}
@@ -205,9 +205,11 @@ func TestAStageAKilledBundleWriteLeftIsSweptByTheReplay(t *testing.T) {
 	if _, err := os.Lstat(stage); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the replay kept the stage (%v)", err)
 	}
-	if err := store.MutateController(ctx, prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
-		_, err := tx.Publish(ctx, completeControllerState(tx.Snapshot().State))
-		return err
+	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		if _, err := tx.ClientArea(ctx, digest); err != nil {
+			return err
+		}
+		return tx.SealClientArea(ctx, digest)
 	}); err != nil {
 		t.Fatalf("sealing the replayed bundle: %#v", diagnostics.Of(err))
 	}

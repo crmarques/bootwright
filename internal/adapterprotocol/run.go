@@ -12,18 +12,19 @@ import (
 // Invocation is one adapter run: the private interpreter's launch, the
 // automation it runs and the job files it reads, and how the run ends.
 type Invocation struct {
-	Loader      string
+	Program     string
 	Arguments   []string
 	Environment []string
-	// Automation is the approved bundle's automation directory; Playbook is
-	// a path under its collection's playbooks.
-	Automation string
-	Playbook   string
-	Inventory  string
-	Variables  string
-	LocalTemp  string
-	RemoteTemp string
-	Scratch    string
+	// Automation is the staged automation tree, AutomationLock its lock every
+	// adapter process inherits; Playbook is a path under its playbooks.
+	Automation     string
+	AutomationLock *os.File
+	Playbook       string
+	Inventory      string
+	Variables      string
+	LocalTemp      string
+	RemoteTemp     string
+	Scratch        string
 	// Lifecycle passes the supervisor its lifecycle marker and arms the
 	// parent-death signal, so the adapter dies with this invocation.
 	Lifecycle bool

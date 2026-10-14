@@ -3,10 +3,7 @@ package lifecycle
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"maps"
-	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -17,62 +14,21 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
-// testBootstrap is the Python and Ansible resolution the harness's completed
-// setup approves. Only its closure identity reaches the engine, so it is not
-// held to the canonical form a controller record read enforces.
-func testBootstrap() *prerequisites.BootstrapDefinition {
-	source := func(id, url string) prerequisites.DependencySource {
-		return prerequisites.DependencySource{ID: id, URL: url, SHA256: strings.Repeat("a", 64), Bytes: 64}
-	}
-	return &prerequisites.BootstrapDefinition{
-		Format: "bootwright.controller.bootstrap-v1", Platform: prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"},
-		PythonIntent: "latest", AnsibleIntent: "latest", PythonVersion: "3.14.7", AnsibleVersion: "2.21.4",
-		PythonExecutable: "python/bin/python3.14", SitePackages: "python/lib/python3.14/site-packages/",
-		Sources: []prerequisites.DependencySource{
-			source("python", "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"),
-			source("ansible", "https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl"),
-		},
-		Wheels:           []prerequisites.BootstrapWheel{{Name: "ansible-core", Version: "2.21.4", SourceID: "ansible"}},
-		AutomationDigest: testAutomaton,
-		Execution: prerequisites.ExecutionRequirement{
-			PythonExecutable: "python/bin/python3.14", Files: []prerequisites.InstalledFile{}, Links: []prerequisites.InstalledLink{}, Preload: []string{},
-		},
-		ExecutionPackages: []string{"glibc", "libgcc"},
-	}
-}
+// movedLock is the runtime lock a later build embeds: another lock digest
+// and the ansible-core release it pins.
+var movedLock = RuntimeLock{Digest: strings.Repeat("5", 64), AnsibleCore: "2.21.6"}
 
-// movedBootstrap is the same resolution at a later ansible-core release, as a
-// setup that resolved Python and Ansible again under the same automation
-// publishes it.
-func movedBootstrap() *prerequisites.BootstrapDefinition {
-	moved := testBootstrap()
-	moved.AnsibleVersion, moved.Wheels[0].Version = "2.21.5", "2.21.5"
-	moved.Sources[1].URL = "https://files.pythonhosted.org/packages/ansible_core-2.21.5-py3-none-any.whl"
-	moved.Sources[1].SHA256 = strings.Repeat("b", 64)
-	return moved
-}
-
-func closureOf(t *testing.T, bootstrap *prerequisites.BootstrapDefinition) operationstore.Closure {
-	t.Helper()
-	digest, err := prerequisites.ClosureDigest(*bootstrap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return operationstore.Closure{Digest: digest, Python: bootstrap.PythonVersion, Ansible: bootstrap.AnsibleVersion}
-}
-
-// approve replaces the bundle the host's completed setup approves, as a
-// later setup does: another catalog digest naming another definition.
-func approve(view *prerequisites.StorageView, catalog string, definition prerequisites.Definition) {
-	definition.CatalogDigest = catalog
-	view.State.Receipt.CatalogDigest, view.State.Receipt.Definition = catalog, &definition
+// closureOf is the closure an operation registered under a lock and an
+// interpreter ABI freezes.
+func closureOf(lock RuntimeLock, abi string) operationstore.Closure {
+	return operationstore.Closure{Digest: prerequisites.RuntimeClosureDigest(lock.Digest, abi), Python: abi, Ansible: lock.AnsibleCore}
 }
 
 // durable is everything a refused continuation must leave as it found it.
 type durable struct {
 	files             map[string][]byte
 	evidence          []byte
-	opened, binds     int
+	binds             int
 	guarded, executed int
 }
 
@@ -85,19 +41,19 @@ func durableOf(h *harness) durable {
 	h.capability.mutex.Unlock()
 	return durable{
 		files: h.workspace.area.clone().files, evidence: slices.Clone(h.workspace.evidence),
-		opened: h.workspace.opened, binds: h.workspace.binds, guarded: guarded, executed: executed,
+		binds: h.workspace.binds, guarded: guarded, executed: executed,
 	}
 }
 
 func (d durable) equal(other durable) bool {
 	return maps.EqualFunc(d.files, other.files, bytes.Equal) && bytes.Equal(d.evidence, other.evidence) &&
-		d.opened == other.opened && d.binds == other.binds && d.guarded == other.guarded && d.executed == other.executed
+		d.binds == other.binds && d.guarded == other.guarded && d.executed == other.executed
 }
 
 // refusedUnchanged runs verb, which must refuse lifecycle.state with exactly
 // message and remediation, and proves the refusal left every record, the
 // evidence and the host as they were: no log restored, no state marked, no
-// bundle opened and no effect.
+// runtime launched and no effect.
 func refusedUnchanged(t *testing.T, h *harness, verb reconciliation.Verb, message, remediation string) {
 	t.Helper()
 	before := durableOf(h)
@@ -155,235 +111,126 @@ func unknownRemoval(t *testing.T, h *harness) {
 	}
 }
 
-// Every registration records the closure of the bundle its effects run in,
-// and a fresh verb runs under the bundle in hand: a removal registered after
-// setup moved the closure records the moved one.
-func TestARegistrationFreezesTheBundlesExecutionClosure(t *testing.T) {
+// Every registration records the closure of the runtime its effects run in,
+// the runtime lock and the interpreter's ABI, and a fresh verb runs under the
+// runtime in hand: a removal registered by a build with another lock records
+// that lock's closure, and launches that lock's runtime.
+func TestARegistrationFreezesTheRuntimesExecutionClosure(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := apply(h); err != nil {
 		t.Fatal(err)
 	}
 	applied, _ := durableOperation(t, h)
-	if applied.Version != operationstore.OperationVersion || applied.Closure == nil || *applied.Closure != closureOf(t, testBootstrap()) {
+	if applied.Version != operationstore.OperationVersion || applied.Closure == nil || *applied.Closure != closureOf(testLock, "3.14") {
 		t.Fatalf("the apply registered version %d with closure %+v", applied.Version, applied.Closure)
 	}
-	approve(&h.workspace.controller, strings.Repeat("c", 64), prerequisites.Definition{Bootstrap: movedBootstrap()})
+	h.service.options.Lock = movedLock
 	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
-		t.Fatalf("a fresh removal under a moved closure: %v", err)
+		t.Fatalf("a fresh removal under a moved lock: %v", err)
 	}
 	removal, _ := durableOperation(t, h)
-	if removal.Verb != reconciliation.Destroy || removal.Closure == nil || *removal.Closure != closureOf(t, movedBootstrap()) {
+	if removal.Verb != reconciliation.Destroy || removal.Closure == nil || *removal.Closure != closureOf(movedLock, "3.14") {
 		t.Fatalf("the removal registered closure %+v", removal.Closure)
+	}
+	launched := h.guard.launched[len(h.guard.launched)-1]
+	if launched.LockDigest != movedLock.Digest || launched.Digest != prerequisites.RuntimeDigest(movedLock.Digest, "3.14", "/usr/bin/python3.14") ||
+		launched.Interpreter.Path != "/usr/bin/python3.14" || launched.AnsibleCore != movedLock.AnsibleCore {
+		t.Fatalf("the removal launched %+v", launched)
 	}
 }
 
-// A continuation of either verb refuses a bundle holding another Python and
-// Ansible closure before it restores its log or marks its operation running,
-// naming the releases and the build it registered under, and goes on once the
-// closure it registered with is restored.
-func TestAContinuationRefusesAMovedClosureWithNoEffect(t *testing.T) {
-	const moved = "the approved execution bundle holds another Python and Ansible closure (Python 3.14.7, ansible-core 2.21.5) than the one this operation registered with"
-	const restore = "restore the execution bundle of Python 3.14.7 and ansible-core 2.21.4 that bootwright devel (abcdef1) registered this operation with"
-	for _, test := range []struct {
-		verb        reconciliation.Verb
-		start       func(*testing.T, *harness)
-		remediation string
-		continued   func(*harness) []string
-	}{
-		{reconciliation.Apply, failedApply, "take back what this operation owns under the approved bundle with bootwright destroy --context lab, or " + restore, func(h *harness) []string { return h.capability.applies }},
-		{reconciliation.Destroy, unknownRemoval, restore, func(h *harness) []string { return h.capability.observes }},
-	} {
-		t.Run(string(test.verb), func(t *testing.T) {
+// A rebuild that embeds the same runtime lock, as any Go or automation fix
+// does, continues an operation another build registered: the closure is the
+// lock and the ABI, never the build.
+func TestASameLockRebuildContinuesALiveOperation(t *testing.T) {
+	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
+		t.Run(string(verb), func(t *testing.T) {
 			h := newHarness(t, "artifact-server-lab")
-			test.start(t, h)
+			if verb == reconciliation.Apply {
+				failedApply(t, h)
+			} else {
+				unknownRemoval(t, h)
+			}
 			registered, _ := durableOperation(t, h)
-			original := *h.workspace.controller.State.Receipt.Definition
-			approve(&h.workspace.controller, strings.Repeat("c", 64), prerequisites.Definition{Bootstrap: movedBootstrap()})
-			refusedUnchanged(t, h, test.verb, moved, test.remediation)
-			h.workspace.controller.State.Receipt.CatalogDigest, h.workspace.controller.State.Receipt.Definition = strings.Repeat("b", 64), &original
+			h.service.options.Executable = Executable{Version: "devel", Commit: "1234567"}
 			h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
-			before := len(test.continued(h))
-			result, err := func() (*OperationResult, error) {
-				if test.verb == reconciliation.Destroy {
-					return h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
-				}
-				return apply(h)
-			}()
-			if err != nil || result.Receipt.Operation != registered.ID || result.Receipt.State != string(reconciliation.OperationDone) || len(test.continued(h)) == before {
-				t.Fatalf("the continuation under the restored closure = %+v (%v)", result, err)
+			result, err := continued(h, verb)
+			if err != nil || result.Receipt.Operation != registered.ID || result.Receipt.State != string(reconciliation.OperationDone) {
+				t.Fatalf("the same-lock rebuild's continuation = %+v (%v)", result, err)
+			}
+			if operation, _ := durableOperation(t, h); operation.Closure == nil || *operation.Closure != closureOf(testLock, "3.14") {
+				t.Fatalf("the continued operation holds closure %+v", operation.Closure)
 			}
 		})
 	}
 }
 
-// A closure is its digest, not its releases: a bundle that keeps Python
-// 3.14.7 and ansible-core 2.21.4 but holds another interpreter build, another
-// dependency wheel or another execution foundation is another closure, and a
-// continuation of either verb refuses it with no effect.
-func TestAContinuationRefusesAClosureMovedUnderTheSameReleases(t *testing.T) {
-	const moved = "the approved execution bundle holds another Python and Ansible closure (Python 3.14.7, ansible-core 2.21.4) than the one this operation registered with"
-	const restore = "restore the execution bundle of Python 3.14.7 and ansible-core 2.21.4 that bootwright devel (abcdef1) registered this operation with"
-	for name, change := range map[string]func(*prerequisites.BootstrapDefinition){
-		"another interpreter build": func(value *prerequisites.BootstrapDefinition) {
-			value.Sources[0].URL = "https://github.com/astral-sh/python-build-standalone/releases/download/20260915/cpython-3.14.7%2B20260915-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
-			value.Sources[0].SHA256 = strings.Repeat("c", 64)
-		},
-		"another dependency wheel": func(value *prerequisites.BootstrapDefinition) {
-			value.Sources = append(value.Sources, prerequisites.DependencySource{
-				ID: "jinja2", URL: "https://files.pythonhosted.org/packages/jinja2-3.1.7-py3-none-any.whl", SHA256: strings.Repeat("d", 64), Bytes: 64,
-			})
-			value.Wheels = append(value.Wheels, prerequisites.BootstrapWheel{Name: "jinja2", Version: "3.1.7", SourceID: "jinja2"})
-		},
-		"another execution foundation": func(value *prerequisites.BootstrapDefinition) {
-			value.Execution.Files = []prerequisites.InstalledFile{{Path: "/usr/lib64/libc.so.6", SHA256: strings.Repeat("5", 64)}}
-		},
+// An OS Python update within the ABI, or an OS upgrade that keeps it, leaves
+// the interpreter's path and ABI as they were: the receipt's full version
+// moves, the closure does not, and the operation continues.
+func TestAPythonZStreamUpdateContinues(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	failedApply(t, h)
+	registered, _ := durableOperation(t, h)
+	h.setup.set(completedSetup("3.14", "3.14.9"))
+	result, err := apply(h)
+	if err != nil || result.Receipt.Operation != registered.ID || result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("the continuation after a z-stream update = %+v (%v)", result, err)
+	}
+}
+
+// A build with another runtime lock, or a setup that chose an interpreter of
+// another ABI, carries another closure, so a continuation of either verb
+// refuses before it restores its log or marks its operation running. The
+// refusal names the kept runtime the registering build continues it with,
+// and an apply also the removal that takes back what it owns; restoring the
+// lock the operation registered under continues it.
+func TestALockChangeRefusesContinuationNamingTheKeptRuntime(t *testing.T) {
+	const kept = "continue it with bootwright devel (abcdef1), whose runtime this host keeps (Python 3.14, ansible-core 2.21.5)"
+	for _, change := range []struct {
+		name    string
+		move    func(*harness)
+		message string
+	}{
+		{"another lock", func(h *harness) { h.service.options.Lock = movedLock },
+			"this build's controller runtime carries another Python and Ansible closure (Python 3.14, ansible-core 2.21.6) than the one this operation registered with"},
+		{"another ABI", func(h *harness) { h.setup.set(completedSetup("3.13", "3.13.12")) },
+			"this build's controller runtime carries another Python and Ansible closure (Python 3.13, ansible-core 2.21.5) than the one this operation registered with"},
 	} {
 		for _, test := range []struct {
 			verb        reconciliation.Verb
 			start       func(*testing.T, *harness)
 			remediation string
+			continued   func(*harness) []string
 		}{
-			{reconciliation.Apply, failedApply, "take back what this operation owns under the approved bundle with bootwright destroy --context lab, or " + restore},
-			{reconciliation.Destroy, unknownRemoval, restore},
+			{reconciliation.Apply, failedApply, kept + ", or take back what it owns with bootwright destroy --context lab", func(h *harness) []string { return h.capability.applies }},
+			{reconciliation.Destroy, unknownRemoval, kept, func(h *harness) []string { return h.capability.observes }},
 		} {
-			t.Run(name+"/"+string(test.verb), func(t *testing.T) {
+			t.Run(change.name+"/"+string(test.verb), func(t *testing.T) {
 				h := newHarness(t, "artifact-server-lab")
 				test.start(t, h)
-				bootstrap := testBootstrap()
-				change(bootstrap)
-				if closureOf(t, bootstrap).Digest == closureOf(t, testBootstrap()).Digest {
-					t.Fatalf("%s left the closure digest as it was", name)
+				registered, _ := durableOperation(t, h)
+				change.move(h)
+				refusedUnchanged(t, h, test.verb, change.message, test.remediation)
+				h.service.options.Lock = testLock
+				h.setup.set(completedSetup("3.14", "3.14.8"))
+				h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+				before := len(test.continued(h))
+				result, err := continued(h, test.verb)
+				if err != nil || result.Receipt.Operation != registered.ID || result.Receipt.State != string(reconciliation.OperationDone) || len(test.continued(h)) == before {
+					t.Fatalf("the continuation under the restored lock = %+v (%v)", result, err)
 				}
-				approve(&h.workspace.controller, strings.Repeat("c", 64), prerequisites.Definition{Bootstrap: bootstrap})
-				refusedUnchanged(t, h, test.verb, moved, test.remediation)
 			})
 		}
 	}
 }
 
-// A setup that solves only the native transaction again republishes the
-// bundle under another catalog digest with the same Python and Ansible
-// closure, and a continuation runs inside that bundle: the native packages
-// are the host's, not the operation's.
-func TestANativeOnlyResolveContinuesTheOperation(t *testing.T) {
-	h := newHarness(t, "artifact-server-lab")
-	failedApply(t, h)
-	registered, _ := durableOperation(t, h)
-	resolved := strings.Repeat("d", 64)
-	approve(&h.workspace.controller, resolved, prerequisites.Definition{
-		Bootstrap: testBootstrap(), NativeRequirements: prerequisites.NativeRequirements{ContainerRuntime: true},
-		Native: &prerequisites.NativeResolvedPlan{Format: "bootwright.native-plan-v1", Solver: "dnf5", SolverVersion: "5.2.0", AfterSHA256: strings.Repeat("e", 64)},
-	})
-	opened := []string{}
-	h.workspace.controller.OpenBundle = func(_ context.Context, digest string) (prerequisites.BundleArea, error) {
-		opened = append(opened, digest)
-		return testBundle{}, nil
+// continued runs the confirmed verb that continues the harness's operation.
+func continued(h *harness, verb reconciliation.Verb) (*OperationResult, error) {
+	if verb == reconciliation.Destroy {
+		return h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 	}
-	result, err := apply(h)
-	if err != nil || result.Receipt.Operation != registered.ID || result.Receipt.State != string(reconciliation.OperationDone) {
-		t.Fatalf("the continuation over a native re-solve = %+v (%v)", result, err)
-	}
-	if !slices.Equal(opened, []string{resolved}) || !slices.Equal(h.capability.applies, []string{"artifact-server-lab", "artifact-server-lab"}) {
-		t.Fatalf("the continuation opened %v and applied %v", opened, h.capability.applies)
-	}
-}
-
-// A continuation of an operation an earlier build registered, whose record
-// names no closure, refuses and names that build, since nothing says which
-// closure its effects ran in. The record still serves a fresh verb: a removal
-// supersedes the apply it describes under the bundle in hand.
-func TestAContinuationRefusesAnEarlierVersionOperationRecord(t *testing.T) {
-	const message = "this operation was registered by an earlier build that froze no Python and Ansible closure"
-	const continued = "continue it with bootwright devel (abcdef1), which registered it"
-	for _, test := range []struct {
-		verb        reconciliation.Verb
-		start       func(*testing.T, *harness)
-		remediation string
-	}{
-		{reconciliation.Apply, failedApply, "take back what this operation owns under this executable with bootwright destroy --context lab, or " + continued},
-		{reconciliation.Destroy, unknownRemoval, continued},
-	} {
-		t.Run(string(test.verb), func(t *testing.T) {
-			h := newHarness(t, "artifact-server-lab")
-			test.start(t, h)
-			registeredEarlier(t, h)
-			refusedUnchanged(t, h, test.verb, message, test.remediation)
-		})
-	}
-	h := newHarness(t, "artifact-server-lab")
-	failedApply(t, h)
-	registeredEarlier(t, h)
-	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
-		t.Fatalf("a removal superseding an earlier build's apply = %+v (%v)", result, err)
-	}
-}
-
-// Every build that froze no closure predates setup runs and refuses a
-// controller directory that keeps them, so once setup kept a run the refusal
-// of such an operation's continuation names no earlier build, whether or not
-// the automation also moved. A removal under this executable supersedes an
-// apply, and a removal that none may supersede leaves only the deletion of the
-// context. An operation that froze its closure still names the build that
-// registered it, which reads setup runs.
-func TestAnEarlierVersionRecordNamesNoEarlierBuildOnceSetupKeepsRuns(t *testing.T) {
-	const message = "this operation was registered by an earlier build that froze no Python and Ansible closure, " +
-		"and bootwright devel (abcdef1) cannot read this host's controller directory, which now keeps setup runs"
-	for _, test := range []struct {
-		verb        reconciliation.Verb
-		start       func(*testing.T, *harness)
-		remediation string
-	}{
-		{reconciliation.Apply, failedApply, "take back what this operation owns under this executable with bootwright destroy --context lab"},
-		{reconciliation.Destroy, unknownRemoval, "delete the context with bootwright context delete --name " + testContextName + " --purge --allow-orphans, which abandons what it may still own"},
-	} {
-		for _, moved := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s with moved automation %t", test.verb, moved), func(t *testing.T) {
-				h := newHarness(t, "artifact-server-lab")
-				test.start(t, h)
-				registeredEarlier(t, h)
-				h.workspace.controller.SetupRuns = true
-				if moved {
-					h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
-				}
-				refusedUnchanged(t, h, test.verb, message, test.remediation)
-			})
-		}
-	}
-	h := newHarness(t, "artifact-server-lab")
-	unknownRemoval(t, h)
-	h.workspace.controller.SetupRuns = true
-	h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
-	h.capability.consumes = map[string][]string{"artifact-server-lab": {reconciliation.AuthorizationDataLoss}}
-	refusedUnchanged(t, h, reconciliation.Destroy, "this executable would freeze the block artifact-server-lab differently from the plan this operation froze",
-		"install bootwright devel (abcdef1), which registered this operation, and run bootwright setup")
-	h = newHarness(t, "artifact-server-lab")
-	failedApply(t, h)
-	registeredEarlier(t, h)
-	h.workspace.controller.SetupRuns = true
-	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
-		t.Fatalf("a removal superseding an earlier build's apply beside setup runs = %+v (%v)", result, err)
-	}
-}
-
-// registeredEarlier rewrites the current operation's record as a build before
-// the closure was frozen published it: version 1 and no closure.
-func registeredEarlier(t *testing.T, h *harness) {
-	t.Helper()
-	target := path.Join(currentOperation(t, h), "operation.json")
-	h.workspace.area.mutex.Lock()
-	defer h.workspace.area.mutex.Unlock()
-	var record operationstore.Operation
-	if err := json.Unmarshal(h.workspace.area.files[target], &record); err != nil {
-		t.Fatal(err)
-	}
-	record.Version, record.Closure = 1, nil
-	data, err := json.Marshal(record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h.workspace.area.files[target] = append(data, '\n')
+	return apply(h)
 }
 
 // A build stamped with a commit and no version, as make build stamps one cut
@@ -423,8 +270,8 @@ func TestARecordWithOnlyACommitNamesDevelAndTheCommit(t *testing.T) {
 }
 
 // A fresh apply killed at each write of its registration, or just after it,
-// replays under the closure it froze. Under the same bundle the retry
-// converges and every record names that closure. Under a moved bundle, a
+// replays under the closure it froze. Under the same lock the retry
+// converges and every record names that closure. Under a moved lock, a
 // registration that landed refuses its continuation with no effect, and one
 // that did not is a fresh apply again, registering the moved closure.
 func TestARegistrationKilledAtEachWriteReplaysUnderItsClosure(t *testing.T) {
@@ -446,19 +293,19 @@ func TestARegistrationKilledAtEachWriteReplaysUnderItsClosure(t *testing.T) {
 			}
 			snapshot := killed.snapshot
 			service := rig.over(snapshot)
-			want := closureOf(t, testBootstrap())
+			want := closureOf(testLock, "3.14")
 			registered := killRest(snapshot.workspace) != "removed"
 			if registered != test.registered {
 				t.Fatalf("killed at %s the context rests %s", point, killRest(snapshot.workspace))
 			}
 			if move {
-				approve(&snapshot.workspace.controller, strings.Repeat("c", 64), prerequisites.Definition{Bootstrap: movedBootstrap()})
-				want = closureOf(t, movedBootstrap())
+				service.options.Lock = movedLock
+				want = closureOf(movedLock, "3.14")
 			}
 			if move && registered {
 				files := snapshot.workspace.area.clone().files
 				err := killInvoke(ctx, service, reconciliation.Apply)
-				if reported := diagnostics.Of(err); len(reported) != 1 || !strings.HasPrefix(reported[0].Message, "the approved execution bundle holds another Python and Ansible closure") {
+				if reported := diagnostics.Of(err); len(reported) != 1 || !strings.HasPrefix(reported[0].Message, "this build's controller runtime carries another Python and Ansible closure") {
 					t.Fatalf("killed at %s, the continuation under a moved closure reported %+v", point, reported)
 				}
 				if !maps.EqualFunc(files, snapshot.workspace.area.clone().files, bytes.Equal) || snapshot.host.effectCount(reconciliation.Apply, "a") != 0 {

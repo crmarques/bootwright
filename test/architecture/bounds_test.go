@@ -42,7 +42,7 @@ func documentedBounds() []documentedBound {
 		contexts         = "specs/contexts.md"
 		store            = "internal/workspace/contextfs/store.go"
 		bundles          = "internal/workspace/contextfs/controller_records.go"
-		setupRuns        = "internal/workspace/contextfs/controller_runs_linux_amd64.go"
+		setupRuns        = "internal/workspace/contextfs/setup_runs_linux_amd64.go"
 		boundedRuns      = "internal/workspace/contextfs/runs_linux_amd64.go"
 		operations       = "internal/reconciliation/operationstore/records.go"
 		lifecycleRun     = "internal/reconciliation/ansiblerunner/process_linux_amd64.go"
@@ -57,9 +57,9 @@ func documentedBounds() []documentedBound {
 		{contexts, "| Active or reserved context names | %s |", store, "maxContexts", nil, false},
 		{contexts, "The %s-name bound applies", store, "maxContexts", nil, false},
 		{contexts, "| Revisions per context | %s |", store, "maxRevisions", nil, false},
-		{contexts, "| Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | %s |", bundles, "maxControllerBundles", nil, false},
+		{contexts, "| Retained [controller bundle namespaces](contexts/controller-record.md#bounds), the tool areas | %s |", bundles, "maxControllerBundles", nil, false},
 		{"specs/contexts/controller-record.md", "There are at most %s retained bundle", bundles, "maxControllerBundles", nil, false},
-		{contexts, "| [Setup runs](contexts/controller-record.md#setup-runs) the controller directory keeps | %s |", setupRuns, "maxSetupRuns", nil, false},
+		{contexts, "| [Setup runs](contexts/controller-record.md#the-setup-subtree) the setup subtree keeps | %s |", setupRuns, "maxSetupRuns", nil, false},
 		{"specs/contexts/controller-record.md", "There are at most %s runs:", setupRuns, "maxSetupRuns", nil, false},
 		{"specs/contexts/controller-record.md", "`run.output`, which is bounded at %s.", setupRuns, "maxSetupRunOutput", nil, true},
 		{contexts, "| [Bounded runs](cli/output.md#bounded-run-output) one context's runs area keeps | %s |", boundedRuns, "maxBoundedRuns", nil, false},
@@ -70,7 +70,7 @@ func documentedBounds() []documentedBound {
 		{contexts, "fresh apply needs %s of them free", operations, "ReservedBytes", nil, true},
 		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}, false},
 		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}, false},
-		{contexts, "| One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}, false},
+		{contexts, "| One controller Ansible run: the base of a controller-stage tool publication | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}, false},
 		{contexts, "| The longest deadline a controller-stage client installation may run under | %s |", setupRun, "clientStageCeiling", &application{runner: "runProcess", ceiling: true}, false},
 		{"specs/container-clusters.md", "whose `minSizeGigabytes` exceeds %s", "internal/containercluster/agentinstall/selection.go", "maxInstallerRootDeviceGigabytes", nil, false},
 		{contexts, "| Bytes in one installer media image | %s |", mediaRecords, "MaxMediaBytes", nil, true},

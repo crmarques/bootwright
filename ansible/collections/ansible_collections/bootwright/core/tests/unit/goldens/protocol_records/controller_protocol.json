@@ -56,8 +56,9 @@
         {
           "phase": "prepared",
           "preparation": {
-            "inventorySHA256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-            "addedSources": []
+            "addedSources": [
+              "tool-oc"
+            ]
           }
         },
         true
@@ -67,10 +68,10 @@
       "changed": false,
       "_ansible_no_log": true,
       "preparation": {
-        "inventorySHA256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-        "addedSources": []
-      },
-      "apply_native": false
+        "addedSources": [
+          "tool-oc"
+        ]
+      }
     }
   },
   {
@@ -82,11 +83,13 @@
           "outcome": "unchanged",
           "evidence": {
             "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-            "before": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-            "after": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-            "planDigest": "",
-            "added": [],
-            "tools": [],
+            "tools": [
+              {
+                "source": "tool-oc",
+                "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "files": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+              }
+            ],
             "postcondition": true
           }
         },
@@ -105,7 +108,7 @@
       "changed": false,
       "_ansible_no_log": true,
       "failed": true,
-      "msg": "Controller dependency protocol or evidence was refused: native postcondition"
+      "msg": "Controller dependency protocol or evidence was refused: preparation"
     }
   },
   {

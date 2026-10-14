@@ -4,6 +4,7 @@ package contextfs
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -95,14 +96,14 @@ func TestClientAreaPublishesUnderItsOwnReservation(t *testing.T) {
 	}
 }
 
-// The setup bundle and the client closure are different namespaces with
-// different rules, so neither may be opened as the other.
-func TestClientAreaRefusesTheApprovedSetupBundle(t *testing.T) {
+// A tool area is named only by a closure digest, and one area never stands
+// for another: a digest the record does not hold opens a new reservation.
+func TestClientAreaRefusesANameThatIsNoDigest(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
-	digest := sealedBundleFixture(t, store, record)
+	sealedBundleFixture(t, store, record)
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
-		_, err := tx.ClientArea(ctx, digest)
+		_, err := tx.ClientArea(ctx, "not-a-digest")
 		return err
 	})
 	expectState(t, err)
@@ -158,7 +159,7 @@ func TestRetainDependenciesIsAppendOnly(t *testing.T) {
 	source := prerequisites.DependencySource{ID: "tool-helm-v3.17.0", URL: "https://mirror.example.test/helm.tar.gz", SHA256: strings.Repeat("b", 64), Bytes: 1024}
 	retain := func(value prerequisites.DependencySource) error {
 		return store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
-			return tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{value}, nil)
+			return tx.RetainDependencies(ctx, []prerequisites.DependencySource{value})
 		})
 	}
 	if err := retain(source); err != nil {
@@ -173,8 +174,8 @@ func TestRetainDependenciesIsAppendOnly(t *testing.T) {
 		t.Fatal("a retained acquisition identity was replaced")
 	}
 	err := store.ReadController(ctx, "example", func(view prerequisites.StorageView) error {
-		if !slices.Contains(view.State.RetainedSources, source) {
-			t.Fatalf("retained sources = %+v", view.State.RetainedSources)
+		if !slices.Contains(view.State.ToolSources, source) {
+			t.Fatalf("retained sources = %+v", view.State.ToolSources)
 		}
 		return nil
 	})
@@ -200,5 +201,41 @@ func TestClientAreaCheckpointsLeaveStoreReadable(t *testing.T) {
 			_ = publishClients(store, clientClosure, true)
 			readable(t, store, "after retry following "+point)
 		})
+	}
+}
+
+// interrupt fails one publication checkpoint exactly once, leaving the store in
+// the state an abrupt process death would leave behind. It records whether the
+// checkpoint was reached, because an injection that never fires proves nothing.
+type interrupt struct {
+	point string
+	fired bool
+}
+
+func (i *interrupt) install(store *Store) {
+	store.fail = func(reached string) error {
+		if reached != i.point || i.fired {
+			return nil
+		}
+		i.fired = true
+		return errors.New("synthetic process death")
+	}
+}
+
+func (i *interrupt) release(t *testing.T, store *Store) {
+	t.Helper()
+	store.fail = nil
+	if !i.fired {
+		t.Fatalf("checkpoint %s was never reached; the case proves nothing", i.point)
+	}
+}
+
+func readable(t *testing.T, store *Store, when string) {
+	t.Helper()
+	if _, err := store.View(context.Background()); err != nil {
+		t.Fatalf("context inspection broken %s: %v", when, err)
+	}
+	if err := store.ReadController(context.Background(), "", func(prerequisites.StorageView) error { return nil }); err != nil {
+		t.Fatalf("preflight broken %s: %v", when, err)
 	}
 }

@@ -1,47 +1,43 @@
-"""Frozen native transitions remain binding across preparation and recovery."""
+"""The controller stage's tool publication stays bound to its frozen request."""
 
-import copy
 import unittest
+from types import SimpleNamespace
 
+from ansible.plugins.action import ActionBase
+from ansible_collections.bootwright.core.plugins.action import controller_protocol
 from ansible_collections.bootwright.core.plugins.action.controller_protocol import (
-    digest,
     frozen_request,
     preparation,
     refusal_reason,
 )
 
 
+def frozen():
+    return dict(
+        version="controller-prerequisites-v6",
+        identity="a" * 64,
+        publicationBundle={},
+        tools=[dict(source=dict(id="tool-oc")), dict(source=dict(id="tool-kubectl"))],
+        acquisition=[dict(source="tool-oc", seconds=205), dict(source="tool-kubectl", seconds=121)],
+        egress={},
+    )
+
+
 class FrozenRequest(unittest.TestCase):
     """Each tool's acquisition deadline travels with the request, in its order."""
 
-    def request(self):
-        return dict(
-            version="controller-prerequisites-v5",
-            operation="setup",
-            identity="a" * 64,
-            platform={},
-            bundle={},
-            publicationBundle={},
-            packages=[],
-            native=None,
-            tools=[dict(source=dict(id="tool-oc")), dict(source=dict(id="tool-kubectl"))],
-            acquisition=[dict(source="tool-oc", seconds=205), dict(source="tool-kubectl", seconds=121)],
-            nativeStaging=0,
-            egress={},
-        )
-
-    def test_a_v5_request_whose_deadlines_match_its_tools_is_accepted(self):
-        request = self.request()
+    def test_a_v6_request_whose_deadlines_match_its_tools_is_accepted(self):
+        request = frozen()
         self.assertIs(frozen_request(request), request)
-        empty = dict(request, tools=[], acquisition=[])
-        self.assertIs(frozen_request(empty), empty)
 
-    def test_an_older_version_or_a_mismatched_deadline_is_refused(self):
-        request = self.request()
+    def test_a_native_or_older_request_or_a_mismatched_deadline_is_refused(self):
+        request = frozen()
         missing = dict(request)
         del missing["acquisition"]
         changes = {
-            "controller-prerequisites-v4": dict(request, version="controller-prerequisites-v4"),
+            "controller-prerequisites-v5": dict(request, version="controller-prerequisites-v5"),
+            "native packages": dict(request, packages=[], native=None),
+            "no tools": dict(request, tools=[], acquisition=[]),
             "missing": missing,
             "reordered": dict(request, acquisition=list(reversed(request["acquisition"]))),
             "short": dict(request, acquisition=request["acquisition"][:1]),
@@ -56,37 +52,12 @@ class FrozenRequest(unittest.TestCase):
                 with self.assertRaises((KeyError, TypeError, ValueError)):
                     frozen_request(changed)
 
-    def test_frozen_request_requires_native_acquisition(self):
-        """A request with native packages carries one deadline per package,
-        before the tools', and a staging bound that is zero exactly when it
-        stages no package."""
-        packages = [dict(source=dict(id="native-one")), dict(source=dict(id="native-two"))]
-        native = [dict(source="native-one", seconds=320), dict(source="native-two", seconds=121)]
-        request = dict(self.request(), packages=packages, acquisition=native + self.request()["acquisition"], nativeStaging=321)
-        self.assertIs(frozen_request(request), request)
-        missing = dict(request)
-        del missing["nativeStaging"]
-        for name, changed in {
-            "no native entries": dict(request, acquisition=self.request()["acquisition"]),
-            "tools first": dict(request, acquisition=self.request()["acquisition"] + native),
-            "packages reordered": dict(request, acquisition=list(reversed(native)) + self.request()["acquisition"]),
-            "no staging": dict(request, nativeStaging=0),
-            "staging without packages": dict(self.request(), nativeStaging=1),
-            "staging past the ceiling": dict(request, nativeStaging=7201),
-            "staging as text": dict(request, nativeStaging="321"),
-            "staging as bool": dict(request, nativeStaging=True),
-            "staging missing": missing,
-        }.items():
-            with self.subTest(name):
-                with self.assertRaises((KeyError, TypeError, ValueError)):
-                    frozen_request(changed)
-
 
 class RefusalReason(unittest.TestCase):
     """Every refusal here reaches one generic message, so it carries its token."""
 
     def test_a_raised_token_is_what_the_message_reports(self):
-        self.assertEqual(refusal_reason(ValueError("native postcondition")), "native postcondition")
+        self.assertEqual(refusal_reason(ValueError("tools completion")), "tools completion")
         self.assertEqual(refusal_reason(KeyError("preparation")), "preparation")
 
     def test_an_operating_system_failure_reports_its_kind_and_no_path(self):
@@ -101,61 +72,53 @@ class RefusalReason(unittest.TestCase):
 
 
 class Preparation(unittest.TestCase):
-    def fixture(self):
-        before = [
-            dict(
-                name="fixture", epoch=0, version="1", release="1", architecture="x86_64"
-            )
-        ]
-        after = [dict(before[0], version="2")]
-        plan = dict(
-            platform={},
-            packages=[],
-            actions=[
-                dict(
-                    kind="upgrade",
-                    before=before[0],
-                    after=after[0],
-                    sourceID="rpm",
-                    reason="root",
-                )
-            ],
-            beforeSHA256=digest(before),
-            afterSHA256=digest(after),
-        )
-        plan["digest"] = digest(plan)
-        request = dict(
-            operation="setup", platform={}, packages=[], native=plan, tools=[]
-        )
-        return before, after, request
+    def test_a_preparation_names_exactly_the_frozen_tools_sources_in_order(self):
+        self.assertEqual(preparation(frozen()), {"addedSources": ["tool-kubectl", "tool-oc"]})
 
-    def test_upgrade_recovery_requires_exact_before_or_after_and_same_plan(self):
-        before, after, request = self.fixture()
-        proof = preparation(request, before)
-        request.update(operation="recover", preparation=proof)
-        self.assertEqual(preparation(request, after), proof)
-        self.assertEqual(preparation(request, before), proof)
+    def test_a_source_named_twice_is_refused(self):
+        request = dict(frozen(), tools=[dict(source=dict(id="tool-oc")), dict(source=dict(id="tool-oc"))])
         with self.assertRaises(ValueError):
-            preparation(request, [dict(before[0], version="intermediate")])
-        changed = copy.deepcopy(request)
-        changed["native"]["actions"][0]["after"]["version"] = "3"
-        with self.assertRaises(ValueError):
-            preparation(changed, after)
+            preparation(request)
 
-    def test_tool_only_resume_does_not_grant_native_changes(self):
-        request = dict(
-            operation="setup",
-            platform={},
-            packages=[],
-            native=None,
-            tools=[dict(source=dict(id="tool"))],
-        )
-        proof = preparation(request, [])
-        request.update(operation="recover", preparation=proof)
-        self.assertEqual(preparation(request, []), proof)
-        request["packages"] = [dict(name="unapproved")]
-        with self.assertRaises(ValueError):
-            preparation(request, [])
+
+class Run(unittest.TestCase):
+    """The prepared and completed phases hand the runner what Go verifies."""
+
+    def run_phase(self, arguments):
+        records = []
+        original_emit, original_run = controller_protocol.emit, ActionBase.run
+        controller_protocol.emit = lambda record, acknowledge=False: records.append((record, acknowledge))
+        ActionBase.run = lambda self, tmp=None, task_vars=None: {}
+        try:
+            action = controller_protocol.ActionModule.__new__(controller_protocol.ActionModule)
+            action._task = SimpleNamespace(args=arguments)
+            return action.run(task_vars={}), records
+        finally:
+            controller_protocol.emit, ActionBase.run = original_emit, original_run
+
+    def test_prepared_announces_the_sources_and_waits(self):
+        result, records = self.run_phase({"phase": "prepared", "request": frozen()})
+        self.assertFalse(result.get("failed"), result)
+        self.assertEqual(records, [({"phase": "prepared", "preparation": {"addedSources": ["tool-kubectl", "tool-oc"]}}, True)])
+
+    def test_completed_reports_the_tools_evidence(self):
+        tools = [dict(source="tool-oc"), dict(source="tool-kubectl")]
+        result, records = self.run_phase({
+            "phase": "completed", "request": frozen(), "preparation": preparation(frozen()), "tools": tools, "tools_changed": True,
+        })
+        self.assertFalse(result.get("failed"), result)
+        evidence = {"request": "a" * 64, "tools": tools, "postcondition": True}
+        self.assertEqual(records, [({"phase": "completed", "outcome": "changed", "evidence": evidence}, False)])
+
+    def test_completed_refuses_another_preparation_or_missing_evidence(self):
+        for name, arguments in {
+            "another preparation": {"preparation": {"addedSources": []}, "tools": [{}, {}]},
+            "one tool short": {"preparation": preparation(frozen()), "tools": [{}]},
+        }.items():
+            with self.subTest(name):
+                result, records = self.run_phase(dict(arguments, phase="completed", request=frozen(), tools_changed=False))
+                self.assertTrue(result.get("failed"), result)
+                self.assertEqual(records, [])
 
 
 if __name__ == "__main__":

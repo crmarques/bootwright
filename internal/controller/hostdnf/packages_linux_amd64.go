@@ -67,17 +67,28 @@ func New(route controller.Route) (*Packages, error) {
 	if _, err := route.Selector(); err != nil {
 		return nil, err
 	}
+	return withProxy(route.HTTPSProxy(), route.NoProxy()), nil
+}
+
+func ForEgress(egress prerequisites.SetupEgress) (*Packages, error) {
+	if _, err := controller.NewProxySelector(egress.HTTPProxy, egress.HTTPSProxy, egress.NoProxy); err != nil {
+		return nil, failure("the controller Machine's proxy route is outside the qualified grammar", "")
+	}
+	return withProxy(egress.HTTPSProxy, egress.NoProxy), nil
+}
+
+func withProxy(endpoint string, bypass []string) *Packages {
 	var proxy []string
-	if endpoint := route.HTTPSProxy(); endpoint != "" {
+	if endpoint != "" {
 		proxy = append(proxy, "https_proxy="+endpoint)
-		if bypass := route.NoProxy(); len(bypass) != 0 {
+		if len(bypass) != 0 {
 			proxy = append(proxy, "no_proxy="+strings.Join(bypass, ","))
 		}
 	}
 	return &Packages{
 		rpm: rpmPath, dnf: dnfPath, base: []string{"LC_ALL=C", "PATH=/usr/sbin:/usr/bin"}, proxy: proxy,
 		run: execute, qualify: qualifiedSystemExecutable,
-	}, nil
+	}
 }
 
 type provider struct{ name, evra, arch string }
@@ -144,7 +155,7 @@ func (p *Packages) query(ctx context.Context, rpm, requirement string) query {
 	stdout, stderr := &capped{limit: errorLimit}, &capped{limit: errorLimit}
 	args := []string{"-q", "--whatprovides", "--queryformat", format, "--", name}
 	exit, err := p.run(ctx, command{path: rpm, args: args, env: p.rpmEnvironment()}, stdout, stderr)
-	unreadable := query{err: failure("rpm could not report what provides "+requirement, "Check that the RPM database is readable, then run setup again.")}
+	unreadable := query{err: failure("rpm could not report what provides "+requirement, "Check that the RPM database is readable")}
 	switch {
 	case err != nil || stdout.truncated:
 		return unreadable
@@ -197,10 +208,10 @@ func (p *Packages) Preview(ctx context.Context, missing []string) (prerequisites
 		return prerequisites.HostPackagePreview{}, ctx.Err()
 	}
 	if previewing.Err() != nil {
-		return prerequisites.HostPackagePreview{}, failure("dnf did not finish the install preview within 20 minutes", "Check the host's repository reachability, then run setup again.")
+		return prerequisites.HostPackagePreview{}, failure("dnf did not finish the install preview within 20 minutes", "Check the host's repository reachability")
 	}
 	if err != nil {
-		return prerequisites.HostPackagePreview{}, failure("dnf could not run to preview the install", "Check that /usr/bin/dnf runs, then run setup again.")
+		return prerequisites.HostPackagePreview{}, failure("dnf could not run to preview the install", "Check that /usr/bin/dnf runs")
 	}
 	diagnostic := stderr.String()
 	if exit != 0 {
@@ -208,7 +219,7 @@ func (p *Packages) Preview(ctx context.Context, missing []string) (prerequisites
 			return prerequisites.HostPackagePreview{}, refusal
 		}
 		if exit != 1 || !strings.Contains(diagnostic, "Operation aborted") {
-			return prerequisites.HostPackagePreview{}, failure("dnf could not preview the install: "+lastError(diagnostic, stdout.String()), "Fix the host's dnf configuration, then run setup again.")
+			return prerequisites.HostPackagePreview{}, failure("dnf could not preview the install: "+lastError(diagnostic, stdout.String()), "Fix the host's dnf configuration")
 		}
 	}
 	text := sanitize(stdout.String())
@@ -236,7 +247,7 @@ func (p *Packages) Install(ctx context.Context, missing []string, output prerequ
 		return nil, ctx.Err()
 	}
 	if err != nil || exit != 0 {
-		return nil, failure("dnf did not complete the install: "+lastError(stream.tail.String(), ""), "Fix the host's dnf configuration, then run setup again; dnf's output is in the setup run log.")
+		return nil, failure("dnf did not complete the install: "+lastError(stream.tail.String(), ""), "Fix the host's dnf configuration (dnf's output is in this run's log)")
 	}
 	results, err := p.queries(ctx, missing)
 	if err != nil {
@@ -246,13 +257,55 @@ func (p *Packages) Install(ctx context.Context, missing []string, output prerequ
 	repositories := p.repositories(ctx, dnf, results)
 	for index, result := range results {
 		if !result.present {
-			return nil, failure("dnf reported success but nothing provides "+missing[index], "Run setup again; the host's repositories may not provide it.")
+			return nil, failure("dnf reported success but nothing provides "+missing[index], "Check that the host's repositories provide it")
 		}
 		for _, installed := range result.providers {
 			evidence = append(evidence, prerequisites.HostPackageEvidence{Requirement: missing[index], Package: installed.nevra(), Repository: repositories[installed.name+" "+installed.arch]})
 		}
 	}
 	return evidence, nil
+}
+
+func (p *Packages) Qualify(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if _, err := p.qualify(p.rpm); err != nil {
+		return unqualified("rpm")
+	}
+	if _, err := p.qualify(p.dnf); err != nil {
+		return unqualified("dnf")
+	}
+	return nil
+}
+
+func (p *Packages) Installed(ctx context.Context, requirements []string) ([]prerequisites.HostPackageEvidence, error) {
+	return p.evidence(ctx, requirements, false)
+}
+
+func (p *Packages) Present(ctx context.Context, requirements []string) ([]prerequisites.HostPackageEvidence, error) {
+	return p.evidence(ctx, requirements, true)
+}
+
+func (p *Packages) evidence(ctx context.Context, requirements []string, origin bool) ([]prerequisites.HostPackageEvidence, error) {
+	if err := validRequirements(requirements, true); err != nil {
+		return nil, err
+	}
+	results, err := p.queries(ctx, requirements)
+	if err != nil {
+		return nil, err
+	}
+	repositories := map[string]string{}
+	if dnf, err := p.qualify(p.dnf); err == nil && origin {
+		repositories = p.repositories(ctx, dnf, results)
+	}
+	evidence := []prerequisites.HostPackageEvidence{}
+	for index, result := range results {
+		for _, installed := range result.providers {
+			evidence = append(evidence, prerequisites.HostPackageEvidence{Requirement: requirements[index], Package: installed.nevra(), Repository: repositories[installed.name+" "+installed.arch]})
+		}
+	}
+	return evidence, ctx.Err()
 }
 
 func (p *Packages) repositories(ctx context.Context, dnf string, results []query) map[string]string {
@@ -317,11 +370,11 @@ func classify(diagnostic, standard string, missing []string) error {
 			named = missing
 		}
 		return failure("no package in the host's repositories provides "+strings.Join(named, ", ")+": "+last,
-			"Enable the repository that provides it in the host's dnf configuration, then run setup again.")
+			"Enable the repository that provides it in the host's dnf configuration")
 	}
 	if problem {
 		return failure("dnf cannot resolve the install of "+strings.Join(missing, ", ")+": "+last,
-			"Resolve the dependency problem in the host's dnf configuration, then run setup again.")
+			"Resolve the dependency problem in the host's dnf configuration")
 	}
 	return nil
 }
@@ -390,12 +443,15 @@ func printable(text string) bool {
 	return text != "" && len(text) <= 128 && sanitize(text) == text && !strings.ContainsAny(text, " \t\n")
 }
 
-func failure(message, remediation string) error {
-	return diagnostics.NewFailureWithRemediation("controller.setup", message, "", remediation)
+func failure(message, correction string) error {
+	if correction == "" {
+		return diagnostics.NewFailure("controller.setup", message, "")
+	}
+	return &prerequisites.ScopedFailure{Code: "controller.setup", Message: message, Correction: correction}
 }
 
 func unqualified(tool string) error {
-	return failure(tool+" is not a root-owned system executable", "Restore the host's "+tool+" under /usr/bin with root ownership and no group or other write access.")
+	return failure(tool+" is not a root-owned system executable", "Restore the host's "+tool+" under /usr/bin with root ownership and no group or other write access")
 }
 
 type capped struct {

@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -13,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/stagelocal"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
@@ -22,7 +21,8 @@ import (
 )
 
 func TestTheComposedInvocationScopeAdmitsSiblingRunsOfItsRunner(t *testing.T) {
-	runner := ansiblerunner.Isolated(map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"}, t.TempDir(), t.TempDir(), heldAdapter)
+	stager := stagelocal.NewAutomationStager(filepath.Join(t.TempDir(), "staging"))
+	runner := ansiblerunner.Isolated(map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"}, t.TempDir(), t.TempDir(), stager, heldAdapter)
 	options := lifecycleOptions(lifecycleDependencies{}, systemClock{}, runner)
 	if options.BeginInvocation == nil {
 		t.Fatal("the composed lifecycle opens no invocation scope")
@@ -80,29 +80,13 @@ func runHeldBy(t *testing.T, parent context.Context, runner ansiblerunner.Runner
 
 func composedRequest(t *testing.T, progress func(context.Context, string, string)) lifecycle.RunRequest {
 	t.Helper()
-	bundle := t.TempDir()
-	if err := os.Mkdir(filepath.Join(bundle, "automation"), 0700); err != nil {
-		t.Fatal(err)
-	}
 	return lifecycle.RunRequest{
 		Context: "alpha", Block: "artifact-server-lab", Description: "Serve ArtifactServer/artifact-server-lab",
 		Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
 		Digest:    "sha256:" + strings.Repeat("5f", 32),
 		Canonical: []byte(`{}`), Placement: machineref.Placement{Connection: "local", Machine: "controller"},
-		Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
-		Bundle: prerequisites.BundleLocation{Path: bundle}, Area: approvedAutomation{}, Output: &bytes.Buffer{},
+		Launch:   prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"},
+		Output:   &bytes.Buffer{},
 		Progress: progress,
 	}
-}
-
-// approvedAutomation is an approved bundle carrying exactly this build's
-// collection.
-type approvedAutomation struct{ prerequisites.BundleArea }
-
-func (approvedAutomation) Read(_ context.Context, name string, _ int) ([]byte, error) {
-	data, ok := ansible.Automation()[strings.TrimPrefix(name, "automation/")]
-	if !ok {
-		return nil, os.ErrNotExist
-	}
-	return data, nil
 }

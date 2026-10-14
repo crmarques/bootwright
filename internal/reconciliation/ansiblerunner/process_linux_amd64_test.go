@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/adapterprotocol"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -177,15 +176,11 @@ func running(t *testing.T, matches func(pid, group int) bool) bool {
 // and the group kill stops the adapter, which otherwise keeps booting nodes
 // until it exits or the two-hour deadline passes. The attempt stays unknown.
 func TestAProtocolRefusalEndsTheAdapterPromptly(t *testing.T) {
-	assets := ansible.Assets()
 	for _, mode := range []string{"malformed", "out-of-order"} {
 		t.Run(mode, func(t *testing.T) {
-			bundle := t.TempDir()
-			if err := os.Mkdir(filepath.Join(bundle, "automation"), 0700); err != nil {
-				t.Fatal(err)
-			}
 			var adapter *exec.Cmd
 			runner := Runner{
+				stager:    newDirStager(t),
 				jobParent: t.TempDir(), scratchParent: t.TempDir(), drain: 200 * time.Millisecond,
 				playbooks: map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"},
 				command: func(string, ...string) *exec.Cmd {
@@ -197,8 +192,8 @@ func TestAProtocolRefusalEndsTheAdapterPromptly(t *testing.T) {
 			request := lifecycle.RunRequest{
 				Context: "lab", Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
 				Canonical: []byte(`{}`), Placement: machineref.Placement{Connection: "local", Machine: "controller"},
-				Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
-				Bundle: prerequisites.BundleLocation{Path: bundle}, Area: embeddedArea{files: assets}, Output: &output,
+				Launch: testLaunch,
+				Output: &output,
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -428,12 +423,9 @@ func TestStoppingAnAdapterEndsItsTreeBeyondItsGroup(t *testing.T) {
 		{"ignoring termination", "stubborn", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			bundle := t.TempDir()
-			if err := os.Mkdir(filepath.Join(bundle, "automation"), 0700); err != nil {
-				t.Fatal(err)
-			}
 			runner := Runner{
-				drain: 500 * time.Millisecond,
+				stager: newDirStager(t),
+				drain:  500 * time.Millisecond,
 				command: func(string, ...string) *exec.Cmd {
 					return exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-"+test.mode)
 				},
@@ -444,15 +436,15 @@ func TestStoppingAnAdapterEndsItsTreeBeyondItsGroup(t *testing.T) {
 			}
 			defer progress.Close()
 			request := lifecycle.RunRequest{
-				Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
-				Bundle: prerequisites.BundleLocation{Path: bundle}, Output: output,
+				Context: "lab", Launch: testLaunch,
+				Output: output,
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			job, scratch := t.TempDir(), t.TempDir()
 			ended := make(chan error, 1)
 			go func() {
-				_, err := runner.execute(ctx, job, scratch, nil, "apply.yml", request)
+				_, err := runner.execute(ctx, job, scratch, nil, stagedAutomation{path: t.TempDir()}, "apply.yml", request)
 				output.Close()
 				ended <- err
 			}()
@@ -509,20 +501,20 @@ func TestStoppingAnAdapterEndsItsTreeBeyondItsGroup(t *testing.T) {
 func TestTheSupervisorIsStartedInLifecycleMode(t *testing.T) {
 	var arguments []string
 	runner := Runner{
-		drain: time.Millisecond,
+		stager: newDirStager(t),
+		drain:  time.Millisecond,
 		command: func(_ string, args ...string) *exec.Cmd {
 			arguments = args
 			return exec.Command("/bin/true")
 		},
 	}
 	request := lifecycle.RunRequest{
-		Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
-		Bundle: prerequisites.BundleLocation{Path: t.TempDir()},
+		Context: "lab", Launch: testLaunch,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// Only the invocation this builds is under test.
-	_, _ = runner.execute(ctx, t.TempDir(), t.TempDir(), nil, "apply.yml", request)
+	_, _ = runner.execute(ctx, t.TempDir(), t.TempDir(), nil, stagedAutomation{path: t.TempDir()}, "apply.yml", request)
 	supervisor := slices.IndexFunc(arguments, func(argument string) bool {
 		return strings.HasSuffix(argument, "/plugins/module_utils/controller_supervisor.py")
 	})
@@ -541,12 +533,8 @@ func TestLifecycleInvocationHelper(t *testing.T) {
 	if area == "" {
 		return
 	}
-	bundle := filepath.Join(area, "bundle")
-	if err := os.MkdirAll(filepath.Join(bundle, "automation"), 0700); err != nil {
-		os.Exit(20)
-	}
 	runner := Runner{
-		jobParent: area, scratchParent: area,
+		jobParent: area, scratchParent: area, stager: &dirStager{parent: area},
 		playbooks: map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"},
 		command: func(string, ...string) *exec.Cmd {
 			return exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-running")
@@ -555,8 +543,8 @@ func TestLifecycleInvocationHelper(t *testing.T) {
 	request := lifecycle.RunRequest{
 		Context: "lab", Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
 		Canonical: []byte(`{}`), Placement: machineref.Placement{Connection: "local", Machine: "controller"},
-		Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
-		Bundle: prerequisites.BundleLocation{Path: bundle}, Area: embeddedArea{files: ansible.Assets()}, Output: os.Stdout,
+		Launch: testLaunch,
+		Output: os.Stdout,
 	}
 	_, _ = runner.Run(context.Background(), request)
 	os.Exit(21)
@@ -602,12 +590,9 @@ func TestAKilledInvocationTakesItsAdapter(t *testing.T) {
 // start on a thread other goroutines share would let any of them take a
 // running adapter down; the runner keeps that thread to itself instead.
 func TestThreadChurnNeverSignalsARunningAdapter(t *testing.T) {
-	bundle := t.TempDir()
-	if err := os.Mkdir(filepath.Join(bundle, "automation"), 0700); err != nil {
-		t.Fatal(err)
-	}
 	runner := Runner{
-		drain: 200 * time.Millisecond,
+		stager: newDirStager(t),
+		drain:  200 * time.Millisecond,
 		// A shell speaks the protocol and completes: one record, one
 		// acknowledgement, one result.
 		command: func(string, ...string) *exec.Cmd {
@@ -616,8 +601,8 @@ func TestThreadChurnNeverSignalsARunningAdapter(t *testing.T) {
 		},
 	}
 	request := lifecycle.RunRequest{
-		Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
-		Bundle: prerequisites.BundleLocation{Path: bundle}, Output: io.Discard,
+		Context: "lab", Launch: testLaunch,
+		Output: io.Discard,
 	}
 	job, scratch := t.TempDir(), t.TempDir()
 	stop, churned := make(chan struct{}), make(chan struct{})
@@ -640,7 +625,7 @@ func TestThreadChurnNeverSignalsARunningAdapter(t *testing.T) {
 	defer func() { close(stop); <-churned }()
 	// The window is at each start, so many short runs expose it.
 	for range 100 {
-		if _, err := runner.execute(context.Background(), job, scratch, nil, "apply.yml", request); err != nil {
+		if _, err := runner.execute(context.Background(), job, scratch, nil, stagedAutomation{path: t.TempDir()}, "apply.yml", request); err != nil {
 			t.Fatalf("a thread ending elsewhere in the invocation signaled its adapter: %v", err)
 		}
 	}

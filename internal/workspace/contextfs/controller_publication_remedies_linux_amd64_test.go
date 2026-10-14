@@ -45,7 +45,7 @@ func requireUnknownControllerRemedy(t *testing.T, name string, err error, fired 
 // named apply then succeeds over the state the uncertain publication left.
 func TestAnUnknownControllerPublicationNamesTheApplyThatMetIt(t *testing.T) {
 	ctx := context.Background()
-	host := syntheticControllerState(t, prerequisites.SetupContext{}).Host
+	host := syntheticControllerState(t).Host
 	for _, test := range []struct {
 		name string
 		call func(lifecycle.Transaction) error
@@ -57,11 +57,16 @@ func TestAnUnknownControllerPublicationNamesTheApplyThatMetIt(t *testing.T) {
 			return err
 		}},
 		{"retained dependencies", func(tx lifecycle.Transaction) error {
-			return tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{checkpointDependency}, nil)
+			return tx.RetainDependencies(ctx, []prerequisites.DependencySource{checkpointDependency})
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			store := checkpointSealedFixture(t)
+			if test.name == "binding" {
+				var record contexts.Record
+				store, record = lifecycleFixture(t)
+				reserveFixture(t, store, record)
+			}
 			fired := armUnknownControllerPublication(store)
 			err := checkpointMutateLifecycle(ctx, store, test.call)
 			store.fail = nil
@@ -148,22 +153,4 @@ func TestAnUnknownControllerPublicationNamesTheDeletionThatMetIt(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// Setup's own uncertain publication keeps its exact retry.
-func TestASetupsUnknownControllerPublicationKeepsItsExactRetry(t *testing.T) {
-	ctx := context.Background()
-	store, record := lifecycleFixture(t)
-	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
-	fired := armUnknownControllerPublication(store)
-	var published error
-	err := store.MutateController(ctx, scope, true, func(tx prerequisites.StorageTransaction) error {
-		_, published = tx.Publish(ctx, syntheticControllerState(t, scope))
-		return nil
-	})
-	store.fail = nil
-	if err != nil {
-		t.Fatal(err)
-	}
-	requireUnknownControllerRemedy(t, "setup", published, *fired, setupRetry)
 }

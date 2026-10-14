@@ -327,14 +327,10 @@ type testWorkspace struct {
 	binds        int
 	areas        map[string]bool
 	retained     []prerequisites.DependencySource
-	resolutions  int
 	failPublish  error
 	// landThenFail fails the next evidence publication once, after its bytes
 	// landed, as a publication whose read-back or sync failed does.
 	landThenFail error
-	// opened counts how many times this operation asked for the approved
-	// execution bundle, which an operation does once however many blocks run.
-	opened int
 	// beforeMutation runs as the exclusive lock is taken, so a test can advance
 	// durable state exactly between a decision and the effects it authorized.
 	beforeMutation func()
@@ -649,15 +645,11 @@ func (v *testView) killed(point string) error {
 }
 
 // ClientArea models the shared host area the controller stage publishes into:
-// only a closure's digest names one and never the approved setup bundle, the
-// reservation is recorded before the area exists, and a sealed closure reopens
+// only a closure's digest names one, the reservation is recorded before the area exists, and a sealed closure reopens
 // read-only.
 func (v *testView) ClientArea(_ context.Context, id string) (prerequisites.BundleArea, error) {
 	if decoded, err := hex.DecodeString(id); err != nil || len(decoded) != 32 {
 		return nil, errors.New("controller client area identity is invalid")
-	}
-	if id == v.workspace.controller.State.Receipt.CatalogDigest {
-		return nil, errors.New("the approved setup bundle is not a client publication area")
 	}
 	if v.workspace.areas == nil {
 		v.workspace.areas = map[string]bool{}
@@ -745,6 +737,13 @@ func (v *testView) SealClientArea(_ context.Context, id string) error {
 	if !sealed {
 		v.workspace.areas[id] = true
 	}
+	bindings := slices.Clone(v.workspace.controller.State.Bindings)
+	for index := range bindings {
+		if bindings[index].Context == v.Identity().Name {
+			bindings[index].Tools = id
+		}
+	}
+	v.workspace.controller.State.Bindings = bindings
 	return nil
 }
 
@@ -796,24 +795,11 @@ func publishLent(area secretstore.Area) error {
 	return nil
 }
 
-// RetainDependencies records what it was asked to retain and keeps it in the
-// controller record as the store does: a source or a resolution is never
-// replaced under its identity, a resolution is kept only complete and beside
-// its exact sources, and the resolutions it supersedes are retired only beside
-// it, never the receipt's own.
-func (v *testView) RetainDependencies(_ context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource, superseded []string) error {
-	state := v.workspace.controller.State
-	retained, definitions := slices.Clone(state.RetainedSources), slices.Clone(state.RetainedDefinitions)
-	if definition == nil && len(superseded) != 0 {
-		return errors.New("a controller stage retires resolutions only beside the one that supersedes them")
-	}
-	for _, digest := range superseded {
-		if len(digest) != 64 || strings.Trim(digest, "0123456789abcdef") != "" || definition != nil && digest == definition.ResolutionDigest ||
-			state.Receipt.Definition != nil && digest == state.Receipt.Definition.ResolutionDigest {
-			return errors.New("a controller stage may not retire that resolution")
-		}
-	}
-	definitions = slices.DeleteFunc(definitions, func(item prerequisites.Definition) bool { return slices.Contains(superseded, item.ResolutionDigest) })
+// RetainDependencies records the tool sources it was asked to retain and keeps
+// them in the controller record as the store does: a source is never replaced
+// under its identity.
+func (v *testView) RetainDependencies(_ context.Context, sources []prerequisites.DependencySource) error {
+	retained := slices.Clone(v.workspace.controller.State.ToolSources)
 	for _, source := range sources {
 		index := slices.IndexFunc(retained, func(item prerequisites.DependencySource) bool { return item.ID == source.ID })
 		if index >= 0 && retained[index] != source {
@@ -823,24 +809,8 @@ func (v *testView) RetainDependencies(_ context.Context, definition *prerequisit
 			retained = append(retained, source)
 		}
 	}
-	if definition != nil {
-		index := slices.IndexFunc(definitions, func(item prerequisites.Definition) bool { return item.ResolutionDigest == definition.ResolutionDigest })
-		if index >= 0 && !prerequisites.SameDefinition(definitions[index], *definition) {
-			return errors.New("a controller stage would replace immutable resolution evidence")
-		}
-		if index < 0 {
-			if err := prerequisites.ValidateResolvedDefinition(*definition); err != nil {
-				return err
-			}
-			if slices.ContainsFunc(definition.Sources, func(source prerequisites.DependencySource) bool { return !slices.Contains(retained, source) }) {
-				return errors.New("retained controller resolution lacks its exact sources")
-			}
-			definitions = append(definitions, prerequisites.CloneDefinition(*definition))
-		}
-		v.workspace.resolutions++
-	}
 	v.workspace.retained = append(v.workspace.retained, sources...)
-	v.workspace.controller.State.RetainedSources, v.workspace.controller.State.RetainedDefinitions = retained, definitions
+	v.workspace.controller.State.ToolSources = retained
 	return nil
 }
 
@@ -1331,38 +1301,72 @@ type testAutomation struct{ digest string }
 
 func (a testAutomation) CatalogDigest() string { return a.digest }
 
-// testGuard stands in for the private execution boundary. Blocks running at
-// the same time each enter it, exactly as they do the real one, so what it
-// counts is guarded.
+// testGuard stands in for the controller runtime's launch guard. Blocks
+// running at the same time each enter it, exactly as they do the real one, so
+// what it counts is guarded. An unpublished runtime refuses every launch.
 type testGuard struct {
-	mutex sync.Mutex
-	calls int
+	mutex       sync.Mutex
+	calls       int
+	launched    []prerequisites.Runtime
+	unpublished bool
 }
 
-func (g *testGuard) WithPython(ctx context.Context, area prerequisites.BundleArea, _ prerequisites.ExecutionRequirement, use func(prerequisites.PythonLaunch, func() error) error) error {
+func (g *testGuard) WithPython(ctx context.Context, runtime prerequisites.Runtime, use func(prerequisites.PythonLaunch) error) error {
 	g.mutex.Lock()
 	g.calls++
+	g.launched = append(g.launched, runtime)
+	unpublished := g.unpublished
 	g.mutex.Unlock()
-	return use(prerequisites.PythonLaunch{Loader: "/loader"}, func() error { return nil })
+	if unpublished {
+		return prerequisites.ErrRuntimeUnavailable
+	}
+	return use(prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"})
+}
+
+func (g *testGuard) Published(context.Context, prerequisites.Runtime) (bool, error) {
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+	return !g.unpublished, nil
+}
+
+// testSetup stands in for the controller setup record every launch reads.
+type testSetup struct {
+	mutex sync.Mutex
+	view  prerequisites.SetupView
+	reads int
+}
+
+func (s *testSetup) ReadSetup(context.Context) (prerequisites.SetupView, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.reads++
+	return s.view, nil
+}
+
+func (s *testSetup) set(view prerequisites.SetupView) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.view = view
+}
+
+// testLock is the runtime lock the harness's build embeds.
+var testLock = RuntimeLock{Digest: strings.Repeat("4", 64), AnsibleCore: "2.21.5"}
+
+// completedSetup is a setup record whose receipt chose the interpreter of
+// one Python ABI.
+func completedSetup(abi, version string) prerequisites.SetupView {
+	return prerequisites.SetupView{Exists: true, State: prerequisites.SetupState{
+		Format: prerequisites.SetupStateFormat,
+		Receipt: &prerequisites.HostReceipt{Lock: testLock.Digest, Runtime: prerequisites.ReceiptRuntime{
+			Interpreter: "/usr/bin/python" + abi, Python: version, ABI: abi, AnsibleCore: testLock.AnsibleCore,
+		}},
+	}}
 }
 
 func (g *testGuard) entered() int {
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
 	return g.calls
-}
-
-type testBundle struct{}
-
-func (testBundle) Read(context.Context, string, int) ([]byte, error) { return nil, nil }
-func (testBundle) Write(context.Context, string, []byte, bool) error { return nil }
-func (testBundle) EnsureDirectory(context.Context, string) error     { return nil }
-func (testBundle) Entries(context.Context) ([]prerequisites.BundleEntry, error) {
-	return nil, nil
-}
-func (testBundle) Verify(context.Context) error { return nil }
-func (testBundle) Location(context.Context) (prerequisites.BundleLocation, error) {
-	return prerequisites.BundleLocation{Path: "/bundle"}, nil
 }
 
 type testConfirmer struct {
@@ -1417,6 +1421,7 @@ type harness struct {
 	confirmer  *testConfirmer
 	presenter  *testPresenter
 	guard      *testGuard
+	setup      *testSetup
 	entropy    []byte
 }
 
@@ -1463,28 +1468,21 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 			desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n")),
 		}},
 		controller: prerequisites.StorageView{
-			Exists: true, Initialized: true,
+			Exists: true, Initialized: true, Prepared: true,
 			State: prerequisites.HostState{
-				Host: host,
-				Receipt: prerequisites.SetupReceipt{
-					Status: "complete", CatalogDigest: strings.Repeat("b", 64),
-					Definition: &prerequisites.Definition{Bootstrap: testBootstrap()},
-				},
+				Host:     host,
 				Bindings: []prerequisites.ControllerBinding{{Context: testContextName, Machine: "controller", HostDigest: digest}},
 			},
 		},
-	}
-	workspace.controller.OpenBundle = func(context.Context, string) (prerequisites.BundleArea, error) {
-		workspace.opened++
-		return testBundle{}, nil
 	}
 	capability := &testCapability{definitions: definitions, secrets: []string{"artifact-server-tls"}}
 	binder := &testBinder{material: map[string]secrets.Material{"artifact-server-tls": secrets.NewMaterial(nil)}}
 	confirmer := &testConfirmer{}
 	presenter := &testPresenter{}
 	guard := &testGuard{}
+	setup := &testSetup{view: completedSetup("3.14", "3.14.8")}
 	clock := &testClock{moment: time.Date(2026, 9, 12, 10, 0, 0, 0, time.UTC)}
-	h := &harness{workspace: workspace, capability: capability, binder: binder, confirmer: confirmer, presenter: presenter, guard: guard}
+	h := &harness{workspace: workspace, capability: capability, binder: binder, confirmer: confirmer, presenter: presenter, guard: guard, setup: setup}
 	h.entropy = []byte{1}
 	h.service = New(workspace, nil, testCompiler{state: compilation.NewState(catalog, catalog, nil)}, binder,
 		testHost{identity: host}, testAutomation{digest: testAutomaton}, guard, testResolver{capability: capability},
@@ -1504,6 +1502,8 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 			Selection:   func(context.Context) (string, error) { return testContextName, nil },
 			Executable:  Executable{Version: "devel", Commit: "abcdef1"},
 			Operations:  func(area operationstore.Area) OperationStore { return operationstore.New(area, clock.Now) },
+			Setup:       setup,
+			Lock:        testLock,
 		})
 	return h
 }
@@ -1590,7 +1590,7 @@ func TestApplyRefusesToRebindAnEstablishedContext(t *testing.T) {
 // context can claim a host that has none of the shared prerequisites.
 func TestApplyRefusesAnUnpreparedControllerHost(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
-	h.workspace.controller.State.Receipt.Status = "pending"
+	h.workspace.controller.Prepared = false
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	if diagnostics.Of(err)[0].Code != "controller.identity" || !strings.Contains(diagnostics.Of(err)[0].Remediation, "bootwright setup") {
 		t.Fatalf("unprepared host error = %v", err)
@@ -2258,7 +2258,7 @@ func TestContinuationRefusesDriftedInputExecutableOrHost(t *testing.T) {
 			h.workspace.controller.State.Bindings = nil
 		},
 		"incomplete setup": func(h *harness) {
-			h.workspace.controller.State.Receipt.Status = "pending"
+			h.workspace.controller.Prepared = false
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -2800,18 +2800,15 @@ func TestAResolutionThatCannotStartLeavesTheOperationUnchanged(t *testing.T) {
 // context at rest, from which a fresh apply starts.
 func TestADestroyOverAnApplyThatStartedNothingCompletes(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
-	open := h.workspace.controller.OpenBundle
-	h.workspace.controller.OpenBundle = func(context.Context, string) (prerequisites.BundleArea, error) {
-		return nil, errors.New("bundle unavailable")
-	}
+	refuseStart(h, "artifact-server-lab", 1)
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
-		t.Fatal("an apply without its bundle reported success")
+		t.Fatal("an apply that could not start its block reported success")
 	}
 	applied := currentOperation(t, h)
 	if _, states := durableOperation(t, h); states["artifact-server-lab"] != reconciliation.BlockPending {
 		t.Fatalf("the apply started %v", states)
 	}
-	h.workspace.controller.OpenBundle = open
+	allowStart(h)
 	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil {
 		t.Fatalf("a removal of nothing refused: %+v", diagnostics.Of(err))
@@ -2852,14 +2849,11 @@ func TestARemovalOverRecordsThatContradictThemselvesRefuses(t *testing.T) {
 			delete(h.workspace.area.files, path.Join("op-"+strings.Repeat("01", 16), "blocks", block, "state.json"))
 		},
 		"a failed apply that records no started block": func(t *testing.T, h *harness) {
-			open := h.workspace.controller.OpenBundle
-			h.workspace.controller.OpenBundle = func(context.Context, string) (prerequisites.BundleArea, error) {
-				return nil, errors.New("bundle unavailable")
-			}
+			refuseStart(h, block, 1)
 			if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
-				t.Fatal("an apply without its bundle reported success")
+				t.Fatal("an apply that could not start its block reported success")
 			}
-			h.workspace.controller.OpenBundle = open
+			allowStart(h)
 			rewriteState(t, h, path.Join(currentOperation(t, h), "operation.json"), string(reconciliation.OperationFailed))
 		},
 	} {
@@ -2960,7 +2954,7 @@ func TestAnOperationNamesItsLogsRelativeToTheStateRoot(t *testing.T) {
 
 // Status reports each setup check in the controller's readiness vocabulary:
 // what stored evidence proves is ready, and anything it does not prove, a
-// missing record or an incomplete receipt alike, is not-ready. A binding the
+// missing record or an interrupted setup alike, is not-ready. A binding the
 // first apply publishes is pending while the context holds no operation, and
 // not-ready once one exists without it.
 func TestStatusSetupChecksUseTheReadinessVocabulary(t *testing.T) {
@@ -2983,8 +2977,8 @@ func TestStatusSetupChecksUseTheReadinessVocabulary(t *testing.T) {
 			prepare: func(view *prerequisites.StorageView) { view.Exists, view.Initialized = false, false },
 			binding: "pending", bundle: "not-ready",
 		},
-		"an incomplete receipt": {
-			prepare: func(view *prerequisites.StorageView) { view.State.Receipt.Status = "pending" },
+		"an interrupted setup": {
+			prepare: func(view *prerequisites.StorageView) { view.Prepared = false },
 			binding: "ready", bundle: "not-ready",
 		},
 	} {
@@ -4194,21 +4188,20 @@ func TestControllerBlockReceivesItsPublicationBoundary(t *testing.T) {
 	if execution.Stage == nil {
 		t.Fatal("the controller block received no publication boundary")
 	}
-	if !execution.Stage.Setup.Exists || execution.Stage.Setup.State.Receipt.Status != "complete" {
-		t.Fatalf("setup evidence = %+v", execution.Stage.Setup.State.Receipt)
+	if !execution.Stage.Setup.Exists || !execution.Stage.Setup.Prepared {
+		t.Fatalf("setup evidence = %+v", execution.Stage.Setup)
 	}
 	for name, supplied := range map[string]bool{
 		"ClientArea":         execution.Stage.ClientArea != nil,
 		"SealClientArea":     execution.Stage.SealClientArea != nil,
 		"RetainDependencies": execution.Stage.RetainDependencies != nil,
 		"Prepare":            execution.Stage.Prepare != nil,
-		"ReleaseFoundation":  execution.Stage.ReleaseFoundation != nil,
 	} {
 		if !supplied {
 			t.Fatalf("the controller block received no %s capability", name)
 		}
 	}
-	if err := execution.Stage.RetainDependencies(context.Background(), nil, nil, nil); err != nil {
+	if err := execution.Stage.RetainDependencies(context.Background(), nil); err != nil {
 		t.Fatalf("retention refused: %v", err)
 	}
 	if _, err := execution.Stage.ClientArea(context.Background(), strings.Repeat("d", 64)); err != nil {
@@ -4257,7 +4250,7 @@ func TestObservationCannotAuthorizeAHostEffect(t *testing.T) {
 	if observation.Resolution == 0 {
 		t.Fatalf("the observation carries no resolution identity: %+v", observation)
 	}
-	if err := observation.Stage.Prepare(context.Background(), prerequisites.NativePreparation{}); err == nil {
+	if err := observation.Stage.Prepare(context.Background(), prerequisites.StagePreparation{}); err == nil {
 		t.Fatal("an observation published a before-state")
 	}
 }
@@ -4349,26 +4342,25 @@ func TestLogLocationIsNamedBeforeTheFirstEffect(t *testing.T) {
 	}
 }
 
-// Every block of one operation runs inside the same approved bundle, so the
-// operation opens it once before its first effect rather than once per block.
-// Opening it per attempt asks the transaction to record what it has open while
-// its own blocks are running, which is exactly what must not happen.
-func TestAnOperationOpensItsApprovedBundleOnce(t *testing.T) {
+// Every block of one operation runs inside the same controller runtime, so
+// the operation locates it once before it registers rather than once per
+// block, and every block launches that one runtime.
+func TestAnOperationLocatesItsRuntimeOnce(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab", "artifact-server-spare")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	if h.workspace.opened != 1 {
-		t.Fatalf("the approved bundle was opened %d times", h.workspace.opened)
+	if h.setup.reads != 1 {
+		t.Fatalf("the controller runtime was located %d times", h.setup.reads)
 	}
-	if len(h.capability.applies) != 2 {
-		t.Fatalf("applied %v", h.capability.applies)
+	if len(h.capability.applies) != 2 || len(h.guard.launched) != 2 || h.guard.launched[0].Digest != h.guard.launched[1].Digest {
+		t.Fatalf("applied %v launching %+v", h.capability.applies, h.guard.launched)
 	}
 }
 
-// A removal proves what it is about to take back and then takes it back, and
-// each of those runs inside one approved bundle however many blocks it covers.
-func TestARemovalOpensItsApprovedBundleOncePerPhase(t *testing.T) {
+// A removal proves what it is about to take back and then takes it back, both
+// in the one runtime it located however many blocks it covers.
+func TestARemovalLocatesItsRuntimeOnce(t *testing.T) {
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
 	h.service.options.Concurrency = 2
 	h.capability.outcomeFor = map[string]Result{
@@ -4378,14 +4370,14 @@ func TestARemovalOpensItsApprovedBundleOncePerPhase(t *testing.T) {
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
 		t.Fatal("an unknown outcome reported success")
 	}
-	applied := h.workspace.opened
+	applied := h.setup.reads
 	h.capability.outcomeFor = nil
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}, {Effect: reconciliation.EffectPartial}, {Effect: reconciliation.EffectPartial}, {Effect: reconciliation.EffectPartial}}
 	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	if opened := h.workspace.opened - applied; opened != 2 {
-		t.Fatalf("the removal opened the approved bundle %d times, want one to prove and one to remove", opened)
+	if located := h.setup.reads - applied; located != 1 {
+		t.Fatalf("the removal located its runtime %d times, want once to prove and remove", located)
 	}
 	if len(h.capability.observes) != 4 || len(h.capability.destroys) != 2 {
 		t.Fatalf("observed %v and destroyed %v", h.capability.observes, h.capability.destroys)

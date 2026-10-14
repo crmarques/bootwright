@@ -127,9 +127,9 @@ code evolves:
 
 | Harness | Selected by |
 | --- | --- |
-| Current-OS native metadata resolution and frozen file verification | `BOOTWRIGHT_NATIVE_RESOLVE_QUALIFY=1`, `BOOTWRIGHT_NATIVE_INSPECT_PLAN` |
-| Bundle acquisition, projection and readiness of a resolved closure against real sources | `-tags controllerqualification`, `BOOTWRIGHT_RESOLVED_BOOTSTRAP_OUTPUT`, `BOOTWRIGHT_RESOLVED_NATIVE_INPUT`, `BOOTWRIGHT_BOOTSTRAP_SOURCE_FIXTURES` |
-| Bootstrap publisher resolution and root-invocation isolation | `-tags controllerqualification`, `BOOTWRIGHT_QUALIFY_DYNAMIC_BOOTSTRAP`, `BOOTWRIGHT_QUALIFY_ROOT_RESOLVER` |
+| Current-OS native metadata resolution and frozen file verification, for the code X89 deletes | `BOOTWRIGHT_NATIVE_RESOLVE_QUALIFY=1`, `BOOTWRIGHT_NATIVE_INSPECT_PLAN` |
+| Bundle acquisition, projection and readiness of a resolved closure against real sources, for the code X89 deletes | `-tags controllerqualification`, `BOOTWRIGHT_RESOLVED_BOOTSTRAP_OUTPUT`, `BOOTWRIGHT_RESOLVED_NATIVE_INPUT`, `BOOTWRIGHT_BOOTSTRAP_SOURCE_FIXTURES` |
+| Bootstrap publisher resolution and root-invocation isolation, for the code X89 deletes | `-tags controllerqualification`, `BOOTWRIGHT_QUALIFY_DYNAMIC_BOOTSTRAP`, `BOOTWRIGHT_QUALIFY_ROOT_RESOLVER` |
 | Ansible `controller_native` target, which builds an RPM and drives the host package manager | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
 | Ansible `controller_prerequisites` target, which runs the shipped setup playbook and role over the real runner protocol against the host inventory | `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` with `make ansible-check` |
 
@@ -137,64 +137,51 @@ Executed native installation is not covered by any of these; it is a manual
 `setup` on a prepared host, as the
 [operator guide](operator-guide.md#prepare-a-host) describes.
 
-## Qualified hosts and images
+## Lock refresh and tested hosts
 
-`setup` admits Fedora 43, Fedora 44 and RHEL 9.8 on Linux/amd64 and refuses
-any other release. The compiled catalog
-`internal/controller/bundlelocal/catalog.json` holds each admitted release's
-provided execution foundation, the loader, glibc and libgcc files the private
-interpreter runs on, pinned by digest; setup resolves every dependency release
-itself, and the catalog pins none.
+`setup` admits any Fedora or RHEL host on Linux/amd64, a derivative whose
+`/etc/os-release` `ID_LIKE` names one included, that has a qualified `rpm` and
+`dnf`, a locked Python ABI installed or offered and a glibc at or above the
+lock's floor ([controller](../specs/controller.md#supported-hosts)). The lock's
+`tested` list names the releases a build was tested on, Fedora 43 and 44 and
+RHEL 9 and 10 today; a release outside it gets the informational
+`controller.untested-release` line and is never refused. The
+[acceptance ledger](acceptance.md#ledger) records each release setup and the
+controller stage actually ran on.
 
-Fedora 43 has run: the [acceptance ledger](acceptance.md#ledger) records setup
-and the controller stage on it. Fedora 44 is admitted but not yet run: its
-record was read from a Fedora 44 host, and its libdnf5 5.4 inventory, a
-resolve against its repositories and the presence check of the resolved roots
-ran there unprivileged (`BOOTWRIGHT_NATIVE_RESOLVE_QUALIFY=1`), but no ledger
-row records setup or the controller stage on it. RHEL 9.8 is admitted but not
-yet run. No ledger row records setup or the
-controller stage on it, so its native path has never executed: the DNF4 solver
-under the host's Python 3.9, its rpm database snapshot and the publisher key
-import that verifies package signatures.
-
-Each release's record also attributes every pinned file to the package build
-that provides it, outside the execution requirement, so no bundle identity
-reads it: glibc 2.42-16.fc43 and libgcc 15.3.1-1.fc43 on Fedora 43, glibc
-2.43-9.fc44 and libgcc 16.2.1-2.fc44 on Fedora 44, and glibc 2.34-275.el9_8
-and libgcc 11.5.0-14.el9 on RHEL 9.8. A controller holds
-exactly those builds, as the operator guide's
-[hold procedure](operator-guide.md#hold-the-execution-foundation) keeps them,
-or vendor-signed builds of the same upstream versions within the release that
-setup qualified from the RPM database and recorded on its receipt; a host with
-any other build is refused, naming the file and its build, before the private
-interpreter runs. To qualify other builds, run
-`scripts/foundation-catalog` unprivileged on a host of that release holding
-them: it prints the release's native record, files with their digests, the
-links that reach them, the preload list and each file's package build from
-`rpm -qf`, which replaces that release's record in the catalog.
-`TestTheFoundationCatalogToolRoundTrips` holds the tool to what the guard
-verifies. Admitting another Fedora release adds its record the same way, and
-its primary key's fingerprint, as `gpg --show-keys` prints it for
-`/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-<release>-primary`, to the native
-resolver's `fedoraSigners` and the collection's `FEDORA_RELEASES`.
-
-Setup's private runtime is qualified for `ansible-core` 2.21 at its latest
-stable patch, on controller CPython 3.12, 3.13 or 3.14 at the latest patch of
-the newest. Setup reads the CPython releases it may select from
-astral-sh/uv's
-[download-metadata.json](https://github.com/astral-sh/uv/blob/main/crates/uv-python/download-metadata.json)
-on its main branch, which lists the python-build-standalone builds. Managed
+The controller runtime is ansible-core 2.21 at the patch
+`internal/controller/runtimelock/lock.json` pins, on controller CPython 3.12,
+3.13 or 3.14, the host's own interpreter at `/usr/bin/python3.X`. Managed
 hosts run Python 3.9 through 3.14, the target versions in ansible-core 2.21's
 [test matrix](https://github.com/ansible/ansible/blob/stable-2.21/test/lib/ansible_test/_util/target/common/constants.py),
 so the collection's modules and module utilities keep to 3.9 grammar, the
 sanity suite imports each of them under the CPython 3.9 that
 `scripts/tools/ansible-check-floor-interpreter.json` pins, and the units suite
-runs their unit tests under it. The ansible-core
-minor is one constant, in `internal/controller/prerequisites/qualified.go`.
-`TestQualifiedAnsibleMinorAgreesEverywhere` holds every statement of it
-together: the collection's `requires_ansible`, both `ansible-core` pins, the
-ansible-lint supported list, the sanity ignore file and this paragraph.
-Qualifying another minor changes all of them in one commit.
+runs their unit tests under it. The ansible-core minor is one constant, in
+`internal/controller/prerequisites/qualified.go`, and the lock's patch is one
+version: `TestQualifiedAnsibleMinorAgreesEverywhere` holds every statement of
+the minor together (the collection's `requires_ansible`, both `ansible-core`
+pins, the ansible-lint supported list, the sanity ignore file and this
+paragraph), and `TestTheLockCarriesOneAnsibleCoreEverywhere` holds the lock's
+version to `scripts/tools/ansible-requirements.txt`. Qualifying another minor
+changes all of them in one commit.
+
+To refresh the lock, run, with network:
+
+```sh
+scripts/runtime-lock generate --ansible-core 2.21 --python 3.12,3.13,3.14 --installer pip==<version> --output internal/controller/runtimelock/lock.json
+scripts/runtime-lock verify
+```
+
+`generate` resolves each ABI's binary wheels with the pinned installer,
+downloads every file to confirm its size and SHA-256, computes the glibc floor
+from the highest manylinux tag and carries the `tested` list forward; add a
+release to it with `--tested fedora:43,44 --tested rhel:9,10` once it ran.
+Move `scripts/tools/ansible-requirements.txt` to the same ansible-core patch in
+the same commit. `verify` downloads every locked URL and compares it, and
+`outdated` prints newer 2.21 patches and dependency releases without gating;
+`.github/workflows/runtime-lock.yml` runs `verify` when the lock or the tool
+changes and weekly, with `outdated` as an advisory summary.
 
 Each managed service runs one container image pinned by content digest in its
 capability's `catalog.go`. All four were resolved from their publisher's

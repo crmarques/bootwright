@@ -213,11 +213,13 @@ narrowed to what the evidence proves, or the evidence is widened; that awaits
 the owner, and `diff` leaves the unproved fields uncompared meanwhile.
 
 **B528: purging bundles strands an incomplete operation's closure.**
-`closureRefusal` (`internal/reconciliation/lifecycle/execution.go:1754`)
-refuses; `setup --purge-old-bundles` then retires the closure through `room`
-(`internal/controller/prerequisites/capacity.go:30`) without reading operation
-records, and re-resolving does not reproduce the wheels. Decision: retirement
-keeps every closure an incomplete operation names.
+`closureRefusal` (`internal/reconciliation/lifecycle/execution.go:1734`)
+refused; before X88, `setup --purge-old-bundles` then retired the closure
+through `room` in the prerequisites capacity code without reading operation
+records, and re-resolving did not reproduce the wheels. X88 removed the purge:
+the closure is now the lock digest and the ABI, a lock change refuses naming
+the build whose runtime the host keeps, and X90's retention keeps the previous
+runtime, so B528 is moot once X89 deletes the bundle code.
 
 ### Seam prerequisites, latent today
 

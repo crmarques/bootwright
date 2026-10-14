@@ -538,68 +538,30 @@ func cliGoldens() []cliGolden {
 		"repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss")
 	noInput := diagnostics.NewFailure("context.input", "context has no desired state; run context update --name lab --input-dir <dir>", "")
 	return append([]cliGolden{
-		// Controller reports: an unpresented dry-run plan, a presented setup
-		// that retired bundles, and a context's readiness.
-		{golden: "cli-setup-plan", args: "setup --dry-run", record: func(r *dispatchRecord) {
+		// Controller reports: an unpresented dry-run plan in text and JSON, a
+		// presented setup that changed the host, and a context's readiness.
+		{golden: "cli-setup-plan", args: "setup --dry-run", record: func(r *dispatchRecord) { r.result.controller = setupDryRun(platform) }},
+		{golden: "cli-setup-plan-json", args: "setup --dry-run --output json", record: func(r *dispatchRecord) {
+			r.result.controller = setupDryRun(platform)
+			r.result.controller.Warnings = []diagnostics.Diagnostic{{Severity: "warning", Code: "controller.untested-release", Message: "Fedora 45 is newer than the releases this build was tested on (43, 44); setup checks its floors and continues"}}
+		}},
+		{golden: "cli-setup-changed", args: "setup --yes", record: func(r *dispatchRecord) {
 			r.result.controller = &prerequisites.Report{
-				Platform: platform, Route: "direct", DryRun: true, Outcome: "planned", Next: "bootwright setup",
-				Checks: []prerequisites.Check{
-					{ID: "execution-bundle", Required: "qualified Python and Ansible", Observed: "unverified", Status: "unverified"},
-					{ID: "container-runtime", Required: "podman", Observed: "unverified", Status: "unverified"},
-				},
-				Actions:      []string{"Prepare the qualified execution bundle", "Install the baseline native packages"},
-				Dependencies: []string{"qualified-source.tar.gz"},
+				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true,
+				Checks:      []prerequisites.Check{ready("host", "fedora 43/amd64"), ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"), ready("host-packages", "openssh-clients, podman"), ready("setup-state", "complete")},
+				Actions:     []string{"Install host packages with dnf: podman"},
+				LogLocation: "/var/lib/bootwright/setup/runs/setup-000003",
 			}
 		}},
-		{golden: "cli-setup-changed", args: "setup --yes --purge-old-bundles", record: func(r *dispatchRecord) {
-			r.result.controller = &prerequisites.Report{
-				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true, Purge: true,
-				Checks:         []prerequisites.Check{ready("execution-bundle", "qualified"), ready("container-runtime", "podman 5.6.1")},
-				Actions:        []string{"Prepare the qualified execution bundle"},
-				RetiredBundles: []string{"bundle-2026-08", "bundle-2026-09"},
-			}
-		}},
-		// A purge beside a setup that had nothing to do says it retired
-		// nothing rather than staying silent.
-		{golden: "cli-setup-purge-none", args: "setup --purge-old-bundles", record: func(r *dispatchRecord) {
-			r.result.controller = &prerequisites.Report{
-				Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "unchanged", ProgressPresented: true, Purge: true,
-				Checks: []prerequisites.Check{ready("execution-bundle", "qualified"), ready("container-runtime", "podman 5.6.1")},
-			}
-		}},
-		// Refused setups: each result's next command is the one its
-		// remediation names (internal/controller/prerequisites/capacity.go and
-		// service.go), and none beside a confirmation refusal, whose remedy
-		// repeats the operator's invocation with --yes
-		// (internal/cli/confirmation.go).
-		{golden: "cli-setup-bound-refused", args: "setup", code: 1,
-			stderr: "[FAIL] controller.conflict: this host already retains the 16 bundle areas or resolutions it may hold, so the new execution bundle has no room; next: run bootwright setup --purge-old-bundles to retire the superseded execution bundles first\n",
-			record: func(r *dispatchRecord) {
-				r.result.controller = &prerequisites.Report{
-					Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "planned", ProgressPresented: true, Next: "bootwright setup --purge-old-bundles",
-					Checks: []prerequisites.Check{ready("execution-bundle", "qualified"), ready("container-runtime", "podman 5.6.1")},
-				}
-				r.err = diagnostics.NewFailureWithRemediation("controller.conflict", "this host already retains the 16 bundle areas or resolutions it may hold, so the new execution bundle has no room", "",
-					"run bootwright setup --purge-old-bundles to retire the superseded execution bundles first")
-			}},
-		{golden: "cli-setup-retirement-failed", args: "setup --yes --purge-old-bundles", code: 1,
-			stderr: "[FAIL] context.state: controller retirement requires an initialized record; next: the setup completed; run bootwright setup --purge-old-bundles again to complete the retirement\n",
-			record: func(r *dispatchRecord) {
-				r.result.controller = &prerequisites.Report{
-					Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "changed", PlanPresented: true, ProgressPresented: true, Purge: true, Next: "bootwright setup --purge-old-bundles",
-					Checks:  []prerequisites.Check{ready("execution-bundle", "qualified"), ready("container-runtime", "podman 5.6.1")},
-					Actions: []string{"Prepare the qualified execution bundle"},
-				}
-				r.err = diagnostics.NewFailureWithRemediation("context.state", "controller retirement requires an initialized record", "",
-					"the setup completed; run bootwright setup --purge-old-bundles again to complete the retirement")
-			}},
+		// Refused setups: a confirmation refusal's remedy repeats the
+		// operator's invocation with --yes (internal/cli/confirmation.go).
 		{golden: "cli-setup-confirmation-refused", args: "setup", code: 1,
 			stderr: "[FAIL] controller.setup: setup confirmation requires an interactive terminal; next: review the plan, then repeat bootwright setup with --yes\n",
 			record: func(r *dispatchRecord) {
 				r.result.controller = &prerequisites.Report{
 					Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "planned", PlanPresented: true, ProgressPresented: true,
-					Checks:  []prerequisites.Check{ready("execution-bundle", "qualified"), {ID: "container-runtime", Required: "podman", Observed: "missing or unverified", Status: "not-ready", Scope: prerequisites.HostScope}},
-					Actions: []string{"Run the Ansible controller role to install and verify missing native prerequisites"},
+					Checks:  []prerequisites.Check{ready("host", "fedora 43/amd64"), {ID: "host-packages", Required: "openssh-clients, podman", Observed: "missing podman", Status: "not-ready", Scope: prerequisites.HostScope}},
+					Actions: []string{"Install host packages with dnf: podman"},
 				}
 				r.err = diagnostics.NewFailureWithRemediation("controller.setup", "setup confirmation requires an interactive terminal", "", "review the plan, then repeat bootwright setup with --yes")
 			}},
@@ -609,24 +571,17 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-setup-plan-state-root", args: "setup --dry-run", code: 1,
 			stderr: "[FAIL] context.state: the state root is a directory owned by root:root with mode 0755, but it must be a directory owned by root:root with mode 0700; next: nothing repairs it, because Bootwright never changes the owner or mode of an existing state root\n",
 			record: func(r *dispatchRecord) {
-				r.result.controller = &prerequisites.Report{
-					Platform: platform, Route: "direct (no HTTPS_PROXY)", DryRun: true, Outcome: "planned",
-					Checks: []prerequisites.Check{
-						{ID: "execution-bundle", Required: "qualified Python and Ansible", Observed: "unverified", Status: "unverified"},
-						{ID: "state-root", Required: "a root:root 0700 directory on a local filesystem", Observed: "a directory owned by root:root with mode 0755", Status: "not-ready", Scope: prerequisites.HostScope},
-					},
-					Actions:      []string{"Prepare the qualified execution bundle"},
-					Dependencies: []string{"qualified-source.tar.gz"},
-				}
+				r.result.controller = setupDryRun(platform)
+				r.result.controller.Route = "direct (no HTTPS_PROXY)"
+				r.result.controller.Next = ""
+				r.result.controller.Checks = append(r.result.controller.Checks, prerequisites.Check{ID: "state-root", Required: "a root:root 0700 directory on a local filesystem", Observed: "a directory owned by root:root with mode 0755", Status: "not-ready", Scope: prerequisites.HostScope})
 				r.err = diagnostics.NewFailureWithRemediation("context.state", "the state root is a directory owned by root:root with mode 0755, but it must be a directory owned by root:root with mode 0700", "",
 					"nothing repairs it, because Bootwright never changes the owner or mode of an existing state root")
 			}},
-		// Each check carries the summary its constructor in
-		// internal/controller/prerequisites/service.go gives a held check,
-		// which readiness makes both required and observed: the platform, the
-		// verified local identity, versions() of the execution bundle, the
-		// installed podman version-release, toolVersionSummary of the target
-		// tools, the libvirt client and the controller Machine's name.
+		// Each check carries the summary internal/controller/prerequisites
+		// gives a held check: the platform, the verified local identity, the
+		// interpreter and ansible-core of the runtime, the baseline packages,
+		// the target tools, the libvirt client and the controller Machine.
 		{golden: "cli-preflight-controller", args: "preflight controller --context lab", record: func(r *dispatchRecord) {
 			held := func(id, summary, scope string) prerequisites.Check {
 				return prerequisites.Check{ID: id, Required: summary, Observed: summary, Status: "ready", Scope: scope}
@@ -636,14 +591,56 @@ func cliGoldens() []cliGolden {
 				Checks: []prerequisites.Check{
 					held("host", "fedora 43/amd64", prerequisites.HostScope),
 					held("installed-host", "verified local identity", prerequisites.HostScope),
-					held("execution-bundle", "Python 3.14.7, Ansible 2.21.4", prerequisites.HostScope),
-					held("container-runtime", "5.6.1-1.fc43", prerequisites.HostScope),
+					held("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5", prerequisites.HostScope),
+					held("host-packages", "openssh-clients, podman", prerequisites.HostScope),
+					held("setup-state", "complete", prerequisites.HostScope),
 					held("target-tools", "openshift-clients 4.21.15, openshift-install 4.21.15", prerequisites.ContextScope),
 					held("libvirt-client", "libvirt client", prerequisites.ContextScope),
 					held("controller-binding", "controller", prerequisites.ContextScope),
 				},
+				Table: &prerequisites.ReceiptTable{
+					Host:     "Fedora Linux 43 (amd64), glibc 2.42 — tested",
+					Runtime:  "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready",
+					Packages: "podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before bootwright)",
+				},
 			}
 		}},
+		// A host whose table looks whole still shows the host check that is not
+		// ready, here an interrupted setup.
+		{golden: "cli-preflight-controller-interrupted", args: "preflight controller", code: 1,
+			stderr: "[FAIL] preflight.failed: required controller prerequisites are not ready; next: run bootwright setup\n",
+			record: func(r *dispatchRecord) {
+				r.result.controller = &prerequisites.Report{
+					Platform: platform, Route: "direct", Outcome: "not-ready", Next: "bootwright setup",
+					Checks: []prerequisites.Check{
+						ready("host", "fedora 43/amd64"),
+						ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"),
+						ready("host-packages", "openssh-clients, podman"),
+						{ID: "setup-state", Required: "complete", Observed: "interrupted (setup-000042)", Status: "not-ready", Scope: prerequisites.HostScope},
+					},
+					Table: &prerequisites.ReceiptTable{
+						Host:     "Fedora Linux 43 (amd64), glibc 2.42 — tested",
+						Runtime:  "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready",
+						Packages: "podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before bootwright)",
+					},
+				}
+				r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright setup")
+			}},
+		// A host that is already ready renders the same table and nothing else
+		// to do; its informational lines go to standard error.
+		{golden: "cli-setup-ready", args: "setup", stderr: "[WARN] controller.loader-preload: /etc/ld.so.preload is not empty, so it loads libraries into every process, root dnf runs included; setup continues\n",
+			record: func(r *dispatchRecord) {
+				r.result.controller = &prerequisites.Report{
+					Platform: platform, Route: "direct", Outcome: "unchanged",
+					Checks: []prerequisites.Check{ready("host", "fedora 43/amd64"), ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"), ready("host-packages", "openssh-clients, podman"), ready("setup-state", "complete")},
+					Table: &prerequisites.ReceiptTable{
+						Host:     "Fedora Linux 43 (amd64), glibc 2.42 — tested",
+						Runtime:  "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready",
+						Packages: "podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before bootwright)",
+					},
+					Warnings: []diagnostics.Diagnostic{{Severity: "warning", Code: "controller.loader-preload", Message: "/etc/ld.so.preload is not empty, so it loads libraries into every process, root dnf runs included; setup continues"}},
+				}
+			}},
 
 		// Lifecycle: a staged preview wider than the build's bound with a step
 		// that consumes an authorization, a preview whose apply only completes
@@ -1137,5 +1134,28 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 		if name := strings.TrimSuffix(filepath.Base(file), ".golden"); !written[name] {
 			t.Errorf("%s is written by no case; delete it with the case that wrote it", file)
 		}
+	}
+}
+
+// setupDryRun is what setup --dry-run reports on a host missing podman whose
+// interpreter it found but whose runtime and setup record it cannot read.
+func setupDryRun(platform prerequisites.Platform) *prerequisites.Report {
+	return &prerequisites.Report{
+		Platform: platform, Route: "direct", DryRun: true, Outcome: "planned", Next: "bootwright setup",
+		Checks: []prerequisites.Check{
+			{ID: "host", Required: "the Fedora or RHEL family on amd64", Observed: "fedora 43/amd64", Status: "ready", Scope: prerequisites.HostScope},
+			{ID: "python-runtime", Required: "Python 3.14, 3.13, 3.12 with ansible-core 2.21.5", Observed: "Python 3.14.8 (/usr/bin/python3.14); runtime not verified without privilege", Status: "unverified", Scope: prerequisites.HostScope},
+			{ID: "host-packages", Required: "openssh-clients, podman", Observed: "missing podman", Status: "not-ready", Scope: prerequisites.HostScope},
+			{ID: "setup-state", Required: "complete", Observed: "unverified", Status: "unverified", Scope: prerequisites.HostScope},
+		},
+		Actions: []string{
+			"Install host packages with dnf: podman",
+			"Verify or prepare the controller runtime: Python 3.14 at /usr/bin/python3.14, ansible-core 2.21.5: 1 of 2 wheels to download (2.4 MB), 1 cached",
+		},
+		Dependencies: []string{"podman"},
+		Files: []prerequisites.LockedFile{
+			{ABI: "3.14", Filename: "ansible_core-2.21.5-py3-none-any.whl", URL: "https://files.pythonhosted.org/packages/ansible_core-2.21.5-py3-none-any.whl", SHA256: strings.Repeat("a", 64)},
+			{Filename: "pip-26.0.1-py3-none-any.whl", URL: "https://files.pythonhosted.org/packages/pip-26.0.1-py3-none-any.whl", SHA256: strings.Repeat("b", 64)},
+		},
 	}
 }

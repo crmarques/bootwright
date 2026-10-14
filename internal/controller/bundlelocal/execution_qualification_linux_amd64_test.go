@@ -151,13 +151,13 @@ func TestAZStreamFoundationQualifiesFromTheRPMDatabase(t *testing.T) {
 	}
 	reads := h.builds.reads
 	launched := false
-	if err := h.guard.WithPython(context.Background(), &h.area, inspection.Qualified.Execution, func(prerequisites.PythonLaunch, func() error) error {
+	if err := h.guard.WithPython(context.Background(), &h.area, inspection.Qualified.Execution, func(bundleLaunch, func() error) error {
 		launched = true
 		return nil
 	}); err != nil || !launched {
 		t.Fatalf("the qualified foundation did not launch: %v", err)
 	}
-	if err := h.guard.WithPython(context.Background(), &h.area, h.requirement, func(prerequisites.PythonLaunch, func() error) error {
+	if err := h.guard.WithPython(context.Background(), &h.area, h.requirement, func(bundleLaunch, func() error) error {
 		t.Fatal("the compiled foundation launched over an errata host")
 		return nil
 	}); err == nil {
@@ -246,7 +246,7 @@ func TestALaunchRefusalNamesSetupForAQualifiableUpdate(t *testing.T) {
 	f.guard.view.packages = qualificationPackages
 	f.guard.view.platform = prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
 	replaceFoundationFile(t, filepath.Join(f.root, "usr/lib64/libc.so.6"), []byte("a later glibc build"))
-	err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(prerequisites.PythonLaunch, func() error) error {
+	err := f.guard.WithPython(context.Background(), &f.area, f.requirement, func(bundleLaunch, func() error) error {
 		t.Fatal("a drifted foundation launched")
 		return nil
 	})

@@ -5,11 +5,11 @@ package ansiblerunner
 import (
 	"context"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -21,6 +21,7 @@ import (
 func TestAdapterInvocationIsUnbufferedSoItsOutputIsReadableWhileItRuns(t *testing.T) {
 	var arguments []string
 	runner := Runner{
+		stager:    newDirStager(t),
 		jobParent: t.TempDir(), scratchParent: t.TempDir(), drain: time.Millisecond,
 		command: func(_ string, args ...string) *exec.Cmd {
 			arguments = args
@@ -28,16 +29,15 @@ func TestAdapterInvocationIsUnbufferedSoItsOutputIsReadableWhileItRuns(t *testin
 		},
 	}
 	request := lifecycle.RunRequest{
-		Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
-		Bundle: prerequisites.BundleLocation{Path: t.TempDir()},
+		Context: "lab", Launch: testLaunch,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// The run itself cannot complete against a stub child; only the invocation
 	// this builds is under test.
-	_, _ = runner.execute(ctx, t.TempDir(), t.TempDir(), nil, "apply.yml", request)
+	_, _ = runner.execute(ctx, t.TempDir(), t.TempDir(), nil, stagedAutomation{path: t.TempDir()}, "apply.yml", request)
 	joined := strings.Join(arguments, "\x00")
-	if !strings.Contains(joined, "-u\x00-I\x00-B\x00-S\x00-c") {
-		t.Fatalf("adapter invocation = %q, want the unbuffered isolated boundary", joined)
+	if !strings.Contains(joined, "-u\x00-I\x00-B\x00-c") || slices.Contains(arguments, "-S") {
+		t.Fatalf("adapter invocation = %q, want the unbuffered isolated boundary with the venv's own site", joined)
 	}
 }

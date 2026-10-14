@@ -39,7 +39,7 @@ release numbers or contact publishers.
 
 | Field | Dependency | Exact override |
 | --- | --- | --- |
-| `libvirt` | Native libvirt client, including `virsh` | Distribution package version or `[EPOCH:]VERSION-RELEASE`. |
+| `libvirt` | Native libvirt client, including `virsh` | `latest`; the grammar admits a distribution package version or `[EPOCH:]VERSION-RELEASE`, which the controller stage refuses. |
 | `helm` | Helm | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
 | `govc` | vSphere client | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
 | `virtctl` | Upstream KubeVirt client | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
@@ -51,24 +51,23 @@ host serves every context, so no single Environment may move their versions.
 like any other unknown key.
 
 `latest` selects the publisher's latest stable release for
-the generic target clients. For native packages it selects the newest available
-build from the approved repositories for the executing OS release and
-architecture. A native version without a release selects the highest available
-build of that version, using the package manager's version ordering. Version
+the generic target clients. For the libvirt client the controller stage
+installs whatever the host's own repositories provide, through the host's dnf,
+so a selected libvirt closure with any other `libvirt` value refuses at that
+stage, naming the Environment and the remedy of removing the field
+([the controller stage](../controller.md#the-controller-stage)). Version
 ranges, wildcards, prereleases for generic clients, nulls and empty strings
 are invalid. Native values are at most 96 ASCII characters, start with an
 alphanumeric character, and otherwise contain only alphanumerics or `._+~^:-`.
 
 The selected desired-state graph determines which dependencies are needed.
 An override alone does not select an unused libvirt, Helm, govc or virtctl
-client. Supporting Python wheels and native package dependencies are resolved
-as a complete compatible closure; they are not individually configurable.
-An incompatible or unavailable exact request fails with a dependency
-diagnostic rather than silently substituting another root version.
-The controller adapter runs the qualified `ansible-core` minor that
-[development](../../docs/development.md#qualified-hosts-and-images) records, a
-[host prerequisite](../controller.md#supported-host-and-dependency-selection)
-no Environment versions.
+client. Native package dependencies are whatever the host's dnf resolves; they are
+not individually configurable. An incompatible or unavailable exact request
+fails with a dependency diagnostic rather than silently substituting another
+root version. The controller adapter runs the `ansible-core` release the
+[runtime lock](../controller.md#the-runtime-lock) of the running build pins, a
+host prerequisite no Environment versions.
 
 OpenShift/OKD installer and client versions remain tied to the target cluster's
 declared release. `openshift-install`, `oc` and `kubectl` are not override keys.
@@ -89,7 +88,7 @@ spec:
 These fields follow the normal `defaults.Environment` inheritance rules.
 Resolution, retention, retry and reuse follow
 [the controller stage](../controller.md#the-controller-stage):
-a serving retained resolution is reused as frozen, so moving a `latest`
+a retained client release is reused as frozen, so moving a `latest`
 dependency forward means declaring the newer release here.
 
 ## Domains

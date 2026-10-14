@@ -2,16 +2,18 @@
 
 Observed 2026-10-13 in the owner's M2b Ceph run, where a destroy of the whole
 Ceph fleet followed an automation-only fix that the code did not require.
+Revised for setup v2 (X88): no execution bundle exists any more, so the
+automation never needs `setup` to reach a run.
 
 ## Symptom
 
 An apply left a step `failed` or `unknown`, the fix was to `ansible/` only, and
 the operator destroyed and rebuilt the whole context (35 minutes for the Ceph
 fleet) because the milestone status said a moved automation digest needs
-retirement. After a rebuild without `bootwright setup`, the continuation
-instead stops at the first step it runs with `controller.identity`, "the
-embedded automation does not match the approved execution bundle", and has
-written an attempt or resolution record for it.
+retirement. Builds before X88 also stopped the continuation at the first step
+with `controller.identity`, "the embedded automation does not match the
+approved execution bundle", unless `bootwright setup` had projected the new
+automation first.
 
 ## Cause
 
@@ -22,17 +24,22 @@ reads the automation, so a fix confined to automation moves the automation
 digest and no content digest, request byte or version. Another build continues
 an operation exactly when it freezes the same blocks
 ([dependency safety](../../specs/state-reconciliation.md#dependency-safety-during-recovery),
-D142), so it passes, and the execution closure check passes because the closure
-excludes the automation. Every attempt then runs the running executable's
-automation from the bundle the current setup receipt names, which the runner
-checks byte for byte, so `setup` must have projected the new automation first.
+D142). Since X88 each invocation stages the running executable's embedded
+automation itself, and the execution closure (`execution-closure-v2`) is only
+the runtime lock digest and the interpreter ABI, so a rebuild that keeps the
+lock continues with no `setup`.
 
 ## Rule
 
-- Fix, `make build`, `bootwright setup`, then `bootwright apply` with the same
-  `--stage`. The operation, its done blocks and their evidence stay; each
-  attempt record names the build that ran it (`build`), and `plan` and `status`
-  say the operation was registered by another build.
+- Fix, `make build`, then `bootwright apply` with the same `--stage`. The
+  operation, its done blocks and their evidence stay; each attempt record names
+  the build that ran it (`build`), and `plan` and `status` say the operation was
+  registered by another build.
+- `bootwright setup` is needed only when the fix moves the runtime lock (another
+  `ansible-core`, Python dependency or interpreter ABI). Before that setup the
+  apply refuses with `run bootwright setup`; after it, a live operation whose
+  closure differs refuses naming the build that registered it, and offers the
+  removal when the operation can be superseded.
 - An unknown block is observed first. When the observation leaves it `failed`,
   the same apply retries it and runs its dependents (D146, X82). Before X82 that
   apply stopped and the next one retried it, so recovery took two applies; a
@@ -48,6 +55,3 @@ checks byte for byte, so `setup` must have projected the new automation first.
   closed and refuses one that carries `build` as "lifecycle record is malformed
   or unsupported", so it can neither continue nor remove the operation. The
   removal under the build in hand is the way out (D145).
-- Do not run `setup --purge-old-bundles` to make the continuation work: it is
-  not needed, and the continuation reads the current receipt's bundle, which
-  retirement keeps.

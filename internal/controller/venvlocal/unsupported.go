@@ -20,8 +20,12 @@ func (a *Adapter) Inspect(ctx context.Context, _ prerequisites.PythonInterpreter
 	return prerequisites.Runtime{}, false, errors.Join(ctx.Err(), errUnsupported)
 }
 
-func (a *Adapter) Build(ctx context.Context, _ prerequisites.PythonInterpreter) (prerequisites.Runtime, error) {
+func (a *Adapter) Build(ctx context.Context, _ prerequisites.RuntimePublisher, _ prerequisites.PythonInterpreter) (prerequisites.Runtime, error) {
 	return prerequisites.Runtime{}, errors.Join(ctx.Err(), errUnsupported)
+}
+
+func (a *Adapter) Published(ctx context.Context, _ prerequisites.Runtime) (bool, error) {
+	return false, errors.Join(ctx.Err(), errUnsupported)
 }
 
 func (a *Adapter) WithPython(ctx context.Context, _ prerequisites.Runtime, _ func(prerequisites.PythonLaunch) error) error {

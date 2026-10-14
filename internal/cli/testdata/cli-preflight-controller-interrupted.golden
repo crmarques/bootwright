@@ -1,0 +1,15 @@
+Controller readiness
+
+  Scope     baseline
+  Platform  fedora 43/amd64
+  Route     direct
+
+Checks
+  [FAIL]  Setup state  required complete; observed interrupted (setup-000042)
+
+  Host      Fedora Linux 43 (amd64), glibc 2.42 — tested
+  Runtime   Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready
+  Packages  podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before bootwright)
+
+  Outcome  not-ready
+  Next     bootwright setup

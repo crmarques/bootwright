@@ -26,30 +26,20 @@ type SetupContext struct {
 type StorageView struct {
 	Exists      bool
 	Initialized bool
-	Context     SetupContext
-	Sources     desiredstate.Sources
-	State       HostState
-	OpenBundle  func(context.Context, string) (BundleArea, error)
-	// Areas is every bundle area this host holds, execution bundles and client
-	// areas alike, in canonical order. Each counts against MaxRetainedBundles
-	// until a retirement removes it.
+	// Prepared reports a completed setup: the setup subtree holds a receipt,
+	// no interrupted setup and no other build's format.
+	Prepared   bool
+	Context    SetupContext
+	Sources    desiredstate.Sources
+	State      HostState
+	OpenBundle func(context.Context, string) (BundleArea, error)
+	// Areas is every tool area this host holds, in canonical order.
 	Areas []HeldArea
-	// SetupRuns reports that the controller directory keeps setup runs, which
-	// every build that predates them refuses as state it does not know.
-	SetupRuns bool
 }
 
-// MaxRetainedBundles bounds both the bundle areas a host holds and the
-// resolutions it retains. Retiring a superseded execution bundle is what
-// returns either.
-const MaxRetainedBundles = 16
-
-// HeldArea is one bundle area a host holds. Retiring marks one whose removal is
-// already intended: it is never read again, and naming it to a retirement
-// completes that removal.
+// HeldArea is one tool area a host holds.
 type HeldArea struct {
-	ID       string
-	Retiring bool
+	ID string
 }
 
 type BundleEntry struct {
@@ -80,21 +70,23 @@ const (
 
 // HostState and all returned evidence are private. Storage copies reachable
 // mutable slices at each request/result boundary. Bindings are sorted by context
-// name and share the receipt's atomic publication; context deletion removes only
-// its disposable binding, preserving host evidence and dependencies.
+// name; context deletion removes only its disposable binding, preserving host
+// evidence. ToolSources are the acquisition identities the controller stage
+// recovers a published tool closure from.
 type HostState struct {
-	Host                controller.InstalledHostIdentity
-	Receipt             SetupReceipt
-	Bindings            []ControllerBinding
-	RetainedSources     []DependencySource
-	RetainedDefinitions []Definition
-	Reservations        []HostReservation
+	Host         controller.InstalledHostIdentity
+	Bindings     []ControllerBinding
+	ToolSources  []DependencySource
+	Reservations []HostReservation
 }
 
+// ControllerBinding records a context against this host; Tools is the tool
+// closure its last controller stage published, when it published one.
 type ControllerBinding struct {
 	Context    string `json:"context"`
 	Machine    string `json:"machine"`
 	HostDigest string `json:"hostDigest"`
+	Tools      string `json:"tools,omitempty"`
 }
 
 // HostReservation records the host resources one context's locally hosted

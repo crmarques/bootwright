@@ -168,7 +168,7 @@ func TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses(t *testing.T
 			}
 			records := h.workspace.area.clone()
 			bound, released, binds := slices.Clone(h.binder.bound), slices.Clone(h.binder.released), h.workspace.binds
-			presented, mutations, opened := len(h.presenter.presented), h.workspace.mutations, h.workspace.opened
+			presented, mutations, opened := len(h.presenter.presented), h.workspace.mutations, h.guard.entered()
 			h.capability.destroys, h.capability.probes, h.capability.observes, h.capability.removals = nil, nil, nil, nil
 
 			_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
@@ -191,9 +191,9 @@ func TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses(t *testing.T
 				t.Fatalf("the refusal reached the host: destroys=%v probes=%v observes=%v",
 					h.capability.destroys, h.capability.probes, h.capability.observes)
 			}
-			if h.workspace.mutations != mutations || h.workspace.opened != opened {
-				t.Fatalf("the refusal took the exclusive lock or opened a bundle: mutations=%d opened=%d",
-					h.workspace.mutations-mutations, h.workspace.opened-opened)
+			if h.workspace.mutations != mutations || h.guard.entered() != opened {
+				t.Fatalf("the refusal took the exclusive lock or launched the runtime: mutations=%d launches=%d",
+					h.workspace.mutations-mutations, h.guard.entered()-opened)
 			}
 			// Every record and binding is exactly as the apply and the loss left it.
 			if !sameFiles(h.workspace.area, records) || currentOperation(t, h) != current {

@@ -22,11 +22,26 @@ type HostInspector interface {
 	Identity(context.Context) (controller.InstalledHostIdentity, error)
 }
 
+type ReleaseInspector interface {
+	Release(context.Context) (HostRelease, error)
+}
+
+type HostRelease struct {
+	ID           string
+	VersionID    string
+	Like         []string
+	Architecture string
+}
+
 // FIPSInspector is how a HostInspector reports whether the host's kernel runs
 // in FIPS mode. A host without it reports no FIPS mode check; the check never
 // changes readiness either way.
 type FIPSInspector interface {
 	FIPSMode(context.Context) (bool, error)
+}
+
+type LoaderPreloadInspector interface {
+	LoaderPreload(context.Context) (bool, error)
 }
 
 // FoundationInspector verifies, under the native package read lock, the
@@ -116,36 +131,29 @@ type BundleManager interface {
 	Rebase(context.Context, BundleArea, BootstrapDefinition) (BootstrapDefinition, error)
 }
 
-// RuntimeInstaller reports the phase of its native transaction and each target
-// tool through the progress callback; the caller supplies the action identity.
-// The RunOutput receives what the Ansible it starts prints, and a nil one
-// discards it.
-type RuntimeInstaller interface {
-	Prepare(context.Context, BundleArea, Platform, Definition, SetupEgress, func(context.Context, NativePreparation) error, func(ProgressEvent), RunOutput) (ActionResult, error)
-	Recover(context.Context, BundleArea, Platform, Definition, SetupEgress, NativePreparation, func(ProgressEvent), RunOutput) (ActionResult, error)
-}
-
 type HostPackages interface {
+	Qualify(ctx context.Context) error
 	Missing(ctx context.Context, requirements []string) ([]string, error)
+	Installed(ctx context.Context, requirements []string) ([]HostPackageEvidence, error)
+	Present(ctx context.Context, requirements []string) ([]HostPackageEvidence, error)
 	Preview(ctx context.Context, missing []string) (HostPackagePreview, error)
 	Install(ctx context.Context, missing []string, output RunOutput) ([]HostPackageEvidence, error)
 }
 
-// WithPython verifies and holds the execution foundation under the native
-// package read lock. A native installer may release that lock only after its
-// loaded helper acknowledges readiness to acquire and revalidate under the
-// native write lock. All other callers retain it through process completion.
+// WithPython holds the runtime's launch lock shared for the whole block and
+// verifies the runtime before use runs. A runtime that is not published
+// reports ErrRuntimeUnavailable.
 type PythonExecutionGuard interface {
-	WithPython(context.Context, BundleArea, ExecutionRequirement, func(PythonLaunch, func() error) error) error
+	WithPython(ctx context.Context, runtime Runtime, use func(PythonLaunch) error) error
 }
 
 type PythonRuntime interface {
+	PythonExecutionGuard
 	Select(ctx context.Context, preferred string) (PythonInterpreter, error)
 	Wheels(ctx context.Context, abi string) ([]RuntimeWheel, error)
 	Fetch(ctx context.Context, abi string, egress SetupEgress) error
 	Inspect(ctx context.Context, interpreter PythonInterpreter) (Runtime, bool, error)
-	Build(ctx context.Context, interpreter PythonInterpreter) (Runtime, error)
-	WithPython(ctx context.Context, runtime Runtime, use func(PythonLaunch) error) error
+	Build(ctx context.Context, publisher RuntimePublisher, interpreter PythonInterpreter) (Runtime, error)
 }
 
 // BootstrapResolver may stage and execute a wheel-only resolver in a disposable
@@ -184,32 +192,6 @@ type StagedAutomation struct {
 	Release func()
 }
 
-// NativeResolver may use disposable unprivileged staging for repository
-// metadata and maintained solver caches. It never applies a host transaction.
-type NativeResolver interface {
-	Resolve(context.Context, Platform, NativeRequirements, controller.DependencyVersions, SetupEgress) (NativeResolvedPlan, error)
-}
-
-// NativeInspector reports whether the selected native root packages are
-// installed by name, without consulting repository metadata, verifying
-// installed files or modifying installed state. OperatorRoots reads, on a RHEL
-// controller, the named root packages the operator installed and whether a
-// signature of the platform's qualified vendor key covers each installed
-// instance; like Check it proves presence and signer, never file integrity.
-type NativeInspector interface {
-	Check(context.Context, NativeResolvedPlan) (NativePresence, error)
-	OperatorRoots(context.Context, Platform, []string) (OperatorPresence, error)
-}
-
-// NativeInventory is how a NativeInspector reads the digest of the host's
-// installed package inventory, from a snapshot taken under the native package
-// read lock and over the same inventory a native resolution records as its
-// before-state. Without it setup never decides that a native transaction did
-// not start, so it never cancels a receipt on that observation.
-type NativeInventory interface {
-	Inventory(context.Context, Platform) (string, error)
-}
-
 type TargetToolCatalog interface {
 	// Select is pure: recover exact retained identities without metadata reads.
 	// Complete is false when setup must resolve a previously unseen requirement.
@@ -223,14 +205,12 @@ type TargetToolCatalog interface {
 	Present(context.Context, BundleArea, []ToolDefinition) (bool, error)
 }
 
-// Storage owns host-wide setup coordination and durable evidence. ExplicitName
-// is empty for baseline scope; no method consults current-context selection.
-// Callbacks hold the root lock and must consume input before returning.
+// Storage reads the shared controller record: host identity, bindings, tool
+// sources and areas, and reservations. ExplicitName is empty for baseline
+// scope; no method consults current-context selection. The callback holds the
+// root lock and must consume input before returning.
 type Storage interface {
 	ReadController(context.Context, string, func(StorageView) error) error
-	// Create authorizes root/empty-registry bootstrap and requires prior ordinary
-	// confirmation. Mutations additionally hold the selected context's lease.
-	MutateController(context.Context, SetupContext, bool, func(StorageTransaction) error) error
 }
 
 // StateRootInspector is how a Storage that keeps its state beneath one root
@@ -250,30 +230,6 @@ type StateRootInspection struct {
 	Observed string
 	Status   string
 	Refusal  error
-}
-
-// StorageTransaction is invocation-scoped. Publish revalidates exact stored
-// evidence before atomic replacement; Unknown disables all further publication.
-type StorageTransaction interface {
-	Snapshot() StorageView
-	Publish(context.Context, HostState) (Publication, error)
-	Bundle(context.Context, string) (BundleArea, error)
-	// RetireBundles removes superseded execution bundle areas and the retained
-	// resolutions they carry. It records its intent before removing anything,
-	// so an interruption leaves an area that is never read rather than one the
-	// record still presents as usable. Naming an area it does not hold removes
-	// nothing, not even a resolution naming it.
-	RetireBundles(context.Context, []string) error
-	// RetireResolutions drops retained resolutions, named by resolution
-	// digest, of a bundle that stays or of one that holds no area. It refuses
-	// the receipt's own and any whose held bundle no other retained resolution
-	// would still name, so every execution bundle stays identifiable as one.
-	RetireResolutions(context.Context, []string) error
-	// OpenRun creates the next setup run while an action of the receipt holds
-	// its durable intent, removing the oldest runs first so no more than the
-	// retention bound are ever kept. It publishes nothing and changes no
-	// record, so a caller treats its failure as retention it does not have.
-	OpenRun(context.Context) (SetupRun, error)
 }
 
 // SetupRun keeps what one controller Ansible run of setup prints, so an
@@ -296,15 +252,23 @@ type SetupStore interface {
 }
 
 type SetupTransaction interface {
+	RuntimePublisher
 	View() SetupView
 	Record(ctx context.Context, value SetupState) error
 	DiscardForeign(ctx context.Context) error
 	OpenRun(ctx context.Context) (string, SetupRun, error)
+	Runtimes(ctx context.Context) ([]string, error)
+	WheelPath(ctx context.Context, sha256, filename string) (string, error)
+}
+
+// RuntimePublisher is the setup transaction's runtime half: PublishRuntime
+// reports false when another publisher won and removes the stage, and
+// RetireRuntime false when a launch holds the runtime.
+type RuntimePublisher interface {
 	StageRuntime(ctx context.Context) (RuntimeStage, error)
 	PublishRuntime(ctx context.Context, stage RuntimeStage, digest string) (bool, error)
-	Runtimes(ctx context.Context) ([]string, error)
+	DiscardRuntime(ctx context.Context, stage RuntimeStage) error
 	RetireRuntime(ctx context.Context, digest string) (bool, error)
-	WheelPath(ctx context.Context, sha256, filename string) (string, error)
 }
 
 type RuntimeStage interface {
@@ -334,16 +298,6 @@ type BundleArea interface {
 // fails unless consume read it whole and the file kept its identity.
 type BundleStream interface {
 	Stream(ctx context.Context, path string, maximum int64, consume func(BundleReader) error) error
-}
-
-// BundleDiscard is how a setup bundle area lets preparation remove a file an
-// earlier build left shorter than its approved size under its final name,
-// which only a write killed before its sync leaves, so the exact replay can
-// publish it again. It removes only a private regular file smaller than
-// approved bytes, only under the area's write capability and never in a
-// sealed area.
-type BundleDiscard interface {
-	DiscardPartial(ctx context.Context, path string, approved int64) error
 }
 
 // BundleReader is one bundle file's stream. Its shape is declared here rather

@@ -6,12 +6,14 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-func Isolated(playbooks map[string]string, jobParent, scratchParent string, adapter func() *exec.Cmd) Runner {
+func Isolated(playbooks map[string]string, jobParent, scratchParent string, stager prerequisites.AutomationStager, adapter func() *exec.Cmd) Runner {
 	return Runner{
 		jobParent: jobParent, scratchParent: scratchParent, owner: uint32(os.Geteuid()),
 		command:   func(string, ...string) *exec.Cmd { return adapter() },
-		playbooks: maps.Clone(playbooks),
+		playbooks: maps.Clone(playbooks), stager: stager,
 	}
 }

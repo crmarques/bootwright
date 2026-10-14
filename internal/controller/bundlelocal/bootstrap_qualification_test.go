@@ -120,7 +120,7 @@ func TestQualifiedResolvedBootstrapPreparation(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return runImportProbe(ctx, area, prerequisites.PythonLaunch{Loader: definition.Execution.Loader, Arguments: []string{"--inhibit-cache", "--glibc-hwcaps-mask", "", "--library-path", filepath.Join(location.Path, "python/lib"), "--preload", strings.Join(definition.Execution.Preload, ":"), filepath.Join(location.Path, definition.Bootstrap.PythonExecutable)}, Directory: location.Path, Environment: []string{"LC_ALL=C.UTF-8", "LANG=C.UTF-8", "HOME=" + location.Path, "OPENSSL_CONF=/dev/null"}}, definition)
+		return runImportProbe(ctx, area, bundleLaunch{Loader: definition.Execution.Loader, Arguments: []string{"--inhibit-cache", "--glibc-hwcaps-mask", "", "--library-path", filepath.Join(location.Path, "python/lib"), "--preload", strings.Join(definition.Execution.Preload, ":"), filepath.Join(location.Path, definition.Bootstrap.PythonExecutable)}, Directory: location.Path, Environment: []string{"LC_ALL=C.UTF-8", "LANG=C.UTF-8", "HOME=" + location.Path, "OPENSSL_CONF=/dev/null"}}, definition)
 	}
 	if _, err := manager.Prepare(t.Context(), area, nil, definition, prerequisites.SetupEgress{}, nil); err != nil {
 		t.Fatalf("%v: %+v", err, diagnostics.Of(err))

@@ -82,11 +82,12 @@ relationship does not bind the registry to a newly verified host, move local
 state, change its root or infer a Machine from the invocation.
 
 [Controller](controller.md) owns verified local-host evidence and setup
-semantics. Workspace owns its durable shared-host receipt and the binding
-between context name, admitted controller Machine identity and verified
-host. First binding is published by the first `apply` that uses the host, under
-the root lock and context lease it already holds, before that operation
-reserves anything or performs any effect. Setup claims no context, and context
+semantics. Workspace owns the setup subtree's receipt and the binding between context
+name, admitted controller Machine identity and verified host. First binding is
+published by the first `apply` that uses the host, under the root lock and
+context lease it already holds, before that operation reserves anything or
+performs any effect, and only once setup completed; on a host no context
+bound yet it also creates the controller record. Setup claims no context, and context
 import, preflight and inspection never publish it. Missing, contradictory or
 different host evidence refuses without replacement. A changed Machine name
 cannot silently transfer an existing binding. Ordinary same-host reboot must
@@ -94,13 +95,13 @@ remain distinguishable from relocation in the qualified identity
 implementation.
 
 Workspace keeps that shared-host state, the Controller descriptor and record,
-the setup receipt and the bundle and client-area namespaces, in the
+the tool areas and the setup subtree with its receipt and runtimes, in the
 [controller record](contexts/controller-record.md).
 
 After definitive setup completion, preserve existing lifecycle guards. A safe
 input update retains binding identity; context deletion may drop disposable
 context-specific references but never uninstalls shared packages or deletes
-shared bundles/host evidence. Package failure or process death is not disposal
+tool areas, runtimes or host evidence. Package failure or process death is not disposal
 proof. Complete-store restore must preserve these relationships under the
 [restore boundary](#format-and-restore-boundary); controller relocation waits
 on [B103](milestones/backlog.md#b103).
@@ -186,25 +187,33 @@ configured secret-store type and reserved directory device/inode. The
 Controller descriptor is an optional trailing member that confirmed setup adds.
 The 4096-name bound applies to active or reserved contexts, not past creations.
 
-A `registry.json` of any other format version, such as the versions 2, 3 and 4
-that earlier builds wrote, is refused rather than converted, as state this
-build cannot read, with the earlier-build guidance below. There is no fallback
-from corrupt state to older metadata.
+A `registry.json` of version 5, which every build before the setup v2
+cut-over wrote, refuses every access with `context.state`, "/var/lib/bootwright
+holds a store an earlier Bootwright build wrote (registry version 5), which
+this build does not read or convert", and the fresh-install remedy: "with the
+build that wrote it, destroy each environment (bootwright destroy --context
+<name>) and delete each context (bootwright context delete --name <name>);
+then, as root, remove /var/lib/bootwright and /var/lib/bootwright-staging and
+run bootwright setup with this build. Never remove /var/lib/bootwright while
+services it manages run." ([D152](milestones/backlog.md#decisions),
+`TestARegistryVersion5StoreNamesTheFreshInstallRemedy`). Nothing in that store
+is rewritten. A `registry.json` of any other format version, such as the
+versions 2, 3 and 4 earlier builds wrote, is refused rather than converted, as
+state this build cannot read, with the earlier-build guidance below. There is
+no fallback from corrupt state to older metadata.
 
 The production root is `/var/lib/bootwright`. Its Controller subtree follows
-the [controller record](contexts/controller-record.md) and exists only after
-confirmed setup:
+the [controller record](contexts/controller-record.md) and exists only after a
+first binding; its setup subtree exists after a confirmed setup:
 
 ```text
 /var/lib/bootwright/
   registry.json
   controller/
     state.json
-    bundles/<catalog-digest>/
+    bundles/<tool-closure-digest>/
       sources/
-      python/
-    runs/<setup-run-id>/
-      run.output
+      tools/
   media/
     <filename.iso>
     <filename.iso>.json
@@ -238,7 +247,7 @@ confirmed setup:
 | --- | --- |
 | `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once setup publishes it. |
 | `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; a pinned stage whose publication met another command's lock is kept beside its record for the command's repetition; deletion is guarded by the reservation record. |
-| `setup/` | Setup's own subtree, independently versioned and outside the registry: the registry's Controller descriptor never names it and no registry verification decodes it. `setup/lock` is the exclusive lock of setup and of runtime publication. `state.json` is the canonical `bootwright.setup-state-v1` record, at most 256 KiB, holding the pending intent setup writes and synchronizes before any effect, the receipt and the current and previous runtimes; a launch that finds an intent refuses `controller.state` naming the interrupted run, and one that finds a record it cannot read or of another format refuses `controller.state` saying another Bootwright build wrote it, both with `run bootwright setup`, which discards another build's subtree after confirmation. A runtime is built in a `runtimes/.stage-<32 hex>` directory and published only with its `runtime.json`: one `syncfs` of the store filesystem, a rename that never replaces, then a synchronized parent; a publisher that finds the runtime already published discards its stage, and setup removes stages a killed run left. A launch holds a runtime's `.lock` shared and retirement takes it exclusively without waiting, so a runtime in use is skipped. `runs/` keeps the newest 8 setup runs, each output at most 4 MiB. Its runtimes hold the ordinary modes a Python virtual environment creates. |
+| `setup/` | Setup's own [subtree](contexts/controller-record.md#the-setup-subtree), independently versioned and outside the registry: its lock, its `bootwright.setup-state-v1` record with the pending intent and receipt, the published runtimes, the locked wheel cache and the newest setup runs. |
 | `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
 | `desired-state/revisions/<revision-id>/` | Immutable input snapshot, so publication and protected recovery can retain a complete selected revision. Collect unselected revisions only with disposal proof. |
 | `manifest.json` | Original input provenance, blob mapping, sizes and hashes needed to verify and replay the snapshot. |
@@ -271,9 +280,10 @@ repeat the command (`TestAStateRootBehindALinkNamesTheAncestorAndItsExit`).
 
 A host whose `/var/lib/bootwright` holds a store an earlier Bootwright build
 created is not a supported controller for this build until that build's
-environments are retired and its root archived. This build refuses that root,
-by what it lacks rather than by recognizing another build's files, and never
-adopts or converts it. The refusal says that another Bootwright build may
+environments are retired and its root archived. This build refuses that root
+and never adopts or converts it. A version 5 registry it names by the version
+it read, with the fresh-install remedy above; any other root it refuses by
+what it lacks rather than by recognizing another build's files. The refusal says that another Bootwright build may
 manage live environments there, to run this build on another controller host
 or to retire that build's environments before archiving its root, and that the
 root is never moved aside while that build's services run.
@@ -334,7 +344,7 @@ that cannot take the lock or lease refuses with `lifecycle.lease` and a retry
 remedy; no lock or lease is ever waited for or taken over. A lease is held
 only once its stage collection, layout verification and reservation check
 succeed; a lease that refuses is released at once. `setup`
-[selects no context](controller.md#selection-and-command-journeys), so it
+[selects no context](controller.md#the-setup-flow), so it
 takes no lease and collects no stage in a context's `state/` subtree.
 Revalidate target, identity and evidence under those locks. Read-only
 operations perform no repair, initialization or publication.
@@ -454,8 +464,8 @@ retry attribute that directory and record the identity that deletion
 requires. The initial registry's stage is the recovery artifact the
 missing-registry rule below names; a replacement registry stage is removed on
 failure like any other, and after a kill by the next registry transaction.
-Media stages follow [Media acquisition](#media-acquisition), and controller
-bundle stages follow the [controller record](contexts/controller-record.md#bounds).
+Media stages follow [Media acquisition](#media-acquisition), and tool area
+stages follow the [controller record](contexts/controller-record.md#bounds).
 
 After durable registry publication, a pristine context may collect verified
 unselected revisions while holding the root lock and context lease. Pristine
@@ -497,20 +507,19 @@ Secrets limits additionally bound their trees.
 | --- | --- | --- |
 | Active or reserved context names | 4096 | `maxContexts` in `internal/workspace/contextfs/store.go` |
 | Revisions per context | 4096 | `maxRevisions` in `internal/workspace/contextfs/store.go` |
-| Retained [controller bundle namespaces](contexts/controller-record.md#bounds) | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_records.go` |
+| Retained [controller bundle namespaces](contexts/controller-record.md#bounds), the tool areas | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_records.go` |
 | Lifecycle operations one context retains | 1024 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
 | Entries in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | 8192 | `MaxEntries` in `internal/reconciliation/operationstore/records.go` |
 | Bytes in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | 64 MiB | `MaxBytes` in `internal/reconciliation/operationstore/records.go` |
 | One lifecycle adapter invocation whose request states no deadline | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
 | The longest deadline a lifecycle adapter request may state | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
-| One controller Ansible run: setup, its recovery or the base of a controller-stage client installation | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
+| One controller Ansible run: the base of a controller-stage tool publication | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
 | The longest deadline a controller-stage client installation may run under | 2 hours | `clientStageCeiling` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
-| The longest bound native packages are staged under in one controller run, which its deadline adds to the run base: the 2-hour ceiling less that base | 110 minutes | `nativeStagingCeiling` in `internal/controller/ansiblelocal/deadline.go` |
 | Bytes in one installer media image | 32 GiB | `MaxMediaBytes` in `internal/managedos/media.go` |
 | Installer media images one host holds | 64 | `MaxMediaEntries` in `internal/managedos/media.go` |
 | Bytes in an installer media name | 250 | `MaxMediaName` in `internal/managedos/media.go` |
 | Installer media stages at once, live, retained or abandoned | 16 | `maxStagedMedia` in `internal/workspace/contextfs/media_linux_amd64.go` |
-| [Setup runs](contexts/controller-record.md#setup-runs) the controller directory keeps | 8 | `maxSetupRuns` in `internal/workspace/contextfs/controller_runs_linux_amd64.go` |
+| [Setup runs](contexts/controller-record.md#the-setup-subtree) the setup subtree keeps | 8 | `maxSetupRuns` in `internal/workspace/contextfs/setup_runs_linux_amd64.go` |
 | [Bounded runs](cli/output.md#bounded-run-output) one context's runs area keeps | 16 | `maxBoundedRuns` in `internal/workspace/contextfs/runs_linux_amd64.go` |
 
 `TestDocumentedBoundsMatchCode` compares each value with its code, and each

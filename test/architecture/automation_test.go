@@ -15,10 +15,7 @@ func TestOnlyTheProjectionReadsCollectionDocumentation(t *testing.T) {
 	const embedded = "github.com/crmarques/bootwright/ansible"
 	const projection = "internal/controller/bundlelocal/projection.go"
 	readers := map[string]bool{
-		"internal/controller/ansiblelocal/installer.go":                false,
-		"internal/reconciliation/ansiblerunner/process_linux_amd64.go": false,
 		projection: false,
-		"internal/controller/nativelocal/resolver_linux_amd64.go":  false,
 		"internal/controller/stagelocal/automation_linux_amd64.go": false,
 	}
 	for _, source := range productionSources(t) {

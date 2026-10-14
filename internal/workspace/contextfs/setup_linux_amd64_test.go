@@ -283,15 +283,13 @@ func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(store.options.Root, setupSubtree, test.entry), test.content, 0600); err != nil {
 				t.Fatal(err)
 			}
-			if test.entry == setupStateName {
-				view, err := store.ReadSetup(context.Background())
-				if err != nil || view.Foreign != test.foreign {
-					t.Fatalf("launch read %#v %v, want foreign %q", view, err, test.foreign)
-				}
-				refusal := onlyDiagnostic(t, prerequisites.SetupLaunchRefusal(view))
-				if refusal.Code != "controller.state" || refusal.Message != "the controller setup record was written by another Bootwright build" || refusal.Remediation != "run bootwright setup" {
-					t.Fatalf("a foreign record refuses a launch with %#v", refusal)
-				}
+			view, err := store.ReadSetup(context.Background())
+			if err != nil || view.Foreign != test.foreign {
+				t.Fatalf("launch read %#v %v, want foreign %q", view, err, test.foreign)
+			}
+			refusal := onlyDiagnostic(t, prerequisites.SetupLaunchRefusal(view))
+			if refusal.Code != "controller.state" || refusal.Message != "the controller setup record was written by another Bootwright build" || refusal.Remediation != "run bootwright setup" {
+				t.Fatalf("a foreign record refuses a launch with %#v", refusal)
 			}
 			mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
 				if got := tx.View().Foreign; got != test.foreign {
@@ -311,7 +309,7 @@ func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
 			if names := setupEntries(t, store); !slices.Equal(names, []string{setupLockName, setupStateName}) {
 				t.Fatalf("the discard left %q", names)
 			}
-			view, err := store.ReadSetup(context.Background())
+			view, err = store.ReadSetup(context.Background())
 			if err != nil || view.Foreign != "" || prerequisites.SetupLaunchRefusal(view) != nil {
 				t.Fatalf("after the discard %#v %v", view, err)
 			}
@@ -503,6 +501,26 @@ func TestARuntimeIsPublishedOnlyWithItsRecord(t *testing.T) {
 	mutateSetup(t, store, func(prerequisites.SetupTransaction) error { return nil })
 	if names := setupEntries(t, store, setupRuntimesName); len(names) != 0 {
 		t.Fatalf("the next setup did not sweep the leftover stage: %q", names)
+	}
+}
+
+func TestADiscardedStageLeavesNoEntryAndPublishesNothing(t *testing.T) {
+	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		stage := stageRuntime(t, tx, "discarded")
+		if err := tx.DiscardRuntime(context.Background(), stage); err != nil {
+			return err
+		}
+		if err := tx.DiscardRuntime(context.Background(), stage); err != nil {
+			return err
+		}
+		if published, err := tx.PublishRuntime(context.Background(), stage, setupDigest(9)); published || err == nil {
+			t.Errorf("a discarded stage published: %t, %v", published, err)
+		}
+		return nil
+	})
+	if names := setupEntries(t, store, setupRuntimesName); len(names) != 0 {
+		t.Fatalf("the discarded stage left %q", names)
 	}
 }
 

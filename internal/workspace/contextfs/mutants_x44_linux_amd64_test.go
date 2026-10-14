@@ -8,27 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
-
-// A setup receipt that lists one proxy bypass twice is refused, while the same
-// list without the repeat is accepted, so the record holds each bypass once
-// (X33's mutants, B255).
-func TestAControllerReceiptRefusesARepeatedProxyBypass(t *testing.T) {
-	value := syntheticControllerState(t, prerequisites.SetupContext{})
-	value.Receipt.Egress = prerequisites.SetupEgress{HTTPSProxy: "https://proxy.example.test:3128", NoProxy: []string{"example.test", "192.0.2.0/24"}}
-	value.Receipt.PlanDigest, _ = prerequisites.SetupPlanDigest(value.Host, value.Receipt)
-	if err := validateControllerState(value); err != nil {
-		t.Fatalf("distinct bypasses were refused: %v", err)
-	}
-	repeated := cloneControllerState(value)
-	repeated.Receipt.Egress.NoProxy = []string{"example.test", "example.test"}
-	repeated.Receipt.PlanDigest, _ = prerequisites.SetupPlanDigest(repeated.Host, repeated.Receipt)
-	if err := validateControllerState(repeated); err == nil {
-		t.Fatal("a bypass listed twice was accepted")
-	}
-}
 
 // A fresh reservation never adopts a context directory it did not create: one
 // already present under the name the registry has just reserved refuses, and

@@ -164,6 +164,10 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		if path == "context update" && len(arrayValue(flags, "file")) == 0 && stringValue(flags, "input-dir") == "" {
 			return "context update requires --file or --input-dir"
 		}
+	case "setup":
+		if stringValue(flags, "output") == "json" && !boolValue(flags, "dry-run") {
+			return "setup accepts --output json only with --dry-run"
+		}
 	case "context delete":
 		if !boolValue(flags, "purge") {
 			return "context delete requires --purge=true"

@@ -10,102 +10,46 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/cli"
-	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
-	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-func TestComposedBaselineDryRunUsesOnlyPlatformAndCatalog(t *testing.T) {
+func TestComposedBaselineDryRunReadsNoSetupState(t *testing.T) {
 	for _, flag := range []string{"", "--context="} {
-		ports := &controllerPorts{}
-		services := assembleServices(serviceDependencies{Controller: controllerDependencies{
-			Storage: ports, Host: ports, Catalog: ports, Bundle: ports,
-			Bootstrap: bootstrapPort{ports}, Native: nativePort{ports}, NativeInspector: nativePort{ports},
-			Foundation: foundationPort{ports},
-		}})
+		ports, stores := &setupPorts{}, &controllerPorts{}
+		services := assembleServices(serviceDependencies{Controller: ports.setupDependencies(stores, stores)})
 		args := []string{"setup", "--dry-run"}
 		if flag != "" {
 			args = append(args, flag)
 		}
 		var out, errOut bytes.Buffer
 		code := runServices(context.Background(), args, &out, &errOut, services)
-		if code != 0 || errOut.Len() != 0 || ports.platform != 1 || ports.catalog != 1 || ports.egress != 1 || ports.effects != 0 || !strings.Contains(out.String(), "Scope     baseline") || !strings.Contains(out.String(), "Outcome  planned") {
-			t.Fatal(code, out.String(), errOut.String(), ports)
+		if code != 0 || errOut.Len() != 0 || ports.reads == 0 || ports.effects != 0 || stores.effects != 0 || !strings.Contains(out.String(), "Scope     baseline") ||
+			!strings.Contains(out.String(), "Outcome  planned") || !strings.Contains(out.String(), "  podman\n") {
+			t.Fatal(code, out.String(), errOut.String(), ports, stores)
 		}
 	}
 }
 
-type controllerPorts struct{ platform, catalog, egress, effects int }
+// controllerPorts is the store as a dry run must never reach it: every call
+// is an effect.
+type controllerPorts struct{ effects int }
 
-func (p *controllerPorts) Platform(context.Context) (prerequisites.Platform, error) {
-	p.platform++
-	return prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, nil
-}
-func (p *controllerPorts) Admit(prerequisites.Platform) error             { p.catalog++; return nil }
-func (p *controllerPorts) ValidateEgress(prerequisites.SetupEgress) error { p.egress++; return nil }
-func (p *controllerPorts) Identity(context.Context) (controller.InstalledHostIdentity, error) {
-	p.effects++
-	return controller.InstalledHostIdentity{}, errors.New("unexpected identity inspection")
-}
-
-// bootstrapPort and nativePort are the resolution ports a dry run never
-// reaches: each call is an effect.
-type bootstrapPort struct{ ports *controllerPorts }
-
-func (b bootstrapPort) Resolve(context.Context, prerequisites.Platform, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.BootstrapDefinition, []diagnostics.Diagnostic, error) {
-	b.ports.effects++
-	return prerequisites.BootstrapDefinition{}, nil, errors.New("unexpected bootstrap resolution")
-}
-
-type nativePort struct{ ports *controllerPorts }
-
-// foundationPort is the execution foundation inspector a dry run never
-// reaches: its call is an effect.
-type foundationPort struct{ ports *controllerPorts }
-
-func (f foundationPort) Inspect(context.Context, prerequisites.Platform) (prerequisites.FoundationInspection, error) {
-	f.ports.effects++
-	return prerequisites.FoundationInspection{}, errors.New("unexpected foundation inspection")
-}
-
-func (n nativePort) Resolve(context.Context, prerequisites.Platform, prerequisites.NativeRequirements, controller.DependencyVersions, prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
-	n.ports.effects++
-	return prerequisites.NativeResolvedPlan{}, errors.New("unexpected native resolution")
-}
-
-func (n nativePort) Check(context.Context, prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
-	n.ports.effects++
-	return prerequisites.NativePresence{}, errors.New("unexpected native inspection")
-}
-
-func (n nativePort) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
-	n.ports.effects++
-	return prerequisites.OperatorPresence{}, errors.New("unexpected operator inspection")
-}
 func (p *controllerPorts) ReadController(context.Context, string, func(prerequisites.StorageView) error) error {
 	p.effects++
 	return errors.New("unexpected controller read")
 }
-func (p *controllerPorts) MutateController(context.Context, prerequisites.SetupContext, bool, func(prerequisites.StorageTransaction) error) error {
+func (p *controllerPorts) ReadSetup(context.Context) (prerequisites.SetupView, error) {
 	p.effects++
-	return errors.New("unexpected controller mutation")
+	return prerequisites.SetupView{}, errors.New("unexpected setup read")
 }
-func (p *controllerPorts) Inspect(context.Context, prerequisites.BundleArea, prerequisites.Definition, bool) (prerequisites.BundleInspection, error) {
+func (p *controllerPorts) MutateSetup(context.Context, func(prerequisites.SetupTransaction) error) error {
 	p.effects++
-	return prerequisites.BundleInspection{}, errors.New("unexpected bundle inspection")
+	return errors.New("unexpected setup mutation")
 }
-func (p *controllerPorts) Validate(prerequisites.Definition) error {
+func (p *controllerPorts) HoldRuntime(context.Context, string) (prerequisites.RuntimeHold, error) {
 	p.effects++
-	return errors.New("unexpected bundle validation")
-}
-func (p *controllerPorts) Rebase(context.Context, prerequisites.BundleArea, prerequisites.BootstrapDefinition) (prerequisites.BootstrapDefinition, error) {
-	p.effects++
-	return prerequisites.BootstrapDefinition{}, errors.New("unexpected bundle rebase")
-}
-
-func (p *controllerPorts) Prepare(context.Context, prerequisites.BundleArea, prerequisites.BundleArea, prerequisites.Definition, prerequisites.SetupEgress, func(prerequisites.ProgressEvent)) (prerequisites.BundleInspection, error) {
-	p.effects++
-	return prerequisites.BundleInspection{}, errors.New("unexpected bundle preparation")
+	return nil, errors.New("unexpected runtime hold")
 }
 
 func TestComposedControllerSuppliesEveryPort(t *testing.T) {
@@ -120,14 +64,20 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 			t.Fatalf("composition left %s unsupplied", fields.Field(index).Name)
 		}
 	}
-	if fields.NumField() != 13 {
+	if fields.NumField() != 12 {
 		t.Fatalf("controller port count = %d; update this gate with the port it covers", fields.NumField())
 	}
 	if _, reports := composed.Host.(prerequisites.FIPSInspector); !reports {
 		t.Fatal("the composed host inspector reports no FIPS mode")
 	}
-	if _, reads := composed.NativeInspector.(prerequisites.NativeInventory); !reads {
-		t.Fatal("the composed native inspector reads no package inventory")
+	if _, releases := composed.Host.(prerequisites.ReleaseInspector); !releases {
+		t.Fatal("the composed host inspector reads no OS release")
+	}
+	if composed.Lock.Digest == "" || len(composed.Lock.Files) == 0 {
+		t.Fatal("the composed runtime lock is empty")
+	}
+	if _, reports := composed.Python.(lifecycle.RuntimePresence); !reports {
+		t.Fatal("the composed runtime guard reports no runtime presence")
 	}
 }
 

@@ -12,7 +12,7 @@ func controllerPreflightCommand() commandSpec {
 }
 
 func controllerSetupCommand() commandSpec {
-	return available(commandSpec{path: "setup", short: "Set up context-independent controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag(), boolFlag("purge-old-bundles", "Retire the execution bundles this host no longer needs")}, long: "Prepare this host's context-independent controller prerequisites: the private execution bundle and the baseline native packages. Setup selects no context; the prerequisites a context adds are installed by the controller stage of apply. --dry-run previews the plan with unverified checks and makes no changes. --purge-old-bundles retires the superseded execution bundles this host still holds after the setup completes, and first, before it publishes, when a new bundle would not fit within the host's bound of 16. It first cancels a setup left pending, at that bound or below it, that never took effect and that this executable cannot resume, then sets the host up afresh. It removes no client closure and nothing the current receipt names. Review the plan before confirming; --yes skips ordinary confirmation."})
+	return available(commandSpec{path: "setup", short: "Set up context-independent controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag(), outputFlag()}, long: "Prepare this host's context-independent controller prerequisites: the baseline host packages, installed through the host's own dnf, and the controller runtime, a venv on the OS Python holding exactly the wheels this build locks. Setup selects no context; the prerequisites a context adds are installed by the controller stage of apply. A ready host makes no request and no change. Otherwise the plan shows dnf's own preview before confirmation. --dry-run never elevates: it names the host package requirements without a preview and makes no changes, and --output json, accepted only with --dry-run, also lists every locked wheel's file, URL and SHA-256. Review the plan before confirming; --yes skips ordinary confirmation."})
 }
 
 type ControllerService interface {
@@ -33,7 +33,6 @@ func (s Services) invokeController(ctx context.Context, path string, values *req
 		result.controller, err = invokeResult(ctx, values, prerequisites.SetupRequest{
 			DryRun:           values.boolean("dry-run"),
 			SkipConfirmation: values.boolean("yes"),
-			PurgeOldBundles:  values.boolean("purge-old-bundles"),
 		}, s.Controller.Setup)
 	default:
 		return commandResult{}, errors.New("command has no application dispatch")

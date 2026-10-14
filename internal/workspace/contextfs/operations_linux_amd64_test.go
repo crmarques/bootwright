@@ -98,7 +98,7 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 			Version: operationstore.OperationVersion, ID: id, Verb: plan.Verb, Source: source, Context: record.Name, Revision: "rev-" + strings.Repeat("ef", 16),
 			InputDigest: strings.Repeat("1", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("2", 64),
 			Executable: operationstore.Executable{Version: "devel", Commit: "abcdef1"},
-			Closure:    &operationstore.Closure{Digest: strings.Repeat("3", 64), Python: "3.14.7", Ansible: "2.21.4"},
+			Closure:    &operationstore.Closure{Digest: strings.Repeat("3", 64), Python: "3.14", Ansible: "2.21.4"},
 			Bindings:   []string{}, State: reconciliation.OperationRunning,
 			Created: "2026-09-30T12:00:00Z", Updated: "2026-09-30T12:00:00Z",
 		}
@@ -285,7 +285,7 @@ func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 			Version: operationstore.OperationVersion, ID: id, Verb: plan.Verb, Source: source, Context: record.Name, Revision: "rev-" + strings.Repeat("ef", 16),
 			InputDigest: strings.Repeat("1", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("2", 64),
 			Executable: operationstore.Executable{Version: "devel", Commit: "abcdef1"},
-			Closure:    &operationstore.Closure{Digest: strings.Repeat("3", 64), Python: "3.14.7", Ansible: "2.21.4"},
+			Closure:    &operationstore.Closure{Digest: strings.Repeat("3", 64), Python: "3.14", Ansible: "2.21.4"},
 			Bindings:   []string{}, State: reconciliation.OperationRunning,
 			Created: "2026-09-30T12:00:00Z", Updated: "2026-09-30T12:00:00Z",
 		}

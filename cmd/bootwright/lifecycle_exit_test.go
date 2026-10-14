@@ -81,7 +81,7 @@ func registerDoneUnder(ctx context.Context, t *testing.T, store *operationstore.
 // exitClosure is the execution closure a registration of this build freezes;
 // no verb here continues an operation, so none compares it.
 func exitClosure() *operationstore.Closure {
-	return &operationstore.Closure{Digest: strings.Repeat("d", 64), Python: "3.13.15", Ansible: "2.21.4"}
+	return &operationstore.Closure{Digest: strings.Repeat("d", 64), Python: "3.13", Ansible: "2.21.4"}
 }
 
 // exitBuild is the build each attempt these records start names.

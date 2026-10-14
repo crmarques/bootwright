@@ -23,14 +23,10 @@ const proceed = "proceed\n"
 // supervisor arms the same signal for itself and ends its whole tree on it.
 const parentDeath = syscall.SIGTERM
 
-// entrypoint pins the private interpreter's import roots before any Ansible
-// code loads.
-const entrypoint = `import sys, os
-root = os.path.dirname(os.path.dirname(sys.executable))
-version = str(sys.version_info.major) + '.' + str(sys.version_info.minor)
-stdlib = root + '/lib/python' + version
-sys.path[:] = [root + '/lib/python' + version.replace('.', '') + '.zip', stdlib, stdlib + '/lib-dynload', stdlib + '/site-packages']
-assert sys.flags.isolated and sys.flags.no_site and sys.flags.dont_write_bytecode
+// entrypoint refuses an interpreter that is not the isolated controller venv
+// before any Ansible code loads; the venv's own site supplies its packages.
+const entrypoint = `import sys
+assert sys.flags.isolated and sys.flags.dont_write_bytecode and sys.prefix != sys.base_prefix
 path = sys.argv.pop(1)
 with open(path, 'rb') as stream:
     code = compile(stream.read(), path, 'exec')
@@ -57,8 +53,10 @@ func Run(ctx context.Context, invocation Invocation, judge Judge) Ending {
 	// A lock is inherited by every process the supervisor forks, so it is
 	// free only once none of them runs.
 	command.ExtraFiles = []*os.File{childOutput, childInput}
-	if invocation.Lock != nil {
-		command.ExtraFiles = append(command.ExtraFiles, invocation.Lock)
+	for _, lock := range []*os.File{invocation.Lock, invocation.AutomationLock} {
+		if lock != nil {
+			command.ExtraFiles = append(command.ExtraFiles, lock)
+		}
 	}
 	command.Stdout, command.Stderr = invocation.Output, invocation.Output
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -91,14 +89,14 @@ func Run(ctx context.Context, invocation Invocation, judge Judge) Ending {
 // that ties the supervisor to its invocation.
 func compose(invocation Invocation) *exec.Cmd {
 	collection := filepath.Join(invocation.Automation, "collections/ansible_collections/bootwright/core")
-	arguments := append(slices.Clone(invocation.Arguments), "-u", "-I", "-B", "-S", "-c", entrypoint,
+	arguments := append(slices.Clone(invocation.Arguments), "-u", "-I", "-B", "-c", entrypoint,
 		filepath.Join(collection, "plugins/module_utils/controller_supervisor.py"))
 	if invocation.Lifecycle {
 		arguments = append(arguments, "--lifecycle")
 	}
 	arguments = append(arguments, "-i", invocation.Inventory, "--extra-vars", "@"+invocation.Variables,
 		filepath.Join(collection, "playbooks", invocation.Playbook))
-	command := invocation.Command(invocation.Loader, arguments...)
+	command := invocation.Command(invocation.Program, arguments...)
 	command.Dir = invocation.Automation
 	command.Env = append(slices.Clone(invocation.Environment),
 		"ANSIBLE_CONFIG="+filepath.Join(invocation.Automation, "ansible.cfg"),

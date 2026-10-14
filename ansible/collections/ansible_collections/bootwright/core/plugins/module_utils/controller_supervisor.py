@@ -171,18 +171,19 @@ def enter_child(lifecycle, prctl, getppid, supervisor, install, end):
         end(125)
 
 
+def controller_runtime(flags, prefix, base_prefix):
+    """Report whether the interpreter is the isolated controller venv.
+
+    The venv's own site module supplies its packages, so isolation, no
+    bytecode writes and a venv prefix are required and nothing pins the
+    import path.
+    """
+    return bool(flags.isolated and flags.dont_write_bytecode and prefix != base_prefix)
+
+
 def main():
-    root = os.path.dirname(os.path.dirname(sys.executable))
-    version = str(sys.version_info.major) + "." + str(sys.version_info.minor)
-    stdlib = root + "/lib/python" + version
-    sys.path[:] = [
-        root + "/lib/python" + version.replace(".", "") + ".zip",
-        stdlib,
-        stdlib + "/lib-dynload",
-        stdlib + "/site-packages",
-    ]
-    if not (sys.flags.isolated and sys.flags.no_site and sys.flags.dont_write_bytecode):
-        raise RuntimeError("qualified interpreter flags required")
+    if not controller_runtime(sys.flags, sys.prefix, sys.base_prefix):
+        raise RuntimeError("the isolated controller runtime is required")
     lifecycle = lifecycle_mode(sys.argv)
     libc = ctypes.CDLL(None, use_errno=True)
     libc.prctl.argtypes = [

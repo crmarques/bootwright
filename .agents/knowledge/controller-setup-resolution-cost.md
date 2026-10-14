@@ -2,7 +2,7 @@
 
 Observed on 2026-09-12 and 2026-09-13 on a ready Fedora 43 controller:
 `bootwright setup` took about two minutes, then still almost a minute,
-to report `unchanged`. [Controller](../../specs/controller.md#supported-host-and-dependency-selection)
+to report `unchanged`. [Controller](../../specs/controller.md#host-packages)
 owns the rules that setup reuses a serving retained resolution, never checks
 for newer releases, and checks readiness by presence only; this page records
 why each removed step was expensive, which is the reason those rules matter.
@@ -10,9 +10,8 @@ why each removed step was expensive, which is the reason those rules matter.
 - Setup used to resolve dependencies before checking readiness, so every run
   paid the full resolution cost even with nothing to do. Resolution now runs
   only when no retained resolution serves the intent or a selected native root
-  is missing. Code: `internal/controller/prerequisites/service.go` (`Setup`,
-  `resolutionRequired`), `internal/controller/prerequisites/resolution.go`
-  (`resolveDependencies`, `supersededLatest`).
+  is missing. That service was replaced by setup v2 in X88, which resolves nothing at
+  setup and reads a lock the build embeds.
 - Bootstrap resolution is priced as acquisition, not as a metadata round-trip:
   it fetches the uv Python metadata, downloads the complete standalone Python
   archive, runs the pip resolver inside that projection, then downloads every
@@ -20,7 +19,7 @@ why each removed step was expensive, which is the reason those rules matter.
   `internal/controller/bundlelocal/bootstrap.go` (`Resolve`).
 - Native resolution stages the `primary`, `filelists` and related members of
   every approved repository and copies the RPM database before the DNF helper
-  solves. Code: `internal/controller/nativelocal/resolver_linux_amd64.go`
+  solves. Code: internal/controller/nativelocal/resolver_linux_amd64.go
   (`Resolve`, `stageRepository`).
 - Bundle readiness used to re-read every retained source, re-extract the Python
   archive and every wheel in memory, byte-compare all published files against
@@ -37,7 +36,7 @@ why each removed step was expensive, which is the reason those rules matter.
   identity is shown as the observed release and never compared to the frozen
   one. The helper's `inspect` operation keeps the full inventory for the native
   transaction's own proof. Code:
-  `internal/controller/nativelocal/resolver_linux_amd64.go` (`Check`,
+  internal/controller/nativelocal/resolver_linux_amd64.go (`Check`,
   `decodePresence`), `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_resolution.py`
   (`present`).
 - File verification belongs to the transaction, over exactly what it installed;
@@ -99,11 +98,12 @@ why each removed step was expensive, which is the reason those rules matter.
   `internal/controller/bundlelocal/projection.go` (`embed`, `describe`),
   `internal/controller/bundlelocal/manager.go` (`validateDefinition`,
   `qualifiedFoundation`, `Rebase`, `retainedSource`,
-  `attributableDocumentation`, `publishDocumentation`),
-  `internal/controller/prerequisites/resolution.go` (`carryForward`, `rebind`).
+  `attributableDocumentation`, `publishDocumentation`); the service's carry
+  forward went with setup v2 in X88.
   Retiring the replaced area is `setup --purge-old-bundles` (X7); a foundation
-  shared across automation-only revisions is parked as
-  [B165](../../specs/milestones/backlog.md#b165).
+  shared across automation-only revisions was parked as B165, which
+  [X88](../../specs/milestones/delivered.md#x88--controller-setup-v2-cut-over)
+  closed: automation is no part of any setup identity.
 - Staging acquires every repository member the solver may open, and narrowing
   that set by what a solver is configured to load does not work. Staging only
   `primary` and `filelists` for DNF5, on the reasoning that
@@ -114,38 +114,33 @@ why each removed step was expensive, which is the reason those rules matter.
   Fedora 43, the staged set is about 104 MB and `filelists` alone is 72 MB of
   it, so the upside was never large: dropping `other`, the only member proved
   droppable, saves 8 MB. Code:
-  `internal/controller/nativelocal/resolver_linux_amd64.go` (`stageRepository`).
+  internal/controller/nativelocal/resolver_linux_amd64.go (`stageRepository`).
 - The inventory snapshot is taken once per invocation. `Resolver` retains the
   copy and reuses it while the live database still has the identity it was
   copied from, so a setup that proves presence three or four times copies the
   database once; `Close`, returned through `localControllerDependencies` and
   deferred by `run`, releases it. Code:
-  `internal/controller/nativelocal/resolver_linux_amd64.go` (`stageDatabase`,
+  internal/controller/nativelocal/resolver_linux_amd64.go (`stageDatabase`,
   `databaseState`, `retainedDatabase.serves`, `Close`).
 - Evidence: `internal/controller/prerequisites` tests asserting that a ready
   controller, a retry after a terminal failure and a missing native root contact
-  no bootstrap or tool publisher
-  (`TestLatestSetupResolvesOnceAndReusesRetainedNoop`,
-  `TestDefiniteRefusalRetriesFromRetainedClosure`), the sealed-bundle presence
+  no bootstrap or tool publisher (removed with that service in X88), the
+  sealed-bundle presence
   test in `internal/controller/bundlelocal` (`TestSealedBundleReadinessIsPresenceOnly`),
-  the presence evidence test in `internal/controller/nativelocal`, and the
+  the presence evidence test in internal/controller/nativelocal, and the
   helper unit test `test_present_reports_roots_by_name_without_verifying_files`.
   For readiness by presence and the integrity proof beside it:
   `test_inspect_reports_readiness_by_presence_without_verifying_files`,
   `test_verified_files_covers_installed_files_and_no_host_owned_path` and
   `test_integrity_is_proved_over_exactly_what_the_transaction_installed`.
   For carrying a resolution forward:
-  `TestSupersededAutomationCarriesTheRetainedResolutionForward`,
-  `TestCarryForwardResolvesAfreshFromARetainedBundleThatLostASource` and
-  `TestCarryForwardFallbackRefusesAsAFreshResolutionWould` in
-  `internal/controller/prerequisites`, and
   `TestRebaseKeepsEveryRetainedIdentityAndOnlyMovesTheAutomation`,
   `TestRebaseRefusesRetainedSourcesThatAreNotTheirApprovedBytes` and
   `TestPreparationRecoversRetainedSourcesInsteadOfAcquiringThem` in
   `internal/controller/bundlelocal`. For staging and the snapshot:
-  `TestStagingRequiresTheMembersEveryPlanDependsOn` in
-  `internal/controller/nativelocal` and
-  `TestRetainedDatabaseServesOnlyTheStateItWasCopiedFrom`.
+  TestStagingRequiresTheMembersEveryPlanDependsOn in
+  internal/controller/nativelocal and
+  TestRetainedDatabaseServesOnlyTheStateItWasCopiedFrom.
 
 Applies to the Linux/amd64 `bundlelocal` and `nativelocal` adapters. Revisit if
 a publisher offers a projection identity without payload acquisition, or if a
@@ -155,3 +150,5 @@ Not yet qualified on a real host: that DNF5 with `optional_metadata_types` set
 to `filelists`, and DNF4's `fill_sack`, open no repository member outside the
 staged set. A solver that does opens a member the staging no longer wrote, and
 the resolve fails loudly rather than solving against partial metadata.
+
+X88 deleted internal/controller/nativelocal (D152): the paths and tests this page names without code formatting are history.

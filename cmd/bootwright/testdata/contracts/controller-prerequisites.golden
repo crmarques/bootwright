@@ -1,5 +1,5 @@
 implementation: controller-prerequisites
-content-digest: 12861259f12ba6828a41390a1acbe06a50f813a4939f65e9b503d450db7356c7
+content-digest: 8e1b5c5efd0a0f8781f63b3d0bf5f26541ecc2458d35db2f09f9a0a0ae0fb3ca
 automation-formats: none
 request-schema:
   egress struct prerequisites.SetupEgress
@@ -11,6 +11,7 @@ request-schema:
   libvirt string
   libvirtClient bool
   machine string
+  packages []string
   tools []struct clients.ToolRequest
   tools[].compatibility string
   tools[].kind string
@@ -20,9 +21,12 @@ request-schema:
 evidence-schema:
   area string
   libvirt bool
+  packages []struct clients.PackageRecord
+  packages[].package string
+  packages[].repository string omitempty
+  packages[].requirement string
   request string
   retained bool
-  roots []string
   tools []struct clients.ToolRecord
   tools[].kind string
   tools[].sha256 string

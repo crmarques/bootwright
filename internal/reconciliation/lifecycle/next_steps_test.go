@@ -348,7 +348,7 @@ func containsCommand(text, command string) bool {
 // effect.
 func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
 	ctx := context.Background()
-	failedReceipt := func(h *harness) { h.workspace.controller.State.Receipt.Status = "failed" }
+	failedReceipt := func(h *harness) { h.workspace.controller.Prepared = false }
 	for _, row := range []struct {
 		name    string
 		arrange func(*testing.T) *harness

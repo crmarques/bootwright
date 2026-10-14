@@ -23,8 +23,8 @@ import (
 
 // Subject is one fresh workspace holding the ready context Context, with
 // empty operation and run areas, on a host whose completed controller setup
-// identifies it as Host, names its approved bundle, binds no context and
-// retains no dependency. KeptRuns is how many runs its run area keeps.
+// and controller record identify it as Host, binding no context and retaining
+// no tool source. KeptRuns is how many runs its run area keeps.
 type Subject struct {
 	Workspace lifecycle.Workspace
 	Context   string
@@ -58,8 +58,7 @@ func Verify(t *testing.T, within Within) {
 		{"each view names the context it holds", eachViewNamesTheContextItHolds},
 		{"a view reads a retained revision and nothing else", aViewReadsARetainedRevisionAndNothingElse},
 		{"a client area opens under a reservation and reopens sealed read-only", aClientAreaOpensUnderAReservation},
-		{"retained dependencies are kept whole and never replaced", retainedDependenciesAreKeptWhole},
-		{"a stage retires the resolutions it supersedes beside the one it retains", aStageRetiresTheResolutionsItSupersedes},
+		{"retained tool sources are kept whole and never replaced", retainedDependenciesAreKeptWhole},
 		{"a secret area is lent for the held context only inside its transaction", aSecretAreaIsLentOnlyInsideItsTransaction},
 	} {
 		t.Run(clause.name, func(t *testing.T) {
@@ -291,21 +290,16 @@ func eachViewNamesTheContextItHolds(t *testing.T, s Subject) {
 	}
 }
 
-// closure is the client closure the suite publishes: a digest no setup names.
+// closure is the client closure the suite publishes.
 var closure = strings.Repeat("e", 64)
 
 func aClientAreaOpensUnderAReservation(t *testing.T, s Subject) {
 	ctx := context.Background()
 	mutate(t, s, func(tx lifecycle.Transaction) {
-		approved := tx.Controller().State.Receipt.CatalogDigest
-		if len(approved) != 64 || approved == closure {
-			t.Fatalf("the completed setup names approved bundle %q", approved)
+		if area, err := tx.ClientArea(ctx, "not-a-digest"); err == nil {
+			t.Fatalf("a client area named by no digest opened %v", area)
 		}
-		for what, refused := range map[string]string{"no digest": "not-a-digest", "the approved setup bundle": approved} {
-			if area, err := tx.ClientArea(ctx, refused); err == nil {
-				t.Fatalf("a client area named by %s opened %v", what, area)
-			}
-		}
+		succeeds(t, tx.Bind(ctx, "controller", s.Host), "the binding a sealed closure is recorded on")
 		refuses(t, tx.SealClientArea(ctx, closure), "sealing a client area never opened")
 		area := clientArea(t, tx, closure)
 		succeeds(t, area.Write(ctx, "manifest.json", []byte("{}\n"), false), "a client file")
@@ -318,6 +312,7 @@ func aClientAreaOpensUnderAReservation(t *testing.T, s Subject) {
 		if !slices.Contains(view.Controller().Areas, prerequisites.HeldArea{ID: closure}) {
 			t.Fatalf("held areas = %+v, want the client area %s", view.Controller().Areas, closure)
 		}
+		bindings(t, view, s.Context, prerequisites.ControllerBinding{Context: s.Context, Machine: "controller", HostDigest: hostDigest(t, s), Tools: closure})
 	})
 	mutate(t, s, func(tx lifecycle.Transaction) {
 		area := clientArea(t, tx, closure)
@@ -329,50 +324,20 @@ func aClientAreaOpensUnderAReservation(t *testing.T, s Subject) {
 
 func retainedDependenciesAreKeptWhole(t *testing.T, s Subject) {
 	ctx := context.Background()
-	resolution := syntheticResolution(t)
 	source := prerequisites.DependencySource{ID: "client-tool", URL: "https://tools.example.test/client.tar.gz", SHA256: strings.Repeat("a", 64), Bytes: 64}
-	replaced, incomplete, altered := source, prerequisites.CloneDefinition(resolution), prerequisites.CloneDefinition(resolution)
+	other := prerequisites.DependencySource{ID: "other-tool", URL: "https://tools.example.test/other.tar.gz", SHA256: strings.Repeat("c", 64), Bytes: 64}
+	replaced := source
 	replaced.SHA256 = strings.Repeat("b", 64)
-	incomplete.Native = nil
-	altered.PythonVersion = "3.14.8"
 	mutate(t, s, func(tx lifecycle.Transaction) {
-		succeeds(t, tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{source}, nil), "retaining a source")
-		succeeds(t, tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{source}, nil), "retaining it again")
-		refuses(t, tx.RetainDependencies(ctx, nil, []prerequisites.DependencySource{replaced}, nil), "a source replaced under its identity")
-		refuses(t, tx.RetainDependencies(ctx, &incomplete, incomplete.Sources, nil), "an incomplete resolution")
-		refuses(t, tx.RetainDependencies(ctx, &resolution, nil, nil), "a resolution without its sources")
+		succeeds(t, tx.RetainDependencies(ctx, []prerequisites.DependencySource{source}), "retaining a source")
+		succeeds(t, tx.RetainDependencies(ctx, []prerequisites.DependencySource{source}), "retaining it again")
+		refuses(t, tx.RetainDependencies(ctx, []prerequisites.DependencySource{replaced}), "a source replaced under its identity")
 		retains(t, tx, []prerequisites.DependencySource{source})
-		succeeds(t, tx.RetainDependencies(ctx, &resolution, resolution.Sources, nil), "retaining a resolution with its sources")
-		succeeds(t, tx.RetainDependencies(ctx, &resolution, resolution.Sources, nil), "retaining it again")
-		refuses(t, tx.RetainDependencies(ctx, &altered, altered.Sources, nil), "a resolution replaced under its identity")
-		retains(t, tx, append([]prerequisites.DependencySource{source}, resolution.Sources...), resolution)
+		succeeds(t, tx.RetainDependencies(ctx, []prerequisites.DependencySource{other}), "retaining another source")
+		retains(t, tx, []prerequisites.DependencySource{source, other})
 	})
 	read(t, s, func(view lifecycle.View) {
-		retains(t, view, append([]prerequisites.DependencySource{source}, resolution.Sources...), resolution)
-	})
-}
-
-// A stage that solves again retires, in the publication that retains its new
-// resolution, the ones it names as superseded, and only beside one it keeps.
-// A named resolution the store does not hold is already gone.
-func aStageRetiresTheResolutionsItSupersedes(t *testing.T, s Subject) {
-	ctx := context.Background()
-	first := syntheticResolution(t)
-	second := resolutionSolvedFrom(t, strings.Repeat("1", 64))
-	third := resolutionSolvedFrom(t, strings.Repeat("2", 64))
-	absent := strings.Repeat("3", 64)
-	mutate(t, s, func(tx lifecycle.Transaction) {
-		succeeds(t, tx.RetainDependencies(ctx, &first, first.Sources, nil), "retaining a first resolution")
-		refuses(t, tx.RetainDependencies(ctx, nil, nil, []string{first.ResolutionDigest}), "a retirement beside no resolution")
-		refuses(t, tx.RetainDependencies(ctx, &second, second.Sources, []string{second.ResolutionDigest}), "a retirement of the resolution being retained")
-		refuses(t, tx.RetainDependencies(ctx, &second, second.Sources, []string{"not-a-digest"}), "a retirement named by no digest")
-		retains(t, tx, first.Sources, first)
-		succeeds(t, tx.RetainDependencies(ctx, &second, second.Sources, []string{first.ResolutionDigest, absent}), "retaining a resolution that supersedes the first")
-		retains(t, tx, first.Sources, second)
-		succeeds(t, tx.RetainDependencies(ctx, &third, third.Sources, []string{second.ResolutionDigest}), "retaining one that supersedes the second")
-	})
-	read(t, s, func(view lifecycle.View) {
-		retains(t, view, first.Sources, third)
+		retains(t, view, []prerequisites.DependencySource{source, other})
 	})
 }
 
@@ -497,6 +462,15 @@ func changes(view lifecycle.View) {
 	}
 }
 
+func hostDigest(t *testing.T, s Subject) string {
+	t.Helper()
+	digest, err := s.Host.PrivateDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return digest
+}
+
 func bindings(t *testing.T, view lifecycle.View, context string, want ...prerequisites.ControllerBinding) {
 	t.Helper()
 	held := slices.DeleteFunc(slices.Clone(view.Controller().State.Bindings), func(binding prerequisites.ControllerBinding) bool {
@@ -535,80 +509,16 @@ func publishes(t *testing.T, area prerequisites.BundleArea, name, want string) {
 	}
 }
 
-// retains requires view to retain exactly the sources and the resolutions
-// named, in any order of sources.
-func retains(t *testing.T, view lifecycle.View, sources []prerequisites.DependencySource, resolutions ...prerequisites.Definition) {
+// retains requires view to retain exactly the tool sources named, in any
+// order.
+func retains(t *testing.T, view lifecycle.View, sources []prerequisites.DependencySource) {
 	t.Helper()
 	held := view.Controller().State
 	byID := func(x, y prerequisites.DependencySource) int { return strings.Compare(x.ID, y.ID) }
-	if got, want := slices.SortedFunc(slices.Values(held.RetainedSources), byID), slices.SortedFunc(slices.Values(sources), byID); !slices.Equal(got, want) {
+	if got, want := slices.SortedFunc(slices.Values(held.ToolSources), byID), slices.SortedFunc(slices.Values(sources), byID); !slices.Equal(got, want) {
 		t.Fatalf("retained sources = %+v, want %+v", got, want)
 	}
-	if !slices.EqualFunc(held.RetainedDefinitions, resolutions, prerequisites.SameDefinition) {
-		t.Fatalf("retained %d resolutions, want %d", len(held.RetainedDefinitions), len(resolutions))
-	}
 }
-
-// syntheticResolution is one complete native resolution, as a controller stage
-// freezes before it installs anything.
-func syntheticResolution(t *testing.T) prerequisites.Definition {
-	t.Helper()
-	return resolutionSolvedFrom(t, strings.Repeat("e", 64))
-}
-
-// resolutionSolvedFrom is that resolution solved against another package
-// inventory: the same releases and sources under a new resolution digest.
-func resolutionSolvedFrom(t *testing.T, inventory string) prerequisites.Definition {
-	t.Helper()
-	platform := prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
-	source := func(id, url string) prerequisites.DependencySource {
-		return prerequisites.DependencySource{ID: id, URL: url, SHA256: strings.Repeat("a", 64), Bytes: 64}
-	}
-	bootstrap, err := prerequisites.CanonicalBootstrap(prerequisites.BootstrapDefinition{
-		Format: "bootwright.controller.bootstrap-v1", Platform: platform, PythonIntent: "latest", AnsibleIntent: "latest",
-		PythonVersion: "3.14.7", AnsibleVersion: "2.21.4", PythonExecutable: "python/bin/python3.14", SitePackages: "python/lib/python3.14/site-packages/",
-		Sources: []prerequisites.DependencySource{
-			source("python", "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"),
-			source("ansible", "https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl"),
-			source("urllib3", "https://files.pythonhosted.org/packages/urllib3-2.7.0-py3-none-any.whl"),
-		},
-		Wheels: []prerequisites.BootstrapWheel{{Name: "ansible-core", Version: "2.21.4", SourceID: "ansible"}, {Name: "urllib3", Version: "2.7.0", SourceID: "urllib3"}},
-		Metadata: []prerequisites.DependencySource{
-			source("python-metadata", "https://raw.githubusercontent.com/astral-sh/uv/main/crates/uv-python/download-metadata.json"),
-			source("ansible-metadata", "https://pypi.org/pypi/ansible-core/json"),
-		},
-		ProjectionSHA256: strings.Repeat("b", 64), FileCount: 10, ExpandedBytes: 100, AutomationDigest: strings.Repeat("c", 64),
-		Execution:         prerequisites.ExecutionRequirement{PythonExecutable: "python/bin/python3.14", Files: []prerequisites.InstalledFile{}, Links: []prerequisites.InstalledLink{}, Preload: []string{}},
-		ExecutionPackages: []string{"glibc", "libgcc"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	native := prerequisites.NativeResolvedPlan{
-		Format: "bootwright.native-plan-v1", Platform: platform, Solver: "dnf5", SolverVersion: "5.2.0", Requests: controller.DefaultDependencyVersions(),
-		Requirements: prerequisites.NativeRequirements{ContainerRuntime: true},
-		Repositories: []prerequisites.NativeRepository{{ID: "base", BaseURL: "https://packages.example.test/fedora", MetadataSHA256: strings.Repeat("d", 64)}},
-		Roots:        []prerequisites.NativeRoot{}, Packages: []prerequisites.NativePackage{}, Actions: []prerequisites.NativeAction{},
-		BeforeSHA256: inventory, AfterSHA256: inventory,
-	}
-	for _, root := range []struct{ key, name string }{{"podman", "podman"}, {"openssh", "openssh-clients"}, {"nmstate", "nmstate"}} {
-		identity := prerequisites.NativeIdentity{Name: root.name, Version: "1.2.3", Release: "1.fc43", Architecture: "x86_64"}
-		native.Roots = append(native.Roots, prerequisites.NativeRoot{Key: root.key, Requested: "latest", Package: identity})
-		native.Packages = append(native.Packages, prerequisites.NativePackage{
-			Name: identity.Name, Version: identity.Version, Release: identity.Release, Architecture: identity.Architecture,
-			Signer: strings.Repeat("f", 40), Source: source(root.name, "https://packages.example.test/fedora/"+root.name+".rpm"),
-		})
-	}
-	if native, err = prerequisites.CanonicalNativePlan(native); err != nil {
-		t.Fatal(err)
-	}
-	definition, err := prerequisites.NewResolvedDefinition(bootstrap, native)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return definition
-}
-
 func succeeds(t *testing.T, err error, what string) {
 	t.Helper()
 	if err != nil {

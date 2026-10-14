@@ -295,7 +295,7 @@ The [CLI privilege boundary](cli.md#local-privilege-and-user-identity)
 provides root execution only for valid available commands that require it.
 
 Context-free read-only commands do not access the root except available
-[Controller inspection](controller.md#selection-and-command-journeys), which
+[Controller inspection](controller.md#the-setup-flow), which
 may read shared host metadata without selecting a context. Context-backed reads
 acquire the existing store's shared lock and never create, repair or migrate
 state. A bounded run takes the same shared lock and creates at most one thing:
@@ -404,7 +404,7 @@ observation could not run also carries `failure`, the first diagnostic that
 observation reported, its code, message and remediation, each bounded; no
 other record carries it, and the record keeps its version. Every attempt and
 resolution also names the build it ran under, `build`: the automation digest
-the executable embeds, which its approved bundle holds, the block's content
+the executable embeds, which the run's staged extraction holds, the block's content
 digest, the executable's version and commit, and `modified` when its own stamp
 says so. The member is optional and moves no record version, so a record an
 earlier build wrote has none, and a start that adopts an interrupted record
@@ -433,10 +433,11 @@ migration or scan-based adoption of an unpublished record. Every record and
 frozen request is encoded, read closed and proved canonical by one
 canonical-JSON implementation; each format keeps its own byte bound,
 pre-decode bounds, trailing line feed and failure words. An operation record
-is version 2, and a registration writes no other. A version 1 record, which a
-build before the execution closure was frozen wrote, names no closure; it
-still reads, updates as itself and serves a fresh verb and `status`, and only
-its continuation refuses. Every read of a frozen plan holds it to its
+is version 2, and a registration writes no other; any other version, the
+version 1 record a build before the execution closure was frozen wrote among
+them, refuses `lifecycle.state` as unsupported. A store that holds one is a
+version 5 store, which [refuses first](contexts.md#storage-locking-and-publication)
+with the fresh-install remedy. Every read of a frozen plan holds it to its
 operation's record, as the registration did: a
 `plan.json` whose digest or verb is not the one that record carries refuses
 `lifecycle.state`, however valid a plan it is, as does one beside no operation
@@ -811,9 +812,10 @@ selected it: the block's removal retains what it installed, and the shared area
 it published into is proved, not deleted, by a destroy. Because it extends what
 [controller setup](controller.md) prepared, the engine hands that block the
 retained setup evidence, the shared publication area and its sealing, the
-durable dependency record that precedes acquisition, the before-state
-publication that precedes a host transaction, and the native package read lock
-its own transaction has to take over. No other block receives them.
+durable dependency record that precedes acquisition and the before-state
+publication that precedes a host transaction. No other block receives them.
+No block holds or hands over a native package lock: a launch holds only its
+runtime's shared launch lock, which never blocks the host's package manager.
 
 A stage selection is the set of stages an invocation may start; an omitted
 selection admits every stage. A block is *ready* when it is `pending` and every
@@ -999,31 +1001,35 @@ A continuation of either verb uses the exact frozen execution closure its
 operation registered with, and the automation of the build in hand only where
 that build freezes the same blocks, as below; a fresh removal, which registers
 an
-operation of its own, runs under the build and bundle in hand, as below. If
+operation of its own, runs under the build and runtime in hand, as below. If
 required content is unavailable, changed, or its safe use for the requested
 operation cannot be established, refuse before the affected observation or
 effect and report the recovery requirement. Preserve the plan and ownership
 evidence; never silently upgrade, substitute a dependency, or discard recovery
 state.
 
-Every effect of an operation runs inside the execution bundle the host's
-completed setup approves, and a registration freezes that bundle's Python and
-Ansible *execution closure* in the operation record: an identity over the
-platform, the interpreter release and layout, the approved bytes of every
-Python and wheel source and the provided execution foundation the closure was
-qualified against, and its Python and `ansible-core` releases. The index
-documents the closure was resolved from, the automation projected beside it
-and the projection that automation moves are no part of it, so setup carrying
-the same closure onto other automation keeps it. The native package closure
-setup installs is host-owned: the host's package manager may update it and
-setup may solve its transaction again, so it is neither frozen nor compared,
-and a bundle republished only for a native re-solve carries the same closure
-and continues.
+Every effect of an operation runs inside the controller runtime of the build
+in hand: the venv its embedded runtime lock builds on the interpreter the setup
+receipt names ([controller runtime](controller.md#host-identity-and-shared-prerequisites)).
+An operation locates that runtime once, before it registers, and refuses
+`controller.state` with `run bootwright setup` when the setup record holds no
+receipt, records an interrupted setup or another build's format, or this host
+has published no runtime for the build's lock. A registration freezes the
+runtime's Python and Ansible *execution closure* in the operation record:
+`bootwright.controller.execution-closure-v2`, a SHA-256 over the runtime lock
+digest and the interpreter's ABI, with that ABI (`python`) and the lock's
+`ansible-core` release (`ansible`). The automation, the interpreter's path and
+full release and the host's native packages are no part of it, so any rebuild
+that keeps the lock, an OS Python update within the ABI and an OS upgrade that
+keeps it all continue a live operation, and an automation-only fix needs no
+setup.
 
 Before a continuation of either verb restores its operation's log, raises
 evidence or marks its operation `running`, it refuses `lifecycle.state`, with no
-effect and no record changed, when its operation record is the version 1 record
-that names no closure, when the approved bundle holds another closure, or when
+effect and no record changed, when this build's runtime carries another closure (another
+runtime lock or another interpreter ABI), naming the build that registered it,
+whose runtime this host keeps, and for an apply the removal that takes back what
+it owns, or when
 another build registered the operation and this executable does not freeze the
 same blocks. Another build is one whose automation differs from the one the
 operation registered under or whose version or commit differs from the ones it
@@ -1060,14 +1066,8 @@ may [supersede](#continuation-and-removal) the operation, it also offers that
 removal. Once a build that writes `build` has worked the operation, the build
 it registered under cannot read its records if it predates that member, so the
 way out is then the superseding removal under the build in hand, or the
-[deletion exit](#lifecycle-unit) where none may take its place. The one
-exception is a version 1 record once the controller directory keeps [setup
-runs](contexts/controller-record.md#setup-runs): every build that wrote such
-a record predates them and refuses that directory, so the refusal
-says so and names no build. It offers the superseding removal where one may
-take the operation's place, and otherwise the
-[deletion exit](#lifecycle-unit) of the records neither verb acts on. A fresh
-verb always runs under the build and bundle in hand.
+[deletion exit](#lifecycle-unit) where none may take its place. A fresh
+verb always runs under the build and runtime in hand.
 
 That re-proof, with the controller setup and host binding a continuation also
 re-proves ([controller-host protection](#controller-host-protection)), runs
@@ -1078,9 +1078,10 @@ proves its host the same way. An `apply` refused over an incomplete removal
 names that removal's continuation, or the fresh removal that replaces a failed
 one, only when its re-proof, or that replacement's host proof, admits it;
 otherwise its remedy is the exit that proof's refusal names, and that refusal
-follows it. A retained setup receipt that holds no execution definition
-refuses every verb that runs a block or registers, naming
-`run bootwright setup`, and `status` offers `bootwright setup` in their place.
+follows it. A host whose setup has not completed, or whose runtime for the
+running build is not prepared, refuses every verb that runs a block or
+registers, naming `run bootwright setup`, and `status` offers
+`bootwright setup` in their place.
 
 ### Attempts and unknown outcomes
 
@@ -1660,7 +1661,8 @@ repeating the command, when they, the selected input revision or its bytes
 moved since the first read. It proves this context is bound to this host as a
 continuation does, refusing `controller.identity` or `controller.state` with
 the remedy `run bootwright diff --context <name> without --observe` for an
-unbound context, and opens the approved execution bundle. It observes at most
+unbound context, and locates this build's controller runtime, refusing
+`controller.state` with `run bootwright setup` when it is not prepared. It observes at most
 as many blocks at once as an operation runs, each inside its own execution
 guard, reports one check row, `observation`, and holds the lock until every
 observation returned, so an apply or destroy started meanwhile refuses

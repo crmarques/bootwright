@@ -3,7 +3,7 @@ package lifecycle
 import (
 	"context"
 	"encoding/json"
-	"strings"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -24,7 +24,7 @@ type toolLocator struct {
 }
 
 func (toolLocator) LocateTool(_ context.Context, view prerequisites.StorageView, block reconciliation.Block, proved BlockEvidence, tool controller.InstalledTool) (string, error) {
-	return "/located/" + block.ID + "/" + view.State.Receipt.CatalogDigest + "/" + string(proved.State) + "/" + string(proved.Evidence) + "/" + tool.Executable, nil
+	return "/located/" + block.ID + "/" + strconv.FormatBool(view.Prepared) + "/" + string(proved.State) + "/" + string(proved.Evidence) + "/" + tool.Executable, nil
 }
 
 func (l toolLocator) ask(ctx context.Context, call string, execution Execution) {
@@ -68,7 +68,7 @@ var installer = controller.InstalledTool{Kind: "openshift-install", Compatibilit
 // so an answer shows which record the lookup was handed.
 const stageProof = `{"area":"applied"}`
 
-var locatedFromTheStageProof = "/located/controller-prerequisites/" + strings.Repeat("b", 64) + "/done/" + stageProof + "/openshift-install"
+var locatedFromTheStageProof = "/located/controller-prerequisites/true/done/" + stageProof + "/openshift-install"
 
 func stagedToolHarness(t *testing.T) (*harness, toolLocator) {
 	t.Helper()

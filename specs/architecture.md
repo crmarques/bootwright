@@ -130,15 +130,16 @@ Each is deliberate and bounded; another like it is a defect.
 - **Adapter-to-adapter wiring.** No adapter imports another
   (`TestPackageDependencyDirection`), but within Controller composition injects
   one adapter's capability into another through a Controller-owned contract:
-  `controller/ansiblelocal` receives the execution guard as a
-  `prerequisites.PythonExecutionGuard`, and `controller/nativelocal` receives
-  `bundlelocal.FetchMetadata` as its `MetadataReader`.
-- **The execution guard.** Every process running the installed private Python
-  runtime (setup's Ansible run, a bundle probe, and a lifecycle attempt,
-  quiescence probe or bounded run) starts inside
-  `controller/bundlelocal.ExecutionGuard`, which first verifies that foundation.
-  Composition binds it to `prerequisites.PythonExecutionGuard` and directly to
-  `lifecycle.ExecutionGuard`, not through a Controller service.
+  `controller/ansiblelocal` and `reconciliation/ansiblerunner` receive the
+  `stagelocal` automation stager as a `prerequisites.AutomationStager`.
+- **The execution guard.** Every process running the controller runtime (a
+  lifecycle attempt, quiescence probe or bounded run, and the controller
+  stage's Ansible inside its block) starts inside the
+  `controller/venvlocal` guard, which holds the runtime's launch lock and
+  verifies the runtime first. Composition binds it to
+  `prerequisites.PythonRuntime` and directly to `lifecycle.ExecutionGuard`, and
+  hands the lifecycle the setup store as its `lifecycle.SetupReader`, not
+  through a Controller service.
 - **Machine's direct SSH sessions.** `machine/sshlocal`, the one pinned SSH
   client an explicit session and a host-key observation cross, is a Go-owned
   remote access path outside the
@@ -273,7 +274,7 @@ has one kind, and its role in `packageRoles`
 | Lifecycle capability | `internal/<context>/<capability>`, such as `managedos/installation`, `containercluster/agentinstall`, `infrastructureservices/managedservice` and `infrastructureservices/artifactserver` | The [`Capability` port](#lifecycle-ports) implementations of one substrate arm, installation method or service, or of the controller stage. `capability.go` declares a capability type and its constructor, `contracts.go` its ports, `requests.go` and `evidence.go` its frozen request and the evidence it proves, and, where it has them, `catalog.go` its kind and implementation identities and `selection.go` the objects it plans. | application |
 | Capability definition | `infrastructureservices/dnsserver`, `ntpserver` and `proxy` | One `managedservice.Definition` the shared capability runs; it consumes no other application package. | application |
 | Application store | `reconciliation/operationstore`, `secrets/secretstore` | A durable record format and its consistency over an `Area` a Workspace adapter supplies. `reconciliation/contextguard` likewise implements `workspace/contexts.ContextMutationGuard` for Reconciliation and consumes no port. | application |
-| Port test support | `reconciliation/operationstore/areacontract`, `secrets/secretstore/areacontract`, `controller/prerequisites/storagecontract`, `reconciliation/lifecycle/workspacecontract`, `managedos/media/storecontract`, `reconciliation/operationstore/areadouble` and `controller/hostdnf` | Each `contract` package, beside the port it exercises, is the shared contract suite `Verify` of one storage port a Workspace adapter implements: every implementation's tests run it, the in-memory doubles included, and it consumes only that port's package, the lifecycle workspace's also the operation areas and controller evidence its views carry and the secret context a transaction lends. The operation area's, controller storage's and lifecycle workspace's suites hold every method of their port to at least one clause. `areadouble.Admit` is what every in-memory operation store `Area` double refuses before it answers and `areadouble.Entries` what it lists; it imports nothing first-party. Only tests import these packages. `controller/hostdnf`, the host's dnf adapter of `prerequisites.HostPackages`, is listed only until the controller stage wires it. | application |
+| Port test support | `reconciliation/operationstore/areacontract`, `secrets/secretstore/areacontract`, `reconciliation/lifecycle/workspacecontract`, `managedos/media/storecontract` and `reconciliation/operationstore/areadouble` | Each `contract` package, beside the port it exercises, is the shared contract suite `Verify` of one storage port a Workspace adapter implements: every implementation's tests run it, the in-memory doubles included, and it consumes only that port's package, the lifecycle workspace's also the operation areas and controller evidence its views carry and the secret context a transaction lends. The operation area's and lifecycle workspace's suites hold every method of their port to at least one clause. `areadouble.Admit` is what every in-memory operation store `Area` double refuses before it answers and `areadouble.Entries` what it lists; it imports nothing first-party. Only tests import these packages. | application |
 | Driven adapter | `internal/<context>/<implementation>`, named by what it binds | One effect behind another package's contract, within what `TestAdmissionEffectBoundary` allows it. `secrets/material` and `controller/privilege` keep their consumed interfaces in `contracts.go`. | adapter |
 | Diagnostics | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. | technical |
 | Availability | `internal/availability` | The single unavailable-capability sentinel, `ErrNotImplemented`. | technical |
@@ -760,16 +761,14 @@ They accept these phases:
 | Phase | Runner | Direction | Fields | Acknowledgement | Bounds | Failure effect |
 | --- | --- | --- | --- | --- | --- | --- |
 | `loaded` | both | adapter → runner | `phase` | before any effect | first, once | Acknowledgement EOF or another reply fails the adapter before its first effect. |
-| `prepared` | controller | adapter → runner | `phase`, `preparation`: `inventorySHA256`, `addedSources`, and for a native plan `afterInventorySHA256`, `planDigest`, `transitionsSHA256` | after the runner matches this before-state to the frozen request and publishes it durably | once, after `loaded`, except on recovery; at most 512 sources | Unmatched or unpublished, it is never acknowledged, so no host-wide effect runs. |
-| `native` | controller | adapter → runner | `phase` | before the native package transaction | once, after `prepared`, only for native actions | Once its acknowledgement is delivered, the transaction is neither signaled nor killed on a deadline or cancellation. |
+| `prepared` | controller | adapter → runner | `phase`, `preparation`: exactly `addedSources`, the sorted source identities of the frozen request's tools | after the runner matches these sources to the frozen request and publishes them durably | once, after `loaded` and before any `continue` | Unmatched, with any other member, or unpublished, it is never acknowledged, so no tool is installed. |
 | `continue` | controller | adapter → runner | `phase` | before each tool installation | one per frozen tool, in order, after `prepared`; at most 128 | Acknowledgement EOF fails the adapter before that tool. |
 | `group` | lifecycle | adapter → runner | `phase`, `group`, `status` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, `evidence`: an object of at least one member | none | last, once | Absent when the channel closes, the run has no result. |
-| `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp`, an acquisition class with `source`, or a native class | none | last, once, in place of `completed`: `release-stamp` while an `openshift-clients` tool is being installed; an acquisition class (`dns`, `certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`, `integrity`, `trust`, `storage`) naming the native package being staged, between `prepared` and `native`, or the tool being installed; a native class (`solver-conflict`, `missing-candidate`, `signature`, `database`, `transaction`, `postcondition`, `foundation`, `timeout`, `internal`) after `loaded` | The run fails with the [release-stamp refusal](controller.md#selection-and-command-journeys), or the diagnostic Go gives the [class](controller.md#selection-and-command-journeys), naming the source's host, instead of the generic adapter failure, even when the adapter's failed exit is read first; `internal` keeps the generic failure, and a native class after an authorized `native` is `controller.unknown`. |
+| `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp`, an acquisition class with `source`, or `internal` | none | last, once, in place of `completed`: `release-stamp` while an `openshift-clients` tool is being installed; an acquisition class (`dns`, `certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`, `integrity`, `trust`, `storage`) naming the tool being installed; `internal`, with no `source`, after `loaded` | The run fails with the [release-stamp refusal](controller.md#the-controller-stage), or the diagnostic Go gives the [class](controller.md#the-controller-stage), naming the source's host, instead of the generic adapter failure, even when the adapter's failed exit is read first; `internal` keeps the generic failure. |
 | `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply; optionally `detail`: at most 160 letters, digits and `_.:@-` naming a closed cause, optionally with the code site that refused, or an exception type and code site, never a value | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason, its message followed by any `detail`, instead of the generic adapter failure, even when the adapter's failed exit is read first; the runner closes the acknowledgement channel and kills nothing, so the adapter is left to end on its own. |
 
-`outcome` is `changed` or `unchanged`, and the controller runner refuses
-`unchanged` after an authorized `native`. `status` is `running`, `ok`, `failed`
+`outcome` is `changed` or `unchanged`. `status` is `running`, `ok`, `failed`
 or `skipped`, and every status but `running` settles its group. Go alone derives
 `failed`, `unknown` and `canceled`; they never cross the channel. `reason`
 names an adapter refusal Go remedies by name; the outcome is still Go's, and
@@ -784,8 +783,8 @@ under case folding. It also refuses a phase carrying any member but its own, a
 `group` whose status is not one of the four, and a phase its runner does not
 admit. Both runners refuse an unknown, repeated or out-of-order phase, a record
 after `completed`, and more records than their bound: 64 for the lifecycle
-runner, 132 for the controller runner (`loaded`, `prepared`, `native`,
-`completed` or `refused`, and a `continue` per tool). The
+runner, 132 for the controller runner (`loaded`, `prepared`, `completed` or
+`refused`, and a `continue` per tool). The
 controller runner also refuses a `refused` record with a reason outside its
 classes, `release-stamp` for another tool kind, an acquisition class without a
 source or naming a source the run is not then acquiring, and any record after
@@ -812,14 +811,12 @@ the runner closes the acknowledgement channel, so an adapter waiting for one
 fails instead of waiting out the deadline, and the lifecycle runner kills the
 adapter's process group.
 The controller runner kills nothing on a refusal: the adapter fails at its next
-acknowledgement, and an authorized native transaction first runs to its end. A
+acknowledgement. A
 deadline or a cancellation signals the adapter's supervisor first, which ends
 every descendant, including an Ansible worker in a session of its own that a
 group kill never reaches, then kills the adapter's process group once the
-adapter is reaped or the drain passes. It spares only a controller run whose
-`native` acknowledgement was delivered: that run loses its acknowledgement
-channel and is drained, and nothing is signaled or killed. A controller run's deadline is 10 minutes
-plus its native staging bound and each tool source's
+adapter is reaped or the drain passes. A controller run's deadline is 10 minutes
+plus each tool source's
 [acquisition deadline](controller.md#the-controller-stage), held to a ceiling of
 2 hours, and a closure with tools past that ceiling is refused before Ansible
 starts. A lifecycle run's is the one its request states, which its capability
@@ -839,11 +836,8 @@ A lifecycle attempt is then `unknown` after a refusal, a deadline, a lost result
 or a zero exit without `completed`; `failed` after a non-zero exit that broke no
 protocol rule; and `canceled` when the operator cancels. The controller runner
 reports `failed` for any failure before `prepared` is published, since no
-host-wide effect was yet permitted, and for setup's own run, which publishes
-into the bundle it executes and carries no tool, until Go acknowledges a
-`native` record, since the adapter starts no transaction before that
-acknowledgement; it reports `unknown` after that, after `prepared` for any
-other run, and on cancellation.
+host-wide effect was yet permitted, and `unknown` after `prepared` and on
+cancellation. Setup runs no Ansible.
 
 A lifecycle run on the controller may also declare output files: each is a
 named path under a private `outputs/` directory of its job, passed to the

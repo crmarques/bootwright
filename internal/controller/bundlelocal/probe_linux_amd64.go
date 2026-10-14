@@ -15,11 +15,11 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-func probeBundle(ctx context.Context, guard prerequisites.PythonExecutionGuard, area prerequisites.BundleArea, definition prerequisites.Definition) error {
+func probeBundle(ctx context.Context, guard bundleGuard, area prerequisites.BundleArea, definition prerequisites.Definition) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return guard.WithPython(ctx, area, prerequisites.LaunchRequirementFor(ctx, definition.Execution), func(launch prerequisites.PythonLaunch, _ func() error) error {
+	return guard.WithPython(ctx, area, prerequisites.LaunchRequirementFor(ctx, definition.Execution), func(launch bundleLaunch, _ func() error) error {
 		return runImportProbe(ctx, area, launch, definition)
 	})
 }
@@ -50,7 +50,7 @@ assert cipher.decrypt(bytes(12), sealed, None) == b'bootwright-controller'
 print('bootwright-controller-ready-v1')
 `
 
-func runImportProbe(ctx context.Context, area prerequisites.BundleArea, launch prerequisites.PythonLaunch, definition prerequisites.Definition) error {
+func runImportProbe(ctx context.Context, area prerequisites.BundleArea, launch bundleLaunch, definition prerequisites.Definition) error {
 	if definition.Bootstrap == nil {
 		return bundleFailure("the import check requires a resolved Python and Ansible closure")
 	}

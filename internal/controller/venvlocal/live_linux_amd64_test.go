@@ -38,7 +38,8 @@ func TestALiveBuildOnThisHost(t *testing.T) {
 		}
 	}
 	host := newFakeHost(t)
-	adapter := New(Config{Lock: lock, Runtimes: runtimes, Wheels: wheels, Store: &renameStore{host: host, runtimes: runtimes}})
+	adapter := New(Config{Lock: lock, Runtimes: runtimes, Wheels: wheels})
+	publishers.Store(adapter, &renameStore{host: host, runtimes: runtimes})
 	me := uint32(os.Getuid())
 	adapter.trusted = func(uid uint32) bool { return uid == 0 || uid == me }
 	ctx := context.Background()
@@ -50,7 +51,7 @@ func TestALiveBuildOnThisHost(t *testing.T) {
 	if err := adapter.Fetch(ctx, interpreter.ABI, prerequisites.SetupEgress{HTTPSProxy: os.Getenv("HTTPS_PROXY")}); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := adapter.Build(ctx, interpreter)
+	runtime, err := testBuild(adapter, ctx, interpreter)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -19,34 +19,12 @@ const (
 	// maxSetupRunOutput is what a setup run's writer keeps: the bounded run's
 	// own bound, operationstore.MaxAdapterOutputBytes, so every run's output
 	// shares one (D92).
-	maxSetupRunOutput = 4 << 20
-	// maxAdmittedSetupRunOutput is what admission accepts on every controller
-	// read: an earlier build kept up to 8 MiB, and refusing its run would
-	// refuse the whole controller.
-	maxAdmittedSetupRunOutput = 8 << 20
-	maxControllerEntries      = maxControllerStages + 3
-	setupRunsName             = "runs"
-	setupRunOutputName        = "run.output"
-	setupRunPrefix            = "setup-"
-	setupRunDigits            = 6
+	maxSetupRunOutput  = 4 << 20
+	setupRunsName      = "runs"
+	setupRunOutputName = "run.output"
+	setupRunPrefix     = "setup-"
+	setupRunDigits     = 6
 )
-
-// controllerNames lists the controller directory under the bound it had before
-// setup runs, the runs container aside, so keeping runs moves no stage bound.
-func controllerNames(dir *directory) ([]string, int, error) {
-	names, err := directoryNames(dir, maxControllerEntries)
-	if err != nil {
-		return nil, 0, err
-	}
-	counted := len(names)
-	if slices.Contains(names, setupRunsName) {
-		counted--
-	}
-	if counted > maxControllerStages+2 {
-		return nil, 0, state("state directory entry count exceeds its limit")
-	}
-	return names, counted, nil
-}
 
 func setupRunNumber(name string) (int, bool) {
 	digits, found := strings.CutPrefix(name, setupRunPrefix)
@@ -66,20 +44,11 @@ func unsafeSetupRun(path, reason string) error {
 	return state("controller setup run entry is not this store's own: " + path + ": " + reason)
 }
 
-// verifyControllerRuns admits the runs container only as this store creates
-// it: a private directory holding at most maxSetupRuns run directories, each
-// empty or holding only its own bounded private output file. A killed run
-// leaves one of those shapes, so nothing else is ever admitted.
-func verifyControllerRuns(ctx context.Context, owner *directory) ([]int, error) {
-	runs, err := openDirectory(owner, setupRunsName)
-	if err != nil {
-		return nil, unsafeSetupRun(storeEntry(owner, setupRunsName), "it is not a private directory")
-	}
-	defer runs.file.Close()
-	return verifySetupRuns(ctx, runs, maxAdmittedSetupRunOutput)
-}
-
-func verifySetupRuns(ctx context.Context, runs *directory, bound int64) ([]int, error) {
+// verifySetupRuns admits a runs container only as this store creates it: at
+// most maxSetupRuns run directories, each empty or holding only its own
+// bounded private output file. A killed run leaves one of those shapes, so
+// nothing else is ever admitted.
+func verifySetupRuns(ctx context.Context, runs *directory) ([]int, error) {
 	names, err := directoryNames(runs, maxSetupRuns)
 	if err != nil {
 		return nil, unsafeSetupRun(heldEntry(runs), "it holds more than "+strconv.Itoa(maxSetupRuns)+" runs or cannot be listed")
@@ -97,7 +66,7 @@ func verifySetupRuns(ctx context.Context, runs *directory, bound int64) ([]int, 
 		if err != nil {
 			return nil, unsafeSetupRun(storeEntry(runs, name), "it is not a private directory")
 		}
-		_, _, err = setupRunOutput(run, bound)
+		_, _, err = setupRunOutput(run)
 		run.file.Close()
 		if err != nil {
 			return nil, err
@@ -108,7 +77,7 @@ func verifySetupRuns(ctx context.Context, runs *directory, bound int64) ([]int, 
 	return numbers, nil
 }
 
-func setupRunOutput(run *directory, bound int64) (syscall.Stat_t, bool, error) {
+func setupRunOutput(run *directory) (syscall.Stat_t, bool, error) {
 	names, err := directoryNames(run, 1)
 	if err != nil {
 		return syscall.Stat_t{}, false, unsafeSetupRun(heldEntry(run), "it holds more than its own output")
@@ -126,41 +95,14 @@ func setupRunOutput(run *directory, bound int64) (syscall.Stat_t, bool, error) {
 	}
 	stat, err := statHandle(file)
 	file.Close()
-	if err != nil || !private(stat, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || stat.Dev != run.identity.Dev || stat.Size > bound {
+	if err != nil || !private(stat, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || stat.Dev != run.identity.Dev || stat.Size > maxSetupRunOutput {
 		return syscall.Stat_t{}, false, unsafeSetupRun(path, "it is not a private regular file within its bound")
 	}
 	return stat, true, nil
 }
 
-// OpenRun creates the next setup run beneath the held controller directory.
-// Every step descends from verified handles without following a link, and the
-// run's directory and file are created exclusively, so an existing name is
-// never reused and no content but the oldest runs' own is ever removed.
-func (t *controllerTransaction) OpenRun(ctx context.Context) (prerequisites.SetupRun, error) {
-	if err := t.available(ctx); err != nil {
-		return nil, err
-	}
-	intended := t.stored.data != nil && t.stored.value.Receipt.Incomplete() &&
-		slices.ContainsFunc(t.stored.value.Receipt.Actions, func(action prerequisites.SetupAction) bool { return action.Phase == "intent" })
-	if !intended {
-		return nil, state("a setup run requires a durably intended setup action")
-	}
-	owner, err := openControllerDirectory(t.base.root, t.base.registry)
-	if err != nil {
-		return nil, err
-	}
-	defer owner.file.Close()
-	runs, err := t.base.store.ensureDirectory(ctx, owner, setupRunsName)
-	if err != nil {
-		return nil, unsafeSetupRun(storeEntry(owner, setupRunsName), "it cannot be opened as a private directory")
-	}
-	defer runs.file.Close()
-	_, run, err := t.base.store.nextSetupRun(ctx, runs, maxAdmittedSetupRunOutput)
-	return run, err
-}
-
-func (s *Store) nextSetupRun(ctx context.Context, runs *directory, bound int64) (string, prerequisites.SetupRun, error) {
-	numbers, err := verifySetupRuns(ctx, runs, bound)
+func (s *Store) nextSetupRun(ctx context.Context, runs *directory) (string, prerequisites.SetupRun, error) {
+	numbers, err := verifySetupRuns(ctx, runs)
 	if err != nil {
 		return "", nil, err
 	}
@@ -172,7 +114,7 @@ func (s *Store) nextSetupRun(ctx context.Context, runs *directory, bound int64) 
 		return "", nil, state("setup run numbers are exhausted")
 	}
 	for len(numbers) >= maxSetupRuns {
-		if err := s.removeSetupRun(ctx, runs, setupRunName(numbers[0]), bound); err != nil {
+		if err := s.removeSetupRun(ctx, runs, setupRunName(numbers[0])); err != nil {
 			return "", nil, err
 		}
 		numbers = numbers[1:]
@@ -183,13 +125,13 @@ func (s *Store) nextSetupRun(ctx context.Context, runs *directory, bound int64) 
 
 // removeSetupRun unlinks each entry only while it is still the exact one this
 // call verified.
-func (s *Store) removeSetupRun(ctx context.Context, runs *directory, name string, bound int64) error {
+func (s *Store) removeSetupRun(ctx context.Context, runs *directory, name string) error {
 	run, err := openDirectory(runs, name)
 	if err != nil {
 		return unsafeSetupRun(storeEntry(runs, name), "it is not a private directory")
 	}
 	identity := run.identity
-	output, present, err := setupRunOutput(run, bound)
+	output, present, err := setupRunOutput(run)
 	if err == nil && present {
 		err = unlinkVerified(run, setupRunOutputName, output, false)
 	}

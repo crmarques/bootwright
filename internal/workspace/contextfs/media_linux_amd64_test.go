@@ -309,8 +309,7 @@ func TestSharedMediaReservationsAreVisibleAndNeverConflict(t *testing.T) {
 	other, sources := fixture(t)
 	_ = other
 	publish(t, store, "second", sources)
-	scope := prerequisites.SetupContext{}
-	publishControllerState(t, store, scope, completeControllerState(syntheticControllerState(t, scope)))
+	publishControllerState(t, store, syntheticControllerState(t))
 	for _, name := range []string{"example", "second"} {
 		err := store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
 			return tx.Reserve(ctx, []prerequisites.HostReservation{{
@@ -1323,8 +1322,7 @@ func TestMediaDeleteDiscardsARetainedStage(t *testing.T) {
 		store := mediaFixture(t)
 		addMedia(t, store, "demo.iso", "first", false)
 		retainStage(t, store, "demo.iso", "installer bytes")
-		scope := prerequisites.SetupContext{}
-		publishControllerState(t, store, scope, completeControllerState(syntheticControllerState(t, scope)))
+		publishControllerState(t, store, syntheticControllerState(t))
 		if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
 			return tx.Reserve(ctx, []prerequisites.HostReservation{{
 				Context: "example", Kind: "media", Service: "media",

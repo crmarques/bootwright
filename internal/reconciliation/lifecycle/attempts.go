@@ -34,7 +34,7 @@ func recordingContext(ctx context.Context) context.Context { return context.With
 // that cannot start returns no state and the block keeps the one it had: a
 // pending block stays pending and a failed one it would have retried stays
 // failed, exactly as their records still say.
-func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
+func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
@@ -131,7 +131,7 @@ func (s Service) ranUnder(block reconciliation.Block) operationstore.Build {
 // (D119), and the resolution is still recorded against the apply's block, as
 // removalEffect maps it. A block it leaves unknown names command, the exact
 // command that observes it again.
-func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int, removal bool, removalPlan reconciliation.Plan, command string, retry bool) (reconciliation.BlockState, error) {
+func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int, removal bool, removalPlan reconciliation.Plan, command string, retry bool) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
@@ -327,10 +327,9 @@ func removalEffect(observed reconciliation.EffectState) reconciliation.EffectSta
 	return reconciliation.EffectUnknown
 }
 
-// invoke runs the capability inside the private Python execution boundary,
-// exactly as controller setup does. The approved bundle is the operation's
-// own, opened once before its first effect.
-func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, proved, applyProved []BlockEvidence, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
+// invoke runs the capability inside the controller runtime. The approved
+// runtime is the operation's own, located once before its first effect.
+func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, proved, applyProved []BlockEvidence, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
 	result := Result{Outcome: reconciliation.OutcomeUnknown}
 	// Completion is counted in proved groups, not in elapsed time: the adapter
@@ -353,7 +352,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 			_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "adapter-output", Block: block.ID, Detail: detail})
 		}
 	}()
-	err = s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, release func() error) error {
+	err = s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
 		// Only a block the plan froze into the controller stage receives that
 		// stage's publication boundary. The stage is declared domain
 		// vocabulary, so no implementation identity is read here.
@@ -364,8 +363,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 				ClientArea:         tx.ClientArea,
 				SealClientArea:     tx.SealClientArea,
 				RetainDependencies: tx.RetainDependencies,
-				ReleaseFoundation:  release,
-				Prepare: func(inner context.Context, preparation prerequisites.NativePreparation) error {
+				Prepare: func(inner context.Context, preparation prerequisites.StagePreparation) error {
 					if resolution != 0 {
 						return failure("lifecycle.state", "an observation may not authorize a host effect", "")
 					}
@@ -386,7 +384,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		execution := Execution{
 			Operation: operation.ID, Context: tx.Identity().Name, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
 			ApplyOperation: owningApply(operation), ApplyProved: applyProved,
-			Launch: launch, Bundle: approved.location, Area: approved.area, Material: material, Proved: proved,
+			Launch: launch, Material: material, Proved: proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)
 			},

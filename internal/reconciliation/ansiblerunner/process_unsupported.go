@@ -6,6 +6,7 @@ import (
 	"context"
 	"maps"
 
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -13,7 +14,9 @@ type Runner struct {
 	playbooks map[string]string
 }
 
-func New(playbooks map[string]string) Runner { return Runner{playbooks: maps.Clone(playbooks)} }
+func New(playbooks map[string]string, _ prerequisites.AutomationStager) Runner {
+	return Runner{playbooks: maps.Clone(playbooks)}
+}
 
 func (Runner) BeginInvocation(ctx context.Context) (context.Context, func()) {
 	return context.WithCancel(ctx)

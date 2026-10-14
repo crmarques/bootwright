@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -70,9 +69,6 @@ func verifyControllerBundleReservations(ctx context.Context, owner *directory, r
 		}
 	}
 	for _, reservation := range reservations {
-		if reservation.Mode == "retiring" {
-			continue
-		}
 		if reservation.DirectoryInode != 0 && !slices.Contains(names, reservation.ID) {
 			return state("attributed controller bundle is missing")
 		}
@@ -99,8 +95,6 @@ type controllerBundleArea struct {
 
 var _ prerequisites.BundleStream = (*controllerBundleArea)(nil)
 
-var _ prerequisites.BundleDiscard = (*controllerBundleArea)(nil)
-
 func (a *controllerBundleArea) close() {
 	for index := len(a.owned) - 1; index >= 0; index-- {
 		a.owned[index].file.Close()
@@ -116,9 +110,6 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 	index := slices.IndexFunc(stored.bundles, func(item controllerBundleReservation) bool { return item.ID == id })
 	if index < 0 {
 		return nil, nil
-	}
-	if stored.bundles[index].Mode == "retiring" {
-		return nil, controllerFailure("controller.state", "this controller bundle is being retired", "run bootwright setup --purge-old-bundles to complete its retirement")
 	}
 	if stored.bundles[index].DirectoryInode == 0 {
 		return nil, controllerFailure("controller.identity", "required controller bundle is not attributable", "run bootwright setup")
@@ -149,95 +140,6 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 	if err := area.available(ctx, false); err != nil {
 		area.close()
 		return nil, err
-	}
-	return area, nil
-}
-
-func (t *controllerTransaction) Bundle(ctx context.Context, id string) (prerequisites.BundleArea, error) {
-	if err := t.available(ctx); err != nil {
-		return nil, err
-	}
-	if !validControllerDigest(id) || t.stored.data == nil || id != t.stored.value.Receipt.CatalogDigest {
-		return nil, state("bundle namespace is not the approved setup catalog")
-	}
-	writable := t.stored.value.Receipt.Incomplete() && slices.ContainsFunc(t.stored.value.Receipt.Actions, func(action prerequisites.SetupAction) bool { return action.Phase == "intent" })
-	index := slices.IndexFunc(t.stored.bundles, func(item controllerBundleReservation) bool { return item.ID == id })
-	if index >= 0 && t.stored.bundles[index].Mode == "sealed" {
-		writable = false
-	}
-	// A reservation published by an earlier attempt is this store's durable
-	// proof that it owns the directory that attempt may have created.
-	interrupted := index >= 0 && t.stored.bundles[index].Mode == "reserved"
-	if index < 0 || t.stored.bundles[index].DirectoryInode == 0 {
-		if !writable {
-			return nil, state("bundle creation requires a durably intended setup action")
-		}
-		if index < 0 {
-			if len(t.stored.bundles) >= maxControllerBundles {
-				return nil, controllerFailure("controller.conflict", "this host already holds the "+strconv.Itoa(maxControllerBundles)+" bundle areas it may hold, so setup's new execution bundle has no room", setupBoundRemedy)
-			}
-			next := slices.Clone(t.stored.bundles)
-			next = append(next, controllerBundleReservation{ID: id, Mode: "reserved"})
-			slices.SortFunc(next, func(a, b controllerBundleReservation) int { return strings.Compare(a.ID, b.ID) })
-			if _, err := t.publishValue(ctx, t.stored.value, next); err != nil {
-				return nil, err
-			}
-		}
-		owner, err := openControllerDirectory(t.base.root, t.base.registry)
-		if err != nil {
-			return nil, err
-		}
-		defer owner.file.Close()
-		parent, err := t.base.store.ensureDirectory(ctx, owner, "bundles")
-		if err != nil {
-			return nil, err
-		}
-		defer parent.file.Close()
-		var identity syscall.Stat_t
-		switch existing, err := openDirectory(parent, id); {
-		case err == nil:
-			// Only an empty directory carried by this store's own reserved
-			// entry may be attributed; a retry never adopts foreign content
-			// and never repeats a completed publication.
-			entries, listErr := directoryNames(existing, 1)
-			identity = existing.identity
-			existing.file.Close()
-			if listErr != nil {
-				return nil, listErr
-			}
-			if !interrupted || len(entries) != 0 {
-				return nil, state("existing controller bundle cannot be adopted")
-			}
-		case !errors.Is(err, syscall.ENOENT):
-			return nil, err
-		default:
-			dir, err := t.base.store.newDirectory(ctx, parent, id)
-			if err != nil {
-				return nil, err
-			}
-			defer dir.file.Close()
-			identity = dir.identity
-			if err := t.base.store.checkpoint(ctx, checkpointAfterControllerBundleDirectory); err != nil {
-				return nil, err
-			}
-		}
-		next := slices.Clone(t.stored.bundles)
-		index = slices.IndexFunc(next, func(item controllerBundleReservation) bool { return item.ID == id })
-		next[index] = controllerBundleReservation{ID: id, Mode: "attributed", DirectoryDevice: uint64(identity.Dev), DirectoryInode: identity.Ino}
-		if _, err := t.publishValue(ctx, t.stored.value, next); err != nil {
-			return nil, err
-		}
-	}
-	area, err := openControllerBundle(ctx, t.base.store, t.base.root, t.base.registry, t.stored, id, func() bool { return t.active && !t.uncertain }, writable, t.available)
-	if err != nil {
-		return nil, err
-	}
-	t.areas = append(t.areas, area)
-	area.canWrite = func() bool {
-		return t.stored.value.Receipt.Incomplete() && slices.ContainsFunc(t.stored.value.Receipt.Actions, func(action prerequisites.SetupAction) bool { return action.Phase == "intent" }) && !slices.ContainsFunc(t.stored.bundles, func(item controllerBundleReservation) bool { return item.ID == id && item.Mode == "sealed" })
-	}
-	area.sealed = func() bool {
-		return slices.ContainsFunc(t.stored.bundles, func(item controllerBundleReservation) bool { return item.ID == id && item.Mode == "sealed" })
 	}
 	return area, nil
 }
@@ -592,51 +494,6 @@ func (a *controllerBundleArea) writeFile(ctx context.Context, parent *directory,
 	}
 	held = ""
 	return nil
-}
-
-// DiscardPartial removes the file at path when it holds fewer than approved
-// bytes. Since writes stage and rename, a final name holds a short file only
-// when a build before them was killed between creating and syncing it, so the
-// exact replay publishes it again. Only the area's writer, which holds the
-// exclusive root lock under a durable intent, may remove one, never in a
-// sealed area, and only the private regular file of exactly the identity it
-// inspected.
-func (a *controllerBundleArea) DiscardPartial(ctx context.Context, path string, approved int64) error {
-	if err := a.available(ctx, false); err != nil {
-		return err
-	}
-	if !a.writable() || a.isSealed() {
-		return state("an incomplete controller bundle file may be removed only from an unsealed bundle by its writer")
-	}
-	parts, err := bundleParts(path)
-	if err != nil {
-		return err
-	}
-	if approved <= 0 || approved > maxBundleFileBytes {
-		return state("controller bundle file bound is invalid")
-	}
-	parent, name, close, err := a.parent(parts)
-	if err != nil {
-		return err
-	}
-	defer close()
-	file, err := openRelative(parent, name, pathHandle, 0)
-	if err != nil {
-		return safeError(err)
-	}
-	identity, err := statHandle(file)
-	file.Close()
-	if err != nil || !privateBundleFile(identity, parent) || identity.Size < 0 || identity.Size >= approved {
-		return state("controller bundle file is not an incomplete write this store may remove")
-	}
-	a.scanned = false
-	if err := unlinkVerified(parent, name, identity, false); err != nil {
-		return err
-	}
-	if err := a.store.syncDirectory(ctx, parent); err != nil {
-		return err
-	}
-	return a.available(ctx, true)
 }
 
 func (a *controllerBundleArea) Entries(ctx context.Context) ([]prerequisites.BundleEntry, error) {

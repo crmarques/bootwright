@@ -249,42 +249,41 @@ func TestSecondLifecycleMutatorRefusesWhileOneHoldsTheStore(t *testing.T) {
 	}
 }
 
-// reserveFixture publishes a controller receipt so reservations have a record
-// to live in, mirroring a host that completed controller setup.
-func reserveFixture(t *testing.T, store *Store, record contexts.Record) {
+// reserveFixture prepares the host and publishes its controller record, so
+// reservations have a record to live in, mirroring a host whose setup
+// completed and that a context already bound.
+func reserveFixture(t *testing.T, store *Store, _ contexts.Record) {
 	t.Helper()
-	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
-	publishControllerState(t, store, scope, completeControllerState(syntheticControllerState(t, scope)))
+	publishControllerState(t, store, syntheticControllerState(t))
 }
 
-// sealedBundleFixture completes a setup whose sealed bundle directory exists,
-// which is the state every real controller carries into a lifecycle apply.
+// sealedToolArea is the tool area sealedBundleFixture seals, which no other
+// test publishes.
+var sealedToolArea = strings.Repeat("a", 64)
+
+// sealedBundleFixture binds the context to a prepared host and seals a tool
+// area it published, which is the state a controller stage leaves.
 func sealedBundleFixture(t *testing.T, store *Store, record contexts.Record) string {
 	t.Helper()
 	ctx := context.Background()
-	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
-	value := syntheticControllerState(t, scope)
-	publishControllerState(t, store, scope, value)
-	err := store.MutateController(ctx, scope, false, func(tx prerequisites.StorageTransaction) error {
-		intended := tx.Snapshot().State
-		intended.Receipt.Actions[0].Phase = "intent"
-		if _, err := tx.Publish(ctx, intended); err != nil {
+	reserveFixture(t, store, record)
+	err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
+		if err := tx.Bind(ctx, "controller", syntheticHost(t)); err != nil {
 			return err
 		}
-		area, err := tx.Bundle(ctx, value.Receipt.CatalogDigest)
+		area, err := tx.ClientArea(ctx, sealedToolArea)
 		if err != nil {
 			return err
 		}
 		if err := area.Write(ctx, "manifest.json", []byte("{}\n"), false); err != nil {
 			return err
 		}
-		_, err = tx.Publish(ctx, completeControllerState(tx.Snapshot().State))
-		return err
+		return tx.SealClientArea(ctx, sealedToolArea)
 	})
 	if err != nil {
-		t.Fatalf("sealed bundle publication failed: %#v", diagnostics.Of(err))
+		t.Fatalf("sealed tool area publication failed: %#v", diagnostics.Of(err))
 	}
-	return value.Receipt.CatalogDigest
+	return sealedToolArea
 }
 
 // A reservation publishes the shared controller record, which must carry the

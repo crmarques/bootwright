@@ -40,7 +40,7 @@ type venvReport struct {
 // Build stages, installs, compiles and verifies a venv, writes runtime.json and
 // publishes it. A runtime already published is adopted only if it verifies and
 // passes the import probe; otherwise it is retired and replaced, once.
-func (a *Adapter) Build(ctx context.Context, interpreter prerequisites.PythonInterpreter) (prerequisites.Runtime, error) {
+func (a *Adapter) Build(ctx context.Context, publisher prerequisites.RuntimePublisher, interpreter prerequisites.PythonInterpreter) (prerequisites.Runtime, error) {
 	qualified, err := a.qualify(ctx, interpreter.Path, interpreter.ABI)
 	if err != nil {
 		return prerequisites.Runtime{}, err
@@ -59,27 +59,13 @@ func (a *Adapter) Build(ctx context.Context, interpreter prerequisites.PythonInt
 	if err != nil {
 		return prerequisites.Runtime{}, err
 	}
-	stage, err := a.store.StageRuntime(ctx)
-	if err != nil {
-		return prerequisites.Runtime{}, err
-	}
-	published := false
-	defer func() {
-		if !published {
-			a.store.DiscardRuntime(stage)
-		}
-	}()
-	if err := a.populate(ctx, stage, final, runtime, files); err != nil {
-		return prerequisites.Runtime{}, err
-	}
 	for replaced := false; ; replaced = true {
-		err = a.store.PublishRuntime(ctx, stage, runtime.Digest)
-		if err == nil {
-			published = true
-			return runtime, nil
-		}
-		if !errors.Is(err, fs.ErrExist) {
+		published, err := a.publish(ctx, publisher, final, runtime, files)
+		if err != nil {
 			return prerequisites.Runtime{}, err
+		}
+		if published {
+			return runtime, nil
 		}
 		broken := a.verifyRuntime(runtime)
 		if broken == nil {
@@ -91,10 +77,25 @@ func (a *Adapter) Build(ctx context.Context, interpreter prerequisites.PythonInt
 		if replaced {
 			return prerequisites.Runtime{}, broken
 		}
-		if err := a.store.RetireRuntime(ctx, runtime.Digest); err != nil {
+		retired, err := publisher.RetireRuntime(ctx, runtime.Digest)
+		if err != nil {
+			return prerequisites.Runtime{}, err
+		}
+		if !retired {
 			return prerequisites.Runtime{}, failure("the published controller runtime " + runtime.Digest[:12] + " is broken and cannot be replaced while a launch holds it")
 		}
 	}
+}
+
+func (a *Adapter) publish(ctx context.Context, publisher prerequisites.RuntimePublisher, final string, runtime prerequisites.Runtime, files []runtimelock.File) (bool, error) {
+	stage, err := publisher.StageRuntime(ctx)
+	if err != nil {
+		return false, err
+	}
+	if err := a.populate(ctx, stage.Path(), final, runtime, files); err != nil {
+		return false, errors.Join(err, publisher.DiscardRuntime(context.WithoutCancel(ctx), stage))
+	}
+	return publisher.PublishRuntime(ctx, stage, runtime.Digest)
 }
 
 func (a *Adapter) populate(ctx context.Context, stage, final string, runtime prerequisites.Runtime, files []runtimelock.File) error {

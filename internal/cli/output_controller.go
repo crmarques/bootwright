@@ -3,7 +3,7 @@ package cli
 import (
 	"context"
 	"io"
-	"strconv"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
@@ -64,7 +64,7 @@ func (p *ControllerPresenter) PresentControllerPlan(ctx context.Context, report 
 	if !p.headline {
 		text.headline("", controllerHeadline("controller setup", &report))
 	}
-	controllerPlanText(&text, &report, !p.scope, !p.checks)
+	controllerPlanText(&text, &report, !p.scope, !p.checks, false)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -200,14 +200,24 @@ func controllerActionLabel(id string) string {
 		return "Host"
 	case "installed-host":
 		return "Installed host"
-	case "execution-foundation":
-		return "Execution foundation"
 	case "fips-mode":
 		return "FIPS mode"
 	case "execution-bundle":
 		return "Execution bundle"
 	case "container-runtime":
 		return "Container runtime"
+	case "host-packages":
+		return "Host packages"
+	case "python-runtime":
+		return "Controller runtime"
+	case "native-packages":
+		return "Host packages"
+	case "runtime":
+		return "Controller runtime"
+	case "receipt":
+		return "Setup receipt"
+	case "discard-setup-state":
+		return "Earlier setup state"
 	case "target-tools":
 		return "Target tools"
 	case "libvirt-client":
@@ -220,8 +230,6 @@ func controllerActionLabel(id string) string {
 		return "Controller binding"
 	case "state-root":
 		return "State root"
-	case "setup-recovery":
-		return "Setup recovery"
 	case "setup-state":
 		return "Setup state"
 	}
@@ -246,7 +254,7 @@ func writeControllerReport(out, errOut io.Writer, command string, report *prereq
 	// A setup that failed before its plan settled has nothing to plan; every
 	// other unpresented plan still names what would change.
 	if !report.PlanPresented && !(report.ProgressPresented && report.Outcome == "planned") {
-		controllerPlanText(&text, report, !presented, !presented)
+		controllerPlanText(&text, report, !presented, !presented, showReceiptTable(command, report))
 	}
 	// After the plan was presented, an unfinished setup must still say which of
 	// its approved actions took effect.
@@ -277,14 +285,6 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 	fields := []field{{Label: "Outcome", Value: outcome}}
 	if report.PlanPresented && (report.Outcome == "changed" || report.Outcome == "unchanged") {
 		fields = append(fields, field{Label: "Readiness", Value: "all required prerequisites verified"})
-	}
-	// Retirement removes shared host content, so what it took back is reported
-	// rather than left for the operator to discover, and a completed purge
-	// that took back nothing says so.
-	if len(report.RetiredBundles) != 0 {
-		fields = append(fields, field{Label: "Retired", Value: strconv.Itoa(len(report.RetiredBundles)) + " superseded execution " + bundleNoun(len(report.RetiredBundles))})
-	} else if report.Purge && !report.DryRun && (report.Outcome == "changed" || report.Outcome == "unchanged") {
-		fields = append(fields, field{Label: "Retired", Value: "none"})
 	}
 	if report.LogLocation != "" {
 		fields = append(fields, field{Label: logLocationLabel, Value: report.LogLocation})
@@ -382,19 +382,37 @@ func controllerScopeText(text *display, report *prerequisites.Report) {
 	text.fields(scope...)
 }
 
+func showReceiptTable(command string, report *prerequisites.Report) bool {
+	return report.Table != nil && (command == "preflight controller" || report.Outcome == "unchanged")
+}
+
 // controllerPlanText writes the plan body. The scope and checks are skipped
 // when the presenter already streamed them.
-func controllerPlanText(text *display, report *prerequisites.Report, scope, checks bool) {
+func controllerPlanText(text *display, report *prerequisites.Report, scope, checks, table bool) {
 	if scope {
 		controllerScopeText(text, report)
 	}
 	if checks {
-		text.section("Checks")
 		rows := make([][]string, 0, len(report.Checks))
 		for _, check := range report.Checks {
-			rows = append(rows, []string{checkToken(check.Status), controllerActionLabel(check.ID), check.Summary()})
+			if !table || check.Scope == prerequisites.ContextScope || check.Status != "ready" {
+				rows = append(rows, []string{checkToken(check.Status), controllerActionLabel(check.ID), check.Summary()})
+			}
 		}
-		text.rows(rows)
+		if len(rows) != 0 {
+			text.section("Checks")
+			text.rows(rows)
+		}
+	}
+	if table {
+		text.section("")
+		text.fields(field{"Host", report.Table.Host}, field{"Runtime", report.Table.Runtime}, field{"Packages", report.Table.Packages})
+		if len(report.Actions) == 0 && (report.Outcome == "ready" || report.Outcome == "unchanged") {
+			text.lines([]string{"Nothing to do."})
+		}
+		if len(report.Actions) == 0 {
+			return
+		}
 	}
 	if len(report.Actions) == 0 {
 		text.section("Planned changes")
@@ -402,8 +420,12 @@ func controllerPlanText(text *display, report *prerequisites.Report, scope, chec
 		return
 	}
 	if len(report.Dependencies) != 0 {
-		text.section("Dependencies")
+		text.section("Host package requirements")
 		text.lines(report.Dependencies)
+	}
+	if report.Preview != nil {
+		text.section("dnf preview")
+		text.verbatim(previewLines(report.Preview))
 	}
 	text.section("Planned changes")
 	actions := make([]step, 0, len(report.Actions))
@@ -413,9 +435,82 @@ func controllerPlanText(text *display, report *prerequisites.Report, scope, chec
 	text.steps(actions)
 }
 
-func bundleNoun(count int) string {
-	if count == 1 {
-		return "bundle"
+// previewLines is dnf's own preview, verbatim, then its truncation and the
+// notes setup adds.
+func previewLines(preview *prerequisites.HostPackagePreview) []string {
+	lines := strings.Split(strings.TrimRight(preview.Text, "\n"), "\n")
+	if preview.Truncated {
+		lines = append(lines, "(preview truncated at 64 KiB)")
 	}
-	return "bundles"
+	for _, note := range preview.Notes {
+		lines = append(lines, "Note: "+note)
+	}
+	return lines
+}
+
+func (d *display) verbatim(lines []string) {
+	for _, line := range lines {
+		if line != "" {
+			d.text.WriteString(displayIndent + escapeDisplayLine(line))
+		}
+		d.text.WriteByte('\n')
+	}
+}
+
+func writeControllerResult(out, errOut io.Writer, command string, report *prerequisites.Report, json bool) error {
+	if json {
+		return writeSetupPlanJSON(out, command, report)
+	}
+	return writeControllerReport(out, errOut, command, report)
+}
+
+// setupPlanResult is setup's dry-run plan as machine output.
+type setupPlanResult struct {
+	DryRun       bool               `json:"dryRun"`
+	Outcome      string             `json:"outcome"`
+	Platform     string             `json:"platform"`
+	Checks       []setupPlanCheck   `json:"checks"`
+	Actions      []string           `json:"actions"`
+	Requirements []string           `json:"requirements"`
+	Files        []setupLockedWheel `json:"files"`
+}
+
+type setupPlanCheck struct {
+	ID       string `json:"id"`
+	Required string `json:"required"`
+	Observed string `json:"observed"`
+	Status   string `json:"status"`
+}
+
+type setupLockedWheel struct {
+	ABI      string `json:"abi,omitempty"`
+	Filename string `json:"filename"`
+	URL      string `json:"url"`
+	SHA256   string `json:"sha256"`
+}
+
+func (setupPlanResult) documentedResult() {}
+
+func writeSetupPlanJSON(out io.Writer, command string, report *prerequisites.Report) error {
+	result := setupPlanResult{
+		DryRun: report.DryRun, Outcome: escapeDisplayLine(report.Outcome),
+		Platform: escapeDisplayLine(report.Platform.OS + " " + report.Platform.Release + "/" + report.Platform.Architecture),
+		Checks:   []setupPlanCheck{}, Actions: []string{}, Requirements: []string{}, Files: []setupLockedWheel{},
+	}
+	for _, check := range report.Checks {
+		result.Checks = append(result.Checks, setupPlanCheck{ID: escapeDisplayLine(check.ID), Required: escapeDisplayLine(check.Required), Observed: escapeDisplayLine(check.Observed), Status: escapeDisplayLine(check.Status)})
+	}
+	for _, action := range report.Actions {
+		result.Actions = append(result.Actions, escapeDisplayLine(action))
+	}
+	for _, requirement := range report.Dependencies {
+		result.Requirements = append(result.Requirements, escapeDisplayLine(requirement))
+	}
+	for _, file := range report.Files {
+		result.Files = append(result.Files, setupLockedWheel{ABI: escapeDisplayLine(file.ABI), Filename: escapeDisplayLine(file.Filename), URL: escapeDisplayLine(file.URL), SHA256: escapeDisplayLine(file.SHA256)})
+	}
+	return writeEnvelope(out, commandEnvelope{
+		SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
+		Result: result, Diagnostics: displayDiagnostics(report.Warnings), Logs: []string{},
+	})
 }

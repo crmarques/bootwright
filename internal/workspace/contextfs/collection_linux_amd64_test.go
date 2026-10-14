@@ -629,23 +629,3 @@ func TestARefusedLeaseIsReleasedAndNeverHeld(t *testing.T) {
 		t.Fatalf("the transaction failed: %#v", diagnostics.Of(err))
 	}
 }
-
-// setup scopes no context, so it takes no lease; only a controller mutation
-// scoped to a context leases that context.
-func TestOnlyAScopedControllerMutationTakesTheContextLease(t *testing.T) {
-	ctx := context.Background()
-	store, record := lifecycleFixture(t)
-	file, err := os.Open(filepath.Join(store.options.Root, "contexts", record.Name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.MutateController(ctx, prerequisites.SetupContext{}, false, func(prerequisites.StorageTransaction) error { return nil }); err != nil {
-		t.Fatalf("a controller mutation that scopes no context took the lease: %#v", diagnostics.Of(err))
-	}
-	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
-	expectBusy(t, store.MutateController(ctx, scope, false, func(prerequisites.StorageTransaction) error { return nil }))
-}

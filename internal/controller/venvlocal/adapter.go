@@ -13,20 +13,10 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
 )
 
-// Store is how contextfs stages, publishes (fs.ErrExist when another won) and
-// retires runtimes; retiring takes .lock LOCK_EX|LOCK_NB and spares a held one.
-type Store interface {
-	StageRuntime(ctx context.Context) (string, error)
-	PublishRuntime(ctx context.Context, stage, digest string) error
-	DiscardRuntime(stage string)
-	RetireRuntime(ctx context.Context, digest string) error
-}
-
 type Config struct {
 	Lock     runtimelock.Lock
 	Runtimes string
 	Wheels   string
-	Store    Store
 }
 
 type command struct {
@@ -40,7 +30,6 @@ type Adapter struct {
 	lock     runtimelock.Lock
 	runtimes string
 	wheels   string
-	store    Store
 	bin      string
 	top      string
 	trusted  func(uint32) bool
@@ -52,7 +41,7 @@ var _ prerequisites.PythonRuntime = (*Adapter)(nil)
 
 func New(config Config) *Adapter {
 	return &Adapter{
-		lock: config.Lock, runtimes: config.Runtimes, wheels: config.Wheels, store: config.Store,
+		lock: config.Lock, runtimes: config.Runtimes, wheels: config.Wheels,
 		bin: "/usr/bin", top: "/", trusted: func(uid uint32) bool { return uid == 0 },
 		run: runCommand, client: wheelClient,
 	}

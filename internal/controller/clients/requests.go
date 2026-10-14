@@ -19,7 +19,7 @@ const (
 	Kind           = string(api.Environment)
 	Implementation = "controller-prerequisites"
 	BlockID        = "controller-prerequisites"
-	Version        = "controller-clients-v2"
+	Version        = "controller-clients-v3"
 )
 
 // ToolRequest is one declared client requirement, frozen in the plan before
@@ -33,9 +33,10 @@ type ToolRequest struct {
 }
 
 // Request is what this block freezes: the clients the selected graph needs,
-// the libvirt requirement it declares, and the controller Machine's route.
-// Exact releases are not frozen here, because a version intent of latest is
-// resolved by the attempt that installs it and retained from then on.
+// the host package requirements its closures name, the libvirt intent it
+// declares, and the controller Machine's route. Exact releases are not frozen
+// here: a tool's latest intent is resolved by the attempt that installs it,
+// and a host package is whatever the host's repositories provide.
 type Request struct {
 	Egress prerequisites.SetupEgress `json:"egress"`
 	// Hypervisor and InstallerMedia are the closures this Machine's own role in
@@ -46,6 +47,7 @@ type Request struct {
 	Libvirt        string        `json:"libvirt"`
 	LibvirtClient  bool          `json:"libvirtClient"`
 	Machine        string        `json:"machine"`
+	Packages       []string      `json:"packages"`
 	Tools          []ToolRequest `json:"tools"`
 	Version        string        `json:"version"`
 }
@@ -70,6 +72,7 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 	if request.LibvirtClient || request.Hypervisor {
 		request.Libvirt = selection.Versions().Libvirt
 	}
+	request.Packages = prerequisites.StageRequirements(request.native())
 	for _, tool := range requests {
 		request.Tools = append(request.Tools, ToolRequest{Compatibility: tool.Compatibility, Kind: tool.Kind, Mirror: tool.Mirror, Version: tool.Version})
 	}
@@ -77,10 +80,10 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 }
 
 // native is the native selection this frozen request names, exactly as
-// prerequisites.StageNativeOf reads it from the selection the request was
-// frozen from, so the stage and preflight match one retained resolution.
+// prerequisites.StageNativeOf reads it, so the stage and preflight ask the
+// host for the same requirements.
 func (r Request) native() prerequisites.StageNative {
-	return prerequisites.StageNative{LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia, Libvirt: r.Versions().Libvirt}
+	return prerequisites.StageNative{LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia}
 }
 
 // ToolRequests restores the catalog's own request shape from the frozen block.
@@ -109,7 +112,14 @@ func (r Request) Canonical() ([]byte, error) {
 }
 
 func DecodeRequest(data []byte) (Request, error) {
-	return reconciliation.ThawVersion[Request](data, "controller prerequisites", Version)
+	request, err := reconciliation.ThawVersion[Request](data, "controller prerequisites", Version)
+	if err != nil {
+		return Request{}, err
+	}
+	if !slices.Equal(request.Packages, prerequisites.StageRequirements(request.native())) {
+		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request names host packages its closures do not select", "destroy it with the build that applied it")
+	}
+	return request, nil
 }
 
 // ContentDigest binds the plan to the exact behavior this build implements, so

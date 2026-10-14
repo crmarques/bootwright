@@ -69,7 +69,7 @@ func (s Service) observeDiff(ctx context.Context, name string, read *diffRead) e
 		if err := s.reproveDiff(ctx, view, store, read); err != nil {
 			return err
 		}
-		approved, err := approvedBundle(ctx, view)
+		approved, err := s.approvedRuntime(ctx)
 		if err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ func (s Service) reproveDiff(ctx context.Context, view RunView, store recordRead
 	return verifyHostBinding(view.Controller(), view.Identity(), host, unobservedDiff(read.context.Name), false)
 }
 
-func (s Service) inspectAll(ctx context.Context, view RunView, store recordReader, approved bundle, read *diffRead, blocks []reconciliation.Block, material map[string]secrets.Material) map[string]blockReading {
+func (s Service) inspectAll(ctx context.Context, view RunView, store recordReader, approved approved, read *diffRead, blocks []reconciliation.Block, material map[string]secrets.Material) map[string]blockReading {
 	readings := make(map[string]blockReading, len(blocks))
 	var mutex sync.Mutex
 	var running sync.WaitGroup
@@ -197,7 +197,7 @@ func installFroze(read *diffRead) string {
 	return "install " + registeredWith(read.owning.Executable) + ", which froze it, to observe it"
 }
 
-func (s Service) inspection(ctx context.Context, view RunView, store recordReader, approved bundle, launch prerequisites.PythonLaunch, read *diffRead, block reconciliation.Block, material map[string]secrets.Material) (Execution, error) {
+func (s Service) inspection(ctx context.Context, view RunView, store recordReader, approved approved, launch prerequisites.PythonLaunch, read *diffRead, block reconciliation.Block, material map[string]secrets.Material) (Execution, error) {
 	proved, err := applyDependencies(ctx, store, read.owning.ID, block.ID)
 	if err != nil {
 		return Execution{}, err
@@ -205,7 +205,7 @@ func (s Service) inspection(ctx context.Context, view RunView, store recordReade
 	setup := view.Controller()
 	execution := Execution{
 		Context: view.Identity().Name, ApplyOperation: read.owning.ID, ApplyProved: proved, Block: block,
-		Launch: launch, Bundle: approved.location, Area: approved.area, Material: material,
+		Launch: launch, Material: material,
 		LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 			return s.locateTool(inner, store, setup, read.context.Name, read.owning, read.owningPlan, tool)
 		},
@@ -216,13 +216,13 @@ func (s Service) inspection(ctx context.Context, view RunView, store recordReade
 	return execution, nil
 }
 
-func (s Service) inspect(ctx context.Context, view RunView, store recordReader, approved bundle, read *diffRead, block reconciliation.Block, material map[string]secrets.Material) blockReading {
+func (s Service) inspect(ctx context.Context, view RunView, store recordReader, approved approved, read *diffRead, block reconciliation.Block, material map[string]secrets.Material) blockReading {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return blockReading{state: sideUnknown, reason: "this executable does not offer the implementation block " + block.ID + " froze", remedy: installFroze(read)}
 	}
 	var observation Observation
-	err := s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
+	err := s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
 		execution, err := s.inspection(ctx, view, store, approved, launch, read, block, material)
 		if err != nil {
 			return err
@@ -454,13 +454,10 @@ func readOnlyStage(setup prerequisites.StorageView) *ControllerStage {
 		return failure("lifecycle.state", "an observation may not authorize a host effect", "")
 	}
 	return &ControllerStage{
-		Setup:          setup,
-		ClientArea:     func(context.Context, string) (prerequisites.BundleArea, error) { return nil, refuse() },
-		SealClientArea: func(context.Context, string) error { return refuse() },
-		RetainDependencies: func(context.Context, *prerequisites.Definition, []prerequisites.DependencySource, []string) error {
-			return refuse()
-		},
-		Prepare:           func(context.Context, prerequisites.NativePreparation) error { return refuse() },
-		ReleaseFoundation: refuse,
+		Setup:              setup,
+		ClientArea:         func(context.Context, string) (prerequisites.BundleArea, error) { return nil, refuse() },
+		SealClientArea:     func(context.Context, string) error { return refuse() },
+		RetainDependencies: func(context.Context, []prerequisites.DependencySource) error { return refuse() },
+		Prepare:            func(context.Context, prerequisites.StagePreparation) error { return refuse() },
 	}
 }

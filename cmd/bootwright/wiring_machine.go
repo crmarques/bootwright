@@ -6,6 +6,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -40,6 +41,7 @@ type machineDependencies struct {
 	Home      func() (string, error)
 	Owner     func() (int, error)
 	Files     operatorFiles
+	Stager    prerequisites.AutomationStager
 }
 
 // wireMachine binds Machine inspection, explicit access and power. Inspection
@@ -51,7 +53,7 @@ func wireMachine(deps machineDependencies) cli.Services {
 	selection := currentSelection(deps.Selection)
 	evidence := machineOwnership{reconciler: deps.Lifecycle}
 	client := sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
-	runner := ansiblerunner.New(operationPlaybook())
+	runner := ansiblerunner.New(operationPlaybook(), deps.Stager)
 	powered := power.New(deps.State, machineRealization{reconciler: deps.Lifecycle}, machineIdentities{reconciler: deps.Lifecycle},
 		deps.Lifecycle, runner, runner.BeginInvocation, deps.Confirmer, deps.Reporter, selection)
 	sessions := machineaccess.New(deps.State, selection, machineaccess.Options{

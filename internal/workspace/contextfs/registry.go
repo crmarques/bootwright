@@ -18,6 +18,16 @@ const (
 	storeRecoveryRemediation = earlierBuildGuidance + "; a store this build created is restored whole from a matching backup"
 )
 
+// The setup v2 cut-over (D152) reads no store an earlier format wrote; the
+// remedy is a fresh install, never a conversion.
+const (
+	freshInstallMessage     = "/var/lib/bootwright holds a store an earlier Bootwright build wrote (registry version 5), which this build does not read or convert"
+	freshInstallRemediation = "with the build that wrote it, destroy each environment (bootwright destroy --context <name>) and delete each context " +
+		"(bootwright context delete --name <name>); then, as root, remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright setup " +
+		"with this build. Never remove /var/lib/bootwright while services it manages run."
+	cutOverRegistryVersion = 5
+)
+
 type registryRecord struct {
 	Version    int                            `json:"version"`
 	Contexts   []contexts.Record              `json:"contexts"`
@@ -40,9 +50,12 @@ func decodeRegistry(data []byte, maximum int, target *contexts.Registry) error {
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return state("context registry is malformed")
 	}
+	if envelope.Version == cutOverRegistryVersion {
+		return contexts.StateErrorWithRemediation(freshInstallMessage, freshInstallRemediation)
+	}
 	if envelope.Version != contexts.RegistryVersion {
-		// Earlier builds wrote versions 2 to 4; any other version is another
-		// build's state, never damage this build may convert or move aside.
+		// Any other version is another build's state, never damage this build
+		// may convert or move aside.
 		return contexts.StateErrorWithRemediation(missingRegistryMessage, storeRecoveryRemediation)
 	}
 	var record registryRecord

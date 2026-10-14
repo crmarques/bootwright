@@ -8,8 +8,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -42,14 +45,56 @@ func TestSupersededRegistryFormatsRefuseWithoutRewriting(t *testing.T) {
 	}
 }
 
+// A version 5 store, which every build before the setup v2 cut-over wrote, is
+// refused by every access with the fresh-install message and remedy, and
+// nothing in it is rewritten (D152).
+func TestARegistryVersion5StoreNamesTheFreshInstallRemedy(t *testing.T) {
+	store, sources := fixture(t)
+	record := publish(t, store, "example", sources)
+	path := filepath.Join(store.options.Root, "registry.json")
+	before := []byte("{\"version\":5,\"contexts\":[]}\n")
+	ctx := context.Background()
+	if err := store.MutateSetup(ctx, func(prerequisites.SetupTransaction) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	writePrivate(t, path, before)
+	for name, operation := range map[string]func() error{
+		"a view":        func() error { _, err := store.View(ctx); return err },
+		"an input read": func() error { _, err := store.ReadInputs(ctx, record.Name); return err },
+		"a transaction": func() error { return store.Transact(ctx, false, nil, func(contexts.Transaction) error { return nil }) },
+		"a controller read": func() error {
+			return store.ReadController(ctx, "", func(prerequisites.StorageView) error { return nil })
+		},
+		"a setup read": func() error { _, err := store.ReadSetup(ctx); return err },
+		"a setup mutation": func() error {
+			return store.MutateSetup(ctx, func(prerequisites.SetupTransaction) error { return nil })
+		},
+	} {
+		reported := diagnostics.Of(operation())
+		if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != freshInstallMessage || reported[0].Remediation != freshInstallRemediation {
+			t.Errorf("%s refused with %#v", name, reported)
+		}
+	}
+	if !strings.HasPrefix(freshInstallMessage, "/var/lib/bootwright holds a store an earlier Bootwright build wrote (registry version 5)") ||
+		!strings.Contains(freshInstallRemediation, "destroy each environment (bootwright destroy --context <name>)") ||
+		!strings.Contains(freshInstallRemediation, "remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright setup with this build") ||
+		!strings.HasSuffix(freshInstallRemediation, "Never remove /var/lib/bootwright while services it manages run.") {
+		t.Errorf("the fresh-install refusal reads %q: %q", freshInstallMessage, freshInstallRemediation)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("the refused registry was rewritten: %q %v", after, err)
+	}
+}
+
 func TestRegistryCanonicalFields(t *testing.T) {
-	valid := []byte("{\"version\":5,\"contexts\":[]}\n")
+	valid := []byte("{\"version\":6,\"contexts\":[]}\n")
 	for _, data := range [][]byte{
 		bytes.Replace(valid, []byte("\"contexts\":[]"), []byte("\"contexts\":null"), 1),
-		bytes.Replace(valid, []byte("\"version\":5,"), nil, 1),
+		bytes.Replace(valid, []byte("\"version\":6,"), nil, 1),
 		bytes.Replace(valid, []byte("\"contexts\":[]"), []byte("\"identities\":[],\"contexts\":[]"), 1),
 		bytes.Replace(valid, []byte("\"contexts\":[]"), []byte("\"contexts\":[],\"nextIdentity\":1"), 1),
-		bytes.Replace(valid, []byte("\"version\":5"), []byte("\"version\":5,\"version\":5"), 1),
+		bytes.Replace(valid, []byte("\"version\":6"), []byte("\"version\":6,\"version\":6"), 1),
 	} {
 		var registry contexts.Registry
 		expectState(t, decodeRecord(data, maxRegistry, &registry))

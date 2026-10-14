@@ -243,7 +243,7 @@ func TestAContinuationWithNoSameBlocksProofRefusesUnderAnotherBuild(t *testing.T
 		t.Helper()
 		operation, _ := durableOperation(t, h)
 		return h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
-			return h.service.verifyContinuation(ctx, view, operation, sameBlocksProof{})
+			return h.service.verifyContinuation(ctx, view, operation, sameBlocksProof{}, nil)
 		})
 	}
 	for _, build := range otherBuilds() {

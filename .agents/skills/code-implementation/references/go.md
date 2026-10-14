@@ -96,8 +96,7 @@ row, which `TestEveryBindingJoinsTheCapabilityContractSuite` requires. For a
 storage port the Workspace adapter implements, it is the `Verify` beside that
 port, which contextfs and every in-memory double of the port run: the
 operation area's in `internal/reconciliation/operationstore/areacontract`, the
-secret store area's in `internal/secrets/secretstore/areacontract`, controller
-storage's in `internal/controller/prerequisites/storagecontract`, the lifecycle
+secret store area's in `internal/secrets/secretstore/areacontract`, the lifecycle
 workspace's in `internal/reconciliation/lifecycle/workspacecontract` and the
 media store's in `internal/managedos/media/storecontract`. An in-memory
 operation area admits each call through `areadouble.Admit` in

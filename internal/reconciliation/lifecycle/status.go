@@ -327,7 +327,7 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 		// The removal proves the host's setup before it resolves or registers
 		// anything, so setup takes its place while setup gates it.
 		removal := contextCommand(view.Identity().Name, string(reconciliation.Destroy))
-		if setupGates(view.Controller()) {
+		if s.setupGates(ctx, view) {
 			removal = setupStep
 		}
 		if !slices.Contains(steps, removal) {
@@ -341,16 +341,16 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 // controller setup refuses. Setup is context-free, so it names no context.
 const setupStep = "bootwright setup"
 
-// setupGates reports whether the retained controller setup refuses every
-// transition that runs a block or registers: setup has not completed on this
-// host, or its receipt holds no execution definition, which every effect and
-// every registration runs in (executionClosure).
-func setupGates(controller prerequisites.StorageView) bool {
-	if !setupComplete(controller) {
+// setupGates reports whether the controller setup refuses every transition
+// that runs a block or registers: setup has not completed on this host, or
+// this build's controller runtime cannot be located, which every effect and
+// every registration runs in (approvedRuntime).
+func (s Service) setupGates(ctx context.Context, view View) bool {
+	if !setupComplete(view.Controller()) {
 		return true
 	}
-	definition := controller.State.Receipt.Definition
-	return definition == nil || definition.Bootstrap == nil
+	_, err := s.approvedRuntime(ctx)
+	return err != nil
 }
 
 // continuation is the command that takes an incomplete operation on. A
@@ -372,7 +372,7 @@ func (s Service) continuation(ctx context.Context, view View, operation operatio
 		return []string{command}
 	}
 	if next == string(reconciliation.Destroy) {
-		if setupGates(view.Controller()) {
+		if s.setupGates(ctx, view) {
 			return []string{setupStep}
 		}
 		return []string{command}
@@ -380,7 +380,7 @@ func (s Service) continuation(ctx context.Context, view View, operation operatio
 	if err := s.recordedRefusal(view, operation, s.proveSameBlocks(ctx, view, operation, frozen)); err != nil {
 		return refusalExit(view, err)
 	}
-	if setupGates(view.Controller()) {
+	if s.setupGates(ctx, view) {
 		return []string{setupStep}
 	}
 	if !slices.ContainsFunc(view.Controller().State.Bindings, func(item prerequisites.ControllerBinding) bool {
@@ -388,7 +388,7 @@ func (s Service) continuation(ctx context.Context, view View, operation operatio
 	}) {
 		return refusalExit(view, failure("controller.identity", "this context is not bound to a controller host", unboundExit(view, operation)))
 	}
-	if err := closureRefusal(view, operation); err != nil {
+	if err := s.closureRefusal(ctx, view, operation, nil); err != nil {
 		return refusalExit(view, err)
 	}
 	return []string{command}
@@ -413,9 +413,9 @@ func refusalExit(view View, refusal error) []string {
 }
 
 // setupComplete is the controller setup an apply needs before it claims this
-// host: a record that exists, is initialized and holds a complete receipt.
+// host: a setup subtree holding a receipt and no interrupted setup.
 func setupComplete(controller prerequisites.StorageView) bool {
-	return controller.Exists && controller.Initialized && controller.State.Receipt.Status == "complete"
+	return controller.Exists && controller.Prepared
 }
 
 // setupChecks reports what the stored controller evidence already proves, in

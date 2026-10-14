@@ -60,7 +60,7 @@ func TestEveryImplementationAndOperationBindsOneFixedEntrypoint(t *testing.T) {
 			bound[implementation+"/"+operation] = "infrastructureservices/" + implementation + "_" + operation + ".yml"
 		}
 	}
-	runner := New(bound)
+	runner := New(bound, nil)
 	for key, want := range bound {
 		implementation, operation, _ := strings.Cut(key, "/")
 		playbook, ok := runner.playbookFor(lifecycle.RunRequest{Implementation: implementation, Operation: operation})

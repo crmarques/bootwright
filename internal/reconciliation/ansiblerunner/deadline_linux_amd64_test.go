@@ -8,11 +8,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -23,26 +21,23 @@ import (
 // default. A fixed two-hour deadline killed an installation whose budgets alone
 // outlast it.
 func TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling(t *testing.T) {
-	bundle := t.TempDir()
-	if err := os.Mkdir(filepath.Join(bundle, "automation"), 0700); err != nil {
-		t.Fatal(err)
-	}
 	t.Run("a shorter deadline ends the run", func(t *testing.T) {
 		runner := Runner{
-			drain: 200 * time.Millisecond,
+			stager: newDirStager(t),
+			drain:  200 * time.Millisecond,
 			command: func(string, ...string) *exec.Cmd {
 				return exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-running")
 			},
 		}
 		request := lifecycle.RunRequest{
-			Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
-			Bundle: prerequisites.BundleLocation{Path: bundle}, Output: io.Discard,
+			Context: "lab", Launch: testLaunch,
+			Output:   io.Discard,
 			Deadline: 300 * time.Millisecond,
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		started := time.Now()
-		_, err := runner.execute(ctx, t.TempDir(), t.TempDir(), nil, "apply.yml", request)
+		_, err := runner.execute(ctx, t.TempDir(), t.TempDir(), nil, stagedAutomation{path: t.TempDir()}, "apply.yml", request)
 		if elapsed := time.Since(started); ctx.Err() != nil || elapsed > 5*time.Second || !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("a run whose request states %s ended after %s with %v", request.Deadline, elapsed, err)
 		}
@@ -60,7 +55,8 @@ func TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling(t *testing.T) {
 			// channel, so the run is going when its deadline is read and ends
 			// only when the test cancels it.
 			runner := Runner{
-				drain: 200 * time.Millisecond,
+				stager: newDirStager(t),
+				drain:  200 * time.Millisecond,
 				command: func(string, ...string) *exec.Cmd {
 					return exec.Command("/bin/sh", "-c", `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
 						`printf '{"group":"wait","phase":"group","status":"running"}\n' >&3; read -r reply <&4`)
@@ -74,8 +70,8 @@ func TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling(t *testing.T) {
 			var observed time.Time
 			var bounded bool
 			request := lifecycle.RunRequest{
-				Context: "lab", Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
-				Bundle: prerequisites.BundleLocation{Path: bundle}, Output: io.Discard,
+				Context: "lab", Launch: testLaunch,
+				Output:   io.Discard,
 				Deadline: test.requested,
 				Progress: func(run context.Context, _, _ string) {
 					observed, bounded = run.Deadline()
@@ -83,7 +79,7 @@ func TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling(t *testing.T) {
 				},
 			}
 			started := time.Now()
-			_, err := runner.execute(ctx, t.TempDir(), t.TempDir(), nil, "apply.yml", request)
+			_, err := runner.execute(ctx, t.TempDir(), t.TempDir(), nil, stagedAutomation{path: t.TempDir()}, "apply.yml", request)
 			if !errors.Is(err, context.Canceled) || !bounded {
 				t.Fatalf("the run ended with %v before its deadline was read (bounded %v)", err, bounded)
 			}

@@ -79,8 +79,6 @@ type RunRequest struct {
 	MaterialValues map[string]string
 	Outputs        []OutputFile
 	Launch         prerequisites.PythonLaunch
-	Bundle         prerequisites.BundleLocation
-	Area           prerequisites.BundleArea
 	Material       map[string]secrets.Material
 	Log            func(context.Context, operationstore.LogRecord) error
 	Progress       func(context.Context, string, string)
@@ -162,8 +160,6 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		MaterialValues:    invocation.Values,
 		Outputs:           slices.Clone(invocation.Outputs),
 		Launch:            execution.Launch,
-		Bundle:            execution.Bundle,
-		Area:              execution.Area,
 		Material:          lend(execution.Material, materials),
 		Log:               execution.Log,
 		Progress:          execution.Progress,

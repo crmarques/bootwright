@@ -34,8 +34,6 @@ PROTOCOLS = {
 # The plugins that act on the controller, each with the helper that would act,
 # run with arguments they refuse before reaching it.
 EFFECTS = {
-    "controller_inventory": "inspection",
-    "controller_packages": "stage_payloads",
     "controller_tool": "prepare_tool",
 }
 

@@ -91,7 +91,7 @@ func (a *Adapter) qualify(ctx context.Context, path, abi string) (prerequisites.
 	}
 	glibc, found := strings.CutPrefix(report.Libc, "glibc ")
 	if !found || !atLeast(glibc, a.lock.GlibcFloor()) {
-		return prerequisites.PythonInterpreter{}, failure(fmt.Sprintf("%s runs on %q, below the locked wheels' glibc %s", path, report.Libc, a.lock.GlibcFloor()))
+		return prerequisites.PythonInterpreter{}, errors.Join(prerequisites.ErrGlibcBelowFloor, failure(fmt.Sprintf("%s runs on %q, below the locked wheels' glibc %s", path, report.Libc, a.lock.GlibcFloor())))
 	}
 	if report.Stdlib != stdlib || !slices.Equal(report.Dynload, []string{dynload}) {
 		return prerequisites.PythonInterpreter{}, failure(fmt.Sprintf("%s loads its stdlib from %s and %v, not the walked %s and %s", path, report.Stdlib, report.Dynload, stdlib, dynload))

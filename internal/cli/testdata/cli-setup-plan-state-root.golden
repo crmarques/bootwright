@@ -5,13 +5,17 @@ Controller setup plan
   Route     direct (no HTTPS_PROXY)
 
 Checks
-  [UNKNOWN]  Execution bundle  required qualified Python and Ansible; observed unverified
-  [FAIL]     State root        required a root:root 0700 directory on a local filesystem; observed a directory owned by root:root with mode 0755
+  [OK]       Host                fedora 43/amd64
+  [UNKNOWN]  Controller runtime  required Python 3.14, 3.13, 3.12 with ansible-core 2.21.5; observed Python 3.14.8 (/usr/bin/python3.14); runtime not verified without privilege
+  [FAIL]     Host packages       required openssh-clients, podman; observed missing podman
+  [UNKNOWN]  Setup state         required complete; observed unverified
+  [FAIL]     State root          required a root:root 0700 directory on a local filesystem; observed a directory owned by root:root with mode 0755
 
-Dependencies
-  qualified-source.tar.gz
+Host package requirements
+  podman
 
 Planned changes
-  1. Prepare the qualified execution bundle
+  1. Install host packages with dnf: podman
+  2. Verify or prepare the controller runtime: Python 3.14 at /usr/bin/python3.14, ansible-core 2.21.5: 1 of 2 wheels to download (2.4 MB), 1 cached
 
   Outcome  planned (dry run)

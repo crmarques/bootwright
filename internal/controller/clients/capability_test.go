@@ -121,54 +121,117 @@ func (f *fakeTools) Present(context.Context, prerequisites.BundleArea, []prerequ
 	return f.present, nil
 }
 
-type fakeNative struct {
-	plan       prerequisites.NativeResolvedPlan
-	ready      bool
-	resolves   int
-	checks     int
-	resolveErr error
-	// requirements is every native transaction the stage asked to solve, and
-	// checked every plan whose presence it asked about, by digest.
-	requirements []prerequisites.NativeRequirements
-	checked      []string
-	// operator answers OperatorRoots, which operators counts.
-	operator  prerequisites.OperatorPresence
-	operators int
-	// absent names the root keys a ready host still lacks.
-	absent map[string]bool
+// fakeDnf is the host's package manager: installed is what rpm reports, and
+// Install adds what it was asked for unless it fails. calls records every
+// call in order, with the setup lock's state at the time.
+type fakeDnf struct {
+	installed  map[string]bool
+	previewErr error
+	installErr error
+	egress     []prerequisites.SetupEgress
+	calls      []string
+	lock       *fakeSetup
+	output     prerequisites.RunOutput
 }
 
-func (f *fakeNative) Resolve(_ context.Context, _ prerequisites.Platform, requirements prerequisites.NativeRequirements, _ controller.DependencyVersions, _ prerequisites.SetupEgress) (prerequisites.NativeResolvedPlan, error) {
-	f.resolves++
-	f.requirements = append(f.requirements, requirements)
-	if f.resolveErr != nil {
-		return prerequisites.NativeResolvedPlan{}, f.resolveErr
+func newDnf(installed ...string) *fakeDnf {
+	dnf := &fakeDnf{installed: map[string]bool{}}
+	for _, name := range installed {
+		dnf.installed[name] = true
 	}
-	return f.plan, nil
+	return dnf
 }
 
-// Check answers as the provided package manager does: every root of the plan
-// installed when the host is ready, and none otherwise.
-func (f *fakeNative) Check(_ context.Context, plan prerequisites.NativeResolvedPlan) (prerequisites.NativePresence, error) {
-	f.checks++
-	f.checked = append(f.checked, plan.Digest)
-	if !f.ready {
-		return prerequisites.NativePresence{}, nil
+func (f *fakeDnf) open(egress prerequisites.SetupEgress) (prerequisites.HostPackages, error) {
+	f.egress = append(f.egress, egress)
+	return f, nil
+}
+
+func (f *fakeDnf) record(call string, names []string) {
+	held := ""
+	if f.lock != nil && f.lock.held {
+		held = " (locked)"
 	}
-	presence := prerequisites.NativePresence{Ready: true}
-	for _, root := range plan.Roots {
-		if f.absent[root.Key] {
-			presence.Ready = false
-			continue
+	f.calls = append(f.calls, call+" "+strings.Join(names, ",")+held)
+}
+
+func (f *fakeDnf) Qualify(context.Context) error { return nil }
+
+func (f *fakeDnf) Missing(_ context.Context, requirements []string) ([]string, error) {
+	f.record("missing", requirements)
+	missing := []string{}
+	for _, requirement := range requirements {
+		if !f.installed[requirement] {
+			missing = append(missing, requirement)
 		}
-		presence.Installed = append(presence.Installed, prerequisites.NativeRootPresence{Key: root.Key, Package: root.Package})
 	}
-	return presence, nil
+	return missing, nil
 }
 
-func (f *fakeNative) OperatorRoots(context.Context, prerequisites.Platform, []string) (prerequisites.OperatorPresence, error) {
-	f.operators++
-	return f.operator, nil
+func (f *fakeDnf) Installed(_ context.Context, requirements []string) ([]prerequisites.HostPackageEvidence, error) {
+	f.record("installed", requirements)
+	return f.providers(requirements, ""), nil
+}
+
+func (f *fakeDnf) Present(_ context.Context, requirements []string) ([]prerequisites.HostPackageEvidence, error) {
+	f.record("present", requirements)
+	return f.providers(requirements, "updates"), nil
+}
+
+func (f *fakeDnf) providers(requirements []string, repository string) []prerequisites.HostPackageEvidence {
+	evidence := []prerequisites.HostPackageEvidence{}
+	for _, requirement := range requirements {
+		if f.installed[requirement] {
+			evidence = append(evidence, prerequisites.HostPackageEvidence{Requirement: requirement, Package: requirement + "-0:1.0-1.fc44.x86_64", Repository: repository})
+		}
+	}
+	return evidence
+}
+
+func (f *fakeDnf) Preview(_ context.Context, missing []string) (prerequisites.HostPackagePreview, error) {
+	f.record("preview", missing)
+	if f.previewErr != nil {
+		return prerequisites.HostPackagePreview{}, f.previewErr
+	}
+	return prerequisites.HostPackagePreview{Text: "Installing: " + strings.Join(missing, " ") + "\n"}, nil
+}
+
+func (f *fakeDnf) Install(_ context.Context, missing []string, output prerequisites.RunOutput) ([]prerequisites.HostPackageEvidence, error) {
+	f.record("install", missing)
+	f.output = output
+	if f.installErr != nil {
+		return nil, f.installErr
+	}
+	for _, name := range missing {
+		f.installed[name] = true
+	}
+	return nil, nil
+}
+
+// fakeSetup is setup/lock: held while its callback runs, over a setup record
+// whose view is view.
+type fakeSetup struct {
+	view  prerequisites.SetupView
+	held  bool
+	takes int
+	err   error
+}
+
+type fakeSetupTransaction struct {
+	prerequisites.SetupTransaction
+	view prerequisites.SetupView
+}
+
+func (t fakeSetupTransaction) View() prerequisites.SetupView { return t.view }
+
+func (f *fakeSetup) MutateSetup(_ context.Context, callback func(prerequisites.SetupTransaction) error) error {
+	f.takes++
+	if f.err != nil {
+		return f.err
+	}
+	f.held = true
+	defer func() { f.held = false }()
+	return callback(fakeSetupTransaction{view: f.view})
 }
 
 type fakeInstaller struct {
@@ -176,16 +239,21 @@ type fakeInstaller struct {
 	outcome     string
 	err         error
 	publication prerequisites.ClientInstallation
+	announced   error
 }
 
 func (f *fakeInstaller) Clients(ctx context.Context, installation prerequisites.ClientInstallation) (prerequisites.ActionResult, error) {
 	f.installs++
 	f.publication = installation
 	if installation.Publish != nil {
-		_ = installation.Publish(ctx, prerequisites.NativePreparation{InventorySHA256: strings.Repeat("1", 64), AddedSources: []string{}})
-	}
-	if installation.Release != nil {
-		_ = installation.Release()
+		added := []string{}
+		for _, tool := range installation.Tools {
+			added = append(added, tool.Source.ID)
+		}
+		slices.Sort(added)
+		if f.announced = installation.Publish(ctx, added); f.announced != nil {
+			return prerequisites.ActionResult{Outcome: "failed"}, f.announced
+		}
 	}
 	if f.err != nil {
 		return prerequisites.ActionResult{Outcome: f.outcome}, f.err
@@ -197,6 +265,16 @@ func (f *fakeInstaller) Clients(ctx context.Context, installation prerequisites.
 	return prerequisites.ActionResult{Outcome: outcome}, nil
 }
 
+// stage builds a capability over the fakes, with the host package manager
+// and setup lock wired to each other.
+func stage(tools *fakeTools, dnf *fakeDnf, setup *fakeSetup, installer *fakeInstaller) Capability {
+	dnf.lock = setup
+	return New(tools, dnf.open, setup, installer)
+}
+
+// unwired is a capability that only plans or reads frozen blocks.
+func unwired() Capability { return stage(&fakeTools{}, newDnf(), &fakeSetup{}, &fakeInstaller{}) }
+
 // executions --------------------------------------------------------------
 
 func newRecorder(area *fakeArea) *recorder {
@@ -204,19 +282,18 @@ func newRecorder(area *fakeArea) *recorder {
 }
 
 type recorder struct {
-	areas      []string
-	sealed     []string
-	retained   []prerequisites.DependencySource
-	resolved   int
-	superseded []string
-	resolution prerequisites.Definition
-	prepared   int
-	released   int
-	groups     []string
-	area       *fakeArea
-	openErr    error
-	sealErr    error
-	published  map[string]bool
+	areas        []string
+	sealed       []string
+	retained     []prerequisites.DependencySource
+	preparations []prerequisites.StagePreparation
+	groups       []string
+	area         *fakeArea
+	openErr      error
+	sealErr      error
+	published    map[string]bool
+	output       bytes.Buffer
+	// order records each effect boundary the stage crossed, in order.
+	order []string
 }
 
 func toolDefinition(kind, version string) prerequisites.ToolDefinition {
@@ -230,137 +307,13 @@ func toolDefinition(kind, version string) prerequisites.ToolDefinition {
 	}
 }
 
-var testPlatform = prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
-
-func source(id, url string) prerequisites.DependencySource {
-	return prerequisites.DependencySource{ID: id, URL: url, SHA256: strings.Repeat("a", 64), Bytes: 64}
-}
-
-// setupDefinition is the host resolution `bootwright setup` froze: the exact
-// shape this stage extends, so the test proves the real composition rather
-// than a stand-in.
-func testBootstrap(t *testing.T) prerequisites.BootstrapDefinition {
-	t.Helper()
-	return bootstrapOn(t, testPlatform)
-}
-
-// bootstrapOn is that foundation as setup froze it on another platform.
-func bootstrapOn(t *testing.T, platform prerequisites.Platform) prerequisites.BootstrapDefinition {
-	t.Helper()
-	bootstrap, err := prerequisites.CanonicalBootstrap(prerequisites.BootstrapDefinition{
-		Format: "bootwright.controller.bootstrap-v1", Platform: platform,
-		PythonIntent: "latest", AnsibleIntent: "latest", PythonVersion: "3.14.7", AnsibleVersion: "2.21.4",
-		PythonExecutable: "python/bin/python3.14", SitePackages: "python/lib/python3.14/site-packages/",
-		Sources: []prerequisites.DependencySource{
-			source("python-3.14.7", "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.14.7%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"),
-			source("ansible-2.21.4", "https://files.pythonhosted.org/packages/ansible_core-2.21.4-py3-none-any.whl"),
-			source("urllib3-2.7.0", "https://files.pythonhosted.org/packages/urllib3-2.7.0-py3-none-any.whl"),
-		},
-		Wheels: []prerequisites.BootstrapWheel{{Name: "ansible-core", Version: "2.21.4", SourceID: "ansible-2.21.4"}, {Name: "urllib3", Version: "2.7.0", SourceID: "urllib3-2.7.0"}},
-		Metadata: []prerequisites.DependencySource{
-			source("python-metadata", "https://raw.githubusercontent.com/astral-sh/uv/main/crates/uv-python/download-metadata.json"),
-			source("ansible-metadata", "https://pypi.org/pypi/ansible-core/json"),
-		},
-		ProjectionSHA256: strings.Repeat("b", 64), FileCount: 10, ExpandedBytes: 100,
-		Execution: prerequisites.ExecutionRequirement{PythonExecutable: "python/bin/python3.14",
-			Files: []prerequisites.InstalledFile{}, Links: []prerequisites.InstalledLink{}, Preload: []string{}},
-		ExecutionPackages: []string{"glibc", "libgcc"},
-		AutomationDigest:  strings.Repeat("c", 64),
-	})
-	if err != nil {
-		t.Fatalf("bootstrap fixture: %v", err)
-	}
-	return bootstrap
-}
-
-func resolvedDefinition(t *testing.T, requirements prerequisites.NativeRequirements) prerequisites.Definition {
-	t.Helper()
-	return resolvedFrom(t, requirements, strings.Repeat("e", 64))
-}
-
-// resolvedFrom is that resolution solved against another package inventory:
-// the same releases under a new resolution digest.
-func resolvedFrom(t *testing.T, requirements prerequisites.NativeRequirements, inventory string) prerequisites.Definition {
-	t.Helper()
-	return resolvedOn(t, testPlatform, requirements, inventory)
-}
-
-// resolvedOn is a resolution solved on another platform.
-func resolvedOn(t *testing.T, platform prerequisites.Platform, requirements prerequisites.NativeRequirements, inventory string) prerequisites.Definition {
-	t.Helper()
-	plan := nativePlanOn(t, platform, requirements)
-	plan.BeforeSHA256, plan.AfterSHA256 = inventory, inventory
-	plan, err := prerequisites.CanonicalNativePlan(plan)
-	if err != nil {
-		t.Fatalf("native plan fixture: %v", err)
-	}
-	definition, err := prerequisites.NewResolvedDefinition(bootstrapOn(t, platform), plan)
-	if err != nil {
-		t.Fatalf("resolution fixture: %v", err)
-	}
-	return definition
-}
-
-func setupDefinition(t *testing.T) prerequisites.Definition {
-	t.Helper()
-	return resolvedDefinition(t, prerequisites.NativeRequirements{ContainerRuntime: true})
-}
-
-// nativePlanFor is one solved native transaction with nothing to change, which
-// is what a host that already carries its roots resolves to.
-func nativePlanFor(t *testing.T, requirements prerequisites.NativeRequirements) prerequisites.NativeResolvedPlan {
-	t.Helper()
-	return nativePlanOn(t, testPlatform, requirements)
-}
-
-// nativePlanOn is that transaction solved by the platform's own solver, with
-// every root the selected requirements name.
-func nativePlanOn(t *testing.T, platform prerequisites.Platform, requirements prerequisites.NativeRequirements) prerequisites.NativeResolvedPlan {
-	t.Helper()
-	solver, version, release, repository := "dnf5", "5.2.0", "1.fc43", "https://packages.example.test/fedora"
-	if platform.OS == "rhel" {
-		solver, version, release, repository = "dnf4", "4.14.0", "1.el9", "https://packages.example.test/rhel"
-	}
-	plan := prerequisites.NativeResolvedPlan{
-		Format: "bootwright.native-plan-v1", Platform: platform, Solver: solver, SolverVersion: version,
-		Requests: controller.DefaultDependencyVersions(), Requirements: requirements,
-		Roots: []prerequisites.NativeRoot{}, Packages: []prerequisites.NativePackage{},
-		Repositories: []prerequisites.NativeRepository{{ID: "base", BaseURL: repository, MetadataSHA256: strings.Repeat("d", 64)}},
-		Actions:      []prerequisites.NativeAction{},
-		BeforeSHA256: strings.Repeat("e", 64), AfterSHA256: strings.Repeat("e", 64),
-	}
-	keys := []string{"nmstate", "openssh", "podman"}
-	if requirements.LibvirtClient {
-		keys = append(keys, "libvirt")
-	}
-	if requirements.Hypervisor {
-		keys = append(keys, "hypervisor")
-	}
-	if requirements.InstallerMedia {
-		keys = append(keys, "installer-media")
-	}
-	names := prerequisites.NativeRootNames()
-	for _, key := range keys {
-		for _, name := range names[key] {
-			identity := prerequisites.NativeIdentity{Name: name, Version: "1.2.3", Release: release, Architecture: "x86_64"}
-			plan.Roots = append(plan.Roots, prerequisites.NativeRoot{Key: key, Requested: "latest", Package: identity})
-			plan.Packages = append(plan.Packages, prerequisites.NativePackage{Name: identity.Name, Version: identity.Version, Release: identity.Release, Architecture: identity.Architecture, Signer: strings.Repeat("f", 40), Source: source(name, repository+"/"+name+".rpm")})
-		}
-	}
-	canonical, err := prerequisites.CanonicalNativePlan(plan)
-	if err != nil {
-		t.Fatalf("native plan fixture: %v", err)
-	}
-	return canonical
-}
-
 func (r *recorder) execution(t *testing.T, block reconciliation.Block, state prerequisites.HostState) lifecycle.Execution {
 	t.Helper()
 	if r.published == nil {
 		r.published = map[string]bool{}
 	}
 	return lifecycle.Execution{
-		Operation: "op-0000000000000000000000000000", Attempt: 1, Block: block, Area: &fakeArea{sealed: true},
+		Operation: "op-0000000000000000000000000000", Attempt: 1, Block: block, Output: &r.output,
 		Stage: &lifecycle.ControllerStage{
 			Setup: prerequisites.StorageView{
 				Exists: true, Initialized: true, State: state,
@@ -373,6 +326,7 @@ func (r *recorder) execution(t *testing.T, block reconciliation.Block, state pre
 			},
 			ClientArea: func(_ context.Context, id string) (prerequisites.BundleArea, error) {
 				r.areas = append(r.areas, id)
+				r.order = append(r.order, "area")
 				if r.openErr != nil {
 					return nil, r.openErr
 				}
@@ -386,20 +340,16 @@ func (r *recorder) execution(t *testing.T, block reconciliation.Block, state pre
 				r.sealed = append(r.sealed, id)
 				return nil
 			},
-			RetainDependencies: func(_ context.Context, definition *prerequisites.Definition, sources []prerequisites.DependencySource, superseded []string) error {
+			RetainDependencies: func(_ context.Context, sources []prerequisites.DependencySource) error {
 				r.retained = append(r.retained, sources...)
-				r.superseded = append(r.superseded, superseded...)
-				if definition != nil {
-					r.resolved++
-					r.resolution = *definition
-				}
+				r.order = append(r.order, "retain")
 				return nil
 			},
-			Prepare: func(context.Context, prerequisites.NativePreparation) error {
-				r.prepared++
+			Prepare: func(_ context.Context, preparation prerequisites.StagePreparation) error {
+				r.preparations = append(r.preparations, preparation)
+				r.order = append(r.order, "prepare")
 				return nil
 			},
-			ReleaseFoundation: func() error { r.released++; return nil },
 		},
 		Progress: func(_ context.Context, group, status string) {
 			r.groups = append(r.groups, group+"="+status)
@@ -420,41 +370,26 @@ func planBlock(t *testing.T, capability Capability, state *compilation.State, ve
 	return plan.Blocks[0]
 }
 
-func hostState(t *testing.T, sources ...prerequisites.DependencySource) prerequisites.HostState {
-	t.Helper()
-	return prerequisites.HostState{
-		Receipt:         prerequisites.SetupReceipt{Status: "complete", Definition: ptr(setupDefinition(t))},
-		RetainedSources: sources,
-	}
+func hostState(sources ...prerequisites.DependencySource) prerequisites.HostState {
+	return prerequisites.HostState{ToolSources: sources}
 }
-
-// libvirtHostState is a host whose controller stage already froze a libvirt
-// client resolution, which is what later presence checks recover it from.
-func libvirtHostState(t *testing.T) prerequisites.HostState {
-	t.Helper()
-	state := hostState(t)
-	resolution := resolvedDefinition(t, prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true})
-	state.RetainedDefinitions = []prerequisites.Definition{resolution}
-	state.RetainedSources = slices.Clone(resolution.Sources)
-	return state
-}
-
-func ptr[T any](value T) *T { return &value }
 
 // tests -------------------------------------------------------------------
 
 // A context that adds nothing to the host gets no block at all, so a plan
 // without controller prerequisites gains no dependency on one.
 func TestPlanContributesNoBlockWithoutSelectedClients(t *testing.T) {
-	capability := New(&fakeTools{}, &fakeNative{}, &fakeNative{}, &fakeInstaller{})
-	contribution, err := capability.Plan(context.Background(), planInput(stateOf(environment(), machine("container-runtime")), reconciliation.Apply))
+	contribution, err := unwired().Plan(context.Background(), planInput(stateOf(environment(), machine("container-runtime")), reconciliation.Apply))
 	if err != nil || len(contribution.Definitions) != 0 {
 		t.Fatalf("contribution = %+v (%v)", contribution, err)
 	}
 }
 
+// The plan freezes the selected closures and presents the host package names
+// they require, without reading the host.
 func TestPlanFreezesTheSelectedClientClosure(t *testing.T) {
-	capability := New(&fakeTools{}, &fakeNative{}, &fakeNative{}, &fakeInstaller{})
+	dnf := newDnf()
+	capability := stage(&fakeTools{}, dnf, &fakeSetup{}, &fakeInstaller{})
 	state := stateOf(environment(), machine("container-runtime", "libvirt"), cluster())
 	block := planBlock(t, capability, state, reconciliation.Apply)
 	if block.ID != BlockID || block.Stage != reconciliation.StageController || block.Kind != Kind || block.Object != "lab" {
@@ -464,7 +399,7 @@ func TestPlanFreezesTheSelectedClientClosure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !request.LibvirtClient || request.Libvirt != "latest" || request.Machine != "controller" {
+	if !request.LibvirtClient || request.Libvirt != "latest" || request.Machine != "controller" || !slices.Equal(request.Packages, []string{"libvirt-client"}) {
 		t.Fatalf("request = %+v", request)
 	}
 	kinds := make([]string, 0, len(request.Tools))
@@ -474,58 +409,127 @@ func TestPlanFreezesTheSelectedClientClosure(t *testing.T) {
 	if !slices.Equal(kinds, []string{"helm", "openshift-clients", "openshift-install"}) {
 		t.Fatalf("tool kinds = %v", kinds)
 	}
-	if !slices.Contains(block.Impacts, "install-native-client libvirt latest") {
+	if !slices.Contains(block.Impacts, "install-host-package libvirt-client") {
 		t.Fatalf("impacts = %v", block.Impacts)
+	}
+	if len(dnf.calls) != 0 || len(dnf.egress) != 0 {
+		t.Fatalf("planning read the host: %v", dnf.calls)
 	}
 }
 
 // The plan is pure: the same state must freeze the identical request, because
 // the digest is what a continuation re-proves.
 func TestPlanIsDeterministic(t *testing.T) {
-	capability := New(&fakeTools{}, &fakeNative{}, &fakeNative{}, &fakeInstaller{})
 	state := stateOf(environment(), machine("container-runtime", "libvirt"), cluster())
-	first := planBlock(t, capability, state, reconciliation.Apply)
-	second := planBlock(t, capability, state, reconciliation.Apply)
+	first := planBlock(t, unwired(), state, reconciliation.Apply)
+	second := planBlock(t, unwired(), state, reconciliation.Apply)
 	if first.RequestDigest != second.RequestDigest {
 		t.Fatalf("digests differ: %s %s", first.RequestDigest, second.RequestDigest)
 	}
 }
 
-// A prepared host proves its clients from retained identities alone: no
-// publisher metadata, no acquisition and no publication.
+// The stage asks the host's own dnf only for what is missing of the selected
+// closures: presence first, then, under setup/lock, presence again, the
+// preview and the install, with the intent naming those packages durable
+// before any of it. The installed NEVRAs and repositories are its evidence,
+// and the observation that follows proves the closure complete.
+func TestTheStageInstallsMissingClosuresThroughHostDnf(t *testing.T) {
+	hypervisor := []string{
+		"libvirt-client", "libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
+		"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm", "swtpm", "swtpm-tools",
+	}
+	for name, test := range map[string]struct {
+		objects []api.Object
+		present []string
+		want    []string
+	}{
+		"a declared libvirt capability":   {objects: []api.Object{environment(), machine("container-runtime", "libvirt")}, want: []string{"libvirt-client"}},
+		"a provider hosted here":          {objects: []api.Object{environment(), machine("container-runtime"), hostedProvider()}, present: []string{"qemu-img", "swtpm"}, want: hypervisor},
+		"installer-media tooling alone":   {objects: append([]api.Object{environment(), machine("container-runtime")}, installerMedia()...), want: []string{"lorax", "xorriso"}},
+		"a Machine on a libvirt provider": {objects: append([]api.Object{environment(), machine("container-runtime")}, guestOnLibvirt()...), want: []string{"libvirt-client"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dnf, setup, installer := newDnf(test.present...), &fakeSetup{}, &fakeInstaller{}
+			capability := stage(&fakeTools{complete: true}, dnf, setup, installer)
+			block := planBlock(t, capability, stateOf(test.objects...), reconciliation.Apply)
+			requirements := stageRequest(t, block).Packages
+			if !slices.Equal(requirements, test.want) {
+				t.Fatalf("the plan froze %v, want %v", requirements, test.want)
+			}
+			missing := slices.DeleteFunc(slices.Clone(requirements), func(name string) bool { return slices.Contains(test.present, name) })
+			recorder := newRecorder(&fakeArea{})
+			result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState()))
+			if err != nil || result.Outcome != reconciliation.OutcomeChanged {
+				t.Fatalf("apply = %+v (%v)", result, err)
+			}
+			joined, locked := strings.Join(requirements, ","), strings.Join(missing, ",")+" (locked)"
+			if want := []string{"installed " + joined, "missing " + locked, "preview " + locked, "install " + locked, "present " + joined}; !slices.Equal(dnf.calls, want) {
+				t.Fatalf("dnf was asked\n%q\nwant\n%q", dnf.calls, want)
+			}
+			if setup.takes != 1 || setup.held {
+				t.Fatalf("setup/lock taken %d times, held after: %v", setup.takes, setup.held)
+			}
+			if len(recorder.preparations) != 1 || !slices.Equal(recorder.preparations[0].Packages, missing) || len(recorder.preparations[0].AddedSources) != 0 {
+				t.Fatalf("intent = %+v, want the missing packages %v alone", recorder.preparations, missing)
+			}
+			if installer.installs != 0 || len(recorder.areas) != 0 {
+				t.Fatalf("a native-only stage ran the automation (%d) or opened areas %v", installer.installs, recorder.areas)
+			}
+			if !strings.HasPrefix(recorder.output.String(), "Installing: "+strings.Join(missing, " ")) || dnf.output != &recorder.output {
+				t.Fatalf("the preview and install did not reach the attempt's output: %q", recorder.output.String())
+			}
+			evidence := evidenceOf(t, result.Evidence)
+			if len(evidence.Packages) != len(requirements) || evidence.Packages[0].Repository != "updates" || !strings.HasSuffix(evidence.Packages[0].Package, ".x86_64") {
+				t.Fatalf("evidence packages = %+v", evidence.Packages)
+			}
+			if libvirt := slices.Contains(requirements, "libvirt-client"); evidence.Libvirt != stageRequest(t, block).LibvirtClient || !libvirt && evidence.Libvirt {
+				t.Fatalf("evidence libvirt = %v", evidence.Libvirt)
+			}
+			observation, err := capability.Observe(context.Background(), newRecorder(&fakeArea{sealed: true}).execution(t, block, hostState()))
+			if err != nil || observation.Effect != reconciliation.EffectCompleted {
+				t.Fatalf("observation after the stage = %+v (%v)", observation, err)
+			}
+		})
+	}
+}
+
+// A host that already provides the selected closure and published clients
+// proves it from presence and retained identities alone: no publisher
+// metadata, no dnf call (rpm alone reads presence), no lock and no publication.
 func TestApplyProvesAPreparedHostWithoutPublisherAccess(t *testing.T) {
 	tools := &fakeTools{selected: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}, complete: true, present: true}
-	native := &fakeNative{ready: true}
-	installer := &fakeInstaller{}
-	capability := New(tools, native, native, installer)
-	state := stateOf(environment(), machine("container-runtime"), cluster())
-	block := planBlock(t, capability, state, reconciliation.Apply)
+	dnf, setup, installer := newDnf("libvirt-client"), &fakeSetup{}, &fakeInstaller{}
+	capability := stage(tools, dnf, setup, installer)
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{sealed: true})
 	recorder.published[prerequisites.ToolsDigest(tools.selected)] = true
-	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState(t)))
+	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState()))
 	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged {
 		t.Fatalf("result = %+v (%v)", result, err)
 	}
-	if tools.resolves != 0 || installer.installs != 0 || len(recorder.areas) != 0 || len(recorder.retained) != 0 {
-		t.Fatalf("a ready host did work: resolves=%d installs=%d areas=%v retained=%d", tools.resolves, installer.installs, recorder.areas, len(recorder.retained))
+	if tools.resolves != 0 || installer.installs != 0 || len(recorder.areas) != 0 || len(recorder.retained) != 0 || len(recorder.preparations) != 0 || setup.takes != 0 {
+		t.Fatalf("a ready host did work: resolves=%d installs=%d areas=%v retained=%d prepared=%d locks=%d", tools.resolves, installer.installs, recorder.areas, len(recorder.retained), len(recorder.preparations), setup.takes)
+	}
+	if !slices.Equal(dnf.calls, []string{"installed libvirt-client"}) {
+		t.Fatalf("dnf calls = %q", dnf.calls)
+	}
+	if packages := evidenceOf(t, result.Evidence).Packages; len(packages) != 1 || packages[0].Requirement != "libvirt-client" {
+		t.Fatalf("evidence packages = %+v", packages)
 	}
 }
 
 // Installation records the identities it will acquire before it acquires them,
-// publishes into the shared area rather than the sealed setup bundle, and
-// seals only after the closure is proved present.
+// publishes into the shared area, and seals only after the closure is proved
+// present. The automation announces exactly the sources the stage recorded.
 func TestApplyRetainsIntentBeforeItPublishes(t *testing.T) {
 	resolved := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
-	tools := &fakeTools{resolved: resolved}
-	native := &fakeNative{}
+	tools := &fakeTools{resolved: resolved, present: true}
 	installer := &fakeInstaller{}
-	capability := New(tools, native, native, installer)
-	state := stateOf(environment(), machine("container-runtime"), cluster())
-	block := planBlock(t, capability, state, reconciliation.Apply)
+	capability := stage(tools, newDnf(), &fakeSetup{}, installer)
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
 	area := &fakeArea{}
 	recorder := newRecorder(area)
-	tools.present = true
-	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState(t)))
+	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState()))
 	if err != nil || result.Outcome != reconciliation.OutcomeChanged {
 		t.Fatalf("result = %+v (%v)", result, err)
 	}
@@ -533,107 +537,186 @@ func TestApplyRetainsIntentBeforeItPublishes(t *testing.T) {
 	if !slices.Equal(recorder.areas, []string{digest}) || !slices.Equal(recorder.sealed, []string{digest}) {
 		t.Fatalf("areas=%v sealed=%v", recorder.areas, recorder.sealed)
 	}
-	if !slices.ContainsFunc(recorder.retained, func(item prerequisites.DependencySource) bool { return item == resolved[0].Source }) {
-		t.Fatalf("the acquisition identity was not retained before publication: %+v", recorder.retained)
+	if !slices.Equal(recorder.order, []string{"retain", "prepare", "area"}) {
+		t.Fatalf("effect boundaries = %v, want intent before the area", recorder.order)
 	}
-	if recorder.resolved != 0 {
-		t.Fatal("a context without libvirt retained a native resolution")
+	if len(recorder.preparations) != 1 || !slices.Equal(recorder.preparations[0].AddedSources, []string{resolved[0].Source.ID}) || len(recorder.preparations[0].Packages) != 0 {
+		t.Fatalf("intent = %+v", recorder.preparations)
 	}
-	if installer.publication.Target != area || installer.publication.Execution == installer.publication.Target {
-		t.Fatal("publication did not target the shared client area")
-	}
-	if recorder.released != 1 {
-		t.Fatalf("execution foundation released %d times", recorder.released)
-	}
-	if installer.publication.Definition.Native != nil {
-		t.Fatal("a context without libvirt carried a native transaction")
+	if installer.publication.Target != area || installer.publication.Identity != block.RequestDigest || installer.announced != nil {
+		t.Fatalf("publication = %+v (%v)", installer.publication, installer.announced)
 	}
 	var evidence Evidence
-	if json.Unmarshal(result.Evidence, &evidence) != nil || evidence.Area != digest || len(evidence.Tools) != 1 {
+	if json.Unmarshal(result.Evidence, &evidence) != nil || evidence.Area != digest || len(evidence.Tools) != 1 || len(evidence.Packages) != 0 {
 		t.Fatalf("evidence = %s", result.Evidence)
 	}
 }
 
-// A selected libvirt client is solved against the host's current inventory and
-// its resolution is retained, so presence-only readiness can prove those roots
-// afterwards without resolving again.
-func TestApplyResolvesAndRetainsTheLibvirtClosure(t *testing.T) {
-	tools := &fakeTools{complete: true}
-	native := &fakeNative{plan: nativePlanFor(t, prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true})}
-	installer := &fakeInstaller{}
-	capability := New(tools, native, native, installer)
-	state := stateOf(environment(), machine("container-runtime", "libvirt"))
-	block := planBlock(t, capability, state, reconciliation.Apply)
+// Host packages go first, under the one intent that also names the tools.
+func TestApplyInstallsHostPackagesBeforeItPublishesTools(t *testing.T) {
+	resolved := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
+	dnf := newDnf()
+	capability := stage(&fakeTools{resolved: resolved, present: true}, dnf, &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{})
-	tools.present = true
-	native.ready = false
-	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState(t)))
-	if err == nil || result.Outcome != reconciliation.OutcomeUnknown {
-		t.Fatalf("an unproved native postcondition must stay unknown: %+v (%v)", result, err)
+	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState()))
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged {
+		t.Fatalf("result = %+v (%v)", result, err)
 	}
-	if native.resolves != 1 || recorder.resolved != 1 {
-		t.Fatalf("resolves=%d retained resolutions=%d", native.resolves, recorder.resolved)
+	if len(recorder.preparations) != 1 || !slices.Equal(recorder.preparations[0].Packages, []string{"libvirt-client"}) || !slices.Equal(recorder.preparations[0].AddedSources, []string{resolved[0].Source.ID}) {
+		t.Fatalf("intent = %+v", recorder.preparations)
 	}
-	if recorder.prepared != 1 {
-		t.Fatalf("the native before-state was published %d times", recorder.prepared)
+	if !slices.Contains(dnf.calls, "install libvirt-client (locked)") || !slices.Equal(recorder.order, []string{"retain", "prepare", "area"}) {
+		t.Fatalf("dnf calls %q, boundaries %v", dnf.calls, recorder.order)
 	}
-	if len(recorder.sealed) != 0 {
-		t.Fatal("an unproved closure was sealed")
+}
+
+// A preview that refuses, or a setup record a launch would refuse, installs
+// nothing: the attempt fails with intent recorded, and a later attempt
+// repeats it. An install that fails once dnf began may have changed the host,
+// so it stays unknown and is resolved from live presence.
+func TestAHostPackageFailureIsFailedBeforeTheInstallAndUnknownAfter(t *testing.T) {
+	refusal := &prerequisites.ScopedFailure{Code: "controller.setup", Message: "no package in the host's repositories provides libvirt-client: No match for argument: libvirt-client", Correction: "Enable the repository that provides it in the host's dnf configuration"}
+	for name, test := range map[string]struct {
+		dnf     *fakeDnf
+		setup   *fakeSetup
+		outcome reconciliation.Outcome
+		code    string
+		install bool
+	}{
+		"a preview refusal": {dnf: &fakeDnf{installed: map[string]bool{}, previewErr: refusal}, setup: &fakeSetup{}, outcome: reconciliation.OutcomeFailed, code: "controller.setup"},
+		"an interrupted setup": {dnf: newDnf(), setup: &fakeSetup{view: prerequisites.SetupView{Exists: true, State: prerequisites.SetupState{Pending: &prerequisites.PendingSetup{ID: "setup-000042"}}}},
+			outcome: reconciliation.OutcomeFailed, code: "controller.state"},
+		"a failed install": {dnf: &fakeDnf{installed: map[string]bool{}, installErr: refusal}, setup: &fakeSetup{}, outcome: reconciliation.OutcomeUnknown, code: "controller.setup", install: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			capability := stage(&fakeTools{complete: true}, test.dnf, test.setup, &fakeInstaller{})
+			block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
+			execution := newRecorder(&fakeArea{}).execution(t, block, hostState())
+			execution.Stage.Setup.Context = prerequisites.SetupContext{Name: "lab"}
+			result, err := capability.Apply(context.Background(), execution)
+			if result.Outcome != test.outcome || firstCode(err) != test.code {
+				t.Fatalf("apply = %q %v, want %q %s", result.Outcome, diagnostics.Of(err), test.outcome, test.code)
+			}
+			if installed := slices.ContainsFunc(test.dnf.calls, func(call string) bool { return strings.HasPrefix(call, "install ") }); installed != test.install {
+				t.Fatalf("dnf calls = %q", test.dnf.calls)
+			}
+			if test.code == "controller.setup" && !strings.HasSuffix(diagnostics.Of(err)[0].Remediation, ", then run bootwright apply --stage controller --context lab.") {
+				t.Fatalf("remedy = %q", diagnostics.Of(err)[0].Remediation)
+			}
+		})
+	}
+}
+
+// A requirement another process installed between the stage's first reading
+// and setup/lock is not asked of dnf again.
+func TestALockedRereadSkipsWhatIsAlreadyInstalled(t *testing.T) {
+	dnf := newDnf()
+	capability := stage(&fakeTools{complete: true}, dnf, &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
+	execution := newRecorder(&fakeArea{}).execution(t, block, hostState())
+	execution.Stage.Prepare = func(context.Context, prerequisites.StagePreparation) error {
+		dnf.installed["libvirt-client"] = true
+		return nil
+	}
+	result, err := capability.Apply(context.Background(), execution)
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged {
+		t.Fatalf("apply = %+v (%v)", result, err)
+	}
+	if slices.ContainsFunc(dnf.calls, func(call string) bool {
+		return strings.HasPrefix(call, "preview ") || strings.HasPrefix(call, "install ")
+	}) {
+		t.Fatalf("dnf calls = %q", dnf.calls)
+	}
+}
+
+// The route dnf receives is the one the controller Machine selected and the
+// block froze.
+func TestDnfReceivesTheFrozenRoute(t *testing.T) {
+	dnf := newDnf("libvirt-client")
+	capability := stage(&fakeTools{complete: true}, dnf, &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
+	if _, err := capability.Apply(context.Background(), newRecorder(&fakeArea{}).execution(t, block, hostState())); err != nil {
+		t.Fatal(err)
+	}
+	if len(dnf.egress) != 1 || !reflectEqual(dnf.egress[0], stageRequest(t, block).Egress) {
+		t.Fatalf("dnf received %+v", dnf.egress)
+	}
+}
+
+func reflectEqual(x, y prerequisites.SetupEgress) bool {
+	return x.HTTPProxy == y.HTTPProxy && x.HTTPSProxy == y.HTTPSProxy && slices.Equal(x.NoProxy, y.NoProxy)
+}
+
+// A declared libvirt release is an intent the host's repositories decide, so
+// the stage refuses it rather than install another release silently.
+func TestADeclaredLibvirtReleaseRefuses(t *testing.T) {
+	declared := environment(field("dependencyVersions", api.MapValue(text("libvirt", "10.0.0"))))
+	dnf := newDnf()
+	capability := stage(&fakeTools{complete: true}, dnf, &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(declared, machine("container-runtime", "libvirt")), reconciliation.Apply)
+	result, err := capability.Apply(context.Background(), newRecorder(&fakeArea{}).execution(t, block, hostState()))
+	reported := diagnostics.Of(err)
+	if result.Outcome != reconciliation.OutcomeFailed || len(reported) != 1 || reported[0].Code != "controller.unsupported" || reported[0].Remediation != "remove spec.dependencyVersions.libvirt from lab" || len(dnf.calls) != 0 {
+		t.Fatalf("apply = %q %+v after %q", result.Outcome, reported, dnf.calls)
 	}
 }
 
 // The complete closure is completion; anything less is a positive absence
-// whose retry is the same idempotent publication.
+// whose retry is the same idempotent installation.
 func TestObserveResolvesFromPresenceAlone(t *testing.T) {
 	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
-	tools := &fakeTools{selected: selected, complete: true}
-	native := &fakeNative{}
-	capability := New(tools, native, native, &fakeInstaller{})
-	state := stateOf(environment(), machine("container-runtime"), cluster())
-	block := planBlock(t, capability, state, reconciliation.Apply)
 	for _, expected := range []struct {
-		present bool
-		effect  reconciliation.EffectState
-	}{{true, reconciliation.EffectCompleted}, {false, reconciliation.EffectNoEffect}} {
-		tools.present = expected.present
+		tools, packages bool
+		effect          reconciliation.EffectState
+	}{
+		{true, true, reconciliation.EffectCompleted},
+		{false, true, reconciliation.EffectNoEffect},
+		{true, false, reconciliation.EffectNoEffect},
+	} {
+		tools := &fakeTools{selected: selected, complete: true, present: expected.tools}
+		dnf := newDnf()
+		dnf.installed["libvirt-client"] = expected.packages
+		capability := stage(tools, dnf, &fakeSetup{}, &fakeInstaller{})
+		block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
 		recorder := newRecorder(&fakeArea{sealed: true})
 		recorder.published[prerequisites.ToolsDigest(selected)] = true
-		observation, err := capability.Observe(context.Background(), recorder.execution(t, block, hostState(t)))
+		observation, err := capability.Observe(context.Background(), recorder.execution(t, block, hostState()))
 		if err != nil || observation.Effect != expected.effect {
-			t.Fatalf("present=%v effect=%q (%v)", expected.present, observation.Effect, err)
+			t.Fatalf("%+v: effect=%q (%v)", expected, observation.Effect, err)
 		}
 	}
 }
 
-// Observation never publishes: it opens the area read-only through the setup
-// view, so it can neither reserve nor create one.
+// Observation never publishes and never runs dnf beyond presence: it opens
+// the area read-only through the setup view, so it can neither reserve nor
+// create one.
 func TestObservePublishesNothing(t *testing.T) {
 	tools := &fakeTools{complete: true, selected: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}}
-	native := &fakeNative{}
-	capability := New(tools, native, native, &fakeInstaller{})
-	state := stateOf(environment(), machine("container-runtime"), cluster())
-	block := planBlock(t, capability, state, reconciliation.Apply)
+	dnf, setup := newDnf(), &fakeSetup{}
+	capability := stage(tools, dnf, setup, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
 	recorder := newRecorder(&fakeArea{sealed: true})
-	if _, err := capability.Observe(context.Background(), recorder.execution(t, block, hostState(t))); err != nil {
+	if _, err := capability.Observe(context.Background(), recorder.execution(t, block, hostState())); err != nil {
 		t.Fatalf("observe: %v", err)
 	}
-	if len(recorder.areas) != 0 || len(recorder.sealed) != 0 || len(recorder.retained) != 0 || tools.resolves != 0 {
-		t.Fatalf("observation published: areas=%v sealed=%v retained=%d resolves=%d", recorder.areas, recorder.sealed, len(recorder.retained), tools.resolves)
+	if len(recorder.areas) != 0 || len(recorder.sealed) != 0 || len(recorder.retained) != 0 || tools.resolves != 0 || setup.takes != 0 || !slices.Equal(dnf.calls, []string{"installed libvirt-client"}) {
+		t.Fatalf("observation acted: areas=%v sealed=%v retained=%d resolves=%d locks=%d dnf=%q", recorder.areas, recorder.sealed, len(recorder.retained), tools.resolves, setup.takes, dnf.calls)
 	}
 }
 
 // Clients outlive the context that selected them, so removal retains them.
 func TestDestroyRetainsSharedClients(t *testing.T) {
 	installer := &fakeInstaller{}
-	capability := New(&fakeTools{}, &fakeNative{}, &fakeNative{}, installer)
-	state := stateOf(environment(), machine("container-runtime"), cluster())
-	block := planBlock(t, capability, state, reconciliation.Destroy)
+	dnf := newDnf()
+	capability := stage(&fakeTools{}, dnf, &fakeSetup{}, installer)
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Destroy)
 	recorder := newRecorder(&fakeArea{})
-	result, err := capability.Destroy(context.Background(), recorder.execution(t, block, hostState(t)))
+	result, err := capability.Destroy(context.Background(), recorder.execution(t, block, hostState()))
 	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged {
 		t.Fatalf("result = %+v (%v)", result, err)
 	}
-	if installer.installs != 0 || len(recorder.areas) != 0 {
+	if installer.installs != 0 || len(recorder.areas) != 0 || len(dnf.calls) != 0 {
 		t.Fatal("removal touched the shared host closure")
 	}
 	var evidence Evidence
@@ -648,19 +731,18 @@ func TestDestroyRetainsSharedClients(t *testing.T) {
 // it cannot read, or a resolution already cancelled, stays unknown.
 func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 	tools := &fakeTools{selected: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}, complete: true, present: true}
-	native := &fakeNative{ready: true}
-	installer := &fakeInstaller{}
-	capability := New(tools, native, native, installer)
+	dnf, installer := newDnf(), &fakeInstaller{}
+	capability := stage(tools, dnf, &fakeSetup{}, installer)
 	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Destroy)
 	recorder := newRecorder(&fakeArea{sealed: true})
-	removed, err := capability.Destroy(context.Background(), recorder.execution(t, block, hostState(t)))
+	removed, err := capability.Destroy(context.Background(), recorder.execution(t, block, hostState()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	groups := slices.Clone(recorder.groups)
 	bare := lifecycle.Execution{Operation: "op-0000000000000000000000000000", Attempt: 1, Resolution: 1, Block: block}
 	for name, execution := range map[string]lifecycle.Execution{
-		"with the controller stage": recorder.execution(t, block, hostState(t)),
+		"with the controller stage": recorder.execution(t, block, hostState()),
 		"with no host state at all": bare,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -671,10 +753,10 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 			if !bytes.Equal(observation.Evidence, removed.Evidence) {
 				t.Fatalf("the resolution's evidence %s is not the %s the removal publishes", observation.Evidence, removed.Evidence)
 			}
-			if tools.selects+tools.presents+tools.resolves+native.resolves+native.checks+installer.installs != 0 ||
+			if tools.selects+tools.presents+tools.resolves+installer.installs+len(dnf.calls) != 0 ||
 				len(recorder.areas) != 0 || len(recorder.sealed) != 0 || len(recorder.retained) != 0 || !slices.Equal(recorder.groups, groups) {
-				t.Fatalf("a removal's resolution ran or read something: tools=%+v native=%+v installs=%d areas=%v groups=%v",
-					tools, native, installer.installs, recorder.areas, recorder.groups)
+				t.Fatalf("a removal's resolution ran or read something: tools=%+v dnf=%q installs=%d areas=%v groups=%v",
+					tools, dnf.calls, installer.installs, recorder.areas, recorder.groups)
 			}
 		})
 	}
@@ -695,20 +777,6 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 				t.Fatalf("removal observation = %+v (%v), want unknown with its reason", observation, err)
 			}
 		})
-	}
-}
-
-// A host with no completed setup has no foundation to extend.
-func TestApplyRefusesAnUnpreparedHost(t *testing.T) {
-	capability := New(&fakeTools{}, &fakeNative{}, &fakeNative{}, &fakeInstaller{})
-	state := stateOf(environment(), machine("container-runtime"), cluster())
-	block := planBlock(t, capability, state, reconciliation.Apply)
-	recorder := newRecorder(&fakeArea{})
-	execution := recorder.execution(t, block, prerequisites.HostState{})
-	execution.Stage.Setup.Initialized = false
-	_, err := capability.Apply(context.Background(), execution)
-	if firstCode(err) != "controller.identity" {
-		t.Fatalf("code = %q (%v)", firstCode(err), err)
 	}
 }
 
@@ -734,10 +802,9 @@ func TestStageFailuresNameTheStageThatSettlesThem(t *testing.T) {
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			native := &fakeNative{}
-			capability := New(test.tools, native, native, &fakeInstaller{})
+			capability := stage(test.tools, newDnf(), &fakeSetup{}, &fakeInstaller{})
 			block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
-			execution := newRecorder(&fakeArea{}).execution(t, block, hostState(t))
+			execution := newRecorder(&fakeArea{}).execution(t, block, hostState())
 			execution.Stage.Setup.Context = prerequisites.SetupContext{Name: "lab", Revision: "rev-" + strings.Repeat("2", 32)}
 			reported := diagnostics.Of(test.call(capability, execution))
 			want := "Restore this host's access to api.github.com, then run bootwright apply --stage controller --context lab."
@@ -748,38 +815,20 @@ func TestStageFailuresNameTheStageThatSettlesThem(t *testing.T) {
 	}
 }
 
-// The native resolver and the controller Ansible installer are shared with
-// setup too. A failure either raises inside this stage keeps its own code and
-// names this stage, not setup, as what settles it.
+// The controller Ansible installer is shared with setup too. A failure it
+// raises inside this stage keeps its own code and names this stage, not
+// setup, as what settles it.
 func TestStageFailuresKeepTheirCodesAndNameTheStage(t *testing.T) {
-	for _, test := range []struct {
-		name         string
-		code         string
-		capabilities []string
-		objects      []api.Object
-		tools        *fakeTools
-		native       *fakeNative
-		installer    *fakeInstaller
-	}{
-		{name: "native resolution", code: "controller.setup", capabilities: []string{"container-runtime", "libvirt"},
-			tools: &fakeTools{complete: true}, installer: &fakeInstaller{},
-			native: &fakeNative{resolveErr: &prerequisites.ScopedFailure{Code: "controller.setup", Message: "the native solver failed", Correction: "Restore the provided OS package-manager foundation and approved repository access"}}},
-		{name: "controller Ansible", code: "controller.unknown", capabilities: []string{"container-runtime"}, objects: []api.Object{cluster()},
-			tools: &fakeTools{resolved: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}}, native: &fakeNative{},
-			installer: &fakeInstaller{outcome: "unknown", err: &prerequisites.ScopedFailure{Code: "controller.unknown", Message: "the Ansible operation has no complete result", Correction: "Preserve the controller state and restore the qualified controller execution environment"}}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			capability := New(test.tools, test.native, test.native, test.installer)
-			block := planBlock(t, capability, stateOf(append([]api.Object{environment(), machine(test.capabilities...)}, test.objects...)...), reconciliation.Apply)
-			execution := newRecorder(&fakeArea{}).execution(t, block, hostState(t))
-			execution.Stage.Setup.Context = prerequisites.SetupContext{Name: "lab", Revision: "rev-" + strings.Repeat("2", 32)}
-			_, err := capability.Apply(context.Background(), execution)
-			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != test.code || reported[0].Source != nil ||
-				!strings.HasSuffix(reported[0].Remediation, ", then run bootwright apply --stage controller --context lab.") {
-				t.Fatalf("stage failure: %+v", reported)
-			}
-		})
+	installer := &fakeInstaller{outcome: "unknown", err: &prerequisites.ScopedFailure{Code: "controller.unknown", Message: "the Ansible operation has no complete result", Correction: "Preserve the controller state and restore the qualified controller execution environment"}}
+	capability := stage(&fakeTools{resolved: []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}}, newDnf(), &fakeSetup{}, installer)
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	execution := newRecorder(&fakeArea{}).execution(t, block, hostState())
+	execution.Stage.Setup.Context = prerequisites.SetupContext{Name: "lab", Revision: "rev-" + strings.Repeat("2", 32)}
+	result, err := capability.Apply(context.Background(), execution)
+	reported := diagnostics.Of(err)
+	if result.Outcome != reconciliation.OutcomeUnknown || len(reported) != 1 || reported[0].Code != "controller.unknown" || reported[0].Source != nil ||
+		!strings.HasSuffix(reported[0].Remediation, ", then run bootwright apply --stage controller --context lab.") {
+		t.Fatalf("stage failure: %q %+v", result.Outcome, reported)
 	}
 }
 
@@ -791,85 +840,27 @@ func TestDecodeRefusesAnotherRequestVersion(t *testing.T) {
 	}
 }
 
-// A frozen native transaction binds the exact before-inventory it was solved
-// from, so a retained resolution whose roots are gone is solved again rather
-// than replayed against an inventory that has moved.
-func TestApplySolvesAgainWhenANativeRootIsMissing(t *testing.T) {
-	tools := &fakeTools{complete: true, present: true}
-	native := &fakeNative{plan: nativePlanFor(t, prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true})}
-	installer := &fakeInstaller{}
-	capability := New(tools, native, native, installer)
-	state := stateOf(environment(), machine("container-runtime", "libvirt"))
-	block := planBlock(t, capability, state, reconciliation.Apply)
-	recorder := newRecorder(&fakeArea{})
-	if _, err := capability.Apply(context.Background(), recorder.execution(t, block, libvirtHostState(t))); err == nil {
-		t.Fatal("an unproved native postcondition reported success")
-	}
-	if native.resolves != 1 {
-		t.Fatalf("a missing root was replayed rather than solved again: resolves=%d", native.resolves)
-	}
-}
-
-// A stage that solves again names every retained resolution of its own
-// selection, other than the one it now retains, as superseded by it: only the
-// latest is ever read, so the store retires them in the same publication. The
-// setup's resolution and another selection's are not its to name.
-func TestApplyNamesTheResolutionsItsNewSolveSupersedes(t *testing.T) {
-	libvirt := prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true}
-	tools := &fakeTools{complete: true, present: true}
-	native := &fakeNative{plan: nativePlanFor(t, libvirt)}
-	capability := New(tools, native, native, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
-	state := hostState(t)
-	again := resolvedDefinition(t, libvirt)
-	earlier, later := resolvedFrom(t, libvirt, strings.Repeat("1", 64)), resolvedFrom(t, libvirt, strings.Repeat("2", 64))
-	media := resolvedDefinition(t, prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true, InstallerMedia: true})
-	mediaOnly := resolvedDefinition(t, prerequisites.NativeRequirements{ContainerRuntime: true, InstallerMedia: true})
-	state.RetainedDefinitions = []prerequisites.Definition{*state.Receipt.Definition, again, earlier, media, mediaOnly, later}
-	recorder := newRecorder(&fakeArea{})
-	if _, err := capability.Apply(context.Background(), recorder.execution(t, block, state)); err == nil {
-		t.Fatal("an unproved native postcondition reported success")
-	}
-	if native.resolves != 1 || recorder.resolved != 1 || recorder.resolution.ResolutionDigest != again.ResolutionDigest {
-		t.Fatalf("resolves=%d retained=%d, want the solve retained once", native.resolves, recorder.resolved)
-	}
-	superseded := slices.Sorted(slices.Values(recorder.superseded))
-	if want := slices.Sorted(slices.Values([]string{earlier.ResolutionDigest, later.ResolutionDigest})); !slices.Equal(superseded, want) {
-		t.Fatalf("the stage named %v as superseded, want %v", superseded, want)
-	}
-}
-
-// Roots that are already installed need no transaction at all, so the request
-// the automation receives carries none and only the clients are published.
-func TestApplyInstallsNoNativeTransactionWhenTheRootsArePresent(t *testing.T) {
-	resolved := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
-	tools := &fakeTools{resolved: resolved, present: true}
-	native := &fakeNative{ready: true}
-	installer := &fakeInstaller{}
-	capability := New(tools, native, native, installer)
-	state := stateOf(environment(), machine("container-runtime", "libvirt"), cluster())
-	block := planBlock(t, capability, state, reconciliation.Apply)
-	recorder := newRecorder(&fakeArea{})
-	result, err := capability.Apply(context.Background(), recorder.execution(t, block, libvirtHostState(t)))
-	if err != nil || result.Outcome != reconciliation.OutcomeChanged {
-		t.Fatalf("result = %+v (%v)", result, err)
-	}
-	if native.resolves != 0 || recorder.resolved != 0 {
-		t.Fatalf("installed roots were solved again: resolves=%d retained=%d", native.resolves, recorder.resolved)
-	}
-	if installer.publication.Definition.Native != nil {
-		t.Fatal("the automation received a native transaction with nothing to change")
-	}
-	var evidence Evidence
-	if json.Unmarshal(result.Evidence, &evidence) != nil || !evidence.Libvirt || !slices.Contains(evidence.Roots, "libvirt") {
-		t.Fatalf("evidence = %s", result.Evidence)
+// A request whose host packages are not exactly what its closures select is
+// refused, so a frozen block can never ask dnf for anything else.
+func TestDecodeRefusesPackagesItsClosuresDoNotSelect(t *testing.T) {
+	block := planBlock(t, unwired(), stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
+	request := stageRequest(t, block)
+	for name, packages := range map[string][]string{"another package": {"nmstate"}, "none": {}, "one more": {"libvirt-client", "lorax"}} {
+		request.Packages = packages
+		data, err := request.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := DecodeRequest(data); firstCode(err) != "lifecycle.state" {
+			t.Fatalf("%s: decode = %v", name, err)
+		}
 	}
 }
 
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenStageRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"controller-clients-v0", "controller-clients-v1", "controller-clients-v3"} {
+	for _, version := range []string{"controller-clients-v0", "controller-clients-v1", "controller-clients-v2", "controller-clients-v4"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)
@@ -905,7 +896,7 @@ func TestLocateToolAnswersOnlyFromTheClosureTheStageProved(t *testing.T) {
 	closure := []prerequisites.ToolDefinition{release("openshift-clients", "4.19.3", "c", "oc", "kubectl"), release("openshift-install", "4.19.3", "e", "openshift-install")}
 	newer := release("openshift-install", "4.22.3", "0", "openshift-install")
 	installer := controller.InstalledTool{Kind: "openshift-install", Compatibility: "openshift", Version: "4.19.3", Executable: "openshift-install"}
-	block := planBlock(t, New(&fakeTools{}, &fakeNative{}, &fakeNative{}, &fakeInstaller{}), stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	block := planBlock(t, unwired(), stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
 	proof := func(edit func(*Evidence)) lifecycle.BlockEvidence {
 		evidence := newEvidence(block.RequestDigest, prerequisites.ToolsDigest(closure), false, closure, nil)
 		if edit != nil {
@@ -959,10 +950,10 @@ func TestLocateToolAnswersOnlyFromTheClosureTheStageProved(t *testing.T) {
 					}
 					return area, nil
 				},
-				State: prerequisites.HostState{RetainedSources: []prerequisites.DependencySource{closure[0].Source, newer.Source, closure[1].Source}},
+				State: prerequisites.HostState{ToolSources: []prerequisites.DependencySource{closure[0].Source, newer.Source, closure[1].Source}},
 			}
 			tools := &fakeTools{selected: tc.selected, complete: tc.complete}
-			capability := New(tools, &fakeNative{}, &fakeNative{}, &fakeInstaller{})
+			capability := stage(tools, newDnf(), &fakeSetup{}, &fakeInstaller{})
 			located, err := capability.LocateTool(context.Background(), view, block, tc.proved, installer)
 			if tc.located != "" {
 				if err != nil || located != tc.located {

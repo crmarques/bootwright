@@ -179,10 +179,10 @@ type admittingThenRefusingGuard struct {
 	err     error
 }
 
-func (g *admittingThenRefusingGuard) WithPython(_ context.Context, _ prerequisites.BundleArea, _ prerequisites.ExecutionRequirement, use func(prerequisites.PythonLaunch, func() error) error) error {
+func (g *admittingThenRefusingGuard) WithPython(_ context.Context, _ prerequisites.Runtime, use func(prerequisites.PythonLaunch) error) error {
 	if g.admit > 0 {
 		g.admit--
-		return use(prerequisites.PythonLaunch{Loader: "/loader"}, func() error { return nil })
+		return use(prerequisites.PythonLaunch{Program: "/runtime/bin/python"})
 	}
 	g.refused++
 	return g.err

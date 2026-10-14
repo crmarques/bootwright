@@ -13,7 +13,7 @@
   },
   "closure": {
     "digest": "3333333333333333333333333333333333333333333333333333333333333333",
-    "python": "3.14.7",
+    "python": "3.14",
     "ansible": "2.21.4"
   },
   "source": "op-abababababababababababababababab",

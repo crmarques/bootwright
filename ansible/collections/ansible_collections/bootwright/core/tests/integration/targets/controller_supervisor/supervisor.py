@@ -46,7 +46,7 @@ spec.loader.exec_module(implementation)
 implementation.main()
 """
     result = subprocess.run(
-        [sys.executable, "-I", "-B", "-S", "-c", program, marker, str(supervisor)],
+        [sys.executable, "-I", "-B", "-c", program, marker, str(supervisor)],
         timeout=10,
         check=False,
     )

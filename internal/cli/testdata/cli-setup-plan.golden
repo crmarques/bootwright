@@ -5,15 +5,17 @@ Controller setup plan
   Route     direct
 
 Checks
-  [UNKNOWN]  Execution bundle   required qualified Python and Ansible; observed unverified
-  [UNKNOWN]  Container runtime  required podman; observed unverified
+  [OK]       Host                fedora 43/amd64
+  [UNKNOWN]  Controller runtime  required Python 3.14, 3.13, 3.12 with ansible-core 2.21.5; observed Python 3.14.8 (/usr/bin/python3.14); runtime not verified without privilege
+  [FAIL]     Host packages       required openssh-clients, podman; observed missing podman
+  [UNKNOWN]  Setup state         required complete; observed unverified
 
-Dependencies
-  qualified-source.tar.gz
+Host package requirements
+  podman
 
 Planned changes
-  1. Prepare the qualified execution bundle
-  2. Install the baseline native packages
+  1. Install host packages with dnf: podman
+  2. Verify or prepare the controller runtime: Python 3.14 at /usr/bin/python3.14, ansible-core 2.21.5: 1 of 2 wheels to download (2.4 MB), 1 cached
 
   Outcome  planned (dry run)
   Next     bootwright setup

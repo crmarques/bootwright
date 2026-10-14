@@ -30,34 +30,3 @@ func TestThePersistedRecordRefusesEachNonCanonicalEncodingInItsOwnWords(t *testi
 		}
 	}
 }
-
-// A controller action payload is canonical only as one sorted, compact
-// object. Its members are not declared, so a case-variant member that sorts in
-// place is its own key.
-func TestTheControllerActionPayloadRefusesEachNonCanonicalEncodingInItsOwnWords(t *testing.T) {
-	const exact = `{"a":1,"b":"x"}`
-	if err := validateControllerObject([]byte(exact)); err != nil {
-		t.Fatalf("the canonical payload refused: %v", err)
-	}
-	for name, tc := range map[string]struct{ data, message string }{
-		"an unsorted member":    {`{"undeclared":true,"a":1,"b":"x"}`, "controller action payload is not canonical"},
-		"a case-variant member": {`{"A":2,"a":1,"b":"x"}`, ""},
-		"a duplicate member":    {`{"a":2,"a":1,"b":"x"}`, "controller action payload is not canonical"},
-		"trailing data":         {exact + "x", "controller action payload contains trailing data"},
-		"a space after a colon": {`{"a": 1,"b":"x"}`, "controller action payload is not canonical"},
-		"a line feed after it":  {exact + "\n", "controller action payload is not canonical"},
-		"a truncated object":    {`{"a":1`, "controller action payload is malformed"},
-	} {
-		err := validateControllerObject([]byte(tc.data))
-		if tc.message == "" {
-			if err != nil {
-				t.Errorf("%s: refused: %v", name, err)
-			}
-			continue
-		}
-		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != tc.message {
-			t.Errorf("%s: refusal = %+v, want %q", name, reported, tc.message)
-		}
-	}
-}

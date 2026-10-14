@@ -54,7 +54,7 @@ func TestADestroyAfterACompletedApplyWithABlockNotDoneRefuses(t *testing.T) {
 				rewriteState(t, h, path.Join(current, "blocks", block, "state.json"), string(state))
 			}
 			records := h.workspace.area.clone()
-			bound, binds, presented, mutations, opened := slices.Clone(h.binder.bound), h.workspace.binds, len(h.presenter.presented), h.workspace.mutations, h.workspace.opened
+			bound, binds, presented, mutations, opened := slices.Clone(h.binder.bound), h.workspace.binds, len(h.presenter.presented), h.workspace.mutations, h.guard.entered()
 			h.capability.destroys, h.capability.probes, h.capability.observes, h.capability.removals = nil, nil, nil, nil
 
 			_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
@@ -82,9 +82,9 @@ func TestADestroyAfterACompletedApplyWithABlockNotDoneRefuses(t *testing.T) {
 				t.Fatalf("the refusal reached the host: destroys=%v probes=%v observes=%v",
 					h.capability.destroys, h.capability.probes, h.capability.observes)
 			}
-			if h.workspace.mutations != mutations || h.workspace.opened != opened {
-				t.Fatalf("the refusal took the exclusive lock or opened a bundle: mutations=%d opened=%d",
-					h.workspace.mutations-mutations, h.workspace.opened-opened)
+			if h.workspace.mutations != mutations || h.guard.entered() != opened {
+				t.Fatalf("the refusal took the exclusive lock or launched the runtime: mutations=%d launches=%d",
+					h.workspace.mutations-mutations, h.guard.entered()-opened)
 			}
 			// Every record and binding is exactly as the apply and the loss left it.
 			if !sameFiles(h.workspace.area, records) || currentOperation(t, h) != current {
@@ -133,7 +133,7 @@ func TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses(t *testing.T)
 			}
 			records := h.workspace.area.clone()
 			applies, evidence := slices.Clone(h.capability.applies), slices.Clone(h.workspace.evidence)
-			bound, binds, presented, mutations, opened := slices.Clone(h.binder.bound), h.workspace.binds, len(h.presenter.presented), h.workspace.mutations, h.workspace.opened
+			bound, binds, presented, mutations, opened := slices.Clone(h.binder.bound), h.workspace.binds, len(h.presenter.presented), h.workspace.mutations, h.guard.entered()
 
 			result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 			reported := diagnostics.Of(err)
@@ -150,9 +150,9 @@ func TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses(t *testing.T)
 			if !slices.Equal(h.capability.applies, applies) || len(h.presenter.presented) != presented {
 				t.Fatalf("the refusal ran or presented an apply: applies=%v presented=%d", h.capability.applies, len(h.presenter.presented)-presented)
 			}
-			if h.workspace.mutations != mutations || h.workspace.opened != opened {
-				t.Fatalf("the refusal took the exclusive lock or opened a bundle: mutations=%d opened=%d",
-					h.workspace.mutations-mutations, h.workspace.opened-opened)
+			if h.workspace.mutations != mutations || h.guard.entered() != opened {
+				t.Fatalf("the refusal took the exclusive lock or launched the runtime: mutations=%d launches=%d",
+					h.workspace.mutations-mutations, h.guard.entered()-opened)
 			}
 			if !sameFiles(h.workspace.area, records) || currentOperation(t, h) != current || !slices.Equal(h.workspace.evidence, evidence) {
 				t.Fatal("the refusal changed durable operation state or its evidence")

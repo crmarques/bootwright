@@ -20,7 +20,7 @@ func controllerReport(outcome string, dryRun bool) *prerequisites.Report {
 		status, observed = "unverified", "unverified"
 	}
 	return &prerequisites.Report{Platform: prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, DryRun: dryRun, Outcome: outcome,
-		Checks: []prerequisites.Check{{ID: "execution-bundle", Required: "qualified Python and Ansible", Observed: observed, Status: status}}, Actions: []string{"Prepare the qualified execution bundle"}, Dependencies: []string{"qualified-source.tar.gz"}}
+		Checks: []prerequisites.Check{{ID: "python-runtime", Required: "qualified Python and Ansible", Observed: observed, Status: status}}, Actions: []string{"Prepare the qualified execution bundle"}, Dependencies: []string{"qualified-source.tar.gz"}}
 }
 
 // Only preflight consumes a context. Setup prepares the prerequisites every
@@ -245,7 +245,7 @@ func TestControllerChecksUseContractStatusTokens(t *testing.T) {
 		if err := NewControllerPresenter(&out, nil, nil).PresentControllerPlan(context.Background(), *report); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(out.String(), "  "+token+"  Execution bundle  ") {
+		if !strings.Contains(out.String(), "  "+token+"  Controller runtime  ") {
 			t.Fatalf("status %q rendered as %q, want %s", status, out.String(), token)
 		}
 		for _, internal := range []string{"[ready]", "[not-ready]", "[unverified]"} {
@@ -262,8 +262,8 @@ func TestControllerIncompleteSetupReportsPerActionProgress(t *testing.T) {
 	report := controllerReport("incomplete", false)
 	report.PlanPresented = true
 	report.Progress = []prerequisites.ActionProgress{
-		{ID: "execution-bundle", Phase: "observed", Outcome: "changed"},
-		{ID: "container-runtime", Phase: "intent"},
+		{ID: "python-runtime", Phase: "observed", Outcome: "changed"},
+		{ID: "host-packages", Phase: "intent"},
 		{ID: "controller-binding", Phase: "planned"},
 	}
 	record := &dispatchRecord{result: commandResult{controller: report}, err: diagnostics.NewFailure("controller.unknown", "a setup action has an unresolved effect outcome", "")}
@@ -272,7 +272,7 @@ func TestControllerIncompleteSetupReportsPerActionProgress(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit = %d", code)
 	}
-	for _, want := range []string{"\nProgress\n", "  [DONE]     Execution bundle\n", "  [UNKNOWN]  Container runtime\n", "  [SKIPPED]  Controller binding\n"} {
+	for _, want := range []string{"\nProgress\n", "  [DONE]     Controller runtime\n", "  [UNKNOWN]  Host packages\n", "  [SKIPPED]  Controller binding\n"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("result %q lacks %q", out.String(), want)
 		}
@@ -286,7 +286,7 @@ func TestControllerIncompleteSetupReportsPerActionProgress(t *testing.T) {
 func TestControllerCompletedSetupReportsReadinessOnly(t *testing.T) {
 	report := controllerReport("changed", false)
 	report.PlanPresented = true
-	report.Progress = []prerequisites.ActionProgress{{ID: "execution-bundle", Phase: "observed", Outcome: "changed"}}
+	report.Progress = []prerequisites.ActionProgress{{ID: "python-runtime", Phase: "observed", Outcome: "changed"}}
 	record := &dispatchRecord{result: commandResult{controller: report}}
 	var out, errOut bytes.Buffer
 	if code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"setup"}); code != 0 || errOut.Len() != 0 {
@@ -309,10 +309,10 @@ func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 	if err := presenter.PresentControllerPlan(ctx, *controllerReport("planned", false)); err != nil {
 		t.Fatal(err)
 	}
-	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "running", Step: 1, Steps: 1})
-	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "running", Detail: "acquiring python.tar.gz", Step: 1, Steps: 1, Completed: 0, Declared: 2})
-	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "running", Detail: "acquiring ansible.tar.gz", Step: 1, Steps: 1, Completed: 1, Declared: 2})
-	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "execution-bundle", Status: "changed", Step: 1, Steps: 1})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "python-runtime", Status: "running", Step: 1, Steps: 1})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "python-runtime", Status: "running", Detail: "acquiring python.tar.gz", Step: 1, Steps: 1, Completed: 0, Declared: 2})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "python-runtime", Status: "running", Detail: "acquiring ansible.tar.gz", Step: 1, Steps: 1, Completed: 1, Declared: 2})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "python-runtime", Status: "changed", Step: 1, Steps: 1})
 	rendered := out.String()
 	prefix := "Controller setup\n\nResolving\n" +
 		"  [RUNNING]  [1/2] Python and Ansible\n" +
@@ -323,10 +323,10 @@ func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 		t.Fatalf("result = %q, want prefix %q", rendered, prefix)
 	}
 	suffix := "\nProgress\n" +
-		"  [RUNNING]  [1/1] Execution bundle\n" +
-		"  [RUNNING]  [1/1] Execution bundle: acquiring python.tar.gz - 0%\n" +
-		"  [RUNNING]  [1/1] Execution bundle: acquiring ansible.tar.gz - 50%\n" +
-		"  [DONE]     [1/1] Execution bundle\n"
+		"  [RUNNING]  [1/1] Controller runtime\n" +
+		"  [RUNNING]  [1/1] Controller runtime: acquiring python.tar.gz - 0%\n" +
+		"  [RUNNING]  [1/1] Controller runtime: acquiring ansible.tar.gz - 50%\n" +
+		"  [DONE]     [1/1] Controller runtime\n"
 	if strings.Count(rendered, "Controller setup\n") != 1 || !strings.Contains(rendered, "\nChecks\n") || !strings.HasSuffix(rendered, suffix) {
 		t.Fatalf("result = %q", rendered)
 	}
@@ -344,8 +344,8 @@ func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "host", Status: "ok", Detail: "fedora 43/amd64"})
-	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "execution-bundle", Status: "running", Detail: "verifying the retained bundle"})
-	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "execution-bundle", Status: "failed", Detail: "required qualified Python and Ansible; observed missing or unverified"})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "python-runtime", Status: "running", Detail: "verifying the retained bundle"})
+	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "python-runtime", Status: "failed", Detail: "required qualified Python and Ansible; observed missing or unverified"})
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ResolutionPhase, Action: "Native packages", Status: "ok", Detail: "no changes", Step: 1, Steps: 1})
 	if err := presenter.PresentControllerPlan(ctx, *report); err != nil {
 		t.Fatal(err)
@@ -353,11 +353,11 @@ func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 	want := "Controller setup\n\n  Scope     baseline\n  Platform  fedora 43/amd64\n" +
 		"\nChecks\n" +
 		"  [OK]       Host: fedora 43/amd64\n" +
-		"  [RUNNING]  Execution bundle: verifying the retained bundle\n" +
-		"  [FAIL]     Execution bundle: required qualified Python and Ansible; observed missing or unverified\n" +
+		"  [RUNNING]  Controller runtime: verifying the retained bundle\n" +
+		"  [FAIL]     Controller runtime: required qualified Python and Ansible; observed missing or unverified\n" +
 		"\nResolving\n" +
 		"  [OK]       [1/1] Native packages: no changes\n" +
-		"\nDependencies\n  qualified-source.tar.gz\n" +
+		"\nHost package requirements\n  qualified-source.tar.gz\n" +
 		"\nPlanned changes\n  1. Prepare the qualified execution bundle\n"
 	if out.String() != want {
 		t.Fatalf("result = %q, want %q", out.String(), want)
@@ -502,24 +502,29 @@ func TestControllerScopeNamesTheAcquisitionRoute(t *testing.T) {
 	}
 }
 
-// A setup that starts its controller Ansible names the run keeping that
-// Ansible's output twice: as a field before the Ansible starts, so it can be
-// followed while it runs, and on the result, so it survives in the
-// scrollback. The whole stream is pinned, from the scope to the result.
-func TestControllerSetupNamesItsRunBeforeItsAnsibleAndOnTheResultGolden(t *testing.T) {
+// A setup names the run keeping dnf's output twice: as a field before dnf
+// starts, so it can be followed while it runs, and on the result, so it
+// survives in the scrollback. The whole stream is pinned, from the scope
+// through the plan, whose dnf preview is shown verbatim, to the result.
+func TestControllerSetupShowsThePreviewAndNamesItsRunGolden(t *testing.T) {
 	ctx := context.Background()
-	const location = "/var/lib/bootwright/controller/runs/setup-000003"
+	const location = "/var/lib/bootwright/setup/runs/setup-000003"
 	var out, errOut bytes.Buffer
 	presenter := &ControllerPresenter{progress: progressPresenter{out: &out, clock: newManualClock().clock()}}
 	report := &prerequisites.Report{
-		Platform: prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}, Route: "direct", Outcome: "planned",
+		Platform: prerequisites.Platform{OS: "fedora", Release: "44", Architecture: "amd64"}, Route: "direct", Outcome: "planned",
 		Checks: []prerequisites.Check{
-			{ID: "host", Required: "fedora 43/amd64", Observed: "fedora 43/amd64", Status: "ready", Scope: prerequisites.HostScope},
-			{ID: "execution-bundle", Required: "qualified Python and Ansible", Observed: "qualified", Status: "ready", Scope: prerequisites.HostScope},
-			{ID: "container-runtime", Required: "5.8.2", Observed: "missing", Status: "not-ready", Scope: prerequisites.HostScope},
+			{ID: "host", Required: "the Fedora or RHEL family on amd64", Observed: "fedora 44/amd64", Status: "ready", Scope: prerequisites.HostScope},
+			{ID: "python-runtime", Required: "Python 3.14, 3.13, 3.12 with ansible-core 2.21.5", Observed: "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5", Status: "ready", Scope: prerequisites.HostScope},
+			{ID: "host-packages", Required: "openssh-clients, podman", Observed: "missing podman", Status: "not-ready", Scope: prerequisites.HostScope},
+			{ID: "setup-state", Required: "complete", Observed: "complete", Status: "ready", Scope: prerequisites.HostScope},
 		},
-		Actions:      []string{"Install the baseline native packages with Ansible"},
-		Dependencies: []string{"podman-5.8.2-1.fc43.x86_64.rpm"},
+		Actions:      []string{"Install host packages with dnf: podman"},
+		Dependencies: []string{"podman"},
+		Preview: &prerequisites.HostPackagePreview{
+			Text:  "Updating and loading repositories:\nRepositories loaded.\nPackage            Arch    Version          Repository   Size\nInstalling:\n podman            x86_64  5:5.8.1-1.fc44   updates    54.2 MiB\nUpgrading:\n glibc             x86_64  2.43-3.fc44      updates     6.7 MiB\n\nTransaction Summary:\n Installing:         1 package\n Upgrading:          1 package\nOperation aborted by the user.\n",
+			Notes: []string{"this install also updates core packages (glibc); dnf applies it as for any package install"},
+		},
 	}
 	record := &dispatchRecord{afterCall: func() {
 		if err := presenter.PresentControllerScope(ctx, prerequisites.InspectionPhase, *report); err != nil {
@@ -535,20 +540,20 @@ func TestControllerSetupNamesItsRunBeforeItsAnsibleAndOnTheResultGolden(t *testi
 		if err := presenter.PresentControllerPlan(ctx, *report); err != nil {
 			t.Fatal(err)
 		}
-		step := prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "container-runtime", Step: 1, Steps: 1}
-		for _, event := range []prerequisites.ProgressEvent{{Status: "running"}, {Status: "running", Detail: "starting the private Ansible runtime"}, {Status: "running", Detail: "installing 3 native packages"}, {Status: "changed"}} {
-			if event.Detail == "starting the private Ansible runtime" {
-				presenter.ReportLogLocation(ctx, location)
-			}
-			event.Phase, event.Action, event.Step, event.Steps = step.Phase, step.Action, step.Step, step.Steps
+		presenter.ReportLogLocation(ctx, location)
+		for _, event := range []prerequisites.ProgressEvent{
+			{Action: "native-packages", Status: "running", Step: 1, Steps: 2}, {Action: "native-packages", Status: "changed", Step: 1, Steps: 2},
+			{Action: "receipt", Status: "running", Step: 2, Steps: 2}, {Action: "receipt", Status: "changed", Step: 2, Steps: 2},
+		} {
+			event.Phase = prerequisites.SetupPhase
 			presenter.ReportProgress(ctx, event)
 		}
 	}}
 	record.result.controller = &prerequisites.Report{
 		Platform: report.Platform, Route: report.Route, Outcome: "changed", PlanPresented: true, ProgressPresented: true,
-		Checks:      []prerequisites.Check{report.Checks[0], report.Checks[1], {ID: "container-runtime", Required: "5.8.2", Observed: "5.8.2", Status: "ready", Scope: prerequisites.HostScope}},
+		Checks:      []prerequisites.Check{report.Checks[0], report.Checks[1], {ID: "host-packages", Required: "openssh-clients, podman", Observed: "openssh-clients, podman", Status: "ready", Scope: prerequisites.HostScope}, report.Checks[3]},
 		Actions:     report.Actions,
-		Progress:    []prerequisites.ActionProgress{{ID: "container-runtime", Phase: "observed", Outcome: "changed"}},
+		Progress:    []prerequisites.ActionProgress{{ID: "native-packages", Phase: "observed", Outcome: "changed"}, {ID: "receipt", Phase: "observed", Outcome: "changed"}},
 		LogLocation: location,
 	}
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), FinishProgress: presenter.Finish}).Run(ctx, []string{"setup", "--yes"})
@@ -556,9 +561,12 @@ func TestControllerSetupNamesItsRunBeforeItsAnsibleAndOnTheResultGolden(t *testi
 		t.Fatalf("setup exited %d with %q", code, errOut.String())
 	}
 	rendered := out.String()
-	if strings.Count(rendered, location) != 2 || strings.Index(rendered, location) > strings.Index(rendered, "starting the private Ansible runtime") ||
+	if strings.Count(rendered, location) != 2 || strings.Index(rendered, location) > strings.Index(rendered, "[1/2] Host packages") ||
 		strings.LastIndex(rendered, location) < strings.Index(rendered, "Outcome") {
-		t.Fatalf("setup did not name its run before its Ansible and on its result:\n%s", rendered)
+		t.Fatalf("setup did not name its run before dnf and on its result:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "\n   podman            x86_64  5:5.8.1-1.fc44   updates    54.2 MiB\n") {
+		t.Fatalf("the plan did not show dnf's preview verbatim:\n%s", rendered)
 	}
 	matchesTextGolden(t, "controller-setup-logs", out.Bytes())
 }

@@ -310,7 +310,7 @@ func TestAWorkedPendingBlockIsNotAdmittedAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	states := map[string]reconciliation.BlockState{"alpha": reconciliation.BlockPending, "bravo": reconciliation.BlockPending}
-	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, bundle{}, nil, operationstore.Operation{}, plan, states, nil, nil)
+	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, nil)
 	run.worked["alpha"] = true
 	if next, _, ok := run.next(); !ok || next.ID != "bravo" {
 		t.Fatalf("admitted %q (%t) beside a worked pending block", next.ID, ok)
@@ -331,7 +331,7 @@ func TestTheCauseKeepsAFailureThatCarriesNoDiagnostic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := Service{}.newScheduler(nil, nil, bundle{}, nil, operationstore.Operation{}, plan, map[string]reconciliation.BlockState{}, nil, nil)
+	run := Service{}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, map[string]reconciliation.BlockState{}, nil, nil)
 	run.settle(step{block: "delta", state: reconciliation.BlockPending, err: errors.New(refusedWrite), unstarted: true})
 	run.settle(step{block: "charlie", state: reconciliation.BlockUnknown, err: fmt.Errorf("adapter: %w", context.Canceled)})
 	run.settle(step{block: "bravo", state: reconciliation.BlockFailed, err: diagnostics.NewFailure("lifecycle.state", "bravo could not be served", "")})
@@ -346,7 +346,7 @@ func TestTheCauseKeepsAFailureThatCarriesNoDiagnostic(t *testing.T) {
 		t.Fatalf("cause = %q, want %q", said, want)
 	}
 
-	canceled := Service{}.newScheduler(nil, nil, bundle{}, nil, operationstore.Operation{}, plan, map[string]reconciliation.BlockState{}, nil, nil)
+	canceled := Service{}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, map[string]reconciliation.BlockState{}, nil, nil)
 	canceled.settle(step{block: "alpha", state: reconciliation.BlockPending, err: context.DeadlineExceeded, unstarted: true})
 	if err := canceled.cause(); err != nil {
 		t.Fatalf("a cancellation became a cause: %v", diagnostics.Of(err))

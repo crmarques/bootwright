@@ -14,7 +14,7 @@ const playbookRoot = "collections/ansible_collections/bootwright/core/playbooks/
 // buildCapabilities lists what this executable can realize, in the API's own
 // kind order, so a plan's block order never depends on wiring order.
 func buildCapabilities(clock systemClock, controller controllerDependencies, records installation.MediaRecords) capabilityResolver {
-	return buildCapabilitiesWith(clock, controller, ansiblerunner.New(operationPlaybook()), records)
+	return buildCapabilitiesWith(clock, controller, ansiblerunner.New(operationPlaybook(), controller.Stager), records)
 }
 
 // Composition owns the entrypoint each implementation runs, so every binding

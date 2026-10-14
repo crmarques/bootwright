@@ -34,6 +34,40 @@ Validation must distinguish absence, known value, and unknown result. A failed
 or ambiguous probe is unknown, never proof that a machine, object, credential,
 path, or effect is absent.
 
+### The controller host's attacker model
+
+On the controller host the attacker is an unprivileged local account, and any
+network adversary between the host and the publishers it acquires from. Root,
+and anything only root can write, is trusted; the operator's sudo rule is
+treated as granting everything it permits. Every file the controller executes
+or loads, the re-executed Bootwright binary, the interpreter, its standard
+library and `lib-dynload`, the controller runtime, `rpm` and `dnf` included, is
+therefore admitted only when it and every directory above it are owned by root
+(or, for the binary and the invoking account's own build output, by that
+account) and writable by neither group nor others. A defence against root, such
+as byte digests of root-owned system libraries, is no boundary here and is not
+kept ([D152](milestones/backlog.md#decisions)).
+
+Controller setup v2 widens the trusted set in four named ways, each stated
+here once:
+
+- **W1, the OS interpreter.** The controller runtime runs on the host's own
+  CPython at its versioned path `/usr/bin/python3.X`, which the root `dnf`
+  transaction already trusts; no separately published interpreter is trusted.
+- **W2, the host's repositories.** Host packages come from every repository
+  and signing key the operator configured in dnf, copr included, as any
+  `dnf install` does; Bootwright records and shows the repository each
+  provider came from.
+- **W3, a root `dnf install --assumeno` before confirmation.** The preview
+  changes no package, but it may refresh dnf's metadata cache, as
+  `dnf-makecache.timer` does.
+- **W4, the system OpenSSL and crypto-policy.** The runtime's Python TLS
+  follows the host's crypto-policy and FIPS mode. Bootwright's Go binary and
+  cryptography's bundled OpenSSL, which Bootwright never uses for TLS, stay
+  outside the host's FIPS-validated modules
+  ([D108](milestones/backlog.md#decisions) as D152 amends it); a
+  FIPS-qualified runtime stays parked as [B331](milestones/backlog.md#b331).
+
 ## Sensitive material
 
 Passwords, tokens, pull secrets, private keys, kubeconfigs, provider and
@@ -280,7 +314,15 @@ of generation.
 
 The [context store](contexts.md#storage-locking-and-publication) owns
 root-only storage, and the [CLI boundary](cli.md#local-privilege-and-user-identity)
-owns sudo authentication and credential refresh. No password enters Bootwright
+owns sudo authentication and credential refresh. Before `sudo`, the
+unprivileged supervisor refuses `runtime.privilege` to re-execute a Bootwright
+file that another account can write: one whose resolved file or any directory
+above it is owned by a UID other than 0 or the invoking account's, or is
+writable by group or others. A root-owned sticky directory such as `/tmp` is
+exempt, because its sticky bit stops another account from replacing an entry
+it does not own; a sticky directory another account owns still refuses. The
+remedy installs the binary to a root-owned path; the
+[CLI boundary](cli.md#local-privilege-and-user-identity) owns the report. No password enters Bootwright
 memory, argv, environment, durable state or output. Per-user selection is
 non-authoritative input under [context identity](contexts.md#identity-and-selection),
 validated against the root registry and never written by root followed by
@@ -307,7 +349,12 @@ either the selected Machine's declared proxy choice, or, for the
 [commands that acquire before any context exists](controller.md#the-context-free-acquisition-route),
 the named variables the invoking environment set. That route is admitted
 against the declared endpoint and bypass grammar before it is used, carries no
-credential, and selects transport alone.
+credential, and selects transport alone. When the admitted route is a proxy,
+the host's `dnf` receives it as `https_proxy` and `no_proxy` and nothing else
+ambient, and a `proxy=` in the host's dnf configuration wins over it; dnf's own
+configuration owns its repositories, mirrors, signing keys and `gpgcheck`, and
+Bootwright never passes `--allowerasing`, `--nogpgcheck`, `--repofrompath`,
+`--enablerepo` or `--releasever` ([host packages](controller.md#host-packages)).
 
 TLS certificate and name verification and SSH host identity verification fail
 closed. An insecure exception must be explicit, endpoint-scoped, visible in
@@ -452,14 +499,16 @@ content digest. Verify integrity and required publisher authenticity from
 separately trusted metadata before use. Repository-owned automation is
 content-digested as part of the selected implementation. Implicit upgrade,
 floating tags during execution, and ambient external tools are forbidden.
-The one exception is [controller setup's](controller.md#selection-and-command-journeys)
-resolver staging. It runs downloaded resolver code, each staging executable
-verified before its own execution, in disposable unprivileged staging with no
-installed-host, shared-state, Secret or target authority, and freezes exact
-versions, sources, publisher digests, resolver identities and the complete
-native transaction before presenting the plan; the installation phase uses only
-that frozen result, and preflight, dry-run and recovery never refresh it. A
-frozen operation never substitutes an update silently; recovery follows
+The controller runtime's Python packages are pinned by the
+[runtime lock](controller.md#the-runtime-lock) each build embeds: every wheel's
+URL, size and SHA-256, chosen when the lock is generated and never at setup,
+installed with `--no-index --no-deps --require-hashes --only-binary=:all:`
+from a cache that verified each one, so no setup resolves, discovers or checks
+for a newer version and the upgrade is a new build. Host packages are the
+exception: the host's `dnf` resolves them under its own signature policy
+([W2](#the-controller-hosts-attacker-model)), and the evidence records each
+provider's NEVRA and repository. A frozen operation never substitutes an update
+silently; recovery follows
 [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 
 ## Logs, output, and diagnostics
@@ -561,8 +610,8 @@ require qualified real-system tests, recorded in the
 | An authored, operator or remote string reaches Ansible as data and is never rendered as a template. | `TestExtraVariablesMarkEveryStringAsData`, `TestExtraVariablesRefuseAKeyAnsibleCoreReserves`, `TestThePlanRefusesEveryKeyTheRunnersCannotEncode`, `TestTheAdapterReadsEveryRequestStringAsData`, `TestTheLifecycleRunnerWritesTheCollectionsFixture`, `TestTheLargestRequestStillFitsTheVariablesBound`, `TestTheControllerRunnerWritesEveryRequestStringAsData`, `TestTheControllerRunnerWritesTheCollectionsFixture`, `TestAPlanRefusesARequestHoldingATemplateDelimiter`, `TestTheControllerPrerequisitesBlockIsScannedLikeEveryOther`, `TestARequestWithoutATemplateDelimiterPlans`, `TestEveryProvenPathToARequestRefusesItsTemplateDelimiter`, and the collection's `test_a_runner_request_string_reaches_the_module_verbatim` and `test_the_same_strings_unmarked_are_rendered` | none |
 | Invalid TLS and SSH identity, failed and ambiguous remote probes, target drift and unauthorized scope expansion refuse. | `TestCertificateValidationRejectsMismatchExpiryUsageAndFalseChain`, `TestADeclaredHostKeyForAnotherTargetRefuses`, `TestInstalledHostIdentityRefusesUntrustedOrAmbiguousEvidence`, `TestContinuationRefusesDriftedInputExecutableOrHost`, `TestEveryCapabilityHonoursTheCapabilityContract`, `TestOnlyADoneBareMetalApplyProofPinsAMachine`, `TestAProvedMachineCarriesItsIdentityToTheAdapter`, `TestAnUnreadableProofRefusesBeforeAnyPromptOrRun`, `TestTrustBundleRequiresVerification`, `TestAMachineBundleWithAnInheritedOptOutRefuses`, `TestAProviderBundleIsNotInheritedByAMachineThatOptsOut`, `TestProviderVirtualMediaDisableVerificationRefuses`, `TestAMachineKindDefaultCannotDefaultDisableVerification`, `TestDisableVerificationIsNeverAKindDefault`, `TestAKindDefaultTrustBundleSkipsAMachineThatOptsOut`, `TestAPrivateInstallationRefusesDisabledVerification`, `TestImportCertificateNeedsAnHttpsImageAndItsCertificate`, `TestTheClaimReadsTheControllerThroughItsBundle`, `TestPowerCarriesTheControllerBundle`, `TestEachReadTargetReadsItsOwnBundle`, `TestTheProbeVerifiesTheListenerAgainstTheBoundServingCertificate` | B73 |
 | Secret and credential material never reaches output, diagnostics, verbose paths, logs, adapter events, retries, errors, cancellation or `no_log` handling. | `TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests`, `TestMaterialNeverAppearsInMetadataOrErrors`, `TestVariablesCarryPathsNotMaterial`, `TestAcquisitionRequiresExactBoundedPublisherBytesAndRedactsFailures`, `TestProducedMaterialNeverReachesRecordsLogsOrAdapterOutput`, `TestSecretCommandsNeverListOrTouchProducedMaterial`, `TestTheInstallOffersItsKubeconfigOnlyOnProvedCompletion`, `TestManagedAndExternalStorageClustersAreNotApplicableAndReadNoCustody`, `TestAFailedRunReadsNoOutput`, `TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic`, `TestTheAdapterOutputPrintsNothingANoLogTaskRaised`, and the collection's `test_no_material_or_completion_reaches_the_adapters_own_output`, `test_the_censored_callback_prints_nothing_a_hidden_task_raised`, `test_no_management_controller_refusal_is_censored`, `test_every_controller_refusal_names_the_controllers_message_and_nothing_it_was_given`, `test_the_module_reports_the_registration_and_never_the_token` and `test_the_read_after_a_stall_runs_under_no_log_and_never_fails_the_wait_itself` | none |
-| Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestAKilledInvocationTakesItsAdapter`, `TestStoppingAnAdapterEndsItsTreeBeyondItsGroup`, `TestThreadChurnNeverSignalsARunningAdapter`, `TestAnAdapterStillRunningRefusesTheNextRun`, `TestAStaleRunDirectoryIsRemovedWithItsSecretFiles`, `TestHangupCancelsTheOperationLikeTerminate`, `TestAnIgnoredHangupLeavesTheOperationRunning`, `TestHangupIsRelayedToThePrivilegedOperation`, `TestRunnerReapsUnauthorizedChildOnCancellationDuringRecovery`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline`, `TestABoundedRunCancelledInsideItsCallKeepsNoMaterial`, `TestABoundedConsumerCancelledInsideItsCallKeepsNoMaterial`, `TestABoundedConsumerCancelledWhileReadingRunsNothing`, and the collection's `test_the_read_is_bounded_in_time_however_slowly_the_answer_arrives` and `test_the_read_is_bounded_in_size` | B17, B23 |
-| Dependency integrity, lock agreement and native-schema compatibility hold, and runtime-tool substitution or drift refuses. | `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution`, `TestBootstrapRejectsSelfConsistentSourceAndVersionSubstitution`, `TestNativeSolveRefusesChangedBytesForSameRetainedRelease`, `TestOperatorRootsAcceptOnlyTheVendorKey`, `TestEveryCapabilityHonoursTheCapabilityContract`, `TestThePowerRolesAdmitTheRequestsThisBuildSends`, `TestTheRoleAdmitsEveryRequestThisBuildSends`, `TestRoleVersionAssertionsMatchTheirArgumentSpecs` | none |
+| Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestAKilledInvocationTakesItsAdapter`, `TestStoppingAnAdapterEndsItsTreeBeyondItsGroup`, `TestThreadChurnNeverSignalsARunningAdapter`, `TestAnAdapterStillRunningRefusesTheNextRun`, `TestAStaleRunDirectoryIsRemovedWithItsSecretFiles`, `TestHangupCancelsTheOperationLikeTerminate`, `TestAnIgnoredHangupLeavesTheOperationRunning`, `TestHangupIsRelayedToThePrivilegedOperation`, `TestRunnerReapsAnUnauthorizedChildOnCancellation`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline`, `TestABoundedRunCancelledInsideItsCallKeepsNoMaterial`, `TestABoundedConsumerCancelledInsideItsCallKeepsNoMaterial`, `TestABoundedConsumerCancelledWhileReadingRunsNothing`, and the collection's `test_the_read_is_bounded_in_time_however_slowly_the_answer_arrives` and `test_the_read_is_bounded_in_size` | B17, B23 |
+| Dependency integrity, lock agreement and native-schema compatibility hold, and runtime-tool substitution or drift refuses. | `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution`, `TestBootstrapRejectsSelfConsistentSourceAndVersionSubstitution`, `TestAWheelWithAnotherHashIsRefused`, `TestDecodeRefusesPackagesItsClosuresDoNotSelect`, `TestEveryCapabilityHonoursTheCapabilityContract`, `TestThePowerRolesAdmitTheRequestsThisBuildSends`, `TestTheRoleAdmitsEveryRequestThisBuildSends`, `TestRoleVersionAssertionsMatchTheirArgumentSpecs` | none |
 | Mutation crash points, lease conflict, replay, partial success, rollback, evidence loss and required-log write failure leave a recoverable context. | `TestCrashReleasesLocksAndLeavesCompleteSelection`, `TestLifecyclePublicationCheckpointsFireAndFailClosed`, `TestMutationGuardLayoutAndLeases`, `TestAPartlyRealizedBlockWhoseRetryFailsIsConvergedByRepeatingTheOperation`, `TestRequiredLogFaultStopsTheOperation`, `TestARestorationWhoseClearFailsStartsNothing`, `TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry`, `TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves`, `TestAnInterruptedRemovalFinalizationIsCompletedByTheNextDestroy`, `TestARemovalWhoseBindingReleaseFailsReportsIncompleteFinalization`, `TestAnInterruptedApplyFinalizationIsCompletedByTheRepeatedApply`, `TestARunningOperationWhoseBlocksAreAllDoneIsFinalized`, `TestAFreshApplyOverAnUnfinalizedRemovalFinishesItFirst`, `TestNoFinalizationOverContradictedRecords`, `TestAReservationHeldBesideACompletedRemovalIsReleasedByTheNextDestroy`, `TestAFinalizationRefusesWhenTheContextChangedBeforeIt`, `TestEvidenceProtectsTheContextBeforeItBindsOrReserves`, `TestAFreshApplyClaimsItsOperationBeforeItBinds`, `TestAFailedEvidencePublicationBindsNothing`, `TestConcurrentFreshAppliesThatBothFailLeaveNothingRaised`, `TestABindingListingThatFailsBlocksNothing`, `TestARegistrationThatProvablyFailedRestoresTheEvidence`, `TestAFailedRegistrationWithReservationsKeepsItsEvidence`, `TestARegistrationThatMayHaveHappenedKeepsItsBinding`, `TestAContinuationProjectsBeforeItsFirstEffect`, `TestTheNextRegistrationReleasesBindingsNoOperationNames`, `TestADestroyReleasesWhatAnInterruptedRegistrationLeft`, `TestAnApplyWhoseBindingAnUnclaimedReleaseTookRefuses`, `TestAnApplyRefusesWhenAnotherClaimRaisedTheEvidenceAgain`, `TestAnApplyOverACompletedDestroyRefusesWhenAFinalizationTookItsBinding`, `TestADestroyOverUnindexedRecordsRefuses`, `TestARemovalRaisesItsEvidenceBeforeItRegisters`, `TestAnApplyInterruptedBeforeItRegistersGivesBackWhatItRaised`, `TestAFailedRestorationIsReportedBesideItsCause`, `TestADestroyReleaseRefusesWhenAnOperationRegisteredBeforeIt`, `TestARemovalWhosePublicationFailedCollectsNothing`, `TestAClaimedOperationRegistersIntoItsDirectory`, `TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb`, `TestAFreshApplyWhoseClaimFailedRestoresTheEvidenceItsDirectoryMayHold`, `TestAnUnclaimedReleaseCollectsOnlyTheBindingsItReadFirst`, `TestAFinalizationCollectsOnlyTheBindingsItReadFirst`, `TestAnIncompleteApplyWithoutAContradictionIsStillRemovable`, `TestAnInitializationResumesOverATornStageAtEveryStagedWrite`, `TestAnInitializationRefusesAStageThatParsesButAttributesNothing`, `TestAContextInitRetryResumesOverATornKeyringStage`, `TestTheKillHarnessReachesTheCustodyPublications`, `TestAFailedPublicationLeavesTheAttemptUnknown`, `TestADestroyAfterAFailedPublicationCapturesBeforeAnyInverse`, `TestAnAgentInstallWhosePublicationFailedIsCapturedBeforeItsRemoval`, `TestACancelledPublicationLeavesItUnknown`, `TestAStoppedDestroyKeepsTheAccess`, `TestAFinalizationWithdrawsWhatAnInterruptedRemovalLeft` | none |
 | Read-only commands perform no writes, payload reads, processes, network access, secret lookup or generation. | `TestImmutableInputAndReadOnlyLifecycleBoundary`, `TestALifecycleInspectionRunsNothing`, `TestPlanPreviewsWithoutWritingAnything`, `TestStubServicesRemainStubs`, `TestReadsNeverCollectAStage` | none |
 | Rejected operations perform no effect. | `TestCancellationBeforeAnyEffectRegistersNothing`, `TestDeclinedConfirmationRegistersNothing`, `TestUnsupportedObjectsRefuseBeforeRegistration`, `TestInvalidAdmissionAndUnavailableRoutesDoNotWrite`, `TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses`, `TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses`, `TestATransitionRefusesWhenItsFrozenPlanChangedBeforeMutation`, `TestATransitionRefusesWhenTheOperationRecordChangedBeforeMutation`, `TestAContinuationRefusesWhenABlockWasRetriedBeforeMutation`, `TestAFrozenPlanThatIsNotItsOperationsRefuses`, `TestARepeatedMaterialRefusesBeforeAnyJobExists`, `TestAnUnsafeMaterialNameOrValueRefusesBeforeAnyJobExists`, `TestAFrozenPlacementOffTheControllerRefusesEveryVerb` | none |

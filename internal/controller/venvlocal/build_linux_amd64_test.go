@@ -42,7 +42,7 @@ func runtimeEntries(t *testing.T, adapter *Adapter) []string {
 
 func TestABuildPublishesAVerifiedRuntime(t *testing.T) {
 	host, adapter, interpreter := buildable(t)
-	runtime, err := adapter.Build(context.Background(), interpreter)
+	runtime, err := testBuild(adapter, context.Background(), interpreter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestTheVenvHoldsNoPthOrStartupHook(t *testing.T) {
 		t.Run(hook, func(t *testing.T) {
 			host, adapter, interpreter := buildable(t)
 			host.startupHook = hook
-			if _, err := adapter.Build(context.Background(), interpreter); err == nil {
+			if _, err := testBuild(adapter, context.Background(), interpreter); err == nil {
 				t.Fatalf("a venv holding %s was published", hook)
 			}
 			if got := runtimeEntries(t, adapter); len(got) != 0 {
@@ -97,7 +97,7 @@ func TestTheVenvHoldsNoPthOrStartupHook(t *testing.T) {
 	t.Run("system site-packages", func(t *testing.T) {
 		host, adapter, interpreter := buildable(t)
 		host.systemSite = true
-		if _, err := adapter.Build(context.Background(), interpreter); err == nil {
+		if _, err := testBuild(adapter, context.Background(), interpreter); err == nil {
 			t.Fatal("a venv that includes the system site-packages was published")
 		}
 	})
@@ -105,7 +105,7 @@ func TestTheVenvHoldsNoPthOrStartupHook(t *testing.T) {
 
 func TestBytecodeIsUncheckedHash(t *testing.T) {
 	host, adapter, interpreter := buildable(t)
-	if _, err := adapter.Build(context.Background(), interpreter); err != nil {
+	if _, err := testBuild(adapter, context.Background(), interpreter); err != nil {
 		t.Fatal(err)
 	}
 	var compile []string
@@ -120,7 +120,7 @@ func TestBytecodeIsUncheckedHash(t *testing.T) {
 	for _, flags := range []uint32{0, 3} {
 		host, adapter, interpreter := buildable(t)
 		host.pycFlags = flags
-		if _, err := adapter.Build(context.Background(), interpreter); err == nil {
+		if _, err := testBuild(adapter, context.Background(), interpreter); err == nil {
 			t.Fatalf("bytecode with flags %d was published", flags)
 		}
 	}
@@ -128,7 +128,7 @@ func TestBytecodeIsUncheckedHash(t *testing.T) {
 
 func TestRuntimeJsonIsWrittenBeforePublication(t *testing.T) {
 	host, adapter, interpreter := buildable(t)
-	runtime, err := adapter.Build(context.Background(), interpreter)
+	runtime, err := testBuild(adapter, context.Background(), interpreter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,12 +149,12 @@ func TestConcurrentPublishersLeaveOneRuntime(t *testing.T) {
 	_, adapter, interpreter := buildable(t)
 	barrier := &sync.WaitGroup{}
 	barrier.Add(2)
-	adapter.store.(*renameStore).barrier = barrier
+	publisherOf(adapter).barrier = barrier
 	results := make([]prerequisites.Runtime, 2)
 	errs := make([]error, 2)
 	var group sync.WaitGroup
 	for index := range 2 {
-		group.Go(func() { results[index], errs[index] = adapter.Build(context.Background(), interpreter) })
+		group.Go(func() { results[index], errs[index] = testBuild(adapter, context.Background(), interpreter) })
 	}
 	group.Wait()
 	for index, err := range errs {
@@ -172,7 +172,7 @@ func TestConcurrentPublishersLeaveOneRuntime(t *testing.T) {
 
 func TestABuildReplacesAPublishedRuntimeThatFailsItsProbe(t *testing.T) {
 	_, adapter, interpreter := buildable(t)
-	runtime, err := adapter.Build(context.Background(), interpreter)
+	runtime, err := testBuild(adapter, context.Background(), interpreter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestABuildReplacesAPublishedRuntimeThatFailsItsProbe(t *testing.T) {
 	if _, ready, err := adapter.Inspect(context.Background(), interpreter); ready || err == nil {
 		t.Fatalf("Inspect = %t, %v on a runtime an update broke", ready, err)
 	}
-	rebuilt, err := adapter.Build(context.Background(), interpreter)
+	rebuilt, err := testBuild(adapter, context.Background(), interpreter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestABuildReplacesAPublishedRuntimeThatFailsItsProbe(t *testing.T) {
 
 func TestABrokenRuntimeALaunchHoldsIsNotAdopted(t *testing.T) {
 	_, adapter, interpreter := buildable(t)
-	runtime, err := adapter.Build(context.Background(), interpreter)
+	runtime, err := testBuild(adapter, context.Background(), interpreter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestABrokenRuntimeALaunchHoldsIsNotAdopted(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = adapter.WithPython(context.Background(), runtime, func(prerequisites.PythonLaunch) error {
-		if _, err := adapter.Build(context.Background(), interpreter); err == nil {
+		if _, err := testBuild(adapter, context.Background(), interpreter); err == nil {
 			t.Error("a build adopted a broken runtime a launch holds")
 		}
 		return nil
@@ -233,7 +233,7 @@ func TestABuildNeedsEveryLockedWheelCached(t *testing.T) {
 	if err := os.Remove(adapter.cachePath(adapter.lock.Installer())); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := adapter.Build(context.Background(), interpreter); err == nil {
+	if _, err := testBuild(adapter, context.Background(), interpreter); err == nil {
 		t.Fatal("a build ran without the installer wheel")
 	}
 	if got := runtimeEntries(t, adapter); len(got) != 0 {

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -110,28 +111,28 @@ func TestAnApplyOverARefusedRemovalNamesTheRefusalsExit(t *testing.T) {
 	})
 }
 
-// withoutDefinition keeps the retained setup complete while its receipt holds
-// no execution definition, which every block and registration needs.
-func withoutDefinition(arrange func(*testing.T, *harness)) func(*testing.T) *harness {
+// withoutReceipt keeps the host's binding while its setup record holds no
+// receipt, so no runtime is located, which every block and registration needs.
+func withoutReceipt(arrange func(*testing.T, *harness)) func(*testing.T) *harness {
 	return func(t *testing.T) *harness {
 		h := newHarness(t, "alpha")
 		arrange(t, h)
-		h.workspace.controller.State.Receipt.Definition = nil
+		h.setup.set(prerequisites.SetupView{})
 		return h
 	}
 }
 
-// Over an incomplete operation whose retained setup receipt holds no execution
-// definition, status offers setup alone in place of every step that would run
-// a block or register, the removal beside an incomplete apply included, and
-// each verb it replaces refuses naming setup.
-func TestStatusOffersSetupWhenTheReceiptHoldsNoExecutionDefinition(t *testing.T) {
+// Over an incomplete operation on a host whose setup record holds no receipt,
+// status offers setup alone in place of every step that would run a block or
+// register, the removal beside an incomplete apply included, and each verb it
+// replaces refuses naming setup.
+func TestStatusOffersSetupWhenNoRuntimeIsLocated(t *testing.T) {
 	for name, row := range map[string]struct {
 		arrange func(*testing.T) *harness
 		gated   []reconciliation.Verb
 	}{
-		"an unknown removal": {arrange: withoutDefinition(unknownRemoval), gated: []reconciliation.Verb{reconciliation.Destroy}},
-		"a failed apply":     {arrange: withoutDefinition(failedApply), gated: []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy}},
+		"an unknown removal": {arrange: withoutReceipt(unknownRemoval), gated: []reconciliation.Verb{reconciliation.Destroy}},
+		"a failed apply":     {arrange: withoutReceipt(failedApply), gated: []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			status, err := row.arrange(t).service.Status(context.Background(), StatusRequest{ContextName: testContextName})
@@ -147,8 +148,8 @@ func TestStatusOffersSetupWhenTheReceiptHoldsNoExecutionDefinition(t *testing.T)
 
 // What each edge of a continuation's proofs reports has a golden: the apply's
 // refusal over a removal whose re-proof refuses, the refused continuation and
-// the refused fresh removal that present nothing, and status over a receipt
-// that holds no execution definition.
+// the refused fresh removal that present nothing, and status over a host
+// whose setup record holds no receipt.
 func TestContinuationProofsMatchTheirGolden(t *testing.T) {
 	unboundRemoval := refusedContinuations()[1]
 	unboundApply := refusedContinuations()[0]
@@ -159,11 +160,11 @@ func TestContinuationProofsMatchTheirGolden(t *testing.T) {
 		return h
 	}
 	reports := map[string]any{
-		"the apply over an unbound unknown removal":                   verbOver(t, unboundRemoval.arrange(t), reconciliation.Apply),
-		"the continuation of an unbound failed apply":                 refusedUnconfirmed(t, unboundApply.arrange(t), reconciliation.Apply),
-		"the fresh destroy on another host":                           refusedUnconfirmed(t, onAnotherHost(t), reconciliation.Destroy),
-		"status over a failed apply with no execution definition":     statusOf(t, withoutDefinition(failedApply)(t)),
-		"status over an unknown removal with no execution definition": statusOf(t, withoutDefinition(unknownRemoval)(t)),
+		"the apply over an unbound unknown removal":            verbOver(t, unboundRemoval.arrange(t), reconciliation.Apply),
+		"the continuation of an unbound failed apply":          refusedUnconfirmed(t, unboundApply.arrange(t), reconciliation.Apply),
+		"the fresh destroy on another host":                    refusedUnconfirmed(t, onAnotherHost(t), reconciliation.Destroy),
+		"status over a failed apply with no setup receipt":     statusOf(t, withoutReceipt(failedApply)(t)),
+		"status over an unknown removal with no setup receipt": statusOf(t, withoutReceipt(unknownRemoval)(t)),
 	}
 	data, err := json.Marshal(reports)
 	if err != nil {

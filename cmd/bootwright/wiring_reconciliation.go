@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/controller/clients"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
@@ -37,6 +38,7 @@ type lifecycleDependencies struct {
 	Inputs     lifecycle.Inputs
 	Host       lifecycle.HostIdentity
 	Guard      lifecycle.ExecutionGuard
+	Setup      lifecycle.SetupReader
 	Selection  contexts.SelectionStore
 	Presenter  lifecycle.PlanPresenter
 	Progress   lifecycle.ProgressReporter
@@ -176,7 +178,7 @@ type capabilityRunner interface {
 func buildCapabilitiesWith(clock systemClock, controller controllerDependencies, runner capabilityRunner, records installation.MediaRecords) capabilityResolver {
 	resolver := capabilityResolver{{
 		kind: clients.Kind, implementation: clients.Implementation,
-		capability: clients.New(controller.Tools, controller.Native, controller.NativeInspector, controller.ClientInstaller),
+		capability: clients.New(controller.Tools, controller.StagePackages, controller.Setup, controller.ClientInstaller),
 	}, {
 		kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation,
 		capability: libvirt.NewMachine(runner),
@@ -231,12 +233,23 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 		return lifecycle.Service{}
 	}
 	clock := systemClock{}
-	runner := ansiblerunner.New(operationPlaybook())
+	runner := ansiblerunner.New(operationPlaybook(), controller.Stager)
 	var capabilities lifecycle.CapabilityResolver = buildCapabilitiesWith(clock, controller, runner, lifecycleMedia(deps))
 	if deps.Capabilities != nil {
 		capabilities = deps.Capabilities
 	}
-	return lifecycle.New(deps.Workspace, deps.Inputs, compiler, binder, deps.Host, automationDigest{}, deps.Guard, capabilities, lifecycleOptions(deps, clock, runner))
+	options := lifecycleOptions(deps, clock, runner)
+	if controller.Lock != nil {
+		options.Lock = lifecycle.RuntimeLock{Digest: controller.Lock.Digest, AnsibleCore: controller.Lock.AnsibleCore}
+	}
+	return lifecycle.New(deps.Workspace, deps.Inputs, compiler, binder, deps.Host, automationDigest{}, deps.Guard, capabilities, options)
+}
+
+func runtimeGuard(python prerequisites.PythonRuntime) lifecycle.ExecutionGuard {
+	if python == nil {
+		return nil
+	}
+	return python
 }
 
 // lifecycleOptions opens each execution's invocation scope through the runner
@@ -248,6 +261,7 @@ func lifecycleOptions(deps lifecycleDependencies, clock systemClock, runner ansi
 		BeginInvocation: runner.BeginInvocation,
 		Executable:      deps.Executable,
 		Operations:      operationStores(clock),
+		Setup:           deps.Setup,
 	}
 }
 

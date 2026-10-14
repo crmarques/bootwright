@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -36,9 +35,7 @@ func refusedContinuations() []refusedContinuation {
 		h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
 		h.capability.consumes = map[string][]string{"alpha": {reconciliation.AuthorizationDataLoss}}
 	}
-	closure := func(h *harness) {
-		approve(&h.workspace.controller, strings.Repeat("c", 64), prerequisites.Definition{Bootstrap: movedBootstrap()})
-	}
+	closure := func(h *harness) { h.service.options.Lock = movedLock }
 	failedApplyUnder := func(change func(*harness)) func(*testing.T) *harness {
 		return func(t *testing.T) *harness {
 			h := newHarness(t, "alpha")
@@ -56,9 +53,7 @@ func refusedContinuations() []refusedContinuation {
 		}
 	}
 	const deletion = "bootwright context delete --name lab --purge --allow-orphans"
-	const movedClosure = "the approved execution bundle holds another Python and Ansible closure (Python 3.14.7, ansible-core 2.21.5) than the one this operation registered with"
-	const earlierBuild = "this operation was registered by an earlier build that froze no Python and Ansible closure, " +
-		"and bootwright devel (abcdef1) cannot read this host's controller directory, which now keeps setup runs"
+	const movedClosure = "this build's controller runtime carries another Python and Ansible closure (Python 3.14, ansible-core 2.21.6) than the one this operation registered with"
 	return []refusedContinuation{
 		{
 			name: "an unbound failed apply", arrange: failedApplyUnder(unbound),
@@ -89,17 +84,6 @@ func refusedContinuations() []refusedContinuation {
 			name: "an unknown removal under a moved closure", arrange: unknownRemovalUnder(closure),
 			steps: []string{}, verb: reconciliation.Destroy,
 			code: "lifecycle.state", message: movedClosure,
-		},
-		{
-			name: "an unknown removal an earlier build registered beside setup runs", arrange: func(t *testing.T) *harness {
-				h := newHarness(t, "alpha")
-				unknownRemoval(t, h)
-				registeredEarlier(t, h)
-				h.workspace.controller.SetupRuns = true
-				return h
-			},
-			steps: []string{deletion}, verb: reconciliation.Destroy,
-			code: "lifecycle.state", message: earlierBuild, exit: deletion,
 		},
 	}
 }

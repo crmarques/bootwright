@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/adapterprotocol"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
 func strictJSON(data []byte, target any, fields ...string) bool {
@@ -85,19 +84,20 @@ func uniqueJSON(decoder *json.Decoder, depth int) error {
 	return nil
 }
 
+// toolPreparation is what the role announces before its first tool effect:
+// the sources it is about to add, which must be exactly the request's.
+type toolPreparation struct {
+	AddedSources []string `json:"addedSources"`
+}
+
 // preparationShape holds a prepared record's preparation to its exact
-// members: the before-state and added sources, and for a native plan the
-// after-state and the plan's digests. Its error ends the read.
+// members. Its error ends the read.
 func preparationShape(record adapterprotocol.Record) error {
 	if record.Phase != "prepared" {
 		return nil
 	}
-	fields := []string{"inventorySHA256", "addedSources"}
-	if bytes.Contains(record.Preparation, []byte(`"planDigest"`)) {
-		fields = append(fields, "afterInventorySHA256", "planDigest", "transitionsSHA256")
-	}
-	var preparation prerequisites.NativePreparation
-	if !strictJSON(record.Preparation, &preparation, fields...) {
+	var preparation toolPreparation
+	if !strictJSON(record.Preparation, &preparation, "addedSources") {
 		return errors.New("protocol preparation")
 	}
 	return nil
@@ -107,34 +107,13 @@ func validSHA(value string) bool {
 	return len(value) == 64 && strings.Trim(value, "0123456789abcdef") == ""
 }
 
-func validPreparation(preparation prerequisites.NativePreparation, request capabilityRequest) bool {
-	if !validSHA(preparation.InventorySHA256) || preparation.AddedSources == nil || len(preparation.AddedSources) > 512 {
-		return false
-	}
-	allowed := map[string]bool{}
-	if request.Native != nil {
-		plan := request.Native
-		transitions, err := prerequisites.NativeTransitionsDigest(plan.Actions)
-		if err != nil || preparation.PlanDigest != plan.Digest || preparation.InventorySHA256 != plan.BeforeSHA256 || preparation.AfterInventorySHA256 != plan.AfterSHA256 || preparation.TransitionsSHA256 != transitions {
-			return false
-		}
-		for _, action := range plan.Actions {
-			allowed[action.SourceID] = true
-		}
-	} else if preparation.PlanDigest != "" || preparation.TransitionsSHA256 != "" || preparation.AfterInventorySHA256 != "" || len(request.Packages) != 0 {
-		return false
-	}
+func validPreparation(preparation toolPreparation, request capabilityRequest) bool {
+	expected := make([]string, 0, len(request.Tools))
 	for _, tool := range request.Tools {
-		allowed[tool.Source.ID] = true
+		expected = append(expected, tool.Source.ID)
 	}
-	previous := ""
-	for _, source := range preparation.AddedSources {
-		if source <= previous || !allowed[source] {
-			return false
-		}
-		previous = source
-	}
-	return len(allowed) == len(preparation.AddedSources)
+	slices.Sort(expected)
+	return preparation.AddedSources != nil && slices.Equal(preparation.AddedSources, slices.Compact(expected))
 }
 
 type toolEvidence struct {
@@ -143,35 +122,14 @@ type toolEvidence struct {
 	Files  string `json:"files"`
 }
 
-func validEvidence(data []byte, request capabilityRequest, preparation *prerequisites.NativePreparation, nativeApplied bool) bool {
-	if preparation == nil {
-		return false
-	}
-	expectedAfter := preparation.AfterInventorySHA256
-	if request.Native == nil {
-		expectedAfter = preparation.InventorySHA256
-	}
+func validEvidence(data []byte, request capabilityRequest) bool {
 	var evidence struct {
 		Request       string            `json:"request"`
-		Before        string            `json:"before"`
-		After         string            `json:"after"`
-		PlanDigest    string            `json:"planDigest"`
-		Added         []string          `json:"added"`
 		Tools         []json.RawMessage `json:"tools"`
 		Postcondition bool              `json:"postcondition"`
 	}
-	if !strictJSON(data, &evidence, "request", "before", "after", "planDigest", "added", "tools", "postcondition") ||
-		evidence.Request != request.Identity || evidence.Before != preparation.InventorySHA256 || evidence.After != expectedAfter || evidence.PlanDigest != preparation.PlanDigest || !evidence.Postcondition || evidence.Added == nil || evidence.Tools == nil || len(evidence.Tools) != len(request.Tools) {
-		return false
-	}
-	expected := []string{}
-	if nativeApplied && request.Native != nil {
-		for _, action := range request.Native.Actions {
-			expected = append(expected, action.SourceID)
-		}
-		slices.Sort(expected)
-	}
-	if !slices.Equal(evidence.Added, expected) {
+	if !strictJSON(data, &evidence, "request", "tools", "postcondition") ||
+		evidence.Request != request.Identity || !evidence.Postcondition || len(evidence.Tools) != len(request.Tools) {
 		return false
 	}
 	for index, data := range evidence.Tools {
@@ -181,11 +139,4 @@ func validEvidence(data []byte, request capabilityRequest, preparation *prerequi
 		}
 	}
 	return true
-}
-
-func nativeChanges(request capabilityRequest) int {
-	if request.Native == nil {
-		return 0
-	}
-	return len(request.Native.Actions)
 }

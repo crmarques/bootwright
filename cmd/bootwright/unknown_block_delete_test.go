@@ -19,30 +19,33 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
 )
 
-// publishCompletedSetup publishes a controller setup that completed, so host
-// reservations have a controller record to live in, as a host that ran
-// bootwright setup carries.
-func publishCompletedSetup(t *testing.T, repository *contextfs.Store) {
+// publishCompletedSetup records a setup that completed and binds each named
+// context, so host reservations have a controller record to live in, as a
+// host that ran bootwright setup and applied those contexts carries.
+func publishCompletedSetup(t *testing.T, repository *contextfs.Store, names ...string) {
 	t.Helper()
+	ctx := context.Background()
 	host, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, "0123456789abcdef0123456789abcdef", "12345678-1234-5678-9abc-def012345678", "fedcba98-7654-3210-fedc-ba9876543210")
 	if err != nil {
 		t.Fatal(err)
 	}
-	value := prerequisites.HostState{Host: host, Bindings: []prerequisites.ControllerBinding{}, RetainedSources: []prerequisites.DependencySource{}, Receipt: prerequisites.SetupReceipt{
-		ID: "setup-" + strings.Repeat("1", 32), CatalogDigest: strings.Repeat("a", 64),
-		Egress: prerequisites.SetupEgress{NoProxy: []string{}}, Sources: []prerequisites.DependencySource{},
-		Actions: []prerequisites.SetupAction{{ID: "baseline-bundle", Request: []byte(`{"dependency":"synthetic-python"}`), Phase: "planned", Evidence: []byte(`{}`)}}, Status: "pending",
-	}}
-	if value.Receipt.PlanDigest, err = prerequisites.SetupPlanDigest(value.Host, value.Receipt); err != nil {
-		t.Fatal(err)
+	receipt := &prerequisites.HostReceipt{
+		Platform: prerequisites.ReceiptPlatform{ID: "fedora", VersionID: "44", Like: []string{}, Architecture: "amd64", Glibc: "2.43", Tested: true},
+		Lock:     strings.Repeat("a", 64), Closure: strings.Repeat("b", 64),
+		Runtime:  prerequisites.ReceiptRuntime{Digest: strings.Repeat("c", 64), Interpreter: "/usr/bin/python3.14", Python: "3.14.8", ABI: "3.14", AnsibleCore: "2.21.5"},
+		Packages: []prerequisites.ReceiptPackage{},
 	}
-	value.Receipt.Status = "complete"
-	value.Receipt.Actions[0].Phase, value.Receipt.Actions[0].Outcome, value.Receipt.Actions[0].Evidence = "observed", "unchanged", []byte(`{"ready":true}`)
-	if err := repository.MutateController(context.Background(), prerequisites.SetupContext{}, true, func(tx prerequisites.StorageTransaction) error {
-		_, err := tx.Publish(context.Background(), value)
-		return err
+	if err := repository.MutateSetup(ctx, func(tx prerequisites.SetupTransaction) error {
+		return tx.Record(ctx, prerequisites.SetupState{Format: prerequisites.SetupStateFormat, Receipt: receipt})
 	}); err != nil {
-		t.Fatalf("the controller setup was not published: %+v", diagnostics.Of(err))
+		t.Fatalf("the controller setup was not recorded: %+v", diagnostics.Of(err))
+	}
+	for _, name := range names {
+		if err := repository.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
+			return tx.Bind(ctx, "controller", host)
+		}); err != nil {
+			t.Fatalf("binding %s: %+v", name, diagnostics.Of(err))
+		}
 	}
 }
 
@@ -123,7 +126,7 @@ func TestDeletingAContextHoldingAnUnknownBlockReleasesItsReservations(t *testing
 	services, repository, input, _ := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "context", "init", "--name", "bravo", "--input-dir", input)
-	publishCompletedSetup(t, repository)
+	publishCompletedSetup(t, repository, "alpha", "bravo")
 	reserveFor(t, repository, "alpha", "socket:192.0.2.1:8080", "unit:bootwright-artifact-alpha")
 	reserveFor(t, repository, "bravo", "socket:192.0.2.1:8081")
 	registerUnknownApply(t, repository)

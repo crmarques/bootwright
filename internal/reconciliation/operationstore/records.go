@@ -140,15 +140,13 @@ type Build struct {
 	Modified         bool       `json:"modified,omitempty"`
 }
 
-// OperationVersion is the operation record every registration writes. A
-// version 1 record, which an earlier build wrote, carries no Closure; it stays
-// readable, and only a continuation refuses it, because nothing says which
-// closure its effects ran in.
+// OperationVersion is the operation record every registration writes and the
+// only one this build reads; each names the closure its effects ran in.
 const OperationVersion = 2
 
-// Closure is the Python and Ansible closure of the execution bundle an
-// operation registered with: its content identity, and the releases a refusal
-// names so an operator knows which bundle a continuation needs.
+// Closure is the controller runtime closure an operation registered with: its
+// identity over the runtime lock and interpreter ABI, and the ABI and
+// ansible-core release a refusal names for the runtime a continuation needs.
 type Closure struct {
 	Digest  string `json:"digest"`
 	Python  string `json:"python"`
@@ -159,7 +157,10 @@ type Closure struct {
 // bounds its ansible-core release.
 const maxRelease = 80
 
-var closureRelease = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
+var (
+	closureABI     = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
+	closureRelease = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
+)
 
 // Operation binds an operation to everything a continuation must re-prove
 // before it does work: the exact context, input, plan, implementations,
@@ -268,17 +269,11 @@ func validateIndex(index Index) error {
 }
 
 func validateOperation(operation Operation) error {
-	switch operation.Version {
-	case 1:
-		if operation.Closure != nil {
-			return recordError("a version 1 lifecycle operation carries no execution closure")
-		}
-	case OperationVersion:
-		if err := validateClosure(operation.Closure); err != nil {
-			return err
-		}
-	default:
+	if operation.Version != OperationVersion {
 		return recordError("lifecycle operation version is unsupported")
+	}
+	if err := validateClosure(operation.Closure); err != nil {
+		return err
 	}
 	if !reconciliation.ValidOperationID(operation.ID) {
 		return recordError("lifecycle operation identity is invalid")
@@ -340,7 +335,7 @@ func validateClosure(closure *Closure) error {
 	if err != nil || len(decoded) != 32 || hex.EncodeToString(decoded) != closure.Digest {
 		return recordError("lifecycle operation execution closure identity is invalid")
 	}
-	if len(closure.Python) > maxRelease || len(closure.Ansible) > maxRelease || !closureRelease.MatchString(closure.Python) || !closureRelease.MatchString(closure.Ansible) {
+	if len(closure.Python) > maxRelease || len(closure.Ansible) > maxRelease || !closureABI.MatchString(closure.Python) || !closureRelease.MatchString(closure.Ansible) {
 		return recordError("lifecycle operation execution closure releases are invalid")
 	}
 	return nil

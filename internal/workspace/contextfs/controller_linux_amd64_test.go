@@ -5,8 +5,10 @@ package contextfs
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -18,34 +20,84 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
-func syntheticControllerState(t *testing.T, scope prerequisites.SetupContext) prerequisites.HostState {
+func syntheticHost(t *testing.T) controller.InstalledHostIdentity {
 	t.Helper()
 	host, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, "0123456789abcdef0123456789abcdef", "12345678-1234-5678-9abc-def012345678", "fedcba98-7654-3210-fedc-ba9876543210")
 	if err != nil {
 		t.Fatal(err)
 	}
-	value := prerequisites.HostState{Host: host, Bindings: []prerequisites.ControllerBinding{}, RetainedSources: []prerequisites.DependencySource{}, Receipt: prerequisites.SetupReceipt{
-		ID: "setup-" + strings.Repeat("1", 32), CatalogDigest: strings.Repeat("a", 64), Context: scope,
-		Egress: prerequisites.SetupEgress{NoProxy: []string{}}, Sources: []prerequisites.DependencySource{},
-		Actions: []prerequisites.SetupAction{{ID: "baseline-bundle", Request: []byte(`{"dependency":"synthetic-python"}`), Phase: "planned", Evidence: []byte(`{}`)}}, Status: "pending",
-	}}
-	value.Receipt.PlanDigest, err = prerequisites.SetupPlanDigest(value.Host, value.Receipt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return value
+	return host
 }
 
-func publishControllerState(t *testing.T, store *Store, scope prerequisites.SetupContext, value prerequisites.HostState) {
+// syntheticControllerState is the record a host carries once setup completed
+// and before any context bound it.
+func syntheticControllerState(t *testing.T) prerequisites.HostState {
 	t.Helper()
-	err := store.MutateController(context.Background(), scope, true, func(tx prerequisites.StorageTransaction) error {
-		outcome, err := tx.Publish(context.Background(), value)
-		if err == nil && outcome != prerequisites.Committed {
-			t.Fatal("setup evidence was not committed")
+	return prerequisites.HostState{Host: syntheticHost(t), Bindings: []prerequisites.ControllerBinding{}, ToolSources: []prerequisites.DependencySource{}}
+}
+
+// syntheticReceipt is a completed setup's receipt in the setup subtree.
+func syntheticReceipt() *prerequisites.HostReceipt {
+	return &prerequisites.HostReceipt{
+		Platform: prerequisites.ReceiptPlatform{ID: "fedora", VersionID: "44", Like: []string{}, Architecture: "amd64", Glibc: "2.43", Tested: true},
+		Lock:     strings.Repeat("a", 64), Closure: strings.Repeat("b", 64),
+		Runtime:  prerequisites.ReceiptRuntime{Digest: strings.Repeat("c", 64), Interpreter: "/usr/bin/python3.14", Python: "3.14.8", ABI: "3.14", AnsibleCore: "2.21.5"},
+		Packages: []prerequisites.ReceiptPackage{},
+	}
+}
+
+func recordSetup(t *testing.T, store *Store, value prerequisites.SetupState) {
+	t.Helper()
+	if err := store.MutateSetup(context.Background(), func(tx prerequisites.SetupTransaction) error {
+		return tx.Record(context.Background(), value)
+	}); err != nil {
+		t.Fatalf("setup record failed: %#v", diagnostics.Of(err))
+	}
+}
+
+// recordPreparedSetup records the setup subtree a completed setup leaves.
+func recordPreparedSetup(t *testing.T, store *Store) {
+	t.Helper()
+	recordSetup(t, store, prerequisites.SetupState{Format: prerequisites.SetupStateFormat, Receipt: syntheticReceipt()})
+}
+
+const testRetry = "repeat the test"
+
+// publishControllerState prepares the host and publishes value as its
+// controller record, keeping the tool areas the record already holds.
+func publishControllerState(t *testing.T, store *Store, value prerequisites.HostState) {
+	t.Helper()
+	recordPreparedSetup(t, store)
+	ctx := context.Background()
+	err := store.Transact(ctx, true, nil, func(base contexts.Transaction) error {
+		tx := base.(*transaction)
+		stored, err := tx.initializeController(ctx, value.Host, testRetry)
+		if err != nil {
+			return err
 		}
+		if err := validateControllerState(value, stored.bundles); err != nil {
+			return err
+		}
+		if err := validateControllerReferences(value, tx.registry); err != nil {
+			return err
+		}
+		dir, err := openControllerDirectory(tx.root, tx.registry)
+		if err != nil {
+			return err
+		}
+		defer dir.file.Close()
+		data, err := encodeRecord(controllerRecord(value, stored.bundles), maxControllerState)
+		if err != nil {
+			return err
+		}
+		if bytes.Equal(data, stored.data) {
+			return nil
+		}
+		_, err = tx.store.replaceControllerRecord(ctx, dir, stored, data, testRetry)
 		return err
 	})
 	if err != nil {
@@ -53,78 +105,25 @@ func publishControllerState(t *testing.T, store *Store, scope prerequisites.Setu
 	}
 }
 
-func completeControllerState(value prerequisites.HostState) prerequisites.HostState {
-	value = cloneControllerState(value)
-	value.Receipt.Status = "complete"
-	for index := range value.Receipt.Actions {
-		value.Receipt.Actions[index].Phase = "observed"
-		value.Receipt.Actions[index].Outcome = "unchanged"
-		value.Receipt.Actions[index].Evidence = []byte(`{"ready":true}`)
-	}
-	return value
-}
-
-func TestControllerPreparationPublishesOnceUnderDurableIntent(t *testing.T) {
-	store, _ := fixture(t)
-	scope := prerequisites.SetupContext{}
-	value := syntheticControllerState(t, scope)
-	value.Receipt.Actions[0].Phase = "intent"
-	publishControllerState(t, store, scope, value)
-	prepared := cloneControllerState(value)
-	prepared.Receipt.Actions[0].Preparation = []byte(`{"addedSources":["synthetic-runtime"],"inventorySHA256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`)
-	digest, err := prerequisites.SetupPlanDigest(prepared.Host, prepared.Receipt)
-	if err != nil || digest != value.Receipt.PlanDigest {
-		t.Fatal("observed preparation changed the approved plan")
-	}
-	publishControllerState(t, store, scope, prepared)
-	for _, data := range [][]byte{nil, []byte(`{"changed":true}`)} {
-		changed := cloneControllerState(prepared)
-		changed.Receipt.Actions[0].Preparation = data
-		err := store.MutateController(context.Background(), scope, false, func(tx prerequisites.StorageTransaction) error {
-			outcome, err := tx.Publish(context.Background(), changed)
-			if err == nil || outcome != prerequisites.NotCommitted {
-				t.Fatal("durable native before-state was discarded or replaced")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	err = store.ReadController(context.Background(), "", func(view prerequisites.StorageView) error {
-		view.State.Receipt.Actions[0].Preparation[0] = 'x'
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	publishControllerState(t, store, scope, completeControllerState(prepared))
-}
-
-func TestControllerPreparationCannotPrecedeIntentOrArriveAfterOutcome(t *testing.T) {
-	scope := prerequisites.SetupContext{}
-	value := syntheticControllerState(t, scope)
-	prepared := cloneControllerState(value)
-	prepared.Receipt.Actions[0].Preparation = []byte(`{"inventory":"synthetic"}`)
-	for _, phase := range []string{"planned", "intent", "observed"} {
-		prepared.Receipt.Actions[0].Phase = phase
-		if validateControllerTransition(prerequisites.HostState{}, prepared, scope) == nil || validateControllerTransition(value, prepared, scope) == nil {
-			t.Fatal("preparation appeared without previously durable intent")
-		}
-	}
-	value.Receipt.Actions[0].Phase = "observed"
-	value.Receipt.Actions[0].Outcome = "unknown"
-	if validateControllerTransition(value, prepared, scope) == nil {
-		t.Fatal("recovery invented missing native before-state")
+func bind(t *testing.T, store *Store, name string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
+		return tx.Bind(ctx, "controller", syntheticHost(t))
+	}); err != nil {
+		t.Fatalf("binding %s failed: %#v", name, diagnostics.Of(err))
 	}
 }
 
-func TestControllerAbsentReadsAndBaselineBootstrap(t *testing.T) {
-	store, _ := fixture(t)
+// An absent store reads as no controller and creates nothing. The first
+// binding after a completed setup creates the controller record holding this
+// host's identity and that binding, and attributes the directory it lives in.
+func TestControllerAbsentReadsAndTheFirstBindingCreatesTheRecord(t *testing.T) {
+	store, sources := fixture(t)
 	called := false
 	err := store.ReadController(context.Background(), "", func(view prerequisites.StorageView) error {
 		called = true
-		if view.Exists || view.Initialized || view.State.Host.Valid() {
+		if view.Exists || view.Initialized || view.Prepared || view.State.Host.Valid() {
 			t.Fatal("absent store invented controller evidence")
 		}
 		return nil
@@ -135,45 +134,77 @@ func TestControllerAbsentReadsAndBaselineBootstrap(t *testing.T) {
 	if _, err := os.Stat(store.options.Root); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("controller inspection created the root")
 	}
-	value := syntheticControllerState(t, prerequisites.SetupContext{})
-	publishControllerState(t, store, prerequisites.SetupContext{}, value)
+	record := publish(t, store, "example", sources)
+	recordPreparedSetup(t, store)
+	bind(t, store, record.Name)
 	registry, err := store.View(context.Background())
-	if err != nil || registry.Version != contexts.RegistryVersion || len(registry.Contexts) != 0 || registry.Controller.Mode != "ready" {
-		t.Fatalf("baseline did not publish a standalone controller root: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(store.options.Root, "contexts")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("baseline created context or secret state")
+	if err != nil || registry.Version != contexts.RegistryVersion || registry.Controller.Mode != "ready" || registry.Controller.DirectoryInode == 0 {
+		t.Fatalf("the first binding did not attribute a ready controller (%v): %+v", err, registry.Controller)
 	}
 	before, err := os.ReadFile(filepath.Join(store.options.Root, "controller", "state.json"))
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || !bytes.HasSuffix(before, []byte("\n")) {
+		t.Fatalf("controller record is missing or not canonical (%v)", err)
 	}
-	if !bytes.HasSuffix(before, []byte("\n")) {
-		t.Fatal("controller record lacks canonical final newline")
-	}
+	digest, _ := syntheticHost(t).PrivateDigest()
 	err = store.ReadController(context.Background(), "", func(view prerequisites.StorageView) error {
-		if !view.Exists || !view.Initialized || !view.State.Host.Equal(value.Host) {
-			t.Fatal("stored host evidence changed")
+		if !view.Exists || !view.Initialized || !view.Prepared || !view.State.Host.Equal(syntheticHost(t)) ||
+			!slices.Equal(view.State.Bindings, []prerequisites.ControllerBinding{{Context: record.Name, Machine: "controller", HostDigest: digest}}) {
+			t.Fatalf("stored controller evidence = %+v", view)
 		}
-		bundle, err := view.OpenBundle(context.Background(), value.Receipt.CatalogDigest)
+		bundle, err := view.OpenBundle(context.Background(), clientClosure)
 		if err != nil || bundle != nil {
-			t.Fatal("absent bundle was not distinguished from corrupt state")
+			t.Fatal("absent tool area was not distinguished from corrupt state")
 		}
-		view.State.Receipt.Actions[0].Request[0] = '!'
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	publishControllerState(t, store, prerequisites.SetupContext{}, value)
+	bind(t, store, record.Name)
 	after, _ := os.ReadFile(filepath.Join(store.options.Root, "controller", "state.json"))
 	if !bytes.Equal(before, after) {
-		t.Fatal("no-op inspection or repeat changed evidence")
+		t.Fatal("revalidating the binding changed evidence")
+	}
+}
+
+// No binding is created before setup completed: with no setup record, an
+// interrupted setup or another build's format, the first binding refuses
+// naming setup and leaves no controller directory behind.
+func TestTheFirstBindingRefusesBeforeSetupCompletes(t *testing.T) {
+	for name, arrange := range map[string]func(*testing.T, *Store){
+		"no setup": func(*testing.T, *Store) {},
+		"an interrupted setup": func(t *testing.T, store *Store) {
+			recordSetup(t, store, prerequisites.SetupState{Format: prerequisites.SetupStateFormat, Receipt: syntheticReceipt(), Pending: &prerequisites.PendingSetup{
+				ID: "setup-000042", PlanDigest: strings.Repeat("d", 64), Actions: []string{"runtime"}, StartedAt: "2026-10-14T12:00:00Z",
+			}})
+		},
+		"another build's format": func(t *testing.T, store *Store) {
+			recordPreparedSetup(t, store)
+			if err := os.WriteFile(filepath.Join(store.options.Root, setupSubtree, setupStateName), []byte(`{"format":"bootwright.setup-state-v9"}`+"\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, sources := fixture(t)
+			record := publish(t, store, "example", sources)
+			arrange(t, store)
+			err := store.MutateLifecycle(context.Background(), record.Name, func(tx lifecycle.Transaction) error {
+				return tx.Bind(context.Background(), "controller", syntheticHost(t))
+			})
+			if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "controller.identity" || found[0].Message != "this host has no completed controller setup" ||
+				found[0].Remediation != "run bootwright setup, then repeat the command" {
+				t.Fatalf("binding before setup = %#v", found)
+			}
+			if _, err := os.Stat(filepath.Join(store.options.Root, "controller")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("a refused binding left a controller directory (%v)", err)
+			}
+		})
 	}
 }
 
 // A controller read never declares the shared subtree, and an ordinary context
-// write preserves the descriptor that confirmed setup published.
+// write preserves the descriptor the first binding published.
 func TestControllerReadDeclaresNothingAndContextWritesPreserveTheDescriptor(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
@@ -190,8 +221,7 @@ func TestControllerReadDeclaresNothingAndContextWritesPreserveTheDescriptor(t *t
 	if !bytes.Equal(before, after) {
 		t.Fatal("controller read declared the shared subtree")
 	}
-	value := completeControllerState(syntheticControllerState(t, prerequisites.SetupContext{}))
-	publishControllerState(t, store, prerequisites.SetupContext{}, value)
+	publishControllerState(t, store, syntheticControllerState(t))
 	if err := replaceInput(store, record, sources); err != nil {
 		t.Fatal(err)
 	}
@@ -201,77 +231,18 @@ func TestControllerReadDeclaresNothingAndContextWritesPreserveTheDescriptor(t *t
 	}
 }
 
-func TestPendingControllerReceiptProtectsExactInputAndBlocksOtherSetup(t *testing.T) {
-	store, sources := fixture(t)
-	record := publish(t, store, "example", sources)
-	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
-	value := syntheticControllerState(t, scope)
-	publishControllerState(t, store, scope, value)
-	before, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
-	for _, operation := range []func(contexts.Transaction) error{
-		func(tx contexts.Transaction) error {
-			_, err := tx.MutationState(context.Background(), record.Name)
-			return err
-		},
-		func(tx contexts.Transaction) error {
-			_, err := tx.Publish(context.Background(), record.Name, record.EnvironmentDirectory, sources)
-			return err
-		},
-		func(tx contexts.Transaction) error { return tx.Delete(context.Background(), record) },
-		func(tx contexts.Transaction) error {
-			base := tx.(*transaction)
-			dir, err := base.leaseContext(context.Background(), record.Name)
-			if err != nil {
-				return err
-			}
-			base.evidence[record.Name] = []byte(pristineMutation)
-			return base.verifyRevisionCollection(context.Background(), dir, record.Name)
-		},
-	} {
-		if err := store.Transact(context.Background(), false, nil, operation); err == nil {
-			t.Fatal("pending setup permitted input mutation or disposal")
-		}
-	}
-	if err := store.MutateController(context.Background(), prerequisites.SetupContext{}, false, func(prerequisites.StorageTransaction) error {
-		t.Fatal("baseline bypassed context pending work")
-		return nil
-	}); err == nil {
-		t.Fatal("different setup scope was accepted")
-	}
-	after, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
-	if !bytes.Equal(before, after) {
-		t.Fatal("refused mutation changed input")
-	}
-	if err := store.ReadController(context.Background(), record.Name, func(prerequisites.StorageView) error { return nil }); err != nil {
-		t.Fatal("inspection could not report pending setup")
-	}
-	if err := store.MutateController(context.Background(), scope, false, func(tx prerequisites.StorageTransaction) error {
-		next := tx.Snapshot().State
-		next.Receipt.CatalogDigest = strings.Repeat("b", 64)
-		next.Receipt.PlanDigest, _ = prerequisites.SetupPlanDigest(next.Host, next.Receipt)
-		_, err := tx.Publish(context.Background(), next)
-		if err == nil {
-			t.Fatal("pending setup accepted a changed dependency plan")
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestControllerBindingSurvivesUpdateAndDisposableDeletionRetainsHost(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
-	scope := prerequisites.SetupContext{Name: record.Name, Revision: record.Revision, Machine: "controller"}
-	value := completeControllerState(syntheticControllerState(t, scope))
+	value := syntheticControllerState(t)
 	hostDigest, _ := value.Host.PrivateDigest()
-	value.Bindings = []prerequisites.ControllerBinding{{Context: record.Name, Machine: scope.Machine, HostDigest: hostDigest}}
-	publishControllerState(t, store, scope, value)
+	value.Bindings = []prerequisites.ControllerBinding{{Context: record.Name, Machine: "controller", HostDigest: hostDigest}}
+	publishControllerState(t, store, value)
 	err := store.Transact(context.Background(), false, nil, func(tx contexts.Transaction) error {
 		if err := tx.CheckControllerInput(context.Background(), record.Name, "replacement"); err == nil {
 			t.Fatal("input update transferred a controller binding")
 		}
-		if err := tx.CheckControllerInput(context.Background(), record.Name, scope.Machine); err != nil {
+		if err := tx.CheckControllerInput(context.Background(), record.Name, "controller"); err != nil {
 			return err
 		}
 		if _, err := tx.MutationState(context.Background(), record.Name); err != nil {
@@ -303,7 +274,7 @@ func TestControllerBindingSurvivesUpdateAndDisposableDeletionRetainsHost(t *test
 		t.Fatal(err)
 	}
 	if err := store.ReadController(context.Background(), "", func(view prerequisites.StorageView) error {
-		if !view.Initialized || !view.State.Host.Equal(value.Host) || len(view.State.Bindings) != 0 || view.State.Receipt.ID != value.Receipt.ID {
+		if !view.Initialized || !view.State.Host.Equal(value.Host) || len(view.State.Bindings) != 0 {
 			t.Fatal("context deletion discarded shared host evidence")
 		}
 		return nil
@@ -312,163 +283,128 @@ func TestControllerBindingSurvivesUpdateAndDisposableDeletionRetainsHost(t *test
 	}
 }
 
-func TestControllerUnknownPublicationClosesCapabilityAndExactRetry(t *testing.T) {
-	store, _ := fixture(t)
-	value := syntheticControllerState(t, prerequisites.SetupContext{})
-	var escaped prerequisites.StorageTransaction
-	store.fail = func(point string) error {
-		if point == "after-controller-rename" {
-			return errors.New("synthetic uncertain sync")
+// withClientArea opens the shared tool area clientClosure names in one
+// controller stage of the bound context example.
+func withClientArea(t *testing.T, store *Store, use func(lifecycle.Transaction, prerequisites.BundleArea) error) error {
+	t.Helper()
+	ctx := context.Background()
+	return store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		area, err := tx.ClientArea(ctx, clientClosure)
+		if err != nil {
+			return err
 		}
-		return nil
-	}
-	err := store.MutateController(context.Background(), prerequisites.SetupContext{}, true, func(tx prerequisites.StorageTransaction) error {
-		escaped = tx
-		outcome, err := tx.Publish(context.Background(), value)
-		if outcome != prerequisites.Unknown || err == nil {
-			t.Fatal("post-rename failure lost uncertainty")
-		}
-		if _, err := tx.Publish(context.Background(), value); err == nil {
-			t.Fatal("unknown publication permitted another mutation")
-		}
-		return nil
+		return use(tx, area)
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	store.fail = nil
-	if escaped.Snapshot().Exists {
-		t.Fatal("escaped callback retained a storage snapshot capability")
-	}
-	if _, err := escaped.Publish(context.Background(), value); err == nil {
-		t.Fatal("escaped callback retained publication authority")
-	}
-	publishControllerState(t, store, prerequisites.SetupContext{}, value)
-	if err := store.ReadController(context.Background(), "", func(view prerequisites.StorageView) error {
-		if !view.Initialized || view.State.Receipt.ID != value.Receipt.ID {
-			t.Fatal("exact recovery did not retain receipt")
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
 }
 
-func TestControllerBundleCapabilityBoundsModesSealAndLifetime(t *testing.T) {
-	store, _ := fixture(t)
-	value := syntheticControllerState(t, prerequisites.SetupContext{})
-	publishControllerState(t, store, prerequisites.SetupContext{}, value)
+// boundFixture is a prepared host whose context example is bound.
+func boundFixture(t *testing.T) *Store {
+	t.Helper()
+	store, sources := fixture(t)
+	record := publish(t, store, "example", sources)
+	recordPreparedSetup(t, store)
+	bind(t, store, record.Name)
+	return store
+}
+
+func TestToolAreaCapabilityBoundsModesSealAndLifetime(t *testing.T) {
+	store := boundFixture(t)
+	ctx := context.Background()
 	var escaped prerequisites.BundleArea
-	err := store.MutateController(context.Background(), prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
-		if _, err := tx.Bundle(context.Background(), value.Receipt.CatalogDigest); err == nil {
-			t.Fatal("unintended action could create bundle")
-		}
-		next := tx.Snapshot().State
-		next.Receipt.Actions[0].Phase = "intent"
-		if _, err := tx.Publish(context.Background(), next); err != nil {
-			return err
-		}
-		area, err := tx.Bundle(context.Background(), value.Receipt.CatalogDigest)
-		if err != nil {
-			return err
-		}
+	err := withClientArea(t, store, func(tx lifecycle.Transaction, area prerequisites.BundleArea) error {
 		escaped = area
-		if err := area.EnsureDirectory(context.Background(), "python/bin"); err != nil {
+		if err := area.EnsureDirectory(ctx, "tools/helm"); err != nil {
 			return err
 		}
-		if err := area.Write(context.Background(), "python/bin/python3", []byte("synthetic executable\n"), true); err != nil {
+		if err := area.Write(ctx, "tools/helm/helm", []byte("synthetic executable\n"), true); err != nil {
 			return err
 		}
-		if err := area.Write(context.Background(), "manifest.json", []byte("{}\n"), false); err != nil {
+		if err := area.Write(ctx, "manifest.json", []byte("{}\n"), false); err != nil {
 			return err
 		}
-		for _, path := range []string{"../outside", "/absolute", "python/../escape", "python/../../escape", "python//bad", "python/\x00bad", "python/" + bundleStagePrefix + strings.Repeat("0", 32)} {
-			if err := area.Write(context.Background(), path, []byte("unsafe"), false); err == nil {
-				t.Fatal("unsafe bundle path was accepted")
+		for _, path := range []string{"../outside", "/absolute", "tools/../escape", "tools/../../escape", "tools//bad", "tools/\x00bad", "tools/" + bundleStagePrefix + strings.Repeat("0", 32)} {
+			if err := area.Write(ctx, path, []byte("unsafe"), false); err == nil {
+				t.Fatalf("unsafe tool area path %q was accepted", path)
 			}
 		}
-		if err := area.Write(context.Background(), "manifest.json", []byte("overwrite"), false); err == nil {
-			t.Fatal("bundle overwrote an existing file")
+		if err := area.Write(ctx, "manifest.json", []byte("overwrite"), false); err == nil {
+			t.Fatal("tool area overwrote an existing file")
 		}
-		if data, err := area.Read(context.Background(), "python/bin/python3", 64); err != nil || string(data) != "synthetic executable\n" {
-			t.Fatal("catalog executable was not readable")
+		if data, err := area.Read(ctx, "tools/helm/helm", 64); err != nil || string(data) != "synthetic executable\n" {
+			t.Fatal("tool executable was not readable")
 		}
-		entries, err := area.Entries(context.Background())
+		entries, err := area.Entries(ctx)
 		if err != nil {
 			return err
 		}
-		if len(entries) != 4 || entries[0].Path != "manifest.json" || entries[3].Path != "python/bin/python3" || !entries[3].Executable {
-			t.Fatal("bundle entries are not complete and deterministically sorted")
+		if len(entries) != 4 || entries[0].Path != "manifest.json" || entries[3].Path != "tools/helm/helm" || !entries[3].Executable {
+			t.Fatalf("tool area entries are not complete and deterministically sorted: %+v", entries)
 		}
-		location, err := area.Location(context.Background())
+		location, err := area.Location(ctx)
 		if err != nil {
 			return err
 		}
 		if location.Inode == 0 || location.Path == "" || !location.Writable || location.Sealed {
-			t.Fatal("execution location lacks private identity evidence")
+			t.Fatal("tool area location lacks private identity evidence")
 		}
-		complete := completeControllerState(tx.Snapshot().State)
-		if _, err := tx.Publish(context.Background(), complete); err != nil {
+		if err := tx.SealClientArea(ctx, clientClosure); err != nil {
 			return err
 		}
-		if err := area.Write(context.Background(), "after-complete", []byte("unsafe"), false); err == nil {
-			t.Fatal("completed bundle retained mutation authority")
+		if err := area.Write(ctx, "after-seal", []byte("unsafe"), false); err == nil {
+			t.Fatal("sealed tool area retained mutation authority")
 		}
-		location, err = area.Location(context.Background())
+		location, err = area.Location(ctx)
 		if err != nil || location.Writable || !location.Sealed {
-			t.Fatal("sealed bundle leaked native publication authority", location, err)
+			t.Fatal("sealed tool area leaked publication authority", location, err)
 		}
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("bundle operation failed: %#v", diagnostics.Of(err))
+		t.Fatalf("tool area operation failed: %#v", diagnostics.Of(err))
 	}
-	if err := escaped.Verify(context.Background()); err == nil {
-		t.Fatal("escaped bundle capability remained usable")
+	if err := escaped.Verify(ctx); err == nil {
+		t.Fatal("escaped tool area capability remained usable")
 	}
-	err = store.ReadController(context.Background(), "", func(view prerequisites.StorageView) error {
-		area, err := view.OpenBundle(context.Background(), value.Receipt.CatalogDigest)
+	err = store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
+		if view.State.Bindings[0].Tools != clientClosure {
+			t.Fatalf("the binding names tool area %q, want the sealed %s", view.State.Bindings[0].Tools, clientClosure)
+		}
+		area, err := view.OpenBundle(ctx, clientClosure)
 		if err != nil {
 			return err
 		}
 		if area == nil {
-			t.Fatal("attributed bundle disappeared")
+			t.Fatal("attributed tool area disappeared")
 		}
-		if err := area.EnsureDirectory(context.Background(), "forbidden"); err == nil {
-			t.Fatal("read-only bundle inspection mutated host")
+		if err := area.EnsureDirectory(ctx, "forbidden"); err == nil {
+			t.Fatal("read-only tool area inspection mutated host")
 		}
-		location, err := area.Location(context.Background())
+		location, err := area.Location(ctx)
 		if err != nil || location.Writable || !location.Sealed {
-			t.Fatal("read-only sealed bundle exposed native publication authority", location, err)
+			t.Fatal("read-only sealed tool area exposed publication authority", location, err)
 		}
-		return area.Verify(context.Background())
+		return area.Verify(ctx)
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestControllerBundleStreamsAFileOnlyWhole(t *testing.T) {
-	store, _ := fixture(t)
-	value := syntheticControllerState(t, prerequisites.SetupContext{})
-	value.Receipt.Actions[0].Phase = "intent"
-	publishControllerState(t, store, prerequisites.SetupContext{}, value)
+func TestToolAreaStreamsAFileOnlyWhole(t *testing.T) {
+	store := boundFixture(t)
+	ctx := context.Background()
 	content := bytes.Repeat([]byte("retained tool source "), 8192)
 	refused := errors.New("consumer refused")
-	err := store.MutateController(context.Background(), prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
-		area, err := tx.Bundle(context.Background(), value.Receipt.CatalogDigest)
-		if err != nil {
-			return err
-		}
-		if err := area.Write(context.Background(), "source", content, false); err != nil {
+	err := withClientArea(t, store, func(_ lifecycle.Transaction, area prerequisites.BundleArea) error {
+		if err := area.Write(ctx, "source", content, false); err != nil {
 			return err
 		}
 		stream, streams := area.(prerequisites.BundleStream)
 		if !streams {
-			t.Fatal("the controller bundle area cannot stream")
+			t.Fatal("the tool area cannot stream")
 		}
 		var streamed bytes.Buffer
-		if err := stream.Stream(context.Background(), "source", int64(len(content)), func(reader prerequisites.BundleReader) error {
+		if err := stream.Stream(ctx, "source", int64(len(content)), func(reader prerequisites.BundleReader) error {
 			_, err := io.Copy(&streamed, reader)
 			return err
 		}); err != nil || !bytes.Equal(streamed.Bytes(), content) {
@@ -489,48 +425,35 @@ func TestControllerBundleStreamsAFileOnlyWhole(t *testing.T) {
 			}, "was not read whole"},
 			"bound": {int64(len(content)) - 1, drain, "metadata is unsafe"},
 		} {
-			err := stream.Stream(context.Background(), "source", test.maximum, test.consume)
+			err := stream.Stream(ctx, "source", test.maximum, test.consume)
 			if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, test.message) {
 				t.Errorf("%s stream: %v", name, err)
 			}
 		}
-		if err := stream.Stream(context.Background(), "source", int64(len(content)), func(prerequisites.BundleReader) error { return refused }); !errors.Is(err, refused) {
+		if err := stream.Stream(ctx, "source", int64(len(content)), func(prerequisites.BundleReader) error { return refused }); !errors.Is(err, refused) {
 			t.Errorf("a consumer's refusal was not returned: %v", err)
 		}
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("bundle operation failed: %#v", diagnostics.Of(err))
+		t.Fatalf("tool area operation failed: %#v", diagnostics.Of(err))
 	}
 }
 
-func TestControllerBundleRejectsUnknownSubstitutionAndSymlinks(t *testing.T) {
+func TestToolAreaRejectsUnknownSubstitutionAndSymlinks(t *testing.T) {
 	for _, mode := range []string{"unattributed", "symlink", "hardlink", "world-readable", "replace-directory"} {
 		t.Run(mode, func(t *testing.T) {
-			store, _ := fixture(t)
-			value := syntheticControllerState(t, prerequisites.SetupContext{})
-			value.Receipt.Actions[0].Phase = "intent"
-			publishControllerState(t, store, prerequisites.SetupContext{}, value)
-			var path string
+			store := boundFixture(t)
+			path := filepath.Join(store.options.Root, "controller", "bundles", clientClosure)
 			if mode != "unattributed" {
-				if err := store.MutateController(context.Background(), prerequisites.SetupContext{}, false, func(tx prerequisites.StorageTransaction) error {
-					area, err := tx.Bundle(context.Background(), value.Receipt.CatalogDigest)
-					if err != nil {
-						return err
-					}
-					if err := area.Write(context.Background(), "original", []byte("private"), false); err != nil {
-						return err
-					}
-					location, err := area.Location(context.Background())
-					path = location.Path
-					return err
+				if err := withClientArea(t, store, func(_ lifecycle.Transaction, area prerequisites.BundleArea) error {
+					return area.Write(context.Background(), "original", []byte("private"), false)
 				}); err != nil {
 					t.Fatal(err)
 				}
 			}
 			switch mode {
 			case "unattributed":
-				path = filepath.Join(store.options.Root, "controller", "bundles", value.Receipt.CatalogDigest)
 				if err := os.MkdirAll(path, 0700); err != nil {
 					t.Fatal(err)
 				}
@@ -555,7 +478,7 @@ func TestControllerBundleRejectsUnknownSubstitutionAndSymlinks(t *testing.T) {
 				}
 			}
 			if err := store.ReadController(context.Background(), "", func(view prerequisites.StorageView) error {
-				area, err := view.OpenBundle(context.Background(), value.Receipt.CatalogDigest)
+				area, err := view.OpenBundle(context.Background(), clientClosure)
 				if err != nil {
 					return err
 				}
@@ -564,18 +487,17 @@ func TestControllerBundleRejectsUnknownSubstitutionAndSymlinks(t *testing.T) {
 				}
 				return area.Verify(context.Background())
 			}); err == nil {
-				t.Fatal("unsafe bundle was admitted")
+				t.Fatal("unsafe tool area was admitted")
 			}
 		})
 	}
 }
 
 func TestControllerReadAndMutationShareRootCoordination(t *testing.T) {
-	store, _ := fixture(t)
-	value := syntheticControllerState(t, prerequisites.SetupContext{})
-	publishControllerState(t, store, prerequisites.SetupContext{}, value)
-	err := store.ReadController(context.Background(), "", func(prerequisites.StorageView) error {
-		if err := store.MutateController(context.Background(), prerequisites.SetupContext{}, false, func(prerequisites.StorageTransaction) error { t.Fatal("mutator acquired held shared root"); return nil }); err == nil {
+	store := boundFixture(t)
+	ctx := context.Background()
+	err := store.ReadController(ctx, "", func(prerequisites.StorageView) error {
+		if err := store.MutateLifecycle(ctx, "example", func(lifecycle.Transaction) error { t.Fatal("mutator acquired held shared root"); return nil }); err == nil {
 			t.Fatal("concurrent mutation was accepted")
 		}
 		return nil
@@ -583,8 +505,8 @@ func TestControllerReadAndMutationShareRootCoordination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = store.MutateController(context.Background(), prerequisites.SetupContext{}, false, func(prerequisites.StorageTransaction) error {
-		if err := store.ReadController(context.Background(), "", func(prerequisites.StorageView) error { t.Fatal("reader acquired held exclusive root"); return nil }); err == nil {
+	err = store.MutateLifecycle(ctx, "example", func(lifecycle.Transaction) error {
+		if err := store.ReadController(ctx, "", func(prerequisites.StorageView) error { t.Fatal("reader acquired held exclusive root"); return nil }); err == nil {
 			t.Fatal("concurrent reader was accepted")
 		}
 		return nil
@@ -594,75 +516,110 @@ func TestControllerReadAndMutationShareRootCoordination(t *testing.T) {
 	}
 }
 
-func TestControllerRecordCanonicalBoundsAndPlanIntegrity(t *testing.T) {
-	value := syntheticControllerState(t, prerequisites.SetupContext{})
-	value.Receipt.Sources = []prerequisites.DependencySource{{ID: "python-1", URL: "https://downloads.example.test/python.tar.gz", SHA256: strings.Repeat("b", 64), Bytes: 123}}
-	value.Receipt.PlanDigest, _ = prerequisites.SetupPlanDigest(value.Host, value.Receipt)
-	value, err := retainControllerSources(prerequisites.HostState{}, value)
+func TestControllerRecordCanonicalBoundsAndIntegrity(t *testing.T) {
+	value := syntheticControllerState(t)
+	digest, _ := value.Host.PrivateDigest()
+	value.ToolSources = []prerequisites.DependencySource{{ID: "helm-v3.17.0", URL: "https://downloads.example.test/helm.tar.gz", SHA256: strings.Repeat("b", 64), Bytes: 123}}
+	value.Bindings = []prerequisites.ControllerBinding{{Context: "example", Machine: "controller", HostDigest: digest, Tools: clientClosure}}
+	areas := []controllerBundleReservation{{ID: clientClosure, Mode: "sealed", DirectoryDevice: 1, DirectoryInode: 2}}
+	if err := validateControllerState(value, areas); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := encodeRecord(controllerRecord(value, areas), maxControllerState)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := validateControllerState(value); err != nil {
-		t.Fatal(err)
+	decoded, held, err := decodeControllerRecord(encoded)
+	if err != nil || !reflect.DeepEqual(value, decoded) || !reflect.DeepEqual(areas, held) {
+		t.Fatalf("canonical controller evidence did not round-trip (%v)", err)
 	}
-	encoded, err := encodeRecord(controllerRecord(value, nil), maxControllerState)
-	if err != nil {
-		t.Fatal(err)
-	}
-	decoded, _, err := decodeControllerRecord(encoded)
-	if err != nil || !reflect.DeepEqual(value, decoded) {
-		t.Fatal("canonical controller evidence did not round-trip")
-	}
-	for _, mutate := range []func(*prerequisites.HostState){
-		func(v *prerequisites.HostState) { v.Receipt.PlanDigest = strings.Repeat("c", 64) },
-		func(v *prerequisites.HostState) {
-			v.Receipt.Actions[0].Request = []byte(`{"duplicate":1,"duplicate":2}`)
+	for name, mutate := range map[string]func(*prerequisites.HostState){
+		"a credential in a source URL": func(v *prerequisites.HostState) {
+			v.ToolSources[0].URL = "https://operator:password@example.test/file"
 		},
-		func(v *prerequisites.HostState) { v.Receipt.Actions[0].Evidence = []byte(`null`) },
-		func(v *prerequisites.HostState) { v.Receipt.Status = "complete" },
-		func(v *prerequisites.HostState) { v.Receipt.Actions[0].Phase = "intent"; v.Receipt.Status = "canceled" },
-		func(v *prerequisites.HostState) {
-			v.Receipt.Sources[0].URL = "https://operator:password@example.test/file"
+		"an unordered source": func(v *prerequisites.HostState) {
+			v.ToolSources = append(v.ToolSources, prerequisites.DependencySource{ID: "a-first", URL: "https://example.test/a", SHA256: strings.Repeat("c", 64), Bytes: 1})
 		},
-		func(v *prerequisites.HostState) { v.Receipt.Actions = append(v.Receipt.Actions, v.Receipt.Actions[0]) },
+		"a binding naming another host": func(v *prerequisites.HostState) { v.Bindings[0].HostDigest = strings.Repeat("0", 64) },
+		"a binding naming an unheld tool area": func(v *prerequisites.HostState) {
+			v.Bindings[0].Tools = strings.Repeat("d", 64)
+		},
 	} {
 		next := cloneControllerState(value)
 		mutate(&next)
-		if err := validateControllerState(next); err == nil {
-			t.Fatal("malformed or contradictory setup evidence was accepted")
+		if err := validateControllerState(next, areas); err == nil {
+			t.Errorf("%s was accepted", name)
 		}
 	}
-	changed := cloneControllerState(value)
-	changed.Receipt.Sources[0].SHA256 = strings.Repeat("c", 64)
-	if _, err := retainControllerSources(value, changed); err == nil {
-		t.Fatal("new setup replaced a retained source identity")
+	if err := validateControllerState(value, []controllerBundleReservation{{ID: clientClosure, Mode: "attributed", DirectoryDevice: 1, DirectoryInode: 2}}); err == nil {
+		t.Error("a binding naming an unsealed tool area was accepted")
 	}
 	if _, _, err := decodeControllerRecord(append(slices.Clone(encoded), ' ')); err == nil {
 		t.Fatal("noncanonical controller bytes were accepted")
 	}
 }
 
+// The v3 controller record holds host identity, bindings with the tool area
+// each last published, tool sources and areas, and reservations, and nothing
+// of a setup: no receipt, retained resolution or execution bundle. A record
+// an earlier version wrote, or one carrying any of those, refuses.
+func TestTheControllerRecordV3HoldsNoReceipt(t *testing.T) {
+	encoded, err := encodeRecord(controllerRecord(syntheticControllerState(t), nil), maxControllerState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &members); err != nil {
+		t.Fatal(err)
+	}
+	if got := slices.Sorted(maps.Keys(members)); !slices.Equal(got, []string{"bindings", "host", "toolAreas", "toolSources", "version"}) {
+		t.Fatalf("the v3 record holds %v", got)
+	}
+	if string(members["version"]) != "3" || ControllerRecordVersion != 3 {
+		t.Fatalf("the record version is %s", members["version"])
+	}
+	area := func(mode string) string {
+		return `"toolAreas":[{"id":"` + clientClosure + `","mode":"` + mode + `","directoryDevice":1,"directoryInode":2}]`
+	}
+	for name, document := range map[string]string{
+		"version 2":                          strings.Replace(string(encoded), `"version":3`, `"version":2`, 1),
+		"a receipt":                          strings.Replace(string(encoded), `"toolAreas":[]`, `"receipt":{},"toolAreas":[]`, 1),
+		"retained resolutions":               strings.Replace(string(encoded), `"toolAreas":[]`, `"retainedDefinitions":[],"toolAreas":[]`, 1),
+		"retained setup sources":             strings.Replace(string(encoded), `"toolAreas":[]`, `"retainedSources":[],"toolAreas":[]`, 1),
+		"execution bundles":                  strings.Replace(string(encoded), `"toolAreas":[]`, `"bundles":[],"toolAreas":[]`, 1),
+		"a retiring tool area":               strings.Replace(string(encoded), `"toolAreas":[]`, area("retiring"), 1),
+		"a reserved area naming a directory": strings.Replace(string(encoded), `"toolAreas":[]`, area("reserved"), 1),
+	} {
+		if document == string(encoded) {
+			t.Fatalf("%s: the fixture did not change the record", name)
+		}
+		if _, _, err := decodeControllerRecord([]byte(document)); err == nil {
+			t.Errorf("a record with %s was accepted", name)
+		}
+	}
+}
+
 func TestControllerDirectoryCreationInterruptionNeverAdoptsOrphan(t *testing.T) {
-	store, _ := fixture(t)
-	value := syntheticControllerState(t, prerequisites.SetupContext{})
+	store, sources := fixture(t)
+	record := publish(t, store, "example", sources)
+	recordPreparedSetup(t, store)
 	store.fail = func(point string) error {
 		if point == "after-controller-directory" {
 			return errors.New("synthetic process death")
 		}
 		return nil
 	}
-	if err := store.MutateController(context.Background(), prerequisites.SetupContext{}, true, func(tx prerequisites.StorageTransaction) error {
-		_, err := tx.Publish(context.Background(), value)
-		return err
-	}); err == nil {
+	bindOnce := func() error {
+		return store.MutateLifecycle(context.Background(), record.Name, func(tx lifecycle.Transaction) error {
+			return tx.Bind(context.Background(), "controller", syntheticHost(t))
+		})
+	}
+	if err := bindOnce(); err == nil {
 		t.Fatal("interrupted directory attribution succeeded")
 	}
 	store.fail = nil
 	before, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
-	if err := store.MutateController(context.Background(), prerequisites.SetupContext{}, true, func(tx prerequisites.StorageTransaction) error {
-		_, err := tx.Publish(context.Background(), value)
-		return err
-	}); err == nil {
+	if err := bindOnce(); err == nil {
 		t.Fatal("retry adopted an unattributed controller directory")
 	}
 	after, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))

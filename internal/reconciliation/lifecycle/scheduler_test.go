@@ -519,7 +519,7 @@ func TestFailedBlocksNamingOneResourceAreRetriedOneAtATime(t *testing.T) {
 	states := map[string]reconciliation.BlockState{
 		"alpha": reconciliation.BlockFailed, "bravo": reconciliation.BlockFailed, "charlie": reconciliation.BlockFailed,
 	}
-	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, bundle{}, nil, operationstore.Operation{}, plan, states, nil, nil)
+	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, nil)
 	retried, _, ok := run.next()
 	if !ok || retried.ID != "alpha" {
 		t.Fatalf("the first retry = %q (%t)", retried.ID, ok)
@@ -559,7 +559,7 @@ func TestAnUnprovedEffectIsResolvedBeforeAnyRetry(t *testing.T) {
 	states := map[string]reconciliation.BlockState{
 		"alpha": reconciliation.BlockUnknown, "bravo": reconciliation.BlockFailed, "charlie": reconciliation.BlockFailed,
 	}
-	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, bundle{}, nil, operationstore.Operation{}, plan, states, nil, nil)
+	run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, nil)
 	observed, _, ok := run.next()
 	if !ok || observed.ID != "alpha" {
 		t.Fatalf("the first admission = %q (%t), want the unknown block", observed.ID, ok)
@@ -608,7 +608,7 @@ func TestAdmissionAfterARetryDoesNotDependOnCompletionOrder(t *testing.T) {
 				"first-failed": reconciliation.BlockFailed, "second-failed": reconciliation.BlockFailed,
 			}
 			selection := reconciliation.StageSelection{reconciliation.StageMachines}
-			run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, bundle{}, nil, operationstore.Operation{}, plan, states, nil, selection)
+			run := Service{options: Options{Concurrency: 4}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, selection)
 			started := []string{}
 			drain := func() {
 				for {
@@ -845,7 +845,7 @@ func TestAnAnnouncedRetryThatNeverStartsIsSettledFailed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			progress := &testProgress{}
 			states := map[string]reconciliation.BlockState{"alpha": reconciliation.BlockUnknown}
-			run := Service{options: Options{Concurrency: 4, Progress: progress}}.newScheduler(nil, nil, bundle{}, nil, operationstore.Operation{}, plan, states, nil, nil)
+			run := Service{options: Options{Concurrency: 4, Progress: progress}}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, nil)
 			run.settle(step{block: "alpha", state: reconciliation.BlockFailed, announced: true, position: 1})
 			if tc.worked {
 				run.worked["alpha"] = true

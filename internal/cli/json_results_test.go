@@ -24,6 +24,7 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[secretListResult](),
 	reflect.TypeFor[encryptionStatusResult](),
 	reflect.TypeFor[trustResult](),
+	reflect.TypeFor[setupPlanResult](),
 	reflect.TypeFor[machineListPresentation](),
 	reflect.TypeFor[machinePowerPresentation](),
 	reflect.TypeFor[mediaListPresentation](),

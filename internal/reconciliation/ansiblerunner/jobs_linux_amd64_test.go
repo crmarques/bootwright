@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
@@ -55,6 +54,7 @@ func completing() *exec.Cmd {
 // sweepingRunner owns the run directories it creates, in parents of its own.
 func sweepingRunner(t *testing.T, adapter func() *exec.Cmd) Runner {
 	return Runner{
+		stager:    newDirStager(t),
 		jobParent: t.TempDir(), scratchParent: t.TempDir(), owner: uint32(os.Geteuid()), drain: 200 * time.Millisecond,
 		playbooks: map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"},
 		command:   func(string, ...string) *exec.Cmd { return adapter() },
@@ -62,17 +62,13 @@ func sweepingRunner(t *testing.T, adapter func() *exec.Cmd) Runner {
 }
 
 func adapterRequest(t *testing.T, output prerequisites.RunOutput) lifecycle.RunRequest {
-	bundle := t.TempDir()
-	if err := os.Mkdir(filepath.Join(bundle, "automation"), 0700); err != nil {
-		t.Fatal(err)
-	}
 	return lifecycle.RunRequest{
 		Context: "alpha", Block: "artifact-server-lab", Description: "Serve ArtifactServer/artifact-server-lab",
 		Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
 		Digest:    "sha256:" + strings.Repeat("5f", 32),
 		Canonical: []byte(`{}`), Placement: machineref.Placement{Connection: "local", Machine: "controller"},
-		Launch: prerequisites.PythonLaunch{Loader: "/qualified/loader"},
-		Bundle: prerequisites.BundleLocation{Path: bundle}, Area: embeddedArea{files: ansible.Assets()}, Output: output,
+		Launch: testLaunch,
+		Output: output,
 	}
 }
 

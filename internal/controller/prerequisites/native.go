@@ -1,6 +1,11 @@
 package prerequisites
 
 import (
+	"bytes"
+	"encoding/hex"
+	"encoding/json"
+	"slices"
+
 	"github.com/crmarques/bootwright/internal/controller"
 )
 
@@ -68,4 +73,60 @@ type NativeResolvedPlan struct {
 	BeforeSHA256  string                        `json:"beforeSHA256"`
 	AfterSHA256   string                        `json:"afterSHA256"`
 	Digest        string                        `json:"digest"`
+}
+
+// ReadNativePreparation admits a container-runtime action's before-state only
+// when its bytes are exactly what EncodeNativePreparation writes, its added
+// sources belong to definition, and its native fields match definition's
+// native plan or, without one, are absent. Setup reads each preparation back
+// this way before retaining it and again before recovering from it.
+func ReadNativePreparation(data []byte, definition Definition) (NativePreparation, error) {
+	var preparation NativePreparation
+	invalid := func() (NativePreparation, error) {
+		return NativePreparation{}, failure("controller.unknown", "native preparation evidence is incomplete or incompatible", "restore the exact native setup evidence before continuing")
+	}
+	if len(data) == 0 || len(data) > 64<<10 || json.Unmarshal(data, &preparation) != nil {
+		return invalid()
+	}
+	digest, err := hex.DecodeString(preparation.InventorySHA256)
+	if err != nil || len(digest) != 32 || hex.EncodeToString(digest) != preparation.InventorySHA256 || preparation.AddedSources == nil || len(preparation.AddedSources) > 512 {
+		return invalid()
+	}
+	previous := ""
+	for _, id := range preparation.AddedSources {
+		if id <= previous || !slices.ContainsFunc(definition.Sources, func(source DependencySource) bool { return source.ID == id }) {
+			return invalid()
+		}
+		previous = id
+	}
+	if definition.Native != nil {
+		transitions, err := NativeTransitionsDigest(definition.Native.Actions)
+		if err != nil || preparation.PlanDigest != definition.Native.Digest || preparation.InventorySHA256 != definition.Native.BeforeSHA256 || preparation.AfterInventorySHA256 != definition.Native.AfterSHA256 || preparation.TransitionsSHA256 != transitions {
+			return invalid()
+		}
+	} else if preparation.PlanDigest != "" || preparation.AfterInventorySHA256 != "" || preparation.TransitionsSHA256 != "" {
+		return invalid()
+	}
+	encoded := EncodeNativePreparation(preparation)
+	if !bytes.Equal(data, encoded) {
+		return invalid()
+	}
+	return preparation, nil
+}
+
+// EncodeNativePreparation is the canonical object the container-runtime
+// action retains as its preparation, published once while its intent is held.
+func EncodeNativePreparation(preparation NativePreparation) json.RawMessage {
+	value := map[string]any{"inventorySHA256": preparation.InventorySHA256, "addedSources": slices.Clone(preparation.AddedSources)}
+	if preparation.PlanDigest != "" || preparation.AfterInventorySHA256 != "" || preparation.TransitionsSHA256 != "" {
+		value["planDigest"] = preparation.PlanDigest
+		value["afterInventorySHA256"] = preparation.AfterInventorySHA256
+		value["transitionsSHA256"] = preparation.TransitionsSHA256
+	}
+	return nativeObject(value)
+}
+
+func nativeObject(values map[string]any) json.RawMessage {
+	data, _ := json.Marshal(values)
+	return data
 }

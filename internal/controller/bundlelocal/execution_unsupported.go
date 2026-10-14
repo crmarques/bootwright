@@ -12,7 +12,7 @@ type ExecutionGuard struct {
 	Builds prerequisites.FoundationBuildReader
 }
 
-func (ExecutionGuard) WithPython(ctx context.Context, _ prerequisites.BundleArea, _ prerequisites.ExecutionRequirement, _ func(prerequisites.PythonLaunch, func() error) error) error {
+func (ExecutionGuard) WithPython(ctx context.Context, _ prerequisites.BundleArea, _ prerequisites.ExecutionRequirement, _ func(bundleLaunch, func() error) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

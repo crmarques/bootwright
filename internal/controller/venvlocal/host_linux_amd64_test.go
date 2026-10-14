@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
 )
 
@@ -145,7 +146,8 @@ func (h *fakeHost) adapter(lock runtimelock.Lock) *Adapter {
 			h.t.Fatal(err)
 		}
 	}
-	adapter := New(Config{Lock: lock, Runtimes: runtimes, Wheels: wheels, Store: &renameStore{host: h, runtimes: runtimes}})
+	adapter := New(Config{Lock: lock, Runtimes: runtimes, Wheels: wheels})
+	publishers.Store(adapter, &renameStore{host: h, runtimes: runtimes})
 	me := uint32(os.Getuid())
 	adapter.bin, adapter.top = filepath.Join(h.root, "usr", "bin"), h.root
 	adapter.trusted = func(uid uint32) bool { return uid == 0 || uid == me }
@@ -280,12 +282,28 @@ type renameStore struct {
 	barrier  *sync.WaitGroup
 }
 
-func (s *renameStore) StageRuntime(context.Context) (string, error) {
-	return os.MkdirTemp(s.runtimes, ".stage-*")
+type stagePath string
+
+func (s stagePath) Path() string { return string(s) }
+
+var publishers sync.Map
+
+func publisherOf(adapter *Adapter) *renameStore {
+	store, _ := publishers.Load(adapter)
+	return store.(*renameStore)
 }
 
-func (s *renameStore) PublishRuntime(_ context.Context, stage, digest string) error {
-	_, err := os.Stat(filepath.Join(stage, recordName))
+func testBuild(adapter *Adapter, ctx context.Context, interpreter prerequisites.PythonInterpreter) (prerequisites.Runtime, error) {
+	return adapter.Build(ctx, publisherOf(adapter), interpreter)
+}
+
+func (s *renameStore) StageRuntime(context.Context) (prerequisites.RuntimeStage, error) {
+	stage, err := os.MkdirTemp(s.runtimes, ".stage-*")
+	return stagePath(stage), err
+}
+
+func (s *renameStore) PublishRuntime(_ context.Context, stage prerequisites.RuntimeStage, digest string) (bool, error) {
+	_, err := os.Stat(filepath.Join(stage.Path(), recordName))
 	s.host.mutex.Lock()
 	s.host.publications = append(s.host.publications, fmt.Sprintf("runtime.json present: %t", err == nil))
 	s.host.mutex.Unlock()
@@ -293,23 +311,29 @@ func (s *renameStore) PublishRuntime(_ context.Context, stage, digest string) er
 		s.barrier.Done()
 		s.barrier.Wait()
 	}
-	return unix.Renameat2(unix.AT_FDCWD, stage, unix.AT_FDCWD, filepath.Join(s.runtimes, digest), unix.RENAME_NOREPLACE)
+	err = unix.Renameat2(unix.AT_FDCWD, stage.Path(), unix.AT_FDCWD, filepath.Join(s.runtimes, digest), unix.RENAME_NOREPLACE)
+	if errors.Is(err, unix.EEXIST) {
+		return false, os.RemoveAll(stage.Path())
+	}
+	return err == nil, err
 }
 
-func (s *renameStore) DiscardRuntime(stage string) { os.RemoveAll(stage) }
+func (s *renameStore) DiscardRuntime(_ context.Context, stage prerequisites.RuntimeStage) error {
+	return os.RemoveAll(stage.Path())
+}
 
-func (s *renameStore) RetireRuntime(_ context.Context, digest string) error {
+func (s *renameStore) RetireRuntime(_ context.Context, digest string) (bool, error) {
 	directory := filepath.Join(s.runtimes, digest)
 	lock, err := os.Open(filepath.Join(directory, lockName))
 	if errors.Is(err, os.ErrNotExist) {
-		return os.RemoveAll(directory)
+		return true, os.RemoveAll(directory)
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer lock.Close()
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		return err
+		return false, nil
 	}
-	return os.RemoveAll(directory)
+	return true, os.RemoveAll(directory)
 }

@@ -69,8 +69,7 @@ func refusals(declared map[string]specOption, request map[string]any) []string {
 // refuses, before the role's first task, a request its specification does not
 // admit. A request version moved here and not there, or a field added on one
 // side only, would therefore pass every gate and refuse every setup on a real
-// host. Each request this build sends, with and without tools and for recovery,
-// is checked against that specification.
+// host. The request this build sends is checked against that specification.
 func TestTheRoleAdmitsEveryRequestThisBuildSends(t *testing.T) {
 	data, ok := ansible.Assets()[roleSpecification]
 	if !ok {
@@ -93,27 +92,20 @@ func TestTheRoleAdmitsEveryRequestThisBuildSends(t *testing.T) {
 	}
 	area := authorityArea{location: prerequisites.BundleLocation{Path: "/bundle", Writable: true}}
 	tools := []prerequisites.ToolDefinition{{Kind: "openshift-clients", Source: prerequisites.DependencySource{ID: "tool-openshift-clients", Bytes: 1}}}
-	for _, operation := range []string{"setup", "recover"} {
-		for _, definition := range []prerequisites.Definition{
-			{CatalogDigest: strings.Repeat("a", 64)},
-			{CatalogDigest: strings.Repeat("a", 64), Tools: tools},
-		} {
-			request, err := New(unusedExecution{t}).request(context.Background(), area, nil, operation, prerequisites.Platform{}, definition, prerequisites.SetupEgress{}, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			encoded, err := json.Marshal(request)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var fields map[string]any
-			if err := json.Unmarshal(encoded, &fields); err != nil {
-				t.Fatal(err)
-			}
-			for _, problem := range refusals(declared.Options, fields) {
-				t.Errorf("%s with %d tools: the role refuses bootwright_controller_request: %s", operation, len(definition.Tools), problem)
-			}
-		}
+	request, err := New(newTreeStager(t)).request(context.Background(), area, strings.Repeat("a", 64), tools, prerequisites.SetupEgress{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatal(err)
+	}
+	for _, problem := range refusals(declared.Options, fields) {
+		t.Errorf("the role refuses bootwright_controller_request: %s", problem)
 	}
 }
 

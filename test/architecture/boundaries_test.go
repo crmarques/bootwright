@@ -47,7 +47,6 @@ func packageRoles() map[string]packageRole {
 		"internal/controller/hostlinux":          adapterRole,
 		"internal/controller/bundlelocal":        adapterRole,
 		"internal/controller/ansiblelocal":       adapterRole,
-		"internal/controller/nativelocal":        adapterRole,
 		"internal/controller/runtimelock":        domainRole,
 		"internal/controller/hostdnf":            adapterRole,
 		"internal/controller/venvlocal":          adapterRole,
@@ -76,7 +75,6 @@ func packageRoles() map[string]packageRole {
 		// A port's shared contract suite, imported only by tests.
 		"internal/reconciliation/operationstore/areacontract": applicationRole,
 		"internal/secrets/secretstore/areacontract":           applicationRole,
-		"internal/controller/prerequisites/storagecontract":   applicationRole,
 		"internal/reconciliation/lifecycle/workspacecontract": applicationRole,
 		"internal/managedos/media/storecontract":              applicationRole,
 		// What every in-memory operation area double refuses, imported only by
@@ -148,7 +146,6 @@ func applicationDependencies() map[string][]string {
 		// transaction lends.
 		"internal/reconciliation/operationstore/areacontract": {"internal/reconciliation/operationstore"},
 		"internal/secrets/secretstore/areacontract":           {"internal/secrets/secretstore"},
-		"internal/controller/prerequisites/storagecontract":   {"internal/controller/prerequisites"},
 		"internal/managedos/media/storecontract":              {"internal/managedos/media"},
 		"internal/reconciliation/lifecycle/workspacecontract": {
 			"internal/controller/prerequisites", "internal/reconciliation/lifecycle", "internal/reconciliation/operationstore",
@@ -355,7 +352,7 @@ func TestDocsPackageTableNamesEveryTestOnlyPackage(t *testing.T) {
 
 // unwiredPackages are packages a slice lands before the one that imports them;
 // each leaves this list in the change that wires it.
-func unwiredPackages() []string { return []string{"internal/controller/venvlocal"} }
+func unwiredPackages() []string { return []string{} }
 
 func TestAdmissionEffectBoundary(t *testing.T) {
 	grants := effectGrants()
@@ -472,7 +469,6 @@ func effectGrants() map[string][]string {
 		},
 		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
 		"internal/controller/hostdnf":      {"io", "os", "os/exec", "syscall"},
-		"internal/controller/nativelocal":  {"golang.org/x/sys/unix", "io", "net/http", "os", "os/exec", "syscall"},
 		"internal/controller/venvlocal":    {"io", "net.Dialer", "net/http", "os", "os/exec", "syscall"},
 		"internal/controller/stagelocal":   {"golang.org/x/sys/unix", "io", "os", "syscall"},
 		// The SSH session adapter runs the one pinned client as a child and

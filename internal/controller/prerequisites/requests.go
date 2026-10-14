@@ -10,10 +10,6 @@ type CheckRequest struct{ ContextName string }
 type SetupRequest struct {
 	DryRun           bool
 	SkipConfirmation bool
-	// PurgeOldBundles retires the execution bundles this host no longer needs,
-	// after the setup it runs beside has completed, or before that setup
-	// publishes a new bundle into a host already at its bound.
-	PurgeOldBundles bool
 }
 
 // Check scopes tell the operator which command settles a missing prerequisite:
@@ -28,8 +24,8 @@ const (
 // a report lists them, so each one a presenter labels is known in one place.
 func CheckIDs() []string {
 	return []string{
-		"host", "installed-host", "execution-foundation", "fips-mode", "execution-bundle", "container-runtime", "target-tools",
-		"libvirt-client", "hypervisor", "installer-media", "controller-binding", "state-root", "setup-recovery", "setup-state",
+		"host", "installed-host", "fips-mode", "host-packages", "python-runtime", "target-tools",
+		"libvirt-client", "hypervisor", "installer-media", "controller-binding", "state-root", "setup-state",
 	}
 }
 
@@ -56,17 +52,19 @@ type Report struct {
 	Machine     string
 	// Route names the acquisition route this scope resolved and where it came
 	// from, so a report says how the host reaches its publishers.
-	Route         string
-	Platform      Platform
-	DryRun        bool
-	Outcome       string
-	Checks        []Check
-	Actions       []string
-	Dependencies  []string
+	Route    string
+	Platform Platform
+	DryRun   bool
+	Outcome  string
+	Checks   []Check
+	Actions  []string
+	// Dependencies names the host package requirements the plan installs.
+	Dependencies []string
+	// Preview is dnf's own preview of that install, display text only.
+	Preview *HostPackagePreview
+	// Files lists every locked wheel, for a dry run's machine output.
+	Files         []LockedFile
 	PlanPresented bool
-	// Purge records that setup ran with --purge-old-bundles, so a completed
-	// setup that retired nothing says so rather than staying silent.
-	Purge bool
 	// Next is the one command that settles a not-ready readiness check, as
 	// preflight decided it, the setup a dry run previewed, or the bootwright
 	// command a refused or failed setup's remediation names. It is empty for
@@ -76,14 +74,10 @@ type Report struct {
 	// failure report adds only its outcome rather than repeating the headline.
 	ProgressPresented bool
 	Progress          []ActionProgress
-	// RetiredBundles names the superseded execution bundles this invocation
-	// removed, in canonical order. It is empty unless retirement was asked for
-	// and either the setup it runs beside completed or that setup made room at
-	// the host's bound.
-	RetiredBundles []string
-	// Warnings are what dependency resolution read but did not refuse, such as
-	// a publisher page of a newer Index API minor. They never change Outcome.
+	// Warnings are informational lines, such as an untested release. They
+	// never change Outcome.
 	Warnings []diagnostics.Diagnostic
+	Table    *ReceiptTable
 	// LogLocation names on this host the directory of the setup run that kept
 	// what this invocation's controller Ansible printed. It is empty when no
 	// Ansible started or its output could not be retained, and never changes

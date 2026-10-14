@@ -9,23 +9,34 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-// An installation whose transaction ran but whose clients are not proved
+// forgetfulDnf reports success for an install that leaves nothing installed.
+type forgetfulDnf struct{ *fakeDnf }
+
+func (f *forgetfulDnf) open(prerequisites.SetupEgress) (prerequisites.HostPackages, error) {
+	return f, nil
+}
+
+func (f *forgetfulDnf) Install(context.Context, []string, prerequisites.RunOutput) ([]prerequisites.HostPackageEvidence, error) {
+	return nil, nil
+}
+
+// An installation whose dnf run completed but whose packages are not proved
 // installed is unknown, and its remedy names the exact continuation of its
 // apply, which resolves it from live evidence before anything else starts.
 func TestAnUnknownInstallationNamesItsContinuation(t *testing.T) {
-	native := &fakeNative{plan: nativePlanFor(t, prerequisites.NativeRequirements{ContainerRuntime: true, LibvirtClient: true})}
-	capability := New(&fakeTools{complete: true, present: true}, native, native, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
 	for _, test := range []struct{ continuation, want string }{
 		{"bootwright apply --context lab --authorize data-loss", "resolve it from live evidence with bootwright apply --context lab --authorize data-loss"},
 		{"", "repeat the operation to resolve it from live evidence"},
 	} {
-		execution := newRecorder(&fakeArea{}).execution(t, block, libvirtHostState(t))
+		dnf := &forgetfulDnf{fakeDnf: newDnf()}
+		capability := New(&fakeTools{complete: true, present: true}, dnf.open, &fakeSetup{}, &fakeInstaller{})
+		block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt")), reconciliation.Apply)
+		execution := newRecorder(&fakeArea{}).execution(t, block, hostState())
 		execution.Continuation = test.continuation
 		result, err := capability.Apply(context.Background(), execution)
 		reported := diagnostics.Of(err)
 		if result.Outcome != reconciliation.OutcomeUnknown || len(reported) != 1 || reported[0].Code != "controller.unknown" ||
-			reported[0].Message != "the selected native clients are not installed after their transaction" || reported[0].Remediation != test.want {
+			reported[0].Message != "the selected host packages are not installed after their install" || reported[0].Remediation != test.want {
 			t.Fatalf("the installation left %s with %+v, want controller.unknown remedied %q", result.Outcome, reported, test.want)
 		}
 	}
