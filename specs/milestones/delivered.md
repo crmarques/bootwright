@@ -3978,8 +3978,8 @@ lists each listener's ports by source; and CI starts the race job on each push.
 
 **Constraints left behind:** [B276](m1.md#b276) and [B277](m1.md#b277) complete
 on D59's owner-accepted closing run; the Zsh cases of the completion harness are
-unrun on hosts without Zsh; D140 awaits the owner's review, as does the routing
-guidance's restoration; the narration that remains is [B98](backlog.md#b98)'s,
+unrun on hosts without Zsh; D140 awaited the owner's review until D148
+accepted it, and the routing guidance's restoration still awaits it; the narration that remains is [B98](backlog.md#b98)'s,
 and the unproved listener-socket release is [B323](backlog.md#b323)'s. Whether
 tracked text names the BMC firmware family in B305, B319 and B447 stays the
 owner's question (audit F033).
@@ -5197,3 +5197,48 @@ names the Go version, so the first CI run after X67 starts with a cold Go
 cache. govulncheck still lists GO-2026-5932, the unmaintained
 `golang.org/x/crypto/openpgp` package, as a module finding that no code calls
 and that has no fix; it does not fail the gate.
+
+### X83 — operation directories created concurrently
+
+**Owner:** Workspace, with State reconciliation. A defect fix of [M1](m1.md)
+(D116), made on the M2 branch on 2026-10-12 during the owner's M2b fixture
+run, which reached `main` in the M2 squash (a3cf8aeae) and is recorded on M1
+on 2026-10-14. **Integrated:** "fix(contextfs): reopen a directory a
+concurrent creator made first" (7afbc159c, on the M2 branch). **Items:** B506.
+**Decisions:** D116.
+
+**Outcome, B506:** the operation store creates `<id>`, `<id>/blocks` and
+`<id>/logs` up front; `logs/blocks`, each block's directory and, on a
+context's first operation, the `operations` subtree are created by the first
+write that needs them. Concurrent blocks (up to `MaxRunningBlocks`, 8) raced
+on that creation, and the losers' `EEXIST` was refused as a foreign entry.
+That surfaced as `runtime.log` "a required private operation log could not be
+maintained", cancelled the invocation inside the siblings' record
+publications and left their blocks unknown; the owner's 2026-10-12 destroy of
+a 13-block context hit it in its first wave of four. The lifecycle, bounded-run
+and SSH-trust operation areas now create each path component in one step that,
+on `EEXIST`, reopens the directory through exactly the checks an existing
+directory passes (no link, beneath the parent, same device, the parent's
+owner, mode 0700), so no check is weakened, and the loser syncs the parent
+itself before it continues. Deliberately exclusive creations (a run's
+directory, a setup run, a snapshot revision, bundle and client areas) still
+refuse `EEXIST`. The [concurrent block execution
+knowledge](../../.agents/knowledge/concurrent-block-execution.md) records the
+symptom.
+
+**Guard tests:** `TestConcurrentWritersShareTheDirectoriesTheyCreate` in
+`internal/workspace/contextfs` runs eight rounds of 16 writers behind one
+barrier on the real filesystem. It failed 50 of 50 runs before the fix and
+passed 200 race runs after it.
+
+**Gates:** on the M2 branch with the fix, as its commit records: `make quick`,
+`make docs-check` and `make race` passed, and `make check` stopped only at
+`make vulncheck` (B470). On `main` at 524cb367d on 2026-10-14: the test passes,
+and fails in every round with the fix reverted; `make quick`, `make race` and
+`make docs-check` pass. No real-host run.
+
+**Digest and version effects:** none; no record, request or plan digest
+moves. **Constraints left behind:** [B510](backlog.md#b510), parked: a writer
+whose plain open lands between a concurrent creator's creation and its parent
+sync proceeds without syncing the parent, and `selectionfs` skips the parent
+sync on `EEXIST`.
