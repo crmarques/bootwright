@@ -479,9 +479,7 @@ git diff --check
 
 `-k` runs independent gates even when another fails; the command still fails
 if any gate fails. A known reachable vulnerability on the pinned Go toolchain
-is not a pass. The owner has deferred the Go upgrade, so
-[B470](../specs/milestones/m1.md#b470) remains open until its vulnerability
-check can pass. This command installs no controller packages and runs no lab
+is not a pass. This command installs no controller packages and runs no lab
 effects.
 
 M1 also needs D59's extended [lab-rhel journey](../examples/lab-rhel/README.md#run-it)
@@ -530,8 +528,8 @@ leaves its observation unrun.
 
 Record command results, build commit, clean source stamp and operation-log
 digests following [record a run](#record-a-run); the human owner accepts the
-[ledger row](acceptance.md#row-format). These host gates, B466 and B470 remain requirements before the
-owner can declare M1 done.
+[ledger row](acceptance.md#row-format). These host gates, B466's among them,
+remain requirements before the owner can declare M1 done.
 
 ## Record a run
 

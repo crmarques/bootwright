@@ -1,6 +1,6 @@
 module github.com/crmarques/bootwright/tools
 
-go 1.26.8
+go 1.26.9
 
 tool (
 	golang.org/x/tools/cmd/goimports

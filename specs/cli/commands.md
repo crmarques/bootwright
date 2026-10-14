@@ -183,7 +183,7 @@ Bootwright
   Version            v0.4.0
   Commit             9f2c1d0e3b5a7c8d9e0f1a2b3c4d5e6f70819293
   Source             clean
-  Go                 go1.26.8
+  Go                 go1.26.9
   Target             linux/amd64
   Dependency bundle  sha256:<64 hexadecimal digits>
 ```

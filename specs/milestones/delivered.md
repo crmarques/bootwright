@@ -3761,7 +3761,7 @@ test, `./scripts/ansible-check --suite units` (264, 240 and 1618 passed) and
 `--suite lint`, `./scripts/check-commits` and `git diff --check` passed. `make
 check` stopped at `make vulncheck`: ten reachable go1.26.8 standard-library
 vulnerabilities, reported identically at `main`, which this slice did not
-introduce and [B470](m1.md#b470) records. D139 (2026-10-11) leaves that failure
+introduce and [B470](#x67--go-toolchain-vulnerability-gate) records. D139 (2026-10-11) leaves that failure
 to B470 alone, so the second pass stays delivered rather than blocked on it;
 the 2026-10-12 review fixes ran the full gates on a later head, which
 [X48](#x48--bounded-concurrent-execution)'s record gives. The sibling chart passed `helm lint`
@@ -3770,7 +3770,7 @@ on both values files, its schema parsed and `git diff --check`. No real-host run
 **Digest effects:** none. No request, record, plan or automation digest moves;
 only refusal texts and admission refusals change, so no context is stranded.
 
-**Constraints left behind:** [B470](m1.md#b470) holds `make vulncheck` alone,
+**Constraints left behind:** [B470](#x67--go-toolchain-vulnerability-gate) holds `make vulncheck` alone,
 on X67, and under D139 no item waits on it. The 2026-10-11 audit's F030 asked to
 put the second pass back on M1 as blocked; D139 settled it in favour of
 completion.
@@ -5166,3 +5166,34 @@ and, with no cause of its own, replaces the resolution's remedy by the log
 fault the boundary reports; the operation is then `unknown`, which that
 remedy no longer described. The next continuation of [B476](m2.md#b476)'s run
 is its live confirmation.
+
+### X67 — Go toolchain vulnerability gate
+
+**Owner:** Architecture. A defect slice of [M1](m1.md), planned by X46's
+second pass and blocked at the owner's request (D126) until the owner
+authorized go1.26.9 on 2026-10-14 (D147). **Items:** B470. **Decisions:**
+D126, D139, D147.
+
+**Outcome, B470:** Go moves from go1.26.8 to go1.26.9: `scripts/go` selects it
+and both modules' `go` directives name it, so CI's setup-go installs the same
+Go. go1.26.9 fixes the ten reachable standard-library vulnerabilities
+govulncheck had reported since X46's second pass (GO-2026-6603, 6604, 6605,
+6607, 6608, 6610, 6611, 6612, 6613 and 6617, in `net/http`, `net/textproto`,
+`crypto/tls` and `os`), so `make vulncheck`, and with it `make check`, passes
+again. The [version output](../cli/commands.md#version-output) example and the
+[build knowledge](../../.agents/knowledge/build-toolchain.md) move with it.
+Both modules' requirements are unchanged, and Go 1.27 stays parked
+([B273](backlog.md#b273)).
+
+**Gates:** on go1.26.9, every step of `make check` passes, `make vulncheck`
+reporting no reachable vulnerability; `./scripts/ansible-check` ran through a
+pipe, because the agent harness hands it non-blocking output. `make race`,
+`make docs-check` and `./scripts/check-commits` pass. No real-host run.
+
+**Digest and version effects:** none; no automation, content or plan digest
+and no request or record version moves, so a live context continues under a
+build that contains X67. **Constraints left behind:** setup-go's cache key
+names the Go version, so the first CI run after X67 starts with a cold Go
+cache. govulncheck still lists GO-2026-5932, the unmaintained
+`golang.org/x/crypto/openpgp` package, as a module finding that no code calls
+and that has no fix; it does not fail the gate.

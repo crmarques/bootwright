@@ -1,6 +1,6 @@
 # Build toolchain and version metadata
 
-The M1a gates use [scripts/go](../../scripts/go) to select exactly Go 1.26.8
+The M1a gates use [scripts/go](../../scripts/go) to select exactly Go 1.26.9
 through `GOTOOLCHAIN`. A module's `go` directive sets a minimum and a `toolchain`
 directive is a suggestion; neither alone fixes the toolchain used by every
 gate. Preserve the explicit selection when changing build tooling. The
@@ -45,7 +45,7 @@ tests do not qualify a release build pipeline. The
 [version output contract](../../specs/cli/commands.md#version-output) owns the
 required representation.
 
-Go 1.26.8's RSA/ECDSA key-generation APIs ignore their supplied `io.Reader`
+Go 1.26's RSA/ECDSA key-generation APIs ignore their supplied `io.Reader`
 unless the temporary `cryptocustomrand` compatibility setting is enabled; an
 erroring Reader therefore does not inject a failure into those operations.
 This was verified against the pinned toolchain sources and the
