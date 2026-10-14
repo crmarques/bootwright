@@ -148,9 +148,11 @@ itself, and the catalog pins none.
 
 Fedora 43 has run: the [acceptance ledger](acceptance.md#ledger) records setup
 and the controller stage on it. Fedora 44 is admitted but not yet run: its
-record was read from a Fedora 44 host and its libdnf5 5.4 inventory checked
-there unprivileged, but no ledger row records setup or the controller stage on
-it. RHEL 9.8 is admitted but not yet run. No ledger row records setup or the
+record was read from a Fedora 44 host, and its libdnf5 5.4 inventory, a
+resolve against its repositories and the presence check of the resolved roots
+ran there unprivileged (`BOOTWRIGHT_NATIVE_RESOLVE_QUALIFY=1`), but no ledger
+row records setup or the controller stage on it. RHEL 9.8 is admitted but not
+yet run. No ledger row records setup or the
 controller stage on it, so its native path has never executed: the DNF4 solver
 under the host's Python 3.9, its rpm database snapshot and the publisher key
 import that verifies package signatures.

@@ -5247,8 +5247,8 @@ sync on `EEXIST`.
 
 **Owner:** Controller setup. An enabling slice of [M1](m1.md), at the owner's
 request of 2026-10-14 (D149), after the owner's controller moved to Fedora 44
-and `setup` refused it with `controller.unsupported`. **Items:** B541.
-**Decisions:** D149.
+and `setup` refused it with `controller.unsupported`. **Items:** B541, and
+B547 as a follow-up of 2026-10-14. **Decisions:** D149.
 
 **Outcome, B541:** `setup`, `preflight controller` and the controller stage
 admit Fedora 44 on Linux/amd64 beside Fedora 43 and RHEL 9.8, and their
@@ -5270,7 +5270,26 @@ record when two share that shape; a launch refusal therefore never names
 another release to qualify within. [Development](../../docs/development.md#qualified-hosts-and-images)
 records the builds and what admitting another Fedora release takes.
 
-**Guard tests:** `TestTheCatalogAdmitsOnlyItsCompiledFoundations`,
+**Outcome, B547 (follow-up):** the first resolve against the Fedora 44
+repositories, run unprivileged on the owner's host through
+`TestNativeCurrentOSResolution`, refused with `controller.setup: the provided
+native package solver refused its isolated dependency operation`. Every
+baseline root was already installed there, and libdnf5 5.4.6.0 answers
+`add_rpm_install` of an installed package with a transaction entry whose action
+is `Reason Change`, which `solve5` refused as an unrequested action; the
+apply-side re-solve from the plan's own RPMs reports the same entry for an
+installed build. A reason change moves no file, so `solve5` now leaves it out
+of the plan, neither inbound nor outbound, and still refuses every other
+unrequested action. After the fix the same resolve passes (3 roots, 3 sources,
+0 changes, 46 s including the metadata stage) and `TestNativeCurrentOSInspection`
+finds the roots by name. The
+[knowledge page](../../.agents/knowledge/native-root-reason-change.md) records
+the symptom and how to read the helper's own refusal.
+
+**Guard tests:** `Dnf5Transaction` in the collection's
+`test_native_resolution.py` (a reason change is neither inbound nor outbound;
+other unrequested actions still refuse);
+`TestTheCatalogAdmitsOnlyItsCompiledFoundations`,
 `TestTheCompiledExecutionFoundationIsUnchanged` (Fedora 44's digest as
 admitted, Fedora 43's and RHEL 9.8's unchanged),
 `TestEveryCatalogFoundationFileHasOnePackage` (each record's builds belong to
@@ -5290,8 +5309,12 @@ vet, completion-test, `make vulncheck` (no reachable vulnerability) and
 pass, and the GCC-major test fails with that match removed. On the owner's
 Fedora 44 host, unprivileged, `TestTheResolverStagesTheQualifiedFoundation`
 runs and passes against every pinned file, and the collection's libdnf5 5.4.6
-snapshot, setup and inventory ran under the host's Python 3.14. Not run: a
-resolve against the Fedora 44 repositories, `setup`, the controller stage and
+snapshot, setup and inventory ran under the host's Python 3.14. The B547
+follow-up ran the resolve against the Fedora 44 repositories and the presence
+check of its roots there, unprivileged (`BOOTWRIGHT_NATIVE_RESOLVE_QUALIFY=1`,
+`BOOTWRIGHT_NATIVE_INSPECT_PLAN`), both passing after the fix, with
+`./scripts/ansible-check --suite units` (1859 passed) and `--suite lint`,
+`make quick` and `make docs-check`. Not run: `setup`, the controller stage and
 `make race`.
 
 **Digest and version effects:** Fedora 43's and RHEL 9.8's execution
@@ -5303,19 +5326,18 @@ changes its glibc and libgcc upstream versions, the update before which the
 has the host's operations complete or its contexts destroyed, then sets it up
 with a build that pins the new builds, as X84 does. **Constraints left behind:** Fedora 44
 awaits its first [acceptance ledger](../../docs/acceptance.md#ledger) run of
-setup and the controller stage; in-tree, only its offline libdnf5 5.4
-inventory ran on Fedora 44, not a resolve against its repositories or a
-package installation. [B542](backlog.md#b542), parked: a Fedora plan records
+setup and the controller stage; in-tree, its repository resolve and root
+presence ran on Fedora 44 unprivileged (B547), not a package installation. [B542](backlog.md#b542), parked: a Fedora plan records
 libdnf5's version without its first part.
 
 ### X85 — Machine commands across several machines
 
 **Owner:** Machine, with CLI. An out-of-sequence product slice, integrated on
 main as one commit at the owner's explicit request of 2026-10-14 (D150).
-**Items:** B543. **Decisions:** D150. **Integrated:** "feat(machine): run
+**Items:** B547. **Decisions:** D150. **Integrated:** "feat(machine): run
 start, stop, restart and exec on several machines".
 
-**Outcome, B543:** `--name` of `machine start`, `machine stop`, `machine restart`
+**Outcome, B547:** `--name` of `machine start`, `machine stop`, `machine restart`
 and `machine exec` is a comma-separated list under the
 [list rules](../cli.md#parsing-and-input-conventions), and the command applies
 to every listed Machine at once. One member after normalization behaves as

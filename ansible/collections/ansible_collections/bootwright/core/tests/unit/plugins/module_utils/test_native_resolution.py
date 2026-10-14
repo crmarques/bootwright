@@ -234,6 +234,129 @@ class NativeResolution(unittest.TestCase):
             )
 
 
+def package5(name, version="2", release="1", arch="x86_64"):
+    return SimpleNamespace(
+        get_name=lambda: name,
+        get_epoch=lambda: 0,
+        get_version=lambda: version,
+        get_release=lambda: release,
+        get_arch=lambda: arch,
+    )
+
+
+class Dnf5Transaction(unittest.TestCase):
+    """solve5 reads libdnf5's transaction: a root the host already holds comes
+    back as a reason change, which moves no file, so it is neither inbound nor
+    outbound; any other action outside install, upgrade, downgrade, replaced
+    and remove still refuses."""
+
+    ACTIONS = {
+        "Install": 1,
+        "Upgrade": 2,
+        "Downgrade": 3,
+        "Reinstall": 4,
+        "Remove": 5,
+        "Replaced": 6,
+        "Reason Change": 7,
+        "Switch": 8,
+    }
+
+    def solve(self, entries):
+        actions = self.ACTIONS
+        names = {code: name for name, code in actions.items()}
+        root = package5("podman")
+
+        class Transaction:
+            def get_problems(self):
+                return 0
+
+            def get_transaction_packages(self):
+                return [
+                    SimpleNamespace(
+                        get_action=lambda code=actions[kind]: code,
+                        get_package=lambda pkg=pkg: pkg,
+                    )
+                    for kind, pkg in entries
+                ]
+
+        class Goal:
+            def __init__(self, base):
+                pass
+
+            def add_rpm_install(self, pkg):
+                pass
+
+            def resolve(self):
+                return Transaction()
+
+        class Query:
+            def __init__(self, base):
+                pass
+
+            def filter_available(self):
+                pass
+
+            def filter_name(self, names):
+                pass
+
+            def __iter__(self):
+                return iter([root])
+
+        library = SimpleNamespace(
+            base=SimpleNamespace(Goal=Goal, GoalProblem_NO_PROBLEM=0),
+            rpm=SimpleNamespace(PackageQuery=Query, rpmvercmp=compare),
+            transaction=SimpleNamespace(
+                transaction_item_action_to_string=lambda code: names[code]
+            ),
+            conf=SimpleNamespace(
+                get_library_version=lambda: SimpleNamespace(major=5, minor=4, micro=6)
+            ),
+        )
+        seen = {}
+
+        def assemble(request, before, roots, inbound, outbound, five, cmp, version):
+            seen.update(roots=roots, inbound=inbound, outbound=outbound)
+            return {"assembled": True}
+
+        request = dict(
+            platform=dict(os="fedora", release="44", architecture="amd64"),
+            versions=dict(podman="latest"),
+            requirements=dict(
+                containerRuntime=True, libvirtClient=False, hypervisor=False, installerMedia=False
+            ),
+            repositories=[],
+        )
+        with patch.dict("sys.modules", libdnf5=library), patch.object(
+            native, "setup_dnf5", return_value=object()
+        ), patch.object(native, "inventory5", return_value=[]), patch.object(
+            native, "selected_roots", return_value=[("podman", "podman", "latest")]
+        ), patch.object(native, "choose", return_value=(root, [root])), patch.object(
+            native, "package_record", return_value={"source": {"sha256": "c" * 64}}
+        ), patch.object(native, "assemble", side_effect=assemble):
+            self.assertEqual(native.solve5(request, "/scratch"), {"assembled": True})
+        return root, seen
+
+    def test_an_installed_root_asked_for_again_moves_no_package(self):
+        root, seen = self.solve([("Reason Change", package5("podman"))])
+        self.assertEqual(seen["inbound"], [])
+        self.assertEqual(seen["outbound"], [])
+        self.assertEqual(seen["roots"], [("podman", "latest", root)])
+
+    def test_moves_are_inbound_and_replacements_outbound(self):
+        new, up, old = package5("lorax"), package5("podman", version="3"), package5("podman")
+        _, seen = self.solve(
+            [("Install", new), ("Upgrade", up), ("Replaced", old), ("Reason Change", package5("nmstate"))]
+        )
+        self.assertEqual(seen["inbound"], [new, up])
+        self.assertEqual(seen["outbound"], [native.identity(old, True)])
+
+    def test_any_other_action_refuses(self):
+        for kind in ("Reinstall", "Switch"):
+            with self.subTest(kind), self.assertRaises(ValueError) as refused:
+                self.solve([(kind, package5("podman"))])
+            self.assertEqual(str(refused.exception), "unrequested native transaction action")
+
+
 class Entrypoint(unittest.TestCase):
     """A refused operation writes exactly two lines and exits 1: its closed
     class, then its type and the first line of its text, bounded."""

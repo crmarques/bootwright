@@ -633,7 +633,8 @@ def solve5(request, scratch, local_sources=None, return_transaction=False):
             inbound.append(entry.get_package())
         elif action in ("replaced", "remove"):
             outbound.append(identity(entry.get_package(), True))
-        else:
+        elif action != "reason change":
+            # An installed root asked for again only changes its reason.
             raise ValueError("unrequested native transaction action")
     version = libdnf5.conf.get_library_version()
     plan = assemble(
