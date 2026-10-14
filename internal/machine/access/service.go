@@ -47,14 +47,22 @@ func (s Service) Rsh(ctx context.Context, request RshRequest) (*machine.SessionR
 	return s.open(ctx, request.ContextName, request.Name, request.SSH, nil)
 }
 
-// Exec runs one exact argument vector on the Machine and reports the status
-// that command exited with.
+// Exec runs one exact argument vector on each named Machine and reports the
+// status that command exited with.
 func (s Service) Exec(ctx context.Context, request ExecRequest) (*machine.SessionResult, error) {
 	if len(request.Command) == 0 {
 		return nil, failure("cli.usage", "a non-empty command argument vector is required",
 			"supply the command to run, after -- if it begins with a flag")
 	}
-	return s.open(ctx, request.ContextName, request.Name, request.SSH, request.Command)
+	names := memberNames(request.Names)
+	switch len(names) {
+	case 0:
+		return nil, failure("cli.usage", "no Machine name was supplied",
+			"name one or more with --name <machine>[,<machine>...]")
+	case 1:
+		return s.open(ctx, request.ContextName, names[0], request.SSH, request.Command)
+	}
+	return s.several(ctx, request.ContextName, names, request.SSH, request.Command)
 }
 
 func (s Service) open(ctx context.Context, contextName, name string, options machine.SSHOptions,

@@ -125,8 +125,8 @@ operands fail semantic validation after explicit-help precedence, as on other
 runnable commands. An explicit `help` path still requires exact subcommands.
 
 Scalar flags follow command-line order and the last occurrence wins, including
-the scalar comma-list flags `--clusters`, `--machines`, `--replace`, and
-`--stage`.
+the scalar comma-list flags `--clusters`, `--machines`, `--replace`, `--stage`,
+and the `--name` that names several Machines.
 Collection flags aggregate in command-line order only where this contract says
 they are repeatable. `validate -f` is repeatable. `--authorize` is repeatable
 and each occurrence may also contain commas. Supplying an empty required value
@@ -145,7 +145,8 @@ valid occurrences; enum and format validation otherwise applies to the final
 resolved scalar value under the last-occurrence-wins rule.
 
 `--clusters`, `--machines`, `--replace`, and `--stage` are comma-separated
-lists.
+lists, and so is the required `--name` of `machine start`, `machine stop`,
+`machine restart` and `machine exec`.
 Whitespace around a member is ignored, empty members are ignored, and duplicate
 members collapse to their first occurrence. Omission selects all eligible
 objects only where the command row says “default all.” Empty resolved lists
@@ -161,7 +162,12 @@ preserve these command-specific compatibility rules:
 - `machine trust --machines` treats an empty or comma-only value as omission,
   while an empty or comma-only `--replace` selects no replacement; and
 - a supplied `--stage` must resolve to at least one member, so a comma-only
-  value is a usage error, and every member must be a declared stage name.
+  value is a usage error, and every member must be a declared stage name; and
+- a supplied `--name` of `machine start`, `machine stop`, `machine restart`
+  and `machine exec` must likewise resolve to at least one member, so a
+  comma-only value is a usage error. `machine rsh` opens one interactive
+  session and keeps a single `--name`: a value containing a comma is a usage
+  error. `cluster rsh` and `cluster exec` keep their single cluster and node.
 
 A selector is applied only after the complete Environment-selected graph has
 been loaded, normalized, and validated. It filters presentation, checks,
@@ -814,6 +820,10 @@ as a private copy. Neither flag alters desired state or the managed identity
 Bootwright installs, and neither `--ssh-user-for-provisioned` nor
 `--ssh-ask-sudo-password` is consumed.
 
+Not yet met: a Machine whose `auth` is a `passwordRef` arm never tries an
+offered `--ssh-id-file` key ahead of its password; tracked as
+[B544](milestones/backlog.md#b544).
+
 The host key is proved before any credential is offered, from exactly one
 source in this order: the Machine's `access.ssh.knownHostsRef` `Secret`; for a
 Bootwright-installed Machine, the host key its
@@ -864,6 +874,47 @@ refusal there and exits `1`, and the child writes no start line to a terminal,
 so the supervisor cannot tell that refusal from a remote command's `1` and
 keeps it. Once the session
 opened, its status is the result even after an interrupt.
+
+`machine exec` accepts a comma-separated `--name` under the
+[list rules](#parsing-and-input-conventions); `machine rsh` names one Machine.
+One member after normalization is the session above, unchanged. Two or more
+members run the same argument vector on every Machine at once, each as its own
+session under the rules above, except where the rules below replace them.
+Canonical order is ascending bytewise Machine name, and it orders refusals,
+warnings and the sessions of the result.
+
+Every member is resolved in the context's effective graph, with its identity,
+before anything is lent, proved or opened. Unknown or excluded members fail
+`access.target` in one diagnostic naming each of them, and any other refusal is
+reported for the first refusing Machine in canonical order. A Machine whose
+resolved identity is the `password` arm fails `access.unavailable`: the client
+prompts for a password on the terminal, which concurrent sessions cannot share;
+the diagnostic names the `machine exec` of that Machine alone as the way, and
+an offered `--ssh-id-file` does not lift the refusal, because a password
+identity tells the client never to try a key; a borrowed `--ssh-user` account
+resolves to the operator identity and is not refused. One credential lend
+covers every session. Host keys are proved one Machine at a time in canonical order before any
+session opens, so an interactive first-use confirmation asks about one Machine
+at a time, and each recorded write re-reads the trust store before it writes.
+Any refusal exits `255`, opens no session and runs nothing. `--ssh-user` and
+`--ssh-id-file` apply to every Machine alike.
+
+Every session of several runs non-interactively: it has no standard input and
+its client is told never to prompt, so none can ask for a password, a
+passphrase or a host key. All sessions start together and run concurrently,
+with no bound. Each client's standard output and standard error reach
+Bootwright's own, line by line, each line prefixed `<machine>: `; a line is
+written whole, so lines of different sessions are interleaved but never mixed
+within a line. An unterminated final line is completed when its session ends,
+and a line that reaches 64 KiB without an end is written as a line of its own.
+
+After every session ended, each session that returned a nonzero status, in
+canonical order, writes one `access.exit` warning on standard error naming the
+Machine and the status; a client that could not start counts as status `255`
+and its warning says so. The invocation's status is the highest status any
+session returned, `0` only when all returned `0`. An interrupt after sessions
+opened signals each client as it does a single session, and the statuses that
+result stand and aggregate the same way.
 
 ### Cluster sessions
 
@@ -1001,6 +1052,46 @@ Machine to a power state. They are bounded operations, not desired state: they
 register no lifecycle operation, freeze no plan, and change no ownership,
 continuation, or frozen plan, so a machine an operator stopped is still a
 machine this context owns and will reconcile.
+
+`--name` is a comma-separated list under the
+[list rules](#parsing-and-input-conventions). One member after normalization
+is the single-Machine operation described below, unchanged. Two or more
+members run that same operation for every Machine concurrently as one batch,
+under the rules that follow; the sections below state the single-Machine
+operation, and each of the batch's runs is exactly it. Canonical order is
+ascending bytewise Machine name, and it orders refusals, progress positions,
+the confirmation's object list, the result rows, the logs and the diagnostics.
+
+Every member is resolved first, before anything is confirmed, lent or run.
+Unknown or excluded members fail `access.target` in one diagnostic naming each
+of them, and any other refusal of resolution is reported for the first
+refusing Machine in canonical order; no Machine then runs. Stopping and
+restarting ask the ordinary confirmation once for the whole batch, after every
+resolution and pin read, naming every Machine in canonical order, and a
+declined or unanswerable one refuses `machine.power` and runs nothing; the
+command that repeats it with `--yes` names the whole list.
+
+Each run keeps its own bounded runtime under the context's shared lock, its
+own [retained output](cli/output.md#bounded-run-output), its own pin check and
+its own request naming that one Machine. The runs execute concurrently, at most
+as the lifecycle engine's [bound on running blocks](state-reconciliation.md#stages-and-the-pause-boundary)
+allows, started in canonical order, inside one invocation scope so that the
+runs of one batch are each other's live siblings
+([security](security.md#process-boundary)); a run past the bound waits for a
+slot. One Machine's failure never cancels another run, and an interrupt or
+cancellation of the invocation cancels all of them. Each run is one progress
+step at its canonical position of the batch total. The batch reports no single
+log location: each Machine's result row names its own.
+
+Every Machine whose run was admitted has a result row, settled or not. The
+invocation exits `0` only when every Machine settled; otherwise it exits `1`
+with the diagnostics of every Machine that failed, a run that ended on its own
+deadline included, each naming its `Machine/<name>`, and still presents the
+rows.
+
+Not yet met: a batch of more than the 16 runs a context's runs area keeps can
+retire the retained output of its own earliest finished runs before its result
+names them; tracked as [B545](milestones/backlog.md#b545).
 
 Resolution follows explicit access: an unknown or excluded name fails
 `access.target`, and a Machine this executable cannot reach a management

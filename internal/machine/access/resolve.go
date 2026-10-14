@@ -58,6 +58,10 @@ func resolveIdentity(ctx context.Context, selected target, options machine.SSHOp
 	if err != nil {
 		return machine.Identity{}, "", err
 	}
+	return identityFor(selected, options, offered)
+}
+
+func identityFor(selected target, options machine.SSHOptions, offered string) (machine.Identity, string, error) {
 	identity := machine.Identity{User: selected.ssh.User, IdentityFile: offered}
 	borrowed := options.User != "" && options.User != selected.ssh.User
 	if borrowed {

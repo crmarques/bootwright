@@ -30,7 +30,7 @@ type Identity struct {
 
 // Session is one resolved SSH session: the exact endpoint, the identity that
 // opens it, the host key it pins, and the argument vector to run there. An
-// empty Command is an interactive session.
+// empty Command is an interactive session; a Batch client may never prompt.
 type Session struct {
 	Machine string
 	Address string
@@ -38,14 +38,17 @@ type Session struct {
 	Identity
 	HostKey trust.HostKey
 	Command []string
+	Batch   bool
 }
 
 // SessionResult is what an access command reports once the client has exited.
 // The exit status is the client's, so nothing here describes success: the
-// remote process already said what happened on its own streams.
+// remote process already said what happened on its own streams. Sessions holds
+// each Machine's result when one invocation ran several; ExitCode is the highest.
 type SessionResult struct {
 	Context  string
 	Machine  string
 	Address  string
 	ExitCode int
+	Sessions []SessionResult
 }

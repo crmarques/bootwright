@@ -472,11 +472,37 @@ func cliGoldens() []cliGolden {
 		}
 		return result
 	}
-	powered := func(verb, now, previous string, changed bool) *power.Result {
-		return &power.Result{
-			Context: "lab", Machine: "rhel-01", Verb: verb, Power: now, Previous: previous, Changed: changed,
-			LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + runID, Logs: []string{"contexts/lab/state/runs/" + runID + "/run.output"},
+	retainedBy := func(name string) (string, []string) {
+		id := runID
+		if name != "rhel-01" {
+			id = "run-0a1b2c3d4e5f60718293a4b5c6d7e8f9"
 		}
+		return "/var/lib/bootwright/contexts/lab/state/runs/" + id, []string{"contexts/lab/state/runs/" + id + "/run.output"}
+	}
+	powerRow := func(name, verb, now, previous string, changed bool) power.Result {
+		location, logs := retainedBy(name)
+		return power.Result{
+			Context: "lab", Machine: name, Verb: verb, Power: now, Previous: previous, Changed: changed,
+			LogLocation: location, Logs: logs,
+		}
+	}
+	powered := func(verb, now, previous string, changed bool) *power.Results {
+		return &power.Results{Context: "lab", Verb: verb, Machines: []power.Result{powerRow("rhel-01", verb, now, previous, changed)}}
+	}
+	poweredSeveral := func(r *dispatchRecord) {
+		r.result.power = &power.Results{Context: "lab", Verb: "stop", Machines: []power.Result{
+			powerRow("rhel-01", "stop", "off", "on", true), powerRow("rhel-02", "stop", "off", "off", false),
+		}}
+	}
+	failedSeveral := func(r *dispatchRecord) {
+		location, logs := retainedBy("rhel-02")
+		unsettled := power.Result{Machine: "rhel-02", LogLocation: location, Logs: logs}
+		r.result.power = &power.Results{Context: "lab", Verb: "stop", Machines: []power.Result{powerRow("rhel-01", "stop", "off", "on", true), unsettled}}
+		r.err = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+			Severity: "error", Code: "lifecycle.state", Message: "the adapter operation did not complete",
+			Remediation: "read the adapter output retained in this run's run.output",
+			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: "rhel-02"},
+		}}}
 	}
 	// A run whose adapter refuses proves no power state: the service returns
 	// only where its output was retained, beside the runner's own refusal
@@ -484,9 +510,10 @@ func cliGoldens() []cliGolden {
 	// points at the file the run's request names
 	// (internal/reconciliation/lifecycle/runtime.go).
 	refusedRun := func(r *dispatchRecord) {
-		r.result.power = &power.Result{
+		r.result.power = &power.Results{Context: "lab", Verb: "stop", Machines: []power.Result{{
+			Machine:     "rhel-01",
 			LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + runID, Logs: []string{"contexts/lab/state/runs/" + runID + "/run.output"},
-		}
+		}}}
 		r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the adapter operation did not complete", "", "read the adapter output retained in this run's run.output")
 	}
 	trusted := func() *enrollment.Report {
@@ -895,6 +922,11 @@ func cliGoldens() []cliGolden {
 			stderr: "[FAIL] lifecycle.state: the adapter operation did not complete; next: read the adapter output retained in this run's run.output\n",
 		},
 		{golden: "cli-machine-stop-refused-json", args: "machine stop --name rhel-01 --yes --output json", code: 1, record: refusedRun},
+		{golden: "cli-machine-stop-several", args: "machine stop --name rhel-02,rhel-01 --yes", record: poweredSeveral},
+		{golden: "cli-machine-stop-several-json", args: "machine stop --name rhel-01,rhel-02 --yes --output json", record: poweredSeveral},
+		{golden: "cli-machine-stop-several-failed", args: "machine stop --name rhel-01,rhel-02 --yes", code: 1, record: failedSeveral,
+			stderr: "[FAIL] lifecycle.state: the adapter operation did not complete [Machine/rhel-02]; next: read the adapter output retained in this run's run.output\n"},
+		{golden: "cli-machine-stop-several-failed-json", args: "machine stop --name rhel-01,rhel-02 --yes --output json", code: 1, record: failedSeveral},
 		{golden: "cli-machine-trust", args: "machine trust --replace db-01 --yes", record: func(r *dispatchRecord) { r.result.trust = trusted() }},
 		{golden: "cli-machine-trust-json", args: "machine trust --replace db-01 --yes --output json", record: func(r *dispatchRecord) { r.result.trust = trusted() }},
 

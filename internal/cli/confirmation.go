@@ -136,6 +136,10 @@ func confirmationIn(action, object, contextName string) confirmation {
 		verb := strings.TrimSuffix(action, " machine")
 		return confirmation{code: "machine.power", label: "power", review: "it", scope: contextName,
 			prompt: "Confirm " + verb + " of machine " + shown + "? [y/N] "}
+	case "stop machines", "restart machines", "force stop machines", "force restart machines":
+		verb := strings.TrimSuffix(action, " machines")
+		return confirmation{code: "machine.power", label: "power", review: "it", scope: contextName,
+			prompt: "Confirm " + verb + " of machines " + shown + "? [y/N] "}
 	}
 	return confirmation{code: "context.state", label: "context", review: "it", scope: contextName,
 		prompt: "Confirm " + escapeDisplayLine(action) + " of " + shown + "? [y/N] "}

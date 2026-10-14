@@ -117,7 +117,7 @@ func TestLabRHELInstalledGuestSessionDialsTheInstallAddress(t *testing.T) {
 		Evidence: labSessionProof{evidence: machine.HostKeyEvidence{Address: request.Address, HostKey: proved}},
 		Launcher: client,
 	})
-	result, err := service.Exec(context.Background(), machineaccess.ExecRequest{ContextName: "lab-rhel", Name: "rhel-01", Command: []string{"true"}})
+	result, err := service.Exec(context.Background(), machineaccess.ExecRequest{ContextName: "lab-rhel", Names: []string{"rhel-01"}, Command: []string{"true"}})
 	if err != nil {
 		t.Fatal(err)
 	}

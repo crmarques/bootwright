@@ -19,6 +19,7 @@ output.
 | Completion script | exact script with its required final LF | empty | `0` |
 | Access handoff | one bounded, escaped descriptor followed by one LF | ordered diagnostics only | `0` or `1` |
 | [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status, even after an interrupt; `255` for a Bootwright refusal before the session opens |
+| [Several SSH sessions](../cli.md#machine-ssh-sessions) | each session's standard output as whole lines prefixed `<machine>: ` | Bootwright diagnostics and the host-key confirmations before any connection, then each session's standard error as whole lines prefixed the same way, then one `access.exit` warning for each nonzero status | the highest status any session returned, even after an interrupt; `255` for a Bootwright refusal before any session opens |
 | Interrupt-driven cancellation | as required by the selected structured mode | as required by that mode | `130` |
 
 An operating-system interrupt reports `runtime.interrupted` and exits `130` for
@@ -64,7 +65,8 @@ blocks against the frozen total and continues to display completed blocks so the
 resume boundary is explicit. Human wording may evolve, but status meaning,
 group membership, order, safe target identity, and next action remain stable.
 An [SSH session](../cli.md#machine-ssh-sessions) presents no status token of its
-own: what its streams carry is the remote process's.
+own: what its streams carry is the remote process's, and several sessions add
+only the `[WARN]` of each `access.exit` warning.
 
 ### Shared human layout
 
@@ -287,7 +289,7 @@ Successful result objects have stable top-level fields:
 | `render storage` | `clusters` |
 | `machine list` | `context`, `machines`, `powerRead` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
-| `machine start`, `machine stop`, `machine restart` | `context`, `machine`, `verb`, `power`, `previous`, `changed` |
+| `machine start`, `machine stop`, `machine restart` | `context`, `verb`, `machines` |
 | `cluster list` | `context`, `clusters` |
 | `cluster info` | `context`, `clusters`, `storage` |
 
@@ -390,10 +392,28 @@ The human table shows the same columns, `NAME`, `CONTACT`, `ADDRESSES`, `OS`,
 `PROVIDER`, `CLUSTERS`, `LIFECYCLE` and, only when a reading was taken,
 `POWER`, with `-` for an absent value.
 
-`machine start`, `machine stop` and `machine restart` report `power`, the `on`
-or `off` state the management controller proved after the verb; `previous`, the
-state it reported before the verb, omitted when it reported none; and
-`changed`, whether the verb changed it.
+`machine start`, `machine stop` and `machine restart` report `context`, `verb`
+and `machines`, whatever the number of Machines `--name` lists. `machines` holds
+one row for each Machine whose run was admitted, in ascending bytewise Machine
+name order, each with `machine`, its name; `power`, the `on` or `off` state the
+management controller proved after the verb, omitted for a Machine whose run
+did not settle; `previous`, the state it reported before the verb, omitted when
+it reported none; `changed`, whether the verb changed it, `false` for a row
+that did not settle; and `logs`, an array of the safe paths, relative to the
+state root, of that run's retained output, in the form the envelope's
+[`logs`](#private-operation-logs) uses. Envelope `logs` lists every row's files
+in row order. When any Machine did not settle and the request named several,
+the envelope has `ok` `false` and `exitCode` `1` and still carries the rows of
+every admitted Machine, with the diagnostics of each failed Machine in row
+order, each with the object `Machine/<name>`. A refusal before any run is
+admitted, and the failure of a request that named one Machine, carry
+diagnostics alone, with `result` `null`. The human result of several Machines is
+a headline, `[OK]` when any changed and `[SKIPPED]` when none changed, and a
+table with the columns `MACHINE`, `POWER`, `PREVIOUS` and `LOGS`, where `LOGS`
+is the run's directory and `-` stands for an absent value. When any Machine did
+not settle the headline is `[FAIL]`, the table is still written to standard
+output and the diagnostics go to standard error. One Machine's human result is
+unchanged.
 
 ### Media results
 
@@ -755,6 +775,7 @@ it to a variable.
 | `access.target` | Explicit access cannot resolve one exact authorized target. |
 | `access.handoff` | An explicit access descriptor cannot be safely resolved or encoded. |
 | `access.credential` | A Machine's SSH access names a password credential the operator reveals and types; written before the connection. |
+| `access.exit` | One of several concurrent SSH sessions returned a nonzero status, or its client could not start (status `255`); a warning written after every session ended, naming the Machine and the status. |
 | `cluster.not-applicable` | A cluster command does not apply to the selected cluster's kind. |
 | `machine.power` | A power transition was refused before it ran, or its confirmation could not be answered. |
 
@@ -904,8 +925,11 @@ reports no progress, so a run that fails once the controller admits its private
 Python runtime, which is where human output first names the directory, names
 the file in its failure envelope: `result` is `null` and `logs` lists the file
 beside the diagnostic, whether the adapter refused or the run was interrupted,
-canceled or past its deadline. A run that fails before that admission lists
-none, as its human output names no directory, and keeps none: the file is
+canceled or past its deadline. A batch of several Machines whose runs failed
+with diagnostics keeps the [result](#machine-results) of the runs it admitted
+beside them, but one interrupted, canceled or past its deadline has a `null`
+`result` and lists every admitted run's file. A run that fails before that
+admission lists none, as its human output names no directory, and keeps none: the file is
 created only once the runtime is admitted, so a refused admission, such as a
 native package transaction holding its lock, or an interrupt, cancellation or
 deadline that lands first leaves no unnamed file behind. A run whose directory

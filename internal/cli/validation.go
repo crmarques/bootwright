@@ -128,8 +128,30 @@ func validateSharedFlags(command *cobra.Command, path string) string {
 	return ""
 }
 
+func validateMachineNames(flags *pflag.FlagSet, path string) string {
+	raw := stringValue(flags, "name")
+	if path == "machine rsh" {
+		if strings.Contains(raw, ",") {
+			return "machine rsh opens one interactive session; name one machine"
+		}
+		return ""
+	}
+	names := normalizeNames(raw)
+	if len(names) == 0 {
+		return "--name must name at least one machine"
+	}
+	normalizeScalar(flags, "name", strings.Join(names, ","))
+	return ""
+}
+
 func validateCommandFlags(command *cobra.Command, path string) string {
 	flags := command.Flags()
+	switch path {
+	case "machine rsh", "machine exec", "machine start", "machine stop", "machine restart":
+		if message := validateMachineNames(flags, path); message != "" {
+			return message
+		}
+	}
 	switch path {
 	case "context init", "context update":
 		if len(arrayValue(flags, "file")) > 1 {

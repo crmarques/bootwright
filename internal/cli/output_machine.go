@@ -7,7 +7,6 @@ import (
 
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
-	"github.com/crmarques/bootwright/internal/machine/power"
 )
 
 type machineListPresentation struct {
@@ -30,17 +29,7 @@ type machineRowPresentation struct {
 	Power     string   `json:"power,omitempty"`
 }
 
-type machinePowerPresentation struct {
-	Context  string `json:"context"`
-	Machine  string `json:"machine"`
-	Verb     string `json:"verb"`
-	Power    string `json:"power"`
-	Previous string `json:"previous,omitempty"`
-	Changed  bool   `json:"changed"`
-}
-
-func (machineListPresentation) documentedResult()  {}
-func (machinePowerPresentation) documentedResult() {}
+func (machineListPresentation) documentedResult() {}
 
 // A row is presentable when it names the Machine and where this context's own
 // operations left it. A power reading is the controller's answer, so an empty
@@ -119,42 +108,4 @@ func displayMachineList(result *inventory.ListResult) machineListPresentation {
 	return machineListPresentation{
 		Context: escapeDisplayLine(result.Context), Machines: rows, PowerRead: result.PowerRead,
 	}
-}
-
-func validMachinePower(result *power.Result) bool {
-	if result == nil || result.Machine == "" || result.Verb == "" {
-		return false
-	}
-	return result.Power == machine.PowerOn || result.Power == machine.PowerOff
-}
-
-func writeMachinePower(out io.Writer, command string, result *power.Result, jsonMode bool) error {
-	if jsonMode {
-		return writeEnvelope(out, commandEnvelope{
-			SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
-			Result: machinePowerPresentation{
-				Context: escapeDisplayLine(result.Context), Machine: escapeDisplayLine(result.Machine),
-				Verb: escapeDisplayLine(result.Verb), Power: escapeDisplayLine(result.Power),
-				Previous: escapeDisplayLine(result.Previous), Changed: result.Changed,
-			},
-			Diagnostics: []diagnostic{}, Logs: displayLines(result.Logs),
-		})
-	}
-	var text display
-	status, headline := "OK", "Machine is "+result.Power
-	if !result.Changed {
-		status = "SKIPPED"
-	}
-	text.headline(status, headline)
-	text.section("")
-	fields := []field{
-		{Label: "Machine", Value: result.Machine},
-		{Label: "Power", Value: result.Power},
-		{Label: "Previous", Value: displayValue(result.Previous)},
-	}
-	if result.LogLocation != "" {
-		fields = append(fields, field{Label: logLocationLabel, Value: result.LogLocation})
-	}
-	text.fields(fields...)
-	return text.writeTo(out)
 }

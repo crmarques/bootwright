@@ -2,6 +2,7 @@ package power
 
 import (
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -24,11 +25,10 @@ func requestFor(catalog api.Catalog, contextName, name, verb string, force bool,
 	if !slices.Contains([]string{Start, Stop, Restart}, verb) {
 		return Request{}, false, failure("lifecycle.state", "unsupported power verb", "")
 	}
-	object, ok := catalog.Find(api.Machine, name)
-	if !ok {
-		return Request{}, false, failure("access.target", "the selected context declares no Machine named "+name,
-			"list the Machines this context selects with bootwright machine list --context "+contextName)
+	if err := undeclared(catalog, contextName, []string{name}); err != nil {
+		return Request{}, false, err
 	}
+	object, _ := catalog.Find(api.Machine, name)
 	controllerMachine, err := lifecycle.ControllerMachine(catalog)
 	if err != nil {
 		return Request{}, false, err
@@ -42,6 +42,24 @@ func requestFor(catalog api.Catalog, contextName, name, verb string, force bool,
 		Identity:  Identity{Context: contextName, Object: object.Name()},
 		Placement: placement, Verb: verb, Version: Implementation,
 	}, physical, nil
+}
+
+// undeclared refuses every name the context declares no Machine for at once.
+func undeclared(catalog api.Catalog, contextName string, names []string) error {
+	var missing []string
+	for _, name := range names {
+		if _, ok := catalog.Find(api.Machine, name); !ok {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	message := "the selected context declares no Machine named " + missing[0]
+	if len(missing) > 1 {
+		message = "the selected context declares no Machines named " + strings.Join(missing, ", ")
+	}
+	return failure("access.target", message, "list the Machines this context selects with bootwright machine list --context "+contextName)
 }
 
 // controllerFor resolves the endpoint this Machine is managed through, the

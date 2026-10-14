@@ -119,6 +119,14 @@ func displayNames(values []string) []string {
 func displayDiagnostics(values []diagnostic) []diagnostic {
 	values = append([]diagnostic{}, values...)
 	diagnostics.Sort(values)
+	return escapeDiagnostics(values)
+}
+
+func displayDiagnosticsInOrder(values []diagnostic) []diagnostic {
+	return escapeDiagnostics(append([]diagnostic{}, values...))
+}
+
+func escapeDiagnostics(values []diagnostic) []diagnostic {
 	for i, d := range values {
 		d.Severity = escapeDisplayLine(d.Severity)
 		d.Code = escapeDisplayLine(d.Code)

@@ -184,9 +184,13 @@ func TestMachineListRefusesToPresentAnIncompleteRow(t *testing.T) {
 	}
 }
 
+func batchOf(rows ...power.Result) *power.Results {
+	return &power.Results{Context: "lab", Verb: "stop", Machines: rows}
+}
+
 func TestPowerResultReportsTheProvedStateAndWhetherItChanged(t *testing.T) {
 	var out bytes.Buffer
-	result := &power.Result{Context: "lab", Machine: "guest", Verb: "stop", Power: "off", Previous: "on", Changed: true}
+	result := batchOf(power.Result{Context: "lab", Machine: "guest", Verb: "stop", Power: "off", Previous: "on", Changed: true})
 	if err := writeMachinePower(&out, "machine stop", result, false); err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +198,7 @@ func TestPowerResultReportsTheProvedStateAndWhetherItChanged(t *testing.T) {
 		t.Fatalf("human output = %q", out.String())
 	}
 	var settled bytes.Buffer
-	unchanged := &power.Result{Context: "lab", Machine: "guest", Verb: "stop", Power: "off", Previous: "off"}
+	unchanged := batchOf(power.Result{Context: "lab", Machine: "guest", Verb: "stop", Power: "off", Previous: "off"})
 	if err := writeMachinePower(&settled, "machine stop", unchanged, false); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +210,7 @@ func TestPowerResultReportsTheProvedStateAndWhetherItChanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := `{"schemaVersion":"v1alpha1","command":"machine stop","ok":true,"exitCode":0,` +
-		`"result":{"context":"lab","machine":"guest","verb":"stop","power":"off","previous":"on","changed":true},` +
+		`"result":{"context":"lab","verb":"stop","machines":[{"machine":"guest","power":"off","previous":"on","changed":true,"logs":[]}]},` +
 		`"diagnostics":[],"logs":[]}` + "\n"
 	if encoded.String() != want {
 		t.Fatalf("JSON = %q, want %q", encoded.String(), want)
@@ -220,11 +224,11 @@ func TestMachinePowerJSONOmitsAnUnreportedPrevious(t *testing.T) {
 		previous string
 		want     string
 	}{
-		{previous: "", want: `"power":"off","changed":true`},
-		{previous: "on", want: `"power":"off","previous":"on","changed":true`},
+		{previous: "", want: `"power":"off","changed":true,"logs":[]`},
+		{previous: "on", want: `"power":"off","previous":"on","changed":true,"logs":[]`},
 	} {
 		var out bytes.Buffer
-		result := &power.Result{Context: "lab", Machine: "guest", Verb: "stop", Power: "off", Previous: test.previous, Changed: true}
+		result := batchOf(power.Result{Context: "lab", Machine: "guest", Verb: "stop", Power: "off", Previous: test.previous, Changed: true})
 		if err := writeMachinePower(&out, "machine stop", result, true); err != nil {
 			t.Fatal(err)
 		}
@@ -239,11 +243,11 @@ func TestMachinePowerJSONOmitsAnUnreportedPrevious(t *testing.T) {
 // the path inside the context's state in JSON.
 func TestPowerResultNamesWhereItsAdapterOutputWasRetained(t *testing.T) {
 	var out bytes.Buffer
-	result := &power.Result{
+	result := batchOf(power.Result{
 		Context: "lab", Machine: "guest", Verb: "stop", Power: "off", Previous: "on", Changed: true,
 		LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/run-abc",
 		Logs:        []string{"run-abc/run.output"},
-	}
+	})
 	if err := writeMachinePower(&out, "machine stop", result, false); err != nil {
 		t.Fatal(err)
 	}
@@ -280,10 +284,10 @@ func TestMachineListAndPowerTextEscapeOnce(t *testing.T) {
 	if len(lines) != 2 || !slices.Equal(strings.Fields(lines[1]), want) {
 		t.Fatalf("machine list = %q, want the row %q", list.String(), want)
 	}
-	result := &power.Result{
+	result := batchOf(power.Result{
 		Context: "lab", Machine: raw("machine"), Verb: "stop", Power: raw("power"), Previous: raw("previous"),
 		Changed: true, LogLocation: raw("location"),
-	}
+	})
 	var text bytes.Buffer
 	if err := writeMachinePower(&text, "machine stop", result, false); err != nil {
 		t.Fatal(err)
@@ -303,8 +307,17 @@ func TestMachineListAndPowerTextEscapeOnce(t *testing.T) {
 }
 
 func TestPowerRefusesToPresentAStateItCannotName(t *testing.T) {
-	if validMachinePower(nil) || validMachinePower(&power.Result{Machine: "guest", Verb: "stop", Power: "paused"}) {
+	if validMachinePower(nil, false) || validMachinePower(batchOf(power.Result{Machine: "guest", Power: "paused"}), false) {
 		t.Fatal("an unreportable power state was presented")
+	}
+	if validMachinePower(batchOf(power.Result{Machine: "guest", Power: "off"}, power.Result{Machine: "other"}), false) {
+		t.Fatal("an unsettled row was presented as a success")
+	}
+	if !validMachinePower(batchOf(power.Result{Machine: "guest", Power: "off"}, power.Result{Machine: "other"}), true) {
+		t.Fatal("an unsettled row was refused beside the failure that explains it")
+	}
+	if validMachinePower(&power.Results{Context: "lab", Verb: "stop"}, true) {
+		t.Fatal("a batch with no admitted row was presented")
 	}
 }
 
@@ -329,7 +342,7 @@ func TestAFailedPowerRunNamesItsOutputInEveryFailureEnvelope(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var cancel context.CancelCauseFunc
 			record := &dispatchRecord{err: test.err}
-			record.result.power = &power.Result{LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/run-abc", Logs: []string{retained}}
+			record.result.power = batchOf(power.Result{Machine: "guest", LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/run-abc", Logs: []string{retained}})
 			if test.interrupt {
 				record.afterCall = func() { cancel(ErrInterrupted) }
 			}

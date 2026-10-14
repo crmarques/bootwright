@@ -5,10 +5,10 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-// PowerRequest is what one invocation asks for.
+// PowerRequest is what one invocation asks for, for each of Names.
 type PowerRequest struct {
 	ContextName      string
-	Name             string
+	Names            []string
 	Verb             string
 	Force            bool
 	SkipConfirmation bool
@@ -51,8 +51,8 @@ type Request struct {
 
 // Result is what the operation proved. Power is the state the controller
 // reported after the operation settled, never the state it was asked for. A
-// run that fails once its runtime is lent proves nothing, so it returns,
-// beside its error, a Result naming only where its adapter output is retained.
+// run that fails once its runtime is lent proves nothing, so its row names only
+// its Machine and where its adapter output is retained.
 type Result struct {
 	Context  string
 	Machine  string
@@ -65,6 +65,13 @@ type Result struct {
 	// They are troubleshooting material, never evidence of what happened.
 	LogLocation string
 	Logs        []string
+}
+
+// Results holds a row per admitted Machine, in ascending name order.
+type Results struct {
+	Context  string
+	Verb     string
+	Machines []Result
 }
 
 // Canonical encodes the request exactly as the adapter consumes it, refusing

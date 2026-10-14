@@ -5,11 +5,18 @@
   "exitCode": 0,
   "result": {
     "context": "lab",
-    "machine": "rhel-01",
     "verb": "start",
-    "power": "on",
-    "previous": "off",
-    "changed": true
+    "machines": [
+      {
+        "machine": "rhel-01",
+        "power": "on",
+        "previous": "off",
+        "changed": true,
+        "logs": [
+          "contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a/run.output"
+        ]
+      }
+    ]
   },
   "diagnostics": [],
   "logs": [

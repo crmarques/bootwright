@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -64,7 +65,13 @@ func catalog() api.Catalog {
 		"os", m("provided", true), "network", network,
 		"access", m("ssh", m("addressRef", "ssh", "user", "admin", "auth", m("passwordRef", "admin-password")))))
 	local := object(api.Machine, "controller", m("os", m("provided", true), "access", m("local", true)))
-	return api.NewCatalog([]api.Object{host, guest, declared, secured, local})
+	peer := object(api.Machine, "peer", m(
+		"os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.11/24"))),
+		"access", m("ssh", m("addressRef", "ssh", "user", "operator", "auth", m("operatorIdentity", m())))))
+	keyed := object(api.Machine, "keyed", m(
+		"os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.12/24"))),
+		"access", m("ssh", m("addressRef", "ssh", "user", "admin", "auth", m("privateKeyRef", "admin-key")))))
+	return api.NewCatalog([]api.Object{host, guest, declared, secured, local, peer, keyed})
 }
 
 func code(t *testing.T, err error) string {
@@ -87,10 +94,12 @@ func (stateSource) RenderEffective(context.Context, compilation.EffectiveRequest
 type lender struct {
 	requested []string
 	material  map[string]secrets.Material
+	lends     int
 }
 
 func (l *lender) WithMaterial(ctx context.Context, request lifecycle.MaterialRequest,
 	use func(context.Context, map[string]secrets.Material) error) error {
+	l.lends++
 	l.requested = append([]string(nil), request.Secrets...)
 	opened := map[string]secrets.Material{}
 	for _, name := range request.Secrets {
@@ -171,24 +180,40 @@ func (p *prompt) ConfirmHostKey(_ context.Context, contextName, name, address, k
 }
 
 type client struct {
+	mu       sync.Mutex
 	sessions []machine.Session
 	// keys copies what each session carried while it ran. The material is
 	// cleared as soon as the session ends, so a test that read the session
 	// afterwards would be reading the zeroing rather than the credential.
 	keys    []string
+	inputs  []io.Reader
+	outputs [][2]io.Writer
 	code    int
 	err     error
 	offered string
 	idErr   error
+	proofs  int
+	// run, when set, answers each session in place of code and err. It is
+	// called concurrently and outside the lock.
+	run func(machine.Session, io.Writer, io.Writer) (int, error)
 }
 
-func (c *client) Run(_ context.Context, session machine.Session, _ io.Reader, _, _ io.Writer) (int, error) {
+func (c *client) Run(_ context.Context, session machine.Session, in io.Reader, out, errOut io.Writer) (int, error) {
+	c.mu.Lock()
 	c.sessions = append(c.sessions, session)
 	c.keys = append(c.keys, string(session.PrivateKey))
+	c.inputs = append(c.inputs, in)
+	c.outputs = append(c.outputs, [2]io.Writer{out, errOut})
+	run := c.run
+	c.mu.Unlock()
+	if run != nil {
+		return run(session, out, errOut)
+	}
 	return c.code, c.err
 }
 
 func (c *client) IdentityFile(_ context.Context, path string) (string, error) {
+	c.proofs++
 	if c.idErr != nil {
 		return "", c.idErr
 	}
@@ -249,7 +274,7 @@ func newHarness(t *testing.T, adjust func(*Options)) *harness {
 
 func exec(t *testing.T, h *harness, name string, options machine.SSHOptions, words ...string) (*machine.SessionResult, error) {
 	t.Helper()
-	return h.service.Exec(context.Background(), ExecRequest{Name: name, SSH: options, Command: words})
+	return h.service.Exec(context.Background(), ExecRequest{Names: []string{name}, SSH: options, Command: words})
 }
 
 // An installed Machine resolves the account and credential its desired state
@@ -439,7 +464,7 @@ func TestAnUnusableOfferedKeyRefusesBeforeAnythingIsOpened(t *testing.T) {
 
 func TestAnUnreachableTargetNeverOpensASession(t *testing.T) {
 	for _, test := range []struct{ name, object, want string }{
-		{"unnamed", "", "access.target"},
+		{"unnamed", "", "cli.usage"},
 		{"outside the selected graph", "absent", "access.target"},
 		{"reached locally", "controller", "access.unavailable"},
 	} {

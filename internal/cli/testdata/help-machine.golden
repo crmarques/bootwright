@@ -6,10 +6,10 @@ Usage:
 Available Commands:
   exec        Run a command over SSH as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status
   list        List machines and the lifecycle position each has reached
-  restart     Restart one machine through its management controller
+  restart     Restart machines through their management controllers
   rsh         Open an SSH session as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status
-  start       Power one machine on through its management controller
-  stop        Shut one machine down through its management controller
+  start       Power machines on through their management controllers
+  stop        Shut machines down through their management controllers
   trust       Inspect and maintain exact host-key trust
 
 Global Flags:

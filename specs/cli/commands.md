@@ -103,11 +103,11 @@ The three `media` commands follow the host-wide
 | --- | --- | --- | --- |
 | `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--silent` false; `--output text\|json` default `text` | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their controller-reported power with `--power-status`, or sorted names with `--silent` | read local state; with `--power-status`, read each machine's power through its management controller |
 | `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |
-| `bootwright machine exec` | required `--name <machine>` and `<command>...` | the exact argument vector runs on the Machine; the remote command's exit status is the result | same |
+| `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine at once with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
 | `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false; `--output text\|json` default `text` | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
-| `bootwright machine start` | required `--name <machine>`; `--output text\|json` default `text` | the power state the Machine's management controller proved once the operation settled | bounded power operation through that controller |
-| `bootwright machine stop` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after the operating system is asked to shut down | same |
-| `bootwright machine restart` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after a proved stop and a proved start | same |
+| `bootwright machine start` | required `--name <list>`; `--output text\|json` default `text` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
+| `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after the operating system is asked to shut down | same |
+| `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after a proved stop and a proved start | same |
 | `bootwright setup` | `--dry-run` false; `--yes` false; `--purge-old-bundles` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys), and with `--purge-old-bundles` the [superseded bundles it retired](../controller.md#supported-host-and-dependency-selection) | bounded dependency acquisition over the [context-free route](../controller.md#the-context-free-acquisition-route) and local installation; dry-run only previews; retirement removes only superseded execution bundles, after the setup completes or, [at the bound](../controller.md#supported-host-and-dependency-selection), before it publishes; a setup left pending, at the bound or below it, that never took effect and that this executable cannot resume is first [canceled](../controller.md#publication-and-interrupted-setup) |
 | `bootwright cluster list` | `--output text\|json` default `text` | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <cluster>` default all unless `--secrets`; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
@@ -167,6 +167,10 @@ for a cluster the resolved node's, as its resolved identity, that an unproved
 host key is confirmed interactively or refused, and that the exit status is the
 client's. The cluster commands also state how `--node` selects: by node name,
 then by FQDN, defaulting to the first node in name order.
+
+The detailed help of `machine start`, `machine stop`, `machine restart` and
+`machine exec` states that `--name` takes a comma-separated list and that the
+command applies to every listed Machine at once.
 
 Help and completion use the static catalog; they never load a selected cluster
 to hide or enable commands. Target-aware discovery belongs to `cluster info`.
@@ -328,9 +332,12 @@ conflict is `cli.usage` with exit `2` and the normal JSON failure envelope;
 `--silent=false` permits both. These relationships use final scalar values and
 follow explicit-help precedence.
 
-`machine start`, `machine stop` and `machine restart` each resolve one exact
-Machine and converge it to the power state their name means, through
-[the Machine's own management controller](../substrates.md#identity-and-power-operations).
+`machine start`, `machine stop` and `machine restart` each resolve every exact
+Machine `--name` lists, and converge each to the power state their name means,
+through [the Machine's own management controller](../substrates.md#identity-and-power-operations).
+`--name` of these three and of `machine exec` is a comma-separated list under
+the [list rules](../cli.md#parsing-and-input-conventions); `machine rsh` takes
+one Machine.
 `--force` cuts the power instead of asking the operating system to shut down,
 and is accepted only by `stop` and `restart`, which interrupt a running system;
 those two also take the ordinary confirmation, while `start` interrupts nothing

@@ -64,7 +64,7 @@ func TestAnOfferedKeyResolvesOnlyThroughTheBoundOpener(t *testing.T) {
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", filepath.Dir(environment))
 	files.take()
 	_, err := services.MachineAccess.Exec(context.Background(), machineaccess.ExecRequest{
-		ContextName: "alpha", Name: "node", SSH: machine.SSHOptions{IdentityFile: key}, Command: []string{"true"},
+		ContextName: "alpha", Names: []string{"node"}, SSH: machine.SSHOptions{IdentityFile: key}, Command: []string{"true"},
 	})
 	if asked := files.take(); !slices.Equal(asked, []string{key}) {
 		t.Fatalf("the session asked the opener for %v, want %s (%#v)", asked, key, diagnostics.Of(err))

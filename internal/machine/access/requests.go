@@ -10,7 +10,7 @@ type RshRequest struct {
 
 type ExecRequest struct {
 	ContextName string
-	Name        string
+	Names       []string
 	SSH         machine.SSHOptions
 	Command     []string
 }

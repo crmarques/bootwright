@@ -288,7 +288,11 @@ func TestPayloadTailNeverRetargetsTheSession(t *testing.T) {
 			if got := request.FieldByName("ContextName"); !got.IsValid() || got.String() != "lab" {
 				t.Fatalf("session context = %v; want lab", got)
 			}
-			if got := request.FieldByName("Name"); !got.IsValid() || got.String() != "demo" {
+			if target := request.FieldByName("Names"); target.IsValid() {
+				if got, ok := target.Interface().([]string); !ok || !reflect.DeepEqual(got, []string{"demo"}) {
+					t.Fatalf("session targets = %v; want [demo]", target)
+				}
+			} else if got := request.FieldByName("Name"); !got.IsValid() || got.String() != "demo" {
 				t.Fatalf("session target = %v; want demo", got)
 			}
 			if got := request.FieldByName("Command").Interface().([]string); !reflect.DeepEqual(got, []string{"kubectl", "--context", "prod", "--name", "other", "get"}) {

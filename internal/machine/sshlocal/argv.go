@@ -50,6 +50,9 @@ func arguments(session machine.Session, held paths) []string {
 		args = append(args, "-i", descriptorPath(held.privateKey))
 	}
 	args = append(args, authentication(session)...)
+	if session.Batch {
+		args = append(args, "-o", "BatchMode=yes")
+	}
 	if session.Port != 0 && session.Port != 22 {
 		args = append(args, "-p", strconv.Itoa(session.Port))
 	}

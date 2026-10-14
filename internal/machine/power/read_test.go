@@ -126,7 +126,7 @@ func TestAReadingFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 				t.Fatalf("surveys = %+v, want guest read %t", surveys, test.read)
 			}
 			powered := New(stateSource{}, evidenceSource{states: states}, &pins{}, &boundary{},
-				&surveyor{reports: map[string]string{"guest": machine.PowerOn, "metal": machine.PowerOff}}, nil, nil, nil)
+				&surveyor{reports: map[string]string{"guest": machine.PowerOn, "metal": machine.PowerOff}}, nil, nil, nil, nil)
 			listed, err := inventory.New(stateSource{}, installationFailed{}, powered, nil).
 				List(context.Background(), inventory.ListRequest{ContextName: "lab", Power: true})
 			if err != nil {
@@ -183,7 +183,7 @@ func TestEachReadTargetReadsItsOwnBundle(t *testing.T) {
 		"rack":  m("verify", true, "trustBundleRef", "rack-bmc-ca"),
 	}
 	runtime, runner := &boundary{}, &surveyor{}
-	if _, err := New(stateSource{tls: tls}, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil).
+	if _, err := New(stateSource{tls: tls}, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil, nil).
 		Read(context.Background(), "lab", []string{"metal", "rack", "zero"}); err != nil {
 		t.Fatal(err)
 	}

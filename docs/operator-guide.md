@@ -377,6 +377,20 @@ sudo systemd-run --unit=bootwright-apply --collect "$PWD/bin/bootwright" apply -
 sudo journalctl -f -u bootwright-apply
 ```
 
+`machine start`, `machine stop`, `machine restart` and `machine exec` take a
+comma-separated `--name` and act on every listed Machine at once. A stop asks
+one confirmation for the batch, and an exec prefixes each output line with its
+Machine and warns on standard error for each session that exits nonzero; its own
+status is the highest of them. An exec on several Machines has no standard
+input and no password prompt, so a Machine that signs in with a password is
+reached alone
+([sessions](../specs/cli.md#machine-ssh-sessions)):
+
+```sh
+bootwright machine stop --context lab-rhel --name rhel-01,rhel-02,rhel-03 --yes
+bootwright machine exec --context lab-rhel --name rhel-01,rhel-02,rhel-03 cat /etc/os-release
+```
+
 SSH placement of a managed service on a second OS-ready host, with that host's
 authored access and bound host key, is operator-run too and has no example.
 No real-hardware row has been accepted yet: [B67](../specs/milestones/m3.md#b67)

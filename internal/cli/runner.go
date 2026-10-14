@@ -266,10 +266,7 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 			}
 			return 1
 		}
-		if handled, presentErr := r.writeExecutedLifecycle(path, result, diagnostics); handled {
-			if presentErr != nil {
-				return 1
-			}
+		if handled, _ := r.writeExecutedFailure(command, path, result, diagnostics); handled {
 			return 1
 		}
 		// A service's refusal of how it was invoked, such as a flag set the

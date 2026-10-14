@@ -5307,3 +5307,80 @@ setup and the controller stage; in-tree, only its offline libdnf5 5.4
 inventory ran on Fedora 44, not a resolve against its repositories or a
 package installation. [B542](backlog.md#b542), parked: a Fedora plan records
 libdnf5's version without its first part.
+
+### X85 — Machine commands across several machines
+
+**Owner:** Machine, with CLI. An out-of-sequence product slice, integrated on
+main as one commit at the owner's explicit request of 2026-10-14 (D150).
+**Items:** B543. **Decisions:** D150. **Integrated:** "feat(machine): run
+start, stop, restart and exec on several machines".
+
+**Outcome, B543:** `--name` of `machine start`, `machine stop`, `machine restart`
+and `machine exec` is a comma-separated list under the
+[list rules](../cli.md#parsing-and-input-conventions), and the command applies
+to every listed Machine at once. One member after normalization behaves as
+before; a value that resolves to no member is `cli.usage`, and `machine rsh`
+refuses a comma in its single `--name`. Every Machine resolves in the
+context's effective graph before anything is confirmed, lent or run, and the
+unknown or excluded ones fail `access.target` in one diagnostic naming each.
+The power verbs ask one confirmation for the batch and run each Machine as the
+single-Machine operation, concurrently and in canonical order, at most
+`lifecycle.MaxRunningBlocks` at a time, inside one invocation scope that the
+Ansible runner's `lifecycle.adapter-running` refusal admits as siblings. One
+Machine's failure cancels no other; every admitted Machine has a result row,
+the power JSON result is one shape for any count (`context`, `verb`,
+`machines`), and a partial failure is one envelope with the rows and a
+diagnostic for each failed Machine
+([operations](../cli.md#machine-power-operations),
+[results](../cli/output.md#machine-results)).
+The exec proves every identity and, one Machine at a time in canonical order,
+every host key before any session opens, lends the union of their credentials
+once, and runs the sessions together with no standard input and a client told
+never to prompt, each output line prefixed `<machine>: ` and written whole. A
+nonzero session writes an `access.exit` warning, and the invocation exits with
+the highest status ([sessions](../cli.md#machine-ssh-sessions)).
+
+**Guard tests:** `internal/machine/power`:
+`TestSeveralMachinesRunConcurrentlyInOneScope`,
+`TestABatchRunsAtMostMaxRunningBlocksAtOnce`,
+`TestABatchWithoutAScopeRunsOneMachineAtATime`,
+`TestABatchAsksOneConfirmationNamingEveryMachine`,
+`TestAListNamingNoMachineIsAUsageRefusal`,
+`TestEveryUndeclaredMemberIsNamedInOneRefusal`,
+`TestARefusingMemberRunsNothingOnAnyMachine`,
+`TestAFailedMachineLeavesTheOthersSettled` (a run's own deadline included) and
+`TestCancelingABatchStopsEveryRun`; `internal/machine/access`:
+`TestOneMemberIsTheSingleSessionUnchanged`,
+`TestNamesThatResolveToNoMemberAreAUsageRefusal`,
+`TestSeveralSessionsRunConcurrentlyAndNonInteractively`,
+`TestSeveralSessionsShareOneLendAndCarryTheirOwnCredentials`,
+`TestEveryUnknownMemberIsNamedInOneRefusal`,
+`TestARefusalForAnyMemberOpensNoSession`,
+`TestHostKeysAreProvedOneAtATimeBeforeAnySessionOpens`,
+`TestAnInterruptBeforeTheSessionsOpenStartsNone`,
+`TestSessionStatusesAggregateWithWarningsInCanonicalOrder`,
+`TestASessionThatCouldNotStartCountsAs255`,
+`TestSeveralSessionsWritePrefixedLinesToTheirStreams`,
+`TestConcurrentSessionLinesNeverInterleave`,
+`TestAnUnterminatedLastLineIsWrittenWhenItsSessionEnds` and
+`TestALineReaching64KiBIsWrittenAsItsOwnLine`; `internal/machine/sshlocal`:
+`TestOnlyABatchSessionForbidsTheClientToPrompt`; `internal/cli`:
+`TestOnlyTheCommandsThatActOnSeveralMachinesTakeANameList`,
+`TestAMachineNameThatResolvesToNoMachineIsAUsageError`,
+`TestSeveralMachineNamesReachTheServiceNormalized`,
+`TestSeveralSessionsExitWithTheStatusTheServiceAggregated`,
+`TestSeveralMachinesHeadlineTheirChange`,
+`TestAFailedBatchWritesItsRowsToStandardOutputAndItsDiagnosticsToStandardError`,
+`TestAFailedBatchIsOneEnvelopeWithItsResult`,
+`TestAFailureWithNoSettledBatchWritesDiagnosticsOnly` and
+`TestACanceledBatchNamesEveryRunsOutputInItsFailureEnvelope`, with the
+`cli-machine-stop-several` goldens (text, JSON, and their failed forms).
+
+**Constraints left behind:** power runs beyond `lifecycle.MaxRunningBlocks`
+wait for a slot. A several-Machine exec has no standard input and cannot use
+password authentication, so a Machine that signs in with a password is reached
+alone, even with a key offered, because a password identity never tries an
+offered key ([B544](backlog.md#b544)). The output lines of several sessions are
+interleaved by line, never within one, and carry no ordering between Machines.
+A batch of more than 16 Machines can retire the retained output of its own
+earliest runs before its result names them ([B545](backlog.md#b545)).

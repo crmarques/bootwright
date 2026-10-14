@@ -283,15 +283,15 @@ func (s machineAccessSpy) Exec(ctx context.Context, request machineaccess.ExecRe
 
 type machinePowerSpy struct{ record *dispatchRecord }
 
-func (s machinePowerSpy) Start(ctx context.Context, request power.PowerRequest) (*power.Result, error) {
+func (s machinePowerSpy) Start(ctx context.Context, request power.PowerRequest) (*power.Results, error) {
 	return s.record.result.power, s.record.called(ctx, "machine start", request)
 }
 
-func (s machinePowerSpy) Stop(ctx context.Context, request power.PowerRequest) (*power.Result, error) {
+func (s machinePowerSpy) Stop(ctx context.Context, request power.PowerRequest) (*power.Results, error) {
 	return s.record.result.power, s.record.called(ctx, "machine stop", request)
 }
 
-func (s machinePowerSpy) Restart(ctx context.Context, request power.PowerRequest) (*power.Result, error) {
+func (s machinePowerSpy) Restart(ctx context.Context, request power.PowerRequest) (*power.Results, error) {
 	return s.record.result.power, s.record.called(ctx, "machine restart", request)
 }
 

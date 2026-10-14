@@ -27,15 +27,19 @@ type Service struct {
 	identities  Identities
 	runtime     Runtime
 	runner      Runner
+	begin       lifecycle.BeginInvocation
 	confirmer   Confirmer
 	reporter    Reporter
 	selection   CurrentSelection
 }
 
-func New(state EffectiveState, realization Realization, identities Identities, runtime Runtime, runner Runner, confirmer Confirmer, reporter Reporter, selection CurrentSelection) Service {
+// New binds a power service. begin is the power runner's invocation scope,
+// which lets several Machines of one context run at once.
+func New(state EffectiveState, realization Realization, identities Identities, runtime Runtime, runner Runner,
+	begin lifecycle.BeginInvocation, confirmer Confirmer, reporter Reporter, selection CurrentSelection) Service {
 	return Service{
 		state: state, realization: realization, identities: identities, runtime: runtime, runner: runner,
-		confirmer: confirmer, reporter: reporter, selection: selection,
+		begin: begin, confirmer: confirmer, reporter: reporter, selection: selection,
 	}
 }
 
@@ -47,22 +51,20 @@ func (s Service) realized(ctx context.Context, contextName string) realizations 
 	}
 }
 
-// Start converges one Machine to powered on.
-func (s Service) Start(ctx context.Context, request PowerRequest) (*Result, error) {
+// Start converges each named Machine to powered on.
+func (s Service) Start(ctx context.Context, request PowerRequest) (*Results, error) {
 	request.Verb = Start
 	return s.converge(ctx, request)
 }
 
-// Stop converges one Machine to powered off. It asks the guest to shut down and
-// proves it arrived; forcing the power off is a separate, explicit request.
-func (s Service) Stop(ctx context.Context, request PowerRequest) (*Result, error) {
+// Stop converges each named Machine to powered off, by guest shutdown unless forced.
+func (s Service) Stop(ctx context.Context, request PowerRequest) (*Results, error) {
 	request.Verb = Stop
 	return s.converge(ctx, request)
 }
 
-// Restart converges one Machine to powered on through a stop it proves first,
-// so a guest that never stopped is never reported as restarted.
-func (s Service) Restart(ctx context.Context, request PowerRequest) (*Result, error) {
+// Restart converges each named Machine to powered on through a proved stop.
+func (s Service) Restart(ctx context.Context, request PowerRequest) (*Results, error) {
 	request.Verb = Restart
 	return s.converge(ctx, request)
 }
@@ -107,12 +109,8 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 			}
 		}
 	}
-	// A reading names no retained output. An inspection that succeeds prints a
-	// table, and one that refuses reports its own diagnostic, so a path to an
-	// adapter log would be noise in the one case and the wrong answer in the
-	// other: nothing here is an operation an operator resumes or inspects. Its
-	// request therefore retains no output, so its run keeps no file and carries
-	// no remediation pointing at one.
+	// A reading is nothing an operator resumes or inspects, so it retains no
+	// output and names no remediation pointing at one.
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
 		for index, survey := range surveys {
 			step := readStep(survey, index+1, len(surveys))
@@ -154,18 +152,18 @@ func (s Service) observe(ctx context.Context, runtime lifecycle.Runtime, frozen 
 	return validateReading(run.Evidence, frozen, digest)
 }
 
-// converge drives one Machine to the power state its verb names. The operation
-// registers nothing and owns nothing: a power state is not desired state, so it
-// proves only what the controller reported when it settled. A physical Machine
-// is held to the identity the context's current apply proved for it, read
-// before anything is asked or run, so a pin that cannot be read refuses
-// without a prompt.
-func (s Service) converge(ctx context.Context, request PowerRequest) (*Result, error) {
+// converge drives each named Machine to its verb's power state. It registers
+// and owns nothing, and resolves every Machine before anything is asked or run.
+func (s Service) converge(ctx context.Context, request PowerRequest) (*Results, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if s.state == nil || s.realization == nil || s.identities == nil || s.runtime == nil || s.runner == nil {
 		return nil, availability.ErrNotImplemented
+	}
+	names, err := normalized(request.Names)
+	if err != nil {
+		return nil, err
 	}
 	name, err := machine.SelectedContext(ctx, s.selection, request.ContextName)
 	if err != nil {
@@ -175,39 +173,26 @@ func (s Service) converge(ctx context.Context, request PowerRequest) (*Result, e
 	if err != nil {
 		return nil, err
 	}
-	frozen, physical, err := requestFor(effective.Effective, name, request.Name, request.Verb, request.Force, s.realized(ctx, name))
+	targets, err := s.resolve(ctx, effective.Effective, name, names, request)
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseTemplateValues(name, frozen); err != nil {
+	if err := s.confirm(ctx, name, request, targets); err != nil {
 		return nil, err
 	}
-	var pin machine.HardwareIdentity
-	if physical {
-		proved, found, err := s.identities.ProvedIdentity(ctx, name, frozen.Identity.Object)
-		if err != nil {
-			return nil, err
-		}
-		if found {
-			pin = proved
-		}
-	}
-	if err := s.confirm(ctx, name, request, frozen); err != nil {
-		return nil, err
-	}
-	return s.execute(ctx, name, frozen, pin)
+	return s.executeAll(ctx, name, request.Verb, targets)
 }
 
 // refuseTemplateValues refuses a power request holding a template delimiter
 // or a key ansible-core reserves before anything is confirmed, lent or bound.
 // A bounded run is never planned, so the plan's own refusal never saw it, and
 // its remedy ends with the command that carries it again.
-func refuseTemplateValues(contextName string, frozen Request) error {
+func refuseTemplateValues(contextName, command string, frozen Request) error {
 	canonical, err := frozen.Canonical()
 	if err != nil {
 		return err
 	}
-	return lifecycle.RefuseBoundedTemplateDelimiters(contextName, powerCommand(contextName, frozen),
+	return lifecycle.RefuseBoundedTemplateDelimiters(contextName, command,
 		[]reconciliation.BlockDefinition{{Kind: string(api.Machine), Object: frozen.Identity.Object, Request: canonical}})
 }
 
@@ -235,41 +220,21 @@ func refuseSurveyTemplateValues(contextName string, surveys []ReadSurvey) error 
 
 // powerCommand is the command that repeats one power request in its context.
 func powerCommand(contextName string, frozen Request) string {
-	command := "bootwright machine " + frozen.Verb + " --context " + contextName + " --name " + frozen.Identity.Object
-	if frozen.Force {
+	return batchCommand(contextName, frozen.Verb, []string{frozen.Identity.Object}, frozen.Force)
+}
+
+// batchCommand is the command that repeats a power request for every Machine.
+func batchCommand(contextName, verb string, names []string, force bool) string {
+	command := "bootwright machine " + verb + " --context " + contextName + " --name " + strings.Join(names, ",")
+	if force {
 		command += " --force"
 	}
 	return command
 }
 
-// confirm asks before an operation interrupts a running system. Powering a
-// machine on interrupts nothing, so only stopping and restarting ask. The
-// prompt names the Machine and its context, and a refusal is the confirmer's
-// own, which names the command that repeats it with --yes.
-func (s Service) confirm(ctx context.Context, contextName string, request PowerRequest, frozen Request) error {
-	if request.Verb == Start || request.SkipConfirmation {
-		return nil
-	}
-	if s.confirmer == nil {
-		return failure("machine.power", "this operation requires confirmation", "repeat "+powerCommand(contextName, frozen)+" with --yes")
-	}
-	action := frozen.Verb + " machine"
-	if frozen.Force {
-		action = "force " + action
-	}
-	var err error
-	if confirmer, ok := s.confirmer.(ContextConfirmer); ok {
-		err = confirmer.ConfirmIn(ctx, action, frozen.Identity.Object, contextName)
-	} else {
-		err = s.confirmer.Confirm(ctx, action, frozen.Identity.Object)
-	}
-	if err != nil && ctx.Err() != nil {
-		return ctx.Err()
-	}
-	return err
-}
-
-func (s Service) execute(ctx context.Context, name string, frozen Request, pin machine.HardwareIdentity) (*Result, error) {
+// execute runs one Machine; only a lone run names its log location.
+func (s Service) execute(ctx context.Context, name string, resolved target, position, total int) (*Result, error) {
+	frozen, pin := resolved.frozen, resolved.pin
 	canonical, err := frozen.Canonical()
 	if err != nil {
 		return nil, err
@@ -287,14 +252,11 @@ func (s Service) execute(ctx context.Context, name string, frozen Request, pin m
 	}
 	var result, retained *Result
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references, RetainOutput: true}, func(inner context.Context, runtime lifecycle.Runtime) error {
-		retained = &Result{LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs)}
-		// The location is named before the adapter runs, because a run that
-		// refuses reports a diagnostic rather than this result, and its output
-		// is exactly what the operator is then told to read.
-		if s.reporter != nil {
+		retained = &Result{Machine: frozen.Identity.Object, LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs)}
+		if s.reporter != nil && total == 1 {
 			s.reporter.ReportLogLocation(inner, runtime.LogLocation)
 		}
-		step := powerStep(frozen)
+		step := powerStep(frozen, position, total)
 		s.progress(inner, step, "running", "")
 		evidence, err := s.run(inner, runtime, frozen, canonical, digest, pin, step)
 		if err != nil {
@@ -359,14 +321,14 @@ func readStep(survey ReadSurvey, position, total int) lifecycle.ProgressEvent {
 // powerStep is the one progress step a power run reports. The adapter's groups
 // are its sub-steps; it declares no count of them, because a stop skips the
 // shutdown of a Machine that is already off.
-func powerStep(frozen Request) lifecycle.ProgressEvent {
+func powerStep(frozen Request, position, total int) lifecycle.ProgressEvent {
 	action := map[string]string{Start: "Start", Stop: "Stop", Restart: "Restart"}[frozen.Verb]
 	if frozen.Verb == Stop && frozen.Force {
 		action = "Force off"
 	}
 	return lifecycle.ProgressEvent{
 		Block: "power", Description: action + " " + string(api.Machine) + "/" + frozen.Identity.Object,
-		Position: 1, Total: 1,
+		Position: position, Total: total,
 	}
 }
 
@@ -456,7 +418,7 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 	request := lifecycle.RunRequest{
 		Context:           runtime.Context.Name,
 		Repeat:            powerCommand(runtime.Context.Name, frozen),
-		Description:       powerStep(frozen).Description,
+		Description:       powerStep(frozen, 1, 1).Description,
 		Implementation:    Implementation,
 		Operation:         Operation,
 		Variable:          Variable,

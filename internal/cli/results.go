@@ -104,7 +104,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 			return true, writeTrustReport(out, path, result.trust, selectedJSON(command))
 		}
 	case "machine start", "machine stop", "machine restart":
-		if validMachinePower(result.power) {
+		if validMachinePower(result.power, false) {
 			return true, writeMachinePower(out, path, result.power, selectedJSON(command))
 		}
 	case "cluster list", "cluster info":
@@ -149,12 +149,9 @@ func writeReveal(out, errOut io.Writer, command *cobra.Command, path string, res
 
 // createdLogs names the private logs an invocation created before it failed.
 // A power verb's run retains its output before its adapter runs and returns
-// that name beside a refusal, so its failure envelope can list the file.
+// that name beside a refusal, so its failure envelope can list every file.
 func (r commandResult) createdLogs() []string {
-	if r.power == nil {
-		return nil
-	}
-	return r.power.Logs
+	return powerLogs(r.power)
 }
 
 func (r *Runner) writeNegativeSecretCheck(command *cobra.Command, path string, result commandResult, diagnostics []diagnostic) (bool, error) {

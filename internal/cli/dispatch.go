@@ -44,7 +44,7 @@ type commandResult struct {
 	machines *inventory.ListResult
 	session  *machine.SessionResult
 	trust    *enrollment.Report
-	power    *power.Result
+	power    *power.Results
 
 	secretMutation     *custody.MutationResult
 	secretCheck        *custody.CheckResult

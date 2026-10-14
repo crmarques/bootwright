@@ -51,8 +51,9 @@ func wireMachine(deps machineDependencies) cli.Services {
 	selection := currentSelection(deps.Selection)
 	evidence := machineOwnership{reconciler: deps.Lifecycle}
 	client := sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
+	runner := ansiblerunner.New(operationPlaybook())
 	powered := power.New(deps.State, machineRealization{reconciler: deps.Lifecycle}, machineIdentities{reconciler: deps.Lifecycle},
-		deps.Lifecycle, ansiblerunner.New(operationPlaybook()), deps.Confirmer, deps.Reporter, selection)
+		deps.Lifecycle, runner, runner.BeginInvocation, deps.Confirmer, deps.Reporter, selection)
 	sessions := machineaccess.New(deps.State, selection, machineaccess.Options{
 		Lender: deps.Lifecycle, Ownership: evidence, Evidence: machineHostKeys{reconciler: deps.Lifecycle},
 		Trust: deps.Trust, Observer: client, Confirmer: deps.Session, Launcher: client,
@@ -88,7 +89,7 @@ func (m machineSessions) Rsh(ctx context.Context, contextName, name string, ssh 
 }
 
 func (m machineSessions) Exec(ctx context.Context, contextName, name string, ssh machine.SSHOptions, command []string) (*machine.SessionResult, error) {
-	return m.access.Exec(ctx, machineaccess.ExecRequest{ContextName: contextName, Name: name, SSH: ssh, Command: command})
+	return m.access.Exec(ctx, machineaccess.ExecRequest{ContextName: contextName, Names: []string{name}, SSH: ssh, Command: command})
 }
 
 // sessionFiles opens an offered key through the invoking account's opener, and

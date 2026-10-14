@@ -165,17 +165,20 @@ func (p *pins) ProvedIdentity(_ context.Context, contextName, name string) (mach
 }
 
 func service(runtime Runtime, runner Runner, confirmer Confirmer) Service {
-	return New(stateSource{}, evidenceSource{}, &pins{}, runtime, runner, confirmer, nil, nil)
+	return New(stateSource{}, evidenceSource{}, &pins{}, runtime, runner, nil, confirmer, nil, nil)
 }
 
 func TestAStopCrossesTheAdapterWithItsFrozenRequestAndBoundCredential(t *testing.T) {
 	runtime, runner, confirmer := &boundary{}, &adapter{power: "off"}, &answer{}
-	result, err := service(runtime, runner, confirmer).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"})
+	result, err := service(runtime, runner, confirmer).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Power != machine.PowerOff || result.Machine != "guest" || result.Verb != Stop {
+	if len(result.Machines) != 1 || result.Context != "lab" || result.Verb != Stop {
 		t.Fatalf("result = %+v", result)
+	}
+	if row := result.Machines[0]; row.Power != machine.PowerOff || row.Machine != "guest" || row.Verb != Stop || row.Context != "lab" {
+		t.Fatalf("row = %+v", row)
 	}
 	if runner.seen.Implementation != Implementation || runner.seen.Operation != Operation {
 		t.Fatalf("adapter entrypoint = %q/%q", runner.seen.Implementation, runner.seen.Operation)
@@ -208,7 +211,7 @@ func TestAPowerRunNamesItsContextAndStep(t *testing.T) {
 	}{{false, "Stop Machine/guest"}, {true, "Force off Machine/guest"}} {
 		runner := &adapter{power: "off"}
 		if _, err := service(&boundary{}, runner, &answer{}).Stop(context.Background(),
-			PowerRequest{ContextName: "lab", Name: "guest", Force: test.force, SkipConfirmation: true}); err != nil {
+			PowerRequest{ContextName: "lab", Names: []string{"guest"}, Force: test.force, SkipConfirmation: true}); err != nil {
 			t.Fatal(err)
 		}
 		if runner.seen.Context != "lab" || runner.seen.Description != test.want || runner.seen.Block != "" {
@@ -220,7 +223,7 @@ func TestAPowerRunNamesItsContextAndStep(t *testing.T) {
 		}
 	}
 	surveys := &surveyor{reports: map[string]string{"guest": machine.PowerOn}}
-	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, surveys, nil, nil, nil).
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, surveys, nil, nil, nil, nil).
 		Read(context.Background(), "lab", selected()); err != nil {
 		t.Fatal(err)
 	}
@@ -244,8 +247,8 @@ func TestAPowerRunNamesItsContextAndStep(t *testing.T) {
 // runs, because a run that refuses never reaches the result that carries it.
 func TestAPowerRunRetainsItsAdapterOutputAndNamesWhereFirst(t *testing.T) {
 	runtime, runner, confirmer, reporter := &boundary{}, &adapter{power: "off"}, &answer{}, &announced{}
-	service := New(stateSource{}, evidenceSource{}, &pins{}, runtime, runner, confirmer, reporter, nil)
-	result, err := service.Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"})
+	service := New(stateSource{}, evidenceSource{}, &pins{}, runtime, runner, nil, confirmer, reporter, nil)
+	result, err := service.Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,13 +259,13 @@ func TestAPowerRunRetainsItsAdapterOutputAndNamesWhereFirst(t *testing.T) {
 	if runner.seen.Output == nil {
 		t.Fatal("the adapter was run with nothing to retain its output in")
 	}
-	if result.LogLocation != location || !slices.Equal(result.Logs, []string{"contexts/lab/state/runs/run-" + strings.Repeat("a", 32) + "/run.output"}) {
-		t.Fatalf("result logs = %q %+v", result.LogLocation, result.Logs)
+	if row := result.Machines[0]; row.LogLocation != location || !slices.Equal(row.Logs, []string{"contexts/lab/state/runs/run-" + strings.Repeat("a", 32) + "/run.output"}) {
+		t.Fatalf("result logs = %q %+v", row.LogLocation, row.Logs)
 	}
 	refusing := &adapter{err: errors.New("the adapter operation did not complete")}
 	reporter = &announced{}
-	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, runtime, refusing, confirmer, reporter, nil).
-		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"}); !errors.Is(err, refusing.err) {
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, runtime, refusing, nil, confirmer, reporter, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}}); !errors.Is(err, refusing.err) {
 		t.Fatalf("a refused run reported %v, not the adapter's own refusal", err)
 	}
 	if len(reporter.locations) != 1 || reporter.locations[0] != location {
@@ -320,8 +323,8 @@ func TestAPowerRunReportsOneStepWithTheRolesGroups(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			reporter := &announced{}
-			_, _ = New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, test.runner, nil, reporter, nil).
-				Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", Force: test.force, SkipConfirmation: true})
+			_, _ = New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, test.runner, nil, nil, reporter, nil).
+				Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, Force: test.force, SkipConfirmation: true})
 			if len(reporter.order) == 0 || reporter.order[0] != "logs" || slices.Contains(reporter.order[1:], "logs") {
 				t.Fatalf("reported in the order %v, want the log location first", reporter.order)
 			}
@@ -331,7 +334,7 @@ func TestAPowerRunReportsOneStepWithTheRolesGroups(t *testing.T) {
 		})
 	}
 	reporter := &announced{}
-	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, &surveyor{reports: map[string]string{"guest": machine.PowerOn}}, nil, reporter, nil).
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, &surveyor{reports: map[string]string{"guest": machine.PowerOn}}, nil, nil, reporter, nil).
 		Read(context.Background(), "lab", selected()); err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +348,7 @@ func TestAPowerRunReportsOneStepWithTheRolesGroups(t *testing.T) {
 // remediation pointing at output an operator is never told about.
 func TestOnlyARunThatNamesItsOutputPointsAFailureAtIt(t *testing.T) {
 	runner := &adapter{power: "off"}
-	if _, err := service(&boundary{}, runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true}); err != nil {
+	if _, err := service(&boundary{}, runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	if runner.seen.OutputRemediation != lentRemediation {
@@ -370,7 +373,7 @@ func TestOnlyARunThatNamesItsOutputPointsAFailureAtIt(t *testing.T) {
 // asks for one.
 func TestOnlyARunThatNamesItsOutputAsksToRetainIt(t *testing.T) {
 	converging := &boundary{}
-	if _, err := service(converging, &adapter{power: "off"}, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true}); err != nil {
+	if _, err := service(converging, &adapter{power: "off"}, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(converging.retaining, []bool{true}) {
@@ -407,21 +410,25 @@ func TestARefusedRunReturnsOnlyWhereItsOutputIs(t *testing.T) {
 		{"its evidence is refused", &adapter{power: "on"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			result, err := service(&boundary{}, test.runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true})
+			result, err := service(&boundary{}, test.runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, SkipConfirmation: true})
 			if err == nil {
 				t.Fatal("a failed run succeeded")
 			}
-			if result == nil || result.LogLocation != location || !slices.Equal(result.Logs, logs) {
+			if result == nil || len(result.Machines) != 1 {
 				t.Fatalf("the refusal named %+v, not the run's retained output", result)
 			}
-			if result.Context != "" || result.Machine != "" || result.Verb != "" || result.Power != "" || result.Previous != "" || result.Changed {
-				t.Fatalf("a refused run reported what it never proved: %+v", result)
+			row := result.Machines[0]
+			if row.LogLocation != location || !slices.Equal(row.Logs, logs) || row.Machine != "guest" {
+				t.Fatalf("the refusal named %+v, not the run's retained output", row)
+			}
+			if row.Context != "" || row.Verb != "" || row.Power != "" || row.Previous != "" || row.Changed {
+				t.Fatalf("a refused run reported what it never proved: %+v", row)
 			}
 		})
 	}
 	refused := unlent{errors.New("the approved execution bundle is unavailable")}
-	result, err := service(refused, &adapter{power: "off"}, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true})
-	if !errors.Is(err, refused.err) || result != nil {
+	result, err := service(refused, &adapter{power: "off"}, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, SkipConfirmation: true})
+	if !errors.Is(err, refused.err) || result == nil || len(result.Machines) != 0 {
 		t.Fatalf("a runtime that was never lent returned %+v, %v", result, err)
 	}
 }
@@ -439,17 +446,17 @@ func TestOnlyAnInterruptingVerbAsksForConfirmation(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		settle string
-		invoke func(Service) (*Result, error)
+		invoke func(Service) (*Results, error)
 		asks   bool
 	}{
-		{"start", machine.PowerOn, func(s Service) (*Result, error) {
-			return s.Start(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"})
+		{"start", machine.PowerOn, func(s Service) (*Results, error) {
+			return s.Start(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}})
 		}, false},
-		{"stop", machine.PowerOff, func(s Service) (*Result, error) {
-			return s.Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"})
+		{"stop", machine.PowerOff, func(s Service) (*Results, error) {
+			return s.Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}})
 		}, true},
-		{"restart", machine.PowerOn, func(s Service) (*Result, error) {
-			return s.Restart(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"})
+		{"restart", machine.PowerOn, func(s Service) (*Results, error) {
+			return s.Restart(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}})
 		}, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -467,16 +474,16 @@ func TestOnlyAnInterruptingVerbAsksForConfirmation(t *testing.T) {
 func TestADeclinedOrUnavailableConfirmationRunsNothing(t *testing.T) {
 	runner := &adapter{power: "off"}
 	confirmer := &answer{refuse: errors.New("declined")}
-	if _, err := service(&boundary{}, runner, confirmer).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"}); err == nil {
+	if _, err := service(&boundary{}, runner, confirmer).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}}); err == nil {
 		t.Fatal("a declined confirmation ran the operation")
 	}
 	if runner.seen.Implementation != "" {
 		t.Fatal("a declined confirmation reached the adapter")
 	}
-	if _, err := service(&boundary{}, runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest"}); err == nil {
+	if _, err := service(&boundary{}, runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}}); err == nil {
 		t.Fatal("an unavailable confirmer ran the operation")
 	}
-	if _, err := service(&boundary{}, runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true}); err != nil {
+	if _, err := service(&boundary{}, runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -489,7 +496,7 @@ func TestAPowerPromptNamesTheMachineAndItsContextAndKeepsItsRefusal(t *testing.T
 		Remediation: "review it, then repeat bootwright machine stop --context lab --name guest with --yes"}
 	runner := &adapter{power: "off"}
 	confirmer := &answer{refuse: &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{declined}}}
-	_, err := service(&boundary{}, runner, confirmer).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", Force: true})
+	_, err := service(&boundary{}, runner, confirmer).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, Force: true})
 	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, []diagnostics.Diagnostic{declined}) {
 		t.Fatalf("a declined stop = %+v, want the confirmer's own refusal", reported)
 	}
@@ -498,11 +505,11 @@ func TestAPowerPromptNamesTheMachineAndItsContextAndKeepsItsRefusal(t *testing.T
 	}
 	for _, test := range []struct {
 		request PowerRequest
-		invoke  func(Service, context.Context, PowerRequest) (*Result, error)
+		invoke  func(Service, context.Context, PowerRequest) (*Results, error)
 		remedy  string
 	}{
-		{PowerRequest{ContextName: "lab", Name: "guest"}, Service.Stop, "repeat bootwright machine stop --context lab --name guest with --yes"},
-		{PowerRequest{ContextName: "lab", Name: "guest", Force: true}, Service.Restart, "repeat bootwright machine restart --context lab --name guest --force with --yes"},
+		{PowerRequest{ContextName: "lab", Names: []string{"guest"}}, Service.Stop, "repeat bootwright machine stop --context lab --name guest with --yes"},
+		{PowerRequest{ContextName: "lab", Names: []string{"guest"}, Force: true}, Service.Restart, "repeat bootwright machine restart --context lab --name guest --force with --yes"},
 	} {
 		_, err := test.invoke(service(&boundary{}, runner, nil), context.Background(), test.request)
 		want := []diagnostics.Diagnostic{{Severity: "error", Code: "machine.power", Message: "this operation requires confirmation", Remediation: test.remedy}}
@@ -516,7 +523,7 @@ func TestAPowerPromptNamesTheMachineAndItsContextAndKeepsItsRefusal(t *testing.T
 // never arrived is unknown rather than successful.
 func TestAStateTheControllerNeverReachedIsNeverReportedAsSettled(t *testing.T) {
 	runner := &adapter{power: "on"}
-	if _, err := service(&boundary{}, runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true}); err == nil {
+	if _, err := service(&boundary{}, runner, nil).Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, SkipConfirmation: true}); err == nil {
 		t.Fatal("a machine still running satisfied a stop")
 	}
 }
@@ -543,12 +550,12 @@ func TestAProvedMachineCarriesItsIdentityToTheAdapter(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			proved, runner := &pins{identity: test.pin, found: true}, &adapter{machine: "metal", power: "off"}
-			result, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil).
-				Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal", SkipConfirmation: true})
+			result, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil, nil).
+				Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result.Machine != "metal" {
+			if len(result.Machines) != 1 || result.Machines[0].Machine != "metal" {
 				t.Fatalf("result = %+v", result)
 			}
 			if !maps.Equal(runner.seen.MaterialValues, test.want) {
@@ -577,22 +584,22 @@ func TestAPinnedRunRefusesAnotherSystemNamingTheMachineAndTheRemedy(t *testing.T
 	}}
 	proved := &pins{identity: machine.HardwareIdentity{UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31", Serial: "SN1"}, found: true}
 	runner := &adapter{machine: "metal", power: "off"}
-	if _, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil).
-		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal", SkipConfirmation: true}); err != nil {
+	if _, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	if len(runner.seen.Refusals) != 1 || !reflect.DeepEqual(diagnostics.Of(runner.seen.Refusals["identity-mismatch"]), want) {
 		t.Fatalf("refusals = %+v, want identity-mismatch as %+v", runner.seen.Refusals, want)
 	}
 	refusing := &adapter{machine: "metal", err: runner.seen.Refusals["identity-mismatch"]}
-	result, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, refusing, nil, nil, nil).
-		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal", SkipConfirmation: true})
-	if !reflect.DeepEqual(diagnostics.Of(err), want) || result == nil || len(result.Logs) != 1 {
+	result, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, refusing, nil, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true})
+	if !reflect.DeepEqual(diagnostics.Of(err), want) || result == nil || len(result.Machines) != 1 || len(result.Machines[0].Logs) != 1 {
 		t.Fatalf("a refused run reported %+v, %v; want %+v and its output", result, diagnostics.Of(err), want)
 	}
 	unpinned := &adapter{machine: "metal", power: "off"}
-	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, unpinned, nil, nil, nil).
-		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal", SkipConfirmation: true}); err != nil {
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, unpinned, nil, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	if unpinned.seen.Refusals != nil {
@@ -612,8 +619,8 @@ func TestPowerCarriesTheControllerBundle(t *testing.T) {
 				tls["metal"] = m("verify", true, "trustBundleRef", bundle)
 			}
 			runtime, runner := &boundary{}, &adapter{machine: "metal", power: "off"}
-			if _, err := New(stateSource{tls: tls}, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil).
-				Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal", SkipConfirmation: true}); err != nil {
+			if _, err := New(stateSource{tls: tls}, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil, nil).
+				Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
 				t.Fatal(err)
 			}
 			var frozen Request
@@ -647,8 +654,8 @@ func TestPowerCarriesTheControllerBundle(t *testing.T) {
 // compared and the adapter is sent no identity.
 func TestAnUnprovedMachineCarriesNoIdentity(t *testing.T) {
 	proved, runner := &pins{}, &adapter{machine: "metal", power: "off"}
-	if _, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil).
-		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal", SkipConfirmation: true}); err != nil {
+	if _, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	if runner.seen.MaterialValues != nil {
@@ -664,8 +671,8 @@ func TestAnUnprovedMachineCarriesNoIdentity(t *testing.T) {
 func TestAnEmulatedMachineConsultsNoPin(t *testing.T) {
 	proved := &pins{identity: machine.HardwareIdentity{UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31", Serial: "SN1"}, found: true}
 	runner := &adapter{power: "off"}
-	if _, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil).
-		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "guest", SkipConfirmation: true}); err != nil {
+	if _, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	if len(proved.asked) != 0 {
@@ -682,8 +689,8 @@ func TestAnEmulatedMachineConsultsNoPin(t *testing.T) {
 func TestAnUnreadableProofRefusesBeforeAnyPromptOrRun(t *testing.T) {
 	unreadable := errors.New("the proof that pins Machine/metal cannot be read")
 	proved, runtime, runner, confirmer := &pins{err: unreadable}, &boundary{}, &adapter{machine: "metal", power: "off"}, &answer{}
-	_, err := New(stateSource{}, evidenceSource{}, proved, runtime, runner, confirmer, nil, nil).
-		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal"})
+	_, err := New(stateSource{}, evidenceSource{}, proved, runtime, runner, nil, confirmer, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}})
 	if !errors.Is(err, unreadable) {
 		t.Fatalf("err = %v, want the pin's own refusal", err)
 	}
@@ -702,7 +709,7 @@ func TestAnUnreadableProofRefusesBeforeAnyPromptOrRun(t *testing.T) {
 func TestAReadingConsultsNoPin(t *testing.T) {
 	proved := &pins{identity: machine.HardwareIdentity{UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31"}, found: true}
 	runner := &surveyor{reports: map[string]string{"guest": machine.PowerOn, "metal": machine.PowerOff}}
-	readings, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil).
+	readings, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil, nil).
 		Read(context.Background(), "lab", selected())
 	if err != nil {
 		t.Fatal(err)

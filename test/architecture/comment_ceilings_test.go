@@ -24,7 +24,7 @@ func commentLineCeilings() map[string]int {
 		"internal/infrastructureservices/dnsserver": 5, "internal/infrastructureservices/managedservice": 192,
 		"internal/infrastructureservices/ntpserver": 3, "internal/infrastructureservices/proxy": 8,
 		"internal/machine": 166, "internal/machine/access": 84, "internal/machine/inventory": 48,
-		"internal/machine/power": 205, "internal/machine/sshlocal": 94, "internal/managedos": 56,
+		"internal/machine/power": 203, "internal/machine/sshlocal": 94, "internal/managedos": 56,
 		"internal/managedos/installation": 597, "internal/managedos/media": 198,
 		"internal/managedos/media/storecontract": 16, "internal/managedos/medialocal": 43,
 		"internal/nativeartifacts/rendering": 0, "internal/reconciliation": 139,

@@ -207,7 +207,9 @@ for its own live sibling adapters. That exemption requires the private
 [invocation scope](state-reconciliation.md#stages-and-the-pause-boundary)
 to prove the exact original lock and holder file identities; context,
 operation and attribution bytes alone never authorize it. A released job
-whose descendants still hold the lock loses the exemption. While
+whose descendants still hold the lock loses the exemption. The runs of one
+[power batch](cli.md#machine-power-operations) share one such scope and are each
+other's live siblings. While
 the invocation that started that job still holds its holder, the refusal names
 the job's context, description, operation and Machine and says to wait for it
 to end; only once the holder is free, so that what holds the lock is what the

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine stop",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "verb": "stop",
+    "machines": [
+      {
+        "machine": "rhel-01",
+        "power": "off",
+        "previous": "on",
+        "changed": true,
+        "logs": [
+          "contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a/run.output"
+        ]
+      },
+      {
+        "machine": "rhel-02",
+        "power": "off",
+        "previous": "off",
+        "changed": false,
+        "logs": [
+          "contexts/lab/state/runs/run-0a1b2c3d4e5f60718293a4b5c6d7e8f9/run.output"
+        ]
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": [
+    "contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a/run.output",
+    "contexts/lab/state/runs/run-0a1b2c3d4e5f60718293a4b5c6d7e8f9/run.output"
+  ]
+}

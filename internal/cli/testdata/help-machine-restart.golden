@@ -1,4 +1,4 @@
-Restart one machine through its management controller. Success reports the power state the controller proved, not the state that was requested.
+Restart machines through their management controllers. --name takes a comma-separated list, and the command applies to every listed machine at once. Success reports the power state the controller proved, not the state that was requested.
 
 Usage:
   bootwright machine restart [flags]
@@ -8,7 +8,7 @@ Examples:
 
 Flags:
       --force           Cut power instead of asking the operating system to shut down
-      --name string     Select the exact object name (required)
+      --name string     Select comma-separated machine names (required)
       --output string   Select output mode (values: text, json) (default "text")
       --yes             Confirm the command's ordinary confirmation
 

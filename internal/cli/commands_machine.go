@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
@@ -24,23 +25,35 @@ func machineCommands() []commandSpec {
 			},
 		}),
 		available(sessionCommand(commandSpec{path: "machine rsh", short: "Open an SSH session", flags: []flagSpec{nameFlag()}})),
-		available(sessionCommand(commandSpec{path: "machine exec", short: "Run a command over SSH", flags: []flagSpec{nameFlag()}, payload: true})),
-		available(powerCommand("machine start", "Power one machine on through its management controller", false)),
-		available(powerCommand("machine stop", "Shut one machine down through its management controller", true)),
-		available(powerCommand("machine restart", "Restart one machine through its management controller", true)),
+		available(machineExecCommand()),
+		available(powerCommand("machine start", "Power machines on through their management controllers", false)),
+		available(powerCommand("machine stop", "Shut machines down through their management controllers", true)),
+		available(powerCommand("machine restart", "Restart machines through their management controllers", true)),
 	}
+}
+
+func machineExecCommand() commandSpec {
+	spec := sessionCommand(commandSpec{path: "machine exec", short: "Run a command over SSH", flags: []flagSpec{machineNamesFlag()}, payload: true})
+	spec.long = strings.Replace(spec.long, "The exit status is the client's.", "The exit status is the client's. "+
+		"--name takes a comma-separated list: the command runs on every listed machine at once, each output line is "+
+		"prefixed by its machine, and the exit status is the highest any client returned.", 1)
+	return spec
+}
+
+func machineNamesFlag() flagSpec {
+	return requiredFlag("name", "Select comma-separated machine names")
 }
 
 // powerCommand describes one power verb. Only a verb that interrupts a running
 // system takes a confirmation and a force arm; powering on interrupts nothing.
 func powerCommand(path, short string, interrupts bool) commandSpec {
-	flags := []flagSpec{nameFlag()}
+	flags := []flagSpec{machineNamesFlag()}
 	if interrupts {
 		flags = append(flags, boolFlag("force", "Cut power instead of asking the operating system to shut down"), confirmationFlag())
 	}
 	return commandSpec{
 		path: path, short: short, flags: append(flags, outputFlag()),
-		long: short + ". Success reports the power state the controller proved, not the state that was requested.",
+		long: short + ". --name takes a comma-separated list, and the command applies to every listed machine at once. Success reports the power state the controller proved, not the state that was requested.",
 	}
 }
 
@@ -54,9 +67,9 @@ type MachineAccessService interface {
 }
 
 type MachinePowerService interface {
-	Start(context.Context, power.PowerRequest) (*power.Result, error)
-	Stop(context.Context, power.PowerRequest) (*power.Result, error)
-	Restart(context.Context, power.PowerRequest) (*power.Result, error)
+	Start(context.Context, power.PowerRequest) (*power.Results, error)
+	Stop(context.Context, power.PowerRequest) (*power.Results, error)
+	Restart(context.Context, power.PowerRequest) (*power.Results, error)
 }
 
 func (s Services) invokeMachineInventory(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
@@ -91,7 +104,7 @@ func (s Services) invokeMachineAccess(ctx context.Context, path string, values *
 	case "machine exec":
 		result, err := invokeResult(ctx, values, machineaccess.ExecRequest{
 			ContextName: values.text("context"),
-			Name:        values.text("name"),
+			Names:       values.names("name"),
 			SSH:         values.ssh(),
 			Command:     slices.Clone(args),
 		}, s.MachineAccess.Exec)
@@ -107,11 +120,11 @@ func (s Services) invokeMachinePower(ctx context.Context, path string, values *r
 	}
 	request := power.PowerRequest{
 		ContextName:      values.text("context"),
-		Name:             values.text("name"),
+		Names:            values.names("name"),
 		Force:            values.optionalBoolean("force"),
 		SkipConfirmation: values.optionalBoolean("yes"),
 	}
-	var invoke func(context.Context, power.PowerRequest) (*power.Result, error)
+	var invoke func(context.Context, power.PowerRequest) (*power.Results, error)
 	switch path {
 	case "machine start":
 		invoke = s.MachinePower.Start

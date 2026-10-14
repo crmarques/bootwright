@@ -82,7 +82,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"render storage", storagerendering.RenderArtifactsRequest{ContextName: "example", Clusters: []string{"first", "second"}}},
 		{"machine list", inventory.ListRequest{ContextName: "example", Clusters: []string{"first", "second"}, Power: true}},
 		{"machine rsh", machineaccess.RshRequest{ContextName: "example", Name: "demo", SSH: ssh}},
-		{"machine exec", machineaccess.ExecRequest{ContextName: "example", Name: "demo", SSH: ssh, Command: []string{"get", "--help", ""}}},
+		{"machine exec", machineaccess.ExecRequest{ContextName: "example", Names: []string{"demo"}, SSH: ssh, Command: []string{"get", "--help", ""}}},
 		{"machine trust", enrollment.EnrollRequest{ContextName: "example", Machines: []string{"node-a", "node-b"}, Replace: []string{"node-b"}, DryRun: true, SkipConfirmation: true}},
 		{"cluster oc", containeraccess.OCRequest{ContextName: "example", Name: "demo", Command: []string{"get", "--help", ""}}},
 		{"cluster kubectl", containeraccess.KubectlRequest{ContextName: "example", Name: "demo", Command: []string{"get", "--help", ""}}},

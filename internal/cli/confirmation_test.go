@@ -233,6 +233,12 @@ func TestEachConfirmationNamesItsObjectAndContextAndKeepsItsConsumersCode(t *tes
 		{action: "force restart machine", object: "rhel-01", context: "lab", prompt: "Confirm force restart of machine rhel-01 in context lab? [y/N] ",
 			args: []string{"machine", "restart", "--force", "--name", "rhel-01"},
 			code: "machine.power", label: "power", remedy: "review it, then repeat bootwright machine restart --context lab --force --name rhel-01 with --yes"},
+		{action: "stop machines", object: "rhel-01, rhel-02, rhel-03", context: "lab", prompt: "Confirm stop of machines rhel-01, rhel-02, rhel-03 in context lab? [y/N] ",
+			args: []string{"machine", "stop", "--name", "rhel-01,rhel-02,rhel-03"},
+			code: "machine.power", label: "power", remedy: "review it, then repeat bootwright machine stop --context lab --name rhel-01,rhel-02,rhel-03 with --yes"},
+		{action: "force restart machines", object: "rhel-01, rhel-02", context: "lab", prompt: "Confirm force restart of machines rhel-01, rhel-02 in context lab? [y/N] ",
+			args: []string{"machine", "restart", "--name", "rhel-01,rhel-02", "--force"},
+			code: "machine.power", label: "power", remedy: "review it, then repeat bootwright machine restart --context lab --force --name rhel-01,rhel-02 with --yes"},
 	} {
 		for _, answer := range []struct {
 			name, prompt, reason string

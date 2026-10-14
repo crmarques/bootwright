@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine stop",
+  "ok": false,
+  "exitCode": 1,
+  "result": {
+    "context": "lab",
+    "verb": "stop",
+    "machines": [
+      {
+        "machine": "rhel-01",
+        "power": "off",
+        "previous": "on",
+        "changed": true,
+        "logs": [
+          "contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a/run.output"
+        ]
+      },
+      {
+        "machine": "rhel-02",
+        "changed": false,
+        "logs": [
+          "contexts/lab/state/runs/run-0a1b2c3d4e5f60718293a4b5c6d7e8f9/run.output"
+        ]
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "lifecycle.state",
+      "message": "the adapter operation did not complete",
+      "object": {
+        "apiVersion": "bootwright.io/v1alpha1",
+        "kind": "Machine",
+        "name": "rhel-02"
+      },
+      "remediation": "read the adapter output retained in this run's run.output"
+    }
+  ],
+  "logs": [
+    "contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a/run.output",
+    "contexts/lab/state/runs/run-0a1b2c3d4e5f60718293a4b5c6d7e8f9/run.output"
+  ]
+}

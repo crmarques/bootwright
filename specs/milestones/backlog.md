@@ -159,6 +159,8 @@ Alias cell.
 | [B537](#b537) | new, 2026-10-13 (the owner's M2b Ceph run) | safety | Storage | A bootstrap that failed before making any mon store is taken back and retried instead of forcing a destroy | Found in the M2b run; no milestone depends on it: destroy recovers it, and removing cluster files needs its own safety decision |
 | [B540](#b540) | new, 2026-10-13 (the X81 review) | safety | Storage | The pool block proves the pool it resumes or creates is newer than its attempt | Found by the X81 review; no milestone depends on it: both cases need an outside actor to recreate the pool during day-0 |
 | [B542](#b542) | new, 2026-10-14 (X84) | defect | Controller setup | A Fedora native plan records the solver version libdnf5 reports in full | Found in X84; no milestone depends on it: nothing compares or gates on the recorded version |
+| [B544](#b544) | new, 2026-10-14 (X85) | defect | Machine | A key offered with `--ssh-id-file` is tried ahead of a Machine's declared password | Found in X85; no milestone depends on it: the password still opens the session, and a borrowed `--ssh-user` account takes the key |
+| [B545](#b545) | new, 2026-10-14 (the X85 review) | defect | Machine, with Workspace | A power batch keeps the retained output of every run its result names | Found by the X85 review; no milestone depends on it: it needs a batch of more than 16 Machines, and every run's outcome is still reported |
 
 ### B82
 
@@ -1218,6 +1220,38 @@ a reader of the plan. Recording all four parts changes the plan a fresh
 resolution records, not any compiled digest. **Exit evidence:** a collection
 unit test that a four-part library version is recorded whole.
 
+### B544
+
+[Machine SSH sessions](../cli.md#machine-ssh-sessions) offer `--ssh-id-file`
+ahead of the declared credential, which remains the fallback. For a Machine
+whose `access.ssh.auth` is a `passwordRef` arm, the session resolves the
+password identity, and `sshlocal.authentication` then passes
+`PubkeyAuthentication=no` with `PreferredAuthentications=password,keyboard-interactive`,
+so the client names the offered key with `-i` but never tries it. X85 found
+this while deciding the several-machine `machine exec` refusal of a password
+identity, which therefore stays a refusal even when a key is offered. The
+outcome is an authentication arm for a password identity with an offered key
+that tries the key first and the password after it, with batch sessions
+restricted to the key. **Exit evidence:** an argument-vector test that a
+password identity with an offered key enables public-key authentication
+ahead of the password methods, and a several-machine `machine exec` test that
+such a Machine opens its session with the offered key instead of refusing.
+
+### B545
+
+A [power batch](../cli.md#machine-power-operations) runs each Machine in its
+own bounded runtime, and a context's runs area keeps the 16 newest runs no live
+run holds (`maxBoundedRuns` in `internal/workspace/contextfs`). A runtime holds
+its run only until its own call returns, so in a batch of more than 16
+Machines, with at most the engine's bound running at once, a later run's
+admission can retire an earlier finished run of the same batch, and the result
+row, the `LOGS` column and the envelope's `logs` then name a `run.output` that
+no longer exists. The outcome is that every run a batch's result names is kept
+until that result is presented: the batch holds its runs until it returns, or
+retention spares the runs of a live invocation. **Exit evidence:** a test that
+a batch of more than 16 Machines leaves every `run.output` its result names in
+place.
+
 ## Retired
 
 Historical IDs no longer issued in their original meanings. D131 reuses
@@ -1535,3 +1569,4 @@ Requires cell as `owner decision: <question>`.
 - **D147** (2026-10-14, the owner): "you can upgrade go to 1.26.9 and mark this backlog as done". This ends D126's deferral of the Go upgrade: [X67](delivered.md#x67--go-toolchain-vulnerability-gate) moves the pin from go1.26.8 to go1.26.9 and delivers B470, so `make vulncheck`, and with it `make check`, passes again and D139's separation of the vulnerability gate from M1's other items holds nothing more. It moves no other dependency; Go 1.27 stays parked as [B273](#b273).
 - **D148** (2026-10-14, the owner accepted the session's recommendation): D140 stands as taken. `machine exec`, `cluster exec`, `cluster oc` and `cluster kubectl` keep the one payload rule of [the CLI contract](../cli.md#parsing-and-input-conventions): Bootwright flags go before the remote command, and every token from the first operand on is payload verbatim, so a remote command's own `--context` or `--name` never retargets the session and `ls -la` needs no `--`. The alternatives the owner declined were the earlier rule, under which a recognized flag after the first operand still took effect, and a mandatory `--` before every payload. No code or contract changes; M1 holds no open decision.
 - **D149** (2026-10-14, the owner): "i upgraded my fedora to 44. bootwright should support it", after `setup` refused the upgraded controller with `controller.unsupported`. This joins B541 to M1 as an exception to D48, because M1's closing run (D59, D125) runs on that controller, and [X84](delivered.md#x84--fedora-44-controllers) delivers it: `setup`, `preflight controller` and the controller stage admit Fedora 44 beside Fedora 43, which stays admitted, and RHEL 9.8.
+- **D150** (2026-10-14, the owner): "update commands bootwright machine start|stop|restart|exec to accept a comma-separated list of machines that the command will be applied in parallel to all". `--name` of those four commands is a comma-separated list under the existing list rules; one member behaves exactly as before and several run concurrently, each power run as today's single-Machine run (at most the engine's bound at once, inside one invocation scope, behind one confirmation) and each exec session non-interactive with its output lines prefixed by their Machine. `machine rsh` stays single because it opens one interactive session, and `cluster rsh` and `cluster exec` are unchanged. Taken by the session, pending the owner's review: (1) a Machine whose resolved identity is a password refuses a several-Machine `exec`, because a password prompt cannot be shared by concurrent sessions; (2) a partial power failure exits `1` with one diagnostic for each failed Machine and still presents every admitted Machine's row; (3) a several-Machine `exec` exits with the highest status any session returned and warns `access.exit` for each nonzero one. [X85](delivered.md#x85--machine-commands-across-several-machines) delivers it as B543.

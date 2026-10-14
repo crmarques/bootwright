@@ -42,8 +42,8 @@ func onlyRefusal(t *testing.T, err error) diagnostics.Diagnostic {
 func TestAPowerVerbRefusesATemplateDelimiterBeforeAnyBinding(t *testing.T) {
 	proved, runtime, runner, confirmer := &pins{}, &boundary{}, &adapter{machine: "metal", power: "off"}, &answer{}
 	state := templatedState{machine: "metal", reference: "{{ lookup('env', 'HOME') }}"}
-	_, err := New(state, evidenceSource{}, proved, runtime, runner, confirmer, nil, nil).
-		Stop(context.Background(), PowerRequest{ContextName: "lab", Name: "metal"})
+	_, err := New(state, evidenceSource{}, proved, runtime, runner, nil, confirmer, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}})
 	refused := onlyRefusal(t, err)
 	if refused.Code != "api.value" || refused.Object == nil || refused.Object.Kind != string(api.Machine) || refused.Object.Name != "metal" {
 		t.Fatalf("refusal = %+v", refused)
@@ -64,7 +64,7 @@ func TestAPowerVerbRefusesATemplateDelimiterBeforeAnyBinding(t *testing.T) {
 func TestAPowerReadRefusesATemplateDelimiterBeforeAnyBinding(t *testing.T) {
 	runtime, runner := &boundary{}, &surveyor{}
 	state := templatedState{machine: "rack", reference: "rack-{% raw %}"}
-	_, err := New(state, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil).
+	_, err := New(state, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil, nil).
 		Read(context.Background(), "lab", []string{"metal", "rack"})
 	refused := onlyRefusal(t, err)
 	if refused.Code != "api.value" || refused.Object == nil || refused.Object.Name != "rack" {

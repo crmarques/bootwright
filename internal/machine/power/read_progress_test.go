@@ -49,7 +49,7 @@ func TestAPowerReadReportsOneCheckPerHost(t *testing.T) {
 
 	reporter := &announced{}
 	runner := &grouped{surveyor: surveyor{reports: reports}}
-	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, runner, nil, reporter, nil).
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, runner, nil, nil, reporter, nil).
 		Read(context.Background(), "lab", selected()); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestAPowerReadReportsOneCheckPerHost(t *testing.T) {
 	unreachable := errors.New("the controller host cannot be reached")
 	reporter = &announced{}
 	runner = &grouped{surveyor: surveyor{reports: reports}, failAt: 2, err: unreachable}
-	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, runner, nil, reporter, nil).
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, runner, nil, nil, reporter, nil).
 		Read(context.Background(), "lab", selected()); !errors.Is(err, unreachable) {
 		t.Fatalf("err = %v, want the run's own failure", err)
 	}

@@ -100,6 +100,26 @@ func TestThePasswordArmLetsTheClientAskAndOffersNoKey(t *testing.T) {
 	}
 }
 
+// A batch session runs beside others that share the terminal, so its client
+// may never prompt; a single session keeps the client's own behavior.
+func TestOnlyABatchSessionForbidsTheClientToPrompt(t *testing.T) {
+	for _, kind := range []machine.IdentityKind{machine.IdentityKey, machine.IdentityOperator, machine.IdentityPassword} {
+		single := arguments(session(kind), paths{config: 3, privateKey: 4, knownHosts: 5})
+		if strings.Contains(strings.Join(single, " "), "BatchMode") {
+			t.Fatalf("a single %s session forbade prompting: %v", kind, single)
+		}
+		batch := session(kind)
+		batch.Batch = true
+		got := arguments(batch, paths{config: 3, privateKey: 4, knownHosts: 5})
+		if !strings.Contains(strings.Join(got, " "), "-o BatchMode=yes") {
+			t.Fatalf("a batch %s session may prompt: %v", kind, got)
+		}
+		if len(got) != len(single)+2 || got[len(got)-1] != batch.Address {
+			t.Fatalf("batch arguments = %v, single = %v", got, single)
+		}
+	}
+}
+
 func TestAPinnedRSAKeyAdmitsTheSignaturesItsServerMayOffer(t *testing.T) {
 	with := session(machine.IdentityKey)
 	with.HostKey = trust.HostKey{Type: "ssh-rsa", PublicKey: "AAAA"}
