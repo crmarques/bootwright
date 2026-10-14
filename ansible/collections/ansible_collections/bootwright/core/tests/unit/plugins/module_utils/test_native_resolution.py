@@ -344,7 +344,7 @@ class Dnf5Transaction(unittest.TestCase):
 
     def test_moves_are_inbound_and_replacements_outbound(self):
         new, up, old = package5("lorax"), package5("podman", version="3"), package5("podman")
-        _, seen = self.solve(
+        _root, seen = self.solve(
             [("Install", new), ("Upgrade", up), ("Replaced", old), ("Reason Change", package5("nmstate"))]
         )
         self.assertEqual(seen["inbound"], [new, up])
