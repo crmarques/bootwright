@@ -23,7 +23,7 @@ func TestEntitlementKindDefaultsSkipTheArmIBMForbids(t *testing.T) {
 	compiler := compilation.NewCompiler(yamlstream.Parser{}, environmentSelection,
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
 		compilation.Rules{Normalize: managedos.Normalize, ValidateAuthored: managedos.ValidateAuthored, ValidatePartial: managedos.ValidatePartial, Validate: managedos.Validate},
-		compilation.Rules{Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate})
+		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate})
 	state, _, err := compiler.Compile(context.Background(), refusalSources(refusalRow{environment: environment, probe: declarations}))
 	if err != nil {
 		for _, d := range diagnostics.Of(err) {

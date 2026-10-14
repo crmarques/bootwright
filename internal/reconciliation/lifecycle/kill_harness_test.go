@@ -27,27 +27,25 @@ import (
 // needs one more has a defect and one that never needs its whole bound fails
 // the harness.
 const (
-	// killBoundFreshApply is two applies. A kill after a block's running
+	// killBoundFreshApply is one apply. A kill after a block's running
 	// record lands and before its outcome does leaves the block running, which
 	// the next invocation observes before it starts anything
 	// (specs/state-reconciliation.md, Block transitions and its running-block
 	// rule). A kill before the effect ran makes that observation prove no
-	// effect, so the block is failed; the scheduler never admits a block its
-	// own invocation observed (scheduler.go's worked rule) and continuation
-	// retries a failed block once per invocation and never one it failed
-	// itself (Continuation and removal), so only the second apply retries it
-	// and starts what waits on it. One block runs at a time, so no kill leaves
+	// effect, so the block is failed; a resolution is not an attempt, so the
+	// same invocation retries it and starts what waits on it (scheduler.go's
+	// observed and worked rules). One block runs at a time, so no kill leaves
 	// two.
-	killBoundFreshApply = 2
-	// killBoundDestroy is two destroys, for the same reason: a kill before a
+	killBoundFreshApply = 1
+	// killBoundDestroy is one destroy, for the same reason: a kill before a
 	// removal's effect leaves its block running with the target present, which
-	// the next destroy observes, finds not removed and leaves failed, and only
-	// the one after retries it.
-	killBoundDestroy = 2
-	// killBoundContinuation is two applies: the continuation's own retry of the
+	// the next destroy observes, finds not removed and leaves failed, and
+	// retries in the same invocation.
+	killBoundDestroy = 1
+	// killBoundContinuation is one apply: the continuation's own retry of the
 	// failed block is killed exactly as a fresh attempt is, and is observed and
 	// retried the same way.
-	killBoundContinuation = 2
+	killBoundContinuation = 1
 	// killBoundSupersede is one destroy. A fresh destroy over an incomplete
 	// apply observes every unproved block before it registers (Resolution
 	// outcomes) and then removes every block the apply started, failed or done
@@ -76,23 +74,23 @@ const (
 	// operation done and then publishes its projection, and an apply over what
 	// a kill before either write left finalizes the rest before it settles.
 	killBoundLagging = 1
-	// killBoundReplacement is two destroys, as killBoundDestroy is. A destroy
+	// killBoundReplacement is one destroy, as killBoundDestroy is. A destroy
 	// over that failed apply replaces it with a removal of its whole frozen
 	// plan (Continuation and removal), so a kill before one of that removal's
 	// effects leaves the block running with the target present, which the
-	// next destroy observes, finds not removed and leaves failed, and only the
-	// one after retries it.
-	killBoundReplacement = 2
-	// killBoundPartial is two destroys, as killBoundDestroy is. A fresh
+	// next destroy observes, finds not removed and leaves failed, and retries
+	// in the same invocation.
+	killBoundReplacement = 1
+	// killBoundPartial is one destroy, as killBoundDestroy is. A fresh
 	// destroy over an apply whose lost attempt left its target part way
 	// realized resolves that block to failed before it registers (Resolution
 	// outcomes) and then removes it with every other block the apply started,
 	// so a kill before or inside that resolution leaves it for the next
 	// destroy to observe again. A kill before the removal's effect on it
 	// leaves it running with the target still part way there, which the next
-	// destroy observes, finds not removed and leaves failed, and only the one
-	// after retries it.
-	killBoundPartial = 2
+	// destroy observes, finds not removed and leaves failed, and retries in
+	// the same invocation.
+	killBoundPartial = 1
 	// killBoundUnraised is one destroy. An apply killed after its claim and
 	// before its running evidence landed leaves that claim under pristine
 	// evidence, and a destroy that settles beside it reclaims it in a
@@ -130,6 +128,10 @@ type killHost struct {
 	// foreign each block whose target a foreign object of the same identity
 	// holds, and silent each block whose host does not answer an observation.
 	partial, foreign, silent map[string]bool
+	// online names the services of the online-removal journey. Its Machines
+	// are already stopped by the operator, so every durable boundary on both
+	// sides of the deferred stop proof can be killed in one invocation.
+	online map[string]bool
 }
 
 func newKillHost(definitions []reconciliation.BlockDefinition) *killHost {
@@ -144,9 +146,15 @@ func (h *killHost) clone() *killHost {
 	defer h.mutex.Unlock()
 	return &killHost{
 		definitions: h.definitions, realized: maps.Clone(h.realized), effects: maps.Clone(h.effects), failures: maps.Clone(h.failures),
-		lost: maps.Clone(h.lost), partial: maps.Clone(h.partial), foreign: maps.Clone(h.foreign), silent: maps.Clone(h.silent),
+		lost: maps.Clone(h.lost), partial: maps.Clone(h.partial), foreign: maps.Clone(h.foreign), silent: maps.Clone(h.silent), online: maps.Clone(h.online),
 	}
 }
+
+func (h *killHost) RequiresOnlineRemoval(block reconciliation.Block) bool {
+	return h.online[block.ID]
+}
+
+func (*killHost) ProbesQuiescence() bool { return true }
 
 func (h *killHost) Plan(context.Context, PlanInput) (CapabilityPlan, error) {
 	return CapabilityPlan{
@@ -860,6 +868,15 @@ func killJourneys() []killJourney {
 			t.Fatal("the apply a partial resolution starts from did not lose b part way")
 		}
 	}
+	online := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		rig.host.definitions = []reconciliation.BlockDefinition{
+			stagedDefinition("machine", reconciliation.StageMachines),
+			stagedDefinition("storage", reconciliation.StageClusters, "machine"),
+		}
+		rig.host.online = map[string]bool{"storage": true}
+		applied(ctx, t, rig)
+	}
 	return []killJourney{
 		{name: "a", bound: killBoundFreshApply, run: reconciliation.Apply, retry: reconciliation.Apply},
 		{name: "b", bound: killBoundDestroy, start: applied, run: reconciliation.Destroy, retry: reconciliation.Destroy},
@@ -871,6 +888,7 @@ func killJourneys() []killJourney {
 		{name: "h", bound: killBoundReplacement, start: lagging, run: reconciliation.Destroy, retry: reconciliation.Destroy},
 		{name: "i", bound: killBoundPartial, start: lostPartly, run: reconciliation.Destroy, retry: reconciliation.Destroy, reaches: killRemovalResolution()},
 		{name: "j", bound: killBoundUnraised, start: unraised, run: reconciliation.Destroy, retry: reconciliation.Destroy, reaches: killReclaim()},
+		{name: "k", bound: killBoundDestroy, start: online, run: reconciliation.Destroy, retry: reconciliation.Destroy},
 	}
 }
 

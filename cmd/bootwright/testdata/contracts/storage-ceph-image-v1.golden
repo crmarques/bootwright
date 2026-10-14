@@ -1,0 +1,22 @@
+implementation: storage-ceph-image-v1
+content-digest: 9730cadd6ce46c97c727b3955f3bba23ec7b4d935cf483d74e2b9b1cbe7f8ef5
+automation-formats: none
+request-schema:
+  base string
+  cluster string
+  controller string
+  image string
+  registry string
+  registryRef string
+  release string
+  tag string
+  version string
+evidence-schema:
+  absent bool omitempty
+  base string omitempty
+  digest string omitempty
+  platform string omitempty
+  postcondition bool
+  release string omitempty
+  request string
+  tag string omitempty

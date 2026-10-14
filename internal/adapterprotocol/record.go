@@ -21,6 +21,7 @@ type Record struct {
 	Outcome     string
 	Reason      string
 	Source      string
+	Detail      string
 	Evidence    json.RawMessage
 	Preparation json.RawMessage
 }
@@ -42,6 +43,7 @@ const (
 	MaxLine = 65536
 	// maxDepth is the deepest nesting of objects and arrays a record holds.
 	maxDepth             = 16
+	maxDetail            = 160
 	maxLifecycleRecords  = 64
 	maxControllerRecords = 132
 )
@@ -58,11 +60,12 @@ func (a Admission) Records() int {
 }
 
 // phase is one phase's exact member set and the runners that admit it. A
-// source is an optional member of a refusal only for the runners in source.
+// source or detail is an optional refusal member only for its runners.
 type phase struct {
 	members  []string
 	admitted Admission
 	source   Admission
+	detail   Admission
 }
 
 // phases is the one table of which runner admits which phase.
@@ -73,7 +76,7 @@ var phases = map[string]phase{
 	"native":    {members: []string{"phase"}, admitted: Controller},
 	"continue":  {members: []string{"phase"}, admitted: Controller},
 	"completed": {members: []string{"evidence", "outcome", "phase"}, admitted: Lifecycle | Controller},
-	"refused":   {members: []string{"phase", "reason"}, admitted: Lifecycle | Controller, source: Controller},
+	"refused":   {members: []string{"phase", "reason"}, admitted: Lifecycle | Controller, source: Controller, detail: Lifecycle},
 }
 
 var (
@@ -248,6 +251,9 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 	if _, named := members["source"]; named && rule.source&admission != 0 {
 		expected = append(slices.Clone(expected), "source")
 	}
+	if _, named := members["detail"]; named && rule.detail&admission != 0 {
+		expected = append(slices.Clone(expected), "detail")
+	}
 	if len(members) != len(expected) {
 		return Record{}, errRecord
 	}
@@ -271,6 +277,9 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 		if raw, named := members["source"]; named {
 			valid = valid && text(raw, &record.Source) && record.Source != ""
 		}
+		if raw, named := members["detail"]; named {
+			valid = valid && text(raw, &record.Detail) && detailed(record.Detail)
+		}
 	case "prepared":
 		record.Preparation = members["preparation"]
 		valid = len(record.Preparation) > 0 && record.Preparation[0] == '{'
@@ -279,6 +288,18 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 		return Record{}, errRecord
 	}
 	return record, nil
+}
+
+func detailed(value string) bool {
+	if value == "" || len(value) > maxDetail {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("_.:@-", c)) {
+			return false
+		}
+	}
+	return true
 }
 
 // text decodes a member that must be a JSON string.

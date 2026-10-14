@@ -13,6 +13,8 @@ Exec=--config /etc/sushy/conf.py
 StopSignal=SIGINT
 Volume=/var/lib/bootwright-substrate/lab-rhel/rhel-01/conf.py:/etc/sushy/conf.py:ro
 Volume=/var/lib/bootwright-substrate/lab-rhel/rhel-01/htpasswd:/etc/sushy/htpasswd:ro
+Volume=/var/lib/bootwright-substrate/lab-rhel/rhel-01/tls.crt:/etc/sushy/tls.crt:ro
+Volume=/var/lib/bootwright-substrate/lab-rhel/rhel-01/tls.key:/etc/sushy/tls.key:ro
 Volume=/run/libvirt:/run/libvirt:rw
 
 [Service]

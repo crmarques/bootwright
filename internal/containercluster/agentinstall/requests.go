@@ -46,6 +46,7 @@ type Controller struct {
 	CredentialsRef string       `json:"credentialsRef"`
 	Endpoint       string       `json:"endpoint"`
 	TLSVerify      bool         `json:"tlsVerify"`
+	TrustBundleRef string       `json:"trustBundleRef,omitempty"`
 	VirtualMedia   VirtualMedia `json:"virtualMedia"`
 }
 
@@ -259,7 +260,7 @@ func (r MediaRequest) SecretReferences() []string {
 func (r InstallRequest) SecretReferences() []string {
 	references := r.Placement.SecretReferences()
 	for _, node := range r.Nodes {
-		references = append(references, node.Controller.CredentialsRef)
+		references = append(references, node.Controller.CredentialsRef, node.Controller.TrustBundleRef)
 	}
 	return sortedUnique(references)
 }

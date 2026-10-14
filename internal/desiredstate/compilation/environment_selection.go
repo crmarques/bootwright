@@ -6,7 +6,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-func selectingEnvironment(documents []desiredstate.Document, parseDiagnostics []diagnostics.Diagnostic, ds *diagnosticSink) *objectRecord {
+func selectingEnvironment(documents []desiredstate.Document, parseDiagnostics []diagnostics.Diagnostic, ds *diagnosticSink, rules ...Rules) *objectRecord {
 	var selected *objectRecord
 	candidates := []desiredstate.Document{}
 	invalid := []desiredstate.Document{}
@@ -21,7 +21,7 @@ func selectingEnvironment(documents []desiredstate.Document, parseDiagnostics []
 		// errors are relevant only if its file is selected, or no Environment can
 		// be admitted. The probe's diagnostics are bounded and discarded here.
 		probe := newDiagnostics(ds.ctx)
-		record := decodeDocument(document, probe)
+		record := decodeDocument(document, probe, rules...)
 		if record == nil {
 			invalid = append(invalid, document)
 			continue
@@ -43,7 +43,7 @@ func selectingEnvironment(documents []desiredstate.Document, parseDiagnostics []
 			if ds.stopped() {
 				break
 			}
-			decodeDocument(document, ds)
+			decodeDocument(document, ds, rules...)
 		}
 		if len(invalid) == 0 {
 			ds.add(diagnostics.Diagnostic{Severity: "error", Code: "api.invariant", Message: "exactly one Environment is required",

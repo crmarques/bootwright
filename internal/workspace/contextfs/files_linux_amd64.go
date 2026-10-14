@@ -649,7 +649,23 @@ func (s *Store) ensureDirectory(ctx context.Context, parent *directory, name str
 	if !errors.Is(err, syscall.ENOENT) {
 		return child, err
 	}
-	return s.newDirectory(ctx, parent, name)
+	child, err = s.newDirectory(ctx, parent, name)
+	if !errors.Is(err, syscall.EEXIST) {
+		return child, err
+	}
+	return s.concurrentDirectory(ctx, parent, name)
+}
+
+func (s *Store) concurrentDirectory(ctx context.Context, parent *directory, name string) (*directory, error) {
+	child, err := openDirectory(parent, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.syncDirectory(ctx, parent); err != nil {
+		child.file.Close()
+		return nil, err
+	}
+	return child, nil
 }
 
 func (s *Store) syncDirectory(ctx context.Context, dir *directory) error {

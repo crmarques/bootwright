@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import pytest
 
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
@@ -36,6 +37,29 @@ DVD = {"name": "rhel-9.8-x86_64-dvd.iso", "sha256": "fedcba9876543210" * 4, "siz
 
 def applied():
     return flattened(ROLE / "tasks" / "apply.yml")
+
+
+@pytest.mark.parametrize("channel", ["delivered-key", "guest-agent"])
+def test_actual_bound_key_policy_is_checked_before_publication_or_boot(channel):
+    tasks = LOADER.load_from_file(str(ROLE / "tasks" / "apply.yml"), trusted_as_template=True)
+    check = next(index for index, task in enumerate(tasks)
+                 if any("bootwright.core.ssh_key_policy" in inner for inner in task.get("block", [])))
+    for task in tasks[:check]:
+        assert "ansible.builtin.assert" in task or task.get(PROTOCOL, {}).get("phase") == "loaded"
+    templar = Templar(loader=LOADER, variables={
+        "bootwright_os_install_request": {"fleetKeyRef": "fleet", "target": {
+            "channel": channel, "hostKeyRef": "host",
+        }},
+        "bootwright_os_install_material": {"fleetKeyType": "ssh-rsa", "hostKeyType": "ssh-ed25519"},
+    })
+    keys = templar.template(tasks[check]["block"][0]["bootwright.core.ssh_key_policy"]["keys"])
+    rescue = tasks[check]["rescue"]
+    assert rescue[0][PROTOCOL] == {"phase": "refused", "reason": '{{ ansible_failed_result.reason | default("ssh-policy-unavailable") }}'}
+    assert "ansible.builtin.fail" in rescue[1]
+    expected = [{"secret": "fleet", "type": "ssh-rsa", "usage": "fleet"}]
+    if channel == "delivered-key":
+        expected.append({"secret": "host", "type": "ssh-ed25519", "usage": "host"})
+    assert keys == expected
 
 
 def index_of(tasks, predicate, description):
@@ -114,7 +138,6 @@ def test_an_apply_proves_its_boot_images_size_and_digest_before_first_use():
 
 
 ROLES = ROLE.parent
-SSH_CONFIG = "Include /etc/crypto-policies/back-ends/openssh.config\n"
 SSH_OPTIONS = (
     "GlobalKnownHostsFile=none", "KnownHostsCommand=none", "VerifyHostKeyDNS=no", "UpdateHostKeys=no",
     "CheckHostIP=no", "StrictHostKeyChecking=yes", "IdentitiesOnly=yes", "IdentityAgent=none",
@@ -224,7 +247,11 @@ def test_every_ssh_argv_uses_a_generated_configuration_and_keepalives():
             assert "| bootwright.core.host_key_algorithms" in derivations[-1]["ansible.builtin.set_fact"][fact], where
             writes = [earlier for earlier in tasks[:index]
                       if (earlier.get(COPY) or {}).get("dest") == configuration]
-            assert writes and writes[-1][COPY]["content"] == SSH_CONFIG, where
+            checks = [earlier for earlier in tasks[:index] if "bootwright.core.ssh_key_policy" in earlier]
+            assert checks, where
+            policy_name = checks[-1]["register"]
+            assert writes and writes[-1][COPY]["content"] == "{{ %s.configuration }}" % policy_name, where
+            assert policy_name + ".hostKeyAlgorithms" in derivations[-1]["ansible.builtin.set_fact"][fact], where
             assert (writes[-1][COPY]["owner"], writes[-1][COPY]["group"], writes[-1][COPY]["mode"]) == ("root", "root", "0600"), where
             removals = [later for later in tasks[index + 1:]
                         if (later.get(FILE) or {}).get("path") == configuration and later[FILE].get("state") == "absent"]

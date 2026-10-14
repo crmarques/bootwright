@@ -173,6 +173,17 @@ def test_a_power_state_the_controller_never_reported_is_refused():
         substrate_machine_protocol.presence(machine_observation(), "Spinning", "uuid", DIGEST)
 
 
+def test_machine_disk_publishes_complete_observed_ssd_presentation():
+    row = {"name": "data", "present": True, "sizeGiB": 20, "bus": "scsi", "target": "sda", "rotationRate": 1}
+    assert substrate_machine_protocol.disk_evidence(row) == row
+    for missing in ("bus", "target", "rotationRate"):
+        with pytest.raises(ValueError, match="disk evidence"):
+            substrate_machine_protocol.disk_evidence({key: value for key, value in row.items() if key != missing})
+    for field, value in (("bus", True), ("target", 1), ("rotationRate", True)):
+        with pytest.raises(ValueError, match="disk media"):
+            substrate_machine_protocol.disk_evidence(dict(row, **{field: value}))
+
+
 # A refused postcondition publishes no evidence, and its message names fields,
 # never values. The completion runs under `no_log`, and the adapter's output
 # callback prints nothing a hidden task raised (plugins/callback/censored.py),

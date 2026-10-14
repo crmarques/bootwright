@@ -49,7 +49,7 @@ type countedStore struct {
 	counter *startCounter
 }
 
-func (s countedStore) StartAttempt(ctx context.Context, id, block string) (int, error) {
+func (s countedStore) StartAttempt(ctx context.Context, id, block string, build operationstore.Build) (int, error) {
 	s.counter.mutex.Lock()
 	s.counter.starts[block]++
 	repeated := s.counter.starts[block] > 1
@@ -57,7 +57,7 @@ func (s countedStore) StartAttempt(ctx context.Context, id, block string) (int, 
 	if repeated {
 		s.counter.repeat()
 	}
-	number, err := s.OperationStore.StartAttempt(ctx, id, block)
+	number, err := s.OperationStore.StartAttempt(ctx, id, block, build)
 	if err != nil {
 		s.counter.once.Do(func() { close(s.counter.refused) })
 	}

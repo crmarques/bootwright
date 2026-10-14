@@ -65,7 +65,8 @@ type Controller struct {
 	// TLSVerify covers the controller-to-BMC leg. An opt-out is declared per
 	// endpoint and never becomes a default.
 	TLSVerify bool
-	// TrustBundleRef names the caBundle Secret that is the one anchor of the
+	// TrustBundleRef names a physical endpoint's caBundle Secret or the
+	// emulated controller's tlsCertificate Secret as the one anchor of the
 	// controller-to-BMC leg when set; the system trust store anchors it
 	// otherwise. Admission refuses it beside TLSVerify false.
 	TrustBundleRef string
@@ -218,6 +219,11 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 		return Target{}, refusal("api.required", "the provider declares no emulated controller credential",
 			"set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on "+provider.Identity())
 	}
+	certificate := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "certificateRef").Text()
+	if certificate == "" {
+		return Target{}, refusal("api.required", "the provider declares no emulated controller serving certificate",
+			"set spec.libvirt.bmcEmulationDefaults.certificateRef on "+provider.Identity())
+	}
 	host, ok := catalog.Find(api.Machine, provider.Spec().Get("libvirt", "machineRef").Text())
 	if !ok {
 		return Target{}, refusal("api.reference", "the provider's host Machine is not in the selected graph",
@@ -227,11 +233,11 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 	target.Controller = Controller{
 		Endpoint:       ControllerEndpoint(address, port, DomainUUID(contextName, machine.Name())),
 		CredentialsRef: credentials,
-		// The emulator serves plain HTTP, so there is no leg to verify, and it
-		// is configured to fetch media without verifying the artifact server.
-		// Neither is a per-boot action the installation performs.
-		TLSVerify:    true,
-		VirtualMedia: VirtualMedia{Trust: TrustEstablished},
+		// The serving certificate anchors this connection. The emulator
+		// establishes artifact-fetch trust when its container is realized.
+		TLSVerify:      true,
+		TrustBundleRef: certificate,
+		VirtualMedia:   VirtualMedia{Trust: TrustEstablished},
 	}
 	target.Identity = Identity{
 		Channel: ChannelGuestAgent,

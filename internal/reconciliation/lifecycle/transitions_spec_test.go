@@ -543,7 +543,7 @@ func blockStep(t *testing.T, state reconciliation.BlockState) string {
 	if len(reconciliation.Startable(plan, states, nil)) == 1 {
 		steps = append(steps, "attempt")
 	}
-	if _, _, ok := retryCandidate(plan, states, nil, nil); ok {
+	if kind, admitted := firstAdmission(plan, states, nil, nil, nil, nil); kind == StepRetry && len(admitted) == 1 {
 		steps = append(steps, "retry")
 	}
 	switch len(steps) {
@@ -570,7 +570,7 @@ func startedFrom(t *testing.T, state reconciliation.BlockState) reconciliation.B
 			if err != nil || block != state {
 				continue
 			}
-			number, err := store.StartAttempt(ctx, id, "block")
+			number, err := store.StartAttempt(ctx, id, "block", registeringBuild(strings.Repeat("c", 64)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -584,7 +584,7 @@ func startedFrom(t *testing.T, state reconciliation.BlockState) reconciliation.B
 			t.Fatalf("no attempt outcome leaves a block %q", state)
 		}
 	}
-	if _, err := store.StartAttempt(ctx, id, "block"); err != nil {
+	if _, err := store.StartAttempt(ctx, id, "block", registeringBuild(strings.Repeat("c", 64))); err != nil {
 		t.Fatal(err)
 	}
 	record, err := store.Block(ctx, id, "block")

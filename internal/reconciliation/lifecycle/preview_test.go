@@ -558,9 +558,10 @@ func twoMachines() []reconciliation.BlockDefinition {
 }
 
 // A stage preview marks what the next apply admits first, as its scheduler
-// decides it: an unproved block it resolves or the failed block it retries
-// holds back every other ready block, which is deferred behind it, and the set
-// the preview marks is the set that apply then works.
+// decides it: an unproved block it resolves holds back every other ready block,
+// which is deferred behind it, while every failed block it retries starts
+// beside every ready block that waits on none of them, and the set the preview
+// marks is the set that apply then works.
 func TestAStagePreviewMarksWhatTheNextApplyAdmits(t *testing.T) {
 	ctx := context.Background()
 	failed := map[string]error{"os-install-rhel-01": errors.New("the installation failed")}
@@ -581,9 +582,28 @@ func TestAStagePreviewMarksWhatTheNextApplyAdmits(t *testing.T) {
 		{
 			name: "a failed installation of one of two Machines", definitions: twoMachines(), stage: "machines",
 			prepare:   func(h *harness) { h.capability.errorFor = failed },
-			marks:     map[string]string{"os-install-rhel-01": StepRetry, "os-install-rhel-02": StepWaiting},
-			waits:     map[string]string{"os-install-rhel-02": "os-install-rhel-01"},
-			startable: 1, deferred: 1, admitted: []string{"apply:os-install-rhel-01"},
+			marks:     map[string]string{"os-install-rhel-01": StepRetry, "os-install-rhel-02": StepStart},
+			startable: 2, admitted: []string{"apply:os-install-rhel-01", "apply:os-install-rhel-02"},
+		},
+		{
+			name: "three failed blocks beside a pending one", stage: "infra-components",
+			definitions: []reconciliation.BlockDefinition{
+				definition("alpha"), definition("bravo"), definition("charlie"), definition("delta"), dependent("echo", "alpha"),
+			},
+			// Three at a time leaves delta pending behind the failures.
+			prepare: func(h *harness) {
+				h.service.options.Concurrency = 3
+				h.capability.errorFor = map[string]error{
+					"alpha":   errors.New("alpha could not be served"),
+					"bravo":   errors.New("bravo could not be served"),
+					"charlie": errors.New("charlie could not be served"),
+				}
+			},
+			marks: map[string]string{
+				"alpha": StepRetry, "bravo": StepRetry, "charlie": StepRetry, "delta": StepStart, "echo": StepWaiting,
+			},
+			waits:     map[string]string{"echo": "alpha"},
+			startable: 4, deferred: 1, admitted: []string{"apply:alpha", "apply:bravo", "apply:charlie", "apply:delta"},
 		},
 		{
 			name: "an unknown installation of one of two Machines", definitions: twoMachines(), stage: "machines",
@@ -610,7 +630,7 @@ func TestAStagePreviewMarksWhatTheNextApplyAdmits(t *testing.T) {
 			if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
 				t.Fatal("the first apply reported success")
 			}
-			h.capability.outcomeFor, h.capability.calls = nil, nil
+			h.capability.outcomeFor, h.capability.calls, h.service.options.Concurrency = nil, nil, 0
 			preview, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName, Stages: []string{tc.stage}})
 			if err != nil {
 				t.Fatal(err)
@@ -642,7 +662,10 @@ func TestAStagePreviewMarksWhatTheNextApplyAdmits(t *testing.T) {
 			if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Stages: []string{tc.stage}, SkipConfirmation: true}); (err == nil) != tc.completes {
 				t.Fatalf("the next apply = %v", err)
 			}
-			if !slices.Equal(h.capability.calls, tc.admitted) || !slices.Equal(h.capability.calls, marked) {
+			// Blocks admitted together reach their adapters in no fixed order.
+			worked := slices.Sorted(slices.Values(h.capability.calls))
+			slices.Sort(marked)
+			if !slices.Equal(worked, tc.admitted) || !slices.Equal(worked, marked) {
 				t.Fatalf("the preview marked %v, the next apply worked %v", marked, h.capability.calls)
 			}
 			shown, previewed := h.presenter.presented[len(h.presenter.presented)-1], *preview

@@ -85,7 +85,7 @@ def run4(base):
             self.failed = True
 
     # Every path is local and checks are explicitly enabled. Missing publisher
-    # trust is a refusal; importing keys is outside the frozen package grant.
+    # trust refuses; only the Ceph grant imports its pinned signer keys first.
     base.conf.gpgcheck = True
     base.conf.localpkg_gpgcheck = True
     for package in base.transaction.install_set:
@@ -157,6 +157,8 @@ def apply(request, scratch):
         before = native.inspect(request, scratch)
         if before["inventorySHA256"] != plan["beforeSHA256"]:
             raise ValueError("native inventory changed before transaction")
+        if request.get("policy") == "ceph-packages-v1":
+            native_signatures.import_ceph_keys(request)
         # DNF owns its transaction lock, RPM checks, vendor hooks and history.
         # Concurrent direct RPM/operator writes are diagnosed by exact inventory
         # comparison; they are outside this supported coordination boundary.

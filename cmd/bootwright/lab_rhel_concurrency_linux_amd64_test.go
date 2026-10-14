@@ -16,7 +16,7 @@ import (
 func TestThreeNodeRHELExampleSharesOnePublicationAndAdmitsIndependentWork(t *testing.T) {
 	sources := exampleDirectory(t, "lab-rhel-3-nodes")
 	state, _ := compileAcceptance(t, sources)
-	if len(sources.Files) != 16 || len(state.Effective().Objects()) != 16 {
+	if len(sources.Files) != 17 || len(state.Effective().Objects()) != 17 {
 		t.Fatal("the three-node fixture is incomplete")
 	}
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})

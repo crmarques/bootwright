@@ -64,6 +64,7 @@
       "verb": "destroy",
       "state": "done",
       "next": "none",
+      "anotherBuild": false,
       "blocks": [
         {
           "id": "os-install-rhel-01",

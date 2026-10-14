@@ -161,6 +161,11 @@ func TestDocsCommandLinesMatchTheCatalog(t *testing.T) {
 			}
 			allowed := flagSpellings(spec.flags)
 			for _, argument := range arguments {
+				// A remote command's flags after -- are payload, just as in
+				// the CLI parser. Keep checking Bootwright flags before it.
+				if argument == "--" {
+					break
+				}
 				if !strings.HasPrefix(argument, "-") || argument == "-" {
 					continue
 				}

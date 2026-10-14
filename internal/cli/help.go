@@ -56,6 +56,7 @@ func helpExample(path string) string {
 		"media add": "--name installer.iso --from-file ./installer.iso", "media list": "--checksums", "media delete": "--name installer.iso",
 		"validate": "--file ./input --output json", "preflight controller": "--context lab", "plan": "--context lab --stage machines", "status": "--context lab", "render effective": "--context lab --output json", "apply": "--context lab --stage machines", "destroy": "--context lab",
 		"machine list": "--context lab --power-status", "machine rsh": "--context lab --name node", "machine exec": "--context lab --name node -- uname -a", "machine start": "--context lab --name node", "machine stop": "--context lab --name node", "machine restart": "--context lab --name node", "machine trust": "--context lab --dry-run", "setup": "--dry-run", "cluster kubeconfig": "--context lab --name cluster",
+		"cluster list": "--context lab", "cluster info": "--context lab --name storage", "cluster rsh": "--context lab --name storage --node node-1", "cluster exec": "--context lab --name storage -- uname -a",
 		"version": "", "help": "context init", "completion bash": "", "completion zsh": "", "completion fish": "", "completion powershell": "",
 	}
 	suffix, ok := examples[path]

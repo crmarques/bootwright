@@ -71,7 +71,7 @@ func TestMachinePlanRequiresItsProviderByObject(t *testing.T) {
 	if !slices.Equal(definition.Requires, want) {
 		t.Fatalf("requires = %v", definition.Requires)
 	}
-	if !slices.Equal(plan.Secrets, []string{"lab-bmc-credentials"}) {
+	if !slices.Equal(plan.Secrets, []string{"lab-bmc-credentials", "lab-bmc-tls"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}
 }
@@ -219,12 +219,33 @@ func TestEveryInvocationCarriesTheFrozenRequestAndNoMaterial(t *testing.T) {
 	names := []string{}
 	for _, file := range invocation.Materials {
 		names = append(names, file.Name)
-		if file.Secret != "lab-bmc-credentials" {
+		if file.Secret != "lab-bmc-credentials" && file.Secret != "lab-bmc-tls" {
 			t.Fatalf("material file %q names %q", file.Name, file.Secret)
 		}
 	}
-	if !slices.Equal(names, []string{"bmc-user", "bmc-password"}) {
+	if !slices.Equal(names, []string{"bmc-user", "bmc-password", "bmc-certificate", "bmc-private-key"}) {
 		t.Fatalf("material files = %v", names)
+	}
+}
+
+func TestControllerReadsAndRemovalReceiveNoServingPrivateKey(t *testing.T) {
+	request := machineRequest(t)
+	for _, operation := range []string{"observe", "destroy"} {
+		runner := &fakeRunner{}
+		_, err := NewMachine(runner).run(context.Background(), lifecycle.Execution{}, operation, request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		certificate := lifecycle.MaterialFile{Name: "bmc-certificate", Part: secrets.CertificatePart,
+			Secret: "lab-bmc-tls", Variable: "controllerCertificate"}
+		if !slices.Contains(runner.requests[0].Materials, certificate) {
+			t.Fatalf("%s omitted the controller's TLS anchor", operation)
+		}
+		for _, file := range runner.requests[0].Materials {
+			if file.Secret == "lab-bmc-tls" && file.Part != secrets.CertificatePart {
+				t.Fatalf("%s received the serving key: %+v", operation, file)
+			}
+		}
 	}
 }
 

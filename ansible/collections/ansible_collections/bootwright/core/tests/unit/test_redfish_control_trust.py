@@ -65,20 +65,28 @@ def authority(common):
     return key, certificate
 
 
-def issued(issuer_key, issuer):
-    """A server key and the certificate the given CA issues it for 127.0.0.1."""
+def issued(issuer_key, issuer, self_signed=False):
+    """A server certificate, optionally self-signed like a generated TLS Secret."""
     key = ec.generate_private_key(ec.SECP256R1())
+    if self_signed:
+        issuer_key = key
     now = datetime.datetime.now(datetime.timezone.utc)
     certificate = (
-        x509.CertificateBuilder().subject_name(_name("127.0.0.1")).issuer_name(issuer.subject)
+        x509.CertificateBuilder().subject_name(_name("127.0.0.1"))
+        .issuer_name(_name("127.0.0.1") if self_signed else issuer.subject)
         .public_key(key.public_key()).serial_number(x509.random_serial_number())
         .not_valid_before(now - datetime.timedelta(minutes=5)).not_valid_after(now + datetime.timedelta(days=1))
         .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), critical=False)
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(x509.KeyUsage(digital_signature=True, content_commitment=False, key_encipherment=False,
+                                     data_encipherment=False, key_agreement=False, key_cert_sign=False,
+                                     crl_sign=False, encipher_only=False, decipher_only=False), critical=True)
         .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
-        .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()), critical=False)
-        .sign(issuer_key, hashes.SHA256()))
-    return key, certificate
+    )
+    if not self_signed:
+        certificate = certificate.add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()), critical=False)
+    return key, certificate.sign(issuer_key, hashes.SHA256())
 
 
 def pem(certificate):
@@ -100,12 +108,11 @@ class Answering(http.server.BaseHTTPRequestHandler):
         return
 
 
-@pytest.fixture(name="served")
+@pytest.fixture(name="served", params=["issued", "self-signed"])
 def served_fixture(request, tmp_path):
-    """A controller on 127.0.0.1 presenting a certificate its own CA issued:
-    its endpoint, and that CA as PEM."""
+    """A loopback controller, with its CA or self-signed serving leaf as anchor."""
     issuer_key, issuer = authority("controller authority")
-    key, certificate = issued(issuer_key, issuer)
+    key, certificate = issued(issuer_key, issuer, self_signed=request.param == "self-signed")
     chain, private = tmp_path / "server.pem", tmp_path / "server.key"
     chain.write_text(pem(certificate))
     private.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
@@ -123,7 +130,7 @@ def served_fixture(request, tmp_path):
         thread.join()
 
     request.addfinalizer(stop)
-    return "https://127.0.0.1:%d/redfish/v1/Systems/1" % server.server_address[1], pem(issuer)
+    return "https://127.0.0.1:%d/redfish/v1/Systems/1" % server.server_address[1], pem(certificate if request.param == "self-signed" else issuer)
 
 
 # A declared bundle is the one anchor the controller's transport verifies
@@ -157,6 +164,12 @@ def test_a_controller_its_bundle_anchors_is_verified_and_another_is_refused(serv
             redfish_control.Client(endpoint, "operator", "p4ssw0rd", ca_data=bundle).fetch()
         assert str(failure.value) == (
             "reading /redfish/v1/Systems/1: the controller's certificate did not verify against " + named)
+
+
+def test_a_pinned_certificate_still_requires_the_declared_endpoint_identity(served):
+    endpoint, anchor = served
+    with pytest.raises(redfish_control.UnverifiedCertificate):
+        redfish_control.Client(endpoint.replace("127.0.0.1", "localhost"), "operator", "p4ssw0rd", ca_data=anchor).fetch()
 
 
 # A bundle beside verification turned off contradicts itself, and one ssl

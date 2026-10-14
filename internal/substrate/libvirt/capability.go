@@ -524,6 +524,10 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 	materials := []lifecycle.MaterialFile{
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Controller.CredentialsRef, Variable: "controllerUser"},
 		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Controller.CredentialsRef, Variable: "controllerPassword"},
+		{Name: "bmc-certificate", Part: secrets.CertificatePart, Secret: request.Controller.CertificateRef, Variable: "controllerCertificate"},
+	}
+	if operation == "apply" {
+		materials = append(materials, lifecycle.MaterialFile{Name: "bmc-private-key", Part: secrets.PrivateKeyPart, Secret: request.Controller.CertificateRef, Variable: "controllerPrivateKey"})
 	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: MachineImplementation, Operation: operation, Variable: machineVariable,
@@ -561,6 +565,8 @@ func (HostCapability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Qui
 // ProbesQuiescence says a guest's removal is gated on its domain being shut
 // off, which only the host can show.
 func (MachineCapability) ProbesQuiescence() bool { return true }
+
+func (MachineCapability) RemovesHost(reconciliation.Block) bool { return true }
 
 // Quiescent proves this machine is not running. Only a domain the hypervisor
 // reports shut off is idle: paused, suspended and crashed domains still hold

@@ -11,6 +11,7 @@
     user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
     password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
     verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+    ca_data: '{{ lookup("ansible.builtin.file", containercluster_install_agent_ca) if containercluster_install_agent_ca else omit }}'
     operation: eject
   register: containercluster_install_agent_released
   failed_when: false
@@ -35,6 +36,7 @@
   vars:
     substrate_libvirt_machine_disk_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
     substrate_libvirt_machine_disk_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+    substrate_libvirt_machine_disk_ca: '{{ containercluster_install_agent_ca }}'
     substrate_libvirt_machine_disk_user: '{{ containercluster_install_agent_user }}'
     substrate_libvirt_machine_disk_password: '{{ containercluster_install_agent_password }}'
     substrate_libvirt_machine_disk_power_on: false

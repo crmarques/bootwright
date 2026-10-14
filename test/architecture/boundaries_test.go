@@ -89,7 +89,7 @@ func packageRoles() map[string]packageRole {
 		"environment/access", "environment/inspection", "environment/preflight",
 		"machine/access", "machine/inventory", "machine/power", "managedos/media", "managedos/installation",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
-		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering",
+		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering", "storage/ceph",
 		"substrate/baremetal", "substrate/libvirt", "trust/enrollment", "workspace/contexts",
 	} {
 		roles["internal/"+capability] = applicationRole
@@ -115,8 +115,11 @@ func applicationDependencies() map[string][]string {
 		"internal/controller/clients": {"internal/controller/prerequisites", "internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
 		// The emulated BMC's image acquisition uses the host Machine's egress
 		// exactly as a managed service's does.
-		"internal/substrate/libvirt":                     append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
-		"internal/substrate/baremetal":                   {"internal/controller/prerequisites", "internal/reconciliation/lifecycle"},
+		"internal/substrate/libvirt":   append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
+		"internal/substrate/baremetal": {"internal/controller/prerequisites", "internal/reconciliation/lifecycle"},
+		// Storage derives its DVD package endpoint through ArtifactServer's
+		// published selection/path rules rather than reconstructing publication.
+		"internal/storage/ceph":                          {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver"},
 		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/containercluster/agentinstall":         append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/artifactserver": append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
@@ -134,8 +137,7 @@ func applicationDependencies() map[string][]string {
 		"internal/desiredstate/compilation":              {},
 		// The guard implements a Workspace-owned interface, so it consumes that
 		// package's vocabulary and nothing else.
-		"internal/reconciliation/contextguard":   {"internal/workspace/contexts"},
-		"internal/reconciliation/operationstore": {},
+		"internal/reconciliation/contextguard": {"internal/workspace/contexts"},
 		// Each port's contract suite exercises that port and consumes nothing
 		// else; the workspace's also reads the operation areas and the
 		// controller evidence its views carry and the secret context a

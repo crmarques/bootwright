@@ -82,7 +82,7 @@ func (a *admission) osd(osd api.Value, field string, nodes []api.Value) {
 }
 
 func (a *admission) selector(selector api.Value, field string, data bool) {
-	paths, pathSpecs, all := selector.Has("paths"), selector.Has("pathSpecs"), selector.Has("all")
+	paths, pathSpecs, all := selector.Has("paths"), selector.Has("pathSpecs"), selector.Get("all").Bool()
 	modes := 0
 	if paths {
 		modes++

@@ -11,7 +11,7 @@ import (
 )
 
 func TestAnUndecodableExampleDocumentIsItsOnlyRefusal(t *testing.T) {
-	sources := exampleSources(t)
+	sources := exampleDirectory(t, "lab-rhel")
 	compiler := wireCompiler()
 	mutated := 0
 	for fileIndex, file := range sources.Files {
@@ -48,7 +48,7 @@ func TestAnUndecodableExampleDocumentIsItsOnlyRefusal(t *testing.T) {
 			}
 		}
 	}
-	if mutated < 100 {
+	if mutated != len(sources.Files) {
 		t.Fatalf("only %d documents were mutated", mutated)
 	}
 }

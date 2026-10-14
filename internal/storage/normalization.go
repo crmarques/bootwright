@@ -151,27 +151,21 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 		}
 		ceph = ceph.WithPath(stretch, "topology", "stretch")
 	}
-	if ceph.Has("mgmtGateway") {
-		gateway := ceph.Get("mgmtGateway").Default("dnsLabel", api.StringValue("mgr"))
-		if gateway.Has("ingress") {
-			gateway = gateway.With("ingress", normalizeIngress(gateway.Get("ingress")))
-		}
-		ceph = ceph.With("mgmtGateway", gateway)
-	}
-	for _, service := range []string{"prometheus", "grafana", "alertmanager", "nodeExporter", "loki", "promtail"} {
-		if ceph.Has("monitoring", service, "networks") {
-			ceph = ceph.WithPath(normalizeCIDRs(ceph.Get("monitoring", service, "networks")), "monitoring", service, "networks")
-		}
-	}
-	if groups := ceph.Get("topology", "osdDrivegroups"); groups.Type() == api.Sequence {
-		items := groups.Items()
-		for i, item := range items {
-			if item.Has("osd", "serviceOverrides", "networks") {
-				items[i] = item.WithPath(normalizeCIDRs(item.Get("osd", "serviceOverrides", "networks")), "osd", "serviceOverrides", "networks")
+	if ceph.Has("serviceBindings") {
+		bindings := ceph.Get("serviceBindings").Items()
+		for i, binding := range bindings {
+			secrets := binding.Get("secrets").Items()
+			slices.SortStableFunc(secrets, func(left, right api.Value) int { return strings.Compare(textOf(left, "path"), textOf(right, "path")) })
+			if binding.Has("secrets") {
+				bindings[i] = binding.With("secrets", api.ListValue(secrets...))
 			}
 		}
-		ceph = ceph.WithPath(api.ListValue(items...), "topology", "osdDrivegroups")
+		slices.SortStableFunc(bindings, func(left, right api.Value) int {
+			return strings.Compare(textOf(left, "serviceRef"), textOf(right, "serviceRef"))
+		})
+		ceph = ceph.With("serviceBindings", api.ListValue(bindings...))
 	}
+
 	return spec.With("ceph", ceph)
 }
 

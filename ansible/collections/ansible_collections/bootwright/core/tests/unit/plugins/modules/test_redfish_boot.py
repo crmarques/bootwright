@@ -5,9 +5,9 @@ the client's single request path: the pinned emulator, which keeps virtual
 media under the system and attaches synchronously; a manager-scoped controller
 that attaches through a vendor extension and reports the outcome in a task; one
 that exposes the same device under both views and demands a precondition on a
-write; and the owner's xFusion iBMC as captured, redacted, which attaches
-through a task and echoes an image without its non-default port. No test names
-a vendor in the client.
+write; and a normalized xFusion iBMC protocol fixture, which attaches through
+a task and echoes an image without its non-default port. These protocol cases
+do not establish hardware qualification. No test names a vendor in the client.
 """
 
 from __future__ import annotations
@@ -257,9 +257,9 @@ def emulator():
 def manager_scoped():
     """Virtual media only under the manager, attached by a vendor extension.
 
-    No captured firmware has this shape: the captured iBMC, xfusion() below,
-    lists its device under both views and advertises the standard insert. It
-    is the shape .agents/knowledge/redfish-physical-bmc.md records: the system's
+    Unlike xfusion() below, this case lists its device only under the manager
+    and advertises an OEM attach action. It exercises the shape
+    .agents/knowledge/redfish-physical-bmc.md records: the system's
     own VirtualMedia path answers 404, the device hangs off the manager, and
     its only attach is an OEM VmmControl whose ActionInfo proves it takes an
     image and Connect/Disconnect, reporting the outcome in a task behind a
@@ -359,11 +359,11 @@ SECURITY_SERVICE = "/redfish/v1/Managers/1/SecurityService"
 
 
 def xfusion():
-    """The owner's xFusion iBMC as captured on 2026-05-22, redacted.
+    """A normalized fixture exercising xFusion iBMC protocol variations.
 
-    A 2288H V7 whose manager reports FirmwareVersion 3.08.05.85. Captured, with
-    every name, address and identity replaced: the system reports Manufacturer
-    XFUSION and Model 2288H V7, an ETag response header, a Boot with
+    Hardware qualification is unverified. Model, firmware version, names,
+    addresses and identities are test placeholders. The system reports
+    Manufacturer XFUSION, an ETag response header, a Boot with
     BootSourceOverrideMode UEFI and target allowable values but none for
     BootSourceOverrideEnabled, EthernetInterfaces and VirtualMedia links, one
     manager in Links.ManagedBy, and a standard reset with an ActionInfo and
@@ -385,11 +385,11 @@ def xfusion():
     is null and its link sits under Oem.xFusion; the service reports
     HttpsTransferCertVerification false.
 
-    Invented, never captured: the UUID, serial and interface address; a
-    connect task that completes, Completed/OK with no message; an eject task
-    that completes, and a device empty as soon as the eject is accepted (the
-    captured device still presented its image right after the 202); and the
-    VerifyCertificate and HttpsTransferCertVerification a test sets true.
+    Scripted test outcomes include a connect task that completes, Completed/OK
+    with no message; an eject task that completes, and a device empty as soon
+    as the eject is accepted; and VerifyCertificate and
+    HttpsTransferCertVerification values a test sets true. These outcomes are
+    test behavior, not evidence of hardware success.
     """
     system, manager = "/redfish/v1/Systems/1", "/redfish/v1/Managers/1"
     views = (system + "/VirtualMedia", manager + "/VirtualMedia")
@@ -399,7 +399,7 @@ def xfusion():
     def system_body(f):
         return {
             "@odata.id": system, "Id": "1", "UUID": "8d3a6f20-4b1c-4e7d-9a2b-3c4d5e6f7a81",
-            "SerialNumber": "SN-XF-0001", "Manufacturer": "XFUSION", "Model": "2288H V7", "PowerState": f.power,
+            "SerialNumber": "SN-XF-0001", "Manufacturer": "XFUSION", "Model": "Example Server", "PowerState": f.power,
             "Boot": dict(f.boot, **{"BootSourceOverrideMode": "UEFI", "BootSourceOverrideTarget@Redfish.AllowableValues": [
                 "None", "Pxe", "Floppy", "Cd", "Hdd", "BiosSetup"]}),
             "EthernetInterfaces": {"@odata.id": system + "/EthernetInterfaces"},
@@ -470,7 +470,7 @@ def xfusion():
         system: lambda f: (200, system_body(f), {"ETag": 'W/"x1"'}),
         system + "/EthernetInterfaces": {"Members": [{"@odata.id": nic}]},
         nic: {"@odata.id": nic, "MACAddress": "aa:bb:cc:dd:ee:71"},
-        manager: {"@odata.id": manager, "FirmwareVersion": "3.08.05.85", "SecurityService": None,
+        manager: {"@odata.id": manager, "FirmwareVersion": "0.0.0-test", "SecurityService": None,
                   "VirtualMedia": {"@odata.id": views[1]},
                   "Oem": {"xFusion": {"SecurityService": {"@odata.id": SECURITY_SERVICE}}}},
         SECURITY_SERVICE: lambda f: {"@odata.id": SECURITY_SERVICE, "Id": "SecurityService",
@@ -964,8 +964,8 @@ def verifying(firmware, device=True, manager=True):
 
 
 # Private material under established trust is attached only once reads alone
-# prove the controller verifies the server: the device's VerifyCertificate and
-# the security service's HttpsTransferCertVerification, before any write.
+# prove the controller verifies the server through the manager's authoritative
+# HttpsTransferCertVerification switch, before any write.
 def test_private_delivery_under_established_proves_the_controller_verifies_before_any_write(monkeypatch):
     firmware = verifying(xfusion())
     assert run(monkeypatch, firmware, "insert", image=IMAGE, **PRIVATE)[0] is True
@@ -977,13 +977,19 @@ def test_private_delivery_under_established_proves_the_controller_verifies_befor
 
 @pytest.mark.parametrize("other", ["", OTHER], ids=["empty", "holding other media"])
 def test_private_delivery_refuses_a_device_that_does_not_verify(monkeypatch, other):
-    firmware = xfusion()
+    firmware = emulator()
     firmware.image = other
     with pytest.raises(ControllerError) as failure:
         run(monkeypatch, firmware, "insert", image=IMAGE, **PRIVATE)
     assert "VerifyCertificate reads false" in str(failure.value)
     assert str(failure.value).endswith("; " + redfish_control.NO_VERIFIED_FETCH)
     assert writes(firmware) == [] and firmware.image == other
+
+
+def test_private_delivery_accepts_the_manager_switch_with_a_false_readonly_device(monkeypatch):
+    firmware = verifying(xfusion(), device=False, manager=True)
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **PRIVATE)[0] is True
+    assert not [entry for entry in writes(firmware) if entry[0] == "PATCH"]
 
 
 def test_private_delivery_refuses_a_manager_that_does_not_verify(monkeypatch):
@@ -1037,7 +1043,7 @@ def test_private_delivery_refuses_disable_verification_before_any_request(monkey
 
 
 # The module Ansible runs carries private_delivery to the client: a play that
-# asks for it on the captured iBMC is refused before any write.
+# asks for it on this iBMC fixture is refused before any write.
 def test_the_module_carries_private_delivery_to_the_client(monkeypatch):
     firmware = xfusion()
     module = Module({"endpoint": firmware.endpoint, "user": "operator", "password": PASSWORD, "verify": True,
@@ -1049,7 +1055,7 @@ def test_the_module_carries_private_delivery_to_the_client(monkeypatch):
     monkeypatch.setattr(redfish_control.time, "sleep", lambda seconds: None)
     redfish_boot.main()
     assert module.ended[0] == "fail"
-    assert "VerifyCertificate reads false" in module.ended[1]["msg"]
+    assert "HttpsTransferCertVerification reads false" in module.ended[1]["msg"]
     assert module.ended[1]["msg"].endswith(redfish_control.NO_VERIFIED_FETCH)
     assert writes(firmware) == []
 
@@ -1091,7 +1097,7 @@ def test_a_security_service_without_the_setting_adds_no_condition(monkeypatch):
 
 # A controller that echoes the image in another spelling of the same URL, a
 # host in capitals, a default port dropped, or a non-default port dropped as
-# the captured iBMC does, presents it, so nothing is sent.
+# this iBMC fixture does, presents it, so nothing is sent.
 @pytest.mark.parametrize("image, echoed", [
     (IMAGE, "https://SERVER.test:8443/os/m/install.iso"),
     ("https://server.test:443/os/m/install.iso", "https://server.test/os/m/install.iso"),
@@ -1574,7 +1580,7 @@ def test_an_identical_certificate_is_not_added_twice(monkeypatch):
 # is attached.
 def test_a_member_without_a_certificate_collection_refuses_naming_the_exception(monkeypatch):
     for shape in (emulator, dual_view, xfusion):
-        firmware = shape()
+        firmware = verifying(shape())
         if shape is emulator:
             serve = firmware.resources[firmware.system + DEVICE]
             firmware.resources[firmware.system + DEVICE] = lambda f, serve=serve: {
@@ -1746,6 +1752,23 @@ def test_disable_verification_writes_only_when_verification_is_on(monkeypatch):
     assert refused_before_attach(firmware) and firmware.verify_certificate is True
 
 
+@pytest.mark.parametrize("other", ["", OTHER], ids=["empty", "holding other media"])
+@pytest.mark.parametrize("manager", [False, True])
+def test_disable_verification_refuses_an_authoritative_manager_before_any_write(monkeypatch, other, manager):
+    firmware = verifying(xfusion(), device=False, manager=manager)
+    firmware.image = other
+    with pytest.raises(ControllerError, match="HttpsTransferCertVerification controls media verification"):
+        run(monkeypatch, firmware, "insert", image=IMAGE, trust=redfish_control.TRUST_DISABLED)
+    assert writes(firmware) == [] and firmware.image == other
+
+
+def test_private_import_cannot_bypass_a_manager_whose_verification_is_off(monkeypatch):
+    firmware = verifying(xfusion(), device=True, manager=False)
+    with pytest.raises(ControllerError, match="HttpsTransferCertVerification reads false"):
+        run(monkeypatch, firmware, "insert", image=IMAGE, **dict(IMPORT, **PRIVATE))
+    assert writes(firmware) == []
+
+
 # established is a trust the controller already holds, so neither the insert
 # nor the eject asks anything of the device, and those are the defaults.
 def test_established_changes_no_setting(monkeypatch):
@@ -1868,3 +1891,14 @@ def test_an_inspection_fails_on_an_unverified_certificate(monkeypatch):
     redfish_system_inspect.main()
     assert ending.ended[0] == "fail"
     assert ending.ended[1]["msg"].endswith("did not verify against the system trust store")
+
+
+def test_import_uses_an_authoritative_manager_without_patching_the_device(monkeypatch):
+    firmware = emulator()
+    manager = "/redfish/v1/Managers/" + UUID
+    firmware.resources[manager] = dict(firmware.resources[manager], SecurityService={"@odata.id": SECURITY_SERVICE})
+    firmware.resources[SECURITY_SERVICE] = {"HttpsTransferCertVerification": True}
+    firmware.script("PATCH", firmware.system + DEVICE, (501, None, {}))
+    assert run(monkeypatch, firmware, "insert", image=IMAGE, **dict(IMPORT, **PRIVATE))[0] is True
+    assert firmware.verify_certificate is False
+    assert trust_writes(firmware) == [("POST", CERTIFICATES, {"CertificateString": SERVER, "CertificateType": "PEM"})]

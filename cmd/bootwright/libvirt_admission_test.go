@@ -52,6 +52,7 @@ spec:
     bmcEmulationDefaults:
       bindAddress: 192.0.2.1
       port: 9000
+      certificateRef: artifact-server-tls
       auth:
         credentialsRef: lab-bmc-credentials
 
@@ -88,7 +89,7 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 		"a data disk named root": {[]exampleEdit{withDataDisks("root")},
 			"api.invariant", provider, "$.spec.libvirt.machineProfiles[0].dataDisks[0].name", "the data disk name root is reserved for the root disk, which the domain presents as vda from root.qcow2"},
 		"eight data disks": {[]exampleEdit{withDataDisks("d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8")},
-			"api.invariant", provider, "$.spec.libvirt.machineProfiles[0].dataDisks", "a libvirt domain presents at most 7 data disks, vdb through vdh, after its root disk"},
+			"api.invariant", provider, "$.spec.libvirt.machineProfiles[0].dataDisks", "a libvirt domain presents at most 7 data disks beside its root disk"},
 		"a vCPU count past int64": {[]exampleEdit{{labProvider, "cpu: 4", "cpu: 100000000000000000000"}},
 			"api.value", provider, "$.spec.libvirt.machineProfiles[0].cpu", "number must be between 0 and 1024"},
 		"a root disk past its ceiling": {[]exampleEdit{{labProvider, "diskGiB: 60", "diskGiB: 3000000000000"}},

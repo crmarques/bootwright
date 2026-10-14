@@ -49,7 +49,7 @@ func provider(fields ...api.FieldValue) api.Object {
 		text("uri", "qemu:///system"),
 		field("bmcEmulationDefaults", api.MapValue(
 			field("enabled", api.BoolValue(true)), text("protocol", "redfish"), text("emulator", "sushy-tools"),
-			text("bindAddress", "192.0.2.1"), number("port", "8000"),
+			text("bindAddress", "192.0.2.1"), number("port", "8000"), text("certificateRef", "lab-bmc-tls"),
 			field("auth", api.MapValue(text("credentialsRef", "lab-bmc-credentials"))),
 		)),
 		field("machineProfiles", api.ListValue(api.MapValue(

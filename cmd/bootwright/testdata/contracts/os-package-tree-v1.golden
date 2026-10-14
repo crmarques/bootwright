@@ -1,0 +1,33 @@
+implementation: os-package-tree-v1
+content-digest: 62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445
+automation-formats: none
+request-schema:
+  identity struct installation.TreeIdentity
+  identity.context string
+  identity.profile string
+  media struct installation.Media
+  media.name string
+  media.sha256 string
+  media.size int64
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  publication struct installation.Publication
+  publication.certificateRef string omitempty
+  publication.path string
+  publication.url string
+  version string
+evidence-schema:
+  absent bool
+  content bool
+  identity string
+  postcondition bool
+  request string
+  staging bool
+  tree bool
+  version string

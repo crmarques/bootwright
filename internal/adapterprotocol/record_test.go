@@ -261,3 +261,24 @@ func TestDecodeAcceptsWhatThePluginsEmit(t *testing.T) {
 		t.Fatalf("records = %+v, want the evidence bytes as written", records)
 	}
 }
+
+func TestDecodeAdmitsALifecycleRefusalDetailOfTheClosedGrammarOnly(t *testing.T) {
+	records := accepts(t, Lifecycle,
+		`{"detail":"native-refusal:fixture-session-expired","phase":"refused","reason":"remote-refusal"}`,
+		`{"detail":"OSError@ceph_package_sources.stream:142","phase":"refused","reason":"adapter-exception"}`,
+		`{"detail":"native-refusal:packages@ceph_package_sources.metadata_member:207","phase":"refused","reason":"remote-refusal"}`,
+	)
+	if records[0].Detail != "native-refusal:fixture-session-expired" || records[1].Reason != "adapter-exception" ||
+		records[2].Detail != "native-refusal:packages@ceph_package_sources.metadata_member:207" {
+		t.Fatalf("records = %+v", records)
+	}
+	refuses(t, Lifecycle,
+		`{"detail":"","phase":"refused","reason":"remote-refusal"}`,
+		`{"detail":"a value with spaces","phase":"refused","reason":"remote-refusal"}`,
+		`{"detail":"`+strings.Repeat("a", 161)+`","phase":"refused","reason":"remote-refusal"}`,
+		`{"detail":1,"phase":"refused","reason":"remote-refusal"}`,
+		`{"detail":"cause","phase":"loaded"}`,
+		`{"detail":"cause","phase":"refused","reason":"remote-refusal","source":"tool-helm"}`,
+	)
+	refuses(t, Controller, `{"detail":"cause","phase":"refused","reason":"timeout"}`)
+}

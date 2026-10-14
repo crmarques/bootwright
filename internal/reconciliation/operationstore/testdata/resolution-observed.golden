@@ -9,6 +9,15 @@
   "evidence": {
     "installed": true
   },
+  "build": {
+    "automationDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "contentDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "executable": {
+      "version": "devel",
+      "commit": "abcdef1"
+    },
+    "modified": true
+  },
   "started": "2026-09-11T12:00:06Z",
   "updated": "2026-09-11T12:00:07Z"
 }

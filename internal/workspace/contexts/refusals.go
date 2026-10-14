@@ -107,7 +107,10 @@ var ErrUnreadableEvidence = errors.New("context mutation evidence is missing, co
 
 // unreadableEvidenceRefusal is an update's or a default deletion's refusal
 // over evidence the guard cannot read, naming the one exit that remains.
-func unreadableEvidenceRefusal(code, name string) error {
+func unreadableEvidenceRefusal(code, name string, cause error) error {
+	if reported := diagnostics.Of(cause); len(reported) == 1 && reported[0].Remediation != "" {
+		return diagnostics.NewFailureWithRemediation(code, reported[0].Message, "", reported[0].Remediation)
+	}
 	return diagnostics.NewFailureWithRemediation(code,
 		"the mutation evidence of context "+name+" is missing, corrupt or unsupported, so nothing proves what it owns", "",
 		"review its records with bootwright status --context "+name+", then abandon whatever it owns with bootwright context delete --name "+name+" --purge --allow-orphans")

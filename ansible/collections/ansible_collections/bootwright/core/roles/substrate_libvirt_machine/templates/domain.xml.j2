@@ -27,11 +27,24 @@
   <on_reboot>restart</on_reboot>
   <on_crash>destroy</on_crash>
   <devices>
+{% if bootwright_substrate_machine_request.disks | selectattr('media', 'defined') | list %}
+    <controller type="scsi" index="0" model="virtio-scsi"/>
+{% endif %}
+{% set scsi = namespace(unit=0) %}
 {% for disk in bootwright_substrate_machine_request.disks %}
     <disk type="file" device="disk">
       <driver name="qemu" type="qcow2" discard="unmap"/>
       <source file="{{ disk.path }}"/>
+{% if disk.media | default('') == 'ssd' %}
+      <target dev="{{ disk.target }}" bus="scsi" rotation_rate="1"/>
+      <address type="drive" controller="0" bus="0" target="0" unit="{{ scsi.unit }}"/>
+{% set scsi.unit = scsi.unit + 1 %}
+{% else %}
       <target dev="{{ disk.target }}" bus="virtio"/>
+{% endif %}
+{% if disk.serial | default('') %}
+      <serial>{{ disk.serial }}</serial>
+{% endif %}
     </disk>
 {% endfor %}
 {% for interface in bootwright_substrate_machine_request.interfaces %}

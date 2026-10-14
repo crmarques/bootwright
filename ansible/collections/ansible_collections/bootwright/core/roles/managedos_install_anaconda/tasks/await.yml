@@ -72,6 +72,7 @@
   vars:
     substrate_libvirt_machine_disk_endpoint: '{{ managedos_install_anaconda_endpoint }}'
     substrate_libvirt_machine_disk_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_libvirt_machine_disk_ca: '{{ managedos_install_anaconda_controller_ca }}'
     substrate_libvirt_machine_disk_user: '{{ bootwright_os_install_material.controllerUser }}'
     substrate_libvirt_machine_disk_password: '{{ bootwright_os_install_material.controllerPassword }}'
     substrate_libvirt_machine_disk_power_on: true

@@ -107,6 +107,8 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if validMachinePower(result.power) {
 			return true, writeMachinePower(out, path, result.power, selectedJSON(command))
 		}
+	case "cluster list", "cluster info":
+		return writeClusterResult(out, errOut, path, result, selectedJSON(command))
 	case "secret show", "cluster kubeconfig":
 		return writeReveal(out, errOut, command, path, result)
 	case "secret encryption init", "secret encryption rotate":

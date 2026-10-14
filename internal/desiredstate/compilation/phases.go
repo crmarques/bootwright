@@ -28,7 +28,7 @@ type run struct {
 // selectEnvironment reads the one Environment that selects this compilation,
 // validates the kind defaults it declares and inherits them into itself.
 func (r *run) selectEnvironment() bool {
-	r.environment = selectingEnvironment(r.documents, r.parsed, r.ds)
+	r.environment = selectingEnvironment(r.documents, r.parsed, r.ds, r.compiler.rules...)
 	if r.environment == nil {
 		return false
 	}
@@ -73,7 +73,7 @@ func (r *run) decodeSelected() bool {
 		}
 		record := r.environment
 		if document.Path != r.environment.path || document.Index != r.environment.document {
-			record = decodeDocument(document, r.ds)
+			record = decodeDocument(document, r.ds, r.compiler.rules...)
 		}
 		if record != nil {
 			r.records = append(r.records, record)
@@ -167,7 +167,7 @@ func normalizationOrder() []api.Kind {
 		api.Environment, api.Entitlement, api.Secret, api.NetworkConfig, api.MachineImage,
 		api.MachineInstallProfile, api.InfraProvider, api.Machine, api.Proxy, api.DNSServer,
 		api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.ContainerCluster,
-		api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageFilesystem,
+		api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageClient, api.StorageFilesystem,
 		api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport, api.ClusterAddon,
 		api.ClusterAddonProfile, api.ClusterAddonBinding, api.CustomPlaybook,
 	}

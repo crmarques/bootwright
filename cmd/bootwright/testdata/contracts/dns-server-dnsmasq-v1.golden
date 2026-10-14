@@ -1,0 +1,50 @@
+implementation: dns-server-dnsmasq-v1
+content-digest: c4cbeee432384a8a093ebae8a82909f0da73531a5b9f8f2253c9c30b5f89ba5a
+automation-formats: none
+request-schema:
+  bindAddress string
+  clients []string omitempty
+  contentRoot string
+  egress struct managedservice.Egress
+  egress.httpProxy string omitempty
+  egress.httpsProxy string omitempty
+  egress.noProxy []string
+  endpoints []struct managedservice.Endpoint
+  endpoints[].address string
+  endpoints[].name string
+  forwarders []string omitempty
+  identity struct managedservice.Identity
+  identity.block string
+  identity.context string
+  identity.service string
+  image string
+  ingressHosts []string omitempty
+  kind string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  port int
+  records []struct managedservice.Record omitempty
+  records[].addresses []string
+  records[].name string
+  records[].subtree bool omitempty
+  sources []string omitempty
+  unit string
+  version string
+evidence-schema:
+  absent bool
+  answers []struct managedservice.Answer
+  answers[].address string
+  answers[].answer string
+  answers[].port int
+  container string
+  contentRoot bool
+  postcondition bool
+  request string
+  startedAfterFiles bool
+  unit string

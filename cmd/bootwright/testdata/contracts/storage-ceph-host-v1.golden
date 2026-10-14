@@ -1,0 +1,89 @@
+implementation: storage-ceph-host-v1
+content-digest: b75e084beaf1c93849d2957139ef0f21431023308452b09d92b1b40366f1f500
+automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v1, ceph-host-route-v1, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-runtime-profile-v2
+request-schema:
+  cluster struct ceph.Request
+  cluster.action string
+  cluster.bootstrap string
+  cluster.callHome string
+  cluster.cephVersion string
+  cluster.cephadm struct ceph.Tool
+  cluster.cephadm.packageVersion string
+  cluster.cephadm.path string
+  cluster.cephadm.version string
+  cluster.client *struct ceph.Client omitempty
+  cluster.client.access string
+  cluster.client.name string
+  cluster.client.pool string
+  cluster.cluster string
+  cluster.clusterKeyRef string
+  cluster.clusterNetworks []string
+  cluster.clusterSSHTransport string
+  cluster.clusterSSHUser string
+  cluster.config map[string]map[string]string omitempty
+  cluster.controller string
+  cluster.fsid string omitempty
+  cluster.hosts []struct ceph.Host
+  cluster.hosts[].address string
+  cluster.hosts[].devices []struct ceph.Device
+  cluster.hosts[].devices[].path string
+  cluster.hosts[].devices[].serial string
+  cluster.hosts[].devices[].sizeBytes int64
+  cluster.hosts[].hostKeyRef string omitempty
+  cluster.hosts[].knownHosts string omitempty
+  cluster.hosts[].labels []string
+  cluster.hosts[].location map[string]string
+  cluster.hosts[].machine string
+  cluster.hosts[].name string
+  cluster.hosts[].port int
+  cluster.hosts[].sshKeyRef string
+  cluster.hosts[].user string
+  cluster.image string
+  cluster.monIP string
+  cluster.owner string omitempty
+  cluster.packages *struct ceph.PackageRequest omitempty
+  cluster.packages.licenseAccepted bool
+  cluster.packages.sources []struct ceph.PackageSource
+  cluster.packages.sources[].certificateRef string
+  cluster.packages.sources[].host string
+  cluster.packages.sources[].media string
+  cluster.packages.sources[].mediaSHA256 string omitempty
+  cluster.packages.sources[].mediaSize int64 omitempty
+  cluster.packages.sources[].profile string
+  cluster.packages.sources[].publicationPath string
+  cluster.packages.sources[].url string
+  cluster.packages.version string
+  cluster.pool *struct ceph.Pool omitempty
+  cluster.pool.crushRule string
+  cluster.pool.minSize int
+  cluster.pool.name string
+  cluster.pool.pgNum int
+  cluster.pool.size int
+  cluster.publicNetworks []string
+  cluster.registry string
+  cluster.registryRef string
+  cluster.services []opaque
+  cluster.version string
+  host string
+  version string
+evidence-schema:
+  cephadmSHA256 string
+  devices []struct ceph.HostDevice
+  devices[].deviceID string
+  devices[].path string
+  devices[].serial string
+  fsid string
+  gid int
+  host string
+  image string
+  imageID string
+  label string
+  owner string
+  planDigest string
+  policySHA256 string
+  ready bool
+  removed bool
+  request string
+  route bool
+  uid int
+  version string

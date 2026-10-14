@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/ansible"
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -17,12 +18,15 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/media"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -69,7 +73,7 @@ func (r storeMediaRecords) MediaRecords(ctx context.Context) (map[string]install
 }
 
 // automationDigest is the content identity of the embedded collection this
-// build would run. An operation freezes it; a continuation refuses on drift.
+// build would run. An operation records it; other builds prove the same blocks.
 type automationDigest struct{}
 
 func (automationDigest) CatalogDigest() string { return ansible.Digest() }
@@ -140,6 +144,15 @@ func operationPlaybook() map[string]string {
 		installation.Implementation + "/apply":          "managedos/install_apply.yml",
 		installation.Implementation + "/observe":        "managedos/install_observe.yml",
 		installation.Implementation + "/destroy":        "managedos/install_destroy.yml",
+		ceph.Implementation + "/apply":                  "storage/core_apply.yml",
+		ceph.Implementation + "/observe":                "storage/core_observe.yml",
+		ceph.Implementation + "/destroy":                "storage/core_destroy.yml",
+		ceph.ImageImplementation + "/apply":             "storage/image_resolve.yml",
+		ceph.ImageImplementation + "/observe":           "storage/image_observe.yml",
+		ceph.ImageImplementation + "/destroy":           "storage/image_destroy.yml",
+		ceph.HostImplementation + "/apply":              "storage/host_prepare.yml",
+		ceph.HostImplementation + "/observe":            "storage/host_observe.yml",
+		ceph.HostImplementation + "/destroy":            "storage/host_destroy.yml",
 	}
 	for prefix, definition := range map[string]managedservice.Definition{
 		"proxy": proxy.Definition(), "dns_server": dnsserver.Definition(), "ntp_server": ntpserver.Definition(),
@@ -149,12 +162,6 @@ func operationPlaybook() map[string]string {
 		}
 	}
 	return bindings
-}
-
-// buildCapabilities lists what this executable can realize, in the API's own
-// kind order, so a plan's block order never depends on wiring order.
-func buildCapabilities(clock systemClock, controller controllerDependencies, records installation.MediaRecords) capabilityResolver {
-	return buildCapabilitiesWith(clock, controller, ansiblerunner.New(operationPlaybook()), records)
 }
 
 // capabilityRunner is the port every runner-driven capability declares, so
@@ -192,6 +199,11 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation,
 		capability: agentinstall.NewInstall(runner).WithIdentities(provedIdentities{}),
 	}}
+	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+		resolver = append(resolver, boundCapability{kind: string(kind), implementation: ceph.Implementation, capability: ceph.New(kind, runner).WithProofs(cephDependencyProofs{})})
+	}
+	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, capability: ceph.NewImage(runner)})
+	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, capability: ceph.NewHost(runner).WithProofs(cephDependencyProofs{})})
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
 		resolver = append(resolver, boundCapability{
 			kind: string(definition.Kind), implementation: definition.Implementation,
@@ -235,9 +247,13 @@ func lifecycleOptions(deps lifecycleDependencies, clock systemClock, runner ansi
 		Clock: clock, Entropy: rand.Read, Selection: currentSelection(deps.Selection),
 		BeginInvocation: runner.BeginInvocation,
 		Executable:      deps.Executable,
-		Operations: func(area operationstore.Area) lifecycle.OperationStore {
-			return operationstore.New(area, clock.Now)
-		},
+		Operations:      operationStores(clock),
+	}
+}
+
+func operationStores(clock systemClock) lifecycle.OperationStoreFactory {
+	return func(area operationstore.Area) lifecycle.OperationStore {
+		return operationstore.New(area, clock.Now)
 	}
 }
 
@@ -255,4 +271,22 @@ func currentSelection(store contexts.SelectionStore) func(context.Context) (stri
 		}
 		return selected.Name, nil
 	}
+}
+
+type cephDependencyProofs struct{}
+
+func (cephDependencyProofs) DataDisk(block reconciliation.Block, evidence []byte, path, serial string, size int64) bool {
+	return libvirt.ProvedDataDisk(block, evidence, path, serial, size)
+}
+
+func (cephDependencyProofs) HostKey(proofs []lifecycle.BlockEvidence, machine, address string) (trust.HostKey, error) {
+	return installation.ProvedHostKey(proofs, machine, address)
+}
+
+func (cephDependencyProofs) PackageTree(proofs []lifecycle.BlockEvidence, profile string) (ceph.PackageTree, error) {
+	request, err := installation.ProvedPackageTree(proofs, profile)
+	if err != nil {
+		return ceph.PackageTree{}, err
+	}
+	return ceph.PackageTree{Context: request.Identity.Context, Media: request.Media.Name, MediaSHA256: request.Media.SHA256, MediaSize: request.Media.Size, Path: request.Publication.Path}, nil
 }

@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"slices"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -54,10 +55,14 @@ type HostRequest struct {
 
 // Disk is one qcow2 image a domain owns, at the exact size the profile froze.
 type Disk struct {
-	Name    string `json:"name"`
-	Path    string `json:"path"`
-	SizeGiB int    `json:"sizeGiB"`
-	Target  string `json:"target"`
+	Bus          string `json:"bus,omitempty"`
+	Media        string `json:"media,omitempty"`
+	Name         string `json:"name"`
+	Path         string `json:"path"`
+	RotationRate int    `json:"rotationRate,omitempty"`
+	Serial       string `json:"serial,omitempty"`
+	SizeGiB      int    `json:"sizeGiB"`
+	Target       string `json:"target"`
 }
 
 // Interface is one attachment the domain is wired to, with the address this
@@ -76,6 +81,7 @@ type Interface struct {
 // container, unit and listener, exposing exactly this domain.
 type Controller struct {
 	Address        string `json:"address"`
+	CertificateRef string `json:"certificateRef"`
 	CredentialsRef string `json:"credentialsRef"`
 	Endpoint       string `json:"endpoint"`
 	Image          string `json:"image"`
@@ -119,7 +125,43 @@ func DecodeHostRequest(data []byte) (HostRequest, error) {
 }
 
 func DecodeMachineRequest(data []byte) (MachineRequest, error) {
-	return reconciliation.ThawVersion[MachineRequest](data, "machine", machineRequestVersion)
+	r, err := reconciliation.ThawVersion[MachineRequest](data, "machine", machineRequestVersion)
+	if err != nil {
+		return r, err
+	}
+	return r, validateDiskMedia(r.Disks)
+}
+
+func validateDiskMedia(disks []Disk) error {
+	media := slices.ContainsFunc(disks, func(disk Disk) bool { return disk.Media != "" || disk.Bus != "" || disk.RotationRate != 0 })
+	if !media {
+		return nil
+	}
+	if len(disks) == 0 || len(disks) > substrate.MaxDataDisks+1 || disks[0].Name != "root" || disks[0].Target != "vda" {
+		return refusal("lifecycle.state", "the frozen media presentation changes the root or data-disk bound", "")
+	}
+	if disks[0].Media != "" || disks[0].Bus != "" || disks[0].RotationRate != 0 {
+		return refusal("lifecycle.state", "the frozen media presentation changes the root disk", "")
+	}
+	declared := make([]api.Value, 0, len(disks)-1)
+	for _, disk := range disks[1:] {
+		value := api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(disk.Name)})
+		if disk.Media != "" {
+			value = value.With("media", api.StringValue(disk.Media))
+		}
+		declared = append(declared, value)
+	}
+	presentations, valid := substrate.DataDiskPresentations(declared)
+	if !valid {
+		return refusal("lifecycle.state", "the frozen disk media presentation is unsupported", "")
+	}
+	for index, disk := range disks[1:] {
+		presentation := presentations[index]
+		if disk.Bus != presentation.Bus || disk.Media != presentation.Media || disk.RotationRate != presentation.RotationRate || disk.Target != presentation.Target {
+			return refusal("lifecycle.state", "the frozen disk changes its fixed media presentation", "")
+		}
+	}
+	return nil
 }
 
 // ReservationKeys are the exclusive host resources each request claims before
@@ -157,7 +199,7 @@ func (r HostRequest) SecretReferences() []string {
 }
 
 func (r MachineRequest) SecretReferences() []string {
-	return sortedUnique(append(r.Placement.SecretReferences(), r.Controller.CredentialsRef))
+	return sortedUnique(append(r.Placement.SecretReferences(), r.Controller.CredentialsRef, r.Controller.CertificateRef))
 }
 
 func sortedUnique(values []string) []string {

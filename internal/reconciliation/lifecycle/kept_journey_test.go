@@ -329,7 +329,8 @@ func TestAWorkAreaKeepingNothingLogsNoKeptCopy(t *testing.T) {
 
 // A removal stopped after the move and before the work area's deletion leaves
 // the copy in both places; the destroy that continues finds custody holding
-// it, so it keeps nothing more and removes the work area.
+// it, so it resolves the stopped removal, keeps nothing more and, in the same
+// invocation, removes the work area.
 func TestAKeptKubeconfigStoppedBetweenTheMoveAndTheRemovalIsInBothPlaces(t *testing.T) {
 	journey, host := keptJourney(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -344,13 +345,9 @@ func TestAKeptKubeconfigStoppedBetweenTheMoveAndTheRemovalIsInBothPlaces(t *test
 		t.Fatalf("the work area is %t keeping %q and custody keeps %v, want the copy in both", work, kept, journey.Kept())
 	}
 	host.set(func(h *keptHost) { h.stopRemoval = nil })
-	resolved, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
-	if err == nil || resolved.Receipt.State != "failed" {
-		t.Fatalf("the resolving removal = %+v, %+v (%v), want the stopped removal resolved as not performed", resolved, diagnostics.Of(err), err)
-	}
 	result, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
 	if err != nil || result.Receipt.State != "done" {
-		t.Fatalf("the continued removal = %+v, %+v (%v)", result, diagnostics.Of(err), err)
+		t.Fatalf("the continued removal = %+v, %+v (%v), want the stopped removal resolved as not performed and retried", result, diagnostics.Of(err), err)
 	}
 	if calls := host.took(); !slices.Equal(calls, []string{"media:observe", "media:destroy"}) {
 		t.Fatalf("the continued removal ran %v, want the resolution and the removal and no second keep", calls)

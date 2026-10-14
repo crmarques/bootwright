@@ -26,6 +26,8 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[machineListPresentation](),
 	reflect.TypeFor[machinePowerPresentation](),
 	reflect.TypeFor[mediaListPresentation](),
+	reflect.TypeFor[clusterListPresentation](),
+	reflect.TypeFor[clusterInfoPresentation](),
 }
 
 // sharedResultLeaves are the only types from outside this package a result may

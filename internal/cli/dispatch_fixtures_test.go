@@ -195,20 +195,20 @@ func (s environmentSpy) PreflightAll(ctx context.Context, request environmentpre
 	return s.record.called(ctx, "preflight all", request)
 }
 
-func (s environmentSpy) ListClusters(ctx context.Context, request inspection.ListClustersRequest) error {
-	return s.record.called(ctx, "cluster list", request)
+func (s environmentSpy) ListClusters(ctx context.Context, request inspection.ListClustersRequest) (*inspection.ListResult, error) {
+	return s.record.result.clusterList, s.record.called(ctx, "cluster list", request)
 }
 
-func (s environmentSpy) ClusterInfo(ctx context.Context, request inspection.ClusterInfoRequest) error {
-	return s.record.called(ctx, "cluster info", request)
+func (s environmentSpy) ClusterInfo(ctx context.Context, request inspection.ClusterInfoRequest) (*inspection.InfoResult, error) {
+	return s.record.result.clusterInfo, s.record.called(ctx, "cluster info", request)
 }
 
-func (s environmentSpy) ClusterRsh(ctx context.Context, request environmentaccess.ClusterRshRequest) error {
-	return s.record.called(ctx, "cluster rsh", request)
+func (s environmentSpy) ClusterRsh(ctx context.Context, request environmentaccess.ClusterRshRequest) (*machine.SessionResult, error) {
+	return s.record.result.session, s.record.called(ctx, "cluster rsh", request)
 }
 
-func (s environmentSpy) ClusterExec(ctx context.Context, request environmentaccess.ClusterExecRequest) error {
-	return s.record.called(ctx, "cluster exec", request)
+func (s environmentSpy) ClusterExec(ctx context.Context, request environmentaccess.ClusterExecRequest) (*machine.SessionResult, error) {
+	return s.record.result.session, s.record.called(ctx, "cluster exec", request)
 }
 
 type containerPreflightSpy struct{ record *dispatchRecord }

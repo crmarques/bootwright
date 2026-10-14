@@ -4,13 +4,23 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func TestTheDataDiskBoundIsTheDomainsTargets(t *testing.T) {
-	if len(diskTargets) != substrate.MaxDataDisks {
-		t.Fatalf("the domain presents %d data disk targets, and admission admits %d data disks", len(diskTargets), substrate.MaxDataDisks)
+	for _, ssd := range []bool{false, true} {
+		disks := []api.Value{}
+		for range substrate.MaxDataDisks {
+			disks = append(disks, mediaDisk("data", ssd))
+		}
+		if targets, valid := substrate.DataDiskPresentations(disks); !valid || len(targets) != substrate.MaxDataDisks {
+			t.Fatal("the domain target bound differs from substrate admission")
+		}
+		if _, valid := substrate.DataDiskPresentations(append(disks, mediaDisk("excess", ssd))); valid {
+			t.Fatal("the domain target selector exceeded substrate admission")
+		}
 	}
 }
 

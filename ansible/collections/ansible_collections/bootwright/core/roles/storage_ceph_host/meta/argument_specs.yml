@@ -1,0 +1,32 @@
+argument_specs:
+  prepare:
+    short_description: Prepare one Ceph host for its frozen cluster.
+    options: &request
+      bootwright_ceph_host_request:
+        type: dict
+        required: true
+        options:
+          cluster:
+            type: dict
+            required: true
+          host:
+            type: str
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [ceph-host-v1]
+      bootwright_ceph_host_digest:
+        type: str
+        required: true
+      bootwright_ceph_host_material:
+        type: dict
+        required: true
+
+  observe:
+    short_description: Observe one Ceph host preparation without mutation.
+    options: *request
+
+  destroy:
+    short_description: Release one Ceph host preparation, which retains its packages and image.
+    options: *request

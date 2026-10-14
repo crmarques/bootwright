@@ -25,6 +25,8 @@ type step struct {
 	// unstarted is an attempt that could not start. It performed no effect
 	// and recorded nothing, so state is the one the block already had.
 	unstarted bool
+	announced bool
+	position  int
 }
 
 // scheduler starts every block the frozen plan admits, up to the bound, and
@@ -45,19 +47,14 @@ type scheduler struct {
 	logging *logBoundary
 
 	states map[string]reconciliation.BlockState
-	// running are the blocks this invocation has in flight. It is deliberately
-	// separate from the durable running state, which means an executor died
-	// mid-attempt and is an unproved effect rather than work in progress.
+	// running are the blocks this invocation has in flight, unlike the durable running
+	// state: an executor that died mid-attempt, an unproved effect rather than work in progress.
 	running map[string]bool
-	// worked names every block this invocation already attempted or observed,
-	// so a block it failed is not retried by the same invocation that failed
-	// it, one it left unproved is not observed twice, and one whose attempt
-	// never ran is not admitted again.
-	worked map[string]bool
-	// unstarted names every block whose attempt could not start. One is
-	// enough to admit nothing further, exactly as a failure admits nothing:
-	// the block is never admitted again by this invocation, and nothing shows
-	// that what refused it would not refuse the next attempt too.
+	// observed and worked keep this invocation from resolving, or attempting, any block twice (D146).
+	observed  map[string]bool
+	worked    map[string]bool
+	announced map[string]int
+	// An unstarted attempt blocks further admission; its refusal may affect others.
 	unstarted map[string]bool
 	// held maps each exclusive resource in use to the block using it.
 	held    map[string]string
@@ -71,13 +68,16 @@ type scheduler struct {
 	// supersedes: each unproved block is read by the check of the block of
 	// removalPlan that takes it back (D119), unless the apply's own observation
 	// proves it completed (D123).
-	removal     bool
-	removalPlan reconciliation.Plan
+	removal       bool
+	removalPlan   reconciliation.Plan
+	online        onlineRemoval
+	onlineProved  bool
+	onlineBlocked bool
 }
 
 // converge runs the operation's blocks until nothing more may start, and
-// reports whether it stopped at a stage boundary and what any block that did
-// not complete reported.
+// reports whether it stopped at a stage or operator-stop boundary and what any
+// block that did not complete reported.
 func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved bundle, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.StageSelection) (bool, error) {
 	return s.newScheduler(tx, store, approved, logging, operation, plan, states, material, selection).converge(ctx)
 }
@@ -108,9 +108,11 @@ func (s Service) newScheduler(tx Transaction, store OperationStore, approved bun
 	return &scheduler{
 		service: s, tx: tx, store: store, approved: approved, operation: operation,
 		plan: plan, material: material, selection: selection, bound: s.Concurrency(), logging: logging,
-		states: states, running: map[string]bool{}, worked: map[string]bool{}, unstarted: map[string]bool{},
+		states: states, running: map[string]bool{}, observed: map[string]bool{}, worked: map[string]bool{},
+		unstarted: map[string]bool{}, announced: map[string]int{},
 		held: map[string]string{}, causes: map[string]error{},
 		results: make(chan step, len(plan.Blocks)),
+		online:  s.onlineRemoval(plan),
 	}
 }
 
@@ -127,6 +129,7 @@ func (c *scheduler) converge(ctx context.Context) (bool, error) {
 		}
 		c.settle(<-c.results)
 	}
+	c.closeAnnounced(ctx)
 	// A log fault requests cancellation, so a stop it caused is never a pause
 	// whether or not that request has reached this context yet. Nor is one an
 	// attempt that could not start caused: its block was startable, and only
@@ -145,9 +148,12 @@ func (c *scheduler) converge(ctx context.Context) (bool, error) {
 // reached so far, and neither does an attempt that could not start; what is
 // already in flight is waited for either way.
 func (c *scheduler) admit(ctx context.Context) {
-	for len(c.running) < c.bound && !c.logging.faulted() && len(c.unstarted) == 0 {
+	for len(c.running) < c.bound && !c.logging.faulted() && len(c.unstarted) == 0 && !c.onlineBlocked {
 		block, position, ok := c.next()
 		if !ok {
+			return
+		}
+		if !c.proveOnlineBoundary(ctx, block) {
 			return
 		}
 		c.start(ctx, block, position)
@@ -157,15 +163,13 @@ func (c *scheduler) admit(ctx context.Context) {
 // next chooses the one block admission may start now. An unproved effect is
 // observed before anything else and admits nothing beside another observation,
 // because no retry, dependent block or removal may start while an effect's
-// outcome is unproved. A failed block is then the only retry candidate and
-// runs alone, because what follows it depends on it succeeding: it waits for
-// everything in flight and starts only within the stage selection. Otherwise
-// the first startable block in frozen order runs, provided nothing already
+// outcome is unproved. Otherwise the first block admission takes in frozen
+// order runs, a retry exactly as a first attempt, provided nothing already
 // running holds a resource it needs to itself and this invocation has not
 // already worked it: a worked block still pending is one whose attempt never
 // ran, and admitting it again would only meet the same refusal.
 func (c *scheduler) next() (reconciliation.Block, int, bool) {
-	kind, admitted := firstAdmission(c.plan, c.states, c.selection, c.worked)
+	kind, admitted := firstAdmission(c.plan, c.states, c.selection, c.observed, c.worked, c.running)
 	switch {
 	case kind == StepResolve:
 		for _, index := range admitted {
@@ -176,14 +180,12 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 		return reconciliation.Block{}, 0, false
 	case c.observeOnly:
 		return reconciliation.Block{}, 0, false
-	case kind == StepRetry:
-		if len(admitted) == 0 || len(c.running) != 0 || !c.free(c.plan.Blocks[admitted[0]]) {
-			return reconciliation.Block{}, 0, false
-		}
-		return c.plan.Blocks[admitted[0]], admitted[0], true
 	}
 	for _, index := range admitted {
 		block := c.plan.Blocks[index]
+		if c.online.machines[block.ID] && !c.online.complete(c.states) {
+			continue
+		}
 		if !c.running[block.ID] && !c.worked[block.ID] && c.free(block) {
 			return block, index, true
 		}
@@ -192,27 +194,40 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 }
 
 // firstAdmission is what admission takes first, as plan positions in frozen
-// order: while any effect is unproved, StepResolve and every unproved block not
-// yet worked; otherwise, while any block is failed, StepRetry and the retry
-// candidate, or none when the selection admits no failed block; otherwise
-// StepStart and every startable block. The scheduler, the refusal of a
-// selection that admits nothing and the stage preview all derive from it, so
-// the preview marks exactly what the next apply admits.
-func firstAdmission(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection, worked map[string]bool) (string, []int) {
+// order: while any effect is unproved, StepResolve and every unproved block
+// neither observed nor worked; otherwise StepRetry while any block is failed,
+// else StepStart, with every selected failed block not yet worked and every
+// startable block, but no startable block once a worked block has failed, and
+// nothing before this invocation observes or works a block when no failed block
+// is selected. The scheduler, the refusal of a selection that admits nothing and
+// the stage preview all derive from it, so the preview marks exactly what the
+// next apply admits.
+func firstAdmission(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection, observed, worked, running map[string]bool) (string, []int) {
 	admitted := []int{}
 	if slices.ContainsFunc(plan.Blocks, func(block reconciliation.Block) bool { return unproved(states[block.ID]) }) {
 		for index, block := range plan.Blocks {
-			if unproved(states[block.ID]) && !worked[block.ID] {
+			if unproved(states[block.ID]) && !observed[block.ID] && !worked[block.ID] {
 				admitted = append(admitted, index)
 			}
 		}
 		return StepResolve, admitted
 	}
+	kind := StepStart
 	if slices.ContainsFunc(plan.Blocks, func(block reconciliation.Block) bool { return states[block.ID] == reconciliation.BlockFailed }) {
-		if _, index, ok := retryCandidate(plan, states, selection, worked); ok {
-			admitted = append(admitted, index)
+		kind = StepRetry
+		failedAgain := false
+		for index, block := range plan.Blocks {
+			switch {
+			case states[block.ID] != reconciliation.BlockFailed, running[block.ID]:
+			case worked[block.ID]:
+				failedAgain = true
+			case selection.Selects(block.Stage):
+				admitted = append(admitted, index)
+			}
 		}
-		return StepRetry, admitted
+		if failedAgain || len(admitted) == 0 && len(observed) == 0 && len(worked) == 0 {
+			return kind, admitted
+		}
 	}
 	startable := reconciliation.Startable(plan, states, selection)
 	for index, block := range plan.Blocks {
@@ -220,21 +235,8 @@ func firstAdmission(plan reconciliation.Plan, states map[string]reconciliation.B
 			admitted = append(admitted, index)
 		}
 	}
-	return StepStart, admitted
-}
-
-// retryCandidate chooses the failed block a retry may start: the first in
-// frozen order whose stage the selection admits and that this invocation has
-// not already worked. Admission and the refusal before registration both ask
-// it, so an operation never registers for a retry its scheduler would not
-// start, and a failed block outside the selection is never retried.
-func retryCandidate(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection, worked map[string]bool) (reconciliation.Block, int, bool) {
-	for index, block := range plan.Blocks {
-		if states[block.ID] == reconciliation.BlockFailed && selection.Selects(block.Stage) && !worked[block.ID] {
-			return block, index, true
-		}
-	}
-	return reconciliation.Block{}, 0, false
+	slices.Sort(admitted)
+	return kind, admitted
 }
 
 // anyState reports whether any block of the plan is in a state, including one
@@ -260,26 +262,31 @@ func (c *scheduler) free(block reconciliation.Block) bool {
 // same step the plan they confirmed listed.
 func (c *scheduler) start(ctx context.Context, block reconciliation.Block, position int) {
 	c.running[block.ID] = true
-	c.worked[block.ID] = true
+	prior := c.states[block.ID]
+	observing := unproved(prior)
+	if observing {
+		c.observed[block.ID] = true
+	} else {
+		c.worked[block.ID] = true
+	}
 	for _, key := range block.Exclusive {
 		c.held[key] = block.ID
 	}
-	prior := c.states[block.ID]
-	observing := unproved(prior)
 	command := c.observingCommand()
+	retry := observing && !c.observeOnly && c.selection.Selects(block.Stage)
 	go func() {
 		var state reconciliation.BlockState
 		var err error
-		var unstarted bool
+		var unstarted, announced bool
 		if observing {
-			// The observation's durable transition is authoritative even when
-			// it reports a refusal, so the operation state matches the record.
-			// One that never started recorded nothing, and the block keeps the
-			// state it had.
-			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks), c.removal, c.removalPlan, command)
+			// The observation's durable transition is authoritative even when it
+			// reports a refusal, so the operation state matches the record; one
+			// that never started recorded nothing, and the block keeps its state.
+			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks), c.removal, c.removalPlan, command, retry)
 			if state == "" {
 				state = prior
 			}
+			announced = retry && state == reconciliation.BlockFailed
 		} else {
 			// An attempt that never started recorded nothing either, and the
 			// block keeps the state it had.
@@ -288,7 +295,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 				state, unstarted = prior, true
 			}
 		}
-		c.results <- step{block: block.ID, state: state, err: err, unstarted: unstarted}
+		c.results <- step{block: block.ID, state: state, err: err, unstarted: unstarted, announced: announced, position: position + 1}
 	}()
 }
 
@@ -319,8 +326,22 @@ func (c *scheduler) settle(finished step) {
 	if finished.unstarted {
 		c.unstarted[finished.block] = true
 	}
+	if finished.announced {
+		c.announced[finished.block] = finished.position
+	}
+	delete(c.causes, finished.block)
 	if finished.err != nil {
 		c.causes[finished.block] = finished.err
+	}
+}
+
+// closeAnnounced settles the row of every announced retry that never started.
+func (c *scheduler) closeAnnounced(ctx context.Context) {
+	for _, block := range c.plan.Blocks {
+		position, ok := c.announced[block.ID]
+		if ok && (!c.worked[block.ID] || c.unstarted[block.ID]) {
+			c.service.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(c.states[block.ID]), Position: position, Total: len(c.plan.Blocks)})
+		}
 	}
 }
 

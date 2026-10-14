@@ -73,6 +73,7 @@
       "verb": "apply",
       "state": "unknown",
       "next": "resolve",
+      "anotherBuild": false,
       "blocks": [
         {
           "id": "artifact-server-lab-artifacts",

@@ -22,8 +22,7 @@ const BootRedfishVirtualMedia = "redfishVirtualMedia"
 // carries the labels the hypervisor expects.
 const ImagePrefix = "/var/lib/libvirt/images/bootwright"
 
-// MaxDataDisks is how many data disks a libvirt domain presents after its root
-// disk, as vdb through vdh.
+// MaxDataDisks is how many data disks a libvirt domain presents after its root.
 const MaxDataDisks = 7
 
 // ProviderNameLimit keeps a provider's host block, substrate-host-<name>,
@@ -90,10 +89,10 @@ func InterfaceMAC(contextName, machine, iface string) string {
 }
 
 // ControllerEndpoint is the Redfish address a consumer reaches one Machine's
-// management controller at. The emulator serves plain HTTP, so the scheme is
-// fixed rather than derived from a TLS choice it does not make.
+// management controller at. Its declared serving certificate always protects
+// the authenticated controller connection.
 func ControllerEndpoint(address string, port int, uuid string) string {
-	return "http://" + ControllerSocket(address, port) + "/redfish/v1/Systems/" + uuid
+	return "https://" + ControllerSocket(address, port) + "/redfish/v1/Systems/" + uuid
 }
 
 // ControllerSocket is the socket one emulated controller listens on, as its
@@ -164,4 +163,9 @@ func FormatPort(value int) string {
 		value /= 10
 	}
 	return digits
+}
+
+func DataDiskSerial(contextName, machine, disk string) string {
+	digest := sha256.Sum256([]byte("bootwright.libvirt.data-disk-v1\x00" + contextName + "\x00" + machine + "\x00" + disk))
+	return "bw" + hex.EncodeToString(digest[:9])
 }

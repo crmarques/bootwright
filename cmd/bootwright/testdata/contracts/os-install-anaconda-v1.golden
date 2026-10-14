@@ -1,0 +1,95 @@
+implementation: os-install-anaconda-v1
+content-digest: 30af8814554a8c3b89f52589a26b1b4aa38a2f7a3d157dbfd4a8e174e9e508fc
+automation-formats: none
+request-schema:
+  address string
+  bootMedia struct installation.Media
+  bootMedia.name string
+  bootMedia.sha256 string
+  bootMedia.size int64
+  budgets struct installation.Budgets
+  budgets.identity struct installation.Budget
+  budgets.identity.attempts int
+  budgets.identity.delaySeconds int
+  budgets.installer struct installation.Budget
+  budgets.installer.attempts int
+  budgets.installer.delaySeconds int
+  budgets.reachability struct installation.Budget
+  budgets.reachability.attempts int
+  budgets.reachability.delaySeconds int
+  fleetKeyRef string
+  hostKeyPath string
+  hostname string
+  identity struct installation.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  identity.profile string
+  image *struct installation.Publication omitempty
+  image.certificateRef string omitempty
+  image.path string
+  image.url string
+  kickstart string
+  markerPath string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  private *struct installation.Publication omitempty
+  private.certificateRef string omitempty
+  private.path string
+  private.url string
+  target struct installation.Target
+  target.channel string
+  target.controller struct installation.Controller
+  target.controller.credentialsRef string
+  target.controller.endpoint string
+  target.controller.tlsVerify bool
+  target.controller.trustBundleRef string omitempty
+  target.controller.virtualMedia struct installation.VirtualMedia
+  target.controller.virtualMedia.removeCertificate bool
+  target.controller.virtualMedia.restoreVerification bool
+  target.controller.virtualMedia.trust string
+  target.domain string omitempty
+  target.hardware *struct installation.Hardware omitempty
+  target.hardware.interfaces []struct installation.Interface
+  target.hardware.interfaces[].macAddress string
+  target.hardware.interfaces[].name string
+  target.hardware.rootDevice string omitempty
+  target.hostKeyRef string omitempty
+  target.hostKeyType string omitempty
+  target.physical bool
+  target.substrate string
+  target.uri string omitempty
+  tlsCertificateRef string omitempty
+  tree *struct installation.Publication omitempty
+  tree.certificateRef string omitempty
+  tree.path string
+  tree.url string
+  treeMedia *struct installation.Media omitempty
+  treeMedia.name string
+  treeMedia.sha256 string
+  treeMedia.size int64
+  user string
+  version string
+evidence-schema:
+  absent bool
+  address string
+  hostKey string
+  image bool
+  marker string
+  media string
+  postcondition bool
+  power string
+  private bool
+  reachable bool
+  request string
+  tree bool
+  treeContent bool
+  treeIdentity string
+  treeStaging bool
+  work bool

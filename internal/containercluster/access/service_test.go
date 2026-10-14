@@ -167,7 +167,7 @@ func TestAnUnknownOrExcludedClusterIsAnAccessTarget(t *testing.T) {
 		if code(t, err) != "access.target" || len(reader.reads) != 0 {
 			t.Fatalf("%q: %v after %d custody reads", name, err, len(reader.reads))
 		}
-		if remedy := diagnostics.Of(err)[0].Remediation; remedy != "name a ContainerCluster this context selects; bootwright render effective --context lab lists them" {
+		if remedy := diagnostics.Of(err)[0].Remediation; remedy != "name a ContainerCluster this context selects; bootwright cluster info --context lab lists them" {
 			t.Fatalf("%q: remediation %q", name, remedy)
 		}
 	}
@@ -190,7 +190,7 @@ func TestManagedAndExternalStorageClustersAreNotApplicableAndReadNoCustody(t *te
 		}
 		found := diagnostics.Of(err)[0]
 		want := "bootwright cluster kubeconfig does not apply to " + name + ", a " + kind + " Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only"
-		if found.Message != want || found.Remediation != "bootwright render effective --context lab lists the clusters this context selects and their kinds" {
+		if found.Message != want || found.Remediation != "bootwright cluster info --context lab lists the clusters this context selects and their kinds" {
 			t.Fatalf("%s: %+v", name, found)
 		}
 	}

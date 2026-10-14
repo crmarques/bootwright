@@ -1,0 +1,50 @@
+---
+- name: Validate the frozen Ceph host request
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_host_request.version == 'ceph-host-v1'
+      - bootwright_ceph_host_digest is match('^[0-9a-f]{64}$')
+      - ansible_connection == 'local'
+    quiet: true
+  no_log: true
+
+- name: Complete the host preparation handoff
+  bootwright.core.ceph_cluster_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Execute the fixed Ceph host observe operation
+  bootwright.core.ceph_host:
+    request: '{{ bootwright_ceph_host_request }}'
+    operation: observe
+    digest: '{{ bootwright_ceph_host_digest }}'
+    material: '{{ bootwright_ceph_host_material }}'
+  register: storage_ceph_host_result
+  failed_when: false
+  no_log: true
+  diff: false
+
+- name: Publish the fixed Ceph host refusal
+  bootwright.core.ceph_cluster_protocol:
+    phase: refused
+    reason: '{{ storage_ceph_host_result.reason | default("adapter-exception") }}'
+    detail: >-
+      {{ storage_ceph_host_result.detail
+        | default(omit if storage_ceph_host_result.reason is defined else "module-failure") }}
+  when: storage_ceph_host_result.evidence is not defined
+  no_log: true
+
+- name: Refuse an unproved Ceph host operation
+  ansible.builtin.fail:
+    msg: The Ceph host operation was refused; the run names its reason
+  when: storage_ceph_host_result.evidence is not defined
+
+- name: Publish bounded Ceph host evidence
+  bootwright.core.ceph_cluster_protocol:
+    phase: completed
+    digest: '{{ bootwright_ceph_host_digest }}'
+    outcome: '{{ "changed" if storage_ceph_host_result.changed else "unchanged" }}'
+    observed: true
+    removed: false
+    evidence: '{{ storage_ceph_host_result.evidence }}'
+  no_log: true

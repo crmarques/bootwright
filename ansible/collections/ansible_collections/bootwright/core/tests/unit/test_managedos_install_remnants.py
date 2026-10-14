@@ -106,6 +106,11 @@ class Host:
             conditions = task.get("when", [])
             conditions = inherited + (conditions if isinstance(conditions, list) else [conditions])
             if "block" in task:
+                # This publication model assumes the read-only policy check
+                # passed. Its early refusal and rescue have separate tests;
+                # no native SSH process is part of this filesystem model.
+                if len(task["block"]) == 1 and "bootwright.core.ssh_key_policy" in task["block"][0]:
+                    continue
                 assert "rescue" not in task, task.get("name")
                 try:
                     reached = self.perform(task["block"], conditions, through)

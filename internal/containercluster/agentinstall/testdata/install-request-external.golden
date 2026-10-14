@@ -32,8 +32,9 @@
       "address": "198.51.100.31",
       "controller": {
         "credentialsRef": "lab-bmc-credentials",
-        "endpoint": "http://192.0.2.1:8000/redfish/v1/Systems/566b9a1d-0751-86e3-ae9d-87255c81379e",
+        "endpoint": "https://192.0.2.1:8000/redfish/v1/Systems/566b9a1d-0751-86e3-ae9d-87255c81379e",
         "tlsVerify": true,
+        "trustBundleRef": "lab-bmc-tls",
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,
@@ -49,8 +50,9 @@
       "address": "198.51.100.32",
       "controller": {
         "credentialsRef": "lab-bmc-credentials",
-        "endpoint": "http://192.0.2.1:8001/redfish/v1/Systems/ae08d076-33d5-8cb7-9edd-060818340b06",
+        "endpoint": "https://192.0.2.1:8001/redfish/v1/Systems/ae08d076-33d5-8cb7-9edd-060818340b06",
         "tlsVerify": true,
+        "trustBundleRef": "lab-bmc-tls",
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,
@@ -66,8 +68,9 @@
       "address": "198.51.100.33",
       "controller": {
         "credentialsRef": "lab-bmc-credentials",
-        "endpoint": "http://192.0.2.1:8002/redfish/v1/Systems/9b149228-70e9-86ab-b2fa-998239057cb5",
+        "endpoint": "https://192.0.2.1:8002/redfish/v1/Systems/9b149228-70e9-86ab-b2fa-998239057cb5",
         "tlsVerify": true,
+        "trustBundleRef": "lab-bmc-tls",
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,
@@ -93,6 +96,6 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-install-agent-v3",
+  "version": "cluster-install-agent-v4",
   "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
 }

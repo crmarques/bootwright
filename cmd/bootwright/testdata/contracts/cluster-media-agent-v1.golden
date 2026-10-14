@@ -1,0 +1,44 @@
+implementation: cluster-media-agent-v1
+content-digest: 9c9aa8d410f3d6401883baec5ecaa1ec21f9a0fdcfaac416b5e652814cb568b0
+automation-formats: none
+request-schema:
+  agentConfig opaque
+  budgets struct agentinstall.MediaBudgets
+  budgets.buildSeconds int
+  identity struct agentinstall.Identity
+  identity.block string
+  identity.cluster string
+  identity.context string
+  image struct agentinstall.Publication
+  image.path string
+  image.url string
+  installConfig opaque
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  pullSecretRef string
+  release struct agentinstall.Release
+  release.distribution string
+  release.version string
+  sshKeyRef string
+  tlsCertificateRef string
+  tool struct agentinstall.Tool
+  tool.compatibility string
+  tool.kind string
+  tool.version string
+  trustBundleRefs []string omitempty
+  version string
+  workRoot string
+evidence-schema:
+  absent bool
+  image bool
+  inputs string
+  installer string
+  postcondition bool
+  request string
+  work bool

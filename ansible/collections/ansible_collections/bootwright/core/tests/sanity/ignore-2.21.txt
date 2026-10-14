@@ -1,6 +1,11 @@
 plugins/callback/censored.py validate-modules:missing-gplv3-license
 plugins/modules/artifact_server_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/artifact_server_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/ceph_cluster.py validate-modules:missing-gplv3-license
+plugins/modules/ceph_cluster_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/ceph_host.py validate-modules:missing-gplv3-license
+plugins/modules/ceph_image_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/ceph_image_resolve.py validate-modules:missing-gplv3-license
 plugins/modules/containercluster_install_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/containercluster_install_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/containercluster_media_inspect.py validate-modules:missing-gplv3-license
@@ -23,6 +28,7 @@ plugins/modules/managedos_tree_protocol.py validate-modules:missing-gplv3-licens
 plugins/modules/redfish_boot.py validate-modules:missing-gplv3-license
 plugins/modules/redfish_system_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/redfish_system_read.py validate-modules:missing-gplv3-license
+plugins/modules/ssh_key_policy.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_host_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_machine_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_physical_protocol.py validate-modules:missing-gplv3-license

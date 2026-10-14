@@ -726,8 +726,8 @@ func (v *testView) SealClientArea(_ context.Context, id string) error {
 }
 
 // Secrets lends the context's secret area only inside a transaction, as the
-// store does; the binder these tests use keeps its produced entries itself, so
-// the area it is handed is nil.
+// store does. The custody doubles these tests use keep their entries
+// themselves, so the area holds no files; it holds the store's lending rules.
 func (v *testView) Secrets(ctx context.Context, callback func(secretstore.Context, secretstore.Area) error) error {
 	if callback == nil {
 		return errors.New("lifecycle secret callback is missing")
@@ -738,7 +738,39 @@ func (v *testView) Secrets(ctx context.Context, callback func(secretstore.Contex
 	if !v.workspace.transacting {
 		return errors.New("a secret area is lent only inside a lifecycle transaction")
 	}
-	return callback(secretstore.Context{Name: testContextName, Mode: "ready", Revision: v.workspace.revision}, nil)
+	area := &lentSecrets{active: true}
+	defer func() { area.active = false }()
+	return callback(secretstore.Context{Name: testContextName, Mode: "ready", Revision: v.workspace.revision}, area)
+}
+
+// lentSecrets is the area testView.Secrets lends. As the store's area does
+// (internal/workspace/contextfs/secrets_linux_amd64.go), it serves only its
+// own callback, and once a store record publication commits in it, it
+// refuses every further publication; a custody double reports each
+// publication it models through publishLent and each loan through lendLent.
+type lentSecrets struct {
+	secretstore.Area
+	active, committed bool
+}
+
+func finishedSecrets() error {
+	return secretstore.Failure("store.conflict", "secret storage callback has already finished")
+}
+
+func lendLent(area secretstore.Area) error {
+	if lent, ok := area.(*lentSecrets); !ok || !lent.active {
+		return finishedSecrets()
+	}
+	return nil
+}
+
+func publishLent(area secretstore.Area) error {
+	lent, ok := area.(*lentSecrets)
+	if !ok || !lent.active || lent.committed {
+		return finishedSecrets()
+	}
+	lent.committed = true
+	return nil
 }
 
 // RetainDependencies records what it was asked to retain and keeps it in the
@@ -810,6 +842,10 @@ type testCapability struct {
 	outcomes     []Result
 	observations []Observation
 	planErr      error
+	// planned runs first in every plan, so a test can see where planning ran.
+	planned func()
+	// removed is the same moment of a removal.
+	removed      func()
 	applyErr     error
 	material     []map[string]secrets.Material
 	executions   []Execution
@@ -867,6 +903,9 @@ func (c *testCapability) recordExecution(execution Execution) {
 // Removal answers from the fixture. It records which frozen blocks a removal
 // read, so a test can prove a plan came from them rather than from input.
 func (c *testCapability) Removal(_ context.Context, block reconciliation.Block) (Removal, error) {
+	if c.removed != nil {
+		c.removed()
+	}
 	c.record(&c.removals, block.ID)
 	if c.removalErr != nil {
 		return Removal{}, c.removalErr
@@ -893,6 +932,9 @@ func (c *testCapability) Quiescent(_ context.Context, probe Probe) (Quiescence, 
 }
 
 func (c *testCapability) Plan(_ context.Context, input PlanInput) (CapabilityPlan, error) {
+	if c.planned != nil {
+		c.planned()
+	}
 	if c.planErr != nil {
 		return CapabilityPlan{}, c.planErr
 	}
@@ -1067,7 +1109,7 @@ type testBinder struct {
 
 // Produce models the custody store: one publication for the block, which an
 // output equal to its entry does not need.
-func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, _ secretstore.Area, request custody.ProduceRequest) ([]secretstore.Produced, error) {
+func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, area secretstore.Area, request custody.ProduceRequest) ([]secretstore.Produced, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -1111,6 +1153,9 @@ func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, 
 	if b.produceErr != nil {
 		return nil, b.produceErr
 	}
+	if err := publishLent(area); err != nil {
+		return nil, err
+	}
 	event := "produce "
 	if slices.ContainsFunc(request.Outputs, func(output secretstore.ProducedInput) bool { return output.Unproved }) {
 		event = "produce unproved "
@@ -1121,8 +1166,11 @@ func (b *testBinder) Produce(ctx context.Context, selected secretstore.Context, 
 }
 
 // Holds reports whether custody holds the entry of block and name.
-func (b *testBinder) Holds(ctx context.Context, selected secretstore.Context, _ secretstore.Area, block, name string) (bool, error) {
+func (b *testBinder) Holds(ctx context.Context, selected secretstore.Context, area secretstore.Area, block, name string) (bool, error) {
 	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if err := lendLent(area); err != nil {
 		return false, err
 	}
 	if selected.Name != testContextName {
@@ -1148,7 +1196,7 @@ func (b *testBinder) producedEntries() []string {
 
 // Withdraw removes every entry in one publication, and publishes nothing when
 // there is none.
-func (b *testBinder) Withdraw(ctx context.Context, selected secretstore.Context, _ secretstore.Area) (bool, error) {
+func (b *testBinder) Withdraw(ctx context.Context, selected secretstore.Context, area secretstore.Area) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -1165,6 +1213,9 @@ func (b *testBinder) Withdraw(ctx context.Context, selected secretstore.Context,
 	}
 	if b.withdrawErr != nil {
 		return false, b.withdrawErr
+	}
+	if err := publishLent(area); err != nil {
+		return false, err
 	}
 	b.produced, b.unproved = nil, nil
 	b.journal = append(b.journal, "withdraw")
@@ -1796,16 +1847,19 @@ func TestFailedBlockLeavesTheOperationContinuable(t *testing.T) {
 	}
 }
 
+// A resolution is not an attempt: a block the live evidence proves unfinished
+// is retried by the same invocation, and one it leaves unknown is not.
 func TestUnknownOutcomeIsResolvedFromLiveEvidence(t *testing.T) {
 	for name, tc := range map[string]struct {
-		effect reconciliation.EffectState
-		state  string
-		next   string
+		effect  reconciliation.EffectState
+		state   string
+		next    string
+		retried bool
 	}{
-		"completed": {reconciliation.EffectCompleted, "done", "none"},
-		"no effect": {reconciliation.EffectNoEffect, "failed", "continue-apply"},
-		"partial":   {reconciliation.EffectPartial, "failed", "continue-apply"},
-		"unknown":   {reconciliation.EffectUnknown, "unknown", "resolve"},
+		"completed": {reconciliation.EffectCompleted, "done", "none", false},
+		"no effect": {reconciliation.EffectNoEffect, "done", "none", true},
+		"partial":   {reconciliation.EffectPartial, "done", "none", true},
+		"unknown":   {reconciliation.EffectUnknown, "unknown", "resolve", false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t, "artifact-server-lab")
@@ -1822,8 +1876,12 @@ func TestUnknownOutcomeIsResolvedFromLiveEvidence(t *testing.T) {
 			if len(h.capability.observes) != 1 {
 				t.Fatalf("observations = %v", h.capability.observes)
 			}
-			if tc.effect != reconciliation.EffectCompleted && len(h.capability.applies) != 1 {
-				t.Fatal("an unresolved block started another attempt")
+			wanted := 1
+			if tc.retried {
+				wanted = 2
+			}
+			if len(h.capability.applies) != wanted {
+				t.Fatalf("applies = %v, want %d", h.capability.applies, wanted)
 			}
 		})
 	}
@@ -1864,9 +1922,10 @@ func TestAnObservationThatNeverRanReportsWhy(t *testing.T) {
 
 // A target the capability proves is part way realized and its own is the
 // ordinary outcome of an interrupted effect. Resolving it to failed is what
-// lets the next invocation converge it: an unknown block would start no retry,
-// no removal and no deletion, so the context would have nowhere to go.
-func TestAPartlyRealizedBlockIsConvergedByRepeatingTheOperation(t *testing.T) {
+// lets the operation converge it: an unknown block would start no retry, no
+// removal and no deletion, so the context would have nowhere to go. The
+// invocation that resolved it retries it, so one repetition is enough.
+func TestAPartlyRealizedBlockIsConvergedByTheOperationThatResolvesIt(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -1874,23 +1933,44 @@ func TestAPartlyRealizedBlockIsConvergedByRepeatingTheOperation(t *testing.T) {
 	}
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
 	resolved, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if err == nil || resolved.Receipt.State != "failed" {
+	if err != nil || resolved.Receipt.State != "done" {
 		t.Fatalf("partial resolution = %+v (%v)", resolved.Receipt, err)
-	}
-	if code := firstCode(err); code != "lifecycle.state" {
-		t.Fatalf("a partial resolution reported %q, want a failure an operator can retry", code)
-	}
-	converged, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if err != nil || converged.Receipt.State != "done" {
-		t.Fatalf("convergence = %+v (%v)", converged.Receipt, err)
 	}
 	if len(h.capability.applies) != 2 || len(h.capability.observes) != 1 {
 		t.Fatalf("applies = %v, observes = %v", h.capability.applies, h.capability.observes)
 	}
 }
 
+// A partial resolution whose retry fails again leaves the block failed with the
+// retry's own error as the way on, and the repetition retries it again.
+func TestAPartlyRealizedBlockWhoseRetryFailsIsConvergedByRepeatingTheOperation(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+		t.Fatal("an unproved effect completed")
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
+	h.capability.errorFor = map[string]error{"artifact-server-lab": errors.New("the retry failed")}
+	resolved, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err == nil || resolved.Receipt.State != "failed" {
+		t.Fatalf("partial resolution = %+v (%v)", resolved.Receipt, err)
+	}
+	if len(h.capability.applies) != 2 || len(h.capability.observes) != 1 {
+		t.Fatalf("applies = %v, observes = %v", h.capability.applies, h.capability.observes)
+	}
+	h.capability.errorFor = nil
+	converged, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if err != nil || converged.Receipt.State != "done" {
+		t.Fatalf("convergence = %+v (%v)", converged.Receipt, err)
+	}
+	if len(h.capability.applies) != 3 || len(h.capability.observes) != 1 {
+		t.Fatalf("applies = %v, observes = %v", h.capability.applies, h.capability.observes)
+	}
+}
+
 // The same resolution frees a removal, because a failed operation admits a
-// fresh destroy while an unknown one admits nothing at all.
+// fresh destroy while an unknown one admits nothing at all. The resolving
+// apply's own retry fails here, so the block is still there to take back.
 func TestAPartlyRealizedBlockIsAlsoRemovable(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
@@ -1901,8 +1981,9 @@ func TestAPartlyRealizedBlockIsAlsoRemovable(t *testing.T) {
 		t.Fatal("an unknown block admitted a removal")
 	}
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
+	h.capability.errorFor = map[string]error{"artifact-server-lab": errors.New("the retry failed")}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
-		t.Fatal("a partial resolution completed the operation")
+		t.Fatal("a partial resolution whose retry failed completed the operation")
 	}
 	removed, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil || removed.Receipt.State != "done" {
@@ -1914,8 +1995,8 @@ func TestAPartlyRealizedBlockIsAlsoRemovable(t *testing.T) {
 }
 
 // An interrupted removal is converged the same way, so a partial resolution is
-// not an apply-only road out.
-func TestAPartlyRemovedBlockIsConvergedByRepeatingTheRemoval(t *testing.T) {
+// not an apply-only road out: the destroy that resolves it retries it.
+func TestAPartlyRemovedBlockIsConvergedByTheRemovalThatResolvesIt(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -1926,12 +2007,11 @@ func TestAPartlyRemovedBlockIsConvergedByRepeatingTheRemoval(t *testing.T) {
 	}
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectPartial}}
 	resolved, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if err == nil || resolved.Receipt.State != "failed" || resolved.Receipt.Verb != "destroy" {
+	if err != nil || resolved.Receipt.State != "done" || resolved.Receipt.Verb != "destroy" {
 		t.Fatalf("partial removal resolution = %+v (%v)", resolved.Receipt, err)
 	}
-	converged, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if err != nil || converged.Receipt.State != "done" {
-		t.Fatalf("removal convergence = %+v (%v)", converged.Receipt, err)
+	if len(h.capability.destroys) != 2 || len(h.capability.observes) != 1 {
+		t.Fatalf("destroys = %v, observes = %v", h.capability.destroys, h.capability.observes)
 	}
 }
 
@@ -2128,8 +2208,9 @@ func TestContinuedDestroyIsNotGatedBeforeRegistration(t *testing.T) {
 
 func TestContinuationRefusesDriftedInputExecutableOrHost(t *testing.T) {
 	for name, corrupt := range map[string]func(*harness){
-		"changed automation": func(h *harness) {
+		"changed automation and block": func(h *harness) {
 			h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
+			h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
 		},
 		"changed input": func(h *harness) {
 			h.workspace.inputs.Files = []desiredstate.SourceFile{
@@ -3254,16 +3335,17 @@ func TestDestroyOverAFailedApplyRemovesEveryStartedBlock(t *testing.T) {
 	}
 }
 
-// Repairing the adapter that failed an operation changes the automation its
-// continuation is frozen to. The removal is the road out of that, so the
-// refusal names it and the context returns to rest under the new executable.
-func TestRepairedAutomationLeavesAFailedApplyDestroyable(t *testing.T) {
+// A repair that changes what a block freezes leaves the failed apply's
+// continuation refused. The removal is the road out, so the refusal names it
+// and the context returns to rest under the new executable.
+func TestARepairThatMovesABlockLeavesAFailedApplyDestroyable(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
 		t.Fatal("a failed block reported success")
 	}
 	h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
+	h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	remediation := ""
 	for _, reported := range diagnostics.Of(err) {

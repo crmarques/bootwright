@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "cluster info",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "clusters": [
+      {
+        "name": "edge",
+        "kind": "ContainerCluster",
+        "accessCommands": [
+          {
+            "command": "cluster exec",
+            "status": "not-implemented",
+            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster kubeconfig",
+            "status": "ready"
+          },
+          {
+            "command": "cluster kubectl",
+            "status": "not-implemented",
+            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster oc",
+            "status": "not-implemented",
+            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster rsh",
+            "status": "not-implemented",
+            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          }
+        ]
+      },
+      {
+        "name": "okd-lab",
+        "kind": "ContainerCluster",
+        "accessCommands": [
+          {
+            "command": "cluster exec",
+            "status": "not-implemented",
+            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster kubeconfig",
+            "status": "unavailable",
+            "reason": "this context holds no administrator kubeconfig for okd-lab until an apply proves its installation complete; run bootwright apply --context lab"
+          },
+          {
+            "command": "cluster kubectl",
+            "status": "not-implemented",
+            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster oc",
+            "status": "not-implemented",
+            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster rsh",
+            "status": "not-implemented",
+            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          }
+        ]
+      }
+    ],
+    "storage": [
+      {
+        "name": "archive",
+        "kind": "StorageCluster",
+        "accessCommands": [
+          {
+            "command": "cluster exec",
+            "status": "not-applicable",
+            "reason": "the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters"
+          },
+          {
+            "command": "cluster kubeconfig",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster kubectl",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster oc",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster rsh",
+            "status": "not-applicable",
+            "reason": "the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters"
+          }
+        ]
+      },
+      {
+        "name": "storage",
+        "kind": "StorageCluster",
+        "accessCommands": [
+          {
+            "command": "cluster exec",
+            "status": "unavailable",
+            "node": "rhel-01",
+            "reason": "the Machine rhel-01, which runs node rhel-01, has no proved host key; bootwright apply --context lab --stage machines records it"
+          },
+          {
+            "command": "cluster kubeconfig",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster kubectl",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster oc",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster rsh",
+            "status": "unavailable",
+            "node": "rhel-01",
+            "reason": "the Machine rhel-01, which runs node rhel-01, has no proved host key; bootwright apply --context lab --stage machines records it"
+          }
+        ],
+        "management": "managed",
+        "release": "9.9.1.2",
+        "adminNode": "rhel-01",
+        "status": "unavailable",
+        "reason": "no apply of this context's current operation has completed the cluster's bootstrap",
+        "remedy": "bootwright apply --context lab --stage clusters"
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

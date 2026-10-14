@@ -10,6 +10,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import re
 import sys
 from xml.etree import ElementTree
 
@@ -382,7 +383,7 @@ def domain_listed(runner, uri, name):
     return listed(runner, uri, "list", name)
 
 
-def domain_metadata(runner, uri, name, context="", machine="", uuid=""):
+def domain_metadata(runner, uri, name, context="", machine="", uuid="", disks=None):
     """Report one domain's ownership and identity without changing it.
 
     `answered` separates a hypervisor that says it defines no such domain from
@@ -402,12 +403,71 @@ def domain_metadata(runner, uri, name, context="", machine="", uuid=""):
     element = root.find("./uuid")
     observed = (element.text or "").strip() if element is not None else ""
     owned = bool(machine and uuid) and observed == uuid and names_owner(root, context, "machine", machine)
-    return {
+    if disks and any(d.get("serial") for d in disks):
+        owned = owned and domain_disk_bindings(root, disks)
+    result = {
         "answered": True,
         "present": True,
         "owned": owned,
         "uuid": observed,
     }
+    if disks and any(d.get("media") == "ssd" for d in disks):
+        result["diskMedia"] = {disk["name"]: disk_media(root, disk) for disk in disks if disk.get("media") == "ssd"}
+    return result
+
+
+def disk_media(root, disk):
+    """Read a frozen SSD target's actual bus and virtual rotation rate."""
+    matches = [item.find("target") for item in root.findall("./devices/disk[@device='disk']")
+               if item.find("target") is not None and item.find("target").get("dev") == disk["target"]]
+    if len(matches) != 1:
+        return {"bus": "", "target": "", "rotationRate": 0}
+    target = matches[0]
+    rate = target.get("rotation_rate", "")
+    return {"bus": target.get("bus", ""), "target": target.get("dev", ""),
+            "rotationRate": int(rate) if rate.isascii() and rate.isdigit() and len(rate) <= 5 else 0}
+
+
+def domain_disk_bindings(root, disks):
+    """Prove frozen volumes, targets, serials and explicit SSD presentation."""
+    observed = root.findall("./devices/disk[@device='disk']")
+    if len(observed) != len(disks):
+        return False
+    if any(disk.get("media") == "ssd" for disk in disks):
+        addresses = []
+        for item in root.findall("./devices/disk"):
+            target, address = item.find("target"), item.find("address")
+            if target is not None and target.get("bus") == "scsi":
+                if address is None or address.get("type") != "drive":
+                    return False
+                addresses.append(tuple(address.get(key) for key in ("controller", "bus", "target", "unit")))
+        if len(addresses) != len(set(addresses)):
+            return False
+    for disk in disks:
+        matches = [d for d in observed if d.find("target") is not None and d.find("target").get("dev") == disk["target"]]
+        if len(matches) != 1:
+            return False
+        item = matches[0]
+        source, target = item.find("source"), item.find("target")
+        if item.get("type") != "file" or source is None or source.get("file") != disk["path"] or target.get("bus") != disk.get("bus", "virtio"):
+            return False
+        if (item.findtext("serial") or "") != disk.get("serial", ""):
+            return False
+        if disk.get("media") == "ssd":
+            if disk.get("bus") != "scsi" or disk.get("rotationRate") != 1 or target.get("rotation_rate") != "1":
+                return False
+            controllers = root.findall("./devices/controller[@type='scsi'][@index='0']")
+            address = item.find("address")
+            if len(controllers) != 1 or controllers[0].get("model") != "virtio-scsi" or address is None:
+                return False
+            if not re.fullmatch(r"sd[a-g]", disk["target"]):
+                return False
+            expected = {"type": "drive", "controller": "0", "bus": "0", "target": "0", "unit": str(ord(disk["target"][-1]) - ord("a"))}
+            if any(address.get(key) != value for key, value in expected.items()):
+                return False
+        elif any(key in disk for key in ("bus", "media", "rotationRate")) or target.get("rotation_rate") is not None:
+            return False
+    return True
 
 
 def domain_state(runner, uri, name):
@@ -610,14 +670,17 @@ def observe_machine(runner, request, read=None):
     controller = request["controller"]
     identity = request["identity"]
     metadata = domain_metadata(
-        runner, request["uri"], request["domain"], identity["context"], identity["object"], request["uuid"])
+        runner, request["uri"], request["domain"], identity["context"], identity["object"], request["uuid"], request.get("disks"))
     disks = []
     for disk in request.get("disks") or []:
-        disks.append({
+        entry = {
             "name": disk["name"],
             "present": os.path.lexists(disk["path"]),
             "sizeGiB": disk_size_gib(runner, disk["path"]),
-        })
+        }
+        if disk.get("media") == "ssd" and disk["name"] in metadata.get("diskMedia", {}):
+            entry.update(metadata["diskMedia"][disk["name"]])
+        disks.append(entry)
     return {
         "answered": metadata["answered"],
         "controller": container_image(runner, controller["unit"]),

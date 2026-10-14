@@ -233,7 +233,7 @@ func TestOperationRecordsMatchTheirGoldens(t *testing.T) {
 			t.Fatalf("attempt of %s read back as %+v (%v)", block, got, err)
 		}
 	}
-	if number, err := store.StartAttempt(ctx, applied.ID, "server-lab"); err != nil || number != 1 {
+	if number, err := store.StartAttempt(ctx, applied.ID, "server-lab", testBuild); err != nil || number != 1 {
 		t.Fatalf("starting: %d (%v)", number, err)
 	}
 	readBlock("block-running", "server-lab", BlockRecord{Version: 1, Block: "server-lab", State: reconciliation.BlockRunning, Attempts: 1})
@@ -251,15 +251,19 @@ func TestOperationRecordsMatchTheirGoldens(t *testing.T) {
 	readAttempt("attempt-observed", "server-lab", "observed", string(preparation), string(evidence))
 	readBlock("block-done", "server-lab", BlockRecord{Version: 1, Block: "server-lab", State: reconciliation.BlockDone, Attempts: 1})
 
-	// The other block's attempt is unknown until a resolution observes it.
-	if _, err := store.StartAttempt(ctx, applied.ID, "install-node-01"); err != nil {
+	// The other block's attempt is unknown until a resolution observes it, which
+	// a modified build runs under that block's own content digest.
+	installed := testBuild
+	installed.ContentDigest = strings.Repeat("b", 64)
+	if _, err := store.StartAttempt(ctx, applied.ID, "install-node-01", installed); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CompleteAttempt(ctx, applied.ID, "install-node-01", 1, reconciliation.OutcomeUnknown,
 		reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
 		t.Fatal(err)
 	}
-	resolution, err := store.StartResolution(ctx, applied.ID, "install-node-01", 1)
+	installed.Modified = true
+	resolution, err := store.StartResolution(ctx, applied.ID, "install-node-01", 1, installed)
 	if err != nil || resolution != 1 {
 		t.Fatalf("starting the resolution: %d (%v)", resolution, err)
 	}

@@ -143,7 +143,7 @@ func TestInstallPlanWaitsForItsMediaAndItsNodes(t *testing.T) {
 	if len(plan.Reservations) != 0 {
 		t.Fatalf("an installation claimed host resources: %+v", plan.Reservations)
 	}
-	if !slices.Equal(plan.Secrets, []string{"lab-bmc-credentials"}) {
+	if !slices.Equal(plan.Secrets, []string{"lab-bmc-credentials", "lab-bmc-tls"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}
 }
@@ -231,6 +231,16 @@ func TestAnInstallationCrossesTheAdapterWithItsClientsAndCredentials(t *testing.
 			return file.Secret == "lab-bmc-credentials" && file.Part == part
 		}) {
 			t.Fatalf("materials = %+v", request.Materials)
+		}
+	}
+	anchor := lifecycle.MaterialFile{Name: "bmc-ca-sno-01", Part: secrets.CertificatePart,
+		Secret: "lab-bmc-tls", Variable: "controllerCANode0"}
+	if !slices.Contains(request.Materials, anchor) {
+		t.Fatalf("the installation omitted the controller's TLS anchor: %+v", request.Materials)
+	}
+	for _, file := range request.Materials {
+		if file.Secret == "lab-bmc-tls" && file.Part != secrets.CertificatePart {
+			t.Fatalf("the installation received a controller serving key: %+v", file)
 		}
 	}
 }

@@ -151,7 +151,7 @@ func TestClusterKubeconfigJourney(t *testing.T) {
 			t.Fatalf("%s wrote %q", name, out)
 		}
 		singleDiagnostic(t, stderr, code)
-		if !strings.Contains(stderr, "bootwright render effective --context lab-sno") {
+		if !strings.Contains(stderr, "bootwright cluster info --context lab-sno") {
 			t.Fatalf("%s names no discovery action: %q", name, stderr)
 		}
 	}

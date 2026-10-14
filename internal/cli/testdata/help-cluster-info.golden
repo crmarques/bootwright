@@ -1,7 +1,10 @@
-Show cluster details and static access applicability. This command is recognized but not implemented.
+Show cluster details and static access applicability, readiness and invocation templates from local desired state and evidence, with no host contact. Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters. A managed Ceph StorageCluster also reports its release, FSID, frozen image, monitors and administrator command. --secrets requires --name and applies to managed Ceph StorageClusters only.
 
 Usage:
   bootwright cluster info [flags]
+
+Examples:
+  bootwright cluster info --context lab --name storage
 
 Flags:
       --name string     Select one cluster (default: all)

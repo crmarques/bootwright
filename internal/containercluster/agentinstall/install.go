@@ -402,6 +402,12 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 				Name: "bmc-password-" + node.Machine, Part: secrets.PasswordPart,
 				Secret: node.Controller.CredentialsRef, Variable: "controllerPassword" + nodeVariable(index),
 			})
+		if node.Controller.TrustBundleRef != "" {
+			materials = append(materials, lifecycle.MaterialFile{
+				Name: "bmc-ca-" + node.Machine, Part: secrets.CertificatePart,
+				Secret: node.Controller.TrustBundleRef, Variable: "controllerCA" + nodeVariable(index),
+			})
+		}
 	}
 	// The deadline follows the budgets and nodes this request froze, not this
 	// build's.

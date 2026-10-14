@@ -49,6 +49,7 @@ func TestTheControllerBoundsAreTheClientsOwn(t *testing.T) {
 		"MEDIA_PROBES": controllerMediaProbes, "MEDIA_PROBE_DELAY": seconds(controllerMediaProbeDelay),
 		"POLL_ATTEMPTS": controllerPowerPolls, "POLL_DELAY": seconds(controllerPowerPollDelay),
 		"BOOT_POLLS": controllerBootPolls, "BOOT_POLL_DELAY": seconds(controllerBootPollDelay),
+		"CERTIFICATE_MEMBERS": controllerCertificateMembers,
 	} {
 		value, found := declared[name]
 		if !found {
@@ -76,6 +77,7 @@ func TestTheControllerBoundsAreTheWorstCasesTheClientDocuments(t *testing.T) {
 	for _, stated := range []string{
 		"- insert: at most " + secondsText(controllerInsertPauses) + " s of pauses and attach timeouts",
 		"- eject: at most " + secondsText(controllerEjectPauses) + " s of pauses",
+		"CERTIFICATE_MEMBERS 8 + 5 requests, each under REQUEST_TIMEOUT, plus one retry of a PATCH answered 412",
 		"- boot: at most " + secondsText(controllerBootPauses) + " s,",
 		"- power-on, power-off and shutdown: at most attempts x " + secondsText(controllerPowerPollDelay) + " s,",
 	} {
@@ -113,7 +115,7 @@ func TestTheControllerBoundsAreTheFiguresTheSpecificationsState(t *testing.T) {
 	}{
 		"a power read":      {ControllerPowerReadBound, "30s"},
 		"a media read":      {ControllerMediaReadBound, "2m0s"},
-		"an insert":         {ControllerInsertBound, "39m20s"},
+		"an insert":         {ControllerInsertBound, "46m20s"},
 		"an eject":          {ControllerEjectBound, "4m30s"},
 		"a boot selection":  {ControllerBootSelectionBound, "2m30s"},
 		"a power operation": {ControllerPowerBound, "3m30s"},

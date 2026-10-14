@@ -40,7 +40,7 @@ func installedRequest() agentinstall.InstallRequest {
 		Placement: machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
 		Release:   agentinstall.Release{Distribution: "openshift", Version: installedRelease},
 		Tool:      agentinstall.Tool{Compatibility: "openshift", Kind: "openshift-install", Version: installedRelease},
-		Version:   "cluster-install-agent-v3",
+		Version:   "cluster-install-agent-v4",
 		WorkRoot:  "/var/lib/bootwright/work/lab/sno",
 	}
 }

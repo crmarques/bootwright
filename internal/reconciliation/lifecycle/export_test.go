@@ -3,13 +3,16 @@ package lifecycle
 import (
 	"context"
 	"encoding/json"
+	"path"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -51,31 +54,51 @@ func NewCapabilityJourney(t *testing.T, capability Capability, binding Capabilit
 // capabilities does.
 func NewCapabilitiesJourney(t *testing.T, capability Capability, bindings []CapabilityBinding, plan CapabilityPlan) *CapabilityJourney {
 	t.Helper()
+	bound := make([]BoundCapability, 0, len(bindings))
+	for _, binding := range bindings {
+		bound = append(bound, BoundCapability{Binding: binding, Capability: capability})
+	}
+	return NewBoundJourney(t, bound, plan)
+}
+
+type BoundCapability struct {
+	Binding    CapabilityBinding
+	Capability Capability
+}
+
+func NewBoundJourney(t *testing.T, bound []BoundCapability, plan CapabilityPlan) *CapabilityJourney {
+	t.Helper()
 	h := newPlannedHarness(t, plan.Definitions)
-	h.service.capabilities = sharedResolver{capability: capability, plan: plan, bindings: bindings}
+	h.service.capabilities = sharedResolver{bound: bound, plan: plan}
 	return &CapabilityJourney{Service: h.service, harness: h}
 }
 
-// sharedResolver resolves every binding to one capability, which contributes
-// the fixed plan through its first binding alone, so no block is planned
-// twice.
+// sharedResolver resolves each binding to its capability, the first binding's
+// alone contributing the fixed plan, so no block is planned twice.
 type sharedResolver struct {
-	capability Capability
-	plan       CapabilityPlan
-	bindings   []CapabilityBinding
+	bound []BoundCapability
+	plan  CapabilityPlan
 }
 
-func (r sharedResolver) Bindings() []CapabilityBinding { return r.bindings }
+func (r sharedResolver) Bindings() []CapabilityBinding {
+	bindings := make([]CapabilityBinding, 0, len(r.bound))
+	for _, bound := range r.bound {
+		bindings = append(bindings, bound.Binding)
+	}
+	return bindings
+}
 
 func (r sharedResolver) Resolve(kind, implementation string) (Capability, bool) {
-	position := slices.Index(r.bindings, CapabilityBinding{Kind: kind, Implementation: implementation})
+	position := slices.IndexFunc(r.bound, func(bound BoundCapability) bool {
+		return bound.Binding == CapabilityBinding{Kind: kind, Implementation: implementation}
+	})
 	switch {
 	case position < 0:
 		return nil, false
 	case position == 0:
-		return plannedCapability{Capability: r.capability, plan: r.plan}, true
+		return plannedCapability{Capability: r.bound[0].Capability, plan: r.plan}, true
 	}
-	return plannedCapability{Capability: r.capability, plan: CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}}, true
+	return plannedCapability{Capability: r.bound[position].Capability, plan: CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}}, true
 }
 
 // Holding gives the journey's bound Secrets one more declaration's material.
@@ -123,6 +146,28 @@ func (p plannedCapability) Unresolved(verb reconciliation.Verb, block reconcilia
 	return Unresolved{}, false
 }
 
+func (p plannedCapability) HostMachines(block reconciliation.Block) ([]string, error) {
+	if bound, ok := p.Capability.(HostBound); ok {
+		return bound.HostMachines(block)
+	}
+	return nil, nil
+}
+
+func (p plannedCapability) RemovesHost(block reconciliation.Block) bool {
+	removal, ok := p.Capability.(HostRemoval)
+	return ok && removal.RemovesHost(block)
+}
+
+func (p plannedCapability) RequiresOnlineRemoval(block reconciliation.Block) bool {
+	online, ok := p.Capability.(OnlineRemoval)
+	return ok && online.RequiresOnlineRemoval(block)
+}
+
+func (p plannedCapability) ProbesQuiescence() bool {
+	prober, ok := p.Capability.(QuiescenceProber)
+	return ok && prober.ProbesQuiescence()
+}
+
 // FailPublication makes every later publication into custody fail with err,
 // or succeed again when err is nil.
 func (j *CapabilityJourney) FailPublication(err error) { j.harness.binder.produceErr = err }
@@ -134,3 +179,91 @@ func (j *CapabilityJourney) Kept() []string { return j.harness.binder.producedEn
 // CustodyJournal is every publication and withdrawal custody committed, in
 // order.
 func (j *CapabilityJourney) CustodyJournal() []string { return slices.Clone(j.harness.binder.journal) }
+
+// Rebuild makes the journey's engine another build: one whose executable
+// embeds automation and stamps executable, over the same context.
+func (j *CapabilityJourney) Rebuild(automation string, executable Executable) {
+	j.harness.service.automation = testAutomation{digest: automation}
+	j.harness.service.options.Executable = executable
+	j.Service.automation = j.harness.service.automation
+	j.Service.options.Executable = executable
+}
+
+// Operation is the context's current operation record as the store holds it.
+func (j *CapabilityJourney) Operation(t *testing.T) operationstore.Operation {
+	t.Helper()
+	operation, _ := durableOperation(t, j.harness)
+	return operation
+}
+
+// Records are one block's attempts of the current operation in order, each
+// followed by its last resolution when it has one.
+func (j *CapabilityJourney) Records(t *testing.T, block string) []operationstore.Attempt {
+	t.Helper()
+	ctx := context.Background()
+	operation, store := j.Operation(t), recordsOf(j.harness)
+	record, err := store.Block(ctx, operation.ID, block)
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := []operationstore.Attempt{}
+	for number := 1; number <= record.Attempts; number++ {
+		attempt, err := store.Attempt(ctx, operation.ID, block, number)
+		if err != nil {
+			t.Fatal(err)
+		}
+		records = append(records, attempt)
+		resolution, found, err := store.LastResolution(ctx, operation.ID, block, number)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if found {
+			records = append(records, resolution)
+		}
+	}
+	return records
+}
+
+// Unstamp rewrites every attempt and resolution record of the current
+// operation without the build it names, as the canonical bytes a build from
+// before records named one wrote, and reports how many it rewrote.
+func (j *CapabilityJourney) Unstamp(t *testing.T) int {
+	t.Helper()
+	ctx := context.Background()
+	area, blocks := j.harness.workspace.area, path.Join(j.Operation(t).ID, "blocks")
+	directories, err := area.Entries(ctx, blocks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rewritten := 0
+	for _, directory := range directories {
+		entries, err := area.Entries(ctx, path.Join(blocks, directory.Name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if !strings.HasPrefix(entry.Name, "attempt-") || !strings.HasSuffix(entry.Name, ".json") {
+				continue
+			}
+			name := path.Join(blocks, directory.Name, entry.Name)
+			stamped, _, err := area.Read(ctx, name, operationstore.MaxAttemptBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var record operationstore.Attempt
+			if err := json.Unmarshal(stamped, &record); err != nil {
+				t.Fatal(err)
+			}
+			record.Build = nil
+			unstamped, err := canonicaljson.Encode(record, canonicaljson.Line)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := area.Replace(ctx, name, unstamped, stamped); err != nil {
+				t.Fatal(err)
+			}
+			rewritten++
+		}
+	}
+	return rewritten
+}

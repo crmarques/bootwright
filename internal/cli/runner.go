@@ -309,7 +309,7 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 // the session opens exits 255, the SSH client's own failure status. A usage
 // refusal and an interrupt keep theirs.
 func refusalStatus(path string) int {
-	if path == "machine exec" || path == "machine rsh" {
+	if SessionCommand(path) {
 		return 255
 	}
 	return 1

@@ -2,7 +2,7 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_machine_request.version == 'machine-libvirt-v4'
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v6'
       - bootwright_substrate_machine_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -22,6 +22,8 @@
     endpoint: '{{ bootwright_substrate_machine_request.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
+    verify: true
+    ca_data: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerCertificate) }}'
     media: false
   register: substrate_libvirt_machine_controller
   failed_when: false

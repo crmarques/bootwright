@@ -345,30 +345,59 @@ func TestPlanResultMarksWhatAStageSelectionWouldStart(t *testing.T) {
 	}
 }
 
-// While a block is unproved or failed, the steps the next apply works first
-// read resolve or retry, and every other ready step reads deferred behind the
-// first of them.
-func TestPlanResultMarksTheBlockTheNextApplyWorksFirst(t *testing.T) {
-	for _, kind := range []string{lifecycle.StepRetry, lifecycle.StepResolve} {
-		result := previewResult()
-		result.Continuation, result.Stages = true, []string{"machines"}
-		result.Steps = []lifecycle.PlanStep{
-			{ID: "os-install-rhel-01", Description: "install rhel-01", Stage: "machines", State: "failed", Selection: kind},
-			{ID: "os-install-rhel-02", Description: "install rhel-02", Stage: "machines", State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "os-install-rhel-01"},
+// While a block is unproved, the steps the next apply resolves read resolve,
+// and every other ready step reads deferred behind the first of them.
+func TestPlanResultMarksTheBlockTheNextApplyResolvesFirst(t *testing.T) {
+	result := previewResult()
+	result.Continuation, result.Stages = true, []string{"machines"}
+	result.Steps = []lifecycle.PlanStep{
+		{ID: "os-install-rhel-01", Description: "install rhel-01", Stage: "machines", State: "unknown", Selection: lifecycle.StepResolve},
+		{ID: "os-install-rhel-02", Description: "install rhel-02", Stage: "machines", State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "os-install-rhel-01"},
+	}
+	result.Startable, result.Deferred = 1, 1
+	var out bytes.Buffer
+	if err := writeLifecyclePlan(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"  1. install rhel-01 [machines] [unknown] [resolve]\n",
+		"  2. install rhel-02 [machines] [pending] [deferred: waits on os-install-rhel-01]\n",
+		"  Starts  1 of 2 blocks, 1 deferred\n",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("plan text = %q, missing %q", out.String(), want)
 		}
-		result.Startable, result.Deferred = 1, 1
-		var out bytes.Buffer
-		if err := writeLifecyclePlan(&out, result); err != nil {
-			t.Fatal(err)
-		}
-		for _, want := range []string{
-			"  1. install rhel-01 [machines] [failed] [" + kind + "]\n",
-			"  2. install rhel-02 [machines] [pending] [deferred: waits on os-install-rhel-01]\n",
-			"  Starts  1 of 2 blocks, 1 deferred\n",
-		} {
-			if !strings.Contains(out.String(), want) {
-				t.Fatalf("plan text = %q, missing %q", out.String(), want)
-			}
+	}
+}
+
+// Every failed block the next apply retries reads retry, every ready step
+// that starts beside them reads start, and all of them count as started; a
+// step that depends on a failed block reads deferred behind it.
+func TestPlanResultMarksEveryBlockTheNextApplyRetries(t *testing.T) {
+	result := previewResult()
+	result.Continuation, result.Stages = true, []string{"clusters"}
+	result.Steps = []lifecycle.PlanStep{
+		{ID: "ceph-host-rhel-01", Description: "prepare Ceph host rhel-01", Stage: "clusters", State: "failed", Selection: lifecycle.StepRetry},
+		{ID: "ceph-host-rhel-02", Description: "prepare Ceph host rhel-02", Stage: "clusters", State: "failed", Selection: lifecycle.StepRetry},
+		{ID: "ceph-host-rhel-03", Description: "prepare Ceph host rhel-03", Stage: "clusters", State: "failed", Selection: lifecycle.StepRetry},
+		{ID: "ceph-registry", Description: "trust the Ceph registry", Stage: "clusters", State: "pending", Selection: lifecycle.StepStart},
+		{ID: "ceph-bootstrap", Description: "bootstrap Ceph", Stage: "clusters", State: "pending", Selection: lifecycle.StepWaiting, WaitsOn: "ceph-host-rhel-01"},
+	}
+	result.Startable, result.Deferred = 4, 1
+	var out bytes.Buffer
+	if err := writeLifecyclePlan(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"  1. prepare Ceph host rhel-01 [clusters] [failed] [retry]\n",
+		"  2. prepare Ceph host rhel-02 [clusters] [failed] [retry]\n",
+		"  3. prepare Ceph host rhel-03 [clusters] [failed] [retry]\n",
+		"  4. trust the Ceph registry [clusters] [pending] [start]\n",
+		"  5. bootstrap Ceph [clusters] [pending] [deferred: waits on ceph-host-rhel-01]\n",
+		"  Starts  4 of 5 blocks, 1 deferred\n",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("plan text = %q, missing %q", out.String(), want)
 		}
 	}
 }

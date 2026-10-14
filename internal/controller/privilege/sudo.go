@@ -119,7 +119,7 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 	probe := func() (readable bool) {
 		policy = limitedOutput{}
 		bounded, cancelProbe := context.WithTimeout(ctx, 2*time.Second)
-		code, probeErr := options.Executor.Run(bounded, Command{Executable: options.Sudo, Arguments: []string{"-n", "-u", "#0", "-ll"}, Environment: append([]string(nil), environment...), Output: &policy, Error: io.Discard})
+		code, probeErr := options.Executor.Run(bounded, Command{Executable: options.Sudo, Arguments: []string{"-n", "-ll"}, Environment: append([]string(nil), environment...), Output: &policy, Error: io.Discard})
 		cancelProbe()
 		return probeErr == nil && code == 0 && !policy.overflow
 	}

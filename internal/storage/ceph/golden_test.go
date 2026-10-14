@@ -1,0 +1,112 @@
+package ceph
+
+import (
+	"bytes"
+	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+var update = flag.Bool("update", false, "rewrite Ceph testdata/*.golden")
+
+func matchesGolden(t *testing.T, name string, data []byte, terminated bool) {
+	t.Helper()
+	matchesGoldenFile(t, filepath.Join("testdata", name+".golden"), data, terminated)
+}
+
+func matchesGoldenFile(t *testing.T, path string, data []byte, terminated bool) {
+	t.Helper()
+	body := data
+	if terminated {
+		if !bytes.HasSuffix(data, []byte("\n")) || bytes.HasSuffix(data, []byte("\n\n")) {
+			t.Fatal("invalid JSON line ending")
+		}
+		body = data[:len(data)-1]
+	}
+	var compact bytes.Buffer
+	if json.Compact(&compact, body) != nil || !bytes.Equal(compact.Bytes(), body) {
+		t.Fatal("golden source is not compact JSON")
+	}
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, body, "", "  "); err != nil {
+		t.Fatal(err)
+	}
+	pretty.WriteByte('\n')
+	if *update {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, pretty.Bytes(), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(want, pretty.Bytes()) {
+		at := 0
+		for at < len(want) && at < pretty.Len() && want[at] == pretty.Bytes()[at] {
+			at++
+		}
+		t.Fatalf("%s differs at byte %d; rerun with -update and review the diff", path, at)
+	}
+}
+
+func TestFrozenRequestGolden(t *testing.T) {
+	r := runtimeRequest()
+	r.Cephadm = Tool{Path: "/usr/sbin/cephadm", Version: "20.2.1", PackageVersion: "20.2.1-405.el9cp"}
+	r.CephVersion = "20.2.1"
+	r.MonIP = "192.0.2.1"
+	r.ClusterSSHUser = "operator"
+	r.CallHome = "enabled"
+	r.PublicNetworks = []string{"192.0.2.0/24"}
+	r.ClusterNetworks = []string{"198.51.100.0/24"}
+	r.Config = map[string]map[string]string{
+		"osd":    {"osd_memory_target_autotune": "false", "osd_memory_target": "2147483648"},
+		"global": {"osd_pool_default_size": "2", "osd_pool_default_min_size": "2"},
+	}
+	for i := range r.Hosts {
+		r.Hosts[i].Labels = []string{"storage"}
+		r.Hosts[i].Location = map[string]string{}
+		r.Hosts[i].KnownHosts = ""
+	}
+	for _, action := range []string{"cluster", "pool", "client"} {
+		r.Action = action
+		r.Pool = nil
+		r.Client = nil
+		if action == "pool" {
+			r.Pool = &Pool{Name: "volumes", Size: 2, MinSize: 2, PGNum: 32, CrushRule: "replicated_rule"}
+		}
+		if action == "client" {
+			r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
+		}
+		data, err := r.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		matchesGolden(t, "request-"+action, data, false)
+		decoded, err := DecodeRequest(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		roundtrip, err := decoded.Canonical()
+		if err != nil || !bytes.Equal(data, roundtrip) {
+			t.Fatal("frozen request did not round-trip")
+		}
+	}
+}
+
+func TestEvidenceGolden(t *testing.T) {
+	r := runtimeRequest()
+	e := readyEvidence(r)
+	data := evidenceBytes(t, e)
+	matchesGolden(t, "evidence-ready", data, false)
+	if _, err := EvaluateEvidence(data, r, "digest", false); err != nil {
+		t.Fatal(err)
+	}
+	digest, _ := json.Marshal(map[string]string{"digest": ContentDigest()})
+	matchesGolden(t, "content-digest", digest, false)
+}

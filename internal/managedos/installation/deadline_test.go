@@ -104,9 +104,9 @@ func pauses(budgets Budgets) time.Duration {
 func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 	request, _ := onlyRequest(t, labCatalog())
 	request.Budgets = Budgets{
-		Installer:    Budget{Attempts: 211, DelaySeconds: 37},
+		Installer:    Budget{Attempts: 251, DelaySeconds: 37},
 		Identity:     Budget{Attempts: 137, DelaySeconds: 59},
-		Reachability: Budget{Attempts: 401, DelaySeconds: 19},
+		Reachability: Budget{Attempts: 451, DelaySeconds: 19},
 	}
 	for wait, budget := range map[string]Budget{
 		"installer": request.Budgets.Installer, "identity": request.Budgets.Identity, "reachability": request.Budgets.Reachability,
@@ -153,11 +153,11 @@ func TestTheMarginAllowsEveryControllerCallAnApplyMakes(t *testing.T) {
 	if mediaMargin < time.Hour+calls {
 		t.Fatalf("the margin is %s, less than an hour and the %s the controller calls may take", mediaMargin, calls)
 	}
-	if want := time.Hour + 4*time.Minute + 20*time.Second; calls != want {
+	if want := time.Hour + 11*time.Minute + 20*time.Second; calls != want {
 		t.Errorf("the controller calls may take %s, want the %s the specification states", calls, want)
 	}
 	request, _ := onlyRequest(t, labCatalog())
-	if got, want := request.Deadline(), 4*time.Hour+9*time.Minute+20*time.Second; got != want {
+	if got, want := request.Deadline(), 4*time.Hour+16*time.Minute+20*time.Second; got != want {
 		t.Errorf("lab-rhel installs under %s, want the %s the specification states", got, want)
 	}
 }

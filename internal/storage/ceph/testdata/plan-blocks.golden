@@ -1,0 +1,92 @@
+[
+  {
+    "dependencies": [
+      "ceph-image-example",
+      "ceph-pool-volumes"
+    ],
+    "exclusive": [
+      "ceph/example"
+    ],
+    "id": "ceph-client-consumer",
+    "implementation": "storage-ceph-core-v3",
+    "stage": "clusters"
+  },
+  {
+    "dependencies": [
+      "ceph-host-example-node-1",
+      "ceph-host-example-node-2",
+      "ceph-host-example-node-3",
+      "ceph-image-example",
+      "machine-node-1",
+      "machine-node-2",
+      "machine-node-3"
+    ],
+    "exclusive": [
+      "ceph/example"
+    ],
+    "id": "ceph-cluster-example",
+    "implementation": "storage-ceph-core-v3",
+    "stage": "clusters"
+  },
+  {
+    "dependencies": [
+      "ceph-image-example",
+      "machine-node-1",
+      "machineinstallprofile-rhel"
+    ],
+    "exclusive": [
+      "ceph-host/node-1"
+    ],
+    "id": "ceph-host-example-node-1",
+    "implementation": "storage-ceph-host-v1",
+    "stage": "clusters"
+  },
+  {
+    "dependencies": [
+      "ceph-image-example",
+      "machine-node-2",
+      "machineinstallprofile-rhel"
+    ],
+    "exclusive": [
+      "ceph-host/node-2"
+    ],
+    "id": "ceph-host-example-node-2",
+    "implementation": "storage-ceph-host-v1",
+    "stage": "clusters"
+  },
+  {
+    "dependencies": [
+      "ceph-image-example",
+      "machine-node-3",
+      "machineinstallprofile-rhel"
+    ],
+    "exclusive": [
+      "ceph-host/node-3"
+    ],
+    "id": "ceph-host-example-node-3",
+    "implementation": "storage-ceph-host-v1",
+    "stage": "clusters"
+  },
+  {
+    "dependencies": [],
+    "exclusive": [],
+    "id": "ceph-image-example",
+    "implementation": "storage-ceph-image-v1",
+    "stage": "clusters"
+  },
+  {
+    "dependencies": [
+      "ceph-cluster-example",
+      "ceph-host-example-node-1",
+      "ceph-host-example-node-2",
+      "ceph-host-example-node-3",
+      "ceph-image-example"
+    ],
+    "exclusive": [
+      "ceph/example"
+    ],
+    "id": "ceph-pool-volumes",
+    "implementation": "storage-ceph-core-v3",
+    "stage": "clusters"
+  }
+]

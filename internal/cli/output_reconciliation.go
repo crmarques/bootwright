@@ -155,10 +155,16 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 	if summary := concurrencySummary(result); summary != "" {
 		closing = append(closing, field{Label: "Concurrency", Value: summary})
 	}
+	if build := result.AnotherBuild; build != nil {
+		closing = append(closing, field{Label: "Build", Value: anotherBuildSummary(*build)})
+	}
 	// A fresh removal refuses while any Machine it takes back runs, after the
 	// prompt, so the plan names them before it is confirmed.
 	if len(result.Stops) != 0 {
 		closing = append(closing, field{Label: "Stop first", Value: strings.Join(result.Stops, ", ")})
+	}
+	if len(result.StopsAfterOnline) != 0 {
+		closing = append(closing, field{Label: "Stop after storage cleanup", Value: strings.Join(result.StopsAfterOnline, ", ")})
 	}
 	// A finalization runs no block, so the apply that completes it consumes,
 	// and requires, no authorization.
@@ -169,6 +175,23 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		text.section("")
 		text.fields(closing...)
 	}
+}
+
+// anotherBuildSummary says which build registered a continuation and which steps this build runs.
+func anotherBuildSummary(build lifecycle.AnotherBuild) string {
+	registered := build.RegisteredBy
+	if registered == "" {
+		registered = "another build"
+	}
+	places := make([]string, 0, len(build.Steps))
+	for _, position := range build.Steps {
+		places = append(places, strconv.Itoa(position))
+	}
+	steps := "steps " + strings.Join(places, ", ") + " run"
+	if len(places) == 1 {
+		steps = "step " + places[0] + " runs"
+	}
+	return registered + " registered this operation; " + steps + " under this build"
 }
 
 // waitMarker names the steps one step waits for, by their place in the plan, so

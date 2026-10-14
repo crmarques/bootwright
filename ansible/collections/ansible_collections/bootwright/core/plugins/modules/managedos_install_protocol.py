@@ -32,6 +32,8 @@ options:
         C(identity-mismatch) or C(machine-running), or C(media-changed-boot)
         for a boot image that no longer has the size and SHA-256 the
         operation froze.
+      - C(ssh-policy-unavailable), C(ssh-policy-host-excluded) and
+        C(ssh-policy-fleet-excluded) identify pre-effect SSH policy refusals.
     type: str
     required: false
   outcome:

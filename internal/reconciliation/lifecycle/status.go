@@ -241,7 +241,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	summary := &LifecycleSummary{
 		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
 		Next: nextAction(operation, plan, states), Blocks: blocks, Logs: logs,
-		Executable: buildIdentity(operation.Executable),
+		Executable: buildIdentity(operation.Executable), AnotherBuild: s.otherBuild(operation),
 	}
 	if summary.Logs == nil {
 		summary.Logs = []string{}
@@ -321,7 +321,7 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 		return nil, err
 	}
 	if len(refused) == 0 || next == string(reconciliation.Destroy) {
-		steps = append(steps, s.continuation(view, operation, frozen, states, next)...)
+		steps = append(steps, s.continuation(ctx, view, operation, frozen, states, next)...)
 	}
 	if operation.Verb == reconciliation.Apply && len(contradicted) == 0 {
 		// The removal proves the host's setup before it resolves or registers
@@ -356,8 +356,8 @@ func setupGates(controller prerequisites.StorageView) bool {
 // continuation is the command that takes an incomplete operation on. A
 // continuation or resolution that still has a block to run re-proves what the
 // records hold before it runs one, so status offers it only where that
-// re-proof passes over what status reads: the frozen input, automation and
-// closure, the controller setup, which setup completes in its place, and the
+// re-proof passes over what status reads: the frozen input, other-build blocks,
+// the closure, the controller setup, which setup completes in its place, and the
 // context's binding. Where it refuses, status offers the exit that refusal
 // names and that status may run: the deletion over a removal, while the
 // removal that supersedes an apply is offered beside it anyway. Status probes
@@ -366,7 +366,7 @@ func setupGates(controller prerequisites.StorageView) bool {
 // replacement is a fresh removal, which is not held to that re-proof but
 // proves the host's setup like every transition that registers, so setup
 // takes its place while setup gates it.
-func (s Service) continuation(view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string) []string {
+func (s Service) continuation(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string) []string {
 	command := continuationCommand(view.Identity().Name, operation, frozen, states)
 	if !pendingRemains(frozen, states) {
 		return []string{command}
@@ -377,7 +377,7 @@ func (s Service) continuation(view View, operation operationstore.Operation, fro
 		}
 		return []string{command}
 	}
-	if err := s.recordedRefusal(view, operation); err != nil {
+	if err := s.recordedRefusal(view, operation, s.proveSameBlocks(ctx, view, operation, frozen)); err != nil {
 		return refusalExit(view, err)
 	}
 	if setupGates(view.Controller()) {

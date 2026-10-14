@@ -102,9 +102,42 @@ type Index struct {
 	Current string `json:"current"`
 }
 
+var ErrRetiredIndex = errors.New("lifecycle index names a retired Ceph qualification fixture")
+
+func RetiredIndexRemedy(name string) string {
+	return "dispose or clean up the fixture and destroy the context with the build that prepared it, then bootwright context delete --name " + name +
+		" --purge; only if that build is unavailable, bootwright context delete --name " + name +
+		" --purge --allow-orphans, which abandons its Machines, disks and reserved keyring bindings"
+}
+
+func RetiredIndexRefusal(name string) error {
+	return errors.Join(ErrRetiredIndex, diagnostics.NewFailureWithRemediation("lifecycle.state",
+		"context "+name+" holds the operation index of the retired Ceph qualification fixture, which this build cannot read", "",
+		RetiredIndexRemedy(name)))
+}
+
+func CheckIndex(data []byte, name string) error {
+	var probe struct {
+		Version       json.Number     `json:"version"`
+		Qualification json.RawMessage `json:"qualification"`
+	}
+	if json.Unmarshal(data, &probe) != nil || probe.Version != "2" && probe.Qualification == nil {
+		return nil
+	}
+	return RetiredIndexRefusal(name)
+}
+
 type Executable struct {
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
+}
+
+// Build is the build that ran one attempt or resolution; the operation keeps naming its registering build.
+type Build struct {
+	AutomationDigest string     `json:"automationDigest"`
+	ContentDigest    string     `json:"contentDigest"`
+	Executable       Executable `json:"executable"`
+	Modified         bool       `json:"modified,omitempty"`
 }
 
 // OperationVersion is the operation record every registration writes. A
@@ -163,7 +196,7 @@ type BlockRecord struct {
 // a durable outcome exists. Preparation is the before-state a capability
 // observed and published while the attempt was still running, before it was
 // permitted to change the host; its presence is what tells a later recovery
-// that this attempt may have installed something.
+// that this attempt may have installed something. Build names who ran it.
 type Attempt struct {
 	Version     int                        `json:"version"`
 	Block       string                     `json:"block"`
@@ -175,6 +208,7 @@ type Attempt struct {
 	Evidence    json.RawMessage            `json:"evidence"`
 	Preparation json.RawMessage            `json:"preparation,omitempty"`
 	Failure     *ObservationFailure        `json:"failure,omitempty"`
+	Build       *Build                     `json:"build,omitempty"`
 	Started     string                     `json:"started"`
 	Updated     string                     `json:"updated"`
 }
@@ -360,7 +394,25 @@ func validateAttempt(record Attempt) error {
 	if record.Failure != nil && !validFailure(record) {
 		return recordError("lifecycle attempt failure is invalid")
 	}
+	if record.Build != nil {
+		if err := validateBuild(*record.Build); err != nil {
+			return err
+		}
+	}
 	return validateTimestamps(record.Started, record.Updated)
+}
+
+func validateBuild(build Build) error {
+	for _, digest := range []string{build.AutomationDigest, build.ContentDigest} {
+		if decoded, err := hex.DecodeString(digest); err != nil || len(decoded) != 32 || hex.EncodeToString(decoded) != digest {
+			return recordError("lifecycle attempt build digests are invalid")
+		}
+	}
+	executable := build.Executable
+	if len(executable.Version) > maxIdentifier || len(executable.Commit) > maxIdentifier || !utf8.ValidString(executable.Version) || !utf8.ValidString(executable.Commit) {
+		return recordError("lifecycle attempt build executable identity is invalid")
+	}
+	return nil
 }
 
 func validFailure(record Attempt) bool {

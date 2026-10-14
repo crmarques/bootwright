@@ -1,0 +1,95 @@
+implementation: storage-ceph-core-v3
+content-digest: 91fe7d16860bc770cacdccaf9754c406fa42e6f2974090257f47283c2f6daa73
+automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-pool-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v2, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v2
+request-schema:
+  action string
+  bootstrap string
+  callHome string
+  cephVersion string
+  cephadm struct ceph.Tool
+  cephadm.packageVersion string
+  cephadm.path string
+  cephadm.version string
+  client *struct ceph.Client omitempty
+  client.access string
+  client.name string
+  client.pool string
+  cluster string
+  clusterKeyRef string
+  clusterNetworks []string
+  clusterSSHTransport string
+  clusterSSHUser string
+  config map[string]map[string]string omitempty
+  controller string
+  fsid string omitempty
+  hosts []struct ceph.Host
+  hosts[].address string
+  hosts[].devices []struct ceph.Device
+  hosts[].devices[].path string
+  hosts[].devices[].serial string
+  hosts[].devices[].sizeBytes int64
+  hosts[].hostKeyRef string omitempty
+  hosts[].knownHosts string omitempty
+  hosts[].labels []string
+  hosts[].location map[string]string
+  hosts[].machine string
+  hosts[].name string
+  hosts[].port int
+  hosts[].sshKeyRef string
+  hosts[].user string
+  image string
+  monIP string
+  owner string omitempty
+  packages *struct ceph.PackageRequest omitempty
+  packages.licenseAccepted bool
+  packages.sources []struct ceph.PackageSource
+  packages.sources[].certificateRef string
+  packages.sources[].host string
+  packages.sources[].media string
+  packages.sources[].mediaSHA256 string omitempty
+  packages.sources[].mediaSize int64 omitempty
+  packages.sources[].profile string
+  packages.sources[].publicationPath string
+  packages.sources[].url string
+  packages.version string
+  pool *struct ceph.Pool omitempty
+  pool.crushRule string
+  pool.minSize int
+  pool.name string
+  pool.pgNum int
+  pool.size int
+  publicNetworks []string
+  registry string
+  registryRef string
+  services []opaque
+  version string
+evidence-schema:
+  action string
+  client string
+  dashboard struct ceph.DashboardEvidence
+  dashboard.certificateSHA256 string
+  dashboard.reachable bool
+  dashboard.url string
+  exists bool
+  fsid string
+  health string
+  hosts []string
+  mgrActive string
+  mgrStandbys []string
+  monAddrs []struct ceph.MonitorAddress
+  monAddrs[].address string
+  monAddrs[].host string
+  monitors []string
+  osds []struct ceph.OSDEvidence
+  osds[].host string
+  osds[].id int
+  osds[].path string
+  osds[].uuid string
+  owned bool
+  owner string
+  partial bool
+  poolID int
+  ready bool
+  removed bool
+  request string
+  version string

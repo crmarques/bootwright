@@ -56,7 +56,7 @@ const domainOff = "shut off"
 
 const (
 	hostRequestVersion    = "substrate-host-libvirt-v4"
-	machineRequestVersion = "machine-libvirt-v4"
+	machineRequestVersion = "machine-libvirt-v6"
 )
 
 // HostBlockID and MachineBlockID name the blocks each capability contributes.
@@ -75,7 +75,7 @@ func HostContentDigest() string {
 
 func MachineContentDigest() string {
 	return contentDigest("bootwright.substrate.libvirt.machine-v1", MachineImplementation, machineRequestVersion,
-		emulatorImage, substrate.ImagePrefix, substrate.Prefix)
+		emulatorImage, substrate.ImagePrefix, substrate.Prefix, "data-media-ssd-scsi-v1")
 }
 
 func contentDigest(parts ...string) string {

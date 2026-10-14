@@ -22,6 +22,7 @@
     user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_target_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_target_password) }}'
     verify: '{{ substrate_libvirt_machine_target_verify }}'
+    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_target_ca) }}'
     media: false
   register: substrate_libvirt_machine_target
   failed_when: false

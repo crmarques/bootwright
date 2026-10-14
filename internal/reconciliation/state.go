@@ -136,8 +136,8 @@ func ResolutionOutcome(resolved EffectState, proved Outcome) Outcome {
 // NextOperationState derives the operation from its blocks. An unknown block
 // dominates, because no retry, dependent block or replacement may start while
 // one effect remains unproved. A boundary means execution stopped because the
-// stage selection admitted nothing further, which is a pause rather than an
-// interruption, so the operation is resumable without recovery.
+// stage selection or operator-stop gate admitted nothing further, which is a
+// pause rather than an interruption, so it is resumable without recovery.
 func NextOperationState(states []BlockState, boundary bool) (OperationState, error) {
 	done, unknown, failed := 0, false, false
 	for _, state := range states {

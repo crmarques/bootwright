@@ -41,6 +41,22 @@ func ForeignListenerRefusals(kind, service, bindAddress string, ports []int) map
 	return refusals
 }
 
+func ListenerRefusals(kind, service, bindAddress string, ports []int) map[string]error {
+	refusals := ForeignListenerRefusals(kind, service, bindAddress, ports)
+	if bindAddress == "0.0.0.0" || bindAddress == "::" {
+		return refusals
+	}
+	for _, port := range ports {
+		refusals["unassigned-bind-address-"+FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+			Severity: "error", Code: "lifecycle.state",
+			Message:     "the placement host has no usable local bind address for " + HostPort(bindAddress, port) + "; this attempt pulled, published or started nothing",
+			Remediation: "restore the declared address on the placement host, or destroy this context with its original build before importing an assigned bindAddress and matching endpoints and TLS certificate names on " + kind + "/" + service,
+			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service},
+		}}}
+	}
+	return refusals
+}
+
 // SocketKeys are the listening sockets one service claims. A wildcard bind
 // claims every endpoint address at that port as well, because the socket it
 // opens conflicts with each of them. A key covers the port on every transport,

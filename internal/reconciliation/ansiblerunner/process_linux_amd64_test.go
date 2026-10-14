@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/internal/adapterprotocol"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
@@ -934,5 +935,40 @@ func TestARunReturnsAtItsDrainWhenADescendantHoldsItsOutput(t *testing.T) {
 	}
 	if _, err := os.Stat(holder); err != nil {
 		t.Fatalf("the adapter left no descendant holding its output: %v", err)
+	}
+}
+
+func TestANamedRefusalCarriesItsAdapterDetail(t *testing.T) {
+	named := diagnostics.NewFailureWithRemediation("lifecycle.unknown", "the Ceph adapter could not prove its remote-refusal boundary", "", "inspect")
+	judge := &lifecycleJudge{request: lifecycle.RunRequest{Refusals: map[string]error{"remote-refusal": named}}, loaded: true}
+	verdict := judge.Judge(context.Background(), adapterprotocol.Record{Phase: "refused", Reason: "remote-refusal", Detail: "native-refusal:fixture-session-expired"}, adapterprotocol.Moment{Open: true})
+	reported := diagnostics.Of(verdict.Failure)
+	if !verdict.Valid || len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Remediation != "inspect" ||
+		reported[0].Message != "the Ceph adapter could not prove its remote-refusal boundary (adapter detail: native-refusal:fixture-session-expired)" {
+		t.Fatalf("verdict = %+v, diagnostics = %+v", verdict, reported)
+	}
+	if original := diagnostics.Of(named); original[0].Message != "the Ceph adapter could not prove its remote-refusal boundary" {
+		t.Fatalf("the caller's own refusal changed: %+v", original)
+	}
+	verdict = judge.Judge(context.Background(), adapterprotocol.Record{Phase: "refused", Reason: "remote-refusal"}, adapterprotocol.Moment{Open: true})
+	if verdict.Failure != named {
+		t.Fatalf("a refusal without detail replaced its caller's failure: %v", verdict.Failure)
+	}
+}
+
+// A token the caller gives no remedy reaches the operator as the caller's
+// unknown refusal with the token in its detail; the token itself is no reason.
+func TestAnUnnamedRefusalTokenReachesTheOperatorInTheUnknownDetail(t *testing.T) {
+	unknown := diagnostics.NewFailureWithRemediation("lifecycle.unknown", "the Ceph adapter could not prove its unknown boundary", "", "inspect")
+	judge := &lifecycleJudge{request: lifecycle.RunRequest{Refusals: map[string]error{"unknown": unknown}}, loaded: true}
+	verdict := judge.Judge(context.Background(), adapterprotocol.Record{Phase: "refused", Reason: "unknown", Detail: "registry-ownership@ceph_native.teardown:1228"}, adapterprotocol.Moment{Open: true})
+	reported := diagnostics.Of(verdict.Failure)
+	if !verdict.Valid || len(reported) != 1 || reported[0].Remediation != "inspect" ||
+		reported[0].Message != "the Ceph adapter could not prove its unknown boundary (adapter detail: registry-ownership@ceph_native.teardown:1228)" {
+		t.Fatalf("verdict = %+v, diagnostics = %+v", verdict, reported)
+	}
+	judge = &lifecycleJudge{request: lifecycle.RunRequest{Refusals: map[string]error{"unknown": unknown}}, loaded: true}
+	if verdict := judge.Judge(context.Background(), adapterprotocol.Record{Phase: "refused", Reason: "registry-ownership"}, adapterprotocol.Moment{Open: true}); verdict.Valid || verdict.Failure != nil {
+		t.Fatalf("a reason the caller did not name was judged %+v", verdict)
 	}
 }

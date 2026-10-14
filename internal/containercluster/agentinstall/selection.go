@@ -443,6 +443,7 @@ func frozenNodes(nodes []nodeProjection) []Node {
 				CredentialsRef: node.target.Controller.CredentialsRef,
 				Endpoint:       node.target.Controller.Endpoint,
 				TLSVerify:      node.target.Controller.TLSVerify,
+				TrustBundleRef: node.target.Controller.TrustBundleRef,
 				VirtualMedia: VirtualMedia{
 					RemoveCertificate:   node.target.Controller.VirtualMedia.RemoveCertificate,
 					RestoreVerification: node.target.Controller.VirtualMedia.RestoreVerification,

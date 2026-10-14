@@ -15,7 +15,18 @@ import (
 )
 
 func TestActualCompilerEffectiveYAMLAndJSONRoundTrips(t *testing.T) {
-	state, _ := compileAcceptance(t, expandedExampleSources(t))
+	sources := exampleDirectory(t, "lab-rhel")
+	sources.Files = append(sources.Files, desiredstate.NewSourceFile("/synthetic/roundtrip-playbook.yaml", []byte(`apiVersion: bootwright.io/v1alpha1
+kind: CustomPlaybook
+metadata: {name: roundtrip}
+spec:
+ follows: base
+ playbook: playbooks/example.yaml
+ target: {machines: [controller]}
+ enabled: false
+ extraVars: {literal: 'true', enabled: false, count: 3, fraction: 1.25}
+`)))
+	state, _ := compileAcceptance(t, sources)
 	catalog := state.Effective()
 	yamlData, err := effectiveencoding.YAML(context.Background(), catalog)
 	if err != nil {

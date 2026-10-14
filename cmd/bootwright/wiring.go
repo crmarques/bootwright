@@ -148,8 +148,10 @@ func assembleServices(deps serviceDependencies) cli.Services {
 		Home: deps.Home, Owner: deps.Owner, Files: deps.Files,
 	})
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
+	services.EnvironmentAccess = machine.EnvironmentAccess
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust
 	services.ClusterAccess = wireClusterAccess(services.DesiredState, secrets.binder, deps.Selection)
+	services.EnvironmentInspection = wireInspection(services.DesiredState, reconciler, secrets.binder, deps.Selection)
 	return services
 }
 

@@ -81,6 +81,9 @@ func (s *Store) Index(ctx context.Context) (Index, error) {
 		s.remember(indexPath, nil)
 		return Index{Version: 1}, nil
 	}
+	if err := CheckIndex(data, "<ctx>"); err != nil {
+		return Index{}, err
+	}
 	var index Index
 	if err := decode(data, MaxIndexBytes, &index); err != nil {
 		return Index{}, err
@@ -126,7 +129,12 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if err != nil {
 		return err
 	}
-	index, err := encode(Index{Version: 1, Current: operation.ID}, MaxIndexBytes)
+	retainedIndex, err := s.Index(ctx)
+	if err != nil {
+		return err
+	}
+	retainedIndex.Current = operation.ID
+	index, err := encode(retainedIndex, MaxIndexBytes)
 	if err != nil {
 		return err
 	}
@@ -698,16 +706,18 @@ func (s *Store) publishBlock(ctx context.Context, id string, record BlockRecord)
 	return nil
 }
 
-// StartAttempt allocates the next attempt number and durably records running
-// before the caller performs any side effect.
-//
-// A start writes two records yet is one publication. The attempt record is
-// created exclusively before the block record counts it, so the block record
-// never names an attempt that has no record. A start that stops between the
-// two leaves a running record of the next number that no effect ran under,
-// because its caller begins nothing until a start returns; the next start
-// adopts that record instead of refusing the number in every later invocation.
-func (s *Store) StartAttempt(ctx context.Context, id, block string) (int, error) {
+// StartAttempt allocates the next attempt number and durably records running,
+// naming build, before the caller performs any side effect. A start writes two
+// records yet is one publication. The attempt record is created exclusively
+// before the block record counts it, so the block record never names an
+// attempt that has no record. A start that stops between the two leaves a
+// running record of the next number that no effect ran under, because its
+// caller begins nothing until a start returns; the next start adopts that
+// record, rewritten to name its build, instead of refusing the number ever after.
+func (s *Store) StartAttempt(ctx context.Context, id, block string, build Build) (int, error) {
+	if err := validateBuild(build); err != nil {
+		return 0, err
+	}
 	record, recorded, err := s.readBlockRecord(ctx, id, block)
 	if err != nil {
 		return 0, err
@@ -723,8 +733,14 @@ func (s *Store) StartAttempt(ctx context.Context, id, block string) (int, error)
 		return 0, err
 	}
 	if found {
-		if err := s.adoptable(ctx, id, block, number, recorded, existing); err != nil {
+		adopted, err := s.adoptable(ctx, id, block, number, recorded, existing)
+		if err != nil {
 			return 0, err
+		}
+		if adopted.Build == nil || *adopted.Build != build {
+			if err := s.adopt(ctx, target, adopted, build, existing); err != nil {
+				return 0, err
+			}
 		}
 	} else {
 		// A block record exists before any of its attempts does, so an
@@ -739,7 +755,7 @@ func (s *Store) StartAttempt(ctx context.Context, id, block string) (int, error)
 		if err != nil {
 			return 0, err
 		}
-		attempt := Attempt{Version: 1, Block: block, Number: number, Phase: "running", Started: started, Updated: started}
+		attempt := Attempt{Version: 1, Block: block, Number: number, Phase: "running", Build: &build, Started: started, Updated: started}
 		encoded, err := encode(attempt, MaxAttemptBytes)
 		if err != nil {
 			return 0, err
@@ -765,38 +781,54 @@ func (s *Store) StartAttempt(ctx context.Context, id, block string) (int, error)
 // before-state and has no resolution allocated against it. Only such a record
 // is one no effect can have run under; anything else there refuses rather than
 // starting over an effect that may have begun or reusing a number.
-func (s *Store) adoptable(ctx context.Context, id, block string, number int, recorded bool, data []byte) error {
+func (s *Store) adoptable(ctx context.Context, id, block string, number int, recorded bool, data []byte) (Attempt, error) {
 	if !recorded {
-		return recordError("the block holds an attempt record but no block record that counts it")
+		return Attempt{}, recordError("the block holds an attempt record but no block record that counts it")
 	}
 	var record Attempt
 	if err := decode(data, MaxAttemptBytes, &record); err != nil {
-		return err
+		return Attempt{}, err
 	}
 	if err := validateAttempt(record); err != nil {
-		return err
+		return Attempt{}, err
 	}
 	if record.Block != block || record.Number != number || record.Resolution != 0 {
-		return recordError("the lifecycle attempt record contradicts its location")
+		return Attempt{}, recordError("the lifecycle attempt record contradicts its location")
 	}
 	if record.Phase != "running" || len(record.Preparation) != 0 {
-		return recordError("the block's next attempt number already holds an attempt that may have begun its effect")
+		return Attempt{}, recordError("the block's next attempt number already holds an attempt that may have begun its effect")
 	}
 	name, err := reconciliation.FormatNumber(number)
 	if err != nil {
-		return err
+		return Attempt{}, err
 	}
 	entries, err := s.area.Entries(ctx, path.Join(id, "blocks", block))
 	if err != nil {
-		return err
+		return Attempt{}, err
 	}
 	prefix := "attempt-" + name + "-resolution-"
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name, prefix) {
-			return recordError("the block's next attempt number already has a resolution allocated against it")
+			return Attempt{}, recordError("the block's next attempt number already has a resolution allocated against it")
 		}
 	}
-	return nil
+	return record, nil
+}
+
+func (s *Store) adopt(ctx context.Context, target string, record Attempt, build Build, data []byte) error {
+	updated, err := s.now()
+	if err != nil {
+		return err
+	}
+	record.Build, record.Updated = &build, updated
+	if err := validateAttempt(record); err != nil {
+		return err
+	}
+	encoded, err := encode(record, MaxAttemptBytes)
+	if err != nil {
+		return err
+	}
+	return s.area.Replace(ctx, target, encoded, data)
 }
 
 // RecordPreparation publishes the before-state one running attempt observed,
@@ -851,10 +883,13 @@ func (s *Store) CompleteAttempt(ctx context.Context, id, block string, number in
 	return s.completeRecord(ctx, id, block, path.Join(id, "blocks", block, "attempt-"+name+".json"), number, 0, outcome, effect, state, evidence, nil)
 }
 
-// StartResolution allocates and durably records the resolution identity and its
-// log before any observation begins, so an observation can never happen under
-// an identity that was never reserved.
-func (s *Store) StartResolution(ctx context.Context, id, block string, attempt int) (int, error) {
+// StartResolution allocates and durably records the resolution identity, naming
+// build, and its log before any observation begins, so an observation can never
+// happen under an identity that was never reserved.
+func (s *Store) StartResolution(ctx context.Context, id, block string, attempt int, build Build) (int, error) {
+	if err := validateBuild(build); err != nil {
+		return 0, err
+	}
 	attemptName, err := reconciliation.FormatNumber(attempt)
 	if err != nil {
 		return 0, err
@@ -885,7 +920,7 @@ func (s *Store) StartResolution(ctx context.Context, id, block string, attempt i
 	if err != nil {
 		return 0, err
 	}
-	record := Attempt{Version: 1, Block: block, Number: attempt, Resolution: next, Phase: "running", Started: started, Updated: started}
+	record := Attempt{Version: 1, Block: block, Number: attempt, Resolution: next, Phase: "running", Build: &build, Started: started, Updated: started}
 	encoded, err := encode(record, MaxAttemptBytes)
 	if err != nil {
 		return 0, err

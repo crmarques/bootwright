@@ -1,4 +1,4 @@
-Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Stop every Machine it takes back first (bootwright machine stop); a plan that deletes disks needs --authorize data-loss. Review the plan before confirming; --yes skips ordinary confirmation.
+Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Follow the plan's Stop first and Stop after storage cleanup lists (bootwright machine stop); online storage cleanup needs its Machines running. A plan that deletes disks needs --authorize data-loss. Review the plan before confirming; --yes skips ordinary confirmation.
 
 Usage:
   bootwright destroy [flags]

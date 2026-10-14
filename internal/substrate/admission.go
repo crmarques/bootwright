@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 func Variant(o api.Object) string {
@@ -216,6 +217,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			issues = add(issues, issue("$.spec.libvirt.bmcEmulationDefaults.enabled", "libvirt BMC emulation must be enabled"))
 		}
 		issues = add(issues, validateEmulatedListener(bmc)...)
+		issues = add(issues, validateEmulatedCertificate(bmc, c)...)
 		issues = add(issues, requirePositiveCapacity(arm, variant, "libvirt")...)
 		issues = add(issues, validateLibvirtDataDisks(o, arm)...)
 		first, last, ranged := bmcPortRange(o, c)
@@ -316,6 +318,25 @@ func validateEmulatedListener(bmc api.Value) []api.Issue {
 		"the emulated BMC listens on one unicast address its controller endpoints can name: not unspecified, multicast or the IPv4 broadcast address, and not an IPv6 link-local, zoned or IPv4-mapped address")}
 }
 
+// validateEmulatedCertificate holds a generated serving certificate to the
+// nameable bindAddress; reference validation refuses a missing or mistyped
+// Secret, and a stored one is proved only when a fresh apply binds it.
+func validateEmulatedCertificate(bmc api.Value, c api.Catalog) []api.Issue {
+	address, name := bmc.Get("bindAddress").Text(), bmc.Get("certificateRef").Text()
+	secret, found := c.Find(api.Secret, name)
+	if !NameableListener(address) || !found || secret.Spec().Get("type").Text() != "tlsCertificate" {
+		return nil
+	}
+	generated := secret.Spec().Get("source", "generated")
+	if !generated.Present() || secrets.GeneratedCertificateNames(generated, address) {
+		return nil
+	}
+	return []api.Issue{{Code: "api.invariant", Field: "$.spec.libvirt.bmcEmulationDefaults.certificateRef",
+		Message: "the emulated BMC serves HTTPS at " + address + ", which the generated certificate of Secret/" + name + " does not name",
+		Remediation: "add " + address + " to spec.source.generated.ipAddresses of Secret/" + name + ", import the change with bootwright context update --name <context> --input-dir <dir>, " +
+			"then run bootwright secret generate --name " + name + " --context <context>"}}
+}
+
 // requirePositiveCapacity refuses a profile size its arm cannot create a
 // machine with. The schema materializes 0 for an omitted size, so an omitted
 // size refuses here too.
@@ -354,7 +375,7 @@ func validateLibvirtDataDisks(o api.Object, arm api.Value) []api.Issue {
 		disks := profile.Get("dataDisks")
 		if disks.Len() > MaxDataDisks {
 			issues = add(issues, api.Issue{Code: "api.invariant", Field: path,
-				Message:     fmt.Sprintf("a libvirt domain presents at most %d data disks, vdb through vdh, after its root disk", MaxDataDisks),
+				Message:     fmt.Sprintf("a libvirt domain presents at most %d data disks beside its root disk", MaxDataDisks),
 				Remediation: fmt.Sprintf("declare at most %d dataDisks on spec.libvirt.machineProfiles[%d] of %s", MaxDataDisks, index, o.Identity())})
 		}
 		for disk, data := range disks.Items() {

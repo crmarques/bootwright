@@ -8,6 +8,7 @@ import (
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
+	"github.com/crmarques/bootwright/internal/machine"
 )
 
 func infrastructurePreflightCommand() commandSpec {
@@ -24,11 +25,23 @@ func allPreflightCommand() commandSpec {
 
 func environmentClusterCommands() []commandSpec {
 	return []commandSpec{
-		{path: "cluster list", short: "List container and storage clusters", flags: []flagSpec{outputFlag()}},
-		{path: "cluster info", short: "Show cluster details and static access applicability", flags: []flagSpec{stringFlag("name", "Select one cluster (default: all)"), boolFlag("secrets", "Include explicitly selected sensitive values"), outputFlag()}},
-		accessCommand(commandSpec{path: "cluster rsh", short: "Print an SSH access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag(), stringFlag("node", "Select a declared node, FQDN, or role-ordinal")}}, " Applicable to OpenShift/OKD ContainerClusters and managed Ceph StorageClusters with declared nodes. External StorageClusters are inapplicable."),
-		accessCommand(commandSpec{path: "cluster exec", short: "Print a command access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag(), stringFlag("node", "Select a declared node, FQDN, or role-ordinal")}, payload: true}, " Applicable to OpenShift/OKD ContainerClusters and managed Ceph StorageClusters with declared nodes. External StorageClusters are inapplicable."),
+		available(commandSpec{path: "cluster list", short: "List container and storage clusters", long: "List container and storage clusters in canonical name order. Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters.", flags: []flagSpec{outputFlag()}}),
+		available(commandSpec{path: "cluster info", short: "Show cluster details and static access applicability", long: "Show cluster details and static access applicability, readiness and invocation templates from local desired state and evidence, with no host contact." +
+			" Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters." +
+			" A managed Ceph StorageCluster also reports its release, FSID, frozen image, monitors and administrator command." +
+			" --secrets requires --name and applies to managed Ceph StorageClusters only.", flags: []flagSpec{stringFlag("name", "Select one cluster (default: all)"), boolFlag("secrets", "Include explicitly selected sensitive values"), outputFlag()}}),
+		available(clusterSessionCommand(commandSpec{path: "cluster rsh", short: "Open an SSH session on a cluster node's Machine"})),
+		available(clusterSessionCommand(commandSpec{path: "cluster exec", short: "Run a command over SSH on a cluster node's Machine", payload: true})),
 	}
+}
+
+func clusterSessionCommand(spec commandSpec) commandSpec {
+	spec.flags = []flagSpec{nameFlag(), stringFlag("node", "Select a declared node by name, then FQDN (default: the first node in name order)")}
+	spec = sessionCommand(spec)
+	spec.long += " The session opens on the Machine behind one node of a managed Ceph StorageCluster: --node selects" +
+		" the node by name, then by FQDN, and defaults to the first node in name order." +
+		" External StorageClusters are inapplicable, and sessions on OpenShift/OKD ContainerClusters are not yet available."
+	return spec
 }
 
 type EnvironmentPreflightService interface {
@@ -38,13 +51,13 @@ type EnvironmentPreflightService interface {
 }
 
 type EnvironmentInspectionService interface {
-	ListClusters(context.Context, inspection.ListClustersRequest) error
-	ClusterInfo(context.Context, inspection.ClusterInfoRequest) error
+	ListClusters(context.Context, inspection.ListClustersRequest) (*inspection.ListResult, error)
+	ClusterInfo(context.Context, inspection.ClusterInfoRequest) (*inspection.InfoResult, error)
 }
 
 type EnvironmentAccessService interface {
-	ClusterRsh(context.Context, environmentaccess.ClusterRshRequest) error
-	ClusterExec(context.Context, environmentaccess.ClusterExecRequest) error
+	ClusterRsh(context.Context, environmentaccess.ClusterRshRequest) (*machine.SessionResult, error)
+	ClusterExec(context.Context, environmentaccess.ClusterExecRequest) (*machine.SessionResult, error)
 }
 
 func (s Services) invokeEnvironmentPreflight(ctx context.Context, path string, values *requestValues, args []string) error {
@@ -80,47 +93,51 @@ func (s Services) invokeEnvironmentPreflight(ctx context.Context, path string, v
 	}
 }
 
-func (s Services) invokeEnvironmentInspection(ctx context.Context, path string, values *requestValues, args []string) error {
+func (s Services) invokeEnvironmentInspection(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
 	if s.EnvironmentInspection == nil {
-		return errMissingService
+		return commandResult{}, errMissingService
 	}
 	switch path {
 	case "cluster list":
-		return invokeRequest(ctx, values, inspection.ListClustersRequest{
+		result, err := invokeResult(ctx, values, inspection.ListClustersRequest{
 			ContextName: values.text("context"),
 		}, s.EnvironmentInspection.ListClusters)
+		return commandResult{clusterList: result}, err
 	case "cluster info":
-		return invokeRequest(ctx, values, inspection.ClusterInfoRequest{
+		result, err := invokeResult(ctx, values, inspection.ClusterInfoRequest{
 			ContextName: values.text("context"),
 			Name:        values.text("name"),
 			Secrets:     values.boolean("secrets"),
 		}, s.EnvironmentInspection.ClusterInfo)
+		return commandResult{clusterInfo: result}, err
 	default:
-		return errors.New("command has no application dispatch")
+		return commandResult{}, errors.New("command has no application dispatch")
 	}
 }
 
-func (s Services) invokeEnvironmentAccess(ctx context.Context, path string, values *requestValues, args []string) error {
+func (s Services) invokeEnvironmentAccess(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
 	if s.EnvironmentAccess == nil {
-		return errMissingService
+		return commandResult{}, errMissingService
 	}
 	switch path {
 	case "cluster rsh":
-		return invokeRequest(ctx, values, environmentaccess.ClusterRshRequest{
+		result, err := invokeResult(ctx, values, environmentaccess.ClusterRshRequest{
 			ContextName: values.text("context"),
 			Name:        values.text("name"),
 			Node:        values.text("node"),
 			SSH:         values.ssh(),
 		}, s.EnvironmentAccess.ClusterRsh)
+		return commandResult{session: result}, err
 	case "cluster exec":
-		return invokeRequest(ctx, values, environmentaccess.ClusterExecRequest{
+		result, err := invokeResult(ctx, values, environmentaccess.ClusterExecRequest{
 			ContextName: values.text("context"),
 			Name:        values.text("name"),
 			Node:        values.text("node"),
 			SSH:         values.ssh(),
 			Command:     slices.Clone(args),
 		}, s.EnvironmentAccess.ClusterExec)
+		return commandResult{session: result}, err
 	default:
-		return errors.New("command has no application dispatch")
+		return commandResult{}, errors.New("command has no application dispatch")
 	}
 }

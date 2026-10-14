@@ -223,7 +223,9 @@ func TestTerminalRemediesNameTheExactCommand(t *testing.T) {
 // it. A removal names no command of its own: the result's last diagnostic
 // names the destroy that replaces it, with the tokens of what it retains, so
 // one result never names the operation's verb in two spellings, and that
-// command, run exactly as named, passes authorization.
+// command, run exactly as named, passes authorization. An invocation retries
+// the block its resolution leaves failed and reports the retry's own result in
+// its place, so the remedy is read from one that stops at its resolution.
 func TestAResolutionRemedyNamesTheCommandThatTakesItOn(t *testing.T) {
 	ctx := context.Background()
 	for _, test := range []struct {
@@ -244,7 +246,7 @@ func TestAResolutionRemedyNamesTheCommandThatTakesItOn(t *testing.T) {
 		t.Run(string(test.verb)+" "+string(test.effect), func(t *testing.T) {
 			h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts")})
 			h.capability.consumes = map[string][]string{"artifacts": dataLoss()}
-			run := func() error {
+			run := func(ctx context.Context) error {
 				if test.verb == reconciliation.Destroy {
 					_, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true})
 					return err
@@ -258,11 +260,17 @@ func TestAResolutionRemedyNamesTheCommandThatTakesItOn(t *testing.T) {
 				}
 			}
 			h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
-			if err := run(); firstCode(err) != "lifecycle.unknown" {
+			if err := run(ctx); firstCode(err) != "lifecycle.unknown" {
 				t.Fatalf("the seeded unknown %s = %v", test.verb, err)
 			}
 			h.capability.observations = []Observation{{Effect: test.effect}}
-			reported := diagnostics.Of(run())
+			stopping, stop := context.WithCancel(ctx)
+			h.capability.observeHold = func(string) { stop() }
+			attempted := len(h.capability.applies) + len(h.capability.destroys)
+			reported := diagnostics.Of(run(stopping))
+			if len(h.capability.applies)+len(h.capability.destroys) != attempted {
+				t.Fatalf("the %s that stopped at its resolution retried the block", test.verb)
+			}
 			index := slices.IndexFunc(reported, func(entry diagnostics.Diagnostic) bool { return entry.Message == test.message })
 			if index < 0 || reported[index].Remediation != test.remedy {
 				t.Fatalf("the resolving %s reported %+v, want %q with %q", test.verb, reported, test.message, test.remedy)

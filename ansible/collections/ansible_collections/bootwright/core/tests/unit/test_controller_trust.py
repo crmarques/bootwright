@@ -44,12 +44,9 @@ PORT_BUNDLE = {"pre_boot": "substrate_baremetal_machine_target_ca", "boot_media"
 # module tasks each holds. Finding another number means the walk or a role
 # changed, and either must be looked at.
 BUNDLED = {"managedos_install_anaconda": 5, "substrate_baremetal_machine": 7, "machine_power_redfish": 5,
-           "machine_power_read_redfish": 1}
+           "machine_power_read_redfish": 1, "substrate_libvirt_machine": 8, "containercluster_install_agent": 4}
 # The roles that make Redfish calls without a bundle, and why.
 UNBUNDLED = {
-    "substrate_libvirt_machine": "its emulated controller serves plain HTTP, so there is no leg to anchor",
-    "containercluster_install_agent": "its nodes are virtual until physical nodes are delivered (B67); "
-                                      "agentinstall refuses a physical node before registration",
     "containercluster_media_agent": "it makes no Redfish call",
 }
 CLUSTER_CALLS = 4
@@ -219,5 +216,5 @@ def test_no_cluster_task_sets_a_virtual_media_trust():
     found = calls("containercluster_install_agent")
     assert len(found) == CLUSTER_CALLS
     for name, _module, arguments, _task in found:
-        for option in ("trust", "certificate", "restore_verification", "remove_certificate", "ca_data"):
+        for option in ("trust", "certificate", "restore_verification", "remove_certificate"):
             assert option not in arguments, (name, option)

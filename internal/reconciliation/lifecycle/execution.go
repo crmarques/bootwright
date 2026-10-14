@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"maps"
 	"reflect"
 	"slices"
@@ -66,7 +67,8 @@ type transition struct {
 	// stops is what a fresh removal's quiescence gate observes on the host:
 	// the objects of its blocks whose capability probes quiescence, in plan
 	// order.
-	stops []string
+	stops      []string
+	sameBlocks sameBlocksProof
 	// basis is the durable state this transition was planned from. For a fresh
 	// removal it is the incomplete operation the removal takes the place of,
 	// which is the context's current operation. It is not always source: a
@@ -241,7 +243,7 @@ func (s Service) decideShared(ctx context.Context, name string, verb reconciliat
 // proveShared re-proves, under the shared lock and before the plan is
 // presented, authorized or confirmed, what the transition's exclusive
 // transaction proves again before it registers: a continuation or resolution
-// its input, automation, closure, setup and host binding, and a fresh removal
+// its input, other-build blocks, closure, setup, host binding; a fresh removal
 // its host. No plan is then presented for a transition that would refuse. A
 // lost frozen binding names the only exit those records leave whatever else
 // they hold, so it wins: a binding the keyring no longer lists has refused
@@ -257,7 +259,7 @@ func (s Service) proveShared(ctx context.Context, name string, decided transitio
 		if removal {
 			return s.verifyRemovalHost(ctx, view)
 		}
-		return s.verifyContinuation(ctx, view, decided.operation)
+		return s.verifyContinuation(ctx, view, decided.operation, decided.sameBlocks)
 	})
 	binding := frozenBinding(decided)
 	if err == nil || binding == "" {
@@ -324,6 +326,9 @@ func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb
 func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.StageSelection) (transition, error) {
 	store := s.store(view)
 	index, err := store.Index(ctx)
+	if errors.Is(err, operationstore.ErrRetiredIndex) {
+		return transition{}, operationstore.RetiredIndexRefusal(view.Identity().Name)
+	}
 	if err != nil {
 		return transition{}, err
 	}
@@ -384,6 +389,7 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 			}
 			decided.release = applied.Bindings
 		}
+		decided.sameBlocks = s.proveSameBlocks(ctx, view, operation, frozen)
 		return plannedFrom(decided, operation, states, attempts), nil
 	}
 	if operation.Verb == reconciliation.Apply {
@@ -432,7 +438,7 @@ func (s Service) refuseOver(ctx context.Context, view View, operation operations
 	case next == string(reconciliation.Destroy):
 		proof = s.verifyRemovalHost(ctx, view)
 	case pendingRemains(frozen, states):
-		proof = s.verifyContinuation(ctx, view, operation)
+		proof = s.verifyContinuation(ctx, view, operation, s.proveSameBlocks(ctx, view, operation, frozen))
 	}
 	refused := diagnostics.Of(proof)
 	if proof != nil && len(refused) == 0 {
@@ -543,11 +549,11 @@ func settled(identity ContextIdentity, decided transition, recovered string) *Op
 // stage it needs, so a selection mistake is corrected rather than silently
 // doing nothing. That apply is authorized against the whole plan, so it
 // carries every token the plan consumes and passes authorization as named.
-// While any block is failed, the work is the retry the scheduler would choose,
-// so a selection that admits none of the failed blocks refuses whichever one
-// comes first.
+// While any block is failed, the work is the retries the scheduler would
+// start, so a selection that admits none of the failed blocks refuses whichever
+// one comes first.
 func refuseStageBoundary(contextName string, plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) error {
-	kind, admitted := firstAdmission(plan, states, selection, nil)
+	kind, admitted := firstAdmission(plan, states, selection, nil, nil, nil)
 	if len(admitted) != 0 {
 		return nil
 	}
@@ -618,8 +624,8 @@ func (s Service) freshApply(ctx context.Context, view View, selection reconcilia
 // anything, and a block it cannot prove refuses the removal there. An
 // incomplete removal is continued instead, and only a failed one is replaced,
 // because a removal that lost an outcome is resolved by repeating itself.
-// Replacement is the only road out of a repaired adapter, since a continuation
-// is frozen to the automation its operation registered under.
+// Replacement is the road out of a repair that changes what a block freezes,
+// since a continuation keeps its frozen blocks.
 func supersedable(operation operationstore.Operation) bool {
 	if operation.Verb == reconciliation.Apply {
 		return operation.State != reconciliation.OperationDone
@@ -766,7 +772,11 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 // they run, so the plan says what to stop before the operator confirms it.
 func (s Service) stops(plan reconciliation.Plan) []string {
 	var named []string
+	deferred := s.onlineRemoval(plan).machines
 	for _, block := range plan.Blocks {
+		if deferred[block.ID] {
+			continue
+		}
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 		if !ok {
 			continue
@@ -852,7 +862,7 @@ func (s Service) present(ctx context.Context, name string, decided transition) e
 	if s.options.Presenter == nil {
 		return failure("lifecycle.state", "lifecycle plan presentation is not configured", "")
 	}
-	result := presentation(decided)
+	result := s.presentation(decided)
 	result.Context, result.Bound = ContextIdentity{Name: name}, s.Concurrency()
 	result.Receipt = Receipt{Operation: "none", Verb: string(decided.verb), State: "preview", Next: string(decided.verb)}
 	if !decided.fresh {
@@ -864,16 +874,35 @@ func (s Service) present(ctx context.Context, name string, decided transition) e
 
 // presentation is the plan a transition shows: what apply and destroy present
 // before they confirm, and what plan previews of the same transition.
-func presentation(decided transition) PlanResult {
+func (s Service) presentation(decided transition) PlanResult {
 	result := planPreview(decided.plan, decided.states, decided.selection)
 	result.Verb = string(decided.verb)
 	result.Continuation = !decided.fresh
-	// Only a fresh removal is gated on quiescence; a continuation already
-	// registered and is not gated again.
+	// Ordinary removal keeps its pre-registration gate. An online removal's
+	// later Machine boundary is re-proved on each continuation that needs it.
 	if decided.fresh && decided.verb == reconciliation.Destroy {
 		result.Stops = slices.Clone(decided.stops)
 	}
+	if decided.verb == reconciliation.Destroy {
+		result.StopsAfterOnline = s.stopsAfterOnline(decided.plan, decided.states)
+	}
+	if result.Continuation && !result.Finalizes && decided.operation.ID != "" && s.otherBuild(decided.operation) && decided.sameBlocks.proved {
+		result.AnotherBuild = anotherBuildOf(decided.operation, result.Steps)
+	}
 	return result
+}
+
+func anotherBuildOf(operation operationstore.Operation, steps []PlanStep) *AnotherBuild {
+	var running []int
+	for index, step := range steps {
+		if step.State != string(reconciliation.BlockDone) && step.Selection != StepNotSelected {
+			running = append(running, index+1)
+		}
+	}
+	if len(running) == 0 {
+		return nil
+	}
+	return &AnotherBuild{RegisteredBy: buildIdentity(operation.Executable), Steps: running}
 }
 
 // execute binds the Secrets the plan consumes, then performs the operation
@@ -1001,13 +1030,10 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		defer release()
 	}
 	store := s.store(tx)
-	// A removal proves the outcome of every effect it would take back, and then
-	// that none of it is still in use, before it registers. Proving either one
-	// per effect instead would not do: a removal takes dependents first, so it
-	// would take back the settled leaves and then stop at the running machine,
-	// leaving a context that can only continue the destroy it should never have
-	// started. Both proofs share one approved bundle, exactly as the operation's
-	// own effects share one once it has registered.
+	// A removal proves every effect's outcome and quiescence before registering.
+	// Only Machines supporting explicitly opted-in online removal defer their
+	// stop proof until those services are durably absent. Unrelated capabilities
+	// keep the original all-or-nothing gate. Both proofs use the approved bundle.
 	if decided.fresh && decided.verb == reconciliation.Destroy {
 		// The host is proved before anything is resolved, probed or
 		// registered, so no removal touches a context from a host its
@@ -1022,7 +1048,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		if err := s.proveRemovable(ctx, tx, store, proving, decided, material); err != nil {
 			return nil, err
 		}
-		if err := s.proveQuiescent(ctx, tx.Identity().Name, proving, decided.plan, material); err != nil {
+		if err := s.proveQuiescent(ctx, store, tx.Identity().Name, proving, decided.plan, material, decided.source, s.onlineRemoval(decided.plan).machines); err != nil {
 			return nil, err
 		}
 	}
@@ -1334,16 +1360,19 @@ func (s Service) reportResolution(ctx context.Context, event ProgressEvent) {
 	s.report(ctx, event)
 }
 
-// proveQuiescent observes every block a removal would take back and refuses
-// while any of it is still in use. Every block is probed rather than the first
+// proveQuiescent observes the blocks assigned to one removal boundary and
+// refuses while any is still in use. Every block is probed rather than the first
 // live one alone, so an operator is told everything to stop instead of
 // discovering the next obstacle each time they repeat the command. A probe
 // that cannot read its target reports live, because an environment that cannot
 // prove it is idle is never assumed to be.
-func (s Service) proveQuiescent(ctx context.Context, contextName string, approved bundle, plan reconciliation.Plan, material map[string]secrets.Material) error {
-	var live, stops []string
+func (s Service) proveQuiescent(ctx context.Context, store OperationStore, contextName string, approved bundle, plan reconciliation.Plan, material map[string]secrets.Material, applyOperation string, skip map[string]bool) error {
+	var live, stops, remedies []string
+	generic := false
+	blocks := slices.DeleteFunc(slices.Clone(plan.Blocks), func(block reconciliation.Block) bool { return skip[block.ID] })
+	retired := s.onlineRemoval(plan).retired
 	err := s.guard.WithPython(ctx, approved.area, approved.requirement, func(launch prerequisites.PythonLaunch, _ func() error) error {
-		for index, block := range plan.Blocks {
+		for index, block := range blocks {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -1355,10 +1384,15 @@ func (s Service) proveQuiescent(ctx context.Context, contextName string, approve
 			}
 			s.reportCheck(ctx, ProgressEvent{
 				Group: block.ID, Detail: block.Kind + "/" + block.Object, Status: "running",
-				Completed: index, Declared: len(plan.Blocks),
+				Completed: index, Declared: len(blocks),
 			})
+			applyProved, err := applyDependencies(ctx, store, applyOperation, block.ID)
+			if err != nil {
+				return err
+			}
 			state, err := capability.Quiescent(ctx, Probe{
-				Context: contextName, Block: block, Launch: launch, Bundle: approved.location, Area: approved.area, Material: material,
+				ApplyOperation: applyOperation, ApplyProved: applyProved, Context: contextName, Block: block, Launch: launch, Bundle: approved.location, Area: approved.area, Material: material,
+				RetiredWithHosts: retired[block.ID],
 			})
 			if err != nil {
 				return err
@@ -1367,6 +1401,13 @@ func (s Service) proveQuiescent(ctx context.Context, contextName string, approve
 				continue
 			}
 			live = append(live, block.Kind+"/"+block.Object+" ("+state.Reason+")")
+			if state.Remedy != "" {
+				if !slices.Contains(remedies, state.Remedy) {
+					remedies = append(remedies, state.Remedy)
+				}
+				continue
+			}
+			generic = true
 			if state.Stop != "" && !slices.Contains(stops, state.Stop) {
 				stops = append(stops, state.Stop)
 			}
@@ -1388,11 +1429,18 @@ func (s Service) proveQuiescent(ctx context.Context, contextName string, approve
 	if len(stops) != 0 {
 		remediation = "stop it with " + strings.Join(stops, ", then ") + ", " + repeat
 	}
+	if len(remedies) != 0 {
+		named := strings.Join(remedies, ", ")
+		if generic {
+			named += "; " + remediation
+		}
+		remediation = named
+	}
 	return failure("lifecycle.live", "this removal would take back state that is still in use: "+strings.Join(live, ", "), remediation)
 }
 
-// reportCheck streams one row of the gate. It runs before the operation
-// exists, so it belongs to no block and counts against no frozen total.
+// reportCheck streams one row of a read-only gate. It belongs to no effect
+// block and counts against no frozen total, including at the online boundary.
 func (s Service) reportCheck(ctx context.Context, event ProgressEvent) {
 	event.Phase, event.Block, event.Description = CheckPhase, quiescenceCheck, quiescenceCheckDescription
 	s.report(ctx, event)
@@ -1517,7 +1565,7 @@ func (s Service) resume(ctx context.Context, tx Transaction, store OperationStor
 	if err != nil {
 		return fail(err)
 	}
-	if err := s.verifyContinuation(ctx, tx, operation); err != nil {
+	if err := s.verifyContinuation(ctx, tx, operation, decided.sameBlocks); err != nil {
 		return fail(err)
 	}
 	operation, log, err := restore(ctx, store, operation)
@@ -1598,8 +1646,8 @@ func (s Service) establishBinding(ctx context.Context, tx Transaction, machine s
 
 // verifyContinuation re-proves everything a continuation depends on before it
 // does work. Drift refuses; it never re-resolves to another implementation.
-func (s Service) verifyContinuation(ctx context.Context, view View, operation operationstore.Operation) error {
-	if err := s.recordedRefusal(view, operation); err != nil {
+func (s Service) verifyContinuation(ctx context.Context, view View, operation operationstore.Operation, proof sameBlocksProof) error {
+	if err := s.recordedRefusal(view, operation, proof); err != nil {
 		return err
 	}
 	host, err := s.host.Identity(ctx)
@@ -1628,9 +1676,9 @@ func (s Service) verifyRemovalHost(ctx context.Context, view View) error {
 
 // recordedRefusal is the part of a continuation's re-proof that reads only
 // what the context and this executable record: the input the operation froze,
-// the closure an earlier build may have left unfrozen, and the automation.
-// status reads it without probing the host.
-func (s Service) recordedRefusal(view View, operation operationstore.Operation) error {
+// the closure an earlier build may have left unfrozen, and another build's proof
+// of the same blocks. status reads it without probing the host.
+func (s Service) recordedRefusal(view View, operation operationstore.Operation, proof sameBlocksProof) error {
 	identity := view.Identity()
 	if operation.Context != identity.Name || operation.Revision != identity.Revision {
 		return failure("lifecycle.state", "the context input changed after this operation registered", "restore the exact input revision this operation froze")
@@ -1644,12 +1692,11 @@ func (s Service) recordedRefusal(view View, operation operationstore.Operation) 
 			registered+" cannot read this host's controller directory, which now keeps setup runs", earlierBuildGone(view, operation))
 	}
 	takeBack := takeBackUnder(identity.Name, "this executable")
-	if operation.AutomationDigest != s.automation.CatalogDigest() {
-		remediation := "install " + registered + ", which registered this operation, and run bootwright setup"
-		if supersedable(operation) {
-			remediation = takeBack + ", or install " + registered + ", which registered it"
+	if s.otherBuild(operation) && !proof.proved {
+		if proof.refusal != nil {
+			return proof.refusal
 		}
-		return failure("lifecycle.state", "this executable's automation differs from the one this operation froze", remediation)
+		return failure("lifecycle.state", "this executable has not proved it freezes the blocks this operation froze", otherBuildRemediation(view, operation))
 	}
 	if operation.Closure == nil {
 		remediation := "continue it with " + registered + ", which registered it"

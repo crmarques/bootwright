@@ -390,8 +390,8 @@ def test_a_machine_destroy_removes_each_empty_context_parent():
             assert evaluate(parent["failed_when"], {parent["register"]: result}) is failed, (removal, result)
     validate = named(tasks, "Validate the frozen machine request")
     base = {"bootwright_substrate_machine_digest": "0" * 64}
-    assert holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v4")))
-    shallow = dict(MACHINE, version="machine-libvirt-v4", directory="/var/lib/libvirt/images/bootwright/rhel-01")
+    assert holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v6")))
+    shallow = dict(MACHINE, version="machine-libvirt-v6", directory="/var/lib/libvirt/images/bootwright/rhel-01")
     assert not holds(tasks[validate], dict(base, bootwright_substrate_machine_request=shallow))
 
 

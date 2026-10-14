@@ -96,6 +96,9 @@
       {{ lookup("ansible.builtin.file",
          bootwright_cluster_install_material['controllerPasswordNode' ~ loop_index]) }}
     verify: '{{ item.controller.tlsVerify }}'
+    ca_data: >-
+      {{ lookup("ansible.builtin.file", bootwright_cluster_install_material['controllerCANode' ~ loop_index])
+         if item.controller.trustBundleRef | default('') else omit }}
     media: true
   loop: '{{ bootwright_cluster_install_request.nodes }}'
   loop_control:

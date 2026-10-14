@@ -1,0 +1,8 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageClient
+metadata:
+  name: rbd-canary
+spec:
+  clusterRef: ceph-lab
+  poolRef: rbd-data
+  access: read-write

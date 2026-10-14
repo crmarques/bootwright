@@ -1,0 +1,165 @@
+{
+  "action": "cluster",
+  "bootstrap": "node-1",
+  "callHome": "enabled",
+  "cephVersion": "20.2.1",
+  "cephadm": {
+    "packageVersion": "20.2.1-405.el9cp",
+    "path": "/usr/sbin/cephadm",
+    "version": "20.2.1"
+  },
+  "cluster": "example",
+  "clusterKeyRef": "cluster-key",
+  "clusterNetworks": [],
+  "clusterSSHTransport": "native",
+  "clusterSSHUser": "operator",
+  "controller": "controller",
+  "hosts": [
+    {
+      "address": "192.0.2.1",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "bwdfe74888b831437e0a",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "labels": [
+        "mon",
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-1",
+      "name": "node-1",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.2",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "bwb915b15101775327fa",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "labels": [
+        "mon",
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-2",
+      "name": "node-2",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.3",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "bwc3fb2249231be58313",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "labels": [
+        "mon",
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-3",
+      "name": "node-3",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    }
+  ],
+  "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
+  "monIP": "192.0.2.1",
+  "packages": {
+    "licenseAccepted": true,
+    "sources": [
+      {
+        "certificateRef": "serving-tls",
+        "host": "node-1",
+        "media": "rhel-dvd.iso",
+        "mediaSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mediaSize": 123456,
+        "profile": "rhel",
+        "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+        "url": "https://192.0.2.10:8443/os/rhel/tree"
+      },
+      {
+        "certificateRef": "serving-tls",
+        "host": "node-2",
+        "media": "rhel-dvd.iso",
+        "mediaSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mediaSize": 123456,
+        "profile": "rhel",
+        "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+        "url": "https://192.0.2.10:8443/os/rhel/tree"
+      },
+      {
+        "certificateRef": "serving-tls",
+        "host": "node-3",
+        "media": "rhel-dvd.iso",
+        "mediaSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mediaSize": 123456,
+        "profile": "rhel",
+        "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+        "url": "https://192.0.2.10:8443/os/rhel/tree"
+      }
+    ],
+    "version": "ceph-packages-v1"
+  },
+  "publicNetworks": [
+    "192.0.2.0/24"
+  ],
+  "registry": "cp.icr.io",
+  "registryRef": "registry",
+  "services": [
+    {
+      "placement": {
+        "count": 3,
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mon"
+    },
+    {
+      "placement": {
+        "count": 2,
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mgr"
+    },
+    {
+      "placement": {
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_id": "data",
+      "service_type": "osd",
+      "spec": {
+        "data_devices": {
+          "paths": [
+            "/dev/vdb"
+          ]
+        }
+      }
+    }
+  ],
+  "version": "ceph-core-v4"
+}

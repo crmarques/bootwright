@@ -1,0 +1,51 @@
+implementation: artifact-server-nginx-v1
+content-digest: d6b66734772bef4e6869a796e6e8ac4f82587dd9711b442b37f14bde1f21f70f
+automation-formats: none
+request-schema:
+  bindAddress string
+  contentRoot string
+  egress struct managedservice.Egress
+  egress.httpProxy string omitempty
+  egress.httpsProxy string omitempty
+  egress.noProxy []string
+  endpoints []struct artifactserver.Endpoint
+  endpoints[].address string
+  endpoints[].listener string
+  endpoints[].name string
+  identity struct managedservice.Identity
+  identity.block string
+  identity.context string
+  identity.service string
+  image string
+  listeners []struct artifactserver.Listener
+  listeners[].name string
+  listeners[].port int
+  listeners[].protocol string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  tls *struct artifactserver.TLS omitempty
+  tls.fingerprint string
+  tls.minVersion string
+  tls.secret string
+  unit string
+  version string
+evidence-schema:
+  absent bool
+  container string
+  contentRoot bool
+  listeners []struct artifactserver.ListenerEvidence
+  listeners[].address string
+  listeners[].fingerprint string
+  listeners[].name string
+  listeners[].port int
+  listeners[].protocol string
+  listeners[].status string
+  postcondition bool
+  request string
+  unit string

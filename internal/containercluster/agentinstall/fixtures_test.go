@@ -86,6 +86,7 @@ func libvirtProvider() api.Object {
 		field("libvirt", api.MapValue(
 			text("machineRef", "controller"), text("uri", "qemu:///system"),
 			field("bmcEmulationDefaults", api.MapValue(
+				text("certificateRef", "lab-bmc-tls"),
 				text("bindAddress", "192.0.2.1"), number("port", "8000"),
 				field("auth", api.MapValue(text("credentialsRef", "lab-bmc-credentials"))),
 			)),

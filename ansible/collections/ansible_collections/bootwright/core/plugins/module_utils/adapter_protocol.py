@@ -20,6 +20,9 @@ REFUSING_PHASES = ("loaded", "group", "refused", "completed")
 GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 OUTCOMES = ("changed", "unchanged")
 HEX = frozenset("0123456789abcdef")
+# A refusal detail names a closed cause or a code site, never a value.
+DETAIL = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:@-")
+MAX_DETAIL = 160
 
 
 def request_digest(value):
@@ -59,13 +62,14 @@ class Capability:
     its own message, which names a cause the generic one would hide.
     """
 
-    def __init__(self, name, unpublished, completion, phases=PHASES, refusals=(), passthrough=()):
+    def __init__(self, name, unpublished, completion, phases=PHASES, refusals=(), passthrough=(), detail=False):
         self.name = name
         self.unpublished = unpublished
         self.completion = completion
         self.phases = phases
         self.refusals = refusals
         self.passthrough = passthrough
+        self.detail = detail
 
 
 def refusal(arguments, refusals):
@@ -90,7 +94,11 @@ def handed(arguments, capability, emit):
         emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
         return {"changed": False}
     if phase == "refused":
-        emit({"phase": "refused", "reason": refusal(arguments, capability.refusals)})
+        record = {"phase": "refused", "reason": refusal(arguments, capability.refusals)}
+        detail = arguments.get("detail")
+        if capability.detail and isinstance(detail, str) and 0 < len(detail) <= MAX_DETAIL and not set(detail) - DETAIL:
+            record["detail"] = detail
+        emit(record)
         return {"changed": False}
     outcome = arguments.get("outcome")
     if outcome not in OUTCOMES:

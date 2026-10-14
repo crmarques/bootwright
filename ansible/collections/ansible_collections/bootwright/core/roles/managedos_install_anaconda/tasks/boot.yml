@@ -19,6 +19,7 @@
   vars:
     substrate_libvirt_machine_target_endpoint: '{{ managedos_install_anaconda_endpoint }}'
     substrate_libvirt_machine_target_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_libvirt_machine_target_ca: '{{ managedos_install_anaconda_controller_ca }}'
     substrate_libvirt_machine_target_user: '{{ bootwright_os_install_material.controllerUser }}'
     substrate_libvirt_machine_target_password: '{{ bootwright_os_install_material.controllerPassword }}'
   when: bootwright_os_install_request.target.substrate == 'libvirt'
@@ -87,6 +88,7 @@
   vars:
     substrate_libvirt_machine_boot_endpoint: '{{ managedos_install_anaconda_endpoint }}'
     substrate_libvirt_machine_boot_verify: '{{ managedos_install_anaconda_verify }}'
+    substrate_libvirt_machine_boot_ca: '{{ managedos_install_anaconda_controller_ca }}'
     substrate_libvirt_machine_boot_user: '{{ bootwright_os_install_material.controllerUser }}'
     substrate_libvirt_machine_boot_password: '{{ bootwright_os_install_material.controllerPassword }}'
     substrate_libvirt_machine_boot_installer_powers_off: true

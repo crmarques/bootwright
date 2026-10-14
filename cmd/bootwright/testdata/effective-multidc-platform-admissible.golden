@@ -48,6 +48,18 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: Entitlement
 metadata:
+  name: acceptance-redhat-ceph
+spec:
+  type: redhat-ceph
+  rhsm:
+    management: external
+  registry:
+    url: registry.redhat.io
+    credentialsRef: acceptance-provider-credentials
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
   name: ceph-entitlement
 spec:
   type: ibm-storage-ceph
@@ -72,6 +84,97 @@ spec:
       hostname: subscription.example.com
       trustBundleRef: satellite-ca-bundle
       contentBaseURL: https://subscription.example.com/pulp/content
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: acceptance-clone-node
+spec:
+  capabilities: []
+  substrate:
+    providerRef: acceptance-vsphere
+    profileRef: clone
+  os:
+    provided: false
+    installProfileRef: acceptance-clone
+    install:
+      ntp:
+        - serverRef: default-01
+        - serverRef: default-02
+        - serverRef: default-03
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+  network:
+    addresses:
+      - name: fqdn
+        address: acceptance-clone-node.example.com
+  access:
+    ssh:
+      addressRef: fqdn
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: acceptance-hypervisor
+spec:
+  capabilities:
+    - container-runtime
+    - libvirt
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: acceptance-hypervisor.example.com
+  access:
+    ssh:
+      addressRef: fqdn
+      port: 22
+      auth:
+        operatorIdentity: {}
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: acceptance-sno-node
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
+  os:
+    provided: false
+  network:
+    configRef: hub-vm-network
+    interfaceAttachments:
+      - interface: primary
+        attachmentRef: hub-vm-machine
+      - interface: ceph-public
+        attachmentRef: hub-vm-ceph-public
+    installAddressRef: primary
+    addresses:
+      - name: primary
+        address: 192.0.2.220/24
+        interface: primary
+      - name: storage
+        address: 198.51.100.120/25
+        interface: ceph-public
+      - name: fqdn
+        address: acceptance-sno-node.example.com
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -1544,6 +1647,36 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: MachineInstallProfile
 metadata:
+  name: acceptance-clone
+spec:
+  os:
+    family: rhel
+    version: "9.99"
+    architecture: x86_64
+  installer:
+    templateClone:
+      seed:
+        cloudInit:
+          growRootFilesystem: true
+  customizations:
+    services:
+      enabled:
+        - sshd
+  proxy:
+    proxyRef: default
+    noProxy:
+      - .example.com
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+      - 203.0.113.0/24
+  ntp:
+    - serverRef: default-01
+    - serverRef: default-02
+    - serverRef: default-03
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
   name: rhel-ceph-node
 spec:
   os:
@@ -1881,6 +2014,56 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
+  name: acceptance-libvirt
+spec:
+  libvirt:
+    machineRef: acceptance-hypervisor
+    uri: qemu:///system
+    bmcEmulationDefaults:
+      enabled: true
+      protocol: redfish
+      emulator: sushy-tools
+      bindAddress: 192.0.2.60
+      certificateRef: acceptance-bmc-tls
+      port: 8000
+      auth:
+        credentialsRef: acceptance-provider-credentials
+    machineProfiles: []
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: acceptance-vsphere
+spec:
+  vsphere:
+    vcenters:
+      - server: vcenter.example.test
+        datacenters:
+          - example-dc
+        credentialsRef: acceptance-provider-credentials
+        disableCertificateVerification: false
+    failureDomains:
+      - name: example-zone
+        region: example-region
+        zone: example-zone
+        server: vcenter.example.test
+        topology:
+          datacenter: example-dc
+          computeCluster: example-compute
+          datastore: example-store
+          networks:
+            - example-network
+    machineProfiles:
+      - name: clone
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 80
+        template: Templates/example-rhel
+        failureDomainRef: example-zone
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
   name: bare-metal
 spec:
   baremetal:
@@ -1975,6 +2158,17 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: Proxy
 metadata:
+  name: acceptance-proxy
+spec:
+  management: managed
+  machineRef: acceptance-hypervisor
+  implementation: squid
+  bindAddress: 192.0.2.201
+  port: 3128
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
   name: default
 spec:
   management: external
@@ -1982,6 +2176,17 @@ spec:
     httpProxy: http://proxy.example.com:8080
     httpsProxy: http://proxy.example.com:8080
     trustBundleRef: custom-ca-bundle
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: acceptance-dns
+spec:
+  management: managed
+  machineRef: acceptance-hypervisor
+  implementation: dnsmasq
+  bindAddress: 192.0.2.201
+  port: 53
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: DNSServer
@@ -2006,6 +2211,17 @@ metadata:
 spec:
   management: external
   address: 203.0.113.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: acceptance-ntp
+spec:
+  management: managed
+  machineRef: acceptance-hypervisor
+  implementation: chrony
+  bindAddress: 192.0.2.201
+  port: 123
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: NTPServer
@@ -2063,6 +2279,84 @@ spec:
     - name: server-name-http
       listenerRef: http
       addressRef: dns-alias
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Registry
+metadata:
+  name: acceptance-registry
+spec:
+  management: managed
+  machineRef: acceptance-hypervisor
+  implementation: mirror-registry
+  bindAddress: 192.0.2.201
+  port: 5000
+---
+apiVersion: bootwright.io/v1alpha1
+kind: LoadBalancer
+metadata:
+  name: acceptance-load-balancer
+spec:
+  management: managed
+  machineRef: acceptance-hypervisor
+  implementation: haproxy
+  bindAddresses:
+    - address: 192.0.2.200
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: acceptance-sno
+spec:
+  distribution:
+    type: okd
+    release:
+      image: quay.io/example/okd:4.99.1
+  install:
+    method: agent
+    mode: connected
+    platform:
+      type: none
+    proxy:
+      proxyRef: default
+      noProxy:
+        - .example.com
+        - 192.0.2.0/24
+        - 198.51.100.0/24
+        - 203.0.113.0/24
+    ntp:
+      - serverRef: default-01
+      - serverRef: default-02
+      - serverRef: default-03
+    endpoints:
+      api:
+        address: 192.0.2.220
+        interfaceNetworks: []
+        source:
+          type: node
+      api-int:
+        address: 192.0.2.220
+        source:
+          type: node
+      ingress:
+        address: 192.0.2.220
+        interfaceNetworks: []
+        source:
+          type: node
+    pullSecretRef: openshift-pull-secret
+    nodeSSH:
+      keyPairRef: acceptance-sno-cluster-admin-ssh-key
+    additionalTrustBundleRefs: []
+  networking:
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.30.0.0/16
+  nodes:
+    - name: master
+      fqdn: master.acceptance-sno.clusters.example.com
+      role: master
+      machineRef: acceptance-sno-node
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ContainerCluster
@@ -2433,14 +2727,22 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: StorageCluster
 metadata:
+  name: acceptance-external-storage
+spec:
+  type: ceph
+  management: external
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
   name: ceph-multidc-01
 spec:
   type: ceph
   management: managed
   ceph:
     distribution: ibm
-    release: 9.0.0.0
-    packageVersion: 20.1.0-1.el9cp
+    release: 9.9.1.2
+    packageVersion: 20.2.1-405.el9cp
     image:
       base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
       version: sha256:1111111111111111111111111111111111111111111111111111111111111111
@@ -2453,10 +2755,8 @@ spec:
     entitlementRef: ceph-entitlement
     cephadm:
       addressRef: ssh
-      workarounds:
-        - mgmt-gateway-spec-dependency-recording
       ansible:
-        packageVersion: 5.0.0-1.el9cp
+        packageVersion: 5.0.3-1
       clusterSSH:
         user: cephadm
         keyRef: ceph-multidc-01-cephadm-ssh-key
@@ -2467,7 +2767,6 @@ spec:
     networks:
       publicCIDRs:
         - 198.51.100.0/25
-        - 198.51.100.128/25
       clusterCIDRs:
         - 203.0.113.0/24
     security:
@@ -2477,215 +2776,57 @@ spec:
         keyType: aes
     config:
       global:
-        mon_osd_down_out_subtree_limit: host
-        osd_pool_default_pg_autoscale_mode: on
-      mgr:
-        mgr/balancer/mode: upmap
-    mgrModules:
-      - balancer
-      - pg_autoscaler
-      - devicehealth
-    services: []
-    monitoring:
-      enabled: true
-      prometheus:
+        osd_pool_default_min_size: "2"
+        osd_pool_default_size: "2"
+    services:
+      - service_type: mon
         placement:
-          hosts:
-            - node-01
-            - node-02
-            - node-04
-            - node-05
-        retentionTime: 14d
-        retentionSize: 5GB
-        networks: []
-      grafana:
+          label: ceph-core
+          count: 3
+      - service_type: mgr
         placement:
-          hosts:
-            - node-01
-            - node-02
-            - node-04
-            - node-05
-        networks: []
-        initialAdminPasswordRef: ceph-multidc-01-grafana-admin
-    mgmtGateway:
-      dnsLabel: mgr
-      port: 10443
-      exposure: http
-      enableAuth: false
-      ingress:
-        name: mgmt
-        address: 198.51.100.58
-        prefixLength: 25
-        virtualInterfaceNetworks:
-          - 198.51.100.0/25
+          label: ceph-core
+          count: 2
+      - service_type: osd
+        service_id: data
         placement:
-          hosts:
-            - node-01
-            - node-02
-            - node-03
-            - node-04
-            - node-05
-            - node-06
-        firstVirtualRouterID: 42
+          label: ceph-core
+        spec:
+          data_devices:
+            paths:
+              - /dev/sdb
     topology:
       nodes:
         - name: node-01
           fqdn: node-01.ceph-multidc-01.clusters.example.com
           machineRef: storage-a-01
           site: site-a
-          roles:
-            - mon
-            - mgr
-            - osd
-            - mds
-            - rgw
-            - ingress
-            - prometheus
-            - grafana
-            - alertmanager
           labels:
-            - _admin
+            - ceph-core
         - name: node-02
           fqdn: node-02.ceph-multidc-01.clusters.example.com
           machineRef: storage-a-02
           site: site-a
-          roles:
-            - mon
-            - mgr
-            - osd
-            - mds
-            - rgw
-            - ingress
-            - prometheus
-            - grafana
-            - alertmanager
           labels:
-            - _admin
+            - ceph-core
         - name: node-03
           fqdn: node-03.ceph-multidc-01.clusters.example.com
           machineRef: storage-a-03
           site: site-a
-          roles:
-            - osd
-            - mds
-            - rgw
-            - ingress
-          labels: []
-        - name: node-04
-          fqdn: node-04.ceph-multidc-01.clusters.example.com
-          machineRef: storage-b-01
-          site: site-b
-          roles:
-            - mon
-            - mgr
-            - osd
-            - mds
-            - rgw
-            - ingress
-            - prometheus
-            - grafana
-            - alertmanager
           labels:
-            - _admin
-        - name: node-05
-          fqdn: node-05.ceph-multidc-01.clusters.example.com
-          machineRef: storage-b-02
-          site: site-b
-          roles:
-            - mon
-            - mgr
-            - osd
-            - mds
-            - rgw
-            - ingress
-            - prometheus
-            - grafana
-            - alertmanager
-          labels:
-            - _admin
-        - name: node-06
-          fqdn: node-06.ceph-multidc-01.clusters.example.com
-          machineRef: storage-b-03
-          site: site-b
-          roles:
-            - osd
-            - mds
-            - rgw
-            - ingress
-          labels: []
-        - name: node-07
-          fqdn: node-07.ceph-multidc-01.clusters.example.com
-          machineRef: storage-witness-01
-          site: site-c
-          roles:
-            - mon
-          labels: []
-      osdDrivegroups:
-        - serviceID: data
-          placement:
-            hosts:
-              - node-01
-              - node-02
-              - node-03
-              - node-04
-              - node-05
-              - node-06
-          osd:
-            dataDevices:
-              paths:
-                - /dev/disk/by-id/nvme-example-data-01
-                - /dev/disk/by-id/nvme-example-data-02
-                - /dev/disk/by-id/nvme-example-data-03
-                - /dev/disk/by-id/nvme-example-data-04
-                - /dev/disk/by-id/nvme-example-data-05
-            encrypted: true
-            filterLogic: AND
-            dataAllocateFraction: !!float 1
-            tpm2: true
-            unmanaged: false
-      stretch:
-        failureDomain: datacenter
-        dataSites:
-          - site-a
-          - site-b
-        tiebreaker:
-          node: node-07
-          site: site-c
-        ruleName: stretch-rule
+            - ceph-core
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: StoragePlacementPolicy
 metadata:
-  name: stretch-datacenter
+  name: host-spread
 spec:
   clusterRef: ceph-multidc-01
-  failureDomain: datacenter
-  ruleName: stretch-rule
+  failureDomain: host
+  ruleName: host-rule
   replicated:
-    size: 4
+    size: 2
     minSize: 2
----
-apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
-metadata:
-  name: odf-cephfs-data
-spec:
-  clusterRef: ceph-multidc-01
-  placementPolicyRef: stretch-datacenter
-  type: replicated
-  role: cephfs-data
-  application: cephfs
----
-apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
-metadata:
-  name: odf-cephfs-metadata
-spec:
-  clusterRef: ceph-multidc-01
-  placementPolicyRef: stretch-datacenter
-  type: replicated
-  role: cephfs-metadata
-  application: cephfs
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: StoragePool
@@ -2693,227 +2834,19 @@ metadata:
   name: odf-hub-multidc-01-rbd
 spec:
   clusterRef: ceph-multidc-01
-  placementPolicyRef: stretch-datacenter
+  placementPolicyRef: host-spread
   type: replicated
   role: rbd
   application: rbd
 ---
 apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
+kind: StorageClient
 metadata:
-  name: odf-hub-multidc-02-rbd
+  name: acceptance-rbd-client
 spec:
   clusterRef: ceph-multidc-01
-  placementPolicyRef: stretch-datacenter
-  type: replicated
-  role: rbd
-  application: rbd
----
-apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
-metadata:
-  name: odf-ocp-multidc-01-rbd
-spec:
-  clusterRef: ceph-multidc-01
-  placementPolicyRef: stretch-datacenter
-  type: replicated
-  role: rbd
-  application: rbd
----
-apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
-metadata:
-  name: odf-ocp-multidc-02-rbd
-spec:
-  clusterRef: ceph-multidc-01
-  placementPolicyRef: stretch-datacenter
-  type: replicated
-  role: rbd
-  application: rbd
----
-apiVersion: bootwright.io/v1alpha1
-kind: StoragePool
-metadata:
-  name: odf-rgw
-spec:
-  clusterRef: ceph-multidc-01
-  placementPolicyRef: stretch-datacenter
-  type: replicated
-  role: rgw
-  application: rgw
----
-apiVersion: bootwright.io/v1alpha1
-kind: StorageFilesystem
-metadata:
-  name: odf-cephfs
-spec:
-  clusterRef: ceph-multidc-01
-  metadataPoolRef: odf-cephfs-metadata
-  dataPoolRefs:
-    - name: odf-cephfs-data
-      default: true
-  mds:
-    activeCount: 2
-    standbyReplay: false
-    placement:
-      hosts:
-        - node-01
-        - node-02
-        - node-03
-        - node-04
-        - node-05
-        - node-06
-  subvolumeGroups: []
----
-apiVersion: bootwright.io/v1alpha1
-kind: StorageObjectGateway
-metadata:
-  name: odf-rgw-all
-spec:
-  clusterRef: ceph-multidc-01
-  serviceID: odf.all
-  placement:
-    hosts:
-      - node-01
-      - node-02
-      - node-03
-      - node-04
-      - node-05
-      - node-06
-    countPerHost: 1
-  frontendPort: 8080
-  config: {}
-  endpoint:
-    dnsLabel: rgw
-    scheme: https
-    port: 443
-    tls:
-      secretRef: ceph-multidc-01-rgw-all-tls
-    ingresses:
-      - name: ha
-        address: 198.51.100.59
-        prefixLength: 25
-        virtualInterfaceNetworks:
-          - 198.51.100.0/25
-        placement:
-          hosts:
-            - node-01
-            - node-02
-            - node-03
-            - node-04
-            - node-05
-            - node-06
-        firstVirtualRouterID: 43
----
-apiVersion: bootwright.io/v1alpha1
-kind: StorageExport
-metadata:
-  name: ceph-multidc-01-odf-hub-multidc-01
-spec:
-  type: dataFoundation
-  clusterRef: ceph-multidc-01
-  dataFoundation:
-    rbdPoolRef: odf-hub-multidc-01-rbd
-    filesystemRef: odf-cephfs
-    objectGatewayRef: odf-rgw-all
----
-apiVersion: bootwright.io/v1alpha1
-kind: StorageExport
-metadata:
-  name: ceph-multidc-01-odf-hub-multidc-02
-spec:
-  type: dataFoundation
-  clusterRef: ceph-multidc-01
-  dataFoundation:
-    rbdPoolRef: odf-hub-multidc-02-rbd
-    filesystemRef: odf-cephfs
-    objectGatewayRef: odf-rgw-all
----
-apiVersion: bootwright.io/v1alpha1
-kind: StorageExport
-metadata:
-  name: ceph-multidc-01-odf-ocp-multidc-01
-spec:
-  type: dataFoundation
-  clusterRef: ceph-multidc-01
-  dataFoundation:
-    rbdPoolRef: odf-ocp-multidc-01-rbd
-    filesystemRef: odf-cephfs
-    objectGatewayRef: odf-rgw-all
----
-apiVersion: bootwright.io/v1alpha1
-kind: StorageExport
-metadata:
-  name: ceph-multidc-01-odf-ocp-multidc-02
-spec:
-  type: dataFoundation
-  clusterRef: ceph-multidc-01
-  dataFoundation:
-    rbdPoolRef: odf-ocp-multidc-02-rbd
-    filesystemRef: odf-cephfs
-    objectGatewayRef: odf-rgw-all
----
-apiVersion: bootwright.io/v1alpha1
-kind: ClusterAddon
-metadata:
-  name: fusion-data-foundation
-spec:
-  provides:
-    - dataFoundation
-  requires: []
-  inputs:
-    - name: external-storage
-      resourceKind: StorageExport
-      required: true
-      effects:
-        - storageExportAttachment: {}
-    - name: ibm-entitlement
-      secretType: token
-      required: true
-      effects:
-        - globalPullSecretMerge:
-            registry: cp.icr.io
-            username: cp
-  olm:
-    namespace:
-      name: openshift-storage
-      management: managed
-      labels:
-        openshift.io/cluster-monitoring: "true"
-    operatorGroup:
-      name: openshift-storage
-      targetNamespaces:
-        - openshift-storage
-    catalogSource:
-      name: isf-data-foundation-catalog
-      image: icr.io/cpopen/isf-data-foundation-catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222
-      displayName: IBM Fusion Data Foundation Catalog
-      publisher: IBM
-      grpcPodConfig:
-        securityContextConfig: restricted
-    subscription:
-      name: odf-operator
-      package: odf-operator
-      channel: stable-4.99
-      source: isf-data-foundation-catalog
-      sourceNamespace: openshift-marketplace
-      installPlanApproval: Automatic
-    customResources: []
-  readiness:
-    timeout: 45m
-    checks:
-      - csvSucceeded:
-          namespace: openshift-storage
-          subscription: odf-operator
-      - condition:
-          apiVersion: ocs.openshift.io/v1
-          kind: CephCluster
-          name: ocs-external-storagecluster
-          namespace: openshift-storage
-          condition:
-            type: Available
-            status: "True"
-  steps: []
+  poolRef: odf-hub-multidc-01-rbd
+  access: read-only
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon
@@ -3065,7 +2998,7 @@ metadata:
 spec:
   profileRefs: []
   addonRefs:
-    - fusion-data-foundation
+    - nmstate
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonProfile
@@ -3074,7 +3007,6 @@ metadata:
 spec:
   profileRefs: []
   addonRefs:
-    - fusion-data-foundation
     - openshift-virtualization
     - nmstate
     - virtual-cluster-network
@@ -3088,13 +3020,6 @@ spec:
   profileRefs:
     - hub-cluster-addons
   addonRefs: []
-  addonConfigs:
-    - addonRef: fusion-data-foundation
-      inputs:
-        - name: external-storage
-          value: ceph-multidc-01-odf-hub-multidc-01
-        - name: ibm-entitlement
-          value: ibm-entitlement-key
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
@@ -3105,13 +3030,6 @@ spec:
   profileRefs:
     - hub-cluster-addons
   addonRefs: []
-  addonConfigs:
-    - addonRef: fusion-data-foundation
-      inputs:
-        - name: external-storage
-          value: ceph-multidc-01-odf-hub-multidc-02
-        - name: ibm-entitlement
-          value: ibm-entitlement-key
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
@@ -3122,13 +3040,6 @@ spec:
   profileRefs:
     - physical-cluster-addons
   addonRefs: []
-  addonConfigs:
-    - addonRef: fusion-data-foundation
-      inputs:
-        - name: external-storage
-          value: ceph-multidc-01-odf-ocp-multidc-01
-        - name: ibm-entitlement
-          value: ibm-entitlement-key
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
@@ -3139,13 +3050,57 @@ spec:
   profileRefs:
     - physical-cluster-addons
   addonRefs: []
-  addonConfigs:
-    - addonRef: fusion-data-foundation
-      inputs:
-        - name: external-storage
-          value: ceph-multidc-01-odf-ocp-multidc-02
-        - name: ibm-entitlement
-          value: ibm-entitlement-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: CustomPlaybook
+metadata:
+  name: acceptance-playbook
+spec:
+  follows: base
+  playbook: playbooks/does-not-exist.yaml
+  target:
+    clusters:
+      - ceph-multidc-01
+  extraVars:
+    count: 3
+    enabled: false
+    fraction: 1.25
+    literal: "true"
+  enabled: false
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-bmc-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: acceptance-bmc.example.test
+      ipAddresses:
+        - 192.0.2.60
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-external-details
+spec:
+  type: opaque
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-provider-credentials
+spec:
+  type: usernamePassword
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-sno-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret

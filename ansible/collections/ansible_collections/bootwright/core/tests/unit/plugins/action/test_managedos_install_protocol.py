@@ -51,6 +51,13 @@ def test_a_changed_boot_image_is_named_to_the_runner(monkeypatch):
     assert published == [{"phase": "refused", "reason": "media-changed-boot"}]
 
 
+@pytest.mark.parametrize("reason", ["ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded"])
+def test_early_key_policy_refusals_use_the_go_owned_public_diagnostic(reason, monkeypatch):
+    result, published = run({"phase": "refused", "reason": reason}, monkeypatch)
+    assert result == {"changed": False}
+    assert published == [{"phase": "refused", "reason": reason}]
+
+
 DIGEST = "1" * 64
 IDENTITY = "fedcba9876543210" * 4
 

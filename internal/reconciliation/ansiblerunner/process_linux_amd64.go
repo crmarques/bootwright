@@ -15,6 +15,7 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/adapterprotocol"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
@@ -329,13 +330,22 @@ func (j *lifecycleJudge) Judge(ctx context.Context, record adapterprotocol.Recor
 		named := j.request.Refusals[record.Reason]
 		valid = valid && j.loaded && named != nil
 		if valid {
-			verdict.Failure = named
+			verdict.Failure = refusalDetail(named, record.Detail)
 		}
 	default:
 		valid = false
 	}
 	verdict.Valid = valid
 	return verdict
+}
+
+func refusalDetail(named error, detail string) error {
+	found := diagnostics.Of(named)
+	if detail == "" || len(found) == 0 {
+		return named
+	}
+	found[0].Message += " (adapter detail: " + detail + ")"
+	return &diagnostics.Failure{Diagnostics: found, Usage: diagnostics.IsUsage(named)}
 }
 
 func (j *lifecycleJudge) Spare() bool { return false }

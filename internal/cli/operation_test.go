@@ -23,7 +23,7 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"context init --name example -f one -f two", "context delete --name example --purge=false",
 		"validate --output json --unknown", "render effective -f input", "render --output json",
 		"add-ons list", "preflight all", "preflight container-cluster",
-		"preflight storage-cluster", "preflight add-ons", "cluster list",
+		"preflight storage-cluster", "preflight add-ons",
 		"cluster oc --name example get pods",
 		"render --output-dir artifacts --sensitive", "render installer", "render storage",
 	} {
@@ -51,7 +51,7 @@ func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testin
 		[]string{"media", "add", "--name", "example.iso", "--from-file", "image.iso"}, []string{"media", "list"}, []string{"media", "delete", "--name", "example.iso"},
 		[]string{"setup"}, []string{"setup", "--dry-run"}, []string{"preflight", "controller"},
 		[]string{"plan"}, []string{"status"}, []string{"apply", "--yes"}, []string{"destroy", "--yes"},
-		[]string{"machine", "list"}, []string{"machine", "rsh", "--name", "example"},
+		[]string{"machine", "list"}, []string{"cluster", "list"}, []string{"cluster", "info"}, []string{"machine", "rsh", "--name", "example"},
 		[]string{"machine", "exec", "--name", "example", "uptime"},
 		[]string{"machine", "start", "--name", "example"}, []string{"machine", "stop", "--name", "example", "--yes"},
 		[]string{"machine", "restart", "--name", "example", "--yes"},

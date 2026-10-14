@@ -1,0 +1,72 @@
+implementation: machine-libvirt-v1
+content-digest: 1b5f81d8ba52fe4bd670b4b3ff9afacb15fd523e32f9a07d607bd2647ebc3ef0
+automation-formats: https://bootwright.io/substrate/v1
+request-schema:
+  controller struct libvirt.Controller
+  controller.address string
+  controller.certificateRef string
+  controller.credentialsRef string
+  controller.endpoint string
+  controller.image string
+  controller.port int
+  controller.unit string
+  directory string
+  disks []struct libvirt.Disk
+  disks[].bus string omitempty
+  disks[].media string omitempty
+  disks[].name string
+  disks[].path string
+  disks[].rotationRate int omitempty
+  disks[].serial string omitempty
+  disks[].sizeGiB int
+  disks[].target string
+  domain string
+  egress struct managedservice.Egress
+  egress.httpProxy string omitempty
+  egress.httpsProxy string omitempty
+  egress.noProxy []string
+  identity struct libvirt.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  interfaces []struct libvirt.Interface
+  interfaces[].bridge string
+  interfaces[].macAddress string
+  interfaces[].name string
+  interfaces[].network string
+  memoryMiB int
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  poolName string
+  poolPath string
+  tpm bool
+  uri string
+  uuid string
+  vcpu int
+  version string
+evidence-schema:
+  absent bool
+  answered bool
+  controller string
+  disks []struct libvirt.DiskEvidence
+  disks[].bus string omitempty
+  disks[].name string
+  disks[].present bool
+  disks[].rotationRate int omitempty
+  disks[].sizeGiB int
+  disks[].target string omitempty
+  domain string
+  listener *bool
+  owned bool
+  postcondition bool
+  power string
+  request string
+  state string
+  system string
+  unit string

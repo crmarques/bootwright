@@ -27,6 +27,7 @@ const (
 	StorageCluster         Kind = "StorageCluster"
 	StoragePlacementPolicy Kind = "StoragePlacementPolicy"
 	StoragePool            Kind = "StoragePool"
+	StorageClient          Kind = "StorageClient"
 	StorageFilesystem      Kind = "StorageFilesystem"
 	StorageObjectGateway   Kind = "StorageObjectGateway"
 	StorageNFSExport       Kind = "StorageNFSExport"
@@ -38,7 +39,7 @@ const (
 	Secret                 Kind = "Secret"
 )
 
-var kindOrder = []Kind{Environment, Entitlement, Machine, MachineImage, MachineInstallProfile, NetworkConfig, InfraProvider, Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer, ContainerCluster, StorageCluster, StoragePlacementPolicy, StoragePool, StorageFilesystem, StorageObjectGateway, StorageNFSExport, StorageExport, ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, CustomPlaybook, Secret}
+var kindOrder = []Kind{Environment, Entitlement, Machine, MachineImage, MachineInstallProfile, NetworkConfig, InfraProvider, Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer, ContainerCluster, StorageCluster, StoragePlacementPolicy, StoragePool, StorageClient, StorageFilesystem, StorageObjectGateway, StorageNFSExport, StorageExport, ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, CustomPlaybook, Secret}
 
 func Kinds() []Kind           { return slices.Clone(kindOrder) }
 func KindIndex(kind Kind) int { return slices.Index(kindOrder, kind) }

@@ -177,6 +177,25 @@ def snapshot_database(platform, scratch):
 
 
 def selected_roots(request):
+    if request.get("policy") == "ceph-packages-v1":
+        versions = {"ceph": "2:20.2.1-405.el9cp", "license": "0:9.1-1.el9cp"}
+        inherited = request["versions"] == dict(versions, inheritedPolicy="latest")
+        if (
+            request["platform"] != {"os": "rhel", "release": "9.8", "architecture": "amd64"}
+            or request["requirements"] != {"cephPackages": True}
+            or request["versions"] != versions and not inherited
+        ):
+            raise ValueError("Ceph package policy")
+        roots = [
+            ("ceph", "cephadm", request["versions"]["ceph"]),
+            ("ceph", "ceph-common", request["versions"]["ceph"]),
+            ("license", "ibm-storage-ceph-license", request["versions"]["license"]),
+        ]
+        if inherited:
+            roots.extend(("inherited-policy", name, "latest") for name in ("crypto-policies", "crypto-policies-scripts"))
+        return roots
+    if request.get("policy") is not None:
+        raise ValueError("native root policy")
     keys = ["openssh", "nmstate"]
     if request["requirements"]["containerRuntime"]:
         keys.append("podman")
@@ -238,6 +257,11 @@ def setup_dnf4(request, scratch, repositories=True, installroot=None):
     conf.assumeyes = False
     conf.substitutions["releasever"] = request["platform"]["release"]
     conf.substitutions["basearch"] = "x86_64"
+    if request.get("policy") == "ceph-packages-v1":
+        selected_roots(request)
+        # The disposable snapshot contains RPMDB only, while DVD AppStream
+        # modular metadata requires the selected RHEL platform explicitly.
+        conf.module_platform_id = "platform:el9"
     base = dnf.Base(conf)
     if repositories:
         for record in local_repositories(request):

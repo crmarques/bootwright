@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
@@ -177,7 +178,7 @@ func validateCertificateCoverage(value api.Value, machine api.Object, c api.Cata
 			continue
 		}
 		address := machineAddress(machine, reference)
-		if address == "" || certificateNames(generated, address) {
+		if address == "" || secrets.GeneratedCertificateNames(generated, address) {
 			continue
 		}
 		field := "dnsNames"
@@ -203,25 +204,6 @@ func listenerProtocol(value api.Value, name string) string {
 		}
 	}
 	return ""
-}
-
-// certificateNames reports whether a generated certificate's subject
-// alternative names include address.
-func certificateNames(generated api.Value, address string) bool {
-	if ip, err := netip.ParseAddr(address); err == nil {
-		for _, listed := range generated.Get("ipAddresses").Strings() {
-			if san, err := netip.ParseAddr(listed); err == nil && san.Unmap() == ip.Unmap() {
-				return true
-			}
-		}
-		return false
-	}
-	for _, listed := range generated.Get("dnsNames").Strings() {
-		if strings.EqualFold(listed, address) {
-			return true
-		}
-	}
-	return false
 }
 
 // validatePlacement holds a managed service to what its placement Machine can

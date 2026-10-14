@@ -24,6 +24,7 @@
     user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password) }}'
     verify: '{{ substrate_libvirt_machine_boot_verify }}'
+    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_ca) }}'
     operation: power-off
   register: substrate_libvirt_machine_boot_stopped
   failed_when: false
@@ -48,6 +49,7 @@
     user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password) }}'
     verify: '{{ substrate_libvirt_machine_boot_verify }}'
+    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_ca) }}'
     operation: boot
     target: Cd
   register: substrate_libvirt_machine_boot_selected
@@ -71,6 +73,7 @@
     user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password) }}'
     verify: '{{ substrate_libvirt_machine_boot_verify }}'
+    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_ca) }}'
     operation: power-on
   register: substrate_libvirt_machine_boot_started
   failed_when: false

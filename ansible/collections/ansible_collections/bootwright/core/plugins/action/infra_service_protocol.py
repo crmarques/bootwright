@@ -14,9 +14,9 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 )
 
 # The refusals a managed service names to its runner before the run fails, each
-# one the runner reports as the service's own diagnostic for a port: a socket
-# something else already listens on, checked before the unit starts.
-REFUSALS = ("foreign-listener",)
+# one the runner reports as the service's own diagnostic for a port: an
+# unassigned address or a socket another daemon holds, checked before effects.
+REFUSALS = ("foreign-listener", "unassigned-bind-address")
 MAX_ANSWERS = 64
 
 

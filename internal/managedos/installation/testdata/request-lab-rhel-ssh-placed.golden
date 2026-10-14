@@ -48,8 +48,9 @@
     "channel": "guest-agent",
     "controller": {
       "credentialsRef": "lab-bmc-credentials",
-      "endpoint": "http://192.0.2.1:8000/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
+      "endpoint": "https://192.0.2.1:8000/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
       "tlsVerify": true,
+      "trustBundleRef": "lab-bmc-tls",
       "virtualMedia": {
         "removeCertificate": false,
         "restoreVerification": false,

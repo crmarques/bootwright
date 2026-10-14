@@ -16,7 +16,7 @@ func targetCatalog() api.Catalog {
 	controller := obj(api.Machine, "controller", m("os", m("provided", true)))
 	host := obj(api.Machine, "host", m("capabilities", api.StringList("libvirt"), "os", m("provided", true)))
 	libvirt := obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
-		"bmcEmulationDefaults", m("bindAddress", "192.0.2.1", "port", api.IntegerValue("8000"),
+		"bmcEmulationDefaults", m("certificateRef", "emulated-bmc-tls", "bindAddress", "192.0.2.1", "port", api.IntegerValue("8000"),
 			"auth", m("credentialsRef", "emulated-bmc")))))
 	guests := obj(api.NetworkConfig, "guests", m("nmstate", m("interfaces",
 		list(m("name", "enp1s0", "type", "ethernet")))))
@@ -100,7 +100,7 @@ func TestAnIPv6EmulatedControllerEndpointBracketsItsAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("deriving guest: %v", diagnostics.Of(err))
 	}
-	want := "http://[fd00::1]:8000/redfish/v1/Systems/" + uuid
+	want := "https://[fd00::1]:8000/redfish/v1/Systems/" + uuid
 	if target.Controller.Endpoint != want || ControllerEndpoint("fd00::1", 8000, uuid) != want {
 		t.Fatalf("endpoint = %q, want %q", target.Controller.Endpoint, want)
 	}
@@ -113,7 +113,7 @@ func TestAnIPv6EmulatedControllerEndpointBracketsItsAddress(t *testing.T) {
 	if socket := ControllerSocket("fd00::1", 8000); socket != "[fd00::1]:8000" {
 		t.Fatalf("socket = %q", socket)
 	}
-	if endpoint := ControllerEndpoint("192.0.2.1", 8000, uuid); endpoint != "http://192.0.2.1:8000/redfish/v1/Systems/"+uuid {
+	if endpoint := ControllerEndpoint("192.0.2.1", 8000, uuid); endpoint != "https://192.0.2.1:8000/redfish/v1/Systems/"+uuid {
 		t.Fatalf("IPv4 endpoint = %q", endpoint)
 	}
 }
@@ -322,6 +322,7 @@ func TestTargetCarriesTheControllerTrustBundle(t *testing.T) {
 				"hardware", "management", "bmc", "tls"))
 		}
 	}
+	bundled["guest"] = "emulated-bmc-tls"
 	catalog := api.NewCatalog(objects)
 	for _, name := range []string{"server", "bastion", "guest"} {
 		machine, _ := catalog.Find(api.Machine, name)

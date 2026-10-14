@@ -54,7 +54,7 @@ func registerDone(ctx context.Context, t *testing.T, store *operationstore.Store
 		t.Fatal(err)
 	}
 	for _, block := range runs {
-		number, err := store.StartAttempt(ctx, id, block)
+		number, err := store.StartAttempt(ctx, id, block, exitBuild())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -72,6 +72,11 @@ func registerDone(ctx context.Context, t *testing.T, store *operationstore.Store
 // no verb here continues an operation, so none compares it.
 func exitClosure() *operationstore.Closure {
 	return &operationstore.Closure{Digest: strings.Repeat("d", 64), Python: "3.13.15", Ansible: "2.21.4"}
+}
+
+// exitBuild is the build each attempt these records start names.
+func exitBuild() operationstore.Build {
+	return operationstore.Build{AutomationDigest: strings.Repeat("b", 64), ContentDigest: strings.Repeat("e", 64)}
 }
 
 func writeRecords(t *testing.T, repository *contextfs.Store, write func(context.Context, *operationstore.Store)) {
@@ -191,5 +196,33 @@ func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
 				t.Fatalf("the deleted context remains (%v)", err)
 			}
 		})
+	}
+}
+
+// Changed input over a completed apply is published with its warning, and the
+// next apply then refuses naming the destroy it needs, registers no operation
+// and changes nothing.
+func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
+	services, repository, input, root := contextFixture(t)
+	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
+	writeRecords(t, repository, func(ctx context.Context, store *operationstore.Store) {
+		registerDone(ctx, t, store, "op-"+strings.Repeat("01", 16), "", exitPlan(t), "alpha")
+	})
+	mutation := filepath.Join(root, "contexts", "alpha", "state", "mutation.json")
+	if err := os.WriteFile(mutation, []byte(`{"version":1,"operation":"applied","ownership":"retained"}`+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test")), 0600); err != nil {
+		t.Fatal(err)
+	}
+	out, stderr := contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
+	if !strings.HasPrefix(out, "[OK] Context updated\n") || !strings.HasPrefix(stderr, "[WARN] lifecycle.state: context alpha holds a completed apply") {
+		t.Fatalf("the update over a completed apply: %s %q", out, stderr)
+	}
+	before := stateFingerprint(t, root)
+	_, stderr = contextRun(t, services, 1, "apply", "--context", "alpha", "--yes")
+	if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, "the desired state changed after this apply completed") ||
+		!strings.Contains(stderr, "bootwright destroy --context alpha") || !sameFingerprints(before, stateFingerprint(t, root)) {
+		t.Fatalf("the apply over the changed input refused with %s", stderr)
 	}
 }

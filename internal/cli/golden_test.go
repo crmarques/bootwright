@@ -299,6 +299,13 @@ func cliGoldens() []cliGolden {
 			LogLocation:    logs,
 		}
 	}
+	// The failed apply as a build other than the one that registered it
+	// reads it.
+	anotherBuild := func() *lifecycle.StatusResult {
+		result := status()
+		result.Lifecycle.AnotherBuild = true
+		return result
+	}
 	// An apply whose machine attempt was lost and whose removal's
 	// observation found a domain of the same name that this context does not
 	// own: the block names why it is still unknown and what the operator does
@@ -503,7 +510,7 @@ func cliGoldens() []cliGolden {
 		"this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01)", "",
 		"repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss")
 	noInput := diagnostics.NewFailure("context.input", "context has no desired state; run context update --name lab --input-dir <dir>", "")
-	return []cliGolden{
+	return append([]cliGolden{
 		// Controller reports: an unpresented dry-run plan, a presented setup
 		// that retired bundles, and a context's readiness.
 		{golden: "cli-setup-plan", args: "setup --dry-run", record: func(r *dispatchRecord) {
@@ -645,6 +652,22 @@ func cliGoldens() []cliGolden {
 				Receipt: lifecycle.Receipt{Operation: operationID, Verb: "plan", State: "preview", Next: "continue-apply"},
 			}
 		}},
+		// A continuation another build previews names the build that registered
+		// the operation and the steps this build runs: the finished first step
+		// is left out of them.
+		{golden: "cli-plan-continuation-other-build", args: "plan", record: func(r *dispatchRecord) {
+			r.result.lifecyclePlan = &lifecycle.PlanResult{
+				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",
+				Steps: []lifecycle.PlanStep{
+					{ID: "artifact-server-lab-artifacts", Description: "serve artifacts for lab-artifacts on controller", Stage: "infra-components", Impacts: []string{"create-container-unit"}, State: "done", Wave: 1},
+					{ID: "substrate-host-lab-libvirt", Description: "realize the libvirt host of lab-libvirt on controller", Stage: "substrates", Impacts: []string{"create-libvirt-pool lab-libvirt"}, State: "failed", After: []int{1}, Wave: 2},
+					{ID: "os-installation-rhel-01", Description: "install the operating system of rhel-01", Stage: "machines", Impacts: []string{"install-operating-system rhel-01"}, State: "pending", After: []int{2}, Wave: 3},
+				},
+				Waves: 3, Widest: 1, Bound: 1, Continuation: true,
+				AnotherBuild: &lifecycle.AnotherBuild{RegisteredBy: "1.4.0 (9f2c1ab)", Steps: []int{2, 3}},
+				Receipt:      lifecycle.Receipt{Operation: operationID, Verb: "plan", State: "preview", Next: "continue-apply"},
+			}
+		}},
 		{golden: "cli-apply", args: "apply --yes", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("done") }},
 		{golden: "cli-destroy", args: "destroy --yes", record: func(r *dispatchRecord) {
 			r.result.lifecycleOperation = &lifecycle.OperationResult{
@@ -700,6 +723,8 @@ func cliGoldens() []cliGolden {
 		// sections are omitted from text and whose lifecycle is null.
 		{golden: "cli-status", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
 		{golden: "cli-status-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = status() }},
+		{golden: "cli-status-another-build", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = anotherBuild() }},
+		{golden: "cli-status-another-build-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = anotherBuild() }},
 		{golden: "cli-status-unresolved", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unresolved() }},
 		{golden: "cli-status-unresolved-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unresolved() }},
 		{golden: "cli-status-idle", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = idle() }},
@@ -803,7 +828,7 @@ func cliGoldens() []cliGolden {
 		}},
 		{
 			args: "cluster kubeconfig --name ceph", code: 1, record: func(r *dispatchRecord) { r.err = kubeconfigNotApplicable },
-			stderr: "[FAIL] cluster.not-applicable: bootwright cluster kubeconfig does not apply to ceph, a managed Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only; next: bootwright render effective --context lab lists the clusters this context selects and their kinds\n",
+			stderr: "[FAIL] cluster.not-applicable: bootwright cluster kubeconfig does not apply to ceph, a managed Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only; next: bootwright cluster info --context lab lists the clusters this context selects and their kinds\n",
 		},
 		{golden: "cli-secret-encryption-init", args: "secret encryption init", record: func(r *dispatchRecord) {
 			r.result.encryptionMutation = &encryption.MutationResult{Context: secretContext, Implementation: selection, ActiveKey: retiredKey, Changed: true}
@@ -885,7 +910,7 @@ func cliGoldens() []cliGolden {
 			stderr: "[FAIL] cli.not-implemented: bootwright status is not implemented\n",
 		},
 		{golden: "cli-not-implemented-json", args: "status --output json", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented }},
-	}
+	}, clusterGoldens()...)
 }
 
 // storedImage is the record a media confirmation shows before its prompt.
@@ -915,7 +940,7 @@ var unstoredSecret = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{
 
 var kubeconfigNotApplicable = diagnostics.NewFailureWithRemediation("cluster.not-applicable",
 	"bootwright cluster kubeconfig does not apply to ceph, a managed Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only", "",
-	"bootwright render effective --context lab lists the clusters this context selects and their kinds")
+	"bootwright cluster info --context lab lists the clusters this context selects and their kinds")
 
 // An explicit sensitive result is the custody's bytes exactly: nothing is
 // added, not even a final LF the material lacks, and standard error stays
@@ -1035,7 +1060,7 @@ func TestPausedFailedUnknownAndRunningResultsNameTheNextCommand(t *testing.T) {
 func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 	// A session's standard output is the remote process's own bytes
 	// (specs/cli/output.md, streams), so Bootwright writes nothing to pin.
-	sessions := []string{"machine rsh", "machine exec"}
+	sessions := []string{"machine rsh", "machine exec", "cluster rsh", "cluster exec"}
 	covered, coveredJSON, written := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, test := range cliGoldens() {
 		if test.golden == "" {

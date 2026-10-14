@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "cluster list",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "clusters": [
+      {
+        "name": "archive",
+        "kind": "StorageCluster"
+      },
+      {
+        "name": "edge",
+        "kind": "ContainerCluster"
+      },
+      {
+        "name": "okd-lab",
+        "kind": "ContainerCluster"
+      },
+      {
+        "name": "storage",
+        "kind": "StorageCluster"
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

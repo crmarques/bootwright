@@ -49,7 +49,11 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if err != nil {
 		return "", err
 	}
-	number, err := store.StartAttempt(ctx, operation.ID, block.ID)
+	applyProved, err := applyDependencies(ctx, store, owningApply(operation), block.ID)
+	if err != nil {
+		return "", err
+	}
+	number, err := store.StartAttempt(ctx, operation.ID, block.ID, s.ranUnder(block))
 	if err != nil {
 		return "", err
 	}
@@ -67,8 +71,9 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	}
 	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
-	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, proved, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, proved, applyProved, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
+			execution.RetiredWithHosts = s.onlineRemoval(plan).retired[block.ID]
 			if err := s.keepBeforeRemoval(inner, tx, boundary, log, capability, execution); err != nil {
 				return Result{Outcome: reconciliation.OutcomeFailed}, err
 			}
@@ -103,6 +108,16 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	return state, runErr
 }
 
+// ranUnder is the build this executable runs a block under, with the block's frozen content digest.
+func (s Service) ranUnder(block reconciliation.Block) operationstore.Build {
+	return operationstore.Build{
+		AutomationDigest: s.automation.CatalogDigest(),
+		ContentDigest:    block.ContentDigest,
+		Executable:       operationstore.Executable{Version: s.options.Executable.Version, Commit: s.options.Executable.Commit},
+		Modified:         s.options.Executable.Modified,
+	}
+}
+
 // resolveUnknown observes the exact frozen request read-only under a freshly
 // allocated resolution identity and log, before any observation begins. Until
 // both exist it has observed nothing, so it returns no state and the block
@@ -118,7 +133,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 // (D119), and the resolution is still recorded against the apply's block, as
 // removalEffect maps it. A block it leaves unknown names command, the exact
 // command that observes it again.
-func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int, removal bool, removalPlan reconciliation.Plan, command string) (reconciliation.BlockState, error) {
+func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int, removal bool, removalPlan reconciliation.Plan, command string, retry bool) (reconciliation.BlockState, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
@@ -129,11 +144,15 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	if err != nil {
 		return "", err
 	}
+	applyProved, err := applyDependencies(ctx, store, owningApply(operation), block.ID)
+	if err != nil {
+		return "", err
+	}
 	attemptNumber, err := store.LastAttempt(ctx, operation.ID, block.ID)
 	if err != nil {
 		return "", err
 	}
-	number, err := store.StartResolution(ctx, operation.ID, block.ID, attemptNumber)
+	number, err := store.StartResolution(ctx, operation.ID, block.ID, attemptNumber, s.ranUnder(block))
 	if err != nil {
 		return "", err
 	}
@@ -150,10 +169,11 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	read := func(target reconciliation.Block, as reconciliation.Verb) (Observation, error) {
 		var observation Observation
-		_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, target, material, nil, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
+		_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, target, material, nil, applyProved, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
 			observe := capability.Observe
 			if as == reconciliation.Destroy {
 				observe = capability.ObserveRemoval
+				execution.RetiredWithHosts = s.retiredIn(removal, plan, removalPlan)[target.ID]
 			}
 			value, err := observe(inner, execution)
 			observation = value
@@ -169,9 +189,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	}
 	// A log failure here still permits the transition positive evidence
 	// proves; the fault it latches is what blocks the work that would follow.
-	for _, reported := range diagnostics.Of(runErr) {
-		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
-	}
+	logObservationFailures(ctx, boundary, log, block, runErr)
 	recorded := observationFailure(runErr)
 	// A resolution that proves an apply's block done places what it produced
 	// in custody first; one that cannot leaves the block unknown. Its failure
@@ -185,7 +203,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	if err := store.CompleteResolution(recording, operation.ID, block.ID, attemptNumber, number, outcome, resolvedEffect, state, observation.Evidence, recorded); err != nil {
 		return reconciliation.BlockUnknown, err
 	}
-	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
+	s.report(ctx, resolvedProgress(block, state, retry, position, total))
 	switch {
 	case state == reconciliation.BlockDone:
 		return state, nil
@@ -215,6 +233,28 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	return state, unresolvedFailure(block.ID, explanation, command)
 }
 
+// resolvedProgress keeps the row of a block its resolution left failed running into the retry that follows.
+func resolvedProgress(block reconciliation.Block, state reconciliation.BlockState, retry bool, position, total int) ProgressEvent {
+	event := ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total}
+	if retry && state == reconciliation.BlockFailed {
+		event.Status, event.Detail = "running", "the effect is unfinished; retrying it"
+	}
+	return event
+}
+
+func logObservationFailures(ctx context.Context, boundary *logBoundary, log *operationstore.Log, block reconciliation.Block, err error) {
+	for _, reported := range diagnostics.Of(err) {
+		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
+	}
+}
+
+func (s Service) retiredIn(removal bool, plan, removalPlan reconciliation.Plan) map[string]bool {
+	if removal {
+		return s.onlineRemoval(removalPlan).retired
+	}
+	return s.onlineRemoval(plan).retired
+}
+
 // resolutionReading is the observation a resolution resolves block by, and
 // whether that is the removal's own check of observed, read for verb. A fresh
 // removal first reads the apply's block by the apply's own observation (D123):
@@ -232,9 +272,7 @@ func resolutionReading(ctx context.Context, boundary *logBoundary, log *operatio
 		return observation, false, nil
 	}
 	ClearProduced(observation.Produced)
-	for _, reported := range diagnostics.Of(err) {
-		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "observation-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
-	}
+	logObservationFailures(ctx, boundary, log, block, err)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "apply-observation", Block: block.ID, Detail: string(observedEffect(observation, err, false))})
 	if ctx.Err() != nil {
 		return Observation{}, true, err
@@ -294,7 +332,7 @@ func removalEffect(observed reconciliation.EffectState) reconciliation.EffectSta
 // invoke runs the capability inside the private Python execution boundary,
 // exactly as controller setup does. The approved bundle is the operation's
 // own, opened once before its first effect.
-func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, proved []BlockEvidence, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
+func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved bundle, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, proved, applyProved []BlockEvidence, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
 	result := Result{Outcome: reconciliation.OutcomeUnknown}
 	// Completion is counted in proved groups, not in elapsed time: the adapter
@@ -349,6 +387,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		}
 		execution := Execution{
 			Operation: operation.ID, Context: tx.Identity().Name, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
+			ApplyOperation: owningApply(operation), ApplyProved: applyProved,
 			Launch: launch, Bundle: approved.location, Area: approved.area, Material: material, Proved: proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)

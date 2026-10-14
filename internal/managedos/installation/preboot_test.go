@@ -49,6 +49,9 @@ func TestAnApplyRemediesItsTargetsPreBootRefusalsByName(t *testing.T) {
 					for reason, err := range mediaRefusals("lab-b", request) {
 						want[reason] = diagnostics.Of(err)
 					}
+					for reason, err := range keyPolicyRefusals(request, runner.requests[0].MaterialValues) {
+						want[reason] = diagnostics.Of(err)
+					}
 				}
 				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("the run names %#v, want %#v", got, want)

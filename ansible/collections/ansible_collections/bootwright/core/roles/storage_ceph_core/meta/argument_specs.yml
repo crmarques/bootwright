@@ -1,0 +1,103 @@
+argument_specs:
+  apply:
+    short_description: Realize a frozen Ceph core resource.
+    options: &request
+      bootwright_ceph_request:
+        type: dict
+        required: true
+        options:
+          action:
+            type: str
+            required: true
+          bootstrap:
+            type: str
+            required: true
+          callHome:
+            type: str
+            required: true
+          cephVersion:
+            type: str
+            required: true
+          cephadm:
+            type: dict
+            required: true
+          client:
+            type: dict
+          cluster:
+            type: str
+            required: true
+          clusterKeyRef:
+            type: str
+            required: true
+          clusterNetworks:
+            type: list
+            elements: str
+            required: true
+          clusterSSHTransport:
+            type: str
+            required: true
+          clusterSSHUser:
+            type: str
+            required: true
+          config:
+            type: dict
+          controller:
+            type: str
+            required: true
+          fsid:
+            type: str
+          hosts:
+            type: list
+            elements: dict
+            required: true
+          image:
+            type: str
+            required: true
+          monIP:
+            type: str
+            required: true
+          owner:
+            type: str
+          packages:
+            type: dict
+          pool:
+            type: dict
+          publicNetworks:
+            type: list
+            elements: str
+            required: true
+          registry:
+            type: str
+            required: true
+          registryRef:
+            type: str
+            required: true
+          services:
+            type: list
+            elements: dict
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [ceph-core-v4]
+      bootwright_ceph_digest:
+        type: str
+        required: true
+      bootwright_ceph_material:
+        type: dict
+        required: true
+      bootwright_ceph_output:
+        type: dict
+        required: false
+        description:
+          - Runner-owned private produced-material output paths.
+          - C(client) receives a client action's generated CephX identity.
+          - C(dashboard) receives a cluster action's dashboard administrator password.
+
+  observe:
+    short_description: Observe a frozen Ceph resource without mutation.
+    options: *request
+
+  destroy:
+    short_description: Remove a frozen Ceph resource only with proved quiescence.
+    options: *request

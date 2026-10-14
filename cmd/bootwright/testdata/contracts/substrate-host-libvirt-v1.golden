@@ -1,0 +1,53 @@
+implementation: substrate-host-libvirt-v1
+content-digest: 56309b3fbe61fb504db90c7fb3e3cf43729ec39f66eb35da19aed93c3915140b
+automation-formats: https://bootwright.io/substrate/v1
+request-schema:
+  identity struct libvirt.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  networks []struct libvirt.Network
+  networks[].address string omitempty
+  networks[].bridge string
+  networks[].forward string omitempty
+  networks[].managed bool
+  networks[].name string
+  packages []string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  poolName string
+  poolPath string
+  provisioned bool
+  services []string
+  uri string
+  version string
+evidence-schema:
+  absent bool
+  directory *bool
+  hypervisor bool
+  networks []struct libvirt.NetworkEvidence
+  networks[].answered bool
+  networks[].autostart bool
+  networks[].bridge bool
+  networks[].definition bool
+  networks[].managed bool
+  networks[].name string
+  networks[].owned bool
+  networks[].state string
+  pool string
+  poolAnswered bool
+  poolAutostart bool
+  poolOwned bool
+  postcondition bool
+  request string
+  services []struct libvirt.ServiceEvidence
+  services[].enabled bool
+  services[].name string
+  services[].state string
+  uri bool

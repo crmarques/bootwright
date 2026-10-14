@@ -4,13 +4,13 @@ Usage:
   bootwright cluster [command]
 
 Available Commands:
-  exec        Print a command access descriptor for independent operator execution; do not launch a client or connect (unavailable)
-  info        Show cluster details and static access applicability (unavailable)
+  exec        Run a command over SSH on a cluster node's Machine as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status
+  info        Show cluster details and static access applicability
   kubeconfig  Export raw sensitive kubeconfig bytes to standard output
   kubectl     Print a kubectl access descriptor for independent operator execution; do not launch a client or connect (unavailable)
-  list        List container and storage clusters (unavailable)
+  list        List container and storage clusters
   oc          Print an oc access descriptor for independent operator execution; do not launch a client or connect (unavailable)
-  rsh         Print an SSH access descriptor for independent operator execution; do not launch a client or connect (unavailable)
+  rsh         Open an SSH session on a cluster node's Machine as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status
 
 Global Flags:
       --context string             Select a context (default: current context)

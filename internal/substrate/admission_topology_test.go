@@ -60,7 +60,7 @@ func TestLibvirtDataDisksAreAtMostSevenAndNeverRoot(t *testing.T) {
 	}
 	issues := validate(topologyProfile(disks(MaxDataDisks + 1)...))
 	bound := issuesAt(issues, "$.spec.libvirt.machineProfiles[0].dataDisks")
-	if len(issues) != 1 || len(bound) != 1 || bound[0].Code != "api.invariant" || !strings.Contains(bound[0].Message, "at most 7 data disks, vdb through vdh") ||
+	if len(issues) != 1 || len(bound) != 1 || bound[0].Code != "api.invariant" || !strings.Contains(bound[0].Message, "at most 7 data disks beside its root disk") ||
 		bound[0].Remediation != "declare at most 7 dataDisks on spec.libvirt.machineProfiles[0] of InfraProvider/lab" {
 		t.Fatalf("eight data disks: %v", issues)
 	}

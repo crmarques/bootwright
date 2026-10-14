@@ -7,6 +7,9 @@ from pathlib import Path
 import stat
 import tempfile
 
+IBM_CEPH_SIGNER = "005f07b2f3838aedc2c0a4d91e1850467eaa5b6e"
+RHEL_SIGNER = "567e347ad0044ade55ba8a5f199e2f91fd431d51"
+
 
 def file_identity(info):
     return (
@@ -67,17 +70,64 @@ def select_key(keys, fingerprint, five):
     return selected[0]
 
 
+def key_for(request, signer):
+    if request.get("policy") != "ceph-packages-v1":
+        return read_key(publisher_key(request["platform"]))
+    if request["platform"] != {"os": "rhel", "release": "9.8", "architecture": "amd64"}:
+        raise ValueError("Ceph publisher platform")
+    if signer == RHEL_SIGNER:
+        return read_key(publisher_key(request["platform"]))
+    if signer == IBM_CEPH_SIGNER and set(request.get("publisherKeys", {})) == {IBM_CEPH_SIGNER}:
+        return read_key(request["publisherKeys"][signer])
+    raise ValueError("Ceph publisher authority")
+
+
+def import_ceph_keys(request):
+    """The frozen Ceph prerequisite grant retains each plan signer's exact key.
+
+    Isolated verification of the entire downloaded closure must precede this
+    call. Generic controller transactions never acquire this additional trust.
+    An already present key is kept: RPM reports its import as success.
+    """
+    import dnf.crypto
+    import dnf.yum.misc
+    import rpm
+
+    from ansible_collections.bootwright.core.plugins.module_utils import native_resolution
+
+    native_resolution.selected_roots(request)
+    if request.get("policy") != "ceph-packages-v1" or os.geteuid() != 0:
+        raise ValueError("Ceph publisher import authority")
+    signers = sorted({package["signer"] for package in request["plan"]["packages"]})
+    if not 0 < len(signers) <= 8:
+        raise ValueError("native publisher closure")
+    keys = []
+    for signer in signers:
+        # DNF 4.19+ reads a key through its descriptor, so the validated bytes get a real one.
+        with tempfile.TemporaryFile() as stream:
+            stream.write(key_for(request, signer))
+            stream.seek(0)
+            keys.append(select_key(dnf.crypto.rawkey2infos(stream), signer, False))
+    for key in keys:
+        transaction = rpm.TransactionSet("/")
+        try:
+            if transaction.pgpImportPubkey(dnf.yum.misc.procgpgkey(key.raw_key)) != 0:
+                raise ValueError("Ceph publisher key import")
+        finally:
+            transaction.closeDB()
+
+
 def verify(request, scratch, payloads):
     from ansible_collections.bootwright.core.plugins.module_utils import (
         native_resolution,
     )
 
     plan = request["plan"]
-    keys = read_key(publisher_key(request["platform"]))
     signers = sorted({package["signer"] for package in plan["packages"]})
     if not 0 < len(signers) <= 8:
         raise ValueError("native publisher closure")
     for signer in signers:
+        keys = key_for(request, signer)
         with tempfile.TemporaryDirectory(prefix="publisher-", dir=scratch) as directory:
             root = Path(directory, "root")
             root.mkdir(mode=0o700)

@@ -106,7 +106,7 @@ func refuseAtBoundary(classification cli.InvocationClass, stdout, stderr io.Writ
 
 // sessionCommand reports an invocation whose exit status is an SSH session's.
 func sessionCommand(classification cli.InvocationClass) bool {
-	return classification.Command == "machine exec" || classification.Command == "machine rsh"
+	return cli.SessionCommand(classification.Command)
 }
 
 // refusedStatus is the status of a refusal at the privilege boundary. A
@@ -147,7 +147,7 @@ func interactiveProcess(classification cli.InvocationClass, args []string, stdou
 		LifecycleProgress:  lifecycleProgress,
 		LifecyclePresenter: cli.NewLifecyclePlanPresenter(stdout),
 		MediaPresenter:     cli.NewMediaChangePresenter(stdout),
-		Executable:         lifecycle.Executable{Version: build.Version, Commit: build.Commit},
+		Executable:         lifecycle.Executable{Version: build.Version, Commit: build.Commit, Modified: strings.EqualFold(strings.TrimSpace(build.Source), "modified")},
 		AmbientRoute:       route,
 	}
 	hooks := invocationHooks{begin: beginSignalOperation, finish: func() {

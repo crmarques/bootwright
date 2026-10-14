@@ -201,7 +201,7 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 	if err != nil {
 		return safeError(err)
 	}
-	evidence, err := readReadyMutation(ctx, dir)
+	evidence, err := s.readyEvidence(ctx, dir, record.Name)
 	if err != nil {
 		return safeError(err)
 	}
@@ -247,6 +247,34 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 	}
 	runs := &operationArea{store: s, subtree: runsSubtree, context: dir, name: record.Name, active: live, readOnly: !bounded}
 	return safeError(callback(view, runs))
+}
+
+func (s *Store) readyEvidence(ctx context.Context, dir *directory, name string) ([]byte, error) {
+	evidence, err := readReadyMutation(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	return evidence, s.retiredOperations(ctx, dir, name)
+}
+
+func (s *Store) retiredOperations(ctx context.Context, dir *directory, name string) error {
+	active := true
+	defer func() { active = false }()
+	area := &operationArea{store: s, subtree: "operations", context: dir, name: name, active: func() bool { return active }, readOnly: true}
+	data, found, err := area.Read(ctx, "index.json", operationstore.MaxIndexBytes)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if err != nil {
+		return errors.Join(contexts.ErrUnreadableEvidence, err)
+	}
+	if !found {
+		return nil
+	}
+	if err := operationstore.CheckIndex(data, name); err != nil {
+		return errors.Join(contexts.ErrUnreadableEvidence, err)
+	}
+	return nil
 }
 
 // MutateLifecycle holds the exclusive root lock and the context lease for the

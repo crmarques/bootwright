@@ -1,0 +1,68 @@
+{
+  "action": "cluster",
+  "client": "",
+  "dashboard": {
+    "certificateSHA256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "reachable": true,
+    "url": "https://node-1:8443/"
+  },
+  "exists": true,
+  "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
+  "health": "HEALTH_OK",
+  "hosts": [
+    "node-1",
+    "node-2",
+    "node-3"
+  ],
+  "mgrActive": "node-1",
+  "mgrStandbys": [
+    "node-2"
+  ],
+  "monAddrs": [
+    {
+      "address": "192.0.2.1",
+      "host": "node-1"
+    },
+    {
+      "address": "192.0.2.2",
+      "host": "node-2"
+    },
+    {
+      "address": "192.0.2.3",
+      "host": "node-3"
+    }
+  ],
+  "monitors": [
+    "node-1",
+    "node-2",
+    "node-3"
+  ],
+  "osds": [
+    {
+      "host": "node-1",
+      "id": 0,
+      "path": "/dev/vdb",
+      "uuid": "osd-node-1"
+    },
+    {
+      "host": "node-2",
+      "id": 1,
+      "path": "/dev/vdb",
+      "uuid": "osd-node-2"
+    },
+    {
+      "host": "node-3",
+      "id": 2,
+      "path": "/dev/vdb",
+      "uuid": "osd-node-3"
+    }
+  ],
+  "owned": true,
+  "owner": "apply-original",
+  "partial": false,
+  "poolID": -1,
+  "ready": true,
+  "removed": false,
+  "request": "digest",
+  "version": "ceph-core-evidence-v2"
+}

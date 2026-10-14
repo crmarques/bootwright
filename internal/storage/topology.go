@@ -11,7 +11,6 @@ func (a *admission) cluster() {
 	spec := a.object.Spec()
 	management := fallback(spec.Get("management"), "managed")
 	if management == "external" {
-		a.forbid(spec, "$.spec", "ceph")
 		return
 	}
 	if management != "managed" {
@@ -33,8 +32,6 @@ func (a *admission) distribution(ceph api.Value) {
 	distribution := fallback(ceph.Get("distribution"), "oss")
 	switch distribution {
 	case "oss":
-		a.forbid(ceph, "$.spec.ceph", "entitlementRef", "ibm", "packageVersion")
-		a.forbid(ceph.Get("cephadm", "ansible"), "$.spec.ceph.cephadm.ansible", "packageVersion")
 		if ceph.Get("security", "fips", "enabled").Bool() {
 			a.invalid("$.spec.ceph.security.fips.enabled", "FIPS storage requires a vendor distribution")
 		}
@@ -114,8 +111,8 @@ func (a *admission) clusterAccess(ceph api.Value) {
 		if node, ok := lookupNode(a.object, name); !ok {
 			a.invalid("$.spec.ceph.cephadm.bootstrap.node", "bootstrap node must resolve to one storage topology node")
 		} else {
-			if !hasRole(node, "mon") {
-				a.invalid("$.spec.ceph.cephadm.bootstrap.node", "bootstrap node requires the monitor role")
+			if !nativeMember(a.object, "mon", textOf(node, "name")) {
+				a.invalid("$.spec.ceph.cephadm.bootstrap.node", "bootstrap node must be eligible for the declared MON service")
 			}
 			if machine, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef")); ok {
 				a.machineAddress(machine, textOf(bootstrap, "addressRef"), "$.spec.ceph.cephadm.bootstrap.addressRef")
@@ -145,14 +142,12 @@ func (a *admission) machineAddress(machine api.Object, name, field string) {
 
 func (a *admission) topology(ceph api.Value) {
 	nodes := ceph.Get("topology", "nodes").Items()
-	if len(nodes) == 0 {
-		return
-	}
-	owners := map[string]int{}
-	fqdns := []string{}
+	fqdns, names, machines := []string{}, []string{}, []string{}
 	for i, node := range nodes {
 		field := indexed("$.spec.ceph.topology.nodes", i)
-		fqdns = append(fqdns, textOf(node, "fqdn"))
+		fqdns = append(fqdns, NativeHostname(node))
+		names = append(names, textOf(node, "name"))
+		machines = append(machines, textOf(node, "machineRef"))
 		if machine, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef")); ok {
 			if !contains(machine.Spec().Get("capabilities"), "ceph-node") {
 				a.invalid(field+".machineRef", "storage nodes require a Machine with the ceph-node capability")
@@ -166,60 +161,49 @@ func (a *admission) topology(ceph api.Value) {
 				}
 			}
 		}
-		for _, label := range node.Get("labels").Strings() {
-			if hasRole(node, label) {
-				a.invalid(field+".labels", "additional labels must be disjoint from topology roles")
+		a.storageSite(textOf(node, "site"), field+".site")
+		for _, location := range node.Get("location").Fields() {
+			if location.Name == "host" || location.Value.Type() != api.String || !nativeID.MatchString(location.Name) || !nativeID.MatchString(location.Value.Text()) {
+				a.invalid(field+".location", "CRUSH location uses nonempty qualified bucket names; host identity is generated")
+			}
+			if domain := textOf(ceph, "topology", "stretch", "failureDomain"); domain != "" && location.Name == domain && location.Value.Text() != textOf(node, "site") {
+				a.invalid(field+".location", "CRUSH site location must agree with the proved site")
 			}
 		}
-		if node.Has("devices") && node.Has("osd") {
-			a.invalid(field+".osd", "device shorthand and per-node OSD configuration are mutually exclusive")
-		}
-		if node.Get("devices").Len() > 0 || node.Has("osd") {
-			owners[textOf(node, "name")]++
-			if !hasRole(node, "osd") {
-				a.invalid(field, "an OSD declaration requires the node's OSD role")
-			}
-			osd := node.Get("osd")
-			if node.Get("devices").Len() > 0 {
-				osd = api.MapValue(api.FieldValue{Name: "dataDevices", Value: api.MapValue(api.FieldValue{Name: "paths", Value: node.Get("devices")})})
-			}
-			a.osd(osd, field+".osd", []api.Value{node})
-		}
 	}
-	a.uniqueValues(fqdns, "$.spec.ceph.topology.nodes", "storage-node FQDNs must be unique")
-	groups := ceph.Get("topology", "osdDrivegroups").Items()
-	ids := []string{}
-	for i, group := range groups {
-		field := indexed("$.spec.ceph.topology.osdDrivegroups", i)
-		ids = append(ids, textOf(group, "serviceID"))
-		placed := a.placement(a.object, group.Get("placement"), field+".placement", "osd", false)
-		for _, node := range placed {
-			owners[textOf(node, "name")]++
-		}
-		a.osd(group.Get("osd"), field+".osd", placed)
-	}
-	a.uniqueValues(ids, "$.spec.ceph.topology.osdDrivegroups", "OSD drivegroup service IDs must be unique")
-	for i, node := range nodes {
-		if hasRole(node, "osd") && owners[textOf(node, "name")] != 1 {
-			a.invalid(indexed("$.spec.ceph.topology.nodes", i), "each OSD host must have exactly one OSD declaration")
-		}
-	}
+	a.uniqueValues(fqdns, "$.spec.ceph.topology.nodes", "registered storage hostnames must be unique")
+	a.uniqueValues(names, "$.spec.ceph.topology.nodes", "storage node names must be unique")
+	a.uniqueValues(machines, "$.spec.ceph.topology.nodes", "one Machine cannot register as multiple storage nodes")
 	if ceph.Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
 		if len(nodes) != 1 || ceph.Has("topology", "stretch") {
 			a.invalid("$.spec.ceph.cephadm.bootstrap.singleHostDefaults", "single-host defaults require exactly one non-stretch node")
-		} else {
-			count := nodes[0].Get("devices").Len()
-			count += declaredDataDevices(nodes[0].Get("osd"))
-			for _, group := range groups {
-				count += declaredDataDevices(group.Get("osd"))
-			}
-			if count < 2 {
-				a.invalid("$.spec.ceph.cephadm.bootstrap.singleHostDefaults", "single-host defaults require at least two declared OSDs")
-			}
 		}
 	}
-	a.stretch(ceph)
+	if ceph.Has("topology", "stretch") {
+		for i, site := range ceph.Get("topology", "stretch", "dataSites").Strings() {
+			a.storageSite(site, indexed("$.spec.ceph.topology.stretch.dataSites", i))
+		}
+		a.storageSite(textOf(ceph, "topology", "stretch", "tiebreaker", "site"), "$.spec.ceph.topology.stretch.tiebreaker.site")
+		a.deferred("$.spec.ceph.topology.stretch", "native stretch lifecycle requires the later qualified stretch slice", "stretch from $.spec.ceph.topology", "B486")
+	}
 }
+
+func (a *admission) storageSite(site, field string) {
+	if site == "" {
+		return
+	}
+	environments := a.catalog.OfKind(api.Environment)
+	if len(environments) != 1 {
+		return
+	}
+	for _, declared := range environments[0].Spec().Get("sites").Items() {
+		if textOf(declared, "name") == site {
+			return
+		}
+	}
+	a.invalid(field, "storage site must resolve to a declared Environment site")
+}
+
 func declaredDataDevices(osd api.Value) int {
 	return osd.Get("dataDevices", "paths").Len() + osd.Get("dataDevices", "pathSpecs").Len()
 }

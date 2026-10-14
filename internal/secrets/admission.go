@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"errors"
+	"net/netip"
 	"slices"
 	"strings"
 	"unicode"
@@ -116,6 +117,23 @@ func generableCommonName(value string) bool {
 
 func generableComment(value string) bool {
 	return len(value) <= MaxPartBytes && strings.TrimSpace(value) == value && SSHComment(value)
+}
+
+func GeneratedCertificateNames(generated api.Value, address string) bool {
+	if ip, err := netip.ParseAddr(address); err == nil {
+		for _, listed := range generated.Get("ipAddresses").Strings() {
+			if san, err := netip.ParseAddr(listed); err == nil && san.Unmap() == ip.Unmap() {
+				return true
+			}
+		}
+		return false
+	}
+	for _, listed := range generated.Get("dnsNames").Strings() {
+		if strings.EqualFold(listed, address) {
+			return true
+		}
+	}
+	return false
 }
 
 // SSHComment reports whether value can be an SSH public key's comment. The

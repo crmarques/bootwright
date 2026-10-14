@@ -28,6 +28,12 @@ const (
 // is read first, requests more.
 const controllerMediaReads = 4
 
+// Certificate import inspects at most eight members and makes five setup
+// requests, plus the one conditional PATCH retry the client allows.
+const controllerCertificateMembers = 8
+const controllerCertificateRequests = controllerCertificateMembers + 5 + 1
+const controllerCertificateBound = controllerCertificateRequests * controllerRequestTimeout
+
 // The pauses each call's documentation states (plugins/modules/redfish_boot.py):
 // every pause its polls may take and, for an insert, each attach's own timeout.
 const (
@@ -55,7 +61,7 @@ const (
 const (
 	ControllerPowerReadBound     = controllerRequestTimeout
 	ControllerMediaReadBound     = controllerMediaReads * controllerRequestTimeout
-	ControllerInsertBound        = controllerInsertPauses + ControllerMediaReadBound + 3*(controllerInsertAttempts-1)*controllerRequestTimeout + 2*controllerRequestTimeout
+	ControllerInsertBound        = controllerCertificateBound + controllerInsertPauses + ControllerMediaReadBound + 3*(controllerInsertAttempts-1)*controllerRequestTimeout + 2*controllerRequestTimeout
 	ControllerEjectBound         = controllerEjectPauses + ControllerMediaReadBound + controllerRequestTimeout
 	ControllerBootSelectionBound = controllerBootPauses + 3*controllerRequestTimeout
 	ControllerPowerBound         = controllerPowerPauses + 3*controllerRequestTimeout

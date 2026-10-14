@@ -14,8 +14,10 @@ import (
 // handedProof is what one attempt or observation was handed as its
 // dependencies' evidence.
 type handedProof struct {
-	call   string
-	proved []BlockEvidence
+	call           string
+	proved         []BlockEvidence
+	applyOperation string
+	applied        []BlockEvidence
 }
 
 // provedRecorder notes what every call the engine makes was handed, destroys
@@ -29,7 +31,8 @@ type provedRecorder struct {
 func (r *provedRecorder) note(call string, execution Execution) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	r.handed = append(r.handed, handedProof{call: call + execution.Block.ID, proved: execution.Proved})
+	r.handed = append(r.handed, handedProof{call: call + execution.Block.ID, proved: execution.Proved,
+		applyOperation: execution.ApplyOperation, applied: execution.ApplyProved})
 }
 
 func (r *provedRecorder) Apply(ctx context.Context, execution Execution) (Result, error) {

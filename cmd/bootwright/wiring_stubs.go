@@ -6,8 +6,6 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/containercluster/installation"
 	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
-	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
-	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
@@ -19,15 +17,13 @@ import (
 // unavailable result instead of a placeholder.
 func wireStubs() cli.Services {
 	return cli.Services{
-		AddOnCatalog:          addoncatalog.Service{},
-		AddOnPreflight:        addonpreflight.Service{},
-		EnvironmentPreflight:  environmentpreflight.Service{},
-		EnvironmentInspection: inspection.Service{},
-		EnvironmentAccess:     environmentaccess.Service{},
-		ContainerPreflight:    containerpreflight.Service{},
-		Installer:             installation.Service{},
-		StoragePreflight:      storagepreflight.Service{},
-		StorageArtifacts:      storagerendering.Service{},
-		Artifacts:             artifactrendering.Service{},
+		AddOnCatalog:         addoncatalog.Service{},
+		AddOnPreflight:       addonpreflight.Service{},
+		EnvironmentPreflight: environmentpreflight.Service{},
+		ContainerPreflight:   containerpreflight.Service{},
+		Installer:            installation.Service{},
+		StoragePreflight:     storagepreflight.Service{},
+		StorageArtifacts:     storagerendering.Service{},
+		Artifacts:            artifactrendering.Service{},
 	}
 }

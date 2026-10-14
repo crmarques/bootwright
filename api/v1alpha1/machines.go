@@ -60,7 +60,11 @@ func machineProfileSchema(variant string) *Shape {
 		fields = append(fields, field("template", nonempty()), field("failureDomainRef", nonempty()))
 	}
 	if variant != "kubevirt" {
-		fields = append(fields, field("dataDisks", named(record(required("name", name()), required("sizeGiB", integer("1", "65536"))))))
+		disk := record(required("name", name()), required("sizeGiB", integer("1", "65536")))
+		if variant == "libvirt" {
+			disk.Fields = append(disk.Fields, field("media", enumeration("ssd")))
+		}
+		fields = append(fields, field("dataDisks", named(disk)))
 	}
 	if variant == "libvirt" {
 		fields = append(fields, field("tpm", record()))
@@ -72,7 +76,7 @@ func machineProfileSchema(variant string) *Shape {
 
 func machineProviderSchema() *Shape {
 	baremetal := record(field("boot", record(defaulted("method", enumeration("redfishVirtualMedia"), StringValue("redfishVirtualMedia")))), field("defaults", record(field("bmc", record(field("credentialsRef", secret("usernamePassword")), field("tls", machineBMCTLSSchema()), field("virtualMedia", machineVirtualMediaSchema()))))))
-	libvirt := record(required("machineRef", ref(Machine)), required("uri", enumeration("qemu:///system")), required("bmcEmulationDefaults", record(defaulted("enabled", boolean(), BoolValue(true)), defaulted("protocol", enumeration("redfish"), StringValue("redfish")), defaulted("emulator", enumeration("sushy-tools"), StringValue("sushy-tools")), required("bindAddress", ip()), defaulted("port", port(), IntegerValue("8000")), required("auth", record(required("credentialsRef", secret("usernamePassword")))))), defaulted("machineProfiles", machineProfileSchema("libvirt"), ListValue()))
+	libvirt := record(required("machineRef", ref(Machine)), required("uri", enumeration("qemu:///system")), required("bmcEmulationDefaults", record(defaulted("enabled", boolean(), BoolValue(true)), defaulted("protocol", enumeration("redfish"), StringValue("redfish")), defaulted("emulator", enumeration("sushy-tools"), StringValue("sushy-tools")), required("bindAddress", ip()), required("certificateRef", secret("tlsCertificate")), defaulted("port", port(), IntegerValue("8000")), required("auth", record(required("credentialsRef", secret("usernamePassword")))))), defaulted("machineProfiles", machineProfileSchema("libvirt"), ListValue()))
 	vcenters := nonemptyArray(&Shape{Type: Sequence, Atomic: true, NameKey: "server", Element: record(required("server", lexical("host")), field("port", integer("0", "65535")), required("datacenters", nonemptyArray(set(nonempty()))), required("credentialsRef", secret("usernamePassword")), defaulted("disableCertificateVerification", boolean(), BoolValue(false)))})
 	topology := record(required("datacenter", nonempty()), required("computeCluster", nonempty()), required("datastore", nonempty()), required("networks", nonemptyArray(set(nonempty()))), field("folder", nonempty()), field("resourcePool", nonempty()))
 	networking := record(field("external", record(field("networkSubnetCidr", set(cidr())))), field("internal", record(field("networkSubnetCidr", set(cidr())))))

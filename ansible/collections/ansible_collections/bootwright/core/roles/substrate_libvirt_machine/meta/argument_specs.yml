@@ -56,7 +56,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-libvirt-v4]
+            choices: [machine-libvirt-v6]
       bootwright_substrate_machine_material:
         type: dict
         required: true
@@ -81,6 +81,9 @@ argument_specs:
       substrate_libvirt_machine_target_endpoint:
         type: str
         required: true
+      substrate_libvirt_machine_target_ca:
+        type: str
+        required: true
       substrate_libvirt_machine_target_verify:
         type: bool
         required: true
@@ -95,6 +98,9 @@ argument_specs:
     short_description: Boot a machine this substrate created from the media inserted in its controller.
     options:
       substrate_libvirt_machine_boot_endpoint:
+        type: str
+        required: true
+      substrate_libvirt_machine_boot_ca:
         type: str
         required: true
       substrate_libvirt_machine_boot_verify:
@@ -116,6 +122,9 @@ argument_specs:
     short_description: Point a machine this substrate created at its installed disk.
     options:
       substrate_libvirt_machine_disk_endpoint:
+        type: str
+        required: true
+      substrate_libvirt_machine_disk_ca:
         type: str
         required: true
       substrate_libvirt_machine_disk_verify:

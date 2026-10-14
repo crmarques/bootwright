@@ -28,6 +28,10 @@ options:
         no container of it exists, since otherwise the socket may be its own.
     type: bool
     default: false
+  bind_address:
+    description: Whether to prove an explicit bind address is usable on this host; wildcards need no assigned address.
+    type: bool
+    default: false
   attempts:
     description: Bounded readiness retries before the listener is unproved.
     type: int
@@ -59,6 +63,10 @@ foreign:
   returned: when foreign is requested
   type: list
   elements: dict
+bindAddressAssigned:
+  description: Whether the explicit bind address is usable on this host, or the address is a wildcard.
+  returned: when bind_address is requested
+  type: bool
 unproved:
   description: Listener sockets that did not answer within the bounded window.
   returned: always
@@ -69,6 +77,7 @@ unproved:
 import time
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.bootwright.core.plugins.module_utils.host_addresses import bind_address_assigned
 from ansible_collections.bootwright.core.plugins.module_utils.artifact_server import (
     foreign,
     observe,
@@ -87,6 +96,7 @@ def main():
             "request": {"type": "dict", "required": True},
             "readiness": {"type": "bool", "default": False},
             "foreign": {"type": "bool", "default": False},
+            "bind_address": {"type": "bool", "default": False},
             "attempts": {"type": "int", "default": 30},
         },
         supports_check_mode=True,
@@ -99,6 +109,12 @@ def main():
         module.fail_json(msg="the artifact server could not be observed: %s" % type(failure).__name__)
         return
     result = {"changed": False, "observation": observation, "unproved": []}
+    if module.params["bind_address"]:
+        try:
+            result["bindAddressAssigned"] = bind_address_assigned(request["bindAddress"])
+        except (OSError, ValueError) as failure:
+            module.fail_json(msg="the host's assigned addresses could not be proved: %s" % type(failure).__name__)
+            return
     if module.params["foreign"]:
         try:
             result["foreign"] = foreign(request, observation)

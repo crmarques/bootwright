@@ -256,6 +256,7 @@ spec:
       protocol: redfish
       emulator: sushy-tools
       bindAddress: 127.0.0.1
+      certificateRef: lab-bmc-tls
       port: 8000
       auth:
         credentialsRef: lab-bmc-credentials
@@ -381,3 +382,18 @@ spec:
   source:
     generated:
       username: admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: localhost
+      dnsNames:
+        - localhost
+      ipAddresses:
+        - 127.0.0.1
+      validityDays: 3650

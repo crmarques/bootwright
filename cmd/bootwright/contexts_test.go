@@ -515,7 +515,7 @@ func TestCompleteExampleContextRoundTrip(t *testing.T) {
 	if err := os.RemoveAll(input); err != nil {
 		t.Fatal(err)
 	}
-	sources := exampleSources(t)
+	sources := exampleDirectory(t, "lab-rhel")
 	for _, collection := range [][]desiredstate.SourceFile{sources.Files, sources.Markers} {
 		for _, file := range collection {
 			relative, err := filepath.Rel(sources.Roots[0], file.Path())
@@ -544,7 +544,7 @@ func TestCompleteExampleContextRoundTrip(t *testing.T) {
 	var result struct {
 		Result struct{ EffectiveState []json.RawMessage }
 	}
-	if err := json.Unmarshal([]byte(rendered), &result); err != nil || len(result.Result.EffectiveState) != 106 || stderr != "" {
+	if err := json.Unmarshal([]byte(rendered), &result); err != nil || len(result.Result.EffectiveState) != len(sources.Files) || stderr != "" {
 		t.Fatalf("complete effective state: count=%d stderr=%s err=%v", len(result.Result.EffectiveState), stderr, err)
 	}
 }

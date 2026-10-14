@@ -1,0 +1,126 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-multidc-01
+
+spec:
+  type: ceph
+  management: managed
+
+  ceph:
+    distribution: ibm
+    release: 9.9.1.2
+    packageVersion: 20.2.1-405.el9cp
+
+    image:
+      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
+      version: sha256:1111111111111111111111111111111111111111111111111111111111111111
+
+    ibm:
+      callHome: disabled
+      packages:
+        source: subscription
+        subscriptionRepos:
+          - example-ceph-9-for-rhel-9-x86_64-rpms
+
+    entitlementRef: ceph-entitlement
+
+    cephadm:
+      ansible:
+        packageVersion: 5.0.3-1
+      addressRef: ssh
+      clusterSSH:
+        user: cephadm
+        keyRef: ceph-multidc-01-cephadm-ssh-key
+      bootstrap:
+        node: node-01
+        addressRef: ssh
+        singleHostDefaults: false
+
+    networks:
+      publicCIDRs:
+        - 198.51.100.0/25
+      clusterCIDRs:
+        - 203.0.113.0/24
+
+    security:
+      fips:
+        enabled: true
+      cephx:
+        keyType: aes
+
+    config:
+      global:
+        osd_pool_default_size: '2'
+        osd_pool_default_min_size: '2'
+
+    topology:
+      nodes:
+        - name: node-01
+          fqdn: node-01.ceph-multidc-01.clusters.example.com
+          machineRef: storage-a-01
+          site: site-a
+          labels:
+            - ceph-core
+
+        - name: node-02
+          fqdn: node-02.ceph-multidc-01.clusters.example.com
+          machineRef: storage-a-02
+          site: site-a
+          labels:
+            - ceph-core
+
+        - name: node-03
+          fqdn: node-03.ceph-multidc-01.clusters.example.com
+          machineRef: storage-a-03
+          site: site-a
+          labels:
+            - ceph-core
+
+    services:
+      - service_type: mon
+        placement:
+          count: 3
+          label: ceph-core
+
+      - service_type: mgr
+        placement:
+          count: 2
+          label: ceph-core
+
+      - service_type: osd
+        service_id: data
+        placement:
+          label: ceph-core
+        spec:
+          data_devices:
+            paths:
+              - /dev/sdb
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePlacementPolicy
+metadata:
+  name: host-spread
+
+spec:
+  clusterRef: ceph-multidc-01
+  failureDomain: host
+  ruleName: host-rule
+
+  replicated:
+    size: 2
+    minSize: 2
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-hub-multidc-01-rbd
+
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: host-spread
+  type: replicated
+  role: rbd
+  application: rbd

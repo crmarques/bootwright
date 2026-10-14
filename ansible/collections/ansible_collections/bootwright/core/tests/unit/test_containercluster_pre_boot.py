@@ -104,6 +104,7 @@ def material():
         "controllerPasswordNode0": "/run/bootwright/bmc-password-metal-01",
         "controllerUserNode1": "/run/bootwright/bmc-user-metal-02",
         "controllerPasswordNode1": "/run/bootwright/bmc-password-metal-02",
+        "controllerCANode1": "/run/bootwright/bmc-ca-metal-02",
         "pinnedUUIDBase64Node0": encoded("4c4c4544-0042-3510-8052-b4c04f4d4e31"),
         "pinnedSerialBase64Node0": encoded("CZJ2440ABC"),
         "pinnedUUIDBase64Node1": encoded("4c4c4544-0042-3510-8052-b4c04f4d4e32"),
@@ -143,10 +144,9 @@ def test_each_proof_reaches_the_nodes_own_controller_with_its_own_credential(tmp
         assert (rendered["endpoint"], rendered["verify"]) == (ENDPOINT, False), arm
         assert (rendered["user"], rendered["password"]) == (
             "/run/bootwright/bmc-user-metal-02", "/run/bootwright/bmc-password-metal-02"), arm
-        assert set(rendered) == ({"endpoint", "verify", "user", "password"} if arm == "libvirt" else {
+        assert set(rendered) == ({"endpoint", "verify", "user", "password", "ca"} if arm == "libvirt" else {
             "endpoint", "verify", "user", "password", "ca", "expected", "pinned_uuid_base64", "pinned_serial_base64"}), arm
-        if arm == "baremetal":
-            assert rendered["ca"] == "", "a cluster node's controller is reached through no bundle until B67"
+        assert rendered["ca"] == ("/run/bootwright/bmc-ca-metal-02" if arm == "libvirt" else "")
 
 
 # Each node reads only the pin under its own position in the frozen order, and

@@ -427,11 +427,11 @@ func sameConfiguration(ctx context.Context, tx Transaction, name string, config 
 }
 
 // decideUpdate runs every safeguard of an input update under the root lock and
-// the context lease, in order: the controller binding, then the mutation
-// guard, so every protected state refuses even an identical input, and only
-// then whether the input changes the selected revision at all. Changed input
-// returns its warnings: admission's, and over a completed apply the warning
-// that apply refuses it until a destroy.
+// the context lease, in order: the controller binding, then the mutation guard,
+// so every protected state refuses even an identical
+// input, and only then whether the input changes the selected revision.
+// Changed input returns its warnings: admission's, and over a completed apply
+// the warning that apply refuses it until a destroy.
 func (s Service) decideUpdate(ctx context.Context, tx Transaction, reg Registry, record Record, admitted admittedUpdate) (bool, []diagnostics.Diagnostic, error) {
 	if reg.Controller != (ControllerDescriptor{}) {
 		if err := tx.CheckControllerInput(ctx, record.Name, admitted.controller); err != nil {
@@ -441,7 +441,7 @@ func (s Service) decideUpdate(ctx context.Context, tx Transaction, reg Registry,
 	disposition, err := s.disposition(ctx, tx, record.Name)
 	switch {
 	case errors.Is(err, ErrUnreadableEvidence):
-		return false, nil, unreadableEvidenceRefusal("context.state", record.Name)
+		return false, nil, unreadableEvidenceRefusal("context.state", record.Name, err)
 	case err != nil:
 		return false, nil, err
 	case !disposition.Update:
@@ -639,7 +639,7 @@ func (s Service) abandonment(ctx context.Context, tx Transaction, name string, a
 		return AbandonsUnlisted, "its directory is gone", true, nil
 	case errors.Is(err, ErrUnreadableEvidence):
 		if !allowOrphans {
-			return "", "", false, unreadableEvidenceRefusal("context.unsafe-delete", name)
+			return "", "", false, unreadableEvidenceRefusal("context.unsafe-delete", name, err)
 		}
 		return AbandonsUnlisted, "its mutation evidence cannot be read", false, nil
 	case err != nil:

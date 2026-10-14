@@ -126,6 +126,19 @@ func failedApply(t *testing.T, h *harness) {
 	}
 }
 
+// applyLeftUnknown leaves the harness's apply unknown on its one block, which a
+// continuation resolves before it does anything else.
+func applyLeftUnknown(t *testing.T, h *harness) {
+	t.Helper()
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := apply(h); err == nil {
+		t.Fatal("the apply a continuation starts from did not lose its outcome")
+	}
+	if operation, _ := durableOperation(t, h); operation.Verb != reconciliation.Apply || operation.State != reconciliation.OperationUnknown {
+		t.Fatalf("the apply is %s %s, not an unknown apply", operation.Verb, operation.State)
+	}
+}
+
 // unknownRemoval leaves the harness's removal of a completed apply unknown on
 // its one block, which only a continuation may settle.
 func unknownRemoval(t *testing.T, h *harness) {
@@ -341,7 +354,8 @@ func TestAnEarlierVersionRecordNamesNoEarlierBuildOnceSetupKeepsRuns(t *testing.
 	unknownRemoval(t, h)
 	h.workspace.controller.SetupRuns = true
 	h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
-	refusedUnchanged(t, h, reconciliation.Destroy, "this executable's automation differs from the one this operation froze",
+	h.capability.consumes = map[string][]string{"artifact-server-lab": {reconciliation.AuthorizationDataLoss}}
+	refusedUnchanged(t, h, reconciliation.Destroy, "this executable would freeze the block artifact-server-lab differently from the plan this operation froze",
 		"install bootwright devel (abcdef1), which registered this operation, and run bootwright setup")
 	h = newHarness(t, "artifact-server-lab")
 	failedApply(t, h)
@@ -396,33 +410,14 @@ func TestARecordWithOnlyACommitNamesDevelAndTheCommit(t *testing.T) {
 				t.Fatalf("status names the registering build %+v (%v), want %q", status.Lifecycle, err, test.named)
 			}
 			h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
-			refusedUnchanged(t, h, reconciliation.Apply, "this executable's automation differs from the one this operation froze",
+			h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
+			refusedUnchanged(t, h, reconciliation.Apply, "this executable would freeze the block artifact-server-lab differently from the plan this operation froze",
 				"take back what this operation owns under this executable with bootwright destroy --context lab, or install "+test.build+", which registered it")
 			h.capability.removalErr = failure("lifecycle.state", "the frozen request has an unsupported version", "")
 			_, err = h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Remediation != "remove it with "+test.build {
 				t.Fatalf("the removal of an unreadable block reported %+v, want it to name %q", reported, test.build)
 			}
-		})
-	}
-}
-
-// A changed automation digest is refused as before, and the refusal now names
-// the build a continuation needs.
-func TestAChangedAutomationRefusalNamesTheExecutable(t *testing.T) {
-	for _, test := range []struct {
-		verb        reconciliation.Verb
-		start       func(*testing.T, *harness)
-		remediation string
-	}{
-		{reconciliation.Apply, failedApply, "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"},
-		{reconciliation.Destroy, unknownRemoval, "install bootwright devel (abcdef1), which registered this operation, and run bootwright setup"},
-	} {
-		t.Run(string(test.verb), func(t *testing.T) {
-			h := newHarness(t, "artifact-server-lab")
-			test.start(t, h)
-			h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
-			refusedUnchanged(t, h, test.verb, "this executable's automation differs from the one this operation froze", test.remediation)
 		})
 	}
 }

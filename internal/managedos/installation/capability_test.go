@@ -172,7 +172,7 @@ func TestPlanFreezesEveryMediaEntryUnderOneClaim(t *testing.T) {
 	if !slices.Equal(media[0].Keys, want) {
 		t.Fatalf("media claims = %v", media[0].Keys)
 	}
-	if !slices.Equal(plan.Secrets, []string{"bootwright-machine-key", "lab-artifacts-tls", "lab-bmc-credentials"}) {
+	if !slices.Equal(plan.Secrets, []string{"bootwright-machine-key", "lab-artifacts-tls", "lab-bmc-credentials", "lab-bmc-tls"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}
 }
@@ -237,6 +237,9 @@ func TestOnlyThePublicHalfOfTheFleetKeyReachesTheAdapter(t *testing.T) {
 	values := runner.requests[0].MaterialValues
 	if values["authorizedKey"] != "ssh-ed25519 AAAAPUBLIC bootwright" {
 		t.Fatalf("authorized key = %q", values["authorizedKey"])
+	}
+	if values["fleetKeyType"] != "ssh-ed25519" {
+		t.Fatalf("bound fleet key type = %q", values["fleetKeyType"])
 	}
 	if values["marker"] != string(marker) {
 		t.Fatalf("marker = %q", values["marker"])

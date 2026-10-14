@@ -2,7 +2,7 @@
 
 The controller stores inserted media as a volume in the provider's pool
 through its libvirt connection, so its unit mounts its own configuration and
-password file read-only and the host's libvirt socket directory, and nothing
+password and TLS files read-only and the host's libvirt socket directory, and nothing
 else, as the substrates spec states.
 
 Rendering the role's templates over its defaults needs Ansible's controller
@@ -52,6 +52,8 @@ def test_the_unit_mounts_its_own_files_and_the_libvirt_socket_directory_alone():
     assert sorted(settings(unit, "Volume")) == sorted([
         state + "/conf.py:/etc/sushy/conf.py:ro",
         state + "/htpasswd:/etc/sushy/htpasswd:ro",
+        state + "/tls.crt:/etc/sushy/tls.crt:ro",
+        state + "/tls.key:/etc/sushy/tls.key:ro",
         "/run/libvirt:/run/libvirt:rw",
     ])
     assert settings(unit, "Mount") == []

@@ -304,6 +304,8 @@ def in_order(tasks, *steps):
 
 def publisher(tasks, file):
     """The one task that publishes this file the controller runs from."""
+    if file in ("tls.crt", "tls.key"):
+        return only(tasks, lambda task: task.get("register") == "substrate_libvirt_machine_tls", "publishes the TLS files")
     if file == "htpasswd":
         return only(tasks, lambda task: str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith("/htpasswd"),
                     "publishes the authentication file")
@@ -409,10 +411,9 @@ def test_a_published_file_that_verifies_nothing_is_replaced_by_a_fresh_hash(mate
 # podman inspect executes its --format template over the container's inspect
 # data, whose State.StartedAt is a time.Time (InspectContainerState in
 # libpod/define/container_inspect.go, https://github.com/containers/podman), so
-# .State.StartedAt.UnixNano prints the start in nanoseconds since the epoch: for
-# a container started at 2026-09-30 11:38:20.675992231 -03, podman 5.8.4
-# printed this, and the command module registers it without the newline.
-STARTED = 1790779100675992231
+# .State.StartedAt.UnixNano prints the start in nanoseconds since the epoch.
+# This synthetic timestamp tests sub-second precision without host provenance.
+STARTED = 1700000000123456789
 EARLIER, LATER = STARTED / 1e9 - 3600, STARTED / 1e9 + 60
 RUNNING = {"changed": False, "rc": 0, "stdout": str(STARTED)}
 NO_CONTAINER = {"changed": False, "rc": 125, "stdout": ""}
@@ -428,7 +429,7 @@ def controller_steps(tasks):
     files = only(tasks, lambda task: "ansible.builtin.stat" in task and reading(restart, task), "observes its files")
     started = only(tasks, lambda task: argv_of(task)[:2] == ["/usr/bin/podman", "inspect"] and reading(restart, task),
                    "reads its start")
-    publishers = {file: publisher(tasks, file) for file in ("conf.py", "htpasswd", "unit")}
+    publishers = {file: publisher(tasks, file) for file in ("conf.py", "htpasswd", "tls.crt", "tls.key", "unit")}
     assert all(in_order(tasks, publishing, files, restart) for publishing in publishers.values())
     assert in_order(tasks, started, restart)
     return restart, files, started, publishers
@@ -450,7 +451,8 @@ def controller_attempt(material, newer=(), changed=(), start=None, unit="active"
         "observation": {"controller": IMAGE, "disks": [], "domain": "bootwright-lab-rhel-01", "unit": unit},
     }
     templar = Templar(loader=LOADER, variables=variables)
-    paths = {templar.template(destination(task)): file for file, task in publishers.items()}
+    paths = {Templar(loader=LOADER, variables=dict(variables, item={"name": file})).template(destination(task)): file
+             for file, task in publishers.items()}
     observed = templar.template(files["loop"])
     assert sorted(observed) == sorted(paths)
     unit_file = templar.template(trust_as_template((ROLES / MACHINE / "templates" / "unit.container.j2").read_text()))
@@ -486,7 +488,7 @@ def test_a_replay_over_a_controller_started_after_its_files_restarts_nothing(mat
 # controller on the file it mounted, while the next attempt finds the published
 # one unchanged: a rotated password whose hash the file already holds, a moved
 # port, or another image.
-@pytest.mark.parametrize("file", ["conf.py", "htpasswd", "unit"])
+@pytest.mark.parametrize("file", ["conf.py", "htpasswd", "tls.crt", "tls.key", "unit"])
 def test_a_file_published_after_the_controller_started_restarts_it(material, file):
     assert controller_attempt(material, newer=(file,)) == (True, "changed")
 

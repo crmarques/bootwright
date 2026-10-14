@@ -21,6 +21,7 @@ var schemaIdentifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 const unsupportedSpellingRemedy = "write lowercase true or false, a decimal number without a base prefix or separator, or quote the value as a string"
 
 type decoder struct {
+	rules     []Rules
 	document  desiredstate.Document
 	sink      *diagnosticSink
 	locations map[string]diagnostics.SourceLocation
@@ -28,11 +29,11 @@ type decoder struct {
 	failed    bool
 }
 
-func decodeDocument(document desiredstate.Document, sink *diagnosticSink) *objectRecord {
+func decodeDocument(document desiredstate.Document, sink *diagnosticSink, rules ...Rules) *objectRecord {
 	if document.IsEmpty() {
 		return nil
 	}
-	d := decoder{document: document, sink: sink, locations: map[string]diagnostics.SourceLocation{}}
+	d := decoder{document: document, sink: sink, rules: rules, locations: map[string]diagnostics.SourceLocation{}}
 	root := documentBody(document)
 	if root == nil || root.Kind != desiredstate.MappingKind {
 		d.fail(root, "yaml.shape", "$", "a desired-state document must be a mapping", "write the document as a mapping of apiVersion, kind, metadata and spec")
@@ -310,6 +311,28 @@ func (d *decoder) unknownField(key *desiredstate.Node, shape *api.Shape, path st
 		return
 	}
 	childPath := path + "." + key.Value
+	kind := api.Kind(nodeText(mappingNode(documentBody(d.document), "kind")))
+	ownerPath, defaultPrefix := childPath, ""
+	if kind == api.Environment && strings.HasPrefix(childPath, "$.spec.defaults.") {
+		rest := strings.TrimPrefix(childPath, "$.spec.defaults.")
+		if owner, tail, ok := strings.Cut(rest, "."); ok {
+			kind, ownerPath = api.Kind(owner), "$.spec."+tail
+			defaultPrefix = "$.spec.defaults." + owner
+		}
+	}
+	for _, rules := range d.rules {
+		if rules.RetiredField == nil {
+			continue
+		}
+		if issue, ok := rules.RetiredField(kind, ownerPath); ok {
+			remedy := issue.Remediation
+			if defaultPrefix != "" {
+				remedy = strings.ReplaceAll(remedy, "$.spec", defaultPrefix)
+			}
+			d.fail(key, "api.field", childPath, issue.Message, remedy)
+			return
+		}
+	}
 	if message := d.retiredFieldMessage(path, key.Value); message != "" {
 		d.fail(key, "api.field", childPath, message, "remove the retired field")
 		return

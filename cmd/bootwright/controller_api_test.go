@@ -73,8 +73,17 @@ spec:
       nodes:
         - name: member
           machineRef: service-host
-          roles: [mon, mgr, osd]
-          devices: [/dev/sdb, /dev/sdc]
+          labels: [core]
+    services:
+      - service_type: mon
+        placement: {label: core, count: 1}
+      - service_type: mgr
+        placement: {label: core, count: 1}
+      - service_type: osd
+        service_id: data
+        placement: {label: core}
+        spec:
+          data_devices: {paths: [/dev/sdb, /dev/sdc]}
 `
 		host := strings.Replace(serviceHost, "[container-runtime]", "[container-runtime, ceph-node]", 1)
 		diagnostic := trustFailure(t, controllerInputs(serviceEnvironment, host, cluster), "api.invariant", "$.spec.controller.machineRef")

@@ -4,7 +4,10 @@ import (
 	"context"
 	"time"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
@@ -50,16 +53,42 @@ func wireMachine(deps machineDependencies) cli.Services {
 	client := sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
 	powered := power.New(deps.State, machineRealization{reconciler: deps.Lifecycle}, machineIdentities{reconciler: deps.Lifecycle},
 		deps.Lifecycle, ansiblerunner.New(operationPlaybook()), deps.Confirmer, deps.Reporter, selection)
+	sessions := machineaccess.New(deps.State, selection, machineaccess.Options{
+		Lender: deps.Lifecycle, Ownership: evidence, Evidence: machineHostKeys{reconciler: deps.Lifecycle},
+		Trust: deps.Trust, Observer: client, Confirmer: deps.Session, Launcher: client,
+		Streams: deps.Streams, Terminal: deps.Terminal,
+	})
 	return cli.Services{
-		MachineInventory: inventory.New(deps.State, evidence, powered, selection),
-		MachineAccess: machineaccess.New(deps.State, selection, machineaccess.Options{
-			Lender: deps.Lifecycle, Ownership: evidence, Evidence: machineHostKeys{reconciler: deps.Lifecycle},
-			Trust: deps.Trust, Observer: client, Confirmer: deps.Session, Launcher: client,
-			Streams: deps.Streams, Terminal: deps.Terminal,
-		}),
-		MachinePower: powered,
-		MachineTrust: enrollment.New(deps.State, deps.Trust, selection, trustOptions(deps, client)),
+		MachineInventory:  inventory.New(deps.State, evidence, powered, selection),
+		MachineAccess:     sessions,
+		EnvironmentAccess: clusterSessions(deps.State, sessions, selection),
+		MachinePower:      powered,
+		MachineTrust:      enrollment.New(deps.State, deps.Trust, selection, trustOptions(deps, client)),
 	}
+}
+
+func clusterSessions(state inventory.EffectiveState, sessions machineaccess.Service, selection func(context.Context) (string, error)) environmentaccess.Service {
+	return environmentaccess.New(effectiveGraph{state: state}, machineSessions{access: sessions}, selection)
+}
+
+type effectiveGraph struct{ state inventory.EffectiveState }
+
+func (g effectiveGraph) Effective(ctx context.Context, contextName string) (api.Catalog, error) {
+	result, err := g.state.RenderEffective(ctx, compilation.EffectiveRequest{ContextName: contextName})
+	if err != nil {
+		return api.Catalog{}, err
+	}
+	return result.Effective, nil
+}
+
+type machineSessions struct{ access machineaccess.Service }
+
+func (m machineSessions) Rsh(ctx context.Context, contextName, name string, ssh machine.SSHOptions) (*machine.SessionResult, error) {
+	return m.access.Rsh(ctx, machineaccess.RshRequest{ContextName: contextName, Name: name, SSH: ssh})
+}
+
+func (m machineSessions) Exec(ctx context.Context, contextName, name string, ssh machine.SSHOptions, command []string) (*machine.SessionResult, error) {
+	return m.access.Exec(ctx, machineaccess.ExecRequest{ContextName: contextName, Name: name, SSH: ssh, Command: command})
 }
 
 // sessionFiles opens an offered key through the invoking account's opener, and

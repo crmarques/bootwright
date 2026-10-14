@@ -58,8 +58,9 @@ type PlanStep struct {
 	Consumes []string
 }
 
-// A stage selection's marker for one step. StepResolve and StepRetry mark the
-// unproved or failed blocks the next apply works first, whatever else is ready.
+// A stage selection's marker for one step. StepResolve marks the unproved
+// blocks the next apply works first, whatever else is ready, and StepRetry the
+// failed blocks it retries beside every step it marks StepStart.
 const (
 	StepStart       = "start"
 	StepResolve     = "resolve"
@@ -67,6 +68,12 @@ const (
 	StepWaiting     = "waiting"
 	StepNotSelected = "not-selected"
 )
+
+// AnotherBuild names the build that registered a continuation and the plan positions this build runs.
+type AnotherBuild struct {
+	RegisteredBy string
+	Steps        []int
+}
 
 // PlanResult previews the next legal operation or the exact continuation point
 // of an incomplete one. It allocates no identity and creates no log.
@@ -90,11 +97,16 @@ type PlanResult struct {
 	// Finalizes marks a preview whose verb only completes the operation's
 	// interrupted finalization and then settles, running no block.
 	Finalizes bool
+	// AnotherBuild is set only on a continuation another build proved it freezes.
+	AnotherBuild *AnotherBuild
 	// Stops names, in plan order, the Machines a fresh destroy proves stopped
 	// before it registers, so the plan says what to stop before it is
 	// confirmed.
-	Stops   []string
-	Receipt Receipt
+	Stops []string
+	// StopsAfterOnline names Machines whose stop proof follows durable online
+	// service removal. They must remain reachable until that boundary.
+	StopsAfterOnline []string
+	Receipt          Receipt
 }
 
 type MachineOutcome struct {
@@ -171,11 +183,10 @@ const (
 	RecoveredRelease      = "release"
 )
 
-// Progress phases, in the order an operation runs them. A check proves a
-// precondition while no operation exists yet, so it has no log to follow and
-// no frozen block to count against; an effect is the work the registered plan
-// authorized. The zero value is an effect, because that is what a block
-// reports.
+// Progress phases distinguish read-only preconditions from authorized effects.
+// A check is not a frozen effect block; the online-removal Machine check runs
+// between effects, while initial checks precede registration. The zero value
+// is an effect, because that is what a block reports.
 const (
 	EffectPhase = ""
 	CheckPhase  = "check"
@@ -269,7 +280,8 @@ type LifecycleSummary struct {
 	// Executable is the identity of the build that registered this operation.
 	// A removal is planned from what that build froze, so an operator reads the
 	// remedy for a request this one cannot read before meeting the refusal.
-	Executable string
+	Executable   string
+	AnotherBuild bool
 }
 
 type StatusResult struct {

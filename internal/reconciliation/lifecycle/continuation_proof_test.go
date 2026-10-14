@@ -28,7 +28,14 @@ type refusedContinuation struct {
 
 func refusedContinuations() []refusedContinuation {
 	unbound := func(h *harness) { h.workspace.controller.State.Bindings = nil }
-	moved := func(h *harness) { h.service.automation = testAutomation{digest: strings.Repeat("9", 64)} }
+	movedApply := func(h *harness) {
+		h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
+		h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
+	}
+	movedRemoval := func(h *harness) {
+		h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
+		h.capability.consumes = map[string][]string{"alpha": {reconciliation.AuthorizationDataLoss}}
+	}
 	closure := func(h *harness) {
 		approve(&h.workspace.controller, strings.Repeat("c", 64), prerequisites.Definition{Bootstrap: movedBootstrap()})
 	}
@@ -64,14 +71,14 @@ func refusedContinuations() []refusedContinuation {
 			code: "controller.identity", message: "this context is not bound to a controller host", exit: deletion,
 		},
 		{
-			name: "a failed apply under a moved automation digest", arrange: failedApplyUnder(moved),
+			name: "a failed apply another build freezes differently", arrange: failedApplyUnder(movedApply),
 			steps: []string{"bootwright destroy --context lab"}, verb: reconciliation.Apply,
-			code: "lifecycle.state", message: "this executable's automation differs from the one this operation froze",
+			code: "lifecycle.state", message: "this executable would freeze the block alpha differently from the plan this operation froze",
 		},
 		{
-			name: "an unknown removal under a moved automation digest", arrange: unknownRemovalUnder(moved),
+			name: "an unknown removal another build freezes differently", arrange: unknownRemovalUnder(movedRemoval),
 			steps: []string{}, verb: reconciliation.Destroy,
-			code: "lifecycle.state", message: "this executable's automation differs from the one this operation froze",
+			code: "lifecycle.state", message: "this executable would freeze the block alpha differently from the plan this operation froze",
 		},
 		{
 			name: "a failed apply under a moved closure", arrange: failedApplyUnder(closure),
@@ -99,8 +106,8 @@ func refusedContinuations() []refusedContinuation {
 
 // Status offers a continuation or resolution that still has a block to run
 // only where its re-proof passes over what status reads: the frozen input,
-// automation and closure, and the context's binding. Where that re-proof
-// refuses, status offers the exit the refusal names and status may run: the
+// the frozen blocks under another build, the closure and the context's
+// binding. Where that re-proof refuses, status offers the exit the refusal names and status may run: the
 // removal that supersedes an incomplete apply, which status offers anyway,
 // and over a removal the context's deletion where the refusal names it, and
 // otherwise nothing. Each offered verb decides, and the refused continuation
@@ -145,8 +152,8 @@ func requireContinuationRefuses(t *testing.T, h *harness, row refusedContinuatio
 }
 
 // The refused continuations an operator meets most, a failed apply whose
-// binding is gone or whose automation moved and an unknown removal whose
-// binding is gone, have a golden of what status, a plan preview and both
+// binding is gone or that another build freezes differently and an unknown
+// removal whose binding is gone, have a golden of what status, a plan preview and both
 // verbs report over them.
 func TestARefusedContinuationMatchesItsGolden(t *testing.T) {
 	reports := map[string]recordStateReport{}

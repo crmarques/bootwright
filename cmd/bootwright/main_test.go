@@ -148,7 +148,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 				prefix = "[FAIL] input.not-found "
 			} else if args[0] == "context" || args[0] == "secret" || args[0] == "validate" ||
 				args[0] == "plan" || args[0] == "status" || args[0] == "apply" || args[0] == "destroy" ||
-				args[0] == "machine" || args[0] == "cluster" && args[1] == "kubeconfig" ||
+				args[0] == "machine" || args[0] == "cluster" && (args[1] == "kubeconfig" || args[1] == "rsh" || args[1] == "exec" || args[1] == "list" || args[1] == "info") ||
 				args[0] == "render" && len(args) > 1 && args[1] == "effective" {
 				prefix = "[FAIL] context.state:"
 			}
@@ -159,7 +159,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 				return
 			}
 			want := 1
-			if args[0] == "machine" && (args[1] == "rsh" || args[1] == "exec") {
+			if (args[0] == "machine" || args[0] == "cluster") && (args[1] == "rsh" || args[1] == "exec") {
 				want = 255
 			}
 			if code != want || stdout.Len() != 0 || !strings.HasPrefix(stderr.String(), prefix) {

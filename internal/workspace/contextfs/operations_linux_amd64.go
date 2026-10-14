@@ -257,6 +257,18 @@ func (a *operationArea) newDirectory(ctx context.Context, parent *directory, nam
 	return child, nil
 }
 
+func (a *operationArea) child(ctx context.Context, parent *directory, name string, create bool) (*directory, error) {
+	child, err := openDirectory(parent, name)
+	if !create || !errors.Is(err, syscall.ENOENT) {
+		return child, err
+	}
+	child, err = a.newDirectory(ctx, parent, name)
+	if !errors.Is(err, syscall.EEXIST) {
+		return child, err
+	}
+	return a.store.concurrentDirectory(ctx, parent, name)
+}
+
 // storage names this area's subtree in a refusal at its bounds, since three
 // areas share them.
 func (a *operationArea) storage() string {
@@ -312,9 +324,11 @@ func (a *operationArea) root(ctx context.Context, create bool) (*directory, func
 	if err != nil {
 		return nil, nil, state("context state directory is unsafe")
 	}
-	operations, err := openDirectory(runtime, a.subtree)
-	if errors.Is(err, syscall.ENOENT) && create {
-		operations, err = a.store.newDirectory(ctx, runtime, a.subtree)
+	var operations *directory
+	if create {
+		operations, err = a.store.ensureDirectory(ctx, runtime, a.subtree)
+	} else {
+		operations, err = openDirectory(runtime, a.subtree)
 	}
 	if err != nil {
 		runtime.file.Close()
@@ -341,10 +355,7 @@ func (a *operationArea) descend(ctx context.Context, parts []string, create bool
 	}
 	parent := operations
 	for _, part := range parts[:max(len(parts)-1, 0)] {
-		child, err := openDirectory(parent, part)
-		if errors.Is(err, syscall.ENOENT) && create {
-			child, err = a.newDirectory(ctx, parent, part)
-		}
+		child, err := a.child(ctx, parent, part, create)
 		if err != nil {
 			release()
 			if errors.Is(err, syscall.ENOENT) {
@@ -448,10 +459,7 @@ func (a *operationArea) directory(ctx context.Context, parts []string, create bo
 	}
 	parent := operations
 	for _, part := range parts {
-		child, err := openDirectory(parent, part)
-		if errors.Is(err, syscall.ENOENT) && create {
-			child, err = a.newDirectory(ctx, parent, part)
-		}
+		child, err := a.child(ctx, parent, part, create)
 		if err != nil {
 			release()
 			if errors.Is(err, syscall.ENOENT) {

@@ -76,6 +76,7 @@ type repository struct {
 	controller     []string
 	updatePlan     *contexts.UpdatePlan
 	deletionPlan   *contexts.DeletionPlan
+	unreadable     error
 }
 
 func newRepository(t *testing.T) *repository {
@@ -227,6 +228,9 @@ func (tx transaction) MutationState(ctx context.Context, name string) ([]byte, e
 		return nil, lostRefusal{contexts.LostContext(name, "contexts/"+name, "no such file or directory")}
 	}
 	tx.r.leased = true
+	if tx.r.unreadable != nil {
+		return nil, tx.r.unreadable
+	}
 	return slices.Clone(tx.r.evidence[name]), nil
 }
 
@@ -338,7 +342,7 @@ type confirmer struct{ r *repository }
 
 func (c confirmer) Confirm(ctx context.Context, action, name string) error {
 	lost := action == lostAction && name == c.r.lost
-	if !c.r.locked || !lost && (!c.r.leased || !slices.Contains(c.r.calls, "guard")) {
+	if !c.r.locked || !lost && (!c.r.leased || c.r.unreadable == nil && !slices.Contains(c.r.calls, "guard")) {
 		c.r.t.Fatal("confirmation preceded locked mutation safeguards")
 	}
 	if name == "" || action != "update" && action != "delete" && action != orphanAction && action != unreadableAction && !lost {
@@ -594,6 +598,53 @@ func TestUpdatePreservesIdentityAndSelectionAndConfirmsUnderLease(t *testing.T) 
 	}
 	if !reflect.DeepEqual(r.calls, []string{"preflight", "read", "compile", "transaction", "registry", "lease", "guard", "unchanged", "present", "confirm", "publish", "commit"}) {
 		t.Fatal("update order", r.calls)
+	}
+}
+
+// retiredIndexRemedy is the exit a store names when it proves a context's
+// evidence unreadable itself, as the operation index of the retired Ceph
+// qualification fixture is.
+const retiredIndexRemedy = "dispose or clean up the fixture and destroy the context with the build that prepared it, then bootwright context delete --name example --purge; only if that build is unavailable, bootwright context delete --name example --purge --allow-orphans, which abandons its Machines, disks and reserved keyring bindings"
+
+func retiredIndex() error {
+	return errors.Join(contexts.ErrUnreadableEvidence, diagnostics.NewFailureWithRemediation("lifecycle.state",
+		"context example holds the operation index of the retired Ceph qualification fixture, which this build cannot read", "", retiredIndexRemedy))
+}
+
+// Evidence the store itself proves unreadable refuses an update and a default
+// deletion with the exit it names, under the lease and before anything is
+// presented, and only the orphan acknowledgement deletes the context.
+func TestEvidenceTheStoreProvesUnreadableRefusesWithItsOwnExit(t *testing.T) {
+	for _, evidence := range []string{pristineEvidence, `{"version":1,"operation":"applied","ownership":"retained"}`} {
+		for _, command := range []string{"update", "delete"} {
+			r := existingRepository(t)
+			r.evidence["example"] = []byte(evidence)
+			r.unreadable = retiredIndex()
+			before := cloneRegistry(r.registry)
+			var err error
+			code := "context.state"
+			if command == "update" {
+				_, err = service(t, r, sourceFixture("/synthetic/input")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input", SkipConfirmation: true})
+			} else {
+				code = "context.unsafe-delete"
+				_, err = service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, SkipConfirmation: true})
+			}
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != code || reported[0].Remediation != retiredIndexRemedy || !reflect.DeepEqual(r.registry, before) ||
+				slices.Contains(r.calls, "guard") || slices.Contains(r.calls, "present") || slices.Contains(r.calls, "publish") || slices.Contains(r.calls, "delete") || slices.Contains(r.calls, "commit") {
+				t.Fatalf("%s over a retired index = %#v: %v", command, reported, r.calls)
+			}
+		}
+		r := existingRepository(t)
+		r.evidence["example"] = []byte(evidence)
+		r.unreadable = retiredIndex()
+		got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true})
+		if err != nil || got == nil || got.Outcome != "deleted" || !got.OrphansAbandoned || len(r.registry.Contexts) != 0 || r.confirmed != unreadableAction {
+			t.Fatalf("the acknowledged deletion over a retired index = %#v (%v)", got, err)
+		}
+		if plan := r.deletionPlan; plan == nil || plan.Abandons != contexts.AbandonsUnlisted || plan.Reason != "its mutation evidence cannot be read" {
+			t.Fatalf("the acknowledged deletion presented %+v", plan)
+		}
 	}
 }
 

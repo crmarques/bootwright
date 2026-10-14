@@ -46,8 +46,9 @@
     {
       "controller": {
         "address": "127.0.0.1",
+        "certificateRef": "lab-bmc-tls",
         "credentialsRef": "lab-bmc-credentials",
-        "endpoint": "http://127.0.0.1:8000/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
+        "endpoint": "https://127.0.0.1:8000/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
         "image": "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e",
         "port": 8000,
         "unit": "bootwright-lab-bmc-rhel-01"
@@ -89,7 +90,7 @@
       "uri": "qemu:///system",
       "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
       "vcpu": 4,
-      "version": "machine-libvirt-v4"
+      "version": "machine-libvirt-v6"
     }
   ],
   "installations": [
@@ -138,8 +139,9 @@
         "channel": "guest-agent",
         "controller": {
           "credentialsRef": "lab-bmc-credentials",
-          "endpoint": "http://127.0.0.1:8000/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
+          "endpoint": "https://127.0.0.1:8000/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
           "tlsVerify": true,
+          "trustBundleRef": "lab-bmc-tls",
           "virtualMedia": {
             "removeCertificate": false,
             "restoreVerification": false,

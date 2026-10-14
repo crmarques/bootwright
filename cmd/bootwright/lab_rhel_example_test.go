@@ -19,7 +19,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
@@ -31,20 +30,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
-const labExampleFiles = 14
-
-func exampleDirectory(t *testing.T, name string) desiredstate.Sources {
-	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", "examples", name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{root})
-	if err != nil {
-		t.Fatal(diagnostics.Of(err))
-	}
-	return sources
-}
+const labExampleFiles = 15
 
 func labExampleSources(t *testing.T) desiredstate.Sources {
 	t.Helper()
@@ -580,7 +566,7 @@ func labContextServices(t *testing.T) (cli.Services, string, *labControllerPorts
 func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	services, input, ports := labContextServices(t)
 	out, _ := contextRun(t, services, 0, "context", "init", "--name", "lab-rhel", "--input-dir", input)
-	if !strings.Contains(out, "Files copied     14") || !strings.Contains(out, "Objects decoded  14") {
+	if !strings.Contains(out, "Files copied     15") || !strings.Contains(out, "Objects decoded  15") {
 		t.Fatal("context import did not admit the complete lab example", out)
 	}
 	if err := os.RemoveAll(input); err != nil {

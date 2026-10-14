@@ -4,34 +4,26 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/crmarques/bootwright/internal/availability"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-func TestUnavailableService(t *testing.T) {
-	tests := []struct {
-		name   string
-		invoke func(context.Context) error
-	}{
-		{"cluster rsh", func(ctx context.Context) error { return (Service{}).ClusterRsh(ctx, ClusterRshRequest{}) }},
-		{"cluster exec", func(ctx context.Context) error { return (Service{}).ClusterExec(ctx, ClusterExecRequest{}) }},
+func TestUnwiredOrEndedClusterSessionsOpenNothing(t *testing.T) {
+	if _, err := (Service{}).ClusterRsh(context.Background(), ClusterRshRequest{Name: "ceph"}); !errors.Is(err, availability.ErrNotImplemented) {
+		t.Fatalf("unwired rsh = %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.invoke(context.Background()); !errors.Is(err, availability.ErrNotImplemented) {
-				t.Fatalf("unavailable result = %v", err)
-			}
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			if err := tt.invoke(ctx); !errors.Is(err, context.Canceled) {
-				t.Fatalf("canceled result = %v", err)
-			}
-			ctx, cancel = context.WithDeadline(context.Background(), time.Time{})
-			defer cancel()
-			if err := tt.invoke(ctx); !errors.Is(err, context.DeadlineExceeded) {
-				t.Fatalf("expired result = %v", err)
-			}
-		})
+	sessions := &recordingSessions{}
+	service := New(&fixedGraph{catalog: sessionCatalog(labNodes()...)}, sessions, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := service.ClusterExec(ctx, ClusterExecRequest{ContextName: "lab", Name: "ceph", Command: []string{"true"}}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled exec = %v", err)
+	}
+	if _, err := service.ClusterRsh(context.Background(), ClusterRshRequest{Name: "ceph"}); diagnostics.Of(err) == nil || diagnostics.Of(err)[0].Code != "context.state" {
+		t.Fatalf("no selection = %v", err)
+	}
+	if len(sessions.opened) != 0 {
+		t.Fatalf("opened %+v", sessions.opened)
 	}
 }

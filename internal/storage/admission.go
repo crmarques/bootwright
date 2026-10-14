@@ -13,10 +13,11 @@ type admission struct {
 	object  api.Object
 	catalog api.Catalog
 	issues  []api.Issue
+	partial bool
 }
 
 func isStorage(kind api.Kind) bool {
-	return slices.Contains([]api.Kind{api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport}, kind)
+	return slices.Contains([]api.Kind{api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport, api.StorageClient}, kind)
 }
 
 func (a *admission) issue(code, field, message, remediation string) {
@@ -26,12 +27,16 @@ func (a *admission) issue(code, field, message, remediation string) {
 }
 
 func (a *admission) invalid(field, message string) {
-	a.issue("api.invariant", field, message, "make the declaration consistent with its selected storage owner")
+	a.issue("api.invariant", field, message, "correct "+field+" to satisfy this requirement: "+message)
+}
+
+func (a *admission) deferred(field, message, what, item string) {
+	a.issue("api.invariant", field, message, "remove "+what+"; "+item+" delivers it")
 }
 
 func (a *admission) required(value api.Value, key, field string) {
-	if !value.Has(key) {
-		a.issue("api.required", field+"."+key, "the selected storage mode requires this field", "supply the required field for the selected mode")
+	if !a.partial && !value.Has(key) {
+		a.issue("api.required", field+"."+key, "this declaration requires the named field", "supply "+field+"."+key+" using its documented type")
 	}
 }
 
@@ -106,6 +111,9 @@ func ValidateAuthored(object api.Object, catalog api.Catalog) []api.Issue {
 		return a.issues
 	}
 	a.lexicalValues()
+	if object.Kind() == api.StorageCluster {
+		a.retiredCluster(object.Spec().Get("ceph"))
+	}
 	return a.issues
 }
 
@@ -119,6 +127,7 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 		return a.issues
 	}
 	a.lexicalValues()
+	a.intrinsic()
 	if object.Kind() == api.StorageCluster {
 		a.cluster()
 		return a.issues
@@ -130,6 +139,13 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 	managed := fallback(owner.Spec().Get("management"), "managed") == "managed"
 	if !managed && object.Kind() != api.StorageExport {
 		a.invalid("$.spec.clusterRef", "this storage child requires a managed cluster")
+		return a.issues
+	}
+	if item, ok := map[api.Kind]string{api.StorageFilesystem: "B492", api.StorageObjectGateway: "B477", api.StorageNFSExport: "B478", api.StorageExport: "B489"}[object.Kind()]; ok {
+		if !managed {
+			item = "parked item B107"
+		}
+		a.deferred("$.spec", "this storage resource family requires its later qualified service slice", "this "+string(object.Kind())+" from the input", item)
 		return a.issues
 	}
 	switch object.Kind() {
@@ -145,6 +161,13 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 		a.nfs(owner)
 	case api.StorageExport:
 		a.export(owner, managed)
+	case api.StorageClient:
+		a.required(object.Spec(), "poolRef", "$.spec")
+		a.required(object.Spec(), "access", "$.spec")
+		a.poolRole(textOf(object.Spec(), "poolRef"), "$.spec.poolRef", "rbd", owner)
+		if access := textOf(object.Spec(), "access"); access != "read-only" && access != "read-write" {
+			a.invalid("$.spec.access", "client access must be read-only or read-write")
+		}
 	}
 	if managed {
 		a.sharedServiceIdentities(owner)

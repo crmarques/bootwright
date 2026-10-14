@@ -22,8 +22,8 @@ fetches media from the artifact server is set on the discovered device around
 an insert and an eject, exactly as the frozen trust says and with no fallback.
 An insert carrying private material under established trust first reads, and
 writes nothing while reading, whether the controller verifies that server: the
-device's VerifyCertificate and any HttpsTransferCertVerification a manager's
-security service reports must read true, or the insert refuses.
+manager's HttpsTransferCertVerification decides when published; otherwise the
+device's VerifyCertificate must read true, or the insert refuses.
 """
 
 from __future__ import annotations
@@ -465,11 +465,16 @@ class Client:
             return False
         if private and trust == TRUST_ESTABLISHED:
             self._verified_fetch(member)
+        manager_verified = trust == TRUST_IMPORT and self._verified_managers()
+        if trust == TRUST_DISABLED:
+            for url, _value in self._manager_verification("disabling verification"):
+                raise ControllerError("disabling verification %s: %s controls media verification; the device flag cannot disable it" % (
+                    _shown(url), redfish_discovery.TRANSFER_VERIFICATION), NO_DISABLE)
         if redfish_discovery.media_present(self._device(member, "attaching")):
             reason = self._release(member)[1]
             if reason:
                 raise ControllerError("attaching: the device presents other media and was not released: " + reason)
-        self._trust_media(member, trust, certificate)
+        self._trust_media(member, trust, certificate, manager_verified)
         reason, fetch_failed = "", False
         for attempt in range(INSERT_ATTEMPTS):
             if attempt:
@@ -485,18 +490,22 @@ class Client:
         """Prove by reading alone that the controller verifies the server it
         fetches media from, or refuse before any write.
 
-        The device's VerifyCertificate must read true; an absent one reads as
-        off, as the schema says. Each manager the system names that links a
-        security service has it read, and one reporting
-        HttpsTransferCertVerification must report it true. A manager without a
-        security service, or a service without the property, adds no
-        condition; a service that cannot be read refuses.
+        Published manager switches decide instead of the device flag. Only
+        when no manager publishes that switch does VerifyCertificate decide;
+        an absent device flag then reads as off. An unreadable security service
+        never supplies proof.
         """
         doing = "verifying the fetch"
+        if self._verified_managers():
+            return
         device = self._device(member, doing)
         if device.get("VerifyCertificate") is not True:
             raise ControllerError("%s %s: VerifyCertificate reads %s" % (
                 doing, _shown(member), "false" if "VerifyCertificate" in device else "nothing"), NO_VERIFIED_FETCH)
+
+    def _manager_verification(self, doing):
+        """Read every published authoritative switch without changing one."""
+        settings = []
         setting = redfish_discovery.TRANSFER_VERIFICATION
         for _manager, body in self._managers:
             link = redfish_discovery.security_service(body)
@@ -504,8 +513,18 @@ class Client:
                 continue
             url = self._own(link, doing)
             service = self._read(url, doing)[0]
-            if setting in service and service[setting] is not True:
-                raise ControllerError("%s %s: %s reads false" % (doing, _shown(url), setting), NO_VERIFIED_FETCH)
+            if setting in service:
+                settings.append((url, service[setting]))
+        return settings
+
+    def _verified_managers(self):
+        """Require every published manager switch on; return whether any exist."""
+        settings = self._manager_verification("verifying the fetch")
+        for url, value in settings:
+            if value is not True:
+                raise ControllerError("verifying the fetch %s: %s reads false" % (
+                    _shown(url), redfish_discovery.TRANSFER_VERIFICATION), NO_VERIFIED_FETCH)
+        return bool(settings)
 
     def _attach(self, member, image):
         """One attach: the reason it failed, or "" once the device presents the
@@ -614,7 +633,7 @@ class Client:
             raise ControllerError(reason)
         return self._settle(member, restore_verification, remove_certificate, certificate) or changed
 
-    def _trust_media(self, member, trust, certificate=""):
+    def _trust_media(self, member, trust, certificate="", manager_verified=False):
         """Make the device trust the server it fetches media from as the frozen
         trust says: whether a write was sent.
 
@@ -624,14 +643,14 @@ class Client:
         to the other or to anything else.
         """
         if trust == TRUST_IMPORT:
-            return self._import(member, certificate)
+            return self._import(member, certificate, manager_verified)
         if trust == TRUST_DISABLED:
             return self._verification(member, False, "disabling verification", NO_DISABLE)
         if trust != TRUST_ESTABLISHED:
             raise ControllerError("attaching: %s is not a virtual-media trust" % _printable(trust, 32))
         return False
 
-    def _import(self, member, certificate):
+    def _import(self, member, certificate, manager_verified=False):
         """Add the server's certificate to the device unless its DER is there,
         then turn verification on and read it back: whether a write was sent."""
         doing = "importing"
@@ -652,6 +671,8 @@ class Client:
             if not 200 <= status < 300:
                 raise _failure(doing, collection, status, body)
             written = True
+        if manager_verified:
+            return written
         return self._verification(member, True, doing, NO_IMPORT) or written
 
     def _settle(self, member, restore, remove, certificate):

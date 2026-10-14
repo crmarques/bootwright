@@ -28,8 +28,9 @@ options:
     description:
       - The refusal a refused phase names to the runner before the run fails,
         which the runner reports as the service's own diagnostic for the port it
-        names. Only C(foreign-listener), a socket something other than this
-        service holds where it binds.
+        names. C(foreign-listener) identifies a socket another daemon holds;
+        C(unassigned-bind-address) identifies an explicit address the host
+        cannot use. Both are checked before effects.
     type: str
     required: false
   port:

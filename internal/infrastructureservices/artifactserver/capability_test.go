@@ -440,18 +440,20 @@ func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 		t.Fatalf("adapter invocations = %d", len(recorder.requests))
 	}
 	refusals := recorder.requests[0].Refusals
-	if keys := slices.Sorted(maps.Keys(refusals)); !slices.Equal(keys, []string{"foreign-listener-8080", "foreign-listener-8443"}) {
-		t.Fatalf("the runner was handed refusals %v, want one per listener port", keys)
-	}
-	runner := &fakeRunner{err: refusals["foreign-listener-8443"]}
-	result, err := New(runner, fixedClock{}).Apply(context.Background(), call)
-	if result.Outcome != reconciliation.OutcomeFailed {
-		t.Fatalf("a foreign listener's refusal = %+v (%v), want failed", result, err)
+	if keys := slices.Sorted(maps.Keys(refusals)); !slices.Equal(keys, []string{"foreign-listener-8080", "foreign-listener-8443", "unassigned-bind-address-8080", "unassigned-bind-address-8443"}) {
+		t.Fatalf("the runner was handed refusals %v, want foreign and unassigned refusals per listener port", keys)
 	}
 	socket := managedservice.HostPort(request.BindAddress, 8443)
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Kind != Kind ||
-		reported[0].Object.Name != request.Identity.Service || !strings.Contains(reported[0].Message, socket) {
-		t.Fatalf("the refusal = %#v, want one naming %s on %s/%s", reported, socket, Kind, request.Identity.Service)
+	for _, refused := range []string{"foreign-listener-8443", "unassigned-bind-address-8443"} {
+		runner := &fakeRunner{err: refusals[refused]}
+		result, err := New(runner, fixedClock{}).Apply(context.Background(), call)
+		if result.Outcome != reconciliation.OutcomeFailed {
+			t.Fatalf("%s = %+v (%v), want failed", refused, result, err)
+		}
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Kind != Kind ||
+			reported[0].Object.Name != request.Identity.Service || !strings.Contains(reported[0].Message, socket) {
+			t.Fatalf("the refusal = %#v, want one naming %s on %s/%s", reported, socket, Kind, request.Identity.Service)
+		}
 	}
 }

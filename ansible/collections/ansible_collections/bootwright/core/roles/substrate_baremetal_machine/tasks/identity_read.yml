@@ -7,6 +7,10 @@
 # The inputs are this entry point's argument spec, passed explicitly by the
 # consuming role and never inherited from a shared fact, and the answers are
 # published under this role's own names.
+- name: Read the effective crypto policy on this connection's placement host
+  bootwright.core.ssh_key_policy:
+  register: substrate_baremetal_machine_ssh_policy
+
 - name: Pin the delivered host key for this one connection
   ansible.builtin.copy:
     content: >-
@@ -20,23 +24,24 @@
 
 # ssh reads this file in place of the system and personal configuration, so no
 # ambient known hosts, proxy, control socket, agent or identity reaches the
-# connection; only the host crypto policy is kept, and an absent policy file
-# is skipped. The keepalives end a connection whose peer stopped answering.
+# connection; only the validated host crypto policy is kept. An absent backend
+# uses native defaults. The keepalives end a connection whose peer stopped answering.
 - name: Write the one-connection client configuration
   ansible.builtin.copy:
-    content: "Include /etc/crypto-policies/back-ends/openssh.config\n"
+    content: '{{ substrate_baremetal_machine_ssh_policy.configuration }}'
     dest: '{{ substrate_baremetal_machine_identity_work }}/ssh_config'
     owner: root
     group: root
     mode: '0600'
   changed_when: false
 
-# The connection negotiates only the pinned key's own algorithms, so a client
-# whose policy prefers another type still proves the key it pinned; an rsa key
-# is accepted under its SHA-2 signatures, which a FIPS controller permits.
+# Pinning may narrow the effective policy but must never re-enable an excluded
+# algorithm. RSA pins use only their policy-permitted SHA-2 signatures.
 - name: Name the algorithms the delivered key is accepted under
   ansible.builtin.set_fact:
-    substrate_baremetal_machine_identity_algorithms: '{{ substrate_baremetal_machine_identity_key | bootwright.core.host_key_algorithms }}'
+    substrate_baremetal_machine_identity_algorithms: >-
+      {{ substrate_baremetal_machine_identity_key
+         | bootwright.core.host_key_algorithms(substrate_baremetal_machine_ssh_policy.hostKeyAlgorithms) }}
   changed_when: false
 
 - name: Read the install marker over that pinned connection

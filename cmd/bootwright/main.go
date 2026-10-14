@@ -8,12 +8,6 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace/selectionfs"
 )
 
-var (
-	version string
-	commit  string
-	source  string
-)
-
 func main() {
 	if handled, code := selectionfs.ServeHelper(context.Background(), os.Args[1:], os.Stdin, os.Stdout); handled {
 		os.Exit(code)

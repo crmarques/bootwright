@@ -22,6 +22,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 # The tree image is the shared package-tree publication's to prove.
 REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
 MEDIA_REFUSALS = ("media-changed-boot",)
+POLICY_REFUSALS = ("ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded")
 POWER_STATES = ("", "On", "Off")
 MAX_MARKER = 4096
 MAX_HOST_KEY = 4096
@@ -160,7 +161,7 @@ CAPABILITY = adapter_protocol.Capability(
     "the installation capability result could not be published",
     completion,
     phases=adapter_protocol.REFUSING_PHASES,
-    refusals=REFUSALS + MEDIA_REFUSALS,
+    refusals=REFUSALS + MEDIA_REFUSALS + POLICY_REFUSALS,
 )
 PHASES = CAPABILITY.phases
 

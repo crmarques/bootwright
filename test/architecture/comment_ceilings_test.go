@@ -5,7 +5,7 @@ package architecture_test
 // package loses comments, never raise it.
 func commentLineCeilings() map[string]int {
 	return map[string]int{
-		"ansible": 14, "api/v1alpha1": 53, "cmd/bootwright": 210,
+		"ansible": 14, "api/v1alpha1": 53, "cmd/bootwright": 208,
 		"internal/adapterprotocol": 132, "internal/addons": 10, "internal/addons/catalog": 0,
 		"internal/addons/preflight": 0, "internal/availability": 0, "internal/canonicaljson": 27,
 		"internal/cli": 450, "internal/containercluster": 29, "internal/containercluster/access": 24,
@@ -29,12 +29,12 @@ func commentLineCeilings() map[string]int {
 		"internal/managedos/media/storecontract": 16, "internal/managedos/medialocal": 43,
 		"internal/nativeartifacts/rendering": 0, "internal/reconciliation": 139,
 		"internal/reconciliation/ansiblerunner": 213, "internal/reconciliation/contextguard": 8,
-		"internal/reconciliation/lifecycle": 1798, "internal/reconciliation/lifecycle/workspacecontract": 27,
+		"internal/reconciliation/lifecycle": 1793, "internal/reconciliation/lifecycle/workspacecontract": 27,
 		"internal/reconciliation/operationstore": 287, "internal/reconciliation/operationstore/areacontract": 12,
 		"internal/reconciliation/operationstore/areadouble": 16, "internal/secrets": 54,
 		"internal/secrets/custody": 81, "internal/secrets/encryption": 11, "internal/secrets/localkeyring": 26,
 		"internal/secrets/material": 53, "internal/secrets/secretstore": 61,
-		"internal/secrets/secretstore/areacontract": 10, "internal/storage": 4, "internal/storage/preflight": 0,
+		"internal/secrets/secretstore/areacontract": 10, "internal/storage": 4, "internal/storage/ceph": 17, "internal/storage/preflight": 0,
 		"internal/storage/rendering": 0, "internal/substrate": 291, "internal/substrate/baremetal": 103,
 		"internal/substrate/libvirt": 319, "internal/trust": 62, "internal/trust/enrollment": 57,
 		"internal/workspace/contextfs": 856, "internal/workspace/contexts": 131,

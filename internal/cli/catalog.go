@@ -13,7 +13,10 @@ type commandSpec struct {
 	// records both facts with the declaration instead of a separate list.
 	implemented bool
 	privileged  bool
+	session     bool
 }
+
+func SessionCommand(path string) bool { return specFor(path).session }
 
 func available(spec commandSpec) commandSpec {
 	spec.implemented, spec.privileged = true, true
@@ -180,6 +183,7 @@ const payloadHelp = " Bootwright flags go before the command." +
 // they did not choose, over a host key they may be asked to confirm, whose
 // exit status is the client's rather than a Bootwright result.
 func sessionCommand(spec commandSpec) commandSpec {
+	spec.session = true
 	spec.short += " as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status"
 	spec.long = spec.short + ". The session runs as the identity the Machine's desired state authorizes," +
 		" over a host key proved before any credential is offered; an unproved key is confirmed" +

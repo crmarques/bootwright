@@ -36,16 +36,16 @@ func object(kind api.Kind, name string, spec api.Value) api.Object {
 	return api.NewObject(kind, name, api.MapValue(), spec)
 }
 func fixtureCatalog() api.Catalog {
-	objects := []api.Object{object(api.Environment, "environment", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet-key")))}
+	objects := []api.Object{object(api.Environment, "environment", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet-key"), "sites", []api.Value{m("name", "site-a"), m("name", "site-b")}))}
 	nodes := []api.Value{}
 	for i := 1; i <= 3; i++ {
 		name := fmt.Sprintf("node-%d", i)
 		machine := fmt.Sprintf("machine-%d", i)
-		nodes = append(nodes, m("name", name, "machineRef", machine, "site", "site-a", "roles", api.StringList("mon", "mgr", "osd", "mds", "rgw", "ingress"), "devices", api.StringList("/dev/vdb")))
+		nodes = append(nodes, m("name", name, "machineRef", machine, "site", "site-a", "labels", api.StringList("mon", "mgr", "storage")))
 		objects = append(objects, object(api.Machine, machine, m("capabilities", api.StringList("ceph-node"), "placement", m("site", "site-a"), "os", m("provided", true, "install", m("rootDeviceHints", m("deviceName", "/dev/vda"))), "network", m("addresses", []api.Value{m("name", "ssh", "address", fmt.Sprintf("192.0.2.%d/24", i))}), "access", m("ssh", m("addressRef", "ssh")))))
 	}
 	objects = append(objects,
-		object(api.StorageCluster, "storage", m("type", "ceph", "ceph", m("release", "19.2.1", "cephadm", m("clusterSSH", m("user", "root"), "bootstrap", m("node", "node-1")), "networks", m("publicCIDRs", api.StringList("192.0.2.0/24")), "topology", m("nodes", nodes)))),
+		object(api.StorageCluster, "storage", m("type", "ceph", "ceph", m("release", "19.2.1", "cephadm", m("clusterSSH", m("user", "root"), "bootstrap", m("node", "node-1")), "networks", m("publicCIDRs", api.StringList("192.0.2.0/24")), "services", coreServices(), "topology", m("nodes", nodes)))),
 		object(api.StoragePlacementPolicy, "policy", m("clusterRef", "storage", "ruleName", "replicated", "failureDomain", "host")),
 		object(api.StoragePool, "metadata", m("clusterRef", "storage", "role", "cephfs-metadata", "placementPolicyRef", "policy")),
 		object(api.StoragePool, "data", m("clusterRef", "storage", "role", "cephfs-data")),
@@ -99,7 +99,10 @@ func TestAllStorageKindsAdmitAndNormalizeWithoutMutatingInput(t *testing.T) {
 	catalog := fixtureCatalog()
 	for _, object := range catalog.Objects() {
 		before := object.Spec()
-		if issues := Validate(object, catalog); len(issues) != 0 {
+		issues := Validate(object, catalog)
+		if slices.Contains([]api.Kind{api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport}, object.Kind()) {
+			requireIssue(t, issues, "$.spec")
+		} else if len(issues) != 0 {
 			t.Errorf("%s: %#v", object.Identity(), issues)
 		}
 		normalized, issues := Normalize(object, catalog)
@@ -126,9 +129,9 @@ func TestCrossClusterAndPoolRoleValidation(t *testing.T) {
 	catalog = replace(catalog, foreign)
 	fs := find(t, catalog, api.StorageFilesystem, "files")
 	fs = fs.WithSpec(fs.Spec().With("dataPoolRefs", api.StringList("foreign")))
-	requireIssue(t, Validate(fs, catalog), "$.spec.dataPoolRefs[0]")
+	requireIssue(t, validateFutureFamily(fs, catalog), "$.spec.dataPoolRefs[0]")
 	fs = fs.WithSpec(fs.Spec().With("metadataPoolRef", api.StringValue("block")))
-	requireIssue(t, Validate(fs, catalog), "$.spec.metadataPoolRef")
+	requireIssue(t, validateFutureFamily(fs, catalog), "$.spec.metadataPoolRef")
 }
 
 func TestProtectionPoliciesAndNumericBounds(t *testing.T) {
@@ -180,14 +183,14 @@ func TestGatewayTLSAndListenerOwnership(t *testing.T) {
 	catalog := fixtureCatalog()
 	gateway := find(t, catalog, api.StorageObjectGateway, "objects")
 	https := gateway.WithSpec(gateway.Spec().WithPath(api.StringValue("https"), "endpoint", "scheme"))
-	requireIssue(t, Validate(https, replace(catalog, https)), "$.spec.endpoint.tls")
+	requireIssue(t, validateFutureFamily(https, replace(catalog, https)), "$.spec.endpoint.tls")
 	httpTLS := gateway.WithSpec(gateway.Spec().WithPath(m("secretRef", "tls"), "endpoint", "tls"))
-	requireIssue(t, Validate(httpTLS, replace(catalog, httpTLS)), "$.spec.endpoint.tls")
+	requireIssue(t, validateFutureFamily(httpTLS, replace(catalog, httpTLS)), "$.spec.endpoint.tls")
 	duplicate := object(api.StorageObjectGateway, "duplicate", gateway.Spec().With("serviceID", api.StringValue("other")))
 	conflicts := replace(catalog, duplicate)
-	requireIssue(t, Validate(duplicate, conflicts), "$.spec.endpoint.ingresses[0]")
+	requireIssue(t, validateFutureFamily(duplicate, conflicts), "$.spec.endpoint.ingresses[0]")
 	changed := gateway.WithSpec(gateway.Spec().With("frontendPort", api.IntegerValue("80")))
-	requireIssue(t, Validate(changed, replace(catalog, changed)), "$.spec.serviceID")
+	requireIssue(t, validateFutureFamily(changed, replace(catalog, changed)), "$.spec.serviceID")
 	plain := gateway.WithSpec(gateway.Spec().Without("endpoint"))
 	normalized, _ := Normalize(plain, catalog)
 	if normalized.Spec().Has("endpoint") {
@@ -198,25 +201,25 @@ func TestGatewayTLSAndListenerOwnership(t *testing.T) {
 func TestOSDOwnershipRootDeviceAndPlacement(t *testing.T) {
 	catalog := fixtureCatalog()
 	cluster := find(t, catalog, api.StorageCluster, "storage")
-	nodes := cluster.Spec().Get("ceph", "topology", "nodes").Items()
-	nodes[0] = nodes[0].With("devices", api.StringList("/dev/vda"))
-	mutated := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes"))
-	requireIssue(t, Validate(mutated, replace(catalog, mutated)), "$.spec.ceph.topology.nodes[0].osd.dataDevices")
-	group := m("serviceID", "extra", "placement", m("hosts", api.StringList("node-1")), "osd", m("dataDevices", m("all", true)))
-	mutated = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(group), "ceph", "topology", "osdDrivegroups"))
-	requireIssue(t, Validate(mutated, replace(catalog, mutated)), "$.spec.ceph.topology.nodes[0]")
-	gateway := find(t, catalog, api.StorageObjectGateway, "objects")
-	gateway = gateway.WithSpec(gateway.Spec().With("placement", m("hosts", api.StringList("machine-1"))))
-	requireIssue(t, Validate(gateway, catalog), "$.spec.placement.hosts")
+	services := cluster.Spec().Get("ceph", "services").Items()
+	services[2] = services[2].WithPath(m("paths", api.StringList("/dev/vda")), "spec", "data_devices")
+	mutated := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "ceph", "services"))
+	requireIssue(t, Validate(mutated, replace(catalog, mutated)), "$.spec.ceph.services[2].spec.data_devices")
+	services[2] = services[2].WithPath(m("paths", api.StringList("/dev/vdb")), "spec", "data_devices")
+	duplicate := services[2].With("service_id", api.StringValue("extra"))
+	services = append(services, duplicate)
+	mutated = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "ceph", "services"))
+	requireIssue(t, Validate(mutated, replace(catalog, mutated)), "$.spec.ceph.services[3].spec.data_devices")
+	services[0] = services[0].With("placement", m("hosts", api.StringList("machine-1")))
+	mutated = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "ceph", "services"))
+	requireIssue(t, Validate(mutated, replace(catalog, mutated)), "$.spec.ceph.services[0].placement.hosts[0]")
 }
 
 func TestExternalStorageAndEntitlementVariants(t *testing.T) {
 	external := object(api.StorageCluster, "external", m("type", "ceph", "management", "external"))
 	export := object(api.StorageExport, "external-export", m("type", "dataFoundation", "clusterRef", "external", "externalDetails", m("fromSecretRef", "details")))
 	catalog := api.NewCatalog([]api.Object{external, export})
-	if issues := Validate(export, catalog); len(issues) != 0 {
-		t.Fatal(issues)
-	}
+	requireIssue(t, Validate(export, catalog), "$.spec")
 	requireIssue(t, Validate(external.WithSpec(external.Spec().With("ceph", api.MapValue())), catalog), "$.spec.ceph")
 	for _, product := range []string{"redhat-ceph", "ibm-storage-ceph"} {
 		spec := m("type", product, "registry", m("credentialsRef", "registry"))
@@ -288,15 +291,13 @@ func TestDeferredStretchStillConstrainsProtection(t *testing.T) {
 			site = "site-b"
 		}
 		name := fmt.Sprintf("stretch-%d", i)
-		nodes = append(nodes, m("name", name, "fqdn", name+".example.test", "machineRef", name, "site", site, "roles", api.StringList("mon", "mgr", "osd"), "devices", api.StringList("/dev/vdb")))
+		nodes = append(nodes, m("name", name, "fqdn", name+".example.test", "machineRef", name, "site", site, "labels", api.StringList("mon", "mgr", "storage")))
 		catalog = replace(catalog, object(api.Machine, name, m("capabilities", api.StringList("ceph-node"), "placement", m("site", site), "os", m("provided", true))))
 	}
 	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes").WithPath(m("failureDomain", "datacenter", "dataSites", api.StringList("site-a", "site-b"), "tiebreaker", api.MapValue()), "ceph", "topology", "stretch").WithPath(m("node", "stretch-0"), "ceph", "cephadm", "bootstrap"))
 	catalog = replace(catalog, cluster)
 	issues := Validate(cluster, catalog)
-	if len(issues) != 1 || issues[0].Code != "api.deferred" {
-		t.Fatal(issues)
-	}
+	requireIssue(t, issues, "$.spec.ceph.topology.stretch")
 	pool := find(t, catalog, api.StoragePool, "block")
 	pool = pool.WithSpec(pool.Spec().With("replicated", m("size", 3)))
 	requireIssue(t, Validate(pool, catalog), "$.spec.replicated")
@@ -309,9 +310,9 @@ func TestVRRPNetworkOverlapAndNetworkReachability(t *testing.T) {
 	gateway := find(t, catalog, api.StorageObjectGateway, "objects")
 	other := object(api.StorageObjectGateway, "second", gateway.Spec().With("serviceID", api.StringValue("second")).With("placement", m("hosts", api.StringList("node-2"))).WithPath(api.StringValue("second"), "endpoint", "dnsLabel").WithPath(api.ListValue(m("name", "second-ingress", "address", "192.0.2.51", "prefixLength", 24, "firstVirtualRouterID", 1)), "endpoint", "ingresses"))
 	catalog = replace(catalog, other)
-	requireIssue(t, Validate(other, catalog), "$.spec.endpoint.ingresses[0].firstVirtualRouterID")
+	requireIssue(t, validateFutureFamily(other, catalog), "$.spec.endpoint.ingresses[0].firstVirtualRouterID")
 	other = other.WithSpec(other.Spec().WithPath(api.ListValue(m("name", "second-ingress", "address", "198.51.100.51", "prefixLength", 24)), "endpoint", "ingresses"))
-	requireIssue(t, Validate(other, replace(catalog, other)), "$.spec.endpoint.ingresses[0].address")
+	requireIssue(t, validateFutureFamily(other, replace(catalog, other)), "$.spec.endpoint.ingresses[0].address")
 	cluster := find(t, catalog, api.StorageCluster, "storage")
 	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringList("192.0.2.128/25"), "ceph", "networks", "clusterCIDRs"))
 	requireIssue(t, Validate(cluster, replace(catalog, cluster)), "$.spec.ceph.networks")
@@ -325,9 +326,9 @@ func TestNFSDefaultsAndExportChoice(t *testing.T) {
 	if textOf(normalized.Spec(), "port") != "12049" {
 		t.Fatal("NFS ingress backend default")
 	}
-	requireIssue(t, Validate(normalized, replace(catalog, normalized)), "$.spec.exports[0]")
+	requireIssue(t, validateFutureFamily(normalized, replace(catalog, normalized)), "$.spec.exports[0]")
 	nfs = nfs.WithSpec(nfs.Spec().With("port", api.IntegerValue("2049")))
-	requireIssue(t, Validate(nfs, replace(catalog, nfs)), "$.spec.port")
+	requireIssue(t, validateFutureFamily(nfs, replace(catalog, nfs)), "$.spec.port")
 }
 
 func TestStorageIssueBoundAndSafeDiagnosticText(t *testing.T) {
@@ -367,10 +368,68 @@ func TestPartialDefaultsCheckOnlyProvableContradictions(t *testing.T) {
 	if issues := ValidatePartial(cluster, api.Catalog{}); len(issues) != 0 {
 		t.Fatal("partial fragment selected a distribution before composition", issues)
 	}
-	cluster = cluster.WithSpec(m("ceph", m("topology", m("nodes", api.ListValue(m("osd", m("tpm2", true)))))))
+	cluster = cluster.WithSpec(m("ceph", m("services", api.ListValue(m("service_type", "osd", "service_id", "data", "spec", m("tpm2", true))))))
 	if issues := ValidatePartial(cluster, api.Catalog{}); len(issues) != 0 {
 		t.Fatal("partial OSD required absent encryption", issues)
 	}
-	cluster = cluster.WithSpec(m("ceph", m("topology", m("nodes", api.ListValue(m("osd", m("tpm2", true, "encrypted", false)))))))
-	requireIssue(t, ValidatePartial(cluster, api.Catalog{}), "$.spec.ceph.topology.nodes[0].osd.tpm2")
+	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(m("service_type", "osd", "service_id", "data", "spec", m("tpm2", true, "encrypted", false))), "ceph", "services"))
+	requireIssue(t, ValidatePartial(cluster, api.Catalog{}), "$.spec.ceph.services[0].spec.tpm2")
+}
+
+func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {
+	catalog := fixtureCatalog()
+	requireRemedy := func(issues []api.Issue, field, remediation string) {
+		t.Helper()
+		for _, issue := range issues {
+			if issue.Field == field && issue.Remediation == remediation {
+				return
+			}
+		}
+		t.Fatalf("missing %s remediation %q: %#v", field, remediation, issues)
+	}
+	for kind, item := range map[api.Kind]string{api.StorageFilesystem: "B492", api.StorageObjectGateway: "B477", api.StorageNFSExport: "B478", api.StorageExport: "B489"} {
+		candidates := catalog.OfKind(kind)
+		if len(candidates) == 0 {
+			t.Fatalf("fixture has no %s", kind)
+		}
+		for _, candidate := range candidates {
+			requireRemedy(Validate(candidate, catalog), "$.spec", "remove this "+string(kind)+" from the input; "+item+" delivers it")
+		}
+	}
+	external := object(api.StorageCluster, "external", m("type", "ceph", "management", "external"))
+	export := object(api.StorageExport, "external-export", m("clusterRef", "external", "externalDetails", m("fromSecretRef", "details")))
+	requireRemedy(Validate(export, api.NewCatalog([]api.Object{external, export})), "$.spec", "remove this StorageExport from the input; parked item B107 delivers it")
+	cluster := find(t, catalog, api.StorageCluster, "storage")
+	changed := cluster.WithSpec(cluster.Spec().WithPath(api.StringList("mgmt-gateway-spec-dependency-recording"), "ceph", "cephadm", "workarounds"))
+	requireRemedy(Validate(changed, replace(catalog, changed)), "$.spec.ceph.cephadm.workarounds", "remove workarounds from $.spec.ceph.cephadm; B479 delivers it")
+	changed = cluster.WithSpec(cluster.Spec().WithPath(m("dataSites", api.StringList("site-a", "site-b"), "tiebreaker", m("site", "site-b")), "ceph", "topology", "stretch"))
+	requireRemedy(Validate(changed, replace(catalog, changed)), "$.spec.ceph.topology.stretch", "remove stretch from $.spec.ceph.topology; B486 delivers it")
+}
+
+func coreServices() api.Value {
+	return api.ListValue(m("service_type", "mon", "placement", m("label", "mon", "count", 3)), m("service_type", "mgr", "placement", m("label", "mgr", "count", 2)), m("service_type", "osd", "service_id", "data", "placement", m("label", "storage"), "spec", m("data_devices", m("paths", api.StringList("/dev/vdb")))))
+}
+
+// The future family admission primitives retain their unit proof while public
+// admission refuses their lifecycle until the owning family migration lands.
+func validateFutureFamily(object api.Object, catalog api.Catalog) []api.Issue {
+	cluster, _ := catalog.Find(api.StorageCluster, textOf(object.Spec(), "clusterRef"))
+	nodes := cluster.Spec().Get("ceph", "topology", "nodes").Items()
+	for i, node := range nodes {
+		nodes[i] = node.With("roles", api.StringList("mds", "rgw", "ingress"))
+	}
+	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes"))
+	catalog = replace(catalog, cluster)
+	a := admission{object: object, catalog: catalog}
+	a.intrinsic()
+	switch object.Kind() {
+	case api.StorageFilesystem:
+		a.filesystem(cluster)
+	case api.StorageObjectGateway:
+		a.gateway(cluster)
+	case api.StorageNFSExport:
+		a.nfs(cluster)
+	}
+	a.sharedServiceIdentities(cluster)
+	return a.issues
 }

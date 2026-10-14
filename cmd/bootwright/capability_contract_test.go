@@ -44,6 +44,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
@@ -54,6 +55,11 @@ type contractRow struct {
 	kind           string
 	implementation string
 	example        string
+	// completedFrom names why a binding's run request is completed from its
+	// dependencies' frozen apply evidence rather than crossed as frozen, so
+	// the suite holds it to planning and to reaching no runner without that
+	// evidence; its effects are held by its own package's tests.
+	completedFrom string
 	// probes marks the one Quiescent that observes through the runner.
 	probes bool
 	// absence is what this binding's absence evidence carries beyond the
@@ -149,6 +155,13 @@ func (r contractRow) binding() lifecycle.CapabilityBinding {
 
 func contractRows() []contractRow {
 	return []contractRow{
+		{kind: string(api.StorageCluster), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.StoragePool), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.StorageClient), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, example: "libvirt-3-nodes-ceph", completedFrom: cephHostCompletedFrom},
+		{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, example: "libvirt-3-nodes-ceph", presence: contractImagePresence, indivisible: true,
+			removalObservesNothing: "specs/storage.md, Frozen release and trust: a resolution retains nothing, so its removal takes back nothing a run could observe",
+			drift:                  map[string]any{"platform": "linux/arm64"}},
 		{kind: clients.Kind, implementation: clients.Implementation, example: "lab-rhel"},
 		{kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation, example: "lab-rhel", probes: true,
 			absence: map[string]any{"answered": true, "listener": false}, presence: contractMachinePresence,
@@ -178,6 +191,41 @@ func contractRows() []contractRow {
 			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
 		{kind: artifactserver.Kind, implementation: artifactserver.Implementation, example: "lab-rhel", presence: contractArtifactServerPresence,
 			readiness: "listeners", removalPartial: contractStoppedService, drift: contractFailedUnit},
+	}
+}
+
+const cephHostCompletedFrom = "specs/storage.md, Frozen release and trust: each host preparation pulls exactly the digest the image block froze, under the original apply's owner and FSID"
+
+const cephCompletedFrom = "specs/storage.md, Frozen release and trust: the cluster, pool and client requests take their owner, FSID and resolved image from the original apply"
+
+func contractImagePresence(t *testing.T, execution lifecycle.Execution) map[string]any {
+	t.Helper()
+	request, err := ceph.DecodeImageRequest(execution.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return map[string]any{"postcondition": true, "release": request.Release, "base": request.Base, "tag": request.Tag, "digest": "sha256:" + strings.Repeat("c", 64), "platform": ceph.PinnedPlatform}
+}
+
+func contractDependentEffects(t *testing.T, row contractRow, example contractExample, capability lifecycle.Capability, runner *contractRunner) {
+	t.Helper()
+	if reporter, ok := capability.(lifecycle.UnsupportedReporter); ok && len(reporter.Unsupported(example.apply.State)) != 0 {
+		t.Errorf("%s/%s refuses %s before registration", row.kind, row.implementation, row.example)
+	}
+	material := contractMaterial(t, example, example.plans[row.binding()].Secrets)
+	for _, block := range example.frozen(row.binding()) {
+		execution := lifecycle.Execution{
+			ApplyOperation: "op-0123456789abcdef0123456789abcdef", Operation: "op-0123456789abcdef0123456789abcdef", Attempt: 1, Block: block,
+			Launch: prerequisites.PythonLaunch{Loader: "/loader"}, Bundle: prerequisites.BundleLocation{Path: "/bundle"}, Material: material,
+		}
+		for _, operation := range []string{"apply", "observe", "destroy", "observe-removal"} {
+			runner.script(lifecycle.RunResult{Outcome: "changed", Evidence: json.RawMessage(`{}`)}, nil)
+			result, observation, err := contractCall(capability, operation, execution)
+			proved := result.Outcome == reconciliation.OutcomeChanged || result.Outcome == reconciliation.OutcomeUnchanged || observation.Effect != "" && observation.Effect != reconciliation.EffectUnknown
+			if sent := runner.sent(); len(sent) != 0 || len(diagnostics.Of(err)) == 0 || proved {
+				t.Errorf("%s: %s without its dependencies' evidence sent %d requests and proved %t (%v)", block.ID, operation, len(sent), proved, err)
+			}
+		}
 	}
 }
 
@@ -365,6 +413,10 @@ func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 			t.Fatalf("%s plans no %s block", row.example, row.implementation)
 		}
 		contractPlanning(t, row, example, capability, runner, findings)
+		if row.completedFrom != "" {
+			contractDependentEffects(t, row, example, capability, runner)
+			continue
+		}
 		if row.retains && (row.noEffect == nil) == (row.noEffectUnreported == "") {
 			t.Fatalf("%s retains what its apply realized, so its row names exactly one of its no-effect evidence and why its adapter reports none", row.implementation)
 		}
@@ -974,7 +1026,11 @@ func contractMachinePresence(t *testing.T, execution lifecycle.Execution) map[st
 	}
 	disks := []map[string]any{}
 	for _, disk := range request.Disks {
-		disks = append(disks, map[string]any{"name": disk.Name, "present": true, "sizeGiB": disk.SizeGiB})
+		observed := map[string]any{"name": disk.Name, "present": true, "sizeGiB": disk.SizeGiB}
+		if disk.Media == "ssd" {
+			observed["bus"], observed["target"], observed["rotationRate"] = disk.Bus, disk.Target, disk.RotationRate
+		}
+		disks = append(disks, observed)
 	}
 	return map[string]any{
 		"postcondition": true, "answered": true, "domain": request.Domain, "owned": true, "state": "running",

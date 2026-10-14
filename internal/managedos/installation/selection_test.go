@@ -61,7 +61,7 @@ func TestRequestFreezesThePublishedContentAndItsURLs(t *testing.T) {
 // names no substrate itself.
 func TestRequestBootsThroughTheMachinesOwnController(t *testing.T) {
 	request, _ := onlyRequest(t, labCatalog())
-	if !strings.HasPrefix(request.Target.Controller.Endpoint, "http://192.0.2.1:8000/redfish/v1/Systems/") {
+	if !strings.HasPrefix(request.Target.Controller.Endpoint, "https://192.0.2.1:8000/redfish/v1/Systems/") {
 		t.Fatalf("endpoint = %q", request.Target.Controller.Endpoint)
 	}
 	if request.Target.Controller.CredentialsRef != "lab-bmc-credentials" {

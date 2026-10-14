@@ -9,11 +9,11 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
-// BlockEvidence is what one block of the current operation durably proved
-// about one API object. It carries the capability's own evidence bytes
-// unread: reconciliation never learns what a capability publishes, so a
-// consumer decodes them through the capability that wrote them.
+// BlockEvidence carries durable facts decoded only by the evidence-owning capability.
 type BlockEvidence struct {
+	// ApplyProved populates Block with the detached original request and digest,
+	// carrying references, never Secret material, for owner validation.
+	Block          reconciliation.Block
 	Kind           string
 	Object         string
 	Implementation string
@@ -22,10 +22,8 @@ type BlockEvidence struct {
 	Evidence       json.RawMessage
 }
 
-// Evidence reports what the current operation's completed attempts and
-// resolutions proved about one exact object. It performs no probe and writes
-// nothing, and an object no frozen block names has no entry: the absence of a
-// record is not evidence that nothing was realized.
+// Evidence reads current-operation facts without probing or writing.
+// A missing record never proves that nothing was realized.
 func (s Service) Evidence(ctx context.Context, contextName, kind, object string) ([]BlockEvidence, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
@@ -70,10 +68,8 @@ func (s Service) Evidence(ctx context.Context, contextName, kind, object string)
 	return found, nil
 }
 
-// provedDependencies reads what every block one block depends on durably
-// proved in this operation, in frozen plan order. Only an apply attempt
-// receives it: a removal's dependencies are the blocks it removes before, and
-// they prove absence rather than anything its effect relies on.
+// provedDependencies reads direct dependencies in frozen plan order for apply.
+// Removal dependencies prove absence, not prerequisites for an effect.
 func provedDependencies(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block) ([]BlockEvidence, error) {
 	if operation.Verb != reconciliation.Apply {
 		return nil, nil
@@ -92,12 +88,57 @@ func provedDependencies(ctx context.Context, store OperationStore, operation ope
 	return proved, nil
 }
 
-// blockEvidence reads the record that last settled a block: its last attempt,
-// or the last resolution of that attempt when one observed it, since only an
-// unproved attempt is resolved and what the resolution observed is then what
-// the block proved. A block that never started, or whose settling record is
-// still running, proves nothing and carries no evidence rather than the bytes
-// of an earlier record.
+// applyDependencies uses the held transaction's store, never re-entering
+// Workspace: removal may hold its exclusive lock while needing apply facts.
+func applyDependencies(ctx context.Context, store OperationStore, applyOperation, blockID string) ([]BlockEvidence, error) {
+	operation, err := store.ReadOperation(ctx, applyOperation)
+	if err != nil {
+		return nil, err
+	}
+	if operation.Verb != reconciliation.Apply {
+		return nil, failure("lifecycle.state", "dependency identity must come from the original apply", "")
+	}
+	plan, err := store.ReadPlan(ctx, applyOperation)
+	if err != nil {
+		return nil, err
+	}
+	index := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.ID == blockID })
+	if index < 0 {
+		return nil, failure("lifecycle.state", "the original apply has no dependency identity for this block", "")
+	}
+	dependencies := map[string]bool{}
+	pending := slices.Clone(plan.Blocks[index].Dependencies)
+	for len(pending) != 0 {
+		id := pending[0]
+		pending = pending[1:]
+		if dependencies[id] {
+			continue
+		}
+		dependencies[id] = true
+		dependency := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.ID == id })
+		if dependency < 0 {
+			return nil, failure("lifecycle.state", "the original apply names a missing dependency", "")
+		}
+		pending = append(pending, plan.Blocks[dependency].Dependencies...)
+	}
+	var proved []BlockEvidence
+	for _, dependency := range plan.Blocks {
+		if !dependencies[dependency.ID] {
+			continue
+		}
+		evidence, err := blockEvidence(ctx, store, applyOperation, dependency, reconciliation.Apply)
+		if err != nil {
+			return nil, err
+		}
+		evidence.Block, _ = plan.Block(dependency.ID)
+		evidence.Evidence = slices.Clone(evidence.Evidence)
+		proved = append(proved, evidence)
+	}
+	return proved, nil
+}
+
+// blockEvidence reads the latest attempt's last resolution, or the attempt
+// itself. Unstarted or running records carry no evidence from earlier records.
 func blockEvidence(ctx context.Context, store OperationStore, operation string, block reconciliation.Block, verb reconciliation.Verb) (BlockEvidence, error) {
 	evidence := BlockEvidence{
 		Kind: block.Kind, Object: block.Object, Implementation: block.Implementation,

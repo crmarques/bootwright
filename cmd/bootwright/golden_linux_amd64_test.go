@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	effectiveencoding "github.com/crmarques/bootwright/internal/desiredstate/encoding"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // update rewrites each golden this package compares instead of comparing it:
@@ -96,6 +97,13 @@ func lineDiff(want, got string) string {
 	return out.String()
 }
 
+// admissibleGoldenSuffix names the golden of an example's admissible
+// projection beside the example's own, for an example admission refuses whole.
+const (
+	refusedExample         = "multidc-platform"
+	admissibleGoldenSuffix = "-admissible"
+)
+
 // An example is the declaration an operator starts from, so the effective
 // state render effective prints for it is contract: normalization, defaults
 // and canonical encoding all reach these bytes (specs/cli/output.md, streams).
@@ -120,6 +128,20 @@ func TestEveryExampleEffectiveStateMatchesItsGolden(t *testing.T) {
 	}
 	for _, name := range examples {
 		t.Run(name, func(t *testing.T) {
+			if name == refusedExample {
+				state, report, err := wireCompiler().Compile(context.Background(), exampleDirectory(t, name))
+				if err == nil || state != nil || report != nil {
+					t.Fatal("future authoring reference unexpectedly compiled")
+				}
+				requireReferenceRefusals(t, diagnostics.Of(err), false)
+				state, _ = compileAcceptance(t, admissibleExampleSources(t, true))
+				data, err := effectiveencoding.YAML(context.Background(), state.Effective())
+				if err != nil {
+					t.Fatalf("encoding the admissible projection: %v", err)
+				}
+				matchesTextGolden(t, "effective-"+name+admissibleGoldenSuffix, data)
+				return
+			}
 			state, _ := compileAcceptance(t, exampleDirectory(t, name))
 			data, err := effectiveencoding.YAML(context.Background(), state.Effective())
 			if err != nil {
@@ -134,7 +156,8 @@ func TestEveryExampleEffectiveStateMatchesItsGolden(t *testing.T) {
 	}
 	for _, path := range goldens {
 		name := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(path), "effective-"), ".golden")
-		if !slices.Contains(examples, name) {
+		known := slices.Contains(examples, name) || name == refusedExample+admissibleGoldenSuffix && slices.Contains(examples, refusedExample)
+		if !known {
 			t.Errorf("%s pins examples/%s, which no longer exists; delete the golden with its example", path, name)
 		}
 	}

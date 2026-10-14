@@ -117,9 +117,9 @@ options:
   private_delivery:
     description:
       - Whether the image URL carries private material. Under C(established)
-        the insert first reads, and refuses unless, the device's
-        VerifyCertificate and any HttpsTransferCertVerification a manager's
-        security service reports are true; C(disable-verification) is refused.
+        the insert requires a published manager HttpsTransferCertVerification
+        to read true; only without that switch does the device's
+        VerifyCertificate decide. C(disable-verification) is refused.
     type: bool
     default: false
 author:

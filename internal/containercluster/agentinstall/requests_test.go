@@ -186,7 +186,7 @@ func TestSecretReferencesNameEveryBoundDeclaration(t *testing.T) {
 	}) {
 		t.Fatalf("media secrets = %v", got)
 	}
-	if got := install.SecretReferences(); !slices.Equal(got, []string{"lab-bmc-credentials"}) {
+	if got := install.SecretReferences(); !slices.Equal(got, []string{"lab-bmc-credentials", "lab-bmc-tls"}) {
 		t.Fatalf("install secrets = %v", got)
 	}
 }

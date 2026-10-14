@@ -290,7 +290,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials(request), Values: values,
-		Refusals: managedservice.ForeignListenerRefusals(Kind, request.Identity.Service, request.BindAddress, listenerPorts(request)),
+		Refusals: managedservice.ListenerRefusals(Kind, request.Identity.Service, request.BindAddress, listenerPorts(request)),
 	}))
 }
 

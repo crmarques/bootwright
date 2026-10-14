@@ -28,7 +28,7 @@ func effectiveReplicas(value api.Value, size, minimum *big.Int) (*big.Int, *big.
 func osdHostCount(cluster api.Object) int64 {
 	var count int64
 	for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
-		if hasRole(node, "osd") {
+		if nativeMember(cluster, "osd", textOf(node, "name")) {
 			count++
 		}
 	}
@@ -41,7 +41,7 @@ func (a *admission) replication(cluster, policy api.Object) {
 		size, minimum = effectiveReplicas(policy.Spec().Get("replicated"), size, minimum)
 	}
 	size, minimum = effectiveReplicas(spec.Get("replicated"), size, minimum)
-	if minimum.Cmp(size) > 0 {
+	if minimum.Cmp(size) > 0 && !(positive(spec.Get("replicated", "size")) && positive(spec.Get("replicated", "minSize"))) {
 		a.invalid("$.spec.replicated", "effective minimum replicas must not exceed effective replica size")
 	}
 	if cluster.Spec().Has("ceph", "topology", "stretch") && (size.Cmp(big.NewInt(4)) != 0 || minimum.Cmp(big.NewInt(2)) != 0) {
@@ -51,8 +51,16 @@ func (a *admission) replication(cluster, policy api.Object) {
 	if domain == "" {
 		domain = textOf(policy.Spec(), "failureDomain")
 	}
-	if domain == "host" && cluster.Spec().Get("ceph", "topology", "nodes").Len() > 0 && size.Cmp(big.NewInt(osdHostCount(cluster))) > 0 {
-		a.invalid("$.spec.replicated.size", "host-domain replicas exceed declared OSD-host capacity")
+	if domain == "" {
+		domain = "host"
+	}
+	if domain == "host" && cluster.Spec().Get("ceph", "topology", "nodes").Len() > 0 {
+		hosts := big.NewInt(osdHostCount(cluster))
+		if size.Cmp(hosts) > 0 {
+			a.invalid("$.spec.replicated.size", "host-domain replicas exceed declared OSD-host capacity")
+		} else if textOf(cluster.Spec(), "ceph", "distribution") == "ibm" && !cluster.Spec().Has("ceph", "topology", "stretch") && size.Cmp(hosts) == 0 {
+			a.issue("api.invariant", "$.spec.replicated.size", "IBM host-domain replication requires an additional OSD-bearing host beyond the effective replica size", "add OSD-bearing hosts, or explicitly select replicated.size: 2 and minSize: 2 for three OSD-bearing hosts; omitted or zero size retains the default of 3")
+		}
 	}
 }
 func (a *admission) pool(cluster api.Object) {
@@ -61,9 +69,6 @@ func (a *admission) pool(cluster api.Object) {
 	policyReady := true
 	if name := textOf(spec, "placementPolicyRef"); name != "" {
 		policy, policyReady = a.sameOwner(api.StoragePlacementPolicy, name, "$.spec.placementPolicyRef", cluster)
-		if positive(spec.Get("replicated", "size")) || positive(spec.Get("replicated", "minSize")) {
-			a.invalid("$.spec.replicated", "placement policy owns non-zero replicated protection values")
-		}
 	}
 	protection := fallback(spec.Get("type"), "replicated")
 	if protection == "replicated" {
@@ -74,9 +79,6 @@ func (a *admission) pool(cluster api.Object) {
 	}
 	if protection == "erasure" {
 		a.required(spec, "erasure", "$.spec")
-		if positive(spec.Get("replicated", "size")) || positive(spec.Get("replicated", "minSize")) {
-			a.invalid("$.spec.replicated", "erasure protection forbids non-zero replicated values")
-		}
 		if cluster.Spec().Has("ceph", "topology", "stretch") {
 			a.invalid("$.spec.type", "stretch does not support erasure pools")
 		}
@@ -99,19 +101,11 @@ func (a *admission) pool(cluster api.Object) {
 	if spec.Has("mirroring") && textOf(spec, "role") != "rbd" {
 		a.invalid("$.spec.mirroring", "pool mirroring requires the rbd role")
 	}
-	if floatPositive(spec.Get("autoscale", "targetSizeRatio")) && spec.Has("autoscale", "targetSizeBytes") {
-		a.invalid("$.spec.autoscale", "autoscale ratio and byte targets are mutually exclusive")
-	}
-	if spec.Has("autoscale", "pgNumMin") && spec.Has("autoscale", "pgNumMax") && numeric(spec.Get("autoscale", "pgNumMin")).Cmp(numeric(spec.Get("autoscale", "pgNumMax"))) > 0 {
-		a.invalid("$.spec.autoscale", "minimum PG count must not exceed maximum PG count")
-	}
 	compression := spec.Get("compression")
 	if compression.Len() > 0 && !compression.Has("mode") {
 		a.required(compression, "mode", "$.spec.compression")
 	}
-	if positive(compression.Get("minBlobSize")) && positive(compression.Get("maxBlobSize")) && numeric(compression.Get("minBlobSize")).Cmp(numeric(compression.Get("maxBlobSize"))) > 0 {
-		a.invalid("$.spec.compression", "positive minimum blob size must not exceed maximum blob size")
-	}
+
 }
 
 func poolRefName(value api.Value) string {
@@ -141,12 +135,13 @@ func (a *admission) filesystem(cluster api.Object) {
 	if len(names) > 1 && defaults != 1 {
 		a.invalid("$.spec.dataPoolRefs", "multiple data pools require exactly one explicit default")
 	}
-	if spec.Has("mds") {
-		a.placement(cluster, spec.Get("mds", "placement"), "$.spec.mds.placement", "mds", false)
-	}
+	a.placement(cluster, spec.Get("mds", "placement"), "$.spec.mds.placement", "mds", false)
 	for i, group := range spec.Get("subvolumeGroups").Items() {
 		if name := textOf(group, "poolLayoutRef"); name != "" {
-			a.sameOwner(api.StoragePool, name, indexed("$.spec.subvolumeGroups", i)+".poolLayoutRef", cluster)
+			a.poolRole(name, indexed("$.spec.subvolumeGroups", i)+".poolLayoutRef", "cephfs-data", cluster)
+			if !slices.Contains(names, name) {
+				a.invalid(indexed("$.spec.subvolumeGroups", i)+".poolLayoutRef", "group layout must use an attached filesystem data pool")
+			}
 		}
 	}
 }

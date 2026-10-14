@@ -13,7 +13,10 @@ import (
 // It returns the selected name and identity so a stale marker is caught.
 type CurrentSelection func(context.Context) (string, error)
 
-type Executable struct{ Version, Commit string }
+type Executable struct {
+	Version, Commit string
+	Modified        bool
+}
 
 type Options struct {
 	BeginInvocation BeginInvocation
@@ -44,7 +47,7 @@ type Service struct {
 }
 
 func New(workspace Workspace, inputs Inputs, compiler Compiler, binder SecretBinder, host HostIdentity, automation AutomationIdentity, guard ExecutionGuard, capabilities CapabilityResolver, options Options) Service {
-	return Service{workspace, inputs, compiler, binder, host, automation, guard, capabilities, options}
+	return Service{workspace: workspace, inputs: inputs, compiler: compiler, binder: binder, host: host, automation: automation, guard: guard, capabilities: capabilities, options: options}
 }
 
 func (s Service) available(ctx context.Context) error {
@@ -159,10 +162,10 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 		result.Verb, result.Continuation, result.Finalizes = string(verb), true, true
 		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(marked.operation, marked.plan, marked.states)}
 	case decided.fresh:
-		result = presentation(decided)
+		result = s.presentation(decided)
 		result.Receipt = Receipt{Operation: "none", Verb: "plan", State: "preview", Next: string(decided.verb)}
 	default:
-		result = presentation(decided)
+		result = s.presentation(decided)
 		result.Receipt = Receipt{Operation: decided.operation.ID, Verb: "plan", State: "preview", Next: nextAction(decided.operation, decided.plan, decided.states)}
 	}
 	result.Context, result.Bound = view.Identity(), s.Concurrency()
@@ -227,8 +230,9 @@ func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState
 // planPreview marks what a stage selection would start and why it would leave
 // the rest, so an operator reads the consequence of the selection before
 // confirming it. The marks are what the next apply's admission takes first:
-// an unproved block it resolves or the failed block it retries holds back every
-// other ready block, which is deferred behind the first of them. Without a
+// an unproved block it resolves holds back every other ready block, which is
+// deferred behind the first of them, while the failed blocks it retries start
+// beside every ready block that does not wait on one of them. Without a
 // selection the steps carry no marker.
 func planPreview(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.StageSelection) PlanResult {
 	schedule := reconciliation.ScheduleOf(plan)
@@ -239,7 +243,7 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 	if len(selection) == 0 {
 		return result
 	}
-	kind, admitted := firstAdmission(plan, states, selection, nil)
+	kind, admitted := firstAdmission(plan, states, selection, nil, nil, nil)
 	holding := ""
 	if kind != StepStart {
 		holding = heldBehind(plan, states, admitted)
@@ -248,6 +252,9 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 	for index, step := range result.Steps {
 		if slices.Contains(admitted, index) {
 			result.Steps[index].Selection = kind
+			if kind == StepRetry && step.State != string(reconciliation.BlockFailed) {
+				result.Steps[index].Selection = StepStart
+			}
 			result.Startable++
 			continue
 		}
@@ -270,9 +277,9 @@ func planPreview(plan reconciliation.Plan, states map[string]reconciliation.Bloc
 	return result
 }
 
-// heldBehind names the block a ready block waits on while admission resolves
-// or retries: the first block it admits, or, where a selection admits no
-// failed block, the first failed block, which the apply refuses over.
+// heldBehind names the block a ready block waits on while admission resolves,
+// the first block it admits, or, where a selection admits no failed block, the
+// first failed block, which the apply refuses over.
 func heldBehind(plan reconciliation.Plan, states map[string]reconciliation.BlockState, admitted []int) string {
 	if len(admitted) != 0 {
 		return plan.Blocks[admitted[0]].ID

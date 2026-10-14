@@ -959,6 +959,11 @@ func (t *transaction) MutationState(ctx context.Context, name string) ([]byte, e
 		return nil, err
 	}
 	if prior, ok := t.evidence[name]; ok {
+		if dir := t.leases[name]; dir != nil {
+			if err := t.store.retiredOperations(ctx, dir, name); err != nil {
+				return nil, err
+			}
+		}
 		return slices.Clone(prior), nil
 	}
 	dir, err := t.leaseContext(ctx, name)
@@ -974,6 +979,9 @@ func (t *transaction) MutationState(ctx context.Context, name string) ([]byte, e
 		return nil, err
 	}
 	t.evidence[name] = slices.Clone(data)
+	if err := t.store.retiredOperations(ctx, dir, name); err != nil {
+		return nil, err
+	}
 	return data, nil
 }
 

@@ -70,6 +70,12 @@ func testOperation(t *testing.T, plan reconciliation.Plan) Operation {
 	}
 }
 
+// testBuild is the build that registered testOperation, running its blocks.
+var testBuild = Build{
+	AutomationDigest: strings.Repeat("2", 64), ContentDigest: strings.Repeat("a", 64),
+	Executable: Executable{Version: "devel", Commit: "abcdef1"},
+}
+
 func newStore(t *testing.T) (*Store, *memoryArea) {
 	t.Helper()
 	area := newArea()
@@ -496,7 +502,7 @@ func TestAttemptLifecycleIsDurableAndExclusive(t *testing.T) {
 	if err := store.Register(ctx, operation, plan); err != nil {
 		t.Fatal(err)
 	}
-	number, err := store.StartAttempt(ctx, operation.ID, "alpha")
+	number, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild)
 	if err != nil || number != 1 {
 		t.Fatalf("first attempt = %d (%v)", number, err)
 	}
@@ -510,7 +516,7 @@ func TestAttemptLifecycleIsDurableAndExclusive(t *testing.T) {
 	if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeChanged, reconciliation.EffectCompleted, reconciliation.BlockDone, nil); err == nil {
 		t.Fatal("an already observed attempt was completed twice")
 	}
-	second, err := store.StartAttempt(ctx, operation.ID, "alpha")
+	second, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild)
 	if err != nil || second != 2 {
 		t.Fatalf("second attempt = %d (%v)", second, err)
 	}
@@ -518,7 +524,7 @@ func TestAttemptLifecycleIsDurableAndExclusive(t *testing.T) {
 		t.Fatal("the first attempt record was removed")
 	}
 	area.files[operation.ID+"/blocks/alpha/attempt-000003.json"] = []byte("{}\n")
-	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err == nil {
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err == nil {
 		t.Fatal("an attempt overwrote an existing record")
 	}
 }
@@ -544,7 +550,7 @@ func TestAStartInterruptedBetweenItsWritesIsAdoptedByTheNext(t *testing.T) {
 			}
 			want := 1
 			if retry {
-				if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+				if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
 					t.Fatal(err)
 				}
 				if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeFailed, reconciliation.EffectUnknown, reconciliation.BlockFailed, nil); err != nil {
@@ -564,7 +570,7 @@ func TestAStartInterruptedBetweenItsWritesIsAdoptedByTheNext(t *testing.T) {
 					area.fail["replace "+statePath] = errors.New("interrupted")
 				}
 			}
-			if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err == nil {
+			if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err == nil {
 				t.Fatal("a start whose block record was never published succeeded")
 			}
 			area.landed = nil
@@ -578,7 +584,7 @@ func TestAStartInterruptedBetweenItsWritesIsAdoptedByTheNext(t *testing.T) {
 			}
 
 			next := New(area, fixedClock())
-			started, err := next.StartAttempt(ctx, operation.ID, "alpha")
+			started, err := next.StartAttempt(ctx, operation.ID, "alpha", testBuild)
 			if err != nil || started != want {
 				t.Fatalf("the start after the interruption = %d (%v), want %d", started, err, want)
 			}
@@ -592,7 +598,7 @@ func TestAStartInterruptedBetweenItsWritesIsAdoptedByTheNext(t *testing.T) {
 			if err := next.CompleteAttempt(ctx, operation.ID, "alpha", want, reconciliation.OutcomeFailed, reconciliation.EffectUnknown, reconciliation.BlockFailed, nil); err != nil {
 				t.Fatal(err)
 			}
-			if following, err := next.StartAttempt(ctx, operation.ID, "alpha"); err != nil || following != want+1 {
+			if following, err := next.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil || following != want+1 {
 				t.Fatalf("the start after the adopted attempt = %d (%v), want %d", following, err, want+1)
 			}
 		})
@@ -622,7 +628,7 @@ func TestAStartAdoptsNothingButAnInterruptedStart(t *testing.T) {
 	running := Attempt{Version: 1, Block: "alpha", Number: 1, Phase: "running", Started: "2026-09-11T12:00:00Z", Updated: "2026-09-11T12:00:00Z"}
 	for name, arrange := range map[string]func(*testing.T, *Store, *memoryArea){
 		"an attempt whose block record was lost": func(t *testing.T, store *Store, area *memoryArea) {
-			if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+			if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
 				t.Fatal(err)
 			}
 			delete(area.files, directory+"state.json")
@@ -690,13 +696,175 @@ func TestAStartAdoptsNothingButAnInterruptedStart(t *testing.T) {
 			for target, data := range area.files {
 				snapshot[target] = slices.Clone(data)
 			}
-			if number, err := New(area, fixedClock()).StartAttempt(ctx, operation.ID, "alpha"); err == nil {
+			if number, err := New(area, fixedClock()).StartAttempt(ctx, operation.ID, "alpha", testBuild); err == nil {
 				t.Fatalf("a start adopted a record no interrupted start left, as attempt %d", number)
 			}
 			if !maps.EqualFunc(area.files, snapshot, bytes.Equal) {
 				t.Fatal("a refused start changed a record")
 			}
 		})
+	}
+}
+
+// An operation another build continues keeps naming the build that registered
+// it, so each attempt and resolution names the build it ran under from its
+// start, and preparing or completing it keeps that build.
+func TestAnAttemptAndItsResolutionNameTheBuildTheyRanUnder(t *testing.T) {
+	ctx := context.Background()
+	store, _ := newStore(t)
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	other := Build{AutomationDigest: strings.Repeat("4", 64), ContentDigest: testBuild.ContentDigest,
+		Executable: Executable{Version: "1.5.0", Commit: "0123abc"}, Modified: true}
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
+		t.Fatal(err)
+	}
+	named := func(when string, want Build) {
+		t.Helper()
+		record, err := New(store.area, fixedClock()).Attempt(ctx, operation.ID, "alpha", 1)
+		if err != nil || record.Build == nil || *record.Build != want {
+			t.Fatalf("%s the attempt names %+v (%v), want %+v", when, record.Build, err, want)
+		}
+	}
+	named("started,", testBuild)
+	if err := store.RecordPreparation(ctx, operation.ID, "alpha", 1, json.RawMessage(`{"unit":"absent"}`)); err != nil {
+		t.Fatal(err)
+	}
+	named("prepared,", testBuild)
+	if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
+		t.Fatal(err)
+	}
+	named("observed,", testBuild)
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, other); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 1, reconciliation.OutcomeChanged, reconciliation.EffectCompleted, reconciliation.BlockDone, json.RawMessage(`{}`), nil); err != nil {
+		t.Fatal(err)
+	}
+	resolution, found, err := New(store.area, fixedClock()).LastResolution(ctx, operation.ID, "alpha", 1)
+	if err != nil || !found || resolution.Build == nil || *resolution.Build != other {
+		t.Fatalf("the resolution names %+v (%v)", resolution.Build, err)
+	}
+	named("resolved,", testBuild)
+}
+
+// A start that adopts an interrupted one runs the attempt itself, so the
+// adopted record names the build that adopts it, whichever build or no build
+// the interrupted start named. A record that names it already is kept as it is.
+func TestAnAdoptedStartNamesTheBuildThatAdoptsIt(t *testing.T) {
+	ctx := context.Background()
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	adopting := Build{AutomationDigest: strings.Repeat("4", 64), ContentDigest: testBuild.ContentDigest,
+		Executable: Executable{Version: "1.5.0", Commit: "0123abc"}}
+	for name, interrupted := range map[string]*Build{"under another build": &testBuild, "by an earlier build": nil} {
+		t.Run(name, func(t *testing.T) {
+			store, area := newStore(t)
+			if _, err := store.Index(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Register(ctx, operation, plan); err != nil {
+				t.Fatal(err)
+			}
+			pending, err := encode(BlockRecord{Version: 1, Block: "alpha", State: reconciliation.BlockPending}, MaxAttemptBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			running, err := encode(Attempt{Version: 1, Block: "alpha", Number: 1, Phase: "running", Build: interrupted,
+				Started: "2026-09-11T12:00:00Z", Updated: "2026-09-11T12:00:00Z"}, MaxAttemptBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			area.files[operation.ID+"/blocks/alpha/state.json"] = pending
+			area.files[operation.ID+"/blocks/alpha/attempt-000001.json"] = running
+			if number, err := New(area, fixedClock()).StartAttempt(ctx, operation.ID, "alpha", adopting); err != nil || number != 1 {
+				t.Fatalf("the adopting start = %d (%v)", number, diagnostics.Of(err))
+			}
+			record, err := New(area, fixedClock()).Attempt(ctx, operation.ID, "alpha", 1)
+			if err != nil || record.Build == nil || *record.Build != adopting || record.Phase != "running" || record.Started != "2026-09-11T12:00:00Z" || record.Updated == record.Started {
+				t.Fatalf("the adopted start reads back as %+v (%v)", record, err)
+			}
+			adopted := slices.Clone(area.files[operation.ID+"/blocks/alpha/attempt-000001.json"])
+			if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeFailed, reconciliation.EffectUnknown, reconciliation.BlockFailed, nil); err != nil {
+				t.Fatal(err)
+			}
+			area.files[operation.ID+"/blocks/alpha/attempt-000002.json"] = bytes.Replace(adopted, []byte(`"number":1`), []byte(`"number":2`), 1)
+			if _, err := New(area, fixedClock()).StartAttempt(ctx, operation.ID, "alpha", adopting); err != nil {
+				t.Fatal(err)
+			}
+			if kept := area.files[operation.ID+"/blocks/alpha/attempt-000002.json"]; !bytes.Equal(kept, bytes.Replace(adopted, []byte(`"number":1`), []byte(`"number":2`), 1)) {
+				t.Fatalf("a start rewrote an interrupted start that already names it: %s", kept)
+			}
+		})
+	}
+}
+
+// A build no start could have taken from a running executable is refused
+// before anything is written.
+func TestAStartRefusesAnInvalidBuild(t *testing.T) {
+	ctx := context.Background()
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	for name, mutate := range map[string]func(*Build){
+		"a short automation digest":    func(build *Build) { build.AutomationDigest = strings.Repeat("2", 63) },
+		"an uppercase content digest":  func(build *Build) { build.ContentDigest = strings.Repeat("A", 64) },
+		"no content digest":            func(build *Build) { build.ContentDigest = "" },
+		"an overlong commit":           func(build *Build) { build.Executable.Commit = strings.Repeat("c", maxIdentifier+1) },
+		"an overlong version":          func(build *Build) { build.Executable.Version = strings.Repeat("v", maxIdentifier+1) },
+		"a version that is not UTF-8":  func(build *Build) { build.Executable.Version = "devel\xff" },
+		"a commit that is not UTF-8":   func(build *Build) { build.Executable.Commit = "\xc3" },
+		"a non-hexadecimal automation": func(build *Build) { build.AutomationDigest = strings.Repeat("g", 64) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, area := newStore(t)
+			if _, err := store.Index(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Register(ctx, operation, plan); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
+				t.Fatal(err)
+			}
+			snapshot := maps.Clone(area.files)
+			build := testBuild
+			mutate(&build)
+			if _, err := store.StartAttempt(ctx, operation.ID, "alpha", build); !refusedAsRecord(err) {
+				t.Fatalf("a start under an invalid build = %v", err)
+			}
+			if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, build); !refusedAsRecord(err) {
+				t.Fatalf("a resolution under an invalid build = %v", err)
+			}
+			if !maps.EqualFunc(area.files, snapshot, bytes.Equal) {
+				t.Fatal("a refused start wrote a record")
+			}
+		})
+	}
+}
+
+func refusedAsRecord(err error) bool {
+	reported := diagnostics.Of(err)
+	return len(reported) == 1 && reported[0].Code == "lifecycle.state"
+}
+
+// A record an earlier build wrote names no build, and stays readable.
+func TestAnAttemptRecordWithoutABuildStaysReadable(t *testing.T) {
+	data := []byte(`{"version":1,"block":"alpha","number":1,"resolution":0,"phase":"observed","outcome":"changed","effect":"completed","evidence":{"postcondition":true},"started":"2026-09-11T12:00:01Z","updated":"2026-09-11T12:00:02Z"}` + "\n")
+	var record Attempt
+	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+		t.Fatalf("decoding: %v", diagnostics.Of(err))
+	}
+	if err := validateAttempt(record); err != nil || record.Build != nil {
+		t.Fatalf("the record reads back as %+v (%v)", record, err)
 	}
 }
 
@@ -803,14 +971,14 @@ func TestResolutionNumbersNeverReuseAPath(t *testing.T) {
 	if err := store.Register(ctx, operation, plan); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
 		t.Fatal(err)
 	}
 	for want := 1; want <= 3; want++ {
-		got, err := store.StartResolution(ctx, operation.ID, "alpha", 1)
+		got, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild)
 		if err != nil || got != want {
 			t.Fatalf("resolution = %d (%v), want %d", got, err, want)
 		}
@@ -843,13 +1011,13 @@ func TestAResolutionRecordCarriesABoundedObservationFailureOnly(t *testing.T) {
 	if err := store.Register(ctx, operation, plan); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1); err != nil {
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild); err != nil {
 		t.Fatal(err)
 	}
 	valid := ObservationFailure{Code: "lifecycle.state", Message: "the adapter could not reach the host", Remediation: "restore it"}
@@ -882,7 +1050,7 @@ func TestAResolutionRecordCarriesABoundedObservationFailureOnly(t *testing.T) {
 	if err != nil || !found || settled.Failure == nil || *settled.Failure != valid {
 		t.Fatalf("the resolution read back as %+v, %t (%v)", settled, found, err)
 	}
-	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1); err != nil {
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 2, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil, nil); err != nil {
@@ -908,7 +1076,7 @@ func TestLastResolutionReadsTheRecordThatSettledTheBlock(t *testing.T) {
 	if err := store.Register(ctx, operation, plan); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
 		t.Fatal(err)
 	}
 	if _, found, err := store.LastResolution(ctx, operation.ID, "alpha", 1); err != nil || found {
@@ -923,7 +1091,7 @@ func TestLastResolutionReadsTheRecordThatSettledTheBlock(t *testing.T) {
 		{reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, `{"seen":1}`},
 		{reconciliation.OutcomeUnchanged, reconciliation.EffectCompleted, reconciliation.BlockDone, `{"seen":2}`},
 	} {
-		number, err := store.StartResolution(ctx, operation.ID, "alpha", 1)
+		number, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -939,7 +1107,7 @@ func TestLastResolutionReadsTheRecordThatSettledTheBlock(t *testing.T) {
 	if _, found, err := store.LastResolution(ctx, operation.ID, "alpha", 2); err != nil || found {
 		t.Fatalf("a resolution of attempt 1 read back for attempt 2 (%t, %v)", found, err)
 	}
-	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1); err != nil {
+	if _, err := store.StartResolution(ctx, operation.ID, "alpha", 1, testBuild); err != nil {
 		t.Fatal(err)
 	}
 	running, found, err := store.LastResolution(ctx, operation.ID, "alpha", 1)
@@ -1062,7 +1230,7 @@ func TestAClaimedOperationRegistersIntoItsDirectory(t *testing.T) {
 	if index, err := store.Index(ctx); err != nil || index.Current != operation.ID {
 		t.Fatalf("index = %+v (%v)", index, err)
 	}
-	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
 		t.Fatal(err)
 	}
 	if started, err := store.Started(ctx, operation.ID); err != nil || !started {
@@ -1401,7 +1569,7 @@ func TestPreparationIsPublishedOnceBeforeTheEffect(t *testing.T) {
 	if err := store.RecordPreparation(ctx, operation.ID, "alpha", 1, preparation); err == nil {
 		t.Fatal("a before-state was published without a durable attempt")
 	}
-	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.RecordPreparation(ctx, operation.ID, "alpha", 1, preparation); err != nil {
@@ -1445,7 +1613,7 @@ func TestPublishingABeforeStateNeverSyncsTheRecord(t *testing.T) {
 	if err := store.Register(ctx, operation, plan); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.StartAttempt(ctx, operation.ID, "alpha"); err != nil {
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
 		t.Fatal(err)
 	}
 	area.syncs = nil
@@ -1482,7 +1650,7 @@ func TestConcurrentBlocksPublishTheirOwnRecords(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			number, err := store.StartAttempt(ctx, operation.ID, block)
+			number, err := store.StartAttempt(ctx, operation.ID, block, testBuild)
 			if err != nil {
 				failures <- err
 				return

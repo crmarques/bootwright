@@ -28,7 +28,7 @@ type scriptedChild struct {
 
 func scriptedElevator(child scriptedChild, commands *[]Command) Elevator {
 	executor := executorFunc(func(_ context.Context, c Command) (int, error) {
-		if slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+		if slices.Equal(c.Arguments, []string{"-n", "-ll"}) {
 			return 1, nil
 		}
 		if commands != nil {
@@ -258,7 +258,7 @@ func TestARefreshWarningNeverReachesJSONStandardError(t *testing.T) {
 					}
 				})
 				elevator.Executor = executorFunc(func(_ context.Context, c Command) (int, error) {
-					if slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) || slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-v"}) {
+					if slices.Equal(c.Arguments, []string{"-n", "-ll"}) || slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-v"}) {
 						return 1, nil
 					}
 					io.WriteString(c.Error, startAnnouncement)
@@ -536,7 +536,7 @@ func TestElevationRelaysRawOutputUnchanged(t *testing.T) {
 	chunks := []string{"apiVersion: v1\r\n", "data: \x00\x01", "\r", "\nkind: Config"}
 	var relayed []string
 	executor := executorFunc(func(_ context.Context, c Command) (int, error) {
-		if slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+		if slices.Equal(c.Arguments, []string{"-n", "-ll"}) {
 			return 1, nil
 		}
 		for _, chunk := range chunks {

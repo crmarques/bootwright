@@ -93,9 +93,9 @@ def identity(prefix, required):
 LIBVIRT, BAREMETAL = "substrate_libvirt_machine", "substrate_baremetal_machine"
 OPTIONS = {
     "libvirt": {
-        "pre_boot": access(LIBVIRT + "_target"),
-        "boot_media": dict(access(LIBVIRT + "_boot"), **{LIBVIRT + "_boot_installer_powers_off": ("bool", True, None)}),
-        "boot_disk": dict(access(LIBVIRT + "_disk"), **{LIBVIRT + "_disk_power_on": ("bool", True, None)}),
+        "pre_boot": access(LIBVIRT + "_target", bundled=True),
+        "boot_media": dict(access(LIBVIRT + "_boot", bundled=True), **{LIBVIRT + "_boot_installer_powers_off": ("bool", True, None)}),
+        "boot_disk": dict(access(LIBVIRT + "_disk", bundled=True), **{LIBVIRT + "_disk_power_on": ("bool", True, None)}),
         "identity_read": identity(LIBVIRT + "_identity", ("uri", "domain", "marker_path", "host_key_path")),
     },
     "baremetal": {

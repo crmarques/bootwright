@@ -195,19 +195,29 @@ type KeptEntry struct {
 	Name  string
 }
 
-// QuiescenceProber is the optional half of a capability whose quiescence is
-// observed on the host, so a removal of its block refuses while its target
-// runs. A destroy's plan names the Machines of those blocks as the ones to stop
-// first; a capability whose quiescence is derived never refuses and is not
-// named.
+// QuiescenceProber identifies host-observed quiescence. Destroy names these
+// Machines at their stop boundary; derived quiescence needs no operator stop.
 type QuiescenceProber interface {
 	ProbesQuiescence() bool
 }
 
-// Removal is the half of a frozen block that removing it decides: the words it
-// is planned and reported in, the impacts it lists and the authorization it
-// consumes. The block's identity, request and digests are deliberately absent,
-// so planning a removal from a frozen plan can never change what is removed.
+// OnlineRemoval defers quiescence only for Machines following its effects in
+// the removal graph. Every online effect must be proved removed before their
+// inverses; the operator, never destroy, stops Machines that remain live.
+type OnlineRemoval interface {
+	RequiresOnlineRemoval(reconciliation.Block) bool
+}
+
+type HostBound interface {
+	HostMachines(reconciliation.Block) ([]string, error)
+}
+
+type HostRemoval interface {
+	RemovesHost(reconciliation.Block) bool
+}
+
+// Removal describes inverse effects and authorization, deliberately excluding
+// identity, request and digests so planning cannot change what is removed.
 type Removal struct {
 	Description string
 	Impacts     []string
@@ -215,27 +225,25 @@ type Removal struct {
 	Groups      []reconciliation.Group
 }
 
-// Probe is one read-only quiescence observation against a frozen block. It
-// carries no operation identity, log or before-state publication, because it
-// runs before any operation is registered and may change nothing.
+// Probe reads quiescence without mutation, attempt, log or before-state hooks.
 type Probe struct {
-	// Context names the context the removal runs in, which a stop command the
-	// probe composes names too, and which the runner records against the
-	// probe's adapter job, as an attempt's.
-	Context  string
-	Block    reconciliation.Block
-	Launch   prerequisites.PythonLaunch
-	Bundle   prerequisites.BundleLocation
-	Area     prerequisites.BundleArea
-	Material map[string]secrets.Material
+	// ApplyOperation remains stable across context renames and replacement removals.
+	ApplyOperation string
+	// ApplyProved follows Execution.ApplyProved; probes never refresh that identity.
+	ApplyProved []BlockEvidence
+	// Context names the removal's current context for stop commands and adapter jobs.
+	Context          string
+	Block            reconciliation.Block
+	Launch           prerequisites.PythonLaunch
+	Bundle           prerequisites.BundleLocation
+	Area             prerequisites.BundleArea
+	Material         map[string]secrets.Material
+	RetiredWithHosts bool
 }
 
-// Execution presents the probe as one bounded adapter call, so a capability
-// reaches its own observation the same way it always does. It carries no log,
-// progress or before-state hook, because a probe runs before any operation
-// exists to record against and may change nothing.
+// Execution presents a read-only adapter call without effect-attempt hooks.
 func (p Probe) Execution() Execution {
-	return Execution{Context: p.Context, Block: p.Block, Launch: p.Launch, Bundle: p.Bundle, Area: p.Area, Material: p.Material}
+	return Execution{ApplyOperation: p.ApplyOperation, ApplyProved: p.ApplyProved, Context: p.Context, Block: p.Block, Launch: p.Launch, Bundle: p.Bundle, Area: p.Area, Material: p.Material, RetiredWithHosts: p.RetiredWithHosts}
 }
 
 // QuiescenceState is what a probe proved about one block's targets.
@@ -257,6 +265,7 @@ type Quiescence struct {
 	State  string
 	Reason string
 	Stop   string
+	Remedy string
 }
 
 // Settled reports the one state that admits removal.
@@ -347,11 +356,11 @@ type OperationStore interface {
 	Block(context.Context, string, string) (operationstore.BlockRecord, error)
 	LostBlockRecords(context.Context, string, reconciliation.Plan) ([]string, error)
 	Attempt(context.Context, string, string, int) (operationstore.Attempt, error)
-	StartAttempt(context.Context, string, string) (int, error)
+	StartAttempt(context.Context, string, string, operationstore.Build) (int, error)
 	RecordPreparation(context.Context, string, string, int, json.RawMessage) error
 	CompleteAttempt(context.Context, string, string, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error
 	LastAttempt(context.Context, string, string) (int, error)
-	StartResolution(context.Context, string, string, int) (int, error)
+	StartResolution(context.Context, string, string, int, operationstore.Build) (int, error)
 	LastResolution(context.Context, string, string, int) (operationstore.Attempt, bool, error)
 	CompleteResolution(context.Context, string, string, int, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage, *operationstore.ObservationFailure) error
 	OpenLog(context.Context, string) (*operationstore.Log, error)
@@ -420,6 +429,11 @@ type SSHReservation struct {
 // bounded memory owned by the caller and cleared after the attempt.
 type Execution struct {
 	Operation string
+	// ApplyOperation is the original persisted apply operation ID, including
+	// during destruction and read-only resolution. A provider may derive a
+	// stable native identity from it and its frozen object identity. Context
+	// names and the current destroy operation are not identity inputs.
+	ApplyOperation string
 	// Context names the context the operation belongs to, so a command a
 	// capability's diagnostic names acts on this context's object only, and
 	// the runner records it against the adapter's job, so a job it holds
@@ -445,6 +459,14 @@ type Execution struct {
 	// A capability decodes it only through the owner of that evidence, which
 	// composition wires. A destroy, a resolution and a probe receive none.
 	Proved []BlockEvidence
+	// ApplyProved carries the transitive dependencies of this block in the
+	// original apply's frozen plan, in that plan's order. Every invocation,
+	// including removal, resolution and quiescence, receives only those
+	// dependencies' durable apply records; reversed removal dependencies and
+	// fresh live observations never replace them. A pending or unproved record
+	// is not identity proof. Consumers decode evidence through its owner and
+	// require the state and identity that owner validates.
+	ApplyProved []BlockEvidence
 	// LocateTool answers where the controller stage installed one executable,
 	// so a block runs the exact file that stage published for the release its
 	// own graph selected. The engine asks the plan's controller stage block,
@@ -461,7 +483,8 @@ type Execution struct {
 	// error, for an operator to read when no structured event explains what a
 	// run did. An adapter hands it the process's streams and writes nothing
 	// itself; whoever opened it owns closing it.
-	Output prerequisites.RunOutput
+	Output           prerequisites.RunOutput
+	RetiredWithHosts bool
 }
 
 // ControllerStage is what extending the host's prerequisites needs and nothing

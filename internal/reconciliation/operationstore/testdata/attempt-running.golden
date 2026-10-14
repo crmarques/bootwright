@@ -7,6 +7,14 @@
   "outcome": "",
   "effect": "",
   "evidence": null,
+  "build": {
+    "automationDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "contentDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "executable": {
+      "version": "devel",
+      "commit": "abcdef1"
+    }
+  },
   "started": "2026-09-11T12:00:01Z",
   "updated": "2026-09-11T12:00:01Z"
 }

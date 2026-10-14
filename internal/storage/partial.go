@@ -19,18 +19,31 @@ func ValidatePartial(object api.Object, catalog api.Catalog) []api.Issue {
 	}
 	a.lexicalValues()
 	a.object = object
-	if cephProduct(object) {
+	a.partial = true
+	a.intrinsic()
+	return a.issues
+}
+
+func (a *admission) orderedPositive(value api.Value, high, low, field string) {
+	if positive(value.Get(high)) && positive(value.Get(low)) && numeric(value.Get(low)).Cmp(numeric(value.Get(high))) > 0 {
+		a.invalid(field, "positive minimum must not exceed maximum")
+	}
+}
+
+func (a *admission) intrinsic() {
+	spec := a.object.Spec()
+	if cephProduct(a.object) {
 		if textOf(spec, "type") == "ibm-storage-ceph" {
 			a.forbid(spec, "$.spec", "rhsm")
-			if spec.Get("license", "accept").Type() == api.Boolean && !spec.Get("license", "accept").Bool() {
+			if (!a.partial || spec.Get("license", "accept").Type() == api.Boolean) && !spec.Get("license", "accept").Bool() {
 				a.invalid("$.spec.license.accept", "IBM storage entitlement requires explicit license acceptance")
 			}
 		} else if textOf(spec, "rhsm", "management") == "external" {
 			a.forbid(spec.Get("rhsm"), "$.spec.rhsm", "organizationRef", "activationKeyRef", "connectToInsights", "satellite")
 		}
-		return a.issues
+		return
 	}
-	switch object.Kind() {
+	switch a.object.Kind() {
 	case api.StoragePlacementPolicy, api.StoragePool:
 		a.orderedPositive(spec.Get("replicated"), "size", "minSize", "$.spec.replicated")
 		if spec.Has("placementPolicyRef") && (positive(spec.Get("replicated", "size")) || positive(spec.Get("replicated", "minSize"))) {
@@ -52,27 +65,15 @@ func ValidatePartial(object api.Object, catalog api.Catalog) []api.Issue {
 		if textOf(spec, "management") == "external" {
 			a.forbid(spec, "$.spec", "ceph")
 		}
-		if textOf(ceph, "distribution") == "oss" {
-			a.forbid(ceph, "$.spec.ceph", "ibm", "entitlementRef", "packageVersion")
+		if textOf(ceph, "distribution") == "oss" || (!a.partial && !ceph.Has("distribution")) {
+			a.forbid(ceph, "$.spec.ceph", "entitlementRef", "ibm", "packageVersion")
 			a.forbid(ceph.Get("cephadm", "ansible"), "$.spec.ceph.cephadm.ansible", "packageVersion")
 		}
-		gateway := ceph.Get("mgmtGateway")
-		if textOf(gateway, "exposure") == "http" {
-			a.forbid(gateway, "$.spec.ceph.mgmtGateway", "tls", "oauth2Proxy")
-			if gateway.Get("enableAuth").Bool() {
-				a.invalid("$.spec.ceph.mgmtGateway.enableAuth", "HTTP management gateway forbids authentication")
-			}
+		a.retiredCluster(ceph)
+		if a.partial {
+			a.nativeServices(ceph, true)
 		}
-		for i, node := range ceph.Get("topology", "nodes").Items() {
-			field := indexed("$.spec.ceph.topology.nodes", i)
-			if node.Has("devices") && node.Has("osd") {
-				a.invalid(field+".osd", "device shorthand and per-node OSD configuration are mutually exclusive")
-			}
-			a.partialOSD(node.Get("osd"), field+".osd")
-		}
-		for i, group := range ceph.Get("topology", "osdDrivegroups").Items() {
-			a.partialOSD(group.Get("osd"), indexed("$.spec.ceph.topology.osdDrivegroups", i)+".osd")
-		}
+
 	case api.StorageObjectGateway:
 		if textOf(spec, "endpoint", "scheme") == "http" {
 			a.forbid(spec.Get("endpoint"), "$.spec.endpoint", "tls")
@@ -89,35 +90,6 @@ func ValidatePartial(object api.Object, catalog api.Catalog) []api.Issue {
 	case api.StorageExport:
 		if spec.Has("dataFoundation") && spec.Has("externalDetails") {
 			a.invalid("$.spec", "storage export ownership modes are mutually exclusive")
-		}
-	}
-	return a.issues
-}
-
-func (a *admission) orderedPositive(value api.Value, high, low, field string) {
-	if positive(value.Get(high)) && positive(value.Get(low)) && numeric(value.Get(low)).Cmp(numeric(value.Get(high))) > 0 {
-		a.invalid(field, "positive minimum must not exceed maximum")
-	}
-}
-
-func (a *admission) partialOSD(osd api.Value, field string) {
-	if osd.Get("tpm2").Bool() && osd.Get("encrypted").Type() == api.Boolean && !osd.Get("encrypted").Bool() {
-		a.invalid(field+".tpm2", "TPM2 OSD unlock requires encryption")
-	}
-	for _, key := range []string{"dataDevices", "dbDevices", "walDevices"} {
-		selector := osd.Get(key)
-		modes := 0
-		for _, mode := range []string{"paths", "pathSpecs", "all"} {
-			if selector.Has(mode) {
-				modes++
-			}
-		}
-		filters := selector.Has("model") || selector.Has("vendor") || selector.Has("rotational") || selector.Has("size")
-		if modes > 1 || (modes > 0 && filters) {
-			a.invalid(field+"."+key, "device selection modes cannot be combined")
-		}
-		if key != "dataDevices" && selector.Get("all").Bool() {
-			a.invalid(field+"."+key+".all", "all-device selection is valid only for data devices")
 		}
 	}
 }

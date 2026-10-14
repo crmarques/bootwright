@@ -8,6 +8,7 @@ func init() {
 	register(StorageObjectGateway, storageObjectGatewaySchema)
 	register(StorageNFSExport, storageNFSExportSchema)
 	register(StorageExport, storageExportSchema)
+	register(StorageClient, storageClientSchema)
 }
 
 func storagePlacement() *Shape {
@@ -61,24 +62,21 @@ func storageClusterSchema() *Shape {
 	configValues := stringsMap()
 	configValues.Element = nonempty()
 	config := &Shape{Type: Mapping, Open: true, Element: configValues, Atomic: true}
-	monitoring := record(field("enabled", boolean()))
-	for _, key := range []string{"prometheus", "grafana", "alertmanager", "nodeExporter", "loki", "promtail"} {
-		monitoring.Fields = append(monitoring.Fields, field(key, storageMonitoringService(key)))
-	}
-	monitoring.Suppress = []Suppression{{Field: "enabled", Value: BoolValue(false), Fields: []string{"prometheus", "grafana", "alertmanager", "nodeExporter", "loki", "promtail"}}}
-	gateway := record(defaulted("dnsLabel", name(), StringValue("mgr")), field("port", integer("0", "65535")), field("exposure", enumeration("https", "http")), field("enableAuth", boolean()), field("tls", storageTLS()), field("oauth2Proxy", record(required("providerDisplayName", nonempty()), required("clientId", nonempty()), required("clientSecretRef", secret("opaque", "token")), required("oidcIssuerUrl", lexical("https-url")), field("redirectUrl", url()), field("httpsAddress", nonempty()), field("allowlistDomains", set(dns())), field("cookieSecretRef", secret("opaque", "token")))), required("ingress", storageIngress(false)))
-	gateway.Suppress = []Suppression{{Field: "exposure", Value: StringValue("http"), Fields: []string{"tls", "oauth2Proxy"}}, {Field: "enableAuth", Value: BoolValue(false), Fields: []string{"oauth2Proxy"}}}
 	cluster := record(
 		defaulted("distribution", enumeration("oss", "redhat", "ibm"), StringValue("oss")), required("release", nonempty()), field("packageVersion", nonempty()), field("image", record(field("base", lexical("registry-base")), field("version", lexical("image-version")))), field("community", record(field("mirror", lexical("https-url")), field("checksum", lexical("checksum")))),
 		field("ibm", record(required("callHome", enumeration("enabled", "disabled")), field("packages", record(required("source", enumeration("vendor", "subscription")), field("subscriptionRepos", set(nonempty())))))), field("entitlementRef", ref(Entitlement)), field("osSubscriptionRef", ref(Entitlement)),
-		required("cephadm", record(field("addressRef", nonempty()), field("workarounds", set(enumeration("mgmt-gateway-spec-dependency-recording"))), field("ansible", record(field("packageVersion", nonempty()))), field("clusterSSH", record(field("user", lexical("posix-user")), field("keyRef", secret("sshKeyPair")))), required("bootstrap", record(required("node", nonempty()), field("addressRef", nonempty()), field("singleHostDefaults", boolean()))))),
-		field("networks", record(field("publicCIDRs", set(cidr())), field("clusterCIDRs", set(cidr())))), field("security", record(field("fips", record(field("enabled", boolean()))), field("cephx", record(required("keyType", enumeration("aes", "aes256k")))))), field("config", config), field("mgrModules", set(nonempty())), field("services", array(record(required("serviceType", nonempty()), field("serviceID", nonempty()), required("placement", storagePlacement()), field("spec", native())))), field("monitoring", monitoring), field("mgmtGateway", gateway),
-		required("topology", record(required("nodes", nonemptyArray(named(record(required("name", name()), field("fqdn", dns()), required("machineRef", ref(Machine)), field("site", name()), required("roles", nonemptyArray(set(enumeration("mon", "mgr", "osd", "mds", "rgw", "ingress", "prometheus", "grafana", "alertmanager")))), field("labels", set(nonempty())), field("devices", set(nonempty())), field("osd", storageOSD()))))), field("osdDrivegroups", array(record(required("serviceID", nonempty()), field("placement", storagePlacement()), required("osd", storageOSD())))), field("stretch", record(required("failureDomain", nonempty()), field("dataSites", set(name())), field("tiebreaker", record(field("node", text()), field("site", text()))), defaulted("ruleName", nonempty(), StringValue("stretch-rule")))))),
+		required("cephadm", record(field("addressRef", nonempty()), field("workarounds", set(enumeration("mgmt-gateway-spec-dependency-recording"))), field("ansible", record(field("packageVersion", nonempty()))), field("clusterSSH", record(field("user", lexical("posix-user")), field("keyRef", secret("sshKeyPair")), field("transport", enumeration("native", "verified-tunnel")))), required("bootstrap", record(required("node", nonempty()), field("addressRef", nonempty()), field("singleHostDefaults", boolean()))))),
+		field("networks", record(field("publicCIDRs", set(cidr())), field("clusterCIDRs", set(cidr())))), field("security", record(field("fips", record(field("enabled", boolean()))), field("cephx", record(required("keyType", enumeration("aes", "aes256k")))))), field("config", config), field("mgrModules", set(nonempty())), required("services", nonemptyArray(array(storageNativeService()))), field("serviceBindings", storageServiceBindings()),
+		required("topology", record(required("nodes", nonemptyArray(named(record(required("name", name()), field("fqdn", dns()), required("machineRef", ref(Machine)), field("site", name()), field("labels", set(nonempty())), field("location", stringsMap()))))), field("stretch", record(required("failureDomain", nonempty()), field("dataSites", set(name())), field("tiebreaker", record(field("node", text()), field("site", text()))), defaulted("ruleName", nonempty(), StringValue("stretch-rule")))))),
 	)
 	cluster.Suppress = []Suppression{{Field: "distribution", Value: StringValue("oss"), Fields: []string{"ibm", "entitlementRef", "packageVersion"}}, {Field: "distribution", Value: StringValue("redhat"), Fields: []string{"community", "ibm"}}, {Field: "distribution", Value: StringValue("ibm"), Fields: []string{"community"}}}
 	s := record(required("type", enumeration("ceph")), defaulted("management", enumeration("managed", "external"), StringValue("managed")), field("ceph", cluster))
 	s.Suppress = []Suppression{{Field: "management", Value: StringValue("external"), Fields: []string{"ceph"}}}
 	return s
+}
+
+func storageClientSchema() *Shape {
+	return record(required("clusterRef", ref(StorageCluster)), required("poolRef", ref(StoragePool)), required("access", enumeration("read-only", "read-write")))
 }
 
 func storagePlacementPolicySchema() *Shape {

@@ -1,0 +1,67 @@
+implementation: cluster-install-agent-v1
+content-digest: e88931125ac1c8819ea4b3554121a64195fc7976a39d55b16daa90cd29d72b02
+automation-formats: none
+request-schema:
+  budgets struct agentinstall.InstallBudgets
+  budgets.bootSeconds int
+  budgets.bootstrapSeconds int
+  budgets.installSeconds int
+  endpoints []struct agentinstall.Endpoint
+  endpoints[].address string
+  endpoints[].name string
+  identity struct agentinstall.Identity
+  identity.block string
+  identity.cluster string
+  identity.context string
+  image struct agentinstall.Publication
+  image.path string
+  image.url string
+  nodes []struct agentinstall.Node
+  nodes[].address string
+  nodes[].controller struct agentinstall.Controller
+  nodes[].controller.credentialsRef string
+  nodes[].controller.endpoint string
+  nodes[].controller.tlsVerify bool
+  nodes[].controller.trustBundleRef string omitempty
+  nodes[].controller.virtualMedia struct agentinstall.VirtualMedia
+  nodes[].controller.virtualMedia.removeCertificate bool
+  nodes[].controller.virtualMedia.restoreVerification bool
+  nodes[].controller.virtualMedia.trust string
+  nodes[].hardware *struct agentinstall.Hardware omitempty
+  nodes[].hardware.interfaces []struct agentinstall.Interface
+  nodes[].hardware.interfaces[].macAddress string
+  nodes[].hardware.interfaces[].name string
+  nodes[].machine string
+  nodes[].name string
+  nodes[].physical bool
+  nodes[].substrate string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  release struct agentinstall.Release
+  release.distribution string
+  release.version string
+  tool struct agentinstall.Tool
+  tool.compatibility string
+  tool.kind string
+  tool.version string
+  version string
+  workRoot string
+evidence-schema:
+  absent bool
+  cluster string
+  completed bool
+  identity string
+  media []string
+  missing []string
+  ownMedia []string
+  postcondition bool
+  powered []string
+  release string
+  request string
+  restored bool

@@ -93,7 +93,7 @@ func (s Service) Kubeconfig(ctx context.Context, request KubeconfigRequest) (*Ku
 // namespace. Only a ContainerCluster, which is always OpenShift or OKD, is a
 // kubeconfig target.
 func kubeconfigTarget(catalog api.Catalog, contextName, cluster string) error {
-	discovery := "bootwright render effective --context " + contextName
+	discovery := "bootwright cluster info --context " + contextName
 	if _, ok := catalog.Find(api.ContainerCluster, cluster); ok {
 		return nil
 	}

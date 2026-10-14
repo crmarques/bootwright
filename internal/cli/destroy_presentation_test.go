@@ -35,6 +35,19 @@ func TestADestroyPlanTextNamesTheMachinesToStopFirst(t *testing.T) {
 	}
 }
 
+func TestDestroyNamesTheOnlineCleanupStopBoundary(t *testing.T) {
+	result := previewResult()
+	result.Verb = "destroy"
+	result.StopsAfterOnline = []string{"rhel-01", "rhel-02", "rhel-03"}
+	var out bytes.Buffer
+	if err := writeLifecyclePlan(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Stop after storage cleanup") || strings.Contains(out.String(), "Stop first") {
+		t.Fatalf("wrong stop boundary: %s", out.String())
+	}
+}
+
 // Destroy's help says what it removes, whatever its apply reached, and what it
 // needs before it runs: the Machines stopped and, for a plan that deletes
 // disks, the data-loss authorization.

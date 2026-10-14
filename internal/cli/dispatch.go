@@ -7,6 +7,7 @@ import (
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/environment/inspection"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
@@ -53,6 +54,9 @@ type commandResult struct {
 	encryptionStatus   *encryption.StatusResult
 
 	kubeconfig *containeraccess.KubeconfigResult
+
+	clusterList *inspection.ListResult
+	clusterInfo *inspection.InfoResult
 }
 
 func (r commandResult) clearSensitive() {
@@ -90,9 +94,9 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "preflight infra", "preflight clusters", "preflight all":
 		return commandResult{}, s.invokeEnvironmentPreflight(ctx, path, &values, args)
 	case "cluster list", "cluster info":
-		return commandResult{}, s.invokeEnvironmentInspection(ctx, path, &values, args)
+		return s.invokeEnvironmentInspection(ctx, path, &values, args)
 	case "cluster rsh", "cluster exec":
-		return commandResult{}, s.invokeEnvironmentAccess(ctx, path, &values, args)
+		return s.invokeEnvironmentAccess(ctx, path, &values, args)
 	case "preflight container-cluster":
 		return commandResult{}, s.invokeContainerPreflight(ctx, path, &values, args)
 	case "preflight storage-cluster":

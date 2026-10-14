@@ -17,9 +17,9 @@ import (
 func TestALibvirtProviderMustNameItsEmulatedBMCAddress(t *testing.T) {
 	const field = "$.spec.libvirt.bmcEmulationDefaults.bindAddress"
 	host := strings.Replace(serviceHost, "[container-runtime]", "[container-runtime, libvirt]", 1)
-	credential := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: emulated-bmc}\nspec: {type: usernamePassword}\n"
+	credential := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: emulated-bmc}\nspec: {type: usernamePassword}\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: emulated-bmc-tls}\nspec: {type: tlsCertificate}\n"
 	provider := func(defaults string) string {
-		return "apiVersion: bootwright.io/v1alpha1\nkind: InfraProvider\nmetadata: {name: lab}\nspec:\n  libvirt:\n    machineRef: service-host\n    uri: qemu:///system\n    bmcEmulationDefaults:\n" + defaults + "      auth: {credentialsRef: emulated-bmc}\n"
+		return "apiVersion: bootwright.io/v1alpha1\nkind: InfraProvider\nmetadata: {name: lab}\nspec:\n  libvirt:\n    machineRef: service-host\n    uri: qemu:///system\n    bmcEmulationDefaults:\n" + defaults + "      certificateRef: emulated-bmc-tls\n      auth: {credentialsRef: emulated-bmc}\n"
 	}
 	omitted := controllerInputs(serviceEnvironment, host, credential, provider(""))
 	trustFailure(t, omitted, "api.required", field)

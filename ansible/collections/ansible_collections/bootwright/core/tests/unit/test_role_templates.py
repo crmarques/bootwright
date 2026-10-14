@@ -22,10 +22,12 @@ import copy
 import os
 import pathlib
 import re
+from xml.etree import ElementTree
 
 import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import domain_disk_bindings
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 GOLDENS = pathlib.Path(__file__).resolve().parent / "goldens" / "templates"
@@ -87,8 +89,8 @@ HOST = {
 }
 
 MACHINE = {
-    "controller": {"address": "192.0.2.1", "credentialsRef": "lab-bmc", "endpoint":
-                   "http://192.0.2.1:8001/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
+    "controller": {"address": "192.0.2.1", "certificateRef": "lab-bmc-tls", "credentialsRef": "lab-bmc", "endpoint":
+                   "https://192.0.2.1:8001/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
                    "image": "registry.example.test/sushy-tools@sha256:" + DIGEST, "port": 8001,
                    "unit": "bootwright-%s-rhel-01-bmc" % CONTEXT},
     "directory": "/var/lib/libvirt/images/bootwright/%s/machines/rhel-01" % CONTEXT,
@@ -110,7 +112,7 @@ MACHINE = {
     "uri": "qemu:///system",
     "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
     "vcpu": 4,
-    "version": "machine-libvirt-v4",
+    "version": "machine-libvirt-v6",
 }
 
 # Each rendered template with the variables its task sees beside the role's
@@ -216,6 +218,23 @@ def test_a_template_writes_the_same_bytes_twice_and_its_goldens_bytes(role, temp
         golden.write_text(first)
     assert golden.read_text() == first, "%s differs; rerun with BOOTWRIGHT_UPDATE_GOLDENS=1 if intended" % (
         golden.relative_to(GOLDENS).as_posix())
+
+
+def test_ssd_domain_uses_distinct_scsi_units_and_preserves_root_and_unmarked_data():
+    request = copy.deepcopy(MACHINE)
+    request["disks"][1].update(bus="scsi", media="ssd", rotationRate=1, target="sda", serial="bwfirst")
+    request["disks"].extend([
+        dict(request["disks"][0], name="ordinary", target="vdb", path=request["directory"] + "/ordinary.qcow2", serial="bwordinary"),
+        dict(request["disks"][1], name="second-ssd", target="sdb", path=request["directory"] + "/second.qcow2", serial="bwsecond"),
+    ])
+    variables = scope("substrate_libvirt_machine", {"bootwright_substrate_machine_request": request})
+    first = render("substrate_libvirt_machine", "domain.xml.j2", variables)
+    assert first == render("substrate_libvirt_machine", "domain.xml.j2", variables)
+    root = ElementTree.fromstring(first)
+    assert domain_disk_bindings(root, request["disks"])
+    assert [(item.get("dev"), item.get("bus"), item.get("rotation_rate")) for item in root.findall('./devices/disk/target')] == [
+        ("vda", "virtio", None), ("sda", "scsi", "1"), ("vdb", "virtio", None), ("sdb", "scsi", "1")]
+    assert [item.get("unit") for item in root.findall('./devices/disk/address')] == ["0", "1"]
 
 
 def test_the_golden_comparison_sees_a_change_in_what_a_template_writes():

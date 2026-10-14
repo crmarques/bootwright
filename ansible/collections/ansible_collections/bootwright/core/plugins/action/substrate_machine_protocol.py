@@ -6,6 +6,9 @@ result and authorization descriptors belong to the invoking Bootwright process.
 
 from __future__ import annotations
 
+# Exact type identity is the validation here: a bool is not an int and a capability object is never a subclass.
+# pylint: disable=unidiomatic-typecheck
+
 from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
 from ansible_collections.bootwright.core.plugins.module_utils.adapter_protocol import publishes, unreached
@@ -31,11 +34,18 @@ def state(value):
 
 
 def disk_evidence(entry):
-    if set(entry) != {"name", "present", "sizeGiB"}:
+    fields = {"name", "present", "sizeGiB"}
+    media = {"bus", "target", "rotationRate"}
+    if set(entry) not in (fields, fields | media):
         raise ValueError("disk evidence")
     if not isinstance(entry["sizeGiB"], int) or isinstance(entry["sizeGiB"], bool):
         raise ValueError("disk size")
-    return {"name": str(entry["name"]), "present": bool(entry["present"]), "sizeGiB": int(entry["sizeGiB"])}
+    result = {"name": str(entry["name"]), "present": bool(entry["present"]), "sizeGiB": int(entry["sizeGiB"])}
+    if set(entry) == fields | media:
+        if not isinstance(entry["bus"], str) or not isinstance(entry["target"], str) or type(entry["rotationRate"]) is not int:
+            raise ValueError("disk media")
+        result.update({key: entry[key] for key in media})
+    return result
 
 
 def listener(observation):

@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	listArguments     = []string{"-n", "-u", "#0", "-ll"}
+	listArguments     = []string{"-n", "-ll"}
 	validateArguments = []string{"-u", "#0", "-v"}
 )
 

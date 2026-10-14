@@ -162,7 +162,7 @@ func TestMachineRequestDerivesTheDomainDisksAndController(t *testing.T) {
 	if request.PoolName != "bootwright-lab-lab-libvirt-vmedia" || request.PoolPath != "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia" {
 		t.Fatalf("pool = %q at %q", request.PoolName, request.PoolPath)
 	}
-	if controller.Endpoint != "http://192.0.2.1:8000/redfish/v1/Systems/"+request.UUID {
+	if controller.Endpoint != "https://192.0.2.1:8000/redfish/v1/Systems/"+request.UUID {
 		t.Fatalf("endpoint = %q", controller.Endpoint)
 	}
 	if !strings.Contains(controller.Image, "@sha256:") {
@@ -242,7 +242,7 @@ func TestAnIPv6ControllerIsBracketedAndClaimsTheSharedSocketKey(t *testing.T) {
 		t.Fatalf("requests = %d (%v)", len(requests), err)
 	}
 	emulated := requests[0].Controller
-	if emulated.Address != "fd00::1" || emulated.Endpoint != "http://[fd00::1]:8000/redfish/v1/Systems/"+requests[0].UUID {
+	if emulated.Address != "fd00::1" || emulated.Endpoint != "https://[fd00::1]:8000/redfish/v1/Systems/"+requests[0].UUID {
 		t.Fatalf("controller = %+v", emulated)
 	}
 	if impacts := machineImpacts(reconciliation.Apply, requests[0]); !slices.Contains(impacts, "open-listener [fd00::1]:8000") {

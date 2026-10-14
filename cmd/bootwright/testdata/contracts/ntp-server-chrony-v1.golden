@@ -1,0 +1,50 @@
+implementation: ntp-server-chrony-v1
+content-digest: 826e9dcae8e4f7187d0e268d4403db8b6895770020b03daaca789a828e0a920a
+automation-formats: none
+request-schema:
+  bindAddress string
+  clients []string omitempty
+  contentRoot string
+  egress struct managedservice.Egress
+  egress.httpProxy string omitempty
+  egress.httpsProxy string omitempty
+  egress.noProxy []string
+  endpoints []struct managedservice.Endpoint
+  endpoints[].address string
+  endpoints[].name string
+  forwarders []string omitempty
+  identity struct managedservice.Identity
+  identity.block string
+  identity.context string
+  identity.service string
+  image string
+  ingressHosts []string omitempty
+  kind string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  port int
+  records []struct managedservice.Record omitempty
+  records[].addresses []string
+  records[].name string
+  records[].subtree bool omitempty
+  sources []string omitempty
+  unit string
+  version string
+evidence-schema:
+  absent bool
+  answers []struct managedservice.Answer
+  answers[].address string
+  answers[].answer string
+  answers[].port int
+  container string
+  contentRoot bool
+  postcondition bool
+  request string
+  startedAfterFiles bool
+  unit string

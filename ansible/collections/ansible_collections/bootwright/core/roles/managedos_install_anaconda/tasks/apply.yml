@@ -41,6 +41,27 @@
       installation again with this release
     quiet: true
 
+- name: Refuse bound keys excluded by this placement host before installation effects
+  block:
+    - name: Check the actual bound key types on this SSH placement host
+      bootwright.core.ssh_key_policy:
+        keys: >-
+          {{ [{'secret': bootwright_os_install_request.fleetKeyRef,
+               'type': bootwright_os_install_material.fleetKeyType, 'usage': 'fleet'}]
+             + ([{'secret': bootwright_os_install_request.target.hostKeyRef,
+                  'type': bootwright_os_install_material.hostKeyType, 'usage': 'host'}]
+                if bootwright_os_install_request.target.channel == 'delivered-key' else []) }}
+  rescue:
+    - name: Name the bounded SSH policy refusal to the installation runner
+      bootwright.core.managedos_install_protocol:
+        phase: refused
+        reason: '{{ ansible_failed_result.reason | default("ssh-policy-unavailable") }}'
+      no_log: true
+
+    - name: Refuse installation before publication or boot
+      ansible.builtin.fail:
+        msg: The placement host SSH policy did not admit this installation's bound keys
+
 - name: Prove each ancestor of this Machine's durable work area
   ansible.builtin.include_tasks: work.yml
   loop:

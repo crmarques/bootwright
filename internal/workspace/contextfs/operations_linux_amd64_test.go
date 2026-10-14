@@ -58,7 +58,7 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 	identity := func(index int) string { return fmt.Sprintf("op-%032x", index) }
 	clock := func() time.Time { return time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC) }
 	attempt := func(operations *operationstore.Store, id string, done bool) error {
-		number, err := operations.StartAttempt(ctx, id, "alpha")
+		number, err := operations.StartAttempt(ctx, id, "alpha", operationstore.Build{AutomationDigest: strings.Repeat("b", 64), ContentDigest: strings.Repeat("e", 64)})
 		if err != nil {
 			return err
 		}
@@ -300,7 +300,7 @@ func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 	}
 	kept := []string{}
 	attempt := func(operations *operationstore.Store, id string, state reconciliation.BlockState) error {
-		number, err := operations.StartAttempt(ctx, id, "alpha")
+		number, err := operations.StartAttempt(ctx, id, "alpha", operationstore.Build{AutomationDigest: strings.Repeat("b", 64), ContentDigest: strings.Repeat("e", 64)})
 		if err != nil {
 			return err
 		}

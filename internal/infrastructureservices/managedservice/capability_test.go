@@ -746,19 +746,21 @@ func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 	if _, err := NewCapability(testDefinition(), recorder).Apply(context.Background(), call); err == nil {
 		t.Fatal("a failed run was accepted")
 	}
-	if len(recorder.requests) != 1 || len(recorder.requests[0].Refusals) != 1 || recorder.requests[0].Refusals[reason] == nil {
-		t.Fatalf("the runner was handed refusals %v, want exactly %s", recorder.requests[0].Refusals, reason)
-	}
-	runner := &scriptedRunner{err: recorder.requests[0].Refusals[reason]}
-	result, err := NewCapability(testDefinition(), runner).Apply(context.Background(), call)
-	if result.Outcome != reconciliation.OutcomeFailed {
-		t.Fatalf("a foreign listener's refusal = %+v (%v), want failed", result, err)
+	if len(recorder.requests) != 1 || len(recorder.requests[0].Refusals) != 2 || recorder.requests[0].Refusals[reason] == nil || recorder.requests[0].Refusals["unassigned-bind-address-"+FormatPort(request.Port)] == nil {
+		t.Fatalf("the runner was handed refusals %v, want foreign and unassigned socket refusals", recorder.requests[0].Refusals)
 	}
 	socket := HostPort(request.BindAddress, request.Port)
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Name != request.Identity.Service ||
-		!strings.Contains(reported[0].Message, socket) || reported[0].Remediation == "" {
-		t.Fatalf("the refusal = %#v, want one naming %s on %s", reported, socket, request.Identity.Service)
+	for _, refused := range []string{reason, "unassigned-bind-address-" + FormatPort(request.Port)} {
+		runner := &scriptedRunner{err: recorder.requests[0].Refusals[refused]}
+		result, err := NewCapability(testDefinition(), runner).Apply(context.Background(), call)
+		if result.Outcome != reconciliation.OutcomeFailed {
+			t.Fatalf("%s = %+v (%v), want failed", refused, result, err)
+		}
+		reported := diagnostics.Of(err)
+		if len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Name != request.Identity.Service ||
+			!strings.Contains(reported[0].Message, socket) || reported[0].Remediation == "" {
+			t.Fatalf("the refusal = %#v, want one naming %s on %s", reported, socket, request.Identity.Service)
+		}
 	}
 }
 

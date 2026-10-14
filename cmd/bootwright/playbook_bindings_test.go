@@ -5,9 +5,17 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 )
 
 const playbookRoot = "collections/ansible_collections/bootwright/core/playbooks/"
+
+// buildCapabilities lists what this executable can realize, in the API's own
+// kind order, so a plan's block order never depends on wiring order.
+func buildCapabilities(clock systemClock, controller controllerDependencies, records installation.MediaRecords) capabilityResolver {
+	return buildCapabilitiesWith(clock, controller, ansiblerunner.New(operationPlaybook()), records)
+}
 
 // Composition owns the entrypoint each implementation runs, so every binding
 // must name a playbook the embedded collection actually carries. A renamed or
@@ -26,6 +34,7 @@ func TestEveryBoundPlaybookExistsInTheEmbeddedCollection(t *testing.T) {
 func TestBoundPlaybooksCoverExactlyTheOfferedCapabilities(t *testing.T) {
 	bindings := operationPlaybook()
 	implementations := map[string]bool{}
+	offeredImplementations := map[string]bool{}
 	for key := range bindings {
 		implementation, _, _ := strings.Cut(key, "/")
 		implementations[implementation] = true
@@ -39,11 +48,14 @@ func TestBoundPlaybooksCoverExactlyTheOfferedCapabilities(t *testing.T) {
 		if !implementations[offered.Implementation] {
 			t.Errorf("capability %s has no bound entrypoint", offered.Implementation)
 		}
-		delete(implementations, offered.Implementation)
+		offeredImplementations[offered.Implementation] = true
 	}
 	for implementation := range implementations {
-		// Day-2 power and the reading an inspection takes are bound without a
-		// lifecycle capability of their own.
+		if offeredImplementations[implementation] {
+			continue
+		}
+		// Day-2 power and inspection are bound without a lifecycle
+		// capability of their own.
 		if implementation == "machine-power-redfish-v2" || implementation == "machine-power-read-v2" {
 			continue
 		}

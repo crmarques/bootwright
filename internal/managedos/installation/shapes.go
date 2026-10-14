@@ -110,7 +110,7 @@ func available(iface api.Value) bool {
 // the package tree extracted on the controller, where the controller stage
 // provides the tooling, so a server placed on any other Machine would publish
 // what was never built there. A virtual Machine's emulated controller is
-// reached over plain HTTP with its credential and fetches without verifying
+// reached over verified HTTPS but fetches media without verifying
 // the server, so that leg must never leave the provider host it runs on. A
 // selection that does not resolve is the request builder's refusal.
 func refusedPublication(catalog api.Catalog, machine, profile api.Object, derived substrate.Target, derivedOK bool, controllerMachine string) (reason, remediation string) {
@@ -138,7 +138,7 @@ func refusedPublication(catalog api.Catalog, machine, profile api.Object, derive
 		}
 	}
 	if derivedOK && !derived.Physical && imageHost != "" && derived.PlacementMachine.Name() != imageHost {
-		return "an emulated controller is reached over plain HTTP with its credential and fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on",
+		return "an emulated controller fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on",
 			machine.Identity() + " is booted through a controller on " + derived.PlacementMachine.Identity() + " and " + imageServer.Identity() + " is placed on " +
 				machineIdentity(imageHost) + "; place " + string(api.InfraProvider) + "/" + derived.Provider + " on " + machineIdentity(imageHost)
 	}

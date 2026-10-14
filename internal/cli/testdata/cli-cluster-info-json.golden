@@ -1,0 +1,182 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "cluster info",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "clusters": [
+      {
+        "name": "edge",
+        "kind": "ContainerCluster",
+        "accessCommands": [
+          {
+            "command": "cluster exec",
+            "status": "not-implemented",
+            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster kubeconfig",
+            "status": "ready"
+          },
+          {
+            "command": "cluster kubectl",
+            "status": "not-implemented",
+            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster oc",
+            "status": "not-implemented",
+            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster rsh",
+            "status": "not-implemented",
+            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          }
+        ]
+      },
+      {
+        "name": "okd-lab",
+        "kind": "ContainerCluster",
+        "accessCommands": [
+          {
+            "command": "cluster exec",
+            "status": "not-implemented",
+            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster kubeconfig",
+            "status": "ready"
+          },
+          {
+            "command": "cluster kubectl",
+            "status": "not-implemented",
+            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster oc",
+            "status": "not-implemented",
+            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster rsh",
+            "status": "not-implemented",
+            "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          }
+        ]
+      }
+    ],
+    "storage": [
+      {
+        "name": "archive",
+        "kind": "StorageCluster",
+        "accessCommands": [
+          {
+            "command": "cluster exec",
+            "status": "not-applicable",
+            "reason": "the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters"
+          },
+          {
+            "command": "cluster kubeconfig",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster kubectl",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster oc",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster rsh",
+            "status": "not-applicable",
+            "reason": "the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters"
+          }
+        ]
+      },
+      {
+        "name": "storage",
+        "kind": "StorageCluster",
+        "accessCommands": [
+          {
+            "command": "cluster exec",
+            "status": "ready",
+            "node": "rhel-01"
+          },
+          {
+            "command": "cluster kubeconfig",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster kubectl",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster oc",
+            "status": "not-applicable",
+            "reason": "applies to OpenShift and OKD ContainerClusters only"
+          },
+          {
+            "command": "cluster rsh",
+            "status": "ready",
+            "node": "rhel-01"
+          }
+        ],
+        "management": "managed",
+        "release": "9.9.1.2",
+        "fsid": "6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b",
+        "image": {
+          "reference": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
+          "digest": "sha256:4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f",
+          "platform": "linux/amd64"
+        },
+        "monitors": [
+          {
+            "host": "rhel-01",
+            "fqdn": "rhel-01.lab.test",
+            "address": "192.0.2.11"
+          },
+          {
+            "host": "rhel-02",
+            "fqdn": "rhel-02.lab.test",
+            "address": "192.0.2.12"
+          },
+          {
+            "host": "rhel-03",
+            "fqdn": "rhel-03.lab.test",
+            "address": "192.0.2.13"
+          }
+        ],
+        "adminNode": "rhel-01",
+        "cephCommand": "bootwright cluster exec --context lab --name storage --node rhel-01 -- sudo -n ceph --conf /var/lib/bootwright/ceph/6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b/ceph.conf --keyring /var/lib/bootwright/ceph/6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b/ceph.client.admin.keyring",
+        "status": "ready",
+        "dashboard": {
+          "status": "ready",
+          "user": "admin",
+          "urls": [
+            {
+              "host": "rhel-01",
+              "url": "https://rhel-01.lab.test:8443/",
+              "role": "active"
+            },
+            {
+              "host": "rhel-02",
+              "url": "https://rhel-02.lab.test:8443/",
+              "role": "standby"
+            }
+          ],
+          "certificateSHA256": "ab0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"
+        }
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

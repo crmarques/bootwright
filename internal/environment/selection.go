@@ -214,7 +214,7 @@ func (r *retention) retainDependencies(catalog api.Catalog, object api.Object) {
 		for _, name := range spec.Get("addonRefs").Strings() {
 			r.keep(api.ClusterAddon, name)
 		}
-	case api.StorageExport, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StoragePlacementPolicy:
+	case api.StorageExport, api.StoragePool, api.StorageClient, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StoragePlacementPolicy:
 		r.keep(api.StorageCluster, spec.Get("clusterRef").Text())
 		retainReferences(spec, api.Schema(kind), r.keep)
 		if kind == api.StorageExport {

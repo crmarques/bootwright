@@ -12,7 +12,8 @@ import (
 // TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves holds a resolution
 // to the verb its operation froze. A destroy's unproved block is observed for
 // what its removal proves, so a target the removal has not taken back is no
-// removal: its block is failed and retried, never done over what it kept. An
+// removal: its block is failed and retried by the same destroy, never done
+// over what it kept. An
 // apply's block is observed for the apply's effect, and so is the one a fresh
 // destroy resolves before it registers, which an observation proving it
 // completed resolves done (D123); only one that does not falls back to the
@@ -30,13 +31,14 @@ func TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves(t *testing.T) {
 		code     string
 		message  string
 		released []string
+		destroys int
 	}{
-		{"a target still present is no removal", reconciliation.EffectNoEffect, reconciliation.OperationFailed, reconciliation.BlockFailed,
-			"lifecycle.state", "the frozen effect was never performed", nil},
+		{"a target still present is no removal", reconciliation.EffectNoEffect, reconciliation.OperationDone, reconciliation.BlockDone,
+			"", "", []string{"bind-1"}, 2},
 		{"a proved removal completes", reconciliation.EffectCompleted, reconciliation.OperationDone, reconciliation.BlockDone,
-			"", "", []string{"bind-1"}},
+			"", "", []string{"bind-1"}, 1},
 		{"an unproved removal stays unknown", reconciliation.EffectUnknown, reconciliation.OperationUnknown, reconciliation.BlockUnknown,
-			"lifecycle.unknown", "the outcome of " + block + " is still unknown: its observation proved neither the effect nor its absence", nil},
+			"lifecycle.unknown", "the outcome of " + block + " is still unknown: its observation proved neither the effect nor its absence", nil, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHarness(t, block)
@@ -64,21 +66,11 @@ func TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves(t *testing.T) {
 			if operation, blocks := durableOperation(t, h); operation.Verb != reconciliation.Destroy || blocks[block] != tc.block {
 				t.Fatalf("the %s holds %s %s, want %s", operation.Verb, block, blocks[block], tc.block)
 			}
-			if len(h.capability.destroys) != 1 {
-				t.Fatalf("the invocation that resolved the removal also ran it: %v", h.capability.destroys)
+			if len(h.capability.destroys) != tc.destroys {
+				t.Fatalf("the invocation that resolved the removal ran it %v, want %d removals", h.capability.destroys, tc.destroys)
 			}
 			if !slices.Equal(h.binder.released, tc.released) {
 				t.Fatalf("released bindings = %v, want %v", h.binder.released, tc.released)
-			}
-			if tc.effect != reconciliation.EffectNoEffect {
-				return
-			}
-			retried, err := h.service.Destroy(ctx, destroy)
-			if err != nil || retried.Receipt.State != string(reconciliation.OperationDone) || len(h.capability.destroys) != 2 {
-				t.Fatalf("the removal never performed was not retried to completion: %+v (%v), destroys %v", retried, err, h.capability.destroys)
-			}
-			if !slices.Equal(h.binder.released, []string{"bind-1"}) {
-				t.Fatalf("released bindings = %v", h.binder.released)
 			}
 		})
 	}

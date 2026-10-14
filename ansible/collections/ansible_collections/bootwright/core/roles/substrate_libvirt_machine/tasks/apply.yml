@@ -2,7 +2,7 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_machine_request.version == 'machine-libvirt-v4'
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v6'
       - bootwright_substrate_machine_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_machine_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_machine_request.directory == '/var/lib/libvirt/images/bootwright/'
@@ -249,6 +249,20 @@
   register: substrate_libvirt_machine_credentials
   no_log: true
 
+- name: Publish the controller's serving certificate and private key
+  ansible.builtin.copy:
+    src: '{{ item.source }}'
+    dest: '{{ substrate_libvirt_machine_state }}/{{ item.name }}'
+    owner: root
+    group: root
+    mode: '0600'
+  loop:
+    - {source: '{{ bootwright_substrate_machine_material.controllerCertificate }}', name: tls.crt}
+    - {source: '{{ bootwright_substrate_machine_material.controllerPrivateKey }}', name: tls.key}
+  register: substrate_libvirt_machine_tls
+  no_log: true
+  diff: false
+
 - name: Publish the controller unit definition
   ansible.builtin.template:
     src: unit.container.j2
@@ -279,6 +293,8 @@
   loop:
     - '{{ substrate_libvirt_machine_state }}/conf.py'
     - '{{ substrate_libvirt_machine_state }}/htpasswd'
+    - '{{ substrate_libvirt_machine_state }}/tls.crt'
+    - '{{ substrate_libvirt_machine_state }}/tls.key'
     - '{{ substrate_libvirt_machine_unit_path }}'
   register: substrate_libvirt_machine_runs_from
   when: substrate_libvirt_machine_before.observation.unit == 'active'
@@ -319,7 +335,7 @@
   when:
     - substrate_libvirt_machine_before.observation.unit == 'active'
     - substrate_libvirt_machine_configuration is changed or substrate_libvirt_machine_unit is changed
-      or substrate_libvirt_machine_credentials is changed
+      or substrate_libvirt_machine_credentials is changed or substrate_libvirt_machine_tls is changed
       or (substrate_libvirt_machine_started.stdout | default('') | trim | int)
       < (substrate_libvirt_machine_runs_from.results | map(attribute='stat.mtime') | max) * 1000000000
   changed_when: true
@@ -345,6 +361,8 @@
     endpoint: '{{ bootwright_substrate_machine_request.controller.endpoint }}'
     user: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
+    verify: true
+    ca_data: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerCertificate) }}'
     media: false
   register: substrate_libvirt_machine_controller
   retries: 30
@@ -387,7 +405,7 @@
          if (substrate_libvirt_machine_directory is changed
              or substrate_libvirt_machine_state_directory is changed
              or substrate_libvirt_machine_configuration is changed
-             or substrate_libvirt_machine_credentials is changed
+             or substrate_libvirt_machine_credentials is changed or substrate_libvirt_machine_tls is changed
              or substrate_libvirt_machine_unit is changed
              or substrate_libvirt_machine_restart is changed
              or substrate_libvirt_machine_pull is changed

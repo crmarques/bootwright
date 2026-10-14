@@ -54,12 +54,13 @@ type statusSecrets struct {
 // statusLifecycle leaves out the registering build and the host log directory,
 // which only a person reads.
 type statusLifecycle struct {
-	Operation string        `json:"operation"`
-	Verb      string        `json:"verb"`
-	State     string        `json:"state"`
-	Next      string        `json:"next"`
-	Blocks    []statusBlock `json:"blocks"`
-	Logs      []string      `json:"logs"`
+	Operation    string        `json:"operation"`
+	Verb         string        `json:"verb"`
+	State        string        `json:"state"`
+	Next         string        `json:"next"`
+	AnotherBuild bool          `json:"anotherBuild"`
+	Blocks       []statusBlock `json:"blocks"`
+	Logs         []string      `json:"logs"`
 }
 
 type statusBlock struct {
@@ -115,7 +116,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 		out.Lifecycle = &statusLifecycle{
 			Operation: escapeDisplayLine(summary.Operation), Verb: escapeDisplayLine(summary.Verb),
 			State: escapeDisplayLine(summary.State), Next: escapeDisplayLine(summary.Next),
-			Blocks: blocks, Logs: displayLines(summary.Logs),
+			AnotherBuild: summary.AnotherBuild, Blocks: blocks, Logs: displayLines(summary.Logs),
 		}
 	}
 	return out
@@ -242,8 +243,13 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 		text.rows(rows)
 	}
 	var tail []field
-	if summary.Executable != "" {
+	switch {
+	case summary.Executable != "" && summary.AnotherBuild:
+		tail = append(tail, field{Label: "Registered by", Value: summary.Executable + ", another build than this one"})
+	case summary.Executable != "":
 		tail = append(tail, field{Label: "Registered by", Value: summary.Executable})
+	case summary.AnotherBuild:
+		tail = append(tail, field{Label: "Registered by", Value: "another build than this one"})
 	}
 	if result.LogLocation != "" {
 		tail = append(tail, field{Label: logLocationLabel, Value: result.LogLocation})

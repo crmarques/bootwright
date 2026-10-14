@@ -242,7 +242,7 @@ def test_a_foreign_listener_refuses_before_any_effect(role, protocol):
     module = "bootwright.core." + protocol
     observe = index_of(tasks, lambda task: (task.get("bootwright.core.%s" % protocol.replace("_protocol", "_inspect")) or {}).get("foreign") is True,
                        "observes the sockets")
-    refused = index_of(tasks, lambda task: (task.get(module) or {}).get("phase") == "refused", "names the refusal")
+    refused = index_of(tasks, lambda task: (task.get(module) or {}).get("reason") == "foreign-listener", "names the refusal")
     failed = index_of(tasks, lambda task: "ansible.builtin.fail" in task and "_sockets.foreign" in str(task.get("when")), "refuses")
     assert tasks[observe]["register"] == role + "_sockets"
     assert observe < refused < failed
@@ -261,6 +261,22 @@ def test_a_foreign_listener_refuses_before_any_effect(role, protocol):
     assert message.endswith("nothing was pulled, published or started: udp 192.0.2.1:53; tcp [fd00::1]:53"), message
 
 
+@pytest.mark.parametrize("role, protocol", APPLIES)
+def test_an_unassigned_bind_address_refuses_before_any_effect(role, protocol):
+    tasks = load_tasks(role, "apply.yml")
+    module = "bootwright.core." + protocol
+    inspect = "bootwright.core." + protocol.replace("_protocol", "_inspect")
+    observe = index_of(tasks, lambda task: (task.get(inspect) or {}).get("bind_address") is True, "proves the bind address")
+    refused = index_of(tasks, lambda task: (task.get(module) or {}).get("reason") == "unassigned-bind-address", "names the address refusal")
+    failed = index_of(tasks, lambda task: "ansible.builtin.fail" in task and "bindAddressAssigned" in str(task.get("when")), "refuses the address")
+    assert observe < refused < failed < min(index for index, task in enumerate(tasks) if effects(task))
+    assert str(tasks[refused]["when"]) == str(tasks[failed]["when"]) == "not %s_sockets.bindAddressAssigned" % role
+    assert tasks[refused].get("no_log") is True
+    for assigned in (True, False):
+        templar = Templar(loader=LOADER, variables={role + "_sockets": {"bindAddressAssigned": assigned}})
+        assert templar.evaluate_conditional(tasks[failed]["when"]) is not assigned
+
+
 def refusal_action(protocol):
     module = importlib.import_module("ansible_collections.bootwright.core.plugins.action." + protocol)
     action = module.ActionModule.__new__(module.ActionModule)
@@ -274,6 +290,7 @@ def refusal_action(protocol):
 @pytest.mark.parametrize("arguments, published", [
     ({"reason": "foreign-listener", "port": 53}, "foreign-listener-53"),
     ({"reason": "foreign-listener", "port": "8443"}, "foreign-listener-8443"),
+    ({"reason": "unassigned-bind-address", "port": 53}, "unassigned-bind-address-53"),
     ({"reason": "other", "port": 53}, None),
     ({"port": 53}, None),
     ({"reason": "foreign-listener"}, None),

@@ -21,7 +21,7 @@ func TestOnlyTheElevatedChildIsRunWithoutADeadline(t *testing.T) {
 	}
 	executor := executorFunc(func(ctx context.Context, c Command) (int, error) {
 		switch {
-		case slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-ll"}):
+		case slices.Equal(c.Arguments, []string{"-n", "-ll"}):
 			record("probe", c.Elevated)
 			return 1, nil
 		case slices.Equal(c.Arguments, []string{"-n", "-u", "#0", "-v"}):

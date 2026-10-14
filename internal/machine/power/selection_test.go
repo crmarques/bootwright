@@ -48,7 +48,7 @@ func catalog() api.Catalog {
 		"access", m("ssh", m("addressRef", "ssh", "user", "root", "knownHostsRef", "host-key",
 			"auth", m("privateKeyRef", "host-identity")))))
 	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
-		"bmcEmulationDefaults", m("bindAddress", "192.0.2.10", "port", api.IntegerValue("8000"),
+		"bmcEmulationDefaults", m("certificateRef", "lab-bmc-tls", "bindAddress", "192.0.2.10", "port", api.IntegerValue("8000"),
 			"auth", m("credentialsRef", "bmc")))))
 	guests := object(api.NetworkConfig, "guests", m("nmstate", m("interfaces",
 		list(m("name", "enp1s0", "type", "ethernet")))))
@@ -93,7 +93,7 @@ func TestAnEmulatedControllerIsReachedFromItsProviderHost(t *testing.T) {
 	if physical {
 		t.Fatal("a Machine whose controller its provider emulates was resolved as physical")
 	}
-	want := "http://192.0.2.10:8000/redfish/v1/Systems/" + substrate.DomainUUID("lab", "guest")
+	want := "https://192.0.2.10:8000/redfish/v1/Systems/" + substrate.DomainUUID("lab", "guest")
 	if request.Controller.Endpoint != want {
 		t.Fatalf("endpoint = %q, want %q", request.Controller.Endpoint, want)
 	}

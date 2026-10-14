@@ -32,7 +32,7 @@ func regressionCompiler() compilation.Compiler {
 		compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
-		compilation.Rules{Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
+		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
 		compilation.Rules{Normalize: substrate.Normalize, ValidateAuthored: substrate.ValidateAuthored, ValidatePartial: substrate.ValidatePartial, Validate: substrate.Validate})
 }
 
@@ -138,10 +138,10 @@ func TestEnvironmentSelectionUsesBootwrightAPIVersion(t *testing.T) {
 }
 
 func TestInheritedReferenceProvenanceAndImmutableSourceState(t *testing.T) {
-	env := environmentYAML + "  defaults:\n    StorageExport:\n      clusterRef: missing\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: material}\nspec: {type: opaque}\n"
-	consumer := "apiVersion: bootwright.io/v1alpha1\nkind: StorageExport\nmetadata: {name: consumer}\nspec:\n  type: dataFoundation\n  externalDetails: {fromSecretRef: material}\n"
+	env := environmentYAML + "  defaults:\n    Registry:\n      credentialsRef: missing\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: material}\nspec: {type: usernamePassword}\n"
+	consumer := "apiVersion: bootwright.io/v1alpha1\nkind: Registry\nmetadata: {name: consumer}\nspec:\n  management: external\n  url: registry.example.test\n"
 	input := sources(env)
-	input.Files = append(input.Files, desiredstate.NewSourceFile("/synthetic/exports/consumer.yaml", []byte(consumer)))
+	input.Files = append(input.Files, desiredstate.NewSourceFile("/synthetic/registries/consumer.yaml", []byte(consumer)))
 	before := append([]desiredstate.SourceFile{}, input.Files...)
 	state, report, err := regressionCompiler().Compile(context.Background(), input)
 	sink := requireCompilationFailure(t, state, report, err)
@@ -149,34 +149,34 @@ func TestInheritedReferenceProvenanceAndImmutableSourceState(t *testing.T) {
 		t.Fatalf("missing owner caused dependent failures: %#v", sink)
 	}
 	d := sink[0]
-	line := 1 + strings.Count(env[:strings.Index(env, "clusterRef:")], "\n")
-	if d.Code != "api.reference" || d.Field != "$.spec.clusterRef" || d.Object == nil || d.Object.Kind != string(api.StorageExport) || d.Object.Name != "consumer" || d.Source == nil || d.Source.Path != "/synthetic/environment.yaml" || d.Source.Line != line || !strings.Contains(d.Message, "Environment defaults") || d.Remediation == "" {
+	line := 1 + strings.Count(env[:strings.Index(env, "credentialsRef:")], "\n")
+	if d.Code != "api.reference" || d.Field != "$.spec.credentialsRef" || d.Object == nil || d.Object.Kind != string(api.Registry) || d.Object.Name != "consumer" || d.Source == nil || d.Source.Path != "/synthetic/environment.yaml" || d.Source.Line != line || !strings.Contains(d.Message, "Environment defaults") || d.Remediation == "" {
 		t.Fatalf("inherited reference provenance is incomplete: %#v", d)
 	}
 	if !reflect.DeepEqual(before, input.Files) {
 		t.Fatal("failed admission mutated source bytes")
 	}
-	resolved := strings.Replace(env, "clusterRef: missing", "clusterRef: storage", 1) + "---\napiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata: {name: storage}\nspec: {type: ceph, management: external}\n"
+	resolved := strings.Replace(env, "credentialsRef: missing", "credentialsRef: material", 1)
 	input.Files[0] = desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(resolved+controllerYAML))
 	state, _, err = regressionCompiler().Compile(context.Background(), input)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	authored, _ := state.Authored().Find(api.StorageExport, "consumer")
-	effective, _ := state.Effective().Find(api.StorageExport, "consumer")
-	if authored.Spec().Has("clusterRef") || effective.Spec().Get("clusterRef").Text() != "storage" {
+	authored, _ := state.Authored().Find(api.Registry, "consumer")
+	effective, _ := state.Effective().Find(api.Registry, "consumer")
+	if authored.Spec().Has("credentialsRef") || effective.Spec().Get("credentialsRef").Text() != "material" {
 		t.Fatal("authored and effective values lost their separate identities")
 	}
 	origin, ok := state.Origin(effective.Identity())
-	if !ok || origin.Path != "/synthetic/exports/consumer.yaml" || origin.Document != 1 {
+	if !ok || origin.Path != "/synthetic/registries/consumer.yaml" || origin.Document != 1 {
 		t.Fatal("object origin moved to its default provider", origin)
 	}
 	origin.Path = "changed"
 	fields := effective.Spec().Fields()
 	fields[0].Value = api.StringValue("changed")
-	again, _ := state.Effective().Find(api.StorageExport, "consumer")
+	again, _ := state.Effective().Find(api.Registry, "consumer")
 	againOrigin, _ := state.Origin(effective.Identity())
-	if !again.Spec().Equal(effective.Spec()) || againOrigin.Path != "/synthetic/exports/consumer.yaml" || string(input.Files[1].Bytes()) != consumer {
+	if !again.Spec().Equal(effective.Spec()) || againOrigin.Path != "/synthetic/registries/consumer.yaml" || string(input.Files[1].Bytes()) != consumer {
 		t.Fatal("returned inspection values alias compiler state or sources")
 	}
 }
@@ -265,5 +265,29 @@ spec:
 	}
 	if !reflect.DeepEqual(report.ExcludedContainerClusters, []string{"dropped"}) || len(report.Advisories) != 0 || len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.selection" {
 		t.Fatalf("unexpected report: %#v", report)
+	}
+}
+
+func TestStorageRetirementGuidanceSurvivesStrictDecoding(t *testing.T) {
+	for _, row := range []struct{ name, body, field, replacement string }{
+		{"helper", "  ceph:\n    monitoring: {enabled: true}\n", "$.spec.ceph.monitoring", "$.spec.ceph.services"},
+		{"node roles", "  ceph:\n    topology:\n      nodes: [{name: node, machineRef: controller, roles: [mon]}]\n", "$.spec.ceph.topology.nodes[0].roles", "$.spec.ceph.services"},
+		{"drive group", "  ceph:\n    topology:\n      osdDrivegroups: []\n", "$.spec.ceph.topology.osdDrivegroups", "$.spec.ceph.services[].spec.data_devices"},
+		{"service identity", "  ceph:\n    services: [{serviceType: mon}]\n", "$.spec.ceph.services[0].serviceType", "$.spec.ceph.services[0].service_type"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			input := sources(environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: StorageCluster\nmetadata: {name: storage}\nspec:\n  type: ceph\n" + row.body)
+			state, report, err := regressionCompiler().Compile(context.Background(), input)
+			sink := requireCompilationFailure(t, state, report, err)
+			if len(sink) != 1 || sink[0].Code != "api.field" || sink[0].Field != row.field || sink[0].Remediation != "replace "+row.field+" with "+row.replacement || !strings.Contains(sink[0].Message, "native-service migration") {
+				t.Fatalf("retirement lost exact replacement: %+v", sink)
+			}
+		})
+	}
+	input := sources(environmentYAML + "  defaults:\n    StorageCluster:\n      ceph:\n        mgmtGateway: {}\n")
+	state, report, err := regressionCompiler().Compile(context.Background(), input)
+	sink := requireCompilationFailure(t, state, report, err)
+	if len(sink) != 1 || sink[0].Field != "$.spec.defaults.StorageCluster.ceph.mgmtGateway" || sink[0].Remediation != "replace $.spec.defaults.StorageCluster.ceph.mgmtGateway with $.spec.defaults.StorageCluster.ceph.services" {
+		t.Fatalf("retired default lost its owner: %+v", sink)
 	}
 }

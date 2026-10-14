@@ -105,9 +105,12 @@ type MachineEvidence struct {
 }
 
 type DiskEvidence struct {
-	Name    string `json:"name"`
-	Present bool   `json:"present"`
-	SizeGiB int    `json:"sizeGiB"`
+	Bus          string `json:"bus,omitempty"`
+	Name         string `json:"name"`
+	Present      bool   `json:"present"`
+	RotationRate int    `json:"rotationRate,omitempty"`
+	SizeGiB      int    `json:"sizeGiB"`
+	Target       string `json:"target,omitempty"`
 }
 
 // ValidateHostPresence accepts evidence only when it proves the exact frozen
@@ -413,6 +416,9 @@ func matchDisks(observed []DiskEvidence, frozen []Disk) error {
 	for index, disk := range expected {
 		if sorted[index].SizeGiB != disk.SizeGiB {
 			return refusal("lifecycle.state", "a machine disk is not the size the profile froze", "")
+		}
+		if disk.Media == "ssd" && (sorted[index].Bus != disk.Bus || sorted[index].Target != disk.Target || sorted[index].RotationRate != disk.RotationRate) {
+			return refusal("lifecycle.state", "a machine SSD disk does not carry its frozen SCSI target and nonrotational presentation", "")
 		}
 	}
 	return nil

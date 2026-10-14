@@ -1,0 +1,36 @@
+implementation: machine-baremetal-v1
+content-digest: a9b7de0371ebbd2caee7e2852f1fc58b25ff9ca538697a5623ea322fc93fa6f9
+automation-formats: none
+request-schema:
+  controller struct baremetal.Controller
+  controller.credentialsRef string
+  controller.endpoint string
+  controller.tlsVerify bool
+  controller.trustBundleRef string omitempty
+  hardware []struct baremetal.Interface
+  hardware[].macAddress string
+  hardware[].name string
+  identity struct baremetal.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  provider string
+  version string
+evidence-schema:
+  absent bool
+  addresses []string
+  manufacturer string
+  model string
+  postcondition bool
+  power string
+  request string
+  serial string
+  uuid string

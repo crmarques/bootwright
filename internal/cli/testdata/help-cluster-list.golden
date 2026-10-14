@@ -1,7 +1,10 @@
-List container and storage clusters. This command is recognized but not implemented.
+List container and storage clusters in canonical name order. Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters.
 
 Usage:
   bootwright cluster list [flags]
+
+Examples:
+  bootwright cluster list --context lab
 
 Flags:
       --output string   Select output mode (values: text, json) (default "text")

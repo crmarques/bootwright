@@ -435,6 +435,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			return lifecycle.RunResult{}, err
 		}
 		values["authorizedKey"] = key
+		values["fleetKeyType"] = strings.Fields(key)[0]
 		pin, err := c.pinValues(execution, request)
 		if err != nil {
 			return lifecycle.RunResult{}, err
@@ -450,6 +451,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			return lifecycle.RunResult{}, err
 		}
 		values["hostKey"] = key
+		values["hostKeyType"] = strings.Fields(key)[0]
 		if operation == "apply" && request.Target.Channel == substrate.ChannelDeliveredKey {
 			if err := deliveredKeyMatches(request, key); err != nil {
 				return lifecycle.RunResult{}, err
@@ -484,6 +486,9 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		materials = append(materials, publicationCertificates(request)...)
 	}
 	// The deadline follows the budgets this request froze, not this build's.
+	if operation == "apply" {
+		maps.Copy(refusals, keyPolicyRefusals(request, values))
+	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
@@ -548,7 +553,7 @@ func publicHalf(execution lifecycle.Execution, reference, subject string) (strin
 		return "", refusal("secret.store", "the bound "+subject+" is not available to this attempt", lifecycle.ReopenBindings(execution.Context, execution.Continuation))
 	}
 	value, ok := material.Part(secrets.PublicKeyPart)
-	if !ok || len(value) == 0 {
+	if !ok || len(strings.Fields(string(value))) == 0 {
 		return "", refusal("secret.part", "the bound "+subject+" carries no public half", lifecycle.ReopenBindings(execution.Context, execution.Continuation))
 	}
 	return strings.TrimRight(string(value), "\n"), nil

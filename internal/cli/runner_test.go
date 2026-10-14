@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,7 +40,7 @@ func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 			// A refusal before an SSH session opens exits 255, the client's own
 			// failure status, so it never reads as the remote command's.
 			want := 1
-			if record.path == "machine rsh" || record.path == "machine exec" {
+			if slices.Contains([]string{"machine rsh", "machine exec", "cluster rsh", "cluster exec"}, record.path) {
 				want = 255
 			}
 			if code != want || out != "" || record.calls != 1 || errOut != "[FAIL] cli.not-implemented: bootwright "+record.path+" is not implemented\n" {
@@ -219,23 +220,24 @@ func TestPayloadParsing(t *testing.T) {
 		code int
 	}{
 		{"machine exec", []string{"echo", "one", "--context", "other", "two"}, []string{"echo", "one", "--context", "other", "two"}, 255},
-		{"cluster exec", []string{"echo", "one", "--context", "other", "two"}, []string{"echo", "one", "--context", "other", "two"}, 1},
+		{"cluster exec", []string{"echo", "one", "--context", "other", "two"}, []string{"echo", "one", "--context", "other", "two"}, 255},
 		{"machine exec", []string{"ls", "-la"}, []string{"ls", "-la"}, 255},
 		{"machine exec", []string{"journalctl", "-u", "sshd", "--no-pager"}, []string{"journalctl", "-u", "sshd", "--no-pager"}, 255},
 		{"machine exec", []string{"tail", "-f", "x"}, []string{"tail", "-f", "x"}, 255},
 		{"machine exec", []string{"kubectl", "--context", "prod", "get", "pods"}, []string{"kubectl", "--context", "prod", "get", "pods"}, 255},
 		{"machine exec", []string{"ls", "--help"}, []string{"ls", "--help"}, 255},
-		{"cluster exec", []string{"ls", "-la", "--node", "n1"}, []string{"ls", "-la", "--node", "n1"}, 1},
+		{"cluster exec", []string{"ls", "-la", "--node", "n1"}, []string{"ls", "-la", "--node", "n1"}, 255},
 		{"machine exec", []string{"--", "-v"}, []string{"-v"}, 255},
 		{"cluster oc", []string{"get", "pods", "--context", "other", "--help"}, []string{"get", "pods", "--context", "other", "--help"}, 1},
 		{"cluster kubectl", []string{"get", "pods", "--context", "other", "--help"}, []string{"get", "pods", "--context", "other", "--help"}, 1},
 		{"machine exec", []string{"--", "--help", "", "a b", "$(payload)"}, []string{"--help", "", "a b", "$(payload)"}, 255},
-		{"cluster exec", []string{"--", "--help"}, []string{"--help"}, 1},
+		{"cluster exec", []string{"--", "--help"}, []string{"--help"}, 255},
 		{"cluster oc", []string{"--", "--help"}, []string{"--help"}, 1},
 		{"cluster kubectl", []string{"--", "--help"}, []string{"--help"}, 1},
 		{"cluster oc", []string{"--help"}, nil, 0},
 		{"machine exec", []string{"--", ""}, nil, 2},
 		{"cluster exec", nil, nil, 2},
+		{"cluster exec", []string{"--node=", "pwd"}, nil, 2},
 		{"machine exec", []string{"--unknown"}, nil, 2},
 	}
 	for _, tc := range cases {
@@ -350,7 +352,7 @@ func TestOutputFailureHasNoFallback(t *testing.T) {
 // A session's streams and exit status belong to the remote process. Bootwright
 // adds no status line of its own and returns exactly what the client reported.
 func TestASessionReportsTheClientsExitStatusAndPrintsNothing(t *testing.T) {
-	for _, invocation := range []string{"machine rsh --name demo", "machine exec --name demo pwd"} {
+	for _, invocation := range []string{"machine rsh --name demo", "machine exec --name demo pwd", "cluster rsh --name demo", "cluster exec --name demo --node n1 pwd"} {
 		t.Run(invocation, func(t *testing.T) {
 			for _, want := range []int{0, 1, 7, 130, 255} {
 				var out, errOut bytes.Buffer
@@ -395,7 +397,7 @@ func TestASessionRefusalExitsTwoFiftyFive(t *testing.T) {
 	refusal := func(code string) error {
 		return diagnostics.NewFailureWithRemediation(code, "the session cannot open", "", "do what it says")
 	}
-	for _, invocation := range []string{"machine rsh --name demo", "machine exec --name demo pwd"} {
+	for _, invocation := range []string{"machine rsh --name demo", "machine exec --name demo pwd", "cluster rsh --name demo", "cluster exec --name demo --node n1 pwd"} {
 		for _, test := range []struct {
 			name      string
 			err       error

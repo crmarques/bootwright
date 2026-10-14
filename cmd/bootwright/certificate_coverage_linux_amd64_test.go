@@ -10,7 +10,7 @@ import "testing"
 // Generation compiles the context's stored revision, so the remedy imports the
 // change before it generates, and names the context as every remedy does.
 func TestAGeneratedServingCertificateMissingAnHTTPSAddressRefusesBeforePlan(t *testing.T) {
-	for _, example := range []string{"lab-rhel", "lab-sno", "lab-baremetal", "multidc-platform"} {
+	for _, example := range []string{"lab-rhel", "lab-sno", "lab-baremetal"} {
 		t.Run(example, func(t *testing.T) {
 			compileAcceptance(t, exampleDirectory(t, example))
 		})

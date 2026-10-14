@@ -80,6 +80,7 @@ spec:
 
     bmcEmulationDefaults:
       bindAddress: 192.0.2.60
+      certificateRef: acceptance-bmc-tls
       auth:
         credentialsRef: acceptance-provider-credentials
 
@@ -332,3 +333,29 @@ metadata:
 
 spec:
   type: sshKeyPair
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-bmc-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: acceptance-bmc.example.test
+      ipAddresses:
+        - 192.0.2.60
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageClient
+metadata:
+  name: acceptance-rbd-client
+
+spec:
+  clusterRef: ceph-multidc-01
+  poolRef: odf-hub-multidc-01-rbd
+  access: read-only

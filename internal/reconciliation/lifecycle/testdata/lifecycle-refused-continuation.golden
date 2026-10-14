@@ -1,5 +1,5 @@
 {
-  "a failed apply under a moved automation digest": {
+  "a failed apply another build freezes differently": {
     "status": {
       "operation": "operation-1",
       "verb": "apply",
@@ -25,7 +25,7 @@
     },
     "apply": {
       "code": "lifecycle.state",
-      "message": "this executable's automation differs from the one this operation froze",
+      "message": "this executable would freeze the block alpha differently from the plan this operation froze",
       "remediation": "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"
     },
     "destroy": {

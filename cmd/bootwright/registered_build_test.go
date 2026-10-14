@@ -31,4 +31,13 @@ func TestAnOperationRecordsTheBuildTheVersionCommandReports(t *testing.T) {
 	if want := (lifecycle.Executable{Version: "1.4.0", Commit: "abcdef1"}); process.Executable != want {
 		t.Fatalf("a release build records %+v, want %+v", process.Executable, want)
 	}
+	version, commit = "", ""
+	buildStamp = func() (*debug.BuildInfo, bool) {
+		return &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}, Settings: []debug.BuildSetting{
+			{Key: "vcs.revision", Value: revision}, {Key: "vcs.modified", Value: "true"}}}, true
+	}
+	process, _ = interactiveProcess(cli.ClassifyInvocation([]string{"status"}), []string{"status"}, io.Discard, io.Discard, controller.Route{})
+	if want := (lifecycle.Executable{Commit: revision, Modified: true}); process.Executable != want {
+		t.Fatalf("a build stamped with a modified source records %+v, want %+v", process.Executable, want)
+	}
 }

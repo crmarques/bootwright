@@ -32,7 +32,7 @@ func TestSupervisorHandsFileStreamsToTheChildUnwrapped(t *testing.T) {
 	var buffered bytes.Buffer
 	var child Command
 	executor := executorFunc(func(_ context.Context, c Command) (int, error) {
-		if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+		if reflect.DeepEqual(c.Arguments, []string{"-n", "-ll"}) {
 			return 1, nil
 		}
 		child = c
@@ -64,7 +64,7 @@ func TestSupervisorRefreshUsesSameExecutorAndOriginalArgumentVector(t *testing.T
 		mu.Lock()
 		calls = append(calls, c)
 		mu.Unlock()
-		if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+		if reflect.DeepEqual(c.Arguments, []string{"-n", "-ll"}) {
 			if c.Input != nil {
 				t.Fatal("policy query received application stdin")
 			}
@@ -138,7 +138,7 @@ func TestSupervisorCancellationJoinsRefresh(t *testing.T) {
 	started := make(chan struct{})
 	stopped := make(chan struct{})
 	executor := executorFunc(func(ctx context.Context, c Command) (int, error) {
-		if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+		if reflect.DeepEqual(c.Arguments, []string{"-n", "-ll"}) {
 			return 1, nil
 		}
 		cancel()
@@ -216,7 +216,7 @@ func TestSupervisorForwardsOnlyASafeTerminalIdentity(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var child Command
 			executor := executorFunc(func(_ context.Context, c Command) (int, error) {
-				if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+				if reflect.DeepEqual(c.Arguments, []string{"-n", "-ll"}) {
 					return 1, nil
 				}
 				child = c
@@ -252,7 +252,7 @@ func TestSupervisorForwardsOnlyASafeTerminalIdentity(t *testing.T) {
 func TestSupervisorPlacesRouteAssignmentsBeforeTheOptionTerminator(t *testing.T) {
 	var child Command
 	executor := executorFunc(func(_ context.Context, c Command) (int, error) {
-		if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+		if reflect.DeepEqual(c.Arguments, []string{"-n", "-ll"}) {
 			return 1, nil
 		}
 		child = c
@@ -290,7 +290,7 @@ func TestSupervisorRefusesAnAssignmentOutsideTheRouteVocabulary(t *testing.T) {
 		"PATH=/evil",
 	} {
 		executor := executorFunc(func(_ context.Context, c Command) (int, error) {
-			if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+			if reflect.DeepEqual(c.Arguments, []string{"-n", "-ll"}) {
 				return 1, nil
 			}
 			t.Fatal("an unqualified assignment reached a child process")
@@ -313,7 +313,7 @@ func TestSupervisorRefusesAnAssignmentOutsideTheRouteVocabulary(t *testing.T) {
 func TestSupervisorLeavesADirectInvocationUnchanged(t *testing.T) {
 	var child Command
 	executor := executorFunc(func(_ context.Context, c Command) (int, error) {
-		if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+		if reflect.DeepEqual(c.Arguments, []string{"-n", "-ll"}) {
 			return 1, nil
 		}
 		child = c
@@ -341,7 +341,7 @@ func (r unreadableInput) Read([]byte) (int, error) {
 
 func inputLoggingExecutor(started *bool) executorFunc {
 	return executorFunc(func(_ context.Context, c Command) (int, error) {
-		if reflect.DeepEqual(c.Arguments, []string{"-n", "-u", "#0", "-ll"}) {
+		if reflect.DeepEqual(c.Arguments, []string{"-n", "-ll"}) {
 			io.WriteString(c.Output, string(listing("env_reset, log_input", "", "")))
 			return 0, nil
 		}
@@ -367,6 +367,32 @@ func TestAStandardInputSecretUnderInputLoggingNeverStartsTheChild(t *testing.T) 
 	options.SecretStdin, options.Input = "", strings.NewReader("")
 	if code, err := NewSupervisor(options).Run(context.Background(), []string{"status"}); code != 0 || err != nil || !started {
 		t.Fatalf("an invocation with no standard-input Secret = %d, %v; child started %v", code, err, started)
+	}
+}
+
+func TestAStandardInputSecretStartsWhenSudoRefusesAListingForARunasUser(t *testing.T) {
+	delay := delayFunc(func(ctx context.Context, _ time.Duration) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	started := false
+	executor := executorFunc(func(_ context.Context, c Command) (int, error) {
+		if slices.Contains(c.Arguments, "-ll") {
+			if slices.Contains(c.Arguments, "-u") {
+				io.WriteString(c.Output, "usage: sudo -h | -K | -k | -V\n")
+				return 1, nil
+			}
+			io.WriteString(c.Output, string(listing("env_reset, secure_path=/usr/sbin\\:/usr/bin", "", "")))
+			return 0, nil
+		}
+		if c.Elevated {
+			started = true
+		}
+		return 0, nil
+	})
+	options := SudoOptions{Executable: "/opt/bootwright", Sudo: "/usr/bin/sudo", Executor: executor, Delay: delay, SecretStdin: "ibm-registry", Input: strings.NewReader("")}
+	if code, err := NewSupervisor(options).Run(context.Background(), []string{"secret", "set", "--name", "ibm-registry", "--password-stdin"}); code != 0 || err != nil || !started {
+		t.Fatalf("Run = %d, %v; child started %v", code, err, started)
 	}
 }
 

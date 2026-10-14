@@ -133,10 +133,13 @@ func TestReadOnlyToolInspectionStreamsTheSourceAndEachMember(t *testing.T) {
 			for _, file := range tool.Files {
 				area.files[file.Path] = projectedFile{data: []byte(fixture.member), executable: true}
 			}
+			// Constructing the closure copies the embedded automation. Measure
+			// inspection itself, including its automation and tool verification.
+			record := closureOf(t, nil)
 			var before, after runtime.MemStats
 			runtime.GC()
 			runtime.ReadMemStats(&before)
-			got, _, err := inspectFiles(t.Context(), area, closureOf(t, nil), []prerequisites.ToolDefinition{tool})
+			got, _, err := inspectFiles(t.Context(), area, record, []prerequisites.ToolDefinition{tool})
 			runtime.ReadMemStats(&after)
 			if err != nil || !got.ToolsReady || !got.Recoverable {
 				t.Fatal(got, err)

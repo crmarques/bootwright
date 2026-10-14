@@ -32,8 +32,24 @@
 - name: Observe the sockets the service binds before any effect
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_managed_service_request }}'
+    bind_address: true
     foreign: true
   register: infra_managed_service_sockets
+
+- name: Name a bind address the placement host does not hold to the runner
+  bootwright.core.infra_service_protocol:
+    phase: refused
+    reason: unassigned-bind-address
+    port: '{{ bootwright_managed_service_request.port }}'
+  when: not infra_managed_service_sockets.bindAddressAssigned
+  no_log: true
+
+- name: Refuse an unassigned bind address
+  ansible.builtin.fail:
+    msg: >-
+      the placement host has no usable local address {{ bootwright_managed_service_request.bindAddress }};
+      nothing was pulled, published or started
+  when: not infra_managed_service_sockets.bindAddressAssigned
 
 - name: Name a listener the service does not own to the runner
   bootwright.core.infra_service_protocol:

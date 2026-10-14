@@ -183,11 +183,15 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 	if credentials == "" {
 		return MachineRequest{}, refusal("api.required", "the provider declares no emulated controller credential", "set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on "+provider.Identity())
 	}
+	certificate := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "certificateRef").Text()
+	if certificate == "" {
+		return MachineRequest{}, refusal("api.required", "the provider declares no emulated controller serving certificate", "set spec.libvirt.bmcEmulationDefaults.certificateRef on "+provider.Identity())
+	}
 	address := provider.Spec().Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text()
 	uuid := substrate.DomainUUID(contextName, name)
 	return MachineRequest{
 		Controller: Controller{
-			Address: address, CredentialsRef: credentials, Endpoint: substrate.ControllerEndpoint(address, port, uuid),
+			Address: address, CertificateRef: certificate, CredentialsRef: credentials, Endpoint: substrate.ControllerEndpoint(address, port, uuid),
 			Image: emulatorImage, Port: port, Unit: substrate.ControllerUnitName(contextName, name),
 		},
 		Directory:  substrate.DiskDirectory(contextName, name),
@@ -217,23 +221,24 @@ func disksFor(profile api.Value, identity, contextName, machine string) ([]Disk,
 	}
 	directory := substrate.DiskDirectory(contextName, machine)
 	disks := []Disk{{Name: "root", Path: directory + "/root.qcow2", SizeGiB: int(root), Target: "vda"}}
-	for index, data := range profile.Get("dataDisks").Items() {
+	dataDisks := profile.Get("dataDisks").Items()
+	presentations, valid := substrate.DataDiskPresentations(dataDisks)
+	if !valid {
+		return nil, refusal("api.value", "a libvirt profile declares unsupported data disk media or targets", "use at most seven dataDisks, omit media or set media: ssd, and keep root reserved on the profile of "+identity)
+	}
+	for index, data := range dataDisks {
 		name := data.Get("name").Text()
 		size, ok := data.Get("sizeGiB").Int64()
-		if !substrate.SafeSegment(name) || !ok || size < 1 {
+		if !substrate.SafeSegment(name) || name == "root" || !ok || size < 1 {
 			return nil, refusal("api.value", "a data disk declares no safe name or positive size", "correct dataDisks on the profile of "+identity)
 		}
-		if index >= len(diskTargets) {
-			return nil, refusal("api.value", "the Machine's profile declares more data disks than the domain can present", "reduce dataDisks on the profile of "+identity)
-		}
-		disks = append(disks, Disk{Name: name, Path: directory + "/" + name + ".qcow2", SizeGiB: int(size), Target: diskTargets[index]})
+		disk := Disk{Name: name, Path: directory + "/" + name + ".qcow2", Serial: substrate.DataDiskSerial(contextName, machine, name), SizeGiB: int(size)}
+		presentation := presentations[index]
+		disk.Bus, disk.Media, disk.RotationRate, disk.Target = presentation.Bus, presentation.Media, presentation.RotationRate, presentation.Target
+		disks = append(disks, disk)
 	}
 	return disks, nil
 }
-
-// diskTargets are the virtio device names after the root disk, in the order a
-// domain presents them.
-var diskTargets = []string{"vdb", "vdc", "vdd", "vde", "vdf", "vdg", "vdh"}
 
 // interfacesFor wires every effective physical interface to the one attachment
 // the Machine selects, because that is what the attachment reference means.

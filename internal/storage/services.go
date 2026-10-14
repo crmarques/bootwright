@@ -18,63 +18,20 @@ func (a *admission) clusterServices(ceph api.Value) {
 			}
 		}
 	}
-	for _, section := range ceph.Get("config").Fields() {
-		for _, key := range []string{"public_network", "cluster_network", "container_image"} {
-			if section.Value.Has(key) {
-				a.invalid("$.spec.ceph.config", "cluster config cannot repeat a typed field")
-			}
+	_, configIssues := CoreCephConfig(ceph)
+	for _, issue := range configIssues {
+		a.issue(issue.Code, issue.Field, issue.Message, issue.Remediation)
+	}
+	for _, module := range ceph.Get("mgrModules").Strings() {
+		if !slices.Contains([]string{"cephadm", "rbd_support"}, module) {
+			a.invalid("$.spec.ceph.mgrModules", "manager module requires its qualified service owner")
 		}
 	}
-	services := ceph.Get("services").Items()
-	keys := []string{}
-	firstClass := []string{"mon", "mgr", "osd", "mds", "rgw", "nfs", "ingress", "prometheus", "grafana", "alertmanager", "node-exporter", "node_exporter", "loki", "promtail", "mgmt-gateway", "mgmt_gateway"}
-	for i, service := range services {
-		field := indexed("$.spec.ceph.services", i)
-		keys = append(keys, textOf(service, "serviceType")+"/"+textOf(service, "serviceID"))
-		if slices.Contains(firstClass, textOf(service, "serviceType")) {
-			a.invalid(field+".serviceType", "generic services cannot duplicate a first-class storage service")
-		}
-		a.placement(a.object, service.Get("placement"), field+".placement", "", true)
+	a.nativeServices(ceph, false)
+	if ceph.Get("cephadm", "workarounds").Len() != 0 {
+		a.deferred("$.spec.ceph.cephadm.workarounds", "management-gateway workarounds require the later qualified management service", "workarounds from $.spec.ceph.cephadm", "B479")
 	}
-	a.uniqueValues(keys, "$.spec.ceph.services", "generic service type and ID pairs must be unique")
-	monitoring := ceph.Get("monitoring")
-	for _, service := range []string{"prometheus", "grafana", "alertmanager", "nodeExporter", "loki", "promtail"} {
-		if !monitoring.Has(service) {
-			continue
-		}
-		field := "$.spec.ceph.monitoring." + service
-		if monitoring.Has("enabled") && !monitoring.Get("enabled").Bool() {
-			a.invalid(field, "disabled monitoring forbids service blocks")
-			continue
-		}
-		role := service
-		if slices.Contains([]string{"nodeExporter", "loki", "promtail"}, service) {
-			role = ""
-		}
-		a.placement(a.object, monitoring.Get(service, "placement"), field+".placement", role, role == "")
-		a.serviceNetworks(a.object, monitoring.Get(service, "networks"), field+".networks")
-	}
-	gateway := ceph.Get("mgmtGateway")
-	if gateway.Present() {
-		http := fallback(gateway.Get("exposure"), "https") == "http"
-		if http {
-			a.forbid(gateway, "$.spec.ceph.mgmtGateway", "tls", "oauth2Proxy")
-			if gateway.Get("enableAuth").Bool() {
-				a.invalid("$.spec.ceph.mgmtGateway.enableAuth", "HTTP management gateway forbids authentication")
-			}
-		}
-		if gateway.Get("enableAuth").Bool() {
-			a.required(gateway, "oauth2Proxy", "$.spec.ceph.mgmtGateway")
-		} else {
-			a.forbid(gateway, "$.spec.ceph.mgmtGateway", "oauth2Proxy")
-		}
-		if gateway.Has("ingress") {
-			a.ingress(a.object, gateway.Get("ingress"), "$.spec.ceph.mgmtGateway.ingress")
-		}
-	}
-	if contains(ceph.Get("cephadm", "workarounds"), "mgmt-gateway-spec-dependency-recording") && (!gateway.Present() || fallback(gateway.Get("exposure"), "https") != "http" || gateway.Has("tls") || gateway.Has("oauth2Proxy") || gateway.Get("enableAuth").Bool()) {
-		a.invalid("$.spec.ceph.cephadm.workarounds", "management-gateway workaround requires HTTP without TLS or OAuth")
-	}
+
 }
 
 func (a *admission) prefixes(values api.Value, field string) []netip.Prefix {
@@ -201,8 +158,6 @@ func (a *admission) gateway(cluster api.Object) {
 	}
 	if fallback(endpoint.Get("scheme"), "https") == "https" {
 		a.required(endpoint, "tls", "$.spec.endpoint")
-	} else if textOf(endpoint, "scheme") == "http" {
-		a.forbid(endpoint, "$.spec.endpoint", "tls")
 	}
 	for i, value := range endpoint.Get("ingresses").Items() {
 		a.ingress(cluster, value, indexed("$.spec.endpoint.ingresses", i))
@@ -211,15 +166,12 @@ func (a *admission) gateway(cluster api.Object) {
 func (a *admission) nfs(cluster api.Object) {
 	spec := a.object.Spec()
 	a.placement(cluster, spec.Get("placement"), "$.spec.placement", "", true)
-	if spec.Get("ingresses").Len() > 0 && numeric(spec.Get("port")).Int64() == 2049 {
-		a.invalid("$.spec.port", "ingress-fronted NFS cannot use backend port 2049")
-	}
 	for i, value := range spec.Get("ingresses").Items() {
 		a.ingress(cluster, value, indexed("$.spec.ingresses", i))
 	}
 	for i, export := range spec.Get("exports").Items() {
 		field := indexed("$.spec.exports", i)
-		if export.Has("filesystemRef") == export.Has("bucket") {
+		if !export.Has("filesystemRef") && !export.Has("bucket") {
 			a.invalid(field, "an NFS export requires exactly one filesystem or bucket")
 		}
 		if export.Has("filesystemRef") {
@@ -249,16 +201,12 @@ func (a *admission) nfs(cluster api.Object) {
 }
 
 func (a *admission) cephEntitlement() {
+	a.intrinsic()
 	spec := a.object.Spec()
 	product := textOf(spec, "type")
 	if product == "redhat-ceph" {
 		for _, issue := range managedos.ValidateRHSM(a.object, true) {
 			a.issue(issue.Code, issue.Field, issue.Message, issue.Remediation)
-		}
-	} else {
-		a.forbid(spec, "$.spec", "rhsm")
-		if !spec.Get("license", "accept").Bool() {
-			a.invalid("$.spec.license.accept", "IBM storage entitlement requires explicit license acceptance")
 		}
 	}
 	a.required(spec, "registry", "$.spec")

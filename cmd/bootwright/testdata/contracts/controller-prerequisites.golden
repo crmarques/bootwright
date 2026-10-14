@@ -1,0 +1,29 @@
+implementation: controller-prerequisites
+content-digest: 12861259f12ba6828a41390a1acbe06a50f813a4939f65e9b503d450db7356c7
+automation-formats: none
+request-schema:
+  egress struct prerequisites.SetupEgress
+  egress.httpProxy string
+  egress.httpsProxy string
+  egress.noProxy []string
+  hypervisor bool
+  installerMedia bool
+  libvirt string
+  libvirtClient bool
+  machine string
+  tools []struct clients.ToolRequest
+  tools[].compatibility string
+  tools[].kind string
+  tools[].mirror string
+  tools[].version string
+  version string
+evidence-schema:
+  area string
+  libvirt bool
+  request string
+  retained bool
+  roots []string
+  tools []struct clients.ToolRecord
+  tools[].kind string
+  tools[].sha256 string
+  tools[].version string

@@ -22,10 +22,15 @@ import (
 
 func exampleSources(t *testing.T) desiredstate.Sources {
 	t.Helper()
+	return exampleDirectory(t, "multidc-platform")
+}
+
+func exampleDirectory(t *testing.T, name string) desiredstate.Sources {
+	t.Helper()
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("filesystem admission is qualified for linux/amd64")
 	}
-	root, err := filepath.Abs(filepath.Join("..", "..", "examples", "multidc-platform"))
+	root, err := filepath.Abs(filepath.Join("..", "..", "examples", name))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +57,98 @@ func expandedExampleSources(t *testing.T) desiredstate.Sources {
 	return sources
 }
 
+// refusedKinds are the kinds the reference and the extras declare that
+// admission refuses until their later slices (storage family refusals): the
+// admissible projection cannot carry one, and no other kind may be missing
+// from it.
+var refusedKinds = []api.Kind{api.StorageExport, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport}
+
+const (
+	fusionAddOn           = "fusion-data-foundation"
+	admissibleCephSources = "acceptance-ceph.yaml"
+)
+
+// mustReplaceOnce rewrites body and fails the test when the text it edits is
+// gone, so a changed reference cannot silently stop being projected.
+func mustReplaceOnce(t *testing.T, path, body, old, replacement string) string {
+	t.Helper()
+	if strings.Count(body, old) != 1 {
+		t.Fatalf("%s: the projection expects %q exactly once", path, old)
+	}
+	return strings.Replace(body, old, replacement, 1)
+}
+
+// admissibleExampleSources is the reference as admission accepts it today:
+// the Ceph sources and the add-on that can only consume a refused export
+// dropped (the hub profile keeps the add-on every cluster profile shares), a
+// non-stretch StorageCluster with its policy and pool substituted from
+// testdata, and the extras without the refused families. The public example is
+// untouched; its own refusals are pinned by referenceRefusals.
+func admissibleExampleSources(t *testing.T, withExtras bool) desiredstate.Sources {
+	t.Helper()
+	sources := exampleSources(t)
+	root := sources.Roots[0]
+	ceph := filepath.Join(root, "clusters", "ceph") + string(filepath.Separator)
+	addOn := filepath.Join(root, "add-ons", fusionAddOn) + string(filepath.Separator)
+	var files []desiredstate.SourceFile
+	dropped := 0
+	for _, file := range sources.Files {
+		body := string(file.Bytes())
+		switch {
+		case strings.HasPrefix(file.Path(), ceph), strings.HasPrefix(file.Path(), addOn):
+			dropped++
+			continue
+		case strings.Contains(body, "kind: ClusterAddonProfile\n"):
+			replacement := ""
+			if strings.Contains(body, "  name: hub-cluster-addons\n") {
+				replacement = "    - nmstate\n"
+			}
+			body = mustReplaceOnce(t, file.Path(), body, "    - "+fusionAddOn+"\n", replacement)
+		case strings.Contains(body, "kind: ClusterAddonBinding\n"):
+			head, _, found := strings.Cut(body, "  addonConfigs:\n")
+			if !found || !strings.Contains(body, "addonRef: "+fusionAddOn+"\n") {
+				t.Fatalf("%s: the projection expects the %s input block", file.Path(), fusionAddOn)
+			}
+			body = head
+		default:
+			files = append(files, file)
+			continue
+		}
+		files = append(files, desiredstate.NewSourceFile(file.Path(), []byte(body)))
+	}
+	if dropped != 15+1 {
+		t.Fatalf("the projection dropped %d sources, want the 15 Ceph sources and the add-on", dropped)
+	}
+	files = append(files, desiredstate.NewSourceFile(filepath.Join(root, admissibleCephSources), readAcceptanceFixture(t, "ceph-admissible.yaml")))
+	if withExtras {
+		files = append(files, desiredstate.NewSourceFile(filepath.Join(root, "acceptance-extras.yaml"), admissibleExtras(t)))
+	}
+	sources.Files = files
+	return sources
+}
+
+// admissibleExtras is extras.yaml without its documents of refused kinds.
+func admissibleExtras(t *testing.T) []byte {
+	t.Helper()
+	var kept []string
+	removed := 0
+	for _, document := range strings.Split(string(readAcceptanceFixture(t, "extras.yaml")), "\n---\n") {
+		refused := false
+		for _, kind := range refusedKinds {
+			refused = refused || strings.Contains(document, "kind: "+string(kind)+"\n")
+		}
+		if refused {
+			removed++
+			continue
+		}
+		kept = append(kept, document)
+	}
+	if removed != 2 {
+		t.Fatalf("the extras hold %d refused documents, want the NFS export and the external export", removed)
+	}
+	return []byte(strings.Join(kept, "\n---\n"))
+}
+
 func compileAcceptance(t *testing.T, sources desiredstate.Sources) (*compilation.State, *compilation.Report) {
 	t.Helper()
 	state, report, err := wireCompiler().Compile(context.Background(), sources)
@@ -70,36 +167,165 @@ func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string
 	return object
 }
 
-func TestActualCLIValidatesCompleteExample(t *testing.T) {
+// The reference includes later service families and stretch intent. Admission
+// refuses those declarations explicitly rather than dropping them from input.
+func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 	sources := exampleSources(t)
 	if len(sources.Files) != 106 {
-		t.Fatalf("example discovery: got %d files, want 106", len(sources.Files))
+		t.Fatalf("reference discovery: got %d files, want 106", len(sources.Files))
 	}
 	var out, errOut bytes.Buffer
 	code := run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
 	var result struct {
-		OK     bool
-		Result struct {
-			Counts                    compilation.Counts
-			Advisories                []any
-			ExcludedResourceFiles     []string
-			ExcludedContainerClusters []string
-			ExcludedStorageClusters   []string
-		}
-		Diagnostics []any
+		OK          bool
+		Diagnostics []diagnostics.Diagnostic
 	}
 	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 		t.Fatal(err, out.String())
 	}
-	if code != 0 || errOut.Len() != 0 || !result.OK || result.Result.Counts != (compilation.Counts{FilesSeen: 106, ObjectsDecoded: 106}) || len(result.Diagnostics) != 0 || len(result.Result.Advisories) != 0 {
-		t.Fatalf("actual CLI admission: code=%d out=%s err=%s", code, out.String(), errOut.String())
+	if code == 0 || errOut.Len() != 0 || result.OK {
+		t.Fatalf("reference admission: code=%d out=%s err=%s", code, out.String(), errOut.String())
 	}
-	if len(result.Result.ExcludedResourceFiles)+len(result.Result.ExcludedContainerClusters)+len(result.Result.ExcludedStorageClusters) != 0 {
-		t.Fatal("unexpected example exclusions")
+	requireReferenceRefusals(t, result.Diagnostics, false)
+}
+
+// diagnosticTuple names one diagnostic by what an author reads: its code, the
+// object it is about and the field it points at.
+type diagnosticTuple struct{ code, kind, name, field string }
+
+func (d diagnosticTuple) String() string {
+	return strings.Join([]string{d.code, d.kind, d.name, d.field}, " | ")
+}
+
+const (
+	laterServiceRefusal = "$.spec"
+	storageClusterKind  = string(api.StorageCluster)
+	multidcCluster      = "ceph-multidc-01"
+)
+
+// referenceRefusals is the complete set of diagnostics the unmodified
+// reference raises: the managed Ceph cluster's per-field qualification
+// refusals and its stretch intent, and each storage family refused until its
+// later slice. A diagnostic outside the set, or a missing one, fails.
+func referenceRefusals() []diagnosticTuple {
+	cluster := func(field string) diagnosticTuple {
+		return diagnosticTuple{"api.invariant", storageClusterKind, multidcCluster, field}
 	}
-	state, _ := compileAcceptance(t, sources)
-	if len(state.Effective().Objects()) != 106 {
-		t.Fatal("example objects lost")
+	family := func(kind, name string) diagnosticTuple {
+		return diagnosticTuple{"api.invariant", kind, name, laterServiceRefusal}
+	}
+	return []diagnosticTuple{
+		cluster("$.spec.ceph.cephadm.workarounds"),
+		cluster("$.spec.ceph.config.global.mon_osd_down_out_subtree_limit"),
+		cluster("$.spec.ceph.config.global.osd_pool_default_pg_autoscale_mode"),
+		{"api.required", storageClusterKind, multidcCluster, "$.spec.ceph.config.global.osd_pool_default_min_size"},
+		{"api.required", storageClusterKind, multidcCluster, "$.spec.ceph.config.global.osd_pool_default_size"},
+		cluster("$.spec.ceph.mgrModules"),
+		cluster("$.spec.ceph.topology.stretch"),
+		cluster("$.spec.ceph.services[3].service_type"),
+		cluster("$.spec.ceph.services[4].service_type"),
+		cluster("$.spec.ceph.services[5].service_type"),
+		cluster("$.spec.ceph.serviceBindings[0].secrets[0].path"),
+		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-01"),
+		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-02"),
+		family("StorageExport", "ceph-multidc-01-odf-ocp-multidc-01"),
+		family("StorageExport", "ceph-multidc-01-odf-ocp-multidc-02"),
+		family("StorageFilesystem", "odf-cephfs"),
+		family("StorageObjectGateway", "odf-rgw-all")}
+}
+
+// expandedRefusals adds what the acceptance extras contribute to the
+// reference's: two more refused storage families, and the warning every
+// CustomPlaybook raises because it cannot execute.
+func expandedRefusals() []diagnosticTuple {
+	return append(referenceRefusals(),
+		diagnosticTuple{"api.invariant", "StorageNFSExport", "acceptance-nfs", laterServiceRefusal},
+		diagnosticTuple{"api.invariant", "StorageExport", "acceptance-external-export", laterServiceRefusal},
+		diagnosticTuple{"api.deferred", "CustomPlaybook", "acceptance-playbook", laterServiceRefusal},
+	)
+}
+
+func requireReferenceRefusals(t *testing.T, sink []diagnostics.Diagnostic, expanded bool) {
+	t.Helper()
+	want := referenceRefusals()
+	if expanded {
+		want = expandedRefusals()
+	}
+	missing := map[diagnosticTuple]int{}
+	for _, tuple := range want {
+		missing[tuple]++
+	}
+	for _, d := range sink {
+		tuple := diagnosticTuple{code: d.Code, field: d.Field}
+		if d.Object != nil {
+			tuple.kind, tuple.name = d.Object.Kind, d.Object.Name
+		}
+		if missing[tuple] == 0 {
+			t.Errorf("unexpected diagnostic outside the reference's refusal set: %s: %s", tuple, d.Message)
+			continue
+		}
+		missing[tuple]--
+	}
+	for tuple, count := range missing {
+		if count != 0 {
+			t.Errorf("expected refusal is missing: %s", tuple)
+		}
+	}
+}
+
+// Target tools are selected by the graph alone: the clusters and providers this
+// supported example declares are what pull the OpenShift clients in, at the
+// versions it declares, and nothing else contributes one.
+func TestActualExampleSelectsTargetToolsFromItsClusters(t *testing.T) {
+	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno"))
+	tools, err := controller.SelectTools(state.Effective())
+	want := []controller.ToolRequest{
+		{Kind: "helm", Version: "latest"},
+		{Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"},
+		{Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"},
+	}
+	if err != nil || !slices.Equal(tools, want) {
+		t.Fatalf("target tools: %#v err=%v", tools, err)
+	}
+}
+
+func TestActualCompilerRefusesFutureKindsAndAdditionalVariants(t *testing.T) {
+	sources := expandedExampleSources(t)
+	state, report, err := wireCompiler().Compile(context.Background(), sources)
+	if err == nil || state != nil || report != nil {
+		t.Fatal("future reference unexpectedly compiled")
+	}
+	requireReferenceRefusals(t, diagnostics.Of(err), true)
+	if len(api.Kinds()) != 27 {
+		t.Fatalf("kind catalog changed: %d", len(api.Kinds()))
+	}
+}
+
+// The projection is the full-wiring positive coverage the reference cannot
+// give while it declares refused families: every kind but the refused ones
+// reaches the effective graph from one admitted stream. A kind added to the
+// catalog without coverage, or a family admitted without leaving the
+// allow-list, fails here.
+func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testing.T) {
+	state, report := compileAcceptance(t, admissibleExampleSources(t, true))
+	kinds := api.Kinds()
+	if len(kinds) != 27 {
+		t.Fatalf("kind catalog changed: %d; cover the new kind in the reference or the extras", len(kinds))
+	}
+	for _, kind := range kinds {
+		covered := len(state.Effective().OfKind(kind)) != 0
+		switch refused := slices.Contains(refusedKinds, kind); {
+		case refused && covered:
+			t.Errorf("kind %s is admitted now: remove it from refusedKinds and cover it", kind)
+		case !refused && !covered:
+			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
+		}
+	}
+	if report.Counts != (compilation.Counts{FilesSeen: 92, ObjectsDecoded: 113}) {
+		t.Errorf("projection counts: %#v", report.Counts)
+	}
+	if len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.deferred" || report.Diagnostics[0].Object == nil || report.Diagnostics[0].Object.Name != "acceptance-playbook" {
+		t.Errorf("the projection raised a diagnostic besides the reserved playbook's: %+v", report.Diagnostics)
 	}
 	installed := requireObject(t, state.Effective(), api.Machine, "storage-a-01")
 	if installed.Spec().Get("access", "ssh", "user").Text() != "bootwright" || installed.Spec().Get("access", "ssh", "auth", "privateKeyRef").Text() != "bootwright-machine-key" {
@@ -110,41 +336,8 @@ func TestActualCLIValidatesCompleteExample(t *testing.T) {
 	}
 }
 
-// Target tools are selected by the graph alone: the clusters and providers this
-// example declares are what pull the OpenShift and KubeVirt clients in, at the
-// versions it declares, and nothing else contributes one.
-func TestActualExampleSelectsTargetToolsFromItsClusters(t *testing.T) {
-	state, _ := compileAcceptance(t, exampleSources(t))
-	tools, err := controller.SelectTools(state.Effective())
-	want := []controller.ToolRequest{
-		{Kind: "helm", Version: "latest"},
-		{Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"},
-		{Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"},
-		{Kind: "virtctl", Version: "latest", Compatibility: "kubevirt"},
-	}
-	if err != nil || !slices.Equal(tools, want) {
-		t.Fatalf("target tools: %#v err=%v", tools, err)
-	}
-}
-
-func TestActualCompilerAdmitsAllKindsAndAdditionalVariants(t *testing.T) {
-	sources := expandedExampleSources(t)
-	state, report := compileAcceptance(t, sources)
-	if report.Counts != (compilation.Counts{FilesSeen: 107, ObjectsDecoded: 126}) {
-		t.Fatalf("expanded graph counts: %#v", report.Counts)
-	}
-	for _, kind := range api.Kinds() {
-		if len(state.Effective().OfKind(kind)) == 0 {
-			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
-		}
-	}
-	if len(api.Kinds()) != 26 {
-		t.Fatalf("kind catalog changed: %d", len(api.Kinds()))
-	}
-	nfs := requireObject(t, state.Effective(), api.StorageNFSExport, "acceptance-nfs")
-	if nfs.Spec().Get("port").Text() != "2049" || nfs.Spec().Get("exports").Items()[0].Get("clients").Items()[0].Text() != "192.0.2.0/24" {
-		t.Fatal("NFS normalization missing")
-	}
+func TestActualAdmissibleProjectionNormalizesAndDefaultsItsExtras(t *testing.T) {
+	state, _ := compileAcceptance(t, admissibleExampleSources(t, true))
 	playbook := requireObject(t, state.Effective(), api.CustomPlaybook, "acceptance-playbook")
 	if playbook.Spec().Get("enabled").Bool() || playbook.Spec().Get("extraVars", "literal").Type() != api.String || playbook.Spec().Get("extraVars", "fraction").Type() != api.Number {
 		t.Fatal("reserved playbook declaration changed")
@@ -185,8 +378,25 @@ func TestActualCompilerAdmitsAllKindsAndAdditionalVariants(t *testing.T) {
 	}
 }
 
+// The graph alone selects the target tools of the reference's clusters and
+// providers, KubeVirt's client included. The extras are left out: their
+// single-node cluster pins a release image, which tool selection refuses.
+func TestActualAdmissibleProjectionSelectsKubeVirtTools(t *testing.T) {
+	state, _ := compileAcceptance(t, admissibleExampleSources(t, false))
+	tools, err := controller.SelectTools(state.Effective())
+	want := []controller.ToolRequest{
+		{Kind: "helm", Version: "latest"},
+		{Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"},
+		{Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"},
+		{Kind: "virtctl", Version: "latest", Compatibility: "kubevirt"},
+	}
+	if err != nil || !slices.Equal(tools, want) {
+		t.Fatalf("target tools: %#v err=%v", tools, diagnostics.Of(err))
+	}
+}
+
 func TestActualCompilerSourceOrderIndependence(t *testing.T) {
-	sources := exampleSources(t)
+	sources := exampleDirectory(t, "lab-rhel")
 	before := make([][]byte, len(sources.Files))
 	for i, file := range sources.Files {
 		before[i] = file.Bytes()
@@ -220,6 +430,17 @@ func TestActualCompilerSourceOrderIndependence(t *testing.T) {
 	}
 }
 
+func TestFutureReferenceRefusalsAreSourceOrderIndependent(t *testing.T) {
+	sources := exampleSources(t)
+	before := admissionFingerprint(t, sources)
+	reversed := sources
+	reversed.Files = slices.Clone(sources.Files)
+	slices.Reverse(reversed.Files)
+	if !bytes.Equal(before, admissionFingerprint(t, reversed)) {
+		t.Fatal("source order changed future-reference refusals")
+	}
+}
+
 func TestActualCompilerDefaultPrecedencePreservesExplicitValues(t *testing.T) {
 	data := readAcceptanceFixture(t, "defaults.yaml")
 	sources := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", data)}, Roots: []string{"/synthetic"}}
@@ -246,7 +467,7 @@ func TestActualCompilerDefaultPrecedencePreservesExplicitValues(t *testing.T) {
 }
 
 func TestActualCompilerCanonicalEffectiveOutputIsInspectionOnly(t *testing.T) {
-	sources := exampleSources(t)
+	sources := exampleDirectory(t, "lab-rhel")
 	state, _ := compileAcceptance(t, sources)
 	data, err := effectiveencoding.YAML(context.Background(), state.Effective())
 	if err != nil {
@@ -269,7 +490,7 @@ func TestActualCompilerCanonicalEffectiveOutputIsInspectionOnly(t *testing.T) {
 	}
 	// Machine network declarations remain present; composed native addresses
 	// belong to internal evidence rather than canonical template replacement.
-	if !bytes.Contains(data, []byte("interfaceBinding:")) || !bytes.Contains(data, []byte("configRef: ceph-network")) {
+	if !bytes.Contains(data, []byte("attachmentRef: lab-guests")) || !bytes.Contains(data, []byte("configRef: lab-guests")) {
 		t.Fatal("canonical output lost Machine declaration structure")
 	}
 }

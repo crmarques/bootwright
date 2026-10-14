@@ -14,9 +14,9 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 )
 
 # The refusal the artifact server names to its runner before the run fails, the
-# runner reporting it as the server's own diagnostic for a port: a socket
-# something else already listens on, checked before the unit starts.
-REFUSALS = ("foreign-listener",)
+# runner reporting it as the server's own diagnostic for a port: an unassigned
+# address or a socket another daemon holds, checked before effects.
+REFUSALS = ("foreign-listener", "unassigned-bind-address")
 MAX_LISTENERS = 64
 
 

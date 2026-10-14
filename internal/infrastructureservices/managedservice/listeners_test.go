@@ -70,3 +70,24 @@ func TestAForeignListenerRemedyOffersOnlyWhatValidationAdmits(t *testing.T) {
 		}
 	}
 }
+
+func TestUnassignedBindRefusalNamesTheServiceAndFrozenInputRecovery(t *testing.T) {
+	for _, kind := range []string{"Proxy", "DNSServer", "NTPServer", "ArtifactServer"} {
+		for _, bind := range []string{"192.0.2.1", "2001:db8::1"} {
+			refusals := ListenerRefusals(kind, "svc", bind, []int{8080})
+			reported := diagnostics.Of(refusals["unassigned-bind-address-8080"])
+			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Kind != kind || reported[0].Object.Name != "svc" {
+				t.Fatalf("%s: refusal = %#v, want lifecycle.state on %s/svc", bind, reported, kind)
+			}
+			if !strings.Contains(reported[0].Message, HostPort(bind, 8080)) || !strings.Contains(reported[0].Message, "no usable local bind address") || !strings.Contains(reported[0].Remediation, "destroy this context with its original build") || !strings.Contains(reported[0].Remediation, "TLS certificate names") {
+				t.Fatalf("%s: refusal = %#v, want socket, absence and exact-continuation recovery", bind, reported[0])
+			}
+		}
+	}
+	for _, bind := range []string{"0.0.0.0", "::"} {
+		refusals := ListenerRefusals("Proxy", "svc", bind, []int{8080})
+		if len(refusals) != 1 || refusals["unassigned-bind-address-8080"] != nil || refusals["foreign-listener-8080"] == nil {
+			t.Fatalf("%s: refusal inventory = %v, want foreign listener only", bind, refusals)
+		}
+	}
+}

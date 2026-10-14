@@ -114,7 +114,7 @@ func failedApplyNaming(t *testing.T, repository *contextfs.Store, binding string
 		if err := store.Register(ctx, operation, plan); err != nil {
 			return err
 		}
-		number, err := store.StartAttempt(ctx, id, "alpha")
+		number, err := store.StartAttempt(ctx, id, "alpha", exitBuild())
 		if err != nil {
 			return err
 		}
