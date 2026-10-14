@@ -8,6 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 // launchRefused runs a fresh apply and a bounded run, each of which must
@@ -187,4 +188,62 @@ func TestStatusNeverRebuildsAMissingRuntime(t *testing.T) {
 	if len(rebuilder.rebuilds) != 0 {
 		t.Fatalf("status rebuilt the runtime %d times", len(rebuilder.rebuilds))
 	}
+}
+
+// A continuation is a launch too: with only the runtime directory gone it
+// rebuilds it from the cache once, before it presents its plan, and then
+// continues the operation it registered.
+func TestAContinuationRebuildsAMissingRuntime(t *testing.T) {
+	for _, test := range []struct {
+		verb  reconciliation.Verb
+		start func(*testing.T, *harness)
+	}{
+		{reconciliation.Apply, failedApply},
+		{reconciliation.Destroy, unknownRemoval},
+	} {
+		t.Run(string(test.verb), func(t *testing.T) {
+			h := newHarness(t, "artifact-server-lab")
+			test.start(t, h)
+			registered, _ := durableOperation(t, h)
+			rebuilder := withRebuilder(h, nil)
+			status, err := h.service.Status(context.Background(), StatusRequest{ContextName: testContextName})
+			if err != nil || len(rebuilder.rebuilds) != 0 {
+				t.Fatalf("status over the incomplete operation = %v, rebuilt %d times", err, len(rebuilder.rebuilds))
+			}
+			if len(status.NextSteps) != 1 || status.NextSteps[0] != setupStep {
+				t.Fatalf("status offered %v over a missing runtime", status.NextSteps)
+			}
+			h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+			result, err := continued(h, test.verb)
+			if err != nil || result.Receipt.Operation != registered.ID || result.Receipt.State != string(reconciliation.OperationDone) {
+				t.Fatalf("the continuation over a missing runtime = %+v (%v)", result, err)
+			}
+			if len(rebuilder.rebuilds) != 1 {
+				t.Fatalf("the continuation rebuilt its runtime %d times", len(rebuilder.rebuilds))
+			}
+		})
+	}
+}
+
+// An apply over an incomplete removal whose runtime the cache can rebuild
+// names that removal's continuation, not setup.
+func TestAnApplyOverARemovalWithAMissingRuntimeNamesItsContinuation(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	unknownRemoval(t, h)
+	withRebuilder(h, nil)
+	_, err := apply(h)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Remediation != "continue it with bootwright destroy --context lab" {
+		t.Fatalf("the apply over the removal reported %+v (%v)", reported, err)
+	}
+}
+
+// A continuation whose missing runtime the cache cannot rebuild refuses with
+// setup before it presents anything.
+func TestAContinuationMissingAWheelRefusesWithRunSetup(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	failedApply(t, h)
+	withRebuilder(h, prerequisites.ErrRuntimeWheelMissing)
+	_, err := continued(h, reconciliation.Apply)
+	requireSetupRefusal(t, err, "the controller runtime for this build (lock 444444444444, Python 3.14) is not prepared")
 }

@@ -73,8 +73,8 @@ the exit status. A non-empty /etc/ld.so.preload is reported the same way, as
 
 Setup installs only what is missing, and from two places:
 
-- **Host packages,** `openssh-clients` and `podman`, plus a `python(abi)`
-  capability when no Python the lock serves is installed, come from the
+- **Host packages,** `openssh-clients` and `podman`, plus the `python3.X`
+  package when no Python the lock serves is installed, come from the
   host's own dnf with its own repositories, signing keys, `proxy=`, mirrors,
   Satellite or RHSM registration, versionlock and excludes
   ([host packages](../specs/controller.md#host-packages)). Bootwright edits no
@@ -288,7 +288,7 @@ order:
    ```sh
    bootwright context list
    bootwright destroy --context <name>
-   bootwright context delete --name <name>
+   bootwright context delete --name <name> --purge
    ```
 
 2. Once nothing it manages runs any more, as root, remove both store roots:

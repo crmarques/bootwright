@@ -145,6 +145,7 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 		return nil, err
 	}
 	current.report.PlanPresented = true
+	current.report.PresentedWarnings = len(current.report.Warnings)
 	if !request.SkipConfirmation {
 		if s.options.Confirmer == nil {
 			return &current.report, failure("controller.setup", "setup requires confirmation", "review the plan and repeat with --yes")

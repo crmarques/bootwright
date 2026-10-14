@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "setup",
+  "ok": false,
+  "exitCode": 1,
+  "result": {
+    "dryRun": true,
+    "outcome": "planned",
+    "platform": "fedora 43/amd64",
+    "checks": [
+      {
+        "id": "host",
+        "required": "the Fedora or RHEL family on amd64",
+        "observed": "fedora 43/amd64",
+        "status": "ready"
+      },
+      {
+        "id": "python-runtime",
+        "required": "Python 3.14, 3.13, 3.12 with ansible-core 2.21.5",
+        "observed": "Python 3.14.8 (/usr/bin/python3.14); runtime not verified without privilege",
+        "status": "unverified"
+      },
+      {
+        "id": "host-packages",
+        "required": "openssh-clients, podman",
+        "observed": "missing podman",
+        "status": "not-ready"
+      },
+      {
+        "id": "setup-state",
+        "required": "complete",
+        "observed": "unverified",
+        "status": "unverified"
+      },
+      {
+        "id": "state-root",
+        "required": "a root:root 0700 directory on a local filesystem",
+        "observed": "a directory owned by root:root with mode 0755",
+        "status": "not-ready"
+      }
+    ],
+    "actions": [
+      "Install host packages with dnf: podman",
+      "Verify or prepare the controller runtime: Python 3.14 at /usr/bin/python3.14, ansible-core 2.21.5: 1 of 2 wheels to download (2.4 MB), 1 cached"
+    ],
+    "requirements": [
+      "podman"
+    ],
+    "files": [
+      {
+        "abi": "3.14",
+        "filename": "ansible_core-2.21.5-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/ansible_core-2.21.5-py3-none-any.whl",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "filename": "pip-26.0.1-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/pip-26.0.1-py3-none-any.whl",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "context.state",
+      "message": "the state root is a directory owned by root:root with mode 0755, but it must be a directory owned by root:root with mode 0700",
+      "remediation": "nothing repairs it, because Bootwright never changes the owner or mode of an existing state root"
+    },
+    {
+      "severity": "warning",
+      "code": "controller.untested-release",
+      "message": "Fedora 45 is newer than the releases this build was tested on (43, 44); setup checks its floors and continues"
+    }
+  ],
+  "logs": []
+}

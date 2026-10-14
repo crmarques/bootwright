@@ -89,8 +89,8 @@ func (a *Adapter) Inspect(ctx context.Context, interpreter prerequisites.PythonI
 	return runtime, true, nil
 }
 
-// verifyRuntime walks the runtime directory, its interpreter link and the
-// interpreter's stdlib, and requires runtime.json to name this runtime.
+// verifyRuntime walks the runtime directory, its launch lock, interpreter link
+// and the interpreter's stdlib, and requires runtime.json to name this runtime.
 func (a *Adapter) verifyRuntime(runtime prerequisites.Runtime) error {
 	directory, err := a.runtimeDirectory(runtime.Digest)
 	if err != nil {
@@ -98,6 +98,9 @@ func (a *Adapter) verifyRuntime(runtime prerequisites.Runtime) error {
 	}
 	if err := a.ownedDirectory(filepath.Join(directory, "bin")); err != nil {
 		return err
+	}
+	if lock, err := os.Lstat(filepath.Join(directory, lockName)); err != nil || !lock.Mode().IsRegular() || !a.owned(lock) {
+		return failure("the controller runtime " + runtime.Digest[:12] + " holds no usable launch lock")
 	}
 	record, err := readRecord(filepath.Join(directory, recordName))
 	if err != nil {

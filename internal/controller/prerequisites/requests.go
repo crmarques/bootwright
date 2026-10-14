@@ -66,9 +66,10 @@ type Report struct {
 	// Preview is dnf's own preview of that install, display text only.
 	Preview *HostPackagePreview
 	// Files lists every locked wheel, for a dry run's machine output.
-	Files         []LockedFile
-	Export        *WheelExport
-	PlanPresented bool
+	Files             []LockedFile
+	Export            *WheelExport
+	PlanPresented     bool
+	PresentedWarnings int
 	// Next is the one command that settles a not-ready readiness check, as
 	// preflight decided it, the setup a dry run previewed, or the bootwright
 	// command a refused or failed setup's remediation names. It is empty for

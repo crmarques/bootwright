@@ -18,7 +18,7 @@ const (
 )
 
 // requested is what setup asks of dnf: the missing baseline and, without a
-// qualified interpreter, the python(abi) the preview chose.
+// qualified interpreter, the python3.X the preview chose.
 func (i inspection) requested() []string {
 	requested := slices.Clone(i.missing)
 	if i.python != "" {
@@ -56,7 +56,7 @@ func (s Service) preview(ctx context.Context, current *inspection) error {
 		}
 		if candidate != "" && candidate != current.python {
 			current.python, current.abi = candidate, abiOf(candidate)
-			if current.wheels, err = s.ports.Python.Wheels(ctx, current.abi); err != nil {
+			if err = s.settleWheels(ctx, current); err != nil {
 				return err
 			}
 		}
@@ -315,7 +315,7 @@ func receiptPackage(evidence HostPackageEvidence, id string, installed []HostPac
 	if item.Repository == "" {
 		item.Repository = unknownRepo
 	}
-	if strings.HasPrefix(evidence.Requirement, "python(abi)") {
+	if _, python := PythonRequirementABI(evidence.Requirement); python {
 		item.RequiredBy = []string{runtimeStep}
 	}
 	if slices.ContainsFunc(installed, func(other HostPackageEvidence) bool {

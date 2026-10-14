@@ -6155,3 +6155,99 @@ duplicated in hostdnf and privilege. Nothing needing root was run: setup's
 install path, retention and the rebuild on a real store and the owner's fresh-install acceptance on Fedora 44 and a RHEL 9 VM
 ([B555](m1.md#b555)) remain, with the owner's runtime-lock `verify` run
 ([B549](m1.md#b549)) and X87's S0 baseline.
+
+### X92 — Setup v2 review findings
+
+**Owner:** Controller setup, with Workspace, State reconciliation and CLI. A
+defect slice of [M1](m1.md) under D152, integrated on local main as one
+commit by the session on 2026-10-14 without a push: the adversarial review of
+setup v2 (X87 to X90) confirmed twelve findings, two blocking; this slice
+fixes them. **Items:** B607, created and completed in this slice for those
+twelve findings. **Decisions:** D152, pending the owner's review.
+**Integrated:** "fix(controller): settle the setup v2 review findings".
+
+**Outcome, by finding** (severity; fix; guard test):
+
+1. *Discarding a foreign setup subtree deleted the healthy runtime and the
+   wheel cache, then the receipt named the deleted runtime* (blocking). While
+   the subtree is another build's, inspection never adopts a runtime and
+   counts every locked wheel as uncached, so the plan carries the `runtime`
+   step and setup fetches, builds and publishes before the receipt names it.
+   `TestDiscardingAnotherBuildsStateRebuildsAHealthyRuntime`
+   (prerequisites) and `TestHealingASubtreeOverAHealthyRuntimeLeavesItLaunchable`
+   (contextfs).
+2. *On Fedora the missing-interpreter path asked dnf for `python(abi) =
+   X.Y`, which Fedora's alternative interpreters never provide* (blocking).
+   The baseline names the package `python3.X`, which every supported
+   release's package of a locked ABI provides; hostdnf and the receipt read
+   the ABI from that name. `TestAFedoraAlternativeInterpreterResolvesByName`
+   (hostdnf, over a dnf5 preview fixture) and
+   `TestTheBaselineNamesTheInterpreterPackageOnlyForAnInterpreterToInstall`.
+3. *Setup readiness ignored the launch lock a launch requires* (minor), so a
+   runtime without `.lock` looped between "run bootwright setup" and
+   "Nothing to do". Runtime verification requires `.lock` as a regular file
+   Bootwright owns, so setup retires and rebuilds such a runtime.
+   `TestARuntimeWithoutItsLaunchLockIsNotReadyAndIsReplaced`.
+4. *The setup store laundered cache-only rebuild refusals into a bare
+   `context.state` storage error* (minor). The rebuilder keeps the refusal its
+   transaction raised whatever the store reports.
+   `TestARebuildOnTheRealStoreKeepsItsRefusal` (contextfs, on the real store).
+5. *A continuation never attempted the cache-only rebuild* (minor) and
+   refused with `run bootwright setup` first. The continuation's closure check
+   locates the runtime as its run does, rebuilding a missing one, and an apply
+   refused over an incomplete removal names that continuation; `status` still
+   never rebuilds and offers setup. `TestAContinuationRebuildsAMissingRuntime`,
+   `TestAnApplyOverARemovalWithAMissingRuntimeNamesItsContinuation` and
+   `TestAContinuationMissingAWheelRefusesWithRunSetup` (lifecycle).
+6. *The cut-over remedy and the operator guide named `context delete --name
+   <name>` without `--purge`* (minor), which every build refuses. The remedy,
+   specs/contexts.md and the guide add `--purge`.
+   `TestARegistryVersion5StoreNamesTheFreshInstallRemedy`.
+7. *The `controller.runtime-retention` line was never written* (minor): it is
+   raised after the presented plan. The report counts the warnings the plan
+   carried and the result writes the rest.
+   `TestTheSetupPlanCarriesItsResolutionWarningsBeforeThePrompt` and
+   `TestRetentionSkipsARuntimeInUse`.
+8. *`setup --dry-run --output json` beside a state-root refusal wrote the
+   human plan before the JSON envelope, which omitted the check* (minor). It
+   writes one envelope with the plan's fields, `ok` false and the refusal in
+   `diagnostics`. The `cli-setup-plan-state-root-json` golden.
+9. *The output contract's result-fields table had no `setup` row* (minor).
+   specs/cli/output.md gains it and controller.md links it; `make docs-check`.
+10. *The lab-rhel README prescribed the pre-v2 setup-after-build and destroy
+    road for an `ansible/`-only fix* (minor). It states rebuild and the same
+    apply, setup only when the lock moves and removal only when a content
+    digest moves; `make docs-check`.
+11. *architecture.md assigned host-package installation to Ansible controller
+    roles* (minor). Go owns host packages (hostdnf) and the runtime
+    (venvlocal); Ansible owns target tool acquisition; `make docs-check`.
+12. *`setup --download-only` could not run off the Fedora/RHEL family*
+    (minor): the wheel client read only that trust bundle. Where the bundle is
+    absent it falls back to Go's system pool, an unsafe bundle is still
+    refused, and a host with no trust is refused naming `--wheel-mirror`;
+    each trust refusal names its remedy.
+    `TestAnAbsentFedoraBundleFallsBackToTheSystemPool`,
+    `TestAnUnsafeBundleIsNeverReplacedByTheSystemPool` and
+    `TestAHostWithNoTrustAtAllRefusesNamingTheBundleAndARemedy`.
+
+**Gates:** in the x92 worktree on main 50aebb522, as its commit records:
+`make check` passes (mod verify, tidy, `go test ./...`, vet, the completion
+test, govulncheck with no reachable vulnerability, ansible-check with lint 0
+failures in the production profile, sanity passing and units 1852 passed and
+1 skipped, with 297, 1278 and 3428 further tests passed); `make quick`, `make
+race`, `go test -race` over contextfs, `internal/controller/...` and
+`internal/cli/...`, `make docs-check` and `git diff --check` pass; the live
+`TestALiveBuildOnThisHost` passes on this Fedora 44 host (Python 3.14.8,
+3.2 s). Not run: anything needing root.
+
+**Digest and version effects:** none. No contract version, store or
+setup-state format, closure, runtime lock or content digest moves, and the
+collection is unchanged, so the automation digest stays. Behaviour changes
+without a version: the baseline host requirement reads `python3.X` in the
+receipts this build writes, within the same setup-state format, the
+fresh-install remedy text adds `--purge`, and a refused `setup --dry-run
+--output json` writes one envelope with its `result`, a new golden; no golden
+is deleted. A host an X90 build set up continues with build alone.
+**Constraints left behind:** nothing needing root was run; the owner's
+fresh-install acceptance ([B555](m1.md#b555)) covers the foreign-subtree
+discard and the `python3.X` install on a real host.

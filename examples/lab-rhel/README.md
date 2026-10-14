@@ -135,8 +135,8 @@ checkout and the built executable's reproducible `Source clean` stamp.
 Run the block one line at a time from the repository root. `setup`, `apply`,
 `machine restart`, `machine stop` and `destroy` present what they will do and
 ask for confirmation, and any command may ask for sudo authorization. The
-automation is embedded in the executable, so run `setup` again after any
-`make build` that changes it; `apply` refuses the retained bundle otherwise.
+automation is embedded in the executable and every invocation stages its own
+copy, so a `make build` needs no `setup` unless it moves the runtime lock.
 
 ```sh
 make build
@@ -270,9 +270,9 @@ and `status` offers both.
 
 The next `apply` observes the exact frozen request, resolves that block from
 live evidence and continues without repeating work it can prove is already
-done. Changing the input, the executable or the embedded automation while an
-operation is incomplete refuses that road instead, and names the recovery it
-needs.
+done. Changing the input while an operation is incomplete refuses that road
+instead, and names the recovery it needs. A rebuilt executable continues the
+operation when it plans the same blocks.
 
 A `destroy` takes the environment back rather than finishing it. It resolves
 every effect whose outcome the interruption lost, after its confirmation,
@@ -292,12 +292,23 @@ nothing is left to resolve: the operation is `failed` and the next `apply`
 retries that block. With several Machines, the other Machines' installations
 wait until the failed one's retry succeeds, and
 `bootwright plan --stage machines` marks them deferred behind it. A `destroy`
-removes what the apply started, and that removal is the road out of a repaired
-adapter. A continuation runs the automation its operation froze, so rebuilding
-the collection refuses one, while a fresh removal runs under the build in hand:
+removes what the apply started. A repaired adapter needs no removal: each
+invocation stages the automation embedded in its own executable, so a fix
+confined to `ansible/` is a rebuild and the same apply, which retries the
+failed block and keeps the blocks already done:
 
 ```sh
-make build && ./bin/bootwright setup        # publish the repaired automation
+make build
+./bin/bootwright apply --yes
+```
+
+`setup` is needed only when the fix moves the runtime lock, such as another
+`ansible-core` or Python dependency. A removal is needed only when the fix
+moves a version or a pin, which changes the block's content digest: the
+continuation then refuses and names the first block that differs. The removal
+runs under the build in hand:
+
+```sh
 ./bin/bootwright machine stop --name rhel-01 --force   # if its guest is running
 ./bin/bootwright destroy                    # names any authorization it needs
 ./bin/bootwright apply --yes

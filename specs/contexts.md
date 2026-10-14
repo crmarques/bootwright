@@ -194,9 +194,9 @@ cut-over wrote, refuses every access with `context.state`, "/var/lib/bootwright
 holds a store an earlier Bootwright build wrote (registry version 5), which
 this build does not read or convert", and the fresh-install remedy: "with the
 build that wrote it, destroy each environment (bootwright destroy --context
-<name>) and delete each context (bootwright context delete --name <name>);
-then, as root, remove /var/lib/bootwright and /var/lib/bootwright-staging and
-run bootwright setup with this build. Never remove /var/lib/bootwright while
+<name>) and delete each context (bootwright context delete --name <name>
+--purge); then, as root, remove /var/lib/bootwright and
+/var/lib/bootwright-staging and run bootwright setup with this build. Never remove /var/lib/bootwright while
 services it manages run." ([D152](milestones/backlog.md#decisions),
 `TestARegistryVersion5StoreNamesTheFreshInstallRemedy`). Nothing in that store
 is rewritten. A `registry.json` of any other format version, such as the

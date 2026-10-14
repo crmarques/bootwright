@@ -200,7 +200,7 @@ func (p *osPython) Select(context.Context, string) (PythonInterpreter, error) {
 	if p.glibcLow {
 		return PythonInterpreter{}, errors.Join(ErrNoPythonInterpreter, ErrGlibcBelowFloor)
 	}
-	if !p.installed && !p.owner.packages.present["python(abi) = 3.14"] && !p.owner.packages.present["python(abi) = 3.13"] {
+	if !p.installed && !p.owner.packages.present["python3.14"] && !p.owner.packages.present["python3.13"] {
 		return PythonInterpreter{}, ErrNoPythonInterpreter
 	}
 	return p.interpreter(), nil
@@ -310,7 +310,8 @@ func (t memoryTransaction) Record(_ context.Context, value SetupState) error {
 
 func (t memoryTransaction) DiscardForeign(context.Context) error {
 	t.m.owner.record("discard")
-	t.m.view = SetupView{}
+	t.m.view, t.m.published = SetupView{}, nil
+	t.m.owner.python.ready, t.m.owner.python.cached = false, false
 	return nil
 }
 
@@ -514,9 +515,9 @@ func TestADerivativeIsAdmittedByIDLike(t *testing.T) {
 func TestNoLockedInterpreterAddsThePythonABIRequirement(t *testing.T) {
 	f := newSetupFixture(t)
 	f.python.installed, f.python.ready = false, false
-	f.packages.refuse["python(abi) = 3.14"] = true
+	f.packages.refuse["python3.14"] = true
 	dry, err := f.service.Setup(context.Background(), SetupRequest{DryRun: true})
-	if err != nil || !slices.Equal(dry.Dependencies, []string{"python(abi) = 3.14"}) || len(dry.Files) != len(testLock.Files) {
+	if err != nil || !slices.Equal(dry.Dependencies, []string{"python3.14"}) || len(dry.Files) != len(testLock.Files) {
 		t.Fatalf("dry run = %+v, %v", dry, err)
 	}
 	if effects := f.effects(); len(effects) != 0 || f.count("read") != 0 {
@@ -527,12 +528,12 @@ func TestNoLockedInterpreterAddsThePythonABIRequirement(t *testing.T) {
 	if err != nil || report.Outcome != "changed" {
 		t.Fatalf("Setup = %+v, %v", report, err)
 	}
-	if !slices.Equal(report.Dependencies, []string{"python(abi) = 3.13"}) || f.count("preview python(abi) = 3.14") != 1 || f.count("install python(abi) = 3.13") != 1 {
+	if !slices.Equal(report.Dependencies, []string{"python3.13"}) || f.count("preview python3.14") != 1 || f.count("install python3.13") != 1 {
 		t.Fatalf("the setup chose %v after %v", report.Dependencies, f.events)
 	}
 	receipt := f.store.view.State.Receipt
 	found := slices.ContainsFunc(receipt.Packages, func(item ReceiptPackage) bool {
-		return item.Requirement == "python(abi) = 3.13" && item.InstalledBy == "setup-000043" && slices.Equal(item.RequiredBy, []string{"runtime"})
+		return item.Requirement == "python3.13" && item.InstalledBy == "setup-000043" && slices.Equal(item.RequiredBy, []string{"runtime"})
 	})
 	if !found {
 		t.Fatalf("the receipt's packages are %+v", receipt.Packages)
@@ -562,6 +563,31 @@ func TestAnotherBuildsSetupStateIsDiscardedAfterConfirmation(t *testing.T) {
 		t.Fatalf("events = %v", f.events)
 	}
 }
+
+// The discard removes the runtimes and the wheel cache with the record, so a
+// healthy runtime there is rebuilt rather than named by a receipt.
+func TestDiscardingAnotherBuildsStateRebuildsAHealthyRuntime(t *testing.T) {
+	f := newSetupFixture(t)
+	f.python.cached = true
+	f.store.view = SetupView{Exists: true, Foreign: unrecognizedTestFormat}
+	report, err := f.service.Setup(context.Background(), SetupRequest{})
+	if err != nil || report.Outcome != "changed" {
+		t.Fatalf("Setup = %+v, %v", report, err)
+	}
+	want := "Prepare the controller runtime: Python 3.14 at " + testPython + ", ansible-core 2.21.5: 2 of 2 wheels to download (4.2 MB), 0 cached"
+	if !slices.Equal(f.plan.Actions, []string{DiscardForeignSetupAction(unrecognizedTestFormat), want}) {
+		t.Fatalf("the plan is %q", f.plan.Actions)
+	}
+	discard, fetch, build := slices.Index(f.events, "discard"), slices.Index(f.events, "fetch"), slices.Index(f.events, "build")
+	if discard < 0 || fetch < discard || build < fetch || f.count("build") != 1 || f.count("inspect") != 0 {
+		t.Fatalf("events = %v", f.events)
+	}
+	if !f.python.ready || f.store.view.State.Receipt == nil || f.store.view.State.Runtimes.Current != f.python.runtime().Digest {
+		t.Fatalf("the receipt names %+v over a runtime ready=%v", f.store.view.State, f.python.ready)
+	}
+}
+
+const unrecognizedTestFormat = "content this build does not recognize"
 
 func TestADeclinedPlanChangesNothing(t *testing.T) {
 	f := newSetupFixture(t)

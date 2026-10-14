@@ -288,11 +288,17 @@ Successful result objects have stable top-level fields:
 | `render effective` | `counts`, `effectiveState` |
 | `render installer` | `clusters` |
 | `render storage` | `clusters` |
+| `setup` (with `--dry-run`) | `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files` |
 | `machine list` | `context`, `machines`, `powerRead` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
 | `machine start`, `machine stop`, `machine restart` | `context`, `verb`, `machines` |
 | `cluster list` | `context`, `clusters` |
 | `cluster info` | `context`, `clusters`, `storage` |
+
+A `setup --dry-run --output json` that the host or the state root refuses
+writes the same fields with `ok` `false` and the refusal in `diagnostics`,
+including the `state-root` check, and nothing else on standard output: the
+human plan is not written beside it.
 
 The `validate` result orders its fields as listed above and has this exact
 shape:

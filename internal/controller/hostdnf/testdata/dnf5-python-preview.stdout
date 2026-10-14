@@ -1,0 +1,9 @@
+Package          Arch   Version          Repository      Size
+Installing:
+ python3.12      x86_64 0:3.12.15-1.fc44 updates     27.1 KiB
+Installing dependencies:
+ python3.12-libs x86_64 0:3.12.15-1.fc44 updates     41.4 MiB
+
+Transaction Summary:
+ Installing:         2 packages
+

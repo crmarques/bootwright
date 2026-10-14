@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -236,15 +237,17 @@ func controllerActionLabel(id string) string {
 	return id
 }
 
-// writeControllerReport closes the result, its warnings on errOut unless the
-// presented plan already carried them. Whatever the presenter already
+// writeControllerReport closes the result, its warnings on errOut except those
+// the presented plan already carried. Whatever the presenter already
 // streamed is not repeated: the scope, checks and plan after a streamed
 // inspection, or everything but the outcome after a presented plan.
 func writeControllerReport(out, errOut io.Writer, command string, report *prerequisites.Report) error {
-	if !report.PlanPresented {
-		if err := writeHumanDiagnostics(errOut, displayDiagnostics(report.Warnings)); err != nil {
-			return err
-		}
+	warnings := report.Warnings
+	if report.PlanPresented {
+		warnings = warnings[min(max(report.PresentedWarnings, 0), len(warnings)):]
+	}
+	if err := writeHumanDiagnostics(errOut, displayDiagnostics(warnings)); err != nil {
+		return err
 	}
 	var text display
 	presented := report.PlanPresented || report.ProgressPresented
@@ -492,6 +495,20 @@ type setupLockedWheel struct {
 func (setupPlanResult) documentedResult() {}
 
 func writeSetupPlanJSON(out io.Writer, command string, report *prerequisites.Report) error {
+	return writeEnvelope(out, commandEnvelope{
+		SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
+		Result: displaySetupPlan(report), Diagnostics: displayDiagnostics(report.Warnings), Logs: []string{},
+	})
+}
+
+func writeSetupPlanFailure(out io.Writer, command string, report *prerequisites.Report, refusal []diagnostic, exitCode int) error {
+	return writeEnvelope(out, commandEnvelope{
+		SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), ExitCode: exitCode,
+		Result: displaySetupPlan(report), Diagnostics: displayDiagnostics(append(slices.Clone(report.Warnings), refusal...)), Logs: []string{},
+	})
+}
+
+func displaySetupPlan(report *prerequisites.Report) setupPlanResult {
 	result := setupPlanResult{
 		DryRun: report.DryRun, Outcome: escapeDisplayLine(report.Outcome),
 		Platform: escapeDisplayLine(report.Platform.OS + " " + report.Platform.Release + "/" + report.Platform.Architecture),
@@ -509,8 +526,12 @@ func writeSetupPlanJSON(out io.Writer, command string, report *prerequisites.Rep
 	for _, file := range report.Files {
 		result.Files = append(result.Files, setupLockedWheel{ABI: escapeDisplayLine(file.ABI), Filename: escapeDisplayLine(file.Filename), URL: escapeDisplayLine(file.URL), SHA256: escapeDisplayLine(file.SHA256)})
 	}
-	return writeEnvelope(out, commandEnvelope{
-		SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
-		Result: result, Diagnostics: displayDiagnostics(report.Warnings), Logs: []string{},
-	})
+	return result
+}
+
+func (r *Runner) setupPlanFailure(path string, report *prerequisites.Report, refusal []diagnostic, exitCode int) int {
+	if writeSetupPlanFailure(r.config.Out, path, report, refusal, exitCode) != nil {
+		return 1
+	}
+	return exitCode
 }

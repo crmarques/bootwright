@@ -287,17 +287,46 @@ func TestAPreviewNoMatchNamesTheRequirement(t *testing.T) {
 	}
 }
 
+// Fedora 44's alternative interpreters provide python3.X but no python(abi),
+// so the interpreter requirement setup previews is the name (captured live).
+func TestAFedoraAlternativeInterpreterResolvesByName(t *testing.T) {
+	out, errText := fixture(t, "dnf5-python-preview.stdout"), fixture(t, "dnf5-python-preview.stderr")
+	requirement, _ := prerequisites.BaselineHostRequirements("3.12")
+	p, double := packagesWith(t, func(c command) reply {
+		if c.args[len(c.args)-1] == "python(abi) = 3.12" {
+			return reply{exit: 1, stderr: fixture(t, "dnf5-python-abi-no-match.stderr")}
+		}
+		return reply{exit: 1, stdout: out, stderr: errText}
+	})
+	preview, err := p.Preview(context.Background(), requirement[2:])
+	if err != nil || preview.Text != out || double.calls[0].args[len(double.calls[0].args)-1] != "python3.12" {
+		t.Fatalf("%+v: %v after %q", preview, err, double.calls)
+	}
+	if _, err := p.Preview(context.Background(), []string{"python(abi) = 3.12"}); err == nil {
+		t.Fatal("the python(abi) capability resolved on Fedora's alternative interpreter")
+	}
+	present := map[string]reply{
+		"python3.14": {stdout: "python3\t0:3.14.8-1.fc44.x86_64\n"},
+		"python3.12": {exit: 1, stdout: "no package provides python3.12\n"},
+	}
+	p, _ = packagesWith(t, func(c command) reply { return present[c.args[len(c.args)-1]] })
+	missing, err := p.Missing(context.Background(), []string{"python3.14", "python3.12"})
+	if err != nil || !slices.Equal(missing, []string{"python3.12"}) {
+		t.Fatal(missing, err)
+	}
+}
+
 func TestThePreviewNotesCorePackagesWithoutRefusing(t *testing.T) {
 	out := fixture(t, "dnf5-core-preview.stdout")
 	p, _ := packagesWith(t, func(command) reply { return reply{exit: 1, stdout: out, stderr: "Operation aborted by the user.\n"} })
-	preview, err := p.Preview(context.Background(), []string{"python(abi) = 3.13"})
+	preview, err := p.Preview(context.Background(), []string{"python3.13"})
 	want := "this install also updates core packages (glibc, glibc-common, libgcc, python3.13, python3.13-libs); dnf applies it as for any package install"
 	if err != nil || preview.Text != out || !slices.Equal(preview.Notes, []string{want}) {
 		t.Fatalf("%+v: %v", preview, err)
 	}
 	plain := fixture(t, "dnf5-install-preview.stdout")
 	p, _ = packagesWith(t, func(command) reply { return reply{exit: 1, stdout: plain, stderr: "Operation aborted by the user.\n"} })
-	if preview, err := p.Preview(context.Background(), []string{"python(abi) = 3.13"}); err != nil || len(preview.Notes) != 0 {
+	if preview, err := p.Preview(context.Background(), []string{"python3.13"}); err != nil || len(preview.Notes) != 0 {
 		t.Fatalf("a preview without core packages carried notes: %+v: %v", preview, err)
 	}
 }

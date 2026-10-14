@@ -471,9 +471,15 @@ func TestTheSetupPlanCarriesItsResolutionWarningsBeforeThePrompt(t *testing.T) {
 		return errOut.String()
 	}
 	presented := controllerReport("changed", false)
-	presented.PlanPresented, presented.Warnings = true, []diagnostics.Diagnostic{warning}
+	presented.PlanPresented, presented.PresentedWarnings, presented.Warnings = true, 1, []diagnostics.Diagnostic{warning}
 	if errOut := run(presented, nil); errOut != "" {
 		t.Fatalf("the result repeated the presented plan's warning: %q", errOut)
+	}
+	// Retention runs after the prompt, so its line is the result's to write.
+	retention := diagnostics.Diagnostic{Severity: "warning", Code: "controller.runtime-retention", Message: "kept: 3 runtimes (1 in use)"}
+	presented.Warnings = append(presented.Warnings, retention)
+	if errOut := run(presented, nil); errOut != "[WARN] controller.runtime-retention: kept: 3 runtimes (1 in use)\n" {
+		t.Fatalf("the result wrote %q for a warning raised after the presented plan", errOut)
 	}
 	stopped := controllerReport("planned", false)
 	stopped.ProgressPresented, stopped.Warnings = true, []diagnostics.Diagnostic{warning}

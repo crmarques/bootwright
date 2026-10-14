@@ -1730,10 +1730,11 @@ func (s Service) recordedRefusal(view View, operation operationstore.Operation, 
 }
 
 // closureRefusal refuses a continuation whose frozen closure, the runtime lock
-// and interpreter ABI, differs from this build's; nil located is located here.
+// and interpreter ABI, differs from this build's; nil located is located here
+// as the continuation's run locates it, rebuilding a missing runtime.
 func (s Service) closureRefusal(ctx context.Context, view View, operation operationstore.Operation, located *approved) error {
 	if located == nil {
-		current, err := s.locateRuntime(ctx, false)
+		current, err := s.approvedRuntime(ctx)
 		if err != nil {
 			return err
 		}

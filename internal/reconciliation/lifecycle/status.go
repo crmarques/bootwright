@@ -388,7 +388,11 @@ func (s Service) continuation(ctx context.Context, view View, operation operatio
 	}) {
 		return refusalExit(view, failure("controller.identity", "this context is not bound to a controller host", unboundExit(view, operation)))
 	}
-	if err := s.closureRefusal(ctx, view, operation, nil); err != nil {
+	located, err := s.locateRuntime(ctx, false)
+	if err != nil {
+		return []string{setupStep}
+	}
+	if err := s.closureRefusal(ctx, view, operation, &located); err != nil {
 		return refusalExit(view, err)
 	}
 	return []string{command}

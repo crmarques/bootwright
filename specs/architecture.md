@@ -627,8 +627,9 @@ Go owns:
 - translation of one authorized capability request into one bounded adapter
   call.
 
-Ansible owns controller dependency installation and Bootwright-controlled
-interaction with managed remote components.
+Ansible owns the acquisition of the target tools a context's graph selects and
+Bootwright-controlled interaction with managed remote components. Go owns the
+controller's own dependencies: host packages and the controller runtime.
 Remote observation, access, configuration, installation, verification, and
 removal cross an Ansible adapter boundary, apart from
 [Machine's direct SSH sessions](#named-exceptions). Ansible does not infer
@@ -638,9 +639,13 @@ authorization, own operation state, or format product output.
 An Ansible adapter receives one frozen validated request and returns a bounded
 structured result with required evidence. A local native tool may run
 through a typed Go runner for a purely local transformation. Controller
-prerequisite inspection uses bounded Go read-only ports. Go also materializes
-the private Python/Ansible execution bootstrap. Host-package and native target
-CLI installation cross the fixed Ansible controller roles/playbooks through
+prerequisite inspection uses bounded Go read-only ports. Go also builds the
+controller runtime, a virtual environment on the OS Python
+(`internal/controller/venvlocal`), and installs host packages by running the
+host's own dnf (`internal/controller/hostdnf`, a `--assumeno` preview and an
+`--assumeyes` install), for setup and for a context's controller stage alike;
+no Ansible role installs a host package. Native target CLI installation
+crosses the fixed Ansible `controller_prerequisites` role through
 [Controller ports](controller.md#egress-and-local-effects). A tool
 contacting a managed remote component belongs inside Ansible.
 

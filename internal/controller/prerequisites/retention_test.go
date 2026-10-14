@@ -69,6 +69,9 @@ func TestRetentionSkipsARuntimeInUse(t *testing.T) {
 	if len(report.Warnings) != 1 || report.Warnings[0].Code != retentionCode || report.Warnings[0].Message != "kept: 3 runtimes (1 in use)" {
 		t.Fatalf("the held runtime was reported as %+v", report.Warnings)
 	}
+	if !report.PlanPresented || report.PresentedWarnings != 0 {
+		t.Fatalf("the retention line counts as presented with the plan: %d of %d", report.PresentedWarnings, len(report.Warnings))
+	}
 	if !slices.Contains(f.store.kept, strings.Repeat("e", 64)) || slices.Contains(f.store.kept, strings.Repeat("d", 64)) {
 		t.Fatalf("the wheel cache keeps %q", f.store.kept)
 	}

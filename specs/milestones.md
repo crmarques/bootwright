@@ -24,7 +24,7 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44, X48 to X51, X67, X70, X83, X84, X87 to X91 are delivered.
+X44, X48 to X51, X67, X70, X83, X84, X87 to X92 are delivered.
 
 - **Next for agents:** nothing: setup v2 is complete in-tree (D152, pending
   review); in M2b, nothing until the owner's B476 run.

@@ -111,9 +111,13 @@ standard library and `lib-dynload` directories are owned by root with no
 group or other write on them or any directory above, when `-I -B` runs a probe
 that imports `ssl`, `ctypes`, `zlib`, `bz2` and `venv` and reports its version,
 cache tag and glibc, and when that glibc is at or above the floor. With no
-qualified interpreter, setup adds the host package requirement
-`python(abi) = X.Y` for the first locked ABI whose dnf preview resolves, newest
-first ([W1](security.md#the-controller-hosts-attacker-model)).
+qualified interpreter, setup adds the host package requirement `python3.X`
+for the first locked ABI X.Y whose dnf preview resolves, newest first
+([W1](security.md#the-controller-hosts-attacker-model)). It names the package
+rather than the `python(abi) = X.Y` capability because Fedora's alternative
+interpreters omit that provide, while every supported release's package of a
+locked ABI, the OS's own `python3` included, provides `python3.X`: RHEL 9
+AppStream's `python3.12`, Fedora's `python3.13` and `python3.12`.
 
 Not yet met: a standalone CPython for a host whose repositories offer no
 locked ABI is parked as [B561](milestones/backlog.md#b561).
@@ -165,11 +169,16 @@ detects. The launch is `bin/python -I -B` with only `LC_ALL`, `LANG`, `PATH`,
 `HOME` and `TMPDIR` set; no loader invocation and no `OPENSSL_CONF` override,
 so the host crypto-policy applies, and no `-S`, because the venv's own `site`
 supplies its packages. The supervisor refuses an interpreter that is not
-isolated, writes bytecode or is not a venv.
+isolated, writes bytecode or is not a venv. Setup holds a runtime to what a
+launch requires: one whose `.lock` is not a regular file Bootwright owns is not
+ready, and setup retires and rebuilds it rather than adopt it.
 
 **Cache-only rebuild.** A launch that finds only the runtime directory missing
 rebuilds it before it refuses: apply, destroy, the controller stage, a bounded
-run and diff, once per operation, before anything registers or runs. When the
+run and diff, once per operation, before anything registers or runs. A
+continuation of either verb rebuilds it before it presents its plan, and an
+apply refused over an incomplete removal names that removal's continuation,
+which rebuilds it, rather than setup. When the
 receipt is complete, its interpreter still qualifies at the same path and the
 wheel cache holds every locked wheel of its ABI and the installer, the launch
 waits for `setup/lock` (it never refuses a held lock as busy), repeats those
@@ -182,7 +191,8 @@ longer qualifies or the receipt is incomplete, and a build that fails once
 every wheel is cached refuses `controller.state`, "the controller runtime for
 this build (…) could not be rebuilt from the wheel cache: `<cause>`", with the
 same remedy, `<cause>` being the build's own first message rather than its
-setup remedy. `status` changes nothing: it never rebuilds, and offers
+setup remedy. Each refusal keeps that code and remedy whatever the setup store
+reports for the transaction it ran in. `status` changes nothing: it never rebuilds, and offers
 `bootwright setup` while the directory is missing.
 
 **Automation.** The automation is no part of any setup identity. Each
@@ -206,7 +216,7 @@ One Go table names the host packages by name or RPM capability:
 | Scope | Selected when | Requirements |
 | --- | --- | --- |
 | Baseline (setup) | always | `openssh-clients`, `podman` |
-| Baseline (setup) | no locked interpreter installed | `python(abi) = X.Y` |
+| Baseline (setup) | no locked interpreter installed | `python3.X` |
 | Stage | libvirt client | `libvirt-client` |
 | Stage | hypervisor | `libvirt-daemon`, `libvirt-daemon-driver-network`, `libvirt-daemon-driver-qemu`, `libvirt-daemon-driver-storage-core`, `qemu-img`, `qemu-kvm`, `swtpm`, `swtpm-tools` |
 | Stage | installer media | `lorax`, `xorriso` |
@@ -569,6 +579,16 @@ read Secret material to probe an unsupported route; authenticated or
 private-trust acquisition needs its own Secrets consumer and recovery
 definition.
 
+**Trust off the Fedora/RHEL family.** The `tls-ca-bundle.pem` read above is the
+only trust the wheel fetch reads while that file exists, and an unsafe one is
+refused. Where the file is absent, as on a Debian, SUSE or Alpine workstation
+that runs `setup --download-only`, the fetch uses Go's system certificate pool,
+which reads the host's own bundle locations; a host with no trust at all is
+refused naming the absent bundle and `--wheel-mirror`. A wheel is used only
+when its size and SHA-256 match the lock, so the TLS trust never decides what
+is installed (`TestAnAbsentFedoraBundleFallsBackToTheSystemPool`,
+`TestAnUnsafeBundleIsNeverReplacedByTheSystemPool`).
+
 **Wheel origins.** Setup fetches only the URLs the lock names, on
 `files.pythonhosted.org`, over the route it admitted, or the files of a
 `--wheel-mirror` in their place; pypi.org, uv metadata and GitHub are not
@@ -631,6 +651,7 @@ and a failed transfer names the file and the host.
 Python ABI (absent for the pip wheel), filename, URL and SHA-256, so an
 operator can fetch them by other means. With `--wheel-mirror`, the plan's
 runtime action also names the mirror; the listed URLs stay the lock's.
+The fields are the `setup` row of the [result fields](cli/output.md#json-output).
 
 **The dnf route.** When the admitted route is a proxy, dnf receives it as
 `https_proxy` and `no_proxy`, and a `proxy=` in the host's dnf configuration
@@ -815,7 +836,10 @@ format, or a setup subtree holding an entry this build does not list, is
 another build's; setup's read and its locked transaction judge it alike. Setup plans "Discard setup state another
 Bootwright build wrote (`<format>`)", removes the subtree after confirmation,
 taking every runtime's lock first so it never removes one in use, and
-proceeds. A launch refuses `controller.state`, "the controller setup record
+proceeds. Because the discard removes every runtime and the wheel cache, the
+plan treats them as absent: its `runtime` row counts every locked wheel as one
+to download, and setup fetches, builds and publishes the runtime before the
+receipt names it. A launch refuses `controller.state`, "the controller setup record
 was written by another Bootwright build", with the remedy `run bootwright
 setup`. A future setup-format change therefore never strands a context.
 
@@ -925,6 +949,8 @@ Each check reports `ready` or `not-ready`, or `unverified` where a dry run
 cannot verify it. An informational line, `controller.untested-release` or
 `controller.loader-preload`, is a `[WARN]` diagnostic on standard error,
 written once with the result; it never changes the outcome or exit status.
+Setup writes the lines its plan carried before that plan and its prompt, and
+those raised after it, such as `controller.runtime-retention`, with the result.
 
 The [diagnostic taxonomy](cli/output.md#diagnostic-taxonomy-and-order) owns
 `preflight.*` and `controller.*` failure codes; existing context, privilege

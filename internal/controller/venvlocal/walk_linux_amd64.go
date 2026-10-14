@@ -5,10 +5,14 @@ package venvlocal
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
 const maxTrustBytes = 8 << 20
@@ -53,33 +57,54 @@ func (a *Adapter) owned(info os.FileInfo) bool {
 	return ok && a.trusted(stat.Uid) && info.Mode().Perm()&0o022 == 0
 }
 
-// systemRoots reads the system TLS trust bundle through root-owned
-// directories only; SSL_CERT_FILE and other ambient overrides are unused.
+const fedoraTrustBundle = "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+
+// systemRoots reads the Fedora/RHEL bundle through root-owned directories, never
+// SSL_CERT_*; off the family it falls back to Go's pool, the lock's SHA-256 holds.
 func systemRoots(ctx context.Context) (*x509.CertPool, error) {
+	return trustedRoots(ctx, fedoraTrustBundle, x509.SystemCertPool)
+}
+
+func trustedRoots(ctx context.Context, bundle string, fallback func() (*x509.CertPool, error)) (*x509.CertPool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	const bundle = "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+	if _, err := os.Lstat(bundle); errors.Is(err, fs.ErrNotExist) {
+		return fallbackRoots(bundle, fallback)
+	}
 	root := &Adapter{top: "/", trusted: func(uid uint32) bool { return uid == 0 }}
 	if err := root.ownedDirectory(filepath.Dir(bundle)); err != nil {
-		return nil, failure("the system TLS trust directory has unsafe ownership or mode")
+		return nil, trustFailure("the system TLS trust directory has unsafe ownership or mode", "Restore "+filepath.Dir(bundle)+" as a root-owned directory without group or other write")
 	}
 	file, err := os.OpenFile(bundle, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
-		return nil, failure("the system TLS trust bundle is unavailable")
+		return nil, trustFailure("the system TLS trust bundle is unavailable", "Restore "+bundle+" with update-ca-trust")
 	}
 	defer file.Close()
 	before, err := file.Stat()
 	if err != nil || !before.Mode().IsRegular() || !root.owned(before) || before.Size() <= 0 || before.Size() > maxTrustBytes {
-		return nil, failure("the system TLS trust bundle has unsafe ownership, mode or size")
+		return nil, trustFailure("the system TLS trust bundle has unsafe ownership, mode or size", "Restore "+bundle+" as a root-owned file without group or other write with update-ca-trust")
 	}
 	data, err := io.ReadAll(io.LimitReader(file, before.Size()+1))
 	if err != nil || int64(len(data)) != before.Size() {
-		return nil, failure("the system TLS trust bundle changed while being read")
+		return nil, trustFailure("the system TLS trust bundle changed while being read", "Repeat this command once nothing rewrites "+bundle)
 	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(data) {
-		return nil, failure("the system TLS trust bundle holds no usable certificate")
+		return nil, trustFailure("the system TLS trust bundle holds no usable certificate", "Restore "+bundle+" with update-ca-trust")
 	}
 	return pool, nil
+}
+
+func fallbackRoots(bundle string, system func() (*x509.CertPool, error)) (*x509.CertPool, error) {
+	pool, err := system()
+	if err != nil || pool == nil || pool.Equal(x509.NewCertPool()) {
+		return nil, trustFailure("this host has no system TLS trust bundle: "+bundle+" is absent and the system certificate pool is empty",
+			"Install the host's CA certificates package, or run this on a host that has one, or pass --wheel-mirror file:///dir")
+	}
+	return pool, nil
+}
+
+func trustFailure(message, correction string) error {
+	return &prerequisites.ScopedFailure{Message: message, Correction: correction}
 }

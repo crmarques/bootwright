@@ -537,6 +537,14 @@ func cliGoldens() []cliGolden {
 		"this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01)", "",
 		"repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss")
 	noInput := diagnostics.NewFailure("context.input", "context has no desired state; run context update --name lab --input-dir <dir>", "")
+	stateRootRefused := func(r *dispatchRecord) {
+		r.result.controller = setupDryRun(platform)
+		r.result.controller.Route = "direct (no HTTPS_PROXY)"
+		r.result.controller.Next = ""
+		r.result.controller.Checks = append(r.result.controller.Checks, prerequisites.Check{ID: "state-root", Required: "a root:root 0700 directory on a local filesystem", Observed: "a directory owned by root:root with mode 0755", Status: "not-ready", Scope: prerequisites.HostScope})
+		r.err = diagnostics.NewFailureWithRemediation("context.state", "the state root is a directory owned by root:root with mode 0755, but it must be a directory owned by root:root with mode 0700", "",
+			"nothing repairs it, because Bootwright never changes the owner or mode of an existing state root")
+	}
 	return append([]cliGolden{
 		// Controller reports: an unpresented dry-run plan in text and JSON, a
 		// presented setup that changed the host, and a context's readiness.
@@ -573,14 +581,11 @@ func cliGoldens() []cliGolden {
 		// (internal/workspace/contextfs/root_inspection_linux_amd64.go).
 		{golden: "cli-setup-plan-state-root", args: "setup --dry-run", code: 1,
 			stderr: "[FAIL] context.state: the state root is a directory owned by root:root with mode 0755, but it must be a directory owned by root:root with mode 0700; next: nothing repairs it, because Bootwright never changes the owner or mode of an existing state root\n",
-			record: func(r *dispatchRecord) {
-				r.result.controller = setupDryRun(platform)
-				r.result.controller.Route = "direct (no HTTPS_PROXY)"
-				r.result.controller.Next = ""
-				r.result.controller.Checks = append(r.result.controller.Checks, prerequisites.Check{ID: "state-root", Required: "a root:root 0700 directory on a local filesystem", Observed: "a directory owned by root:root with mode 0755", Status: "not-ready", Scope: prerequisites.HostScope})
-				r.err = diagnostics.NewFailureWithRemediation("context.state", "the state root is a directory owned by root:root with mode 0755, but it must be a directory owned by root:root with mode 0700", "",
-					"nothing repairs it, because Bootwright never changes the owner or mode of an existing state root")
-			}},
+			record: stateRootRefused},
+		{golden: "cli-setup-plan-state-root-json", args: "setup --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
+			stateRootRefused(r)
+			r.result.controller.Warnings = []diagnostics.Diagnostic{{Severity: "warning", Code: "controller.untested-release", Message: "Fedora 45 is newer than the releases this build was tested on (43, 44); setup checks its floors and continues"}}
+		}},
 		// Each check carries the summary internal/controller/prerequisites
 		// gives a held check: the platform, the verified local identity, the
 		// interpreter and ansible-core of the runtime, the baseline packages,

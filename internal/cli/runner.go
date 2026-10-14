@@ -235,7 +235,8 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	if err == nil && result.session != nil {
 		return result.session.ExitCode
 	}
-	if err != nil && (path == "setup" || path == "preflight controller") && validControllerReport(result.controller) {
+	setupJSON := path == "setup" && selectedJSON(command)
+	if err != nil && !setupJSON && (path == "setup" || path == "preflight controller") && validControllerReport(result.controller) {
 		if presentErr := writeControllerReport(r.config.Out, r.config.ErrOut, path, result.controller); presentErr != nil {
 			return 1
 		}
@@ -274,6 +275,9 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 		exitCode := refused
 		if usage {
 			exitCode = 2
+		}
+		if setupJSON && validControllerReport(result.controller) {
+			return r.setupPlanFailure(path, result.controller, diagnostics, exitCode)
 		}
 		if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, exitCode, selectedJSON(command), logs); err != nil {
 			return 1

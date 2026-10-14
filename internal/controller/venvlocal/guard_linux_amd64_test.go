@@ -138,6 +138,30 @@ func TestTheGuardReportsAnUnpublishedRuntimeAsUnavailable(t *testing.T) {
 	}
 }
 
+func TestARuntimeWithoutItsLaunchLockIsNotReadyAndIsReplaced(t *testing.T) {
+	_, adapter, runtime := built(t)
+	lock := filepath.Join(adapter.runtimes, runtime.Digest, lockName)
+	if err := os.Remove(lock); err != nil {
+		t.Fatal(err)
+	}
+	if _, ready, err := adapter.Inspect(context.Background(), runtime.Interpreter); ready || err == nil {
+		t.Fatalf("Inspect = %t, %v on a runtime without its launch lock", ready, err)
+	}
+	rebuilt, err := testBuild(adapter, context.Background(), runtime.Interpreter)
+	if err != nil || rebuilt.Digest != runtime.Digest {
+		t.Fatalf("Build = %+v, %v", rebuilt, err)
+	}
+	if published, err := adapter.Published(context.Background(), runtime); !published || err != nil {
+		t.Fatalf("Published = %t, %v after the replacement", published, err)
+	}
+	if _, ready, err := adapter.Inspect(context.Background(), runtime.Interpreter); !ready || err != nil {
+		t.Fatalf("Inspect = %t, %v after the replacement", ready, err)
+	}
+	if err := adapter.WithPython(context.Background(), runtime, func(prerequisites.PythonLaunch) error { return nil }); err != nil {
+		t.Fatalf("WithPython = %v after the replacement", err)
+	}
+}
+
 func TestInspectReportsAnAbsentRuntimeAsNotReady(t *testing.T) {
 	_, adapter, interpreter := buildable(t)
 	runtime, ready, err := adapter.Inspect(context.Background(), interpreter)

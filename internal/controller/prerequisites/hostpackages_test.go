@@ -16,14 +16,22 @@ func TestTheBaselineNamesSshAndPodmanAndNoNmstate(t *testing.T) {
 	}
 }
 
-func TestTheBaselineAddsThePythonAbiOnlyForAnInterpreterToInstall(t *testing.T) {
+func TestTheBaselineNamesTheInterpreterPackageOnlyForAnInterpreterToInstall(t *testing.T) {
 	got, err := BaselineHostRequirements("3.13")
-	if err != nil || !slices.Equal(got, []string{"openssh-clients", "podman", "python(abi) = 3.13"}) {
+	if err != nil || !slices.Equal(got, []string{"openssh-clients", "podman", "python3.13"}) {
 		t.Fatal(got, err)
 	}
 	for _, minor := range []string{"3", "3.", "3.13.1", "2.7", "3.013", "3.1 ", "x", "3.13\n"} {
 		if got, err := BaselineHostRequirements(minor); err == nil {
 			t.Errorf("minor %q was admitted as %q", minor, got)
+		}
+	}
+	if abi, ok := PythonRequirementABI(got[2]); !ok || abi != "3.13" {
+		t.Fatalf("the interpreter requirement installs %q", abi)
+	}
+	for _, other := range []string{"python(abi) = 3.13", "python3", "python3.13t", "python3.13-libs", "podman"} {
+		if abi, ok := PythonRequirementABI(other); ok {
+			t.Errorf("%q was read as the interpreter of %q", other, abi)
 		}
 	}
 }

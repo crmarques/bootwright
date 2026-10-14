@@ -28,6 +28,7 @@ var (
 	installerMediaRequirements = []string{"lorax", "xorriso"}
 	hostRequirement            = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*(\([A-Za-z0-9._+-]+\))?( = [0-9]+:?[A-Za-z0-9._+~^-]*)?$`)
 	hostPythonMinor            = regexp.MustCompile(`^3\.(0|[1-9][0-9]*)$`)
+	hostPythonRequirement      = regexp.MustCompile(`^python(3\.(0|[1-9][0-9]*))$`)
 )
 
 func ValidHostRequirement(requirement string) bool {
@@ -42,7 +43,15 @@ func BaselineHostRequirements(pythonMinor string) ([]string, error) {
 	if !hostPythonMinor.MatchString(pythonMinor) {
 		return nil, errors.New("the locked interpreter names no CPython minor")
 	}
-	return append(requirements, "python(abi) = "+pythonMinor), nil
+	return append(requirements, "python"+pythonMinor), nil
+}
+
+func PythonRequirementABI(requirement string) (string, bool) {
+	match := hostPythonRequirement.FindStringSubmatch(requirement)
+	if match == nil {
+		return "", false
+	}
+	return match[1], true
 }
 
 func StageHostRequirements(selected NativeRequirements) []string {

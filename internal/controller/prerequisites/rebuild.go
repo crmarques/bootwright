@@ -36,44 +36,59 @@ func (r RuntimeRebuilder) Rebuild(ctx context.Context, runtime Runtime) error {
 	if waiter, waits := r.setup.(SetupWaiter); waits {
 		mutate = waiter.AwaitSetup
 	}
-	return mutate(ctx, func(tx SetupTransaction) error {
-		view := tx.View()
-		if err := SetupLaunchRefusal(view); err != nil {
-			return err
-		}
-		receipt := view.State.Receipt
-		if receipt == nil || receipt.Runtime.Interpreter != runtime.Interpreter.Path || receipt.Runtime.ABI != runtime.Interpreter.ABI {
-			return ErrRuntimeUnavailable
-		}
-		interpreter, err := r.python.Select(ctx, receipt.Runtime.Interpreter)
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if err != nil || interpreter.Path != runtime.Interpreter.Path || interpreter.ABI != runtime.Interpreter.ABI {
-			return ErrRuntimeUnavailable
-		}
-		if present, ready, err := r.python.Inspect(ctx, interpreter); err == nil && ready && present.Digest == runtime.Digest {
-			return nil
-		}
-		wheels, err := r.python.Wheels(ctx, interpreter.ABI)
-		if err != nil {
-			return err
-		}
-		for _, wheel := range wheels {
-			if !wheel.Cached {
-				return ErrRuntimeWheelMissing
-			}
-		}
-		built, err := r.python.Build(ctx, tx, interpreter)
-		if err != nil && ctx.Err() == nil && !errors.Is(err, ErrRuntimeUnavailable) {
-			return &rebuildFailure{err: err}
-		}
-		if err != nil {
-			return err
-		}
-		if built.Digest != runtime.Digest {
-			return ErrRuntimeUnavailable
-		}
-		return nil
+	var refusal error
+	err := mutate(ctx, func(tx SetupTransaction) error {
+		refusal = r.rebuild(ctx, tx, runtime)
+		return refusal
 	})
+	switch {
+	case err == nil, ctx.Err() != nil:
+		return err
+	case errors.Is(refusal, ErrRuntimeUnavailable):
+		return refusal
+	case errors.Is(refusal, ErrRuntimeRebuildFailed) && !errors.Is(err, ErrRuntimeRebuildFailed):
+		return &rebuildFailure{err: err}
+	}
+	return err
+}
+
+func (r RuntimeRebuilder) rebuild(ctx context.Context, tx SetupTransaction, runtime Runtime) error {
+	view := tx.View()
+	if err := SetupLaunchRefusal(view); err != nil {
+		return err
+	}
+	receipt := view.State.Receipt
+	if receipt == nil || receipt.Runtime.Interpreter != runtime.Interpreter.Path || receipt.Runtime.ABI != runtime.Interpreter.ABI {
+		return ErrRuntimeUnavailable
+	}
+	interpreter, err := r.python.Select(ctx, receipt.Runtime.Interpreter)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err != nil || interpreter.Path != runtime.Interpreter.Path || interpreter.ABI != runtime.Interpreter.ABI {
+		return ErrRuntimeUnavailable
+	}
+	if present, ready, err := r.python.Inspect(ctx, interpreter); err == nil && ready && present.Digest == runtime.Digest {
+		return nil
+	}
+	wheels, err := r.python.Wheels(ctx, interpreter.ABI)
+	if err != nil {
+		return err
+	}
+	for _, wheel := range wheels {
+		if !wheel.Cached {
+			return ErrRuntimeWheelMissing
+		}
+	}
+	built, err := r.python.Build(ctx, tx, interpreter)
+	if err != nil && ctx.Err() == nil && !errors.Is(err, ErrRuntimeUnavailable) {
+		return &rebuildFailure{err: err}
+	}
+	if err != nil {
+		return err
+	}
+	if built.Digest != runtime.Digest {
+		return ErrRuntimeUnavailable
+	}
+	return nil
 }

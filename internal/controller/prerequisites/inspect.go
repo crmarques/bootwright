@@ -356,7 +356,7 @@ func (s Service) settleRuntime(ctx context.Context, current *inspection, settle 
 		settle(unverified("python-runtime", required, HostScope))
 		return err
 	}
-	if current.interpreter.Path != "" && !current.dryRun {
+	if current.interpreter.Path != "" && !current.dryRun && current.view.Foreign == "" {
 		runtime, ready, err := s.ports.Python.Inspect(ctx, current.interpreter)
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -364,12 +364,26 @@ func (s Service) settleRuntime(ctx context.Context, current *inspection, settle 
 		current.runtime, current.runtimeReady = runtime, ready && err == nil
 	}
 	if !current.runtimeReady {
-		if current.wheels, err = s.ports.Python.Wheels(ctx, current.abi); err != nil {
+		if err = s.settleWheels(ctx, current); err != nil {
 			settle(unverified("python-runtime", required, HostScope))
 			return err
 		}
 	}
 	settle(current.runtimeCheck(required))
+	return nil
+}
+
+func (s Service) settleWheels(ctx context.Context, current *inspection) error {
+	wheels, err := s.ports.Python.Wheels(ctx, current.abi)
+	if err != nil {
+		return err
+	}
+	if current.view.Foreign != "" {
+		for index := range wheels {
+			wheels[index].Cached = false
+		}
+	}
+	current.wheels = wheels
 	return nil
 }
 
@@ -390,7 +404,7 @@ func (i *inspection) runtimeCheck(required string) Check {
 }
 
 func abiOf(requirement string) string {
-	_, abi, _ := strings.Cut(requirement, " = ")
+	abi, _ := PythonRequirementABI(requirement)
 	return abi
 }
 

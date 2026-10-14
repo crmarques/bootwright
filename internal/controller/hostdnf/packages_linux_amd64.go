@@ -41,7 +41,6 @@ const (
 var (
 	corePackage    = regexp.MustCompile(`^(glibc[A-Za-z0-9._+-]*|libgcc|kernel[A-Za-z0-9._+-]*|systemd[A-Za-z0-9._+-]*|openssl-libs)$`)
 	problemLine    = regexp.MustCompile(`^Problem( [0-9]+)?:`)
-	pythonABI      = regexp.MustCompile(`^python\(abi\) = (3\.[0-9]+)$`)
 	providerFormat = regexp.MustCompile(`^([A-Za-z0-9._+-]+)\t([0-9]+:[A-Za-z0-9._+~^-]+\.([A-Za-z0-9_]+))$`)
 )
 
@@ -410,8 +409,8 @@ func lastError(texts ...string) string {
 func coreNames(text string, missing []string) []string {
 	python := ""
 	for _, requirement := range missing {
-		if match := pythonABI.FindStringSubmatch(requirement); match != nil {
-			python = "python" + match[1]
+		if abi, ok := prerequisites.PythonRequirementABI(requirement); ok {
+			python = "python" + abi
 		}
 	}
 	var names []string

@@ -32,7 +32,7 @@ the host's dnf owns every package, so setup only asks what is missing:
 - **Missing packages** cost dnf's own time, as `dnf install` would, plus one
   `--assumeno` preview before confirmation.
 - **An OS upgrade** that keeps `/usr/bin/python3.X` costs nothing; a Python
-  ABI that leaves the lock adds one `python(abi)` install and a new venv.
+  ABI that leaves the lock adds one `python3.X` install and a new venv.
 
 D152's targets, which the owner's fresh-install run measures and records as
 [ledger rows](../../docs/acceptance.md#setup-v2-fresh-install-row) (B555):
