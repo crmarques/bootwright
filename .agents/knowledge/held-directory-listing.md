@@ -26,8 +26,8 @@ reads from the current offset the same way.
 List a directory through a held descriptor only after rewinding it
 (`os.lseek(fd, 0, os.SEEK_SET)`, or `Seek(0, io.SeekStart)` in Go), on the same
 descriptor so an identity proof still binds the listing, or list a descriptor
-opened after the last possible addition. `controller_files`'s `listed()` is the
-collection's helper. A test that models the stale listing (a held descriptor
+opened after the last possible addition. `controller_files`'s and, for the Ceph
+modules, `ceph_tunnel_custody`'s `listed()` are the collection's helpers. A test that models the stale listing (a held descriptor
 lists what it held at open or its last rewind) fails without the rewind on any
 filesystem; run a unit suite once with `TMPDIR` on a btrfs directory to catch a
 new site.

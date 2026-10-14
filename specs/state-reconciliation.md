@@ -354,7 +354,12 @@ contexts/<name>/state/operations/
     logs/
 ```
 
-`index.json` names at most one current operation and nothing else. Every other
+`index.json` names at most one current operation. An index of another version,
+or one carrying `qualification`, is unreadable evidence: it refuses every
+lifecycle command with the remedy naming the build that prepared it, then
+`context delete --purge`, or `--purge --allow-orphans` as the abandoning
+fallback.
+Every other
 operation directory is kept for audit and never named by the index: a
 completed operation, one a removal superseded, and the unreferenced directory
 an interrupted registration leaves once its plan landed. A later command reads
@@ -389,11 +394,20 @@ resolution records carry their block, attempt and resolution numbers, phase,
 outcome, effect, bounded evidence and timestamps, and a resolution whose
 observation could not run also carries `failure`, the first diagnostic that
 observation reported, its code, message and remediation, each bounded; no
-other record carries it, and the record keeps its version. They never restate the
-request: the request an attempt or resolution acted on is its block's in
-`plan.json`, which the operation's plan digest names and nothing replaces. A
-running attempt may additionally publish one bounded `preparation` object: the
-before-state its capability observed, recorded durably while the attempt is
+other record carries it, and the record keeps its version. Every attempt and
+resolution also names the build it ran under, `build`: the automation digest
+the executable embeds, which its approved bundle holds, the block's content
+digest, the executable's version and commit, and `modified` when its own stamp
+says so. The member is optional and moves no record version, so a record an
+earlier build wrote has none, and a start that adopts an interrupted record
+names the build that adopts it. It is compatible one way only: a build from
+before it decodes records closed and refuses one that carries `build` as
+malformed or unsupported, so once a build that writes `build` has worked an
+operation, no earlier build can continue or remove it. These records never
+restate the request: the request an attempt or resolution acted on is its
+block's in `plan.json`, which the operation's plan digest names and nothing
+replaces. A running attempt may additionally publish one bounded `preparation`
+object: the before-state its capability observed, recorded durably while the attempt is
 still running and before it is permitted to change the host. It is written once
 and never replaced, so a later recovery can tell an attempt that was authorized
 to install from one that never reached that point. A resolution observation
@@ -457,16 +471,18 @@ Changed desired state never turns continuation into reconciliation. A
 continuation verifies, before doing work, the operation's verb, its context
 identity and input revision, the frozen-input digest, the plan digest its
 record names, the block states and attempt counts it read (unchanged since the
-command read them), that this executable embeds the automation the operation
-registered under, and the host binding with completed setup. Only a fresh
+command read them), that this executable is the build the operation registered
+under or [freezes the same blocks](#dependency-safety-during-recovery), and the
+host binding with completed setup. Only a fresh
 apply binds, so a continuation whose context the controller state records no
 binding for names the `destroy` that supersedes its operation where one may,
 and otherwise the binding's restoration or the context's deletion, never an
 `apply`. Each block then runs the capability this executable offers under the
 implementation identity the block froze. A block whose implementation this
 executable does not offer refuses before its attempt or resolution starts. A
-block's content digest travels with the block and is not compared, because a
-removal keeps the one its apply froze.
+block's content digest travels with the block: a removal keeps the one its apply
+froze, and a continuation compares it only as part of proving that another build
+freezes the same blocks.
 
 This table and the four below state the transition code exactly:
 `TestTransitionTablesMatchSpec` drives that code with every row of each, so a
@@ -527,7 +543,11 @@ proves its own absence, since a removal over an absent target completes (see
 
 The operation then takes the state its blocks give it under
 [precedence](#operation-state-precedence), and a block resolved `failed` is
-retried by a new attempt, which converges it. The diagnostic of a block a
+retried by a new attempt, which converges it. The continuation that resolved it
+makes that attempt itself once every unproved effect is resolved, under the
+rules of any retry, so one invocation recovers what took two before (D146); a
+fresh `destroy`'s resolutions retry nothing of the apply they read. The
+diagnostic of a block a
 resolution leaves `unknown`, and the `unresolved` remedy `status` names for a
 block no resolution observed, end with the exact command that observes it
 again: the operation's continuation, or the fresh `destroy` that resolves an
@@ -572,8 +592,10 @@ states counts only beside a completion.
 ### Produced material custody
 
 Material a block's proved effect leaves, such as an installation's
-administrator kubeconfig, enters the context's
-[custody](secrets.md#produced-material) before its apply block is recorded
+administrator kubeconfig or a Ceph cluster's dashboard credential (the entry
+`ceph-cluster-<name>`, `dashboard`, recaptured without rotation), enters the
+context's [custody](secrets.md#produced-material) before its apply block is
+recorded
 `done`, whether an attempt or a resolution proves it, including a fresh
 `destroy`'s resolution of an incomplete apply's block by its apply observation
 ([resolution outcomes](#resolution-outcomes)); one resolved by the removal's
@@ -628,11 +650,17 @@ the material.
 | `done` | `none` | `done` |
 
 An `attempt` starts once every dependency is `done` and the block's stage is
-selected; a `retry` is a new attempt of the first failed block the selection
-admits, run alone. Either records `running` before its first side effect and
+selected; a `retry` is a new attempt of a failed block the selection admits,
+started under the same rules, so independent failed blocks are retried
+together (D144). Either records `running` before its first side effect and
 then its [attempt outcome](#attempt-outcomes). An `observe` step is a
 resolution and records its [resolution outcome](#resolution-outcomes);
-unproved blocks are observed before any other step starts.
+unproved blocks are observed before any other step starts. A resolution is not
+an attempt: an invocation observes a block at most once and never observes one
+its own attempt left unproved, and a block its resolution leaves `failed` is
+retried by the same invocation as any failed block is, so its dependents can
+start there too (D146). Its progress row then stays running into that retry,
+and is settled `failed` if the invocation stops before the retry starts.
 
 An attempt that cannot start, because this executable lacks its implementation
 or the store refuses to allocate its number and record `running`, performs no
@@ -829,13 +857,18 @@ under whatever selection it is given. Cancellation is never a pause.
 Selection never weakens a safety rule. An unproved effect is resolved before
 anything else whatever stages are selected, because resolution is a read-only
 observation; several unproved effects may be observed together, and nothing
-starts, retries or is removed beside them. A failed block remains the only
-retry candidate and runs alone, because what follows it depends on it
-succeeding: a retry starts only while no other block is running and only when
-its stage is selected, so failed blocks are retried one at a time in frozen
-plan order and one outside the selection is never retried. When no failed
+starts, retries or is removed beside them. Failed blocks are then retried
+under the rules a first attempt follows: each whose stage is selected starts
+once the bound and its exclusive resources admit it, beside the other retries
+and beside every startable block, and what depends on a failed block waits
+for its retry to complete, as it would for a first attempt. An invocation
+retries a block at most once, and once a block it worked fails, it starts no
+further first attempt, although the failed blocks still waiting are retried.
+A failed block outside the selection is never retried, and when no failed
 block's stage is selected the operation refuses `lifecycle.stage` before any
-effect, naming the stage of the first. A selection that admits no startable block also refuses
+effect, naming the stage of the first. That refusal is decided once, before the
+invocation works any block; once one is worked, admission follows only these
+rules, so what starts never depends on which running block completes first. A selection that admits no startable block also refuses
 `lifecycle.stage` before registration, naming a stage that would unblock work.
 
 A fresh `plan` and a fresh `apply` refuse, whatever stages are selected and
@@ -941,9 +974,10 @@ Each Bootwright-controlled executable block names a logical domain capability,
 not an Ansible role or vendor operation. Before the plan is published, Go
 deterministically resolves exactly one matching implementation and freezes its
 identity, version, content digest and request digest in the plan and operation
-registry, and the operation record freezes the automation and the Python and
-Ansible [execution closure](#dependency-safety-during-recovery) every
-implementation runs in. That digest covers the canonical
+registry, and the operation record freezes the Python and Ansible
+[execution closure](#dependency-safety-during-recovery) every implementation
+runs in and names the automation and build it registered under. That digest
+covers the canonical
 secret-free request and only non-sensitive immutable secret-binding
 identifiers or versions; it never hashes secret material. Secret bytes and any
 sensitive binding metadata remain solely in the confidential snapshot or
@@ -953,8 +987,10 @@ never re-resolves to a different implementation.
 
 ### Dependency safety during recovery
 
-A continuation of either verb uses the exact frozen dependency versions and
-content its operation registered with; a fresh removal, which registers an
+A continuation of either verb uses the exact frozen execution closure its
+operation registered with, and the automation of the build in hand only where
+that build freezes the same blocks, as below; a fresh removal, which registers
+an
 operation of its own, runs under the build and bundle in hand, as below. If
 required content is unavailable, changed, or its safe use for the requested
 operation cannot be established, refuse before the affected observation or
@@ -977,22 +1013,53 @@ and a bundle republished only for a native re-solve carries the same closure
 and continues.
 
 Before a continuation of either verb restores its operation's log, raises
-evidence or marks its operation `running`, it refuses `lifecycle.state`, with
-no effect and no record changed, when this executable's automation differs
-from the one its operation registered under, when its operation record is the
-version 1 record that names no closure, or when the approved bundle holds
-another closure. Each refusal names the executable version and commit the
-operation registered under, and the closure refusal also names the Python and
+evidence or marks its operation `running`, it refuses `lifecycle.state`, with no
+effect and no record changed, when its operation record is the version 1 record
+that names no closure, when the approved bundle holds another closure, or when
+another build registered the operation and this executable does not freeze the
+same blocks. Another build is one whose automation differs from the one the
+operation registered under or whose version or commit differs from the ones it
+records, and any build whose own stamp says its source was modified, since no
+recorded identity tells two such builds apart. For an apply, a build freezes the
+same blocks when planning the operation's frozen input again gives exactly the
+operation's blocks, each with every member its plan froze except the words it is
+presented in: its description, its impacts and its groups' descriptions. For a
+destroy, the proof derives the removal again from the operation's own frozen
+plan, which copies each block's request, implementation, content digest, stage
+and dependencies from that plan, so it compares what the removal decides, the
+authorizations it consumes and its groups, and whether every block's capability
+resolves and reads its frozen request, as a fresh removal does. That proof
+plans, and planning reads the media store under the store's own shared lock, so
+the decision proves it under the shared lock and the exclusive re-proof keeps it
+once it finds every record it read unchanged. The proof compares blocks only: a
+continuation keeps the host reservations and the Secret binding its registration
+took. A refusal names the first block that differs, or why the operation could
+not be planned again. A continuation that passes runs this executable's
+automation, which is how an automation fix reaches a failed or unknown block,
+and its record keeps naming the build that registered it. Every content digest
+is computed from the implementation's declared contract (its identity, its
+request and evidence versions and its effect pins) and never from automation
+bytes, so a fix confined to automation, or to Go code that moves no version or
+pin, continues once `setup` has projected it. Such a continuation resolves an
+unknown block first and, when the observation leaves it failed, retries it in
+the same invocation (D146). Each attempt names the build that ran it, while the operation
+keeps naming the one that registered it. Each refusal names the executable
+version and commit the operation registered under, and the closure refusal
+also names the Python and
 `ansible-core` releases the operation needs and the ones the bundle holds. Each
 remedy restores what the operation registered under, and where a fresh removal
 may [supersede](#continuation-and-removal) the operation, it also offers that
-removal. The one exception is a version 1 record once the controller directory
-keeps [setup runs](contexts/controller-record.md#setup-runs): every build that
-wrote such a record predates them and refuses that directory, so the refusal
+removal. Once a build that writes `build` has worked the operation, the build
+it registered under cannot read its records if it predates that member, so the
+way out is then the superseding removal under the build in hand, or the
+[deletion exit](#lifecycle-unit) where none may take its place. The one
+exception is a version 1 record once the controller directory keeps [setup
+runs](contexts/controller-record.md#setup-runs): every build that wrote such
+a record predates them and refuses that directory, so the refusal
 says so and names no build. It offers the superseding removal where one may
 take the operation's place, and otherwise the
-[deletion exit](#lifecycle-unit) of the records neither verb acts on. Only a
-fresh verb runs under the build and bundle in hand.
+[deletion exit](#lifecycle-unit) of the records neither verb acts on. A fresh
+verb always runs under the build and bundle in hand.
 
 That re-proof, with the controller setup and host binding a continuation also
 re-proves ([controller-host protection](#controller-host-protection)), runs
@@ -1196,15 +1263,17 @@ rules above.
 
 ### Continuation and removal
 
-Continuation skips done blocks and retries a failed block under its frozen
-capability contract, one block at a time and once per invocation: an invocation
+Continuation skips done blocks and retries failed blocks under their frozen
+capability contracts, concurrently and each once per invocation: an invocation
 never retries a block it failed itself, because the condition that failed it
-has not been shown to have changed. Go owns ordering and lifecycle state and
-invokes capability ports under the
+has not been shown to have changed. A block that its own resolution, not an
+attempt, left `failed` is one the invocation has not yet retried (D146). Go
+owns ordering and lifecycle state and invokes capability ports under the
 [Go/Ansible boundary](architecture.md#go-and-ansible-responsibility-boundary).
 
-A failure admits no further work, and the blocks already running are waited
-for rather than abandoned: each records the outcome it proved, and stopping one
+A failed attempt admits no further first attempt, although the selected failed
+blocks the invocation has not yet retried are still retried, and the blocks
+already running are waited for rather than abandoned: each records the outcome it proved, and stopping one
 mid-effect would turn a provable outcome into an unproved one. The result names
 every block that did not complete, in frozen plan order, because blocks run
 together and which of them failed first is a race rather than a fact about the
@@ -1348,6 +1417,22 @@ the block, the version it holds and the executable identity its operation
 recorded, so the remedy is the command to run rather than the obstacle that
 stopped it.
 
+A capability's content digest moves when its automation changes what a block's
+effect is rather than how the effect is reached: the objects it creates, their
+names and places, the mark that proves them this context's own, the host
+resources it claims, or what its observation proves. An apply continuation under
+another build compares content digests and never automation bytes, so automation
+that moves no content digest reaches the blocks a continuation still runs, and a
+removal still reads the request its apply froze. A mechanical guard,
+`TestEveryImplementationMovesItsContentDigestWithItsContract`, fails the build
+when an implementation's Go request or evidence schema, or a persisted format
+version quoted in the collection's embedded plugins and roles, changes while
+its content digest does not. It fingerprints a raw-JSON member, such as the
+cluster services the Ceph core and host requests carry, as an opaque leaf, and
+sees no unquoted, dynamically built or unversioned format; the schema nested
+in such a member, and what a record or mark means beyond its shape and
+declared version, stay the author's to move.
+
 A fresh removal uses the secret material its apply bound, by reopening that
 operation's own binding rather than binding what the current declarations name.
 The material that created an effect is the material that proves it gone, and a
@@ -1419,10 +1504,10 @@ apply observation and otherwise by the removal's own check
 registering nothing, when it cannot. A continuation of an apply still
 resolves by the apply's check. A running or unknown removal is
 continued rather than replaced, because a removal that lost an outcome is
-resolved by repeating itself. Replacement is the only road out of a repaired
-adapter, because a continuation is frozen to the automation and execution
-closure its operation registered under while a fresh operation runs under the
-current ones.
+resolved by repeating itself. A continuation runs a repaired adapter when the
+repair leaves every frozen block the same; replacement is the road out of any
+other repair, because a continuation stays frozen to its blocks and execution
+closure while a fresh operation runs under the current ones.
 
 Every transition is decided from durable state read under the shared lock and
 performs its effects under the exclusive one. Under the exclusive lock, before
@@ -1493,50 +1578,52 @@ environment ready themselves.
 
 ### Quiescence before removal
 
-Bootwright removes and replaces only what is out of use, and the one thing it
-proves is that the **Machines** are down. A Machine is what runs an operating
-system and an operator's work; everything else a context owns serves those
-Machines, so a context whose Machines are all stopped has nothing left running
-to interrupt. A capability that realizes Machines defines their *quiescent*
-predicate and observes it on the host itself: never a value echoed back from
-its own request, never a record of what Bootwright intended, and never a state
-a live system also reports for something that is gone. Every other capability
-derives its answer from the Machines the same removal already probes, and
-observes nothing of its own. Bootwright does not ask whether a managed service,
-a published artifact or a provider network is being used, by this context or by
-anything else.
+The engine supports the online ordering below. Candidate Ceph capabilities
+refuse removal while any host survives it
+([B491](milestones/m2.md#b491)); their
+[target contract](storage.md) owns the consumer-quiescence and cleanup proofs.
 
-A fresh removal probes every block it would take back **before it registers**,
-and refuses `lifecycle.live` with no operation, no reservation and no effect
-when any Machine is still running, naming each one and the command that stops
-it. The check cannot be per-effect alone, because a removal takes dependents
-before dependencies: it would delete the quiescent leaves and then stop at the
-running machine, leaving a context that can only continue a removal it should
-never have started. Every block is asked rather than the first live one alone,
-so an operator learns every Machine to stop at once. The Machine inverse then
-revalidates its own target immediately before its effect and fails its block
-rather than forcing, which covers a Machine started while the removal ran. A
-continuation is not gated again: its operation is already registered and each
-of its effects still revalidates.
+A storage effect whose every host Machine is a Bootwright-owned virtual
+Machine destroyed by the same removal is retired with them. It is not an
+online effect, its Machines are `Stop first`, its quiescence derives from
+their stop proof, and its inverse and removal observation record retirement
+without contacting the hosts. A retired block's removal observation is answered
+from its frozen request with no host contact, and the controller-local destroy
+runs of the image and host blocks are not host-contacting calls.
 
-The gate is one [check](cli/output.md#long-running-progress), not a preview of
-the removal: it settles as a single row whose sub-step is the block being
-probed, ahead of the log directory and every effect row, so an operator reads
-each step of the removal once and reads it as the effect it is.
+Bootwright removes and replaces only what is out of use. Machine capabilities
+prove their targets stopped from native state; a silent or unreadable target
+is unproved and refuses. Most removals prove every affected Machine stopped
+before registration, report `lifecycle.live` with the stop commands (or the
+remedy a capability names when no stop settles its block), and make no effect
+when any target is live. Each Machine inverse revalidates its target
+immediately before removing it.
 
-A Machine whose state cannot be read is live. An environment that cannot prove
-its Machines are idle is never assumed to be.
+An `OnlineRemoval` capability requires its effects removed while their Machines
+remain reachable. Only Machine blocks whose inverse dependency closure contains
+such an effect defer the initial stop proof. The plan lists them under
+`Stop after storage cleanup`; unrelated Machines retain `Stop first`. The
+engine durably completes every required online effect before probing all
+remaining deferred Machines. A live or unproved target pauses the registered
+removal before any deferred Machine inverse. After the operator stops those
+Machines, repeating destroy continues the same removal. It never repeats an
+online effect already durably completed. Unknown or failed online cleanup
+cannot admit Machine or substrate deletion.
 
-Stopping is never a side effect of removal. An inverse never powers a Machine
-off, and the operator stops it explicitly — through
-[the Machine power commands](cli/commands.md#command-and-flag-catalog) or their
-own means — so a removal never destroys work that was still running. A Machine
-that exists before Bootwright touches it, such as operator-owned bare metal,
-must be down before it is changed for the same reason.
+Every execution and quiescence probe carries its immutable owning apply
+identity. `ApplyProved` supplies detached frozen blocks and durable completion
+evidence only from the transitive dependency closure of that original apply.
+Removal reads them through the active operation store, without reopening the
+workspace lock. Context renames and a new removal identity do not create a new
+Ceph incarnation or substitute a currently observed host key. Missing original
+evidence refuses before dependent effects.
 
-This composes with authorization rather than replacing it: `data-loss`
-acknowledges that removal destroys data, and quiescence proves that nothing is
-using that data now. Neither substitutes for the other.
+Stopping is never a side effect of removal. The operator uses
+[Machine power commands](cli/commands.md#command-and-flag-catalog) or their own
+means. `data-loss` acknowledges destruction; quiescence independently proves
+nothing is using the data. A native daemon list alone proves neither consumer
+quiescence nor the removal of OSD data, credentials and SSH authorization.
+The [storage contract](storage.md) owns those additional proofs.
 
 ### Physical disk safety
 

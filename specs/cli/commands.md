@@ -110,9 +110,9 @@ The three `media` commands follow the host-wide
 | `bootwright machine restart` | required `--name <machine>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after a proved stop and a proved start | same |
 | `bootwright setup` | `--dry-run` false; `--yes` false; `--purge-old-bundles` false | [context-independent controller prerequisite plan or completed setup](../controller.md#selection-and-command-journeys), and with `--purge-old-bundles` the [superseded bundles it retired](../controller.md#supported-host-and-dependency-selection) | bounded dependency acquisition over the [context-free route](../controller.md#the-context-free-acquisition-route) and local installation; dry-run only previews; retirement removes only superseded execution bundles, after the setup completes or, [at the bound](../controller.md#supported-host-and-dependency-selection), before it publishes; a setup left pending, at the bound or below it, that never took effect and that this executable cannot resume is first [canceled](../controller.md#publication-and-interrupted-setup) |
 | `bootwright cluster list` | `--output text\|json` default `text` | container and storage cluster names and kinds in canonical order | read local state |
-| `bootwright cluster info` | `--name <cluster>` default all unless `--secrets`; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, and optional explicit sensitive values | read local state and optional confidential material |
-| `bootwright cluster rsh` | required `--name <cluster>`; `--node <node>` default first node in canonical name order | bounded handoff for an interactive SSH session to the resolved cluster node | read target and access metadata only |
-| `bootwright cluster exec` | required `--name <cluster>`; `--node <node>` default first node in canonical name order; required `<command>...` | bounded handoff for the exact remote command argument vector | read target and access metadata only |
+| `bootwright cluster info` | `--name <cluster>` default all unless `--secrets`; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
+| `bootwright cluster rsh` | required `--name <cluster>`; `--node <node>` default first node in canonical name order | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
+| `bootwright cluster exec` | required `--name <cluster>`; `--node <node>` default first node in canonical name order; required `<command>...` | the exact argument vector runs on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result | same as `machine exec` |
 | `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
@@ -129,8 +129,12 @@ The three `media` commands follow the host-wide
 in the selected context. The following table owns applicability. Target
 resolution, readiness and diagnostics of `cluster kubeconfig` live in the
 [administrator access export](../cli.md#administrator-access-export); those of
-the other cluster commands are
-[deferred](../deferred/cli-access-and-rendering.md#cluster-inspection-and-explicit-access).
+`cluster rsh` and `cluster exec` in the
+[cluster sessions](../cli.md#cluster-sessions); those of `cluster info
+--secrets` on a managed Ceph cluster in the
+[storage dashboard access](../cli.md#storage-dashboard-access); those of
+`cluster oc` and `cluster kubectl` are
+[deferred](../deferred/cli-access-and-rendering.md#containercluster-access-handoffs-and-sessions).
 
 | Command | Applicable targets |
 | --- | --- |
@@ -140,21 +144,29 @@ the other cluster commands are
 
 Applicability does not establish implementation availability, access readiness,
 identity, or ownership. Missing access material on an applicable target is an
-access failure, not a change in applicability.
+access failure, not a change in applicability. A session on an OpenShift/OKD
+ContainerCluster is applicable and refuses `access.unavailable`: only managed
+Ceph sessions are specified.
+
+Not yet met: `cluster oc` and `cluster kubectl` hand off nothing and sessions on
+an OpenShift/OKD ContainerCluster do not open; tracked as
+[B101](../milestones/backlog.md#b101).
 
 ### Access help
 
-The short description and detailed help for `cluster rsh`, `cluster exec`,
-`cluster oc`, and `cluster kubectl` state that success prints an access
-descriptor for independent operator execution and does not launch a client or
-connect. Cluster command help includes its applicable target kinds and variants
-from the table above. `cluster kubeconfig` help states that success exports raw
-sensitive bytes to standard output.
+The short description and detailed help for `cluster oc` and `cluster kubectl`
+state that success prints an access descriptor for independent operator
+execution and does not launch a client or connect. Cluster command help
+includes its applicable target kinds and variants from the table above.
+`cluster kubeconfig` help states that success exports raw sensitive bytes to
+standard output.
 
-The short description and detailed help for `machine rsh` and `machine exec`
-state that the session runs on the Machine as its resolved identity, that an
-unproved host key is confirmed interactively or refused, and that the exit
-status is the client's.
+The short description and detailed help for `machine rsh`, `machine exec`,
+`cluster rsh` and `cluster exec` state that the session runs on the Machine,
+for a cluster the resolved node's, as its resolved identity, that an unproved
+host key is confirmed interactively or refused, and that the exit status is the
+client's. The cluster commands also state how `--node` selects: by node name,
+then by FQDN, defaulting to the first node in name order.
 
 Help and completion use the static catalog; they never load a selected cluster
 to hide or enable commands. Target-aware discovery belongs to `cluster info`.

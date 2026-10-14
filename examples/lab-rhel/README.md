@@ -23,6 +23,7 @@ reservations, readiness evidence and the inverse.
 | [`rhel-9-8`](infra/os/rhel-9-8.yaml) | The install profile: hosted-tree packages from the DVD media, no subscription, no initial password and no disk encryption, so the served ISO carries no secret. |
 | [`artifact-server-tls`](secret-descriptors/artifact-server-tls.yaml) | Generated serving certificate; its subject alternative names must cover every address an HTTPS endpoint serves. |
 | [`lab-bmc-credentials`](secret-descriptors/lab-bmc-credentials.yaml) | Generated credentials the emulated BMCs answer with. |
+| [`lab-bmc-tls`](secret-descriptors/lab-bmc-tls.yaml) | Generated serving certificate for the emulated BMC HTTPS listener at `127.0.0.1`. |
 | [`bootwright-machine-key`](secret-descriptors/bootwright-machine-key.yaml) | The fleet key installed for the `bootwright` account on every Machine this graph installs. |
 
 ## Host prerequisites
@@ -64,7 +65,7 @@ Two documentation ranges keep the two roles apart, and the domain is
 binds it, so it must already exist on the host before the first apply. In a
 local copy of this example, replace it with an address that exists there, in
 the Machine, all four services and the certificate. The emulated BMC keeps
-`127.0.0.1:8000`: its privileged, plain-HTTP listener is reached only from its
+`127.0.0.1:8000`: its privileged HTTPS listener is reached only from its
 provider host and must not be exposed to the LAN.
 Replace `192.0.2.53` and `192.0.2.123` with an upstream resolver and time
 source the host can reach, or remove those lists to serve only what the graph

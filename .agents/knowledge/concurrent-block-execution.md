@@ -2,8 +2,9 @@
 
 What running an operation's blocks together cost to get right, beyond the
 contract [state reconciliation](../../specs/state-reconciliation.md#stages-and-the-pause-boundary)
-owns. Delivered 2026-09-17; **no real-host apply or destroy has run under it
-yet**, so everything below is from the in-tree suites and the code.
+owns. Delivered 2026-09-17; everything below is from the in-tree suites and
+the code, except the lazily created directory race, which the first real-host
+destroy under it found.
 
 ## The plan was already a graph; only the executor was not
 
@@ -38,6 +39,29 @@ visible while one block runs at a time:
 lock it takes on the native package file is a read lock, so concurrent holders
 are expected.
 
+## A shared directory created lazily is a race too
+
+The operation store makes only `<id>`, `<id>/blocks` and `<id>/logs` up front;
+`logs/blocks/` and each block's directory are created by the first write that
+needs them, through `operationArea.EnsureDirectory` and `OpenLog`. With a first
+wave of several blocks, every one of them races to `Mkdirat` the same
+`logs/blocks`, and the context's first operation also races on the
+`operations` subtree itself. The losers' `EEXIST` used to be refused as a
+foreign entry, so a real-host `destroy` of a 13-block context ended
+`state: unknown` with `runtime.log: a required private operation log could not
+be maintained`, and the log fault's cancellation then landed inside sibling
+blocks' publications as `context.state: published lifecycle record is unsafe`.
+
+The operation areas (lifecycle, bounded runs, SSH trust) and
+`Store.ensureDirectory` now treat `EEXIST` as a concurrent creator winning:
+they reopen through `openDirectory`, which applies exactly the checks an
+existing directory passes, and sync the parent again, since the loser may
+proceed before the winner's sync completes. A writer whose plain open lands
+between the winner's `Mkdirat` and its sync still syncs nothing; that window
+predates the fix. Files already had this shape in `openLog`. The secret,
+bundle and media areas are single-writer and still refuse `EEXIST`, as must
+any path created exclusively on purpose, such as a run's own directory.
+
 ## Admission rules, and why each is not just "start everything ready"
 
 `lifecycle/scheduler.go` admits in a strict precedence, and each level exists
@@ -46,9 +70,13 @@ to preserve a safety rule that predates concurrency:
 1. An **unproved** effect is observed before anything else, and several may be
    observed together because observation is read-only. Nothing else is admitted
    while any block is unproved.
-2. A **failed** block is retried alone. What follows it depends on it
-   succeeding, so running siblings beside the retry would start work the retry
-   may invalidate.
+2. Every selected **failed** block is retried as a first attempt runs, beside
+   every startable block, up to the bound and skipping any whose exclusive
+   resources are in use (D144). What follows a failed block already waits on
+   it through its dependency, so a retry needs no other isolation; before X71
+   it ran alone, which serialized independent hosts. A selection that admits
+   no failed block refuses before any block is worked; after that, admission
+   never depends on which block completes first.
 3. Otherwise every **startable** block starts, in frozen plan order, up to the
    bound, skipping any whose exclusive resources are in use.
 
@@ -59,8 +87,10 @@ it the scheduler retries a fresh failure immediately and loops; before X13 the
 startable branch skipped the check, so a persistently failing attempt start
 re-admitted its block without end.
 
-A failure, an attempt that could not start or a cancellation **admits nothing
-further and waits** for what is in flight. Killing an attempt mid-effect converts a provable outcome into an
+An attempt that could not start or a cancellation **admits nothing further
+and waits** for what is in flight. A failure admits no further first attempt
+and waits too, but the selected failed blocks not yet retried are still
+retried. Killing an attempt mid-effect converts a provable outcome into an
 unproved one, which is the one state nothing can retry, destroy or delete past.
 
 ## The bound is not plan intent

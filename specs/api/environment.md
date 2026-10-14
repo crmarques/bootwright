@@ -232,7 +232,7 @@ Machine [refuses the collision](machines.md#os-lifecycle-and-substrate-invariant
 ## Kind defaults
 
 `spec.defaults` is a closed map keyed by exact, case-sensitive names from the
-26-kind catalog. Each value is a partial copy of that kind's `spec`, without
+27-kind catalog. Each value is a partial copy of that kind's `spec`, without
 an additional `spec` wrapper. For example:
 
 ```yaml

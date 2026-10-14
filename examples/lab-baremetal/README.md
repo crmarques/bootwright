@@ -222,11 +222,10 @@ the domain and its controller and installs nothing; then point a copy of this
 example at that controller, its `bmc.address` the emulated endpoint and its
 declared NIC addresses the ones the domain was realized with.
 
-That rehearsal does not run yet. A private delivery refuses an unverified
-controller leg, and the emulated controller serves plain HTTP
-(`internal/substrate/naming.go`), so the copy needs an https emulated
-controller whose authority it names in `tls.trustBundleRef`, which is not
-provided yet ([B446](../../specs/milestones/m2.md#b446)). Keep any such copy out
+That rehearsal does not run yet. The emulated controller now serves verified
+HTTPS, but its generated serving leaf is not a CA. The physical BMC contract
+requires a CA in `tls.trustBundleRef`, so the copy still needs an accepted
+CA trust chain ([B446](../../specs/milestones/m2.md#b446)). Keep any such copy out
 of the repository: its addresses belong to one workstation, and
 `examples/wip/` is ignored for exactly this.
 

@@ -15,8 +15,12 @@ examples. Every tracked example must:
 multi-datacenter graph. It demonstrates a large resource and reference surface
 using fictional identities, documentation address ranges, and deliberately
 fake operational coordinates. Its private Secret payload root is ignored.
+It is a future authoring reference: current admission explicitly refuses its
+stretch, observability, and CephFS/RGW/export features pending their qualified
+slices. The test suite asserts those refusals.
 
-Validate the directory as a whole:
+Inspect the whole reference graph; this command currently reports the expected
+unsupported-feature diagnostics:
 
 ```text
 bootwright validate -f examples/multidc-platform
@@ -32,6 +36,11 @@ journey that prepares the controller from it.
 [`lab-rhel-3-nodes/`](lab-rhel-3-nodes/) extends it to three RHEL guests using
 one install profile and package tree. Its README checks concurrent services,
 machine realization and installation, followed by replay and safe removal.
+
+[`libvirt-3-nodes-ceph/`](libvirt-3-nodes-ceph/) adds dedicated OSD disks,
+native core services, an RBD pool and a pool-scoped client. Its README is the
+staged-apply procedure from the first context to the removal of the cluster and
+its guests.
 
 [`lab-sno/`](lab-sno/) is that same single-machine lab with one
 single-node OpenShift cluster instead of an installed RHEL guest: the same

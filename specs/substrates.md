@@ -52,7 +52,13 @@ A provider whose emulated BMC would listen on an address a controller endpoint
 cannot name, such as a wildcard, refuses at admission
 ([libvirt arm](api/machines.md#libvirt-arm)): every hosted Machine's controller
 endpoint must be one address its consumers can name. Selection keeps the same
-refusal, before registration, for state that bypassed admission.
+refusal, before registration, for state that bypassed admission. A provider
+whose `certificateRef` names a generated `tlsCertificate` whose
+`ipAddresses` do not include that `bindAddress`, compared as Go's hostname
+verification compares an IP, also refuses at admission, with the remedy to add
+the address to the Secret's `spec.source.generated.ipAddresses`, import the
+change with `bootwright context update`, then run `bootwright secret generate`.
+A stored certificate's names are proved only when a fresh apply binds it.
 
 ### Refusal table
 
@@ -247,12 +253,21 @@ ownership metadata naming the context and Machine. Provider media and machine
 disks occupy separate `providers` and `machines` subtrees, including when a
 provider and Machine share a name. X48 retires the former name-collision
 refusal with tests proving disjoint ownership and cleanup. Host requests use
-`substrate-host-libvirt-v4` and Machine requests use `machine-libvirt-v4`; the
-new frozen paths change their request and plan digests. Each disk is presented on
-the virtio bus, the root disk as `vda` and the data disks as `vdb` through
-`vdh` in declared order, and carries no WWN, SCSI address or serial number for a
-[root-device hint](api/machines.md#bmc-and-root-device-shape) to match. Each
-interface carries the
+`substrate-host-libvirt-v4` and Machine requests use `machine-libvirt-v6`.
+The root disk remains virtio-blk `vda`; unmarked data disks preserve successive
+virtio-blk targets `vdb` through `vdh`. Explicit `media: ssd` data disks instead
+use a virtio-SCSI controller, successive `sda` through `sdg` targets, target
+`rotation_rate="1"`, and distinct controller-0 drive units in the same order.
+Each sequence is independent in a mixed profile. The domain inspection proves
+the frozen volume, target, bus, rotation rate, drive address and derived data
+disk serial before accepting ownership; positive SSD disk evidence carries
+the actual bus, target and rotation rate. The pinned sushy emulator places
+optical media on `sdx` and a free SCSI unit, avoiding the data units.
+Virtual media type proves guest presentation rather than physical storage
+performance. The SSD semantic change is included in the automation digest;
+old applied requests are never reinterpreted. The root carries no WWN or serial
+for a [root-device hint](api/machines.md#bmc-and-root-device-shape) to match.
+Each interface carries the
 same derived address the realized target reports, so a consumer that must
 declare this Machine's hardware to an installer names exactly what the domain
 presents. An interface attaches to the
@@ -286,14 +301,16 @@ as its one ComputerSystem, so a guest is managed through the same Redfish
 system, virtual-media and power resources a physical server presents. It
 listens on the provider's `bindAddress` at the port the
 [allocation rule](api/machines.md#libvirt-arm) assigns this Machine, serves
-plain HTTP, requires the bound `auth.credentialsRef` credential through basic
+HTTPS with the bound `certificateRef` serving certificate, requires the bound
+`auth.credentialsRef` credential through basic
 authentication with a bcrypt password file published `0600`, and fetches
 inserted media without verifying the artifact server's certificate. It stores
 that media as a volume in the provider's pool through its libvirt connection,
 so its unit mounts no pool directory: it mounts its configuration and password
-file read-only and the host's libvirt socket directory, and nothing else. The controller
-endpoint is `http://<bindAddress>:<port>/redfish/v1/Systems/<uuid>`, with an
-IPv6 `bindAddress` bracketed (`http://[fd00::1]:8000/redfish/v1/Systems/<uuid>`),
+file and TLS certificate/key read-only and the host's libvirt socket directory.
+The controller
+endpoint is `https://<bindAddress>:<port>/redfish/v1/Systems/<uuid>`, with an
+IPv6 `bindAddress` bracketed (`https://[fd00::1]:8000/redfish/v1/Systems/<uuid>`),
 so it meets the controller address grammar of
 [machines](api/machines.md#bmc-and-root-device-shape); the plan's listener impact
 prints the socket in the same form. The password file keeps the hash it
@@ -606,7 +623,10 @@ internal authority issued is therefore verified against that authority, and an
 opt-out is endpoint-scoped, recorded in effective state and never a global
 default. A certificate the declared trust refuses fails the operation at once,
 as an answer rather than a controller that did not answer. The emulated
-controller serves plain HTTP and selects nothing.
+controller serves HTTPS; all consumers pin the provider's serving certificate.
+Its private key is bound only for emulator apply. This does not expand the
+authored physical `caBundle` contract to accept a non-CA serving leaf; B446
+and B73 retain that rehearsal gate.
 
 The BMC-to-artifact-server leg follows `bmc.virtualMedia.tls.trust`, which the
 realized target freezes. `import-certificate`, the default, adds the artifact
@@ -614,16 +634,31 @@ server's certificate to the virtual-media device's certificate collection
 unless that certificate is already there and turns the device's certificate
 verification on, before the consumer's insert. `disable-verification` turns
 that verification off before the insert when it reads on. `established` changes
-nothing on the device. When the insert carries private material, as a physical
-installation's does, `established` first reads, and writes nothing, whether
-the controller verifies the server it fetches from: the device's
-`VerifyCertificate` must read `true`, and a manager the system names that links
-a security service reporting `HttpsTransferCertVerification` must report it
-`true`. Anything else, an absent `VerifyCertificate` or an unreadable security
-service included, refuses the insert before any write, naming the setting, and
-the operator imports the artifact server's CA into the controller and turns its
-verification on out of band. Private material is never inserted under
-`disable-verification`. Before the trust is set, a device presenting other
+nothing on the device. A manager the system names that links a security
+service publishing `HttpsTransferCertVerification` publishes the switch that
+decides whether the controller verifies the server it fetches from (D121, which
+amends D104): when any manager publishes it, every published switch decides
+alone and the device's `VerifyCertificate` is not consulted. Only a controller
+whose managers publish no such switch is decided by the device flag, where an
+absent flag reads as off. `import-certificate` then skips the device flag and
+writes only the certificate, and `disable-verification` refuses before any
+write, naming the manager's switch, because the device flag decides nothing
+there. When the insert carries private material, as a physical installation's
+does, `established` and `import-certificate` first read, and write nothing,
+that deciding setting, which must read `true`. Anything else refuses the insert
+before any write, naming the setting, an unreadable security service included
+because it never supplies proof, and the operator imports the artifact server's
+CA into the controller and turns its verification on out of band. Private
+material is never inserted under `disable-verification`. The B447 tests
+`test_private_delivery_accepts_the_manager_switch_with_a_false_readonly_device`,
+`test_private_delivery_refuses_a_manager_that_does_not_verify`,
+`test_private_import_cannot_bypass_a_manager_whose_verification_is_off`,
+`test_import_uses_an_authoritative_manager_without_patching_the_device` and
+`test_disable_verification_refuses_an_authoritative_manager_before_any_write`
+in the
+[Redfish client tests](../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_boot.py)
+prove it in-tree; a physical capture of the device flag stays
+[B305](milestones/m2.md#b305)'s observation. Before the trust is set, a device presenting other
 media is released and proved empty. Each is set once, before the first attach
 and never inside its retry, and nothing falls back from one mode to another: a
 device that cannot import fails, naming the exceptions an operator may declare

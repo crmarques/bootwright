@@ -17,6 +17,7 @@ Alias cell.
 
 | ID | Alias | Kind | Owner | Outcome | Why parked |
 | --- | --- | --- | --- | --- | --- |
+| [B82](#b82) | C5; moved from M4 on 2026-10-10 (D128); parked on 2026-10-11 (D129) | product | Managed OS | One more image, profile or entitlement variant | No concrete additional OS variant beyond the qualified M2 matrix |
 | [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
 | [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
 | [B98](#b98) | C30; B336 split from it on 2026-10-05 (D101) | enabling | Architecture | Production comments reduced to what the clarity contract keeps | D101: M1 amends the rule, and a ratchet holds the count |
@@ -79,11 +80,10 @@ Alias cell.
 | [B331](#b331) | new, 2026-10-05 | product | Controller setup | A FIPS-qualified controller runtime | D108: M1 documents the runtime's own cryptography on a FIPS host |
 | [B332](#b332) | new, 2026-10-05 | product | Machine and Controller | `auth.operatorIdentity` runs under the invoking account | D112: M1 documents what the arm does today; this needs B282's helper |
 | [B333](#b333) | new, 2026-10-05 | enabling | Infrastructure services | A DNSServer binds its endpoint address by default | D114: M1 keeps the wildcard default and names a colliding socket |
-| [B334](#b334) | new, 2026-10-05; its TLS half split to B446 on 2026-10-07 (D120) | safety | Substrate | The emulated BMC refuses a non-loopback bind address and runs confined | D115: M1 binds the examples' emulated BMCs to loopback; D120 moved the TLS to M4 |
+| [B334](#b334) | new, 2026-10-05; its TLS half split to B446 on 2026-10-07 (D120) | safety | Substrate | The emulated BMC refuses a non-loopback bind address and runs confined | D115: M1 binds the examples' emulated BMCs to loopback; D120 moved the TLS to B446, now in M2 |
 | [B335](#b335) | new, 2026-10-05 | enabling | Controller setup | An operator-run RHEL 9.8 resolution harness | Optional beside the RHEL 9.8 controller run D60 plans |
 | [B341](#b341) | new, 2026-10-05 (X39) | enabling | State reconciliation | The template-delimiter refusal names the authored field and scopes native content | Found in X39 after D56; parked under D48; the scope needs an owner decision |
 | [B345](#b345) | new, 2026-10-05 (X39) | enabling | Controller, with CLI | A sudoers denial in a human invocation names its remedy | Found in X39 after D56; parked under D48 |
-| [B346](#b346) | new, 2026-10-05 (X39) | enabling | Machine, with Trust | A FIPS-mode controller verifies the host key types it pins | Found in X39 after D56; parked under D48 |
 | [B348](#b348) | new, 2026-10-05 (X39) | enabling | Controller (privilege) | The invoking account resolves once per process, and directory data the passwd grammar refuses is named | Found in X39 after D56; parked under D48 |
 | [B352](#b352) | new, 2026-10-05 (X39) | enabling | Workspace, with Controller | The invoking-account helper and real controller accounts proved as root | Found in X39 after D56; parked under D48 |
 | [B353](#b353) | new, 2026-10-05 (X39) | enabling | Each test's owner | Tests X39 left narrower than they read | Found in X39 after D56; parked under D48 |
@@ -138,7 +138,7 @@ Alias cell.
 | [B444](#b444) | new, 2026-10-07 (X24) | enabling | Architecture, with each capability's owner | Copies and dead code X24 left | Found in X24; parked under D48 (D116) |
 | [B445](#b445) | new, 2026-10-07 (X24) | enabling | Controller, with Architecture | The cancellation's group-kill order and its knowledge page | Found in X24; parked under D48 (D116); the order is bounded by the drain and was older than X24 |
 | [B450](#b450) | new, 2026-10-08 (X45) | enabling | Infrastructure services | The artifact server serves its private subtree only over https listeners | Found in X45; parked under D48 (D116); defense in depth, since fetching a token in clear needs a plain listener the operator declared, and it moves the automation digest |
-| [B451](#b451) | new, 2026-10-08 (X45) | enabling | Managed OS, Substrate and Infrastructure services | Host observations of what X45 proved only in-tree | Found in X45; parked under D48 (D116); each needs the lab-baremetal rehearsal or real hardware, which B73's gate and the first xFusion observation provide |
+| [B451](#b451) | new, 2026-10-08 (X45) | enabling | Managed OS, Substrate and Infrastructure services | Host observations of what X45 proved only in-tree | Found in X45; parked under D48 (D116); each needs the lab-baremetal rehearsal or real hardware, which B73's gate and the first physical firmware qualification provide |
 | [B452](#b452) | new, 2026-10-08 (X45) | enabling | Each spec's and test's owner | Wording and tests X45 left narrower than they read | Found in X45; parked under D48 (D116) |
 | [B460](#b460) | new, 2026-10-08 (X46) | enabling | State reconciliation | A resolution record says which check proved its evidence | Found in X46; parked under D48 (D116); it adds an optional field to the attempt record |
 | [B461](#b461) | new, 2026-10-08 (X46) | enabling | Infrastructure services | The managed-service and artifact-server roles share their helpers, and Go checks the content root it decodes | Found in X46; parked under D48 (D116); defense in depth, since no input reaches either, and the role half moves the automation digest |
@@ -146,6 +146,29 @@ Alias cell.
 | [B463](#b463) | new, 2026-10-08 (X46) | enabling | Controller (privilege), Desired state and Infrastructure services | Host observations of what X46 proved only in-tree | Found in X46; parked under D48 (D116); each needs root on a host, which D59's closing run provides |
 | [B464](#b464) | new, 2026-10-08 (X46) | enabling | Each spec's and test's owner | Wording, tests and dead code X46 left | Found in X46; parked under D48 (D116) |
 | [B495](#b495) | new, 2026-10-12 (X48 review) | enabling | State reconciliation, with Managed OS, Substrate and Infrastructure services | The three-node lifecycle composition runs end to end with the real runner and controlled adapters | Found in X48's review; parked under D48 (D116): D125's operator gate already proves overlap on a host, and X48's tests qualify each part |
+| [B500](#b500) | new, 2026-10-12 (the 2026-10-11 M2 review) | enabling | Storage | One reviewed IBM Ceph release profile per language, checked across Go, Python and the docs | Found in the M2 review; no milestone depends on it: the pin repeats at about twelve sites that agree today, and the next release bump is the time to consolidate them |
+| [B503](#b503) | new, 2026-10-12 (the 2026-10-11 M2 review) | defect | Substrate and Secrets | Applying a generated BMC serving certificate proves its expiry and that its key matches | Found in the M2 review; no milestone depends on it: admission now proves the names and a fresh apply binds the stored certificate |
+| [B508](#b508) | new, 2026-10-12 (the owner's M2b fixture run) | defect | Secrets, with CLI | After a refused standard-input `secret set`, `secret check` names a remedy that works | Found in the M2b run; no milestone depends on it: since b3e48bcb6 the standard-input route is refused only under a policy that logs input |
+| [B510](#b510) | new, 2026-10-12 (the owner's M2b fixture run) | defect | Workspace | Every on-demand directory creation is durable for each writer that proceeds | Found reviewing B506's fix; no milestone depends on it: each window is microseconds wide and the winner's failed sync fails its own operation |
+| [B521](#b521) | new, 2026-10-13 (the owner's M2b Ceph run) | product | CLI and Lifecycle | A stage-selection plan says how many blocks the invocation will run and how wide that selection is | Found in the M2b Ceph run; no milestone depends on it: the step markers are correct, only the closing summary misleads |
+| [B522](#b522) | new, 2026-10-13 (the owner's M2b Ceph run) | product | Machine inventory, with CLI | A provided Machine whose blocks are done does not read as untouched in `machine list` | Found in the M2b Ceph run; no milestone depends on it: the column follows the spec, which ties the position to a Machine block that a provided Machine never has |
+| [B526](#b526) | new, 2026-10-13 (X74) | defect | State reconciliation, with CLI | `plan` refuses where `apply` refuses on recorded facts | Found in X74; no milestone depends on it: X74's `Build` field is shown only for a continuation `apply` would admit, and `apply` still refuses before any effect |
+| [B527](#b527) | new, 2026-10-13 (X74) | defect | State reconciliation, with Controller setup | A continuation proves the approved bundle holds this executable's automation before it records anything | Found in X74; no milestone depends on it: the runner refuses the automation difference before any effect, costing one resolution record |
+| [B528](#b528) | new, 2026-10-13 (X74) | defect | Controller setup, with State reconciliation | `setup --purge-old-bundles` keeps the bundle and retained resolution an incomplete operation's frozen closure needs | Found in X74; no milestone depends on it: it needs a fresh resolve that moved the execution closure while an operation is incomplete |
+| [B533](#b533) | new, 2026-10-13 (the X76 review) | defect | Storage | The Ceph observation and manager waits hold their contract at every transient edge | Found by the X76 review; no milestone depends on it: each case is transient, leaves no effect unproved and is recovered by a later apply |
+| [B537](#b537) | new, 2026-10-13 (the owner's M2b Ceph run) | safety | Storage | A bootstrap that failed before making any mon store is taken back and retried instead of forcing a destroy | Found in the M2b run; no milestone depends on it: destroy recovers it, and removing cluster files needs its own safety decision |
+| [B540](#b540) | new, 2026-10-13 (the X81 review) | safety | Storage | The pool block proves the pool it resumes or creates is newer than its attempt | Found by the X81 review; no milestone depends on it: both cases need an outside actor to recreate the pool during day-0 |
+
+### B82
+
+One additional managed-OS image, profile or entitlement variant beyond the
+install arms [B74](m2.md#b74) to [B78](m2.md#b78) carry. No concrete consumer is named
+yet; [B80](m2.md#b80)'s definition may supply one. **Exit evidence:** the intent gap, a deliberate API revision, renderer
+and executor parity and qualification.
+
+**Requires:** a concrete consumer beyond M2's qualified host arms.
+**Definition:** Candidate. Parked on 2026-10-11 (D129); no extra OS variant is
+required merely to close M2.
 
 ### B96
 
@@ -153,6 +176,13 @@ Collection metadata and naming polish, including the collection's sanity
 README, whose `missing-gplv3-license` note names only documentation stubs
 although the ignore file also exempts the real modules with no action plugin
 (found in X19). **Exit evidence:** `./scripts/ansible-check`.
+
+The 2026-10-11 M2b acquisition check also exposes pre-existing collection-wide
+sanity failures in `no-assert`, Python formatting/lint, shebang and module
+metadata checks. Correct them without changing strict input semantics or
+inventing a GPL grant; narrowly documented licensing exceptions preserve the
+existing licensing status. Targeted units/lint do not count as a full sanity
+pass.
 
 ### B97
 
@@ -214,6 +244,14 @@ metadata, inapplicable access reads no credential bytes, failed access emits no
 descriptor or sensitive result, and successful handoff or export preserves its
 payload and output boundary. These tests depend on the promoted use case and do
 not expand M1a availability.
+
+Narrowed on 2026-10-12 (D143 clause 9, pending the owner's review): `cluster
+list` and `cluster info` (B519,
+[X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) and
+managed-Ceph `cluster rsh` and `cluster exec` (B517,
+[X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) move to M2.
+This item keeps ContainerCluster sessions, the `oc` and `kubectl` handoffs and
+the remaining matrix.
 
 ### B102
 
@@ -483,7 +521,7 @@ A DNSServer's bind address defaults to the wildcard address, which collides with
 
 ### B334
 
-The emulated BMC runs as root, unconfined, with the libvirt socket, and serves plain HTTP with a basic-auth credential; [B301](delivered.md#x44--help-completion-contracts-and-ratchets) binds the examples' BMCs to loopback. A refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). D120 split the emulator's TLS with a generated certificate its client verifies out as [B446](m2.md#b446), in M4. **Exit evidence:** the refusal and the confined type, each with tests.
+The emulated BMC runs as root, unconfined, with the libvirt socket, and requires a basic-auth credential; its TLS half, a generated serving certificate its client verifies, landed in-tree under [B446](m2.md#b446) (in progress, X47; D120), and the endpoint no longer serves plain HTTP. [B301](delivered.md#x44--help-completion-contracts-and-ratchets) binds the examples' BMCs to loopback. A refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). D120 split the TLS out as B446, now in M2 (D128). The loopback bind and the confinement remainder stay parked. **Exit evidence:** the refusal and the confined type, each with tests.
 
 ### B335
 
@@ -497,9 +535,10 @@ The plan's template-delimiter refusal also scans native passthrough content, suc
 
 In a human invocation sudo's sudoers denial, such as `Sorry, user ... is not allowed to execute`, carries no `sudo: ` prefix, so the holding filter forwards it and only a JSON invocation gets the remedy naming a rule for the procfs re-execution; at a terminal the operator sees sudo's own text, while the operator guide says each refusal names which case applies (found in X39). Holding sudo's untranslated policy lines in a human noninteractive invocation, and printing one remedy line after an interactive refusal, would close it; otherwise the guide and the CLI spec say which sudo text means the rule is missing. **Exit evidence:** elevation rows in which a human invocation's policy denial ends with the mapped remedy, or the reworded guide and spec.
 
-### B346
+### FIPS access moved to M2
 
-The libvirt guest-agent identity proof and `machine rsh` and `exec` pin `ssh-ed25519` host keys, and it is unverified whether a FIPS-mode RHEL 9.8 controller's OpenSSH verifies an explicitly pinned Ed25519 key; if it refuses, lab-rhel cannot complete on such a controller and the identity path needs the key-type work [B73](m2.md#b73) does for physical installation (found in X39). **Exit evidence:** a recorded check on the D109 controller in FIPS mode before the real-hardware run, and, if it refuses, a pinned type the controller's policy admits on that path.
+[B346](m2.md#b346) moved to M2 on 2026-10-11 (D129) for its security-profile
+consumer.
 
 ### B348
 
@@ -854,16 +893,16 @@ with both listeners is fetched only over https.
 ### B451
 
 X45 proved these only in-tree, each for the first host that runs the
-lab-baremetal rehearsal or the xFusion observation (found in X45): the SELinux
+lab-baremetal rehearsal or the physical BMC observation (found in X45): the SELinux
 label of the delivered key files and of the `sshd_config.d` drop-in the
 Kickstart's `%post` writes in the chroot, so that sshd loads the key, and
 whether the drop-in's `HostKey` line limits sshd to the delivered key given the
 `sshd_config` the release ships; whether the installer image and the served
 tree carry the same label now that `chcon` references the served root for the
-public arm too; the iBMC's release time after an `EjectMedia` that answers 202,
+public arm too; the physical BMC's release time after an `EjectMedia` that answers 202,
 which the client polls for up to 24 times 5 seconds and no capture measures;
-whether the iBMC's virtual-media fetch accepts the generated P-256 serving
-certificate (U-11), read from its ClientHello; the iBMC's `EthernetInterfaces`
+whether the physical BMC's virtual-media fetch accepts the generated P-256 serving
+certificate (U-11), read from its ClientHello; the physical BMC's `EthernetInterfaces`
 collection and members on a powered-off server; the artifact unit's journal
 volume during a streamed ISO fetch against journald's rate limit, since one line
 is logged per completed range request; and the disk figures and the firewall
@@ -888,13 +927,15 @@ channel, in the infrastructure-services spec and in the doc comment of the
 private publication path, reads against the container cluster's agent image
 posted to a plain-HTTP emulated controller, an exception the container-clusters
 spec already records, so it needs a pointer to it; the docstring of the
-security-service discovery says the iBMC has a null top-level property where
-the capture shows it absent; the relaxed echo rule treats a device showing
+security-service discovery says the physical BMC under test has a null
+top-level property where the capture shows it absent, so it and its fixtures
+need to distinguish absent and null top-level properties; the relaxed echo rule treats a device showing
 `https://host/x.iso` as already holding `https://host:8443/x.iso`, so a device
 serving the same path on another port of the same host is taken as inserted,
 which is a recorded limit and a stronger proof is the owner's call; and the
 lab-baremetal example still declares the default `import-certificate`
-virtual-media trust, where the owner's iBMC needs `established`. **Exit
+virtual-media trust, where the owner's physical BMC under test needs
+`established`. **Exit
 evidence:** each stated in its owner's file or covered by a test that fails when
 its guard is removed, or withdrawn by the owner.
 
@@ -998,9 +1039,178 @@ its destroy in inverse order, with a mutation check that unwires the
 production bound or the invocation scope; `make quick`, `make docs-check`,
 `make race` and `make check`; or withdrawn by the owner.
 
+### B500
+
+The reviewed release, 9.9.1.2 with the discovery tag `v9.9.1-25074`, is written
+at about twelve sites across Go, Python, the examples and the specs. Each
+language keeps one reviewed release profile, and a check compares the profiles
+across languages and the docs so a bump cannot leave a stale copy (found by the
+2026-10-11 M2 review). Do it with the next release bump. **Exit evidence:** one
+profile per language, a cross-language check that fails when one differs, and a
+bump that moves each place together.
+
+### B503
+
+A generated BMC serving certificate is proved only for the names it covers, at
+admission, and a stored certificate when a fresh apply binds it. Its expiry and
+the match between its private key and public certificate are not proved before
+the emulator starts (found by the 2026-10-11 M2 review). **Exit evidence:**
+bind-time tests that an expired certificate and a mismatched key refuse before
+any effect, and that the remedy names the Secret.
+
+### B508
+
+After `secret set --password-stdin` refused with `secret.input` because sudo did
+not list its policy, `secret check` still named
+`bootwright secret set ... --password-stdin` as the remedy for the missing
+material: the route just refused. Since b3e48bcb6 the policy listing works on
+Fedora's sudo, so the refusal now happens only under a policy that logs input,
+and there the remedy should name the file flags. **Exit evidence:** a test that,
+under an input-logging policy, the missing-material remedy names
+`--password-file`/`--value-file` and not the standard-input flag.
+
+### B510
+
+Two durability windows remain around on-demand directory creation. Both were
+found while reviewing [B506](m1.md#b506)'s fix:
+
+- A writer whose plain open lands between a concurrent creator's `Mkdirat`
+  and its parent sync proceeds without syncing the parent itself.
+- `selectionfs` (`files_linux_amd64.go`, the `.bootwright` creation) accepts
+  `EEXIST` but skips the parent sync on that path.
+
+**Exit evidence:** each writer that proceeds on a created directory has either
+synced its parent or observed the creator's completed sync, with a test for
+each path, or the owner accepts the window.
+
+### B521
+
+A stage-selection plan closes with `Starts N of M blocks, K deferred` and
+`Concurrency`, as the [plan presentation](../cli/output.md#lifecycle-and-status-results)
+requires. The deferred count does not separate two things: selected blocks that
+wait on a block this invocation starts, which run in the same invocation, and
+blocks outside the selection, which do not. `Concurrency` reports the width of
+the whole plan, not the selection. In the owner's M2b Ceph run (628b35f58),
+`apply --stage infra-components,substrates` previewed `Starts 1 of 20 blocks,
+18 deferred` and then ran 5 blocks. `apply --stage machines` previewed `Starts 4
+of 20 blocks, 10 deferred` and ran 7. Every selection previewed `9 waves, widest
+7 steps`. **Exit evidence:** an updated contract and a golden for a stage
+selection whose closing fields count blocks that start now, blocks that start
+later in this invocation, and blocks not selected, and that report the
+selection's own width, or the owner keeps the current fields.
+
+### B522
+
+`machine list` reports the `controller` Machine (OS `provided`) as LIFECYCLE
+`not-applied` after the controller stage completed blocks placed on it. Under
+the [lifecycle position rule](../cli.md#resource-inspection-and-explicit-access),
+`not-applied` means no frozen plan names the Machine. The position is derived
+only from a Machine's own realization block, which a provided Machine never
+has, so the column reads as if nothing touched it (found in the owner's M2b Ceph
+run, 628b35f58). **Exit evidence:** a decided position for a provided Machine,
+such as `applied` once every block placed on it is done or a position of its
+own, in the spec and a `machine list` golden.
+
+### B526
+
+`Service.Plan` computes the same-blocks proof of a continuation under another
+build and applies neither it nor the closure and binding checks, contrary to
+the [preview contract](../state-reconciliation.md#dependency-safety-during-recovery)
+that a plan is presented only for a continuation that does not refuse, so
+`plan` can preview a continuation its `apply` refuses with `lifecycle.state`.
+X74 shows its `Build` field only where the proof passed and leaves the
+difference alone. **Exit evidence:** a test that `plan` refuses, naming the same
+block and remedy as `apply`, wherever `apply` refuses on recorded facts, and a
+spec sentence that says so.
+
+### B527
+
+No lifecycle gate proves that the approved bundle holds this executable's
+automation before work starts, so `status` offers the continuation of another
+build before `setup` has run. The first resolution then fails at the runner's
+automation check (`ansiblerunner` refuses any byte difference) and costs a
+resolution record, and the remedy names the check rather than `setup`.
+**Exit evidence:** a continuation, and the `status` offer, that refuse before
+any record with the command that projects this executable's automation, with a
+test for each.
+
+### B528
+
+`setup --purge-old-bundles` reads no operation record. After a fresh resolve
+moved the execution closure, it retires the only bundle and retained resolution
+that hold an incomplete operation's frozen closure, and `closureRefusal`'s
+remedy then names no command that restores it. X74 does not reach this: a
+continuation that carries the same closure onto other automation keeps the
+current receipt's bundle, which retirement never removes. **Exit evidence:** a
+purge that keeps what an incomplete operation's closure needs, or a remedy that
+names the way to restore it, with a test.
+
+### B533
+
+The independent review of
+[X76](delivered.md#x76--the-live-cluster-phases-as-cephadm-and-ceph-behave)
+left seven minor edges, each transient, each without an unproved effect and
+each recovered by a later apply: `bootstrap_state` still refuses
+`native-command` while the manager restarts, because `prove_seed`'s
+orchestrator reads after `bootstrap-original-ready.json` and
+`prove_mounted_seed`'s `verify_tunnel_configuration` are not wrapped by the
+manager-served handling, against the storage spec's "an observation never
+refuses it"; in observation a manager whose unit is activating or
+deactivating while its container runs is pending without its mounts,
+privileged flag and RW flag being inspected in that snapshot, so the
+"contradicts the request refuses either way" sentence overstates; `tunnel_mount`
+proves the redeployed manager's mounts before it waits for the manager, so a
+container not yet running when cephadm returns refuses
+`native-tunnel-unproved`; `enroll` can reach its fence with no retry budget
+left, because the retries before it may use the whole 480 s horizon; a wait's
+last iteration can overrun the horizon by up to 120 s, leaving little of the
+640 s budget for the proofs after it; `readiness_detail` joins entries with
+`.`, which daemon names also contain; and the storage spec says every phase
+that restarts the manager waits for it, where only `tunnel_mount` does, and
+"repeats only while that manager restarts", where any `native-command`,
+`native-timeout` or `native-output` failure repeats for up to 300 s.
+`Transport.call(phase="bootstrap")` also ignores a `timeout` argument, which
+no caller passes. **Exit evidence:** each edge closed with a test, or the spec
+narrowed to the implemented rule, and the detail separator made unambiguous.
+
+### B537
+
+A `cephadm bootstrap` that fails after `bootstrap-attempt.json` is written
+leaves a partial seed, and by design no later apply starts a second bootstrap
+over it, so the only exit is destroy. The 2026-10-13 run left exactly such a
+seed on rhel-01 (an empty `mon.rhel-01` directory and a stopped, unit-less mon
+in `cephadm ls`, from the failure X79 fixes) and had to be destroyed with its
+machines. A bootstrap that provably made no mon store, started no daemon and
+captured no output could instead be taken back for its own fsid only
+(`cephadm rm-cluster --force --fsid <fsid>` without `--zap-osds`, the attempt
+record cleared in the same journal) and retried. **Exit evidence:** the
+recovery decision recorded, and, if adopted, a test that a seed with any mon
+store, unit, container or captured output still refuses, and one that the
+empty seed is removed and re-bootstrapped.
+
+### B540
+
+The pool block's lost-reply resume identifies the pool it created by name,
+replicated type, CRUSH rule and this operation's attempt record; X81 dropped
+the PG count from that list when the autoscaler is on. A pool deleted and
+recreated under the same name between the create and the resume satisfies
+all of them, and the resume would then record its ID, set its size and
+initialize it for RBD. Separately, a same-name pool created by someone else
+between the empty listing and `osd pool create` makes the create succeed and
+is recorded as this operation's. Both need an outside actor during day-0.
+Recording `osd dump`'s `pool_max` in the attempt record before the create and
+requiring the resumed pool's `pool_id` to exceed it (Ceph never reuses pool
+IDs) would rule out every pool that existed before the create; a
+`create_time` bound would narrow the rest. **Exit evidence:** the
+fingerprint decision recorded, and, if adopted, tests that a resume or a
+create whose pool's ID does not exceed the recorded `pool_max` refuses
+`pool-identity`.
+
 ## Retired
 
-IDs no longer issued. Where an item took one over, its line here names that
+Historical IDs no longer issued in their original meanings. D131 reuses
+M2a/M2b only for the [new M2 submilestones](m2.md#submilestones); their dated
+aliases below retain the earlier meanings. Where an item took one over, its line here names that
 item, whose Alias cell names the old ID too. Searching an old ID over
 `specs/milestones/` finds its item's Alias cell, its record in
 [delivered](delivered.md), or its line here.
@@ -1021,12 +1231,18 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | C27 | before 2026-09 | Delivered by [X3](delivered.md#x3--machine-ssh-sessions-and-host-trust). |
 | R1 | 2026-09-28 | Merged into [B19](m1.md#b19) with C28, whose outcome it was. |
 | M2a, M2b, M3, M4, M5, M6 | 2026-09-28 | These rows became items whose Alias cells name them; the numbers M3 to M6 now name milestones. |
-| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), [B73](m2.md#b73), [B61](m3.md#b61) and [B71](m3.md#b71); M-letter IDs are no longer issued. |
+| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), [B73](m2.md#b73), [B61](m3.md#b61) and [B71](m3.md#b71); these M-letter IDs are no longer issued. |
 | N1 to N5, L2, L4, L5, L6 | 2026-09-28 | Became items whose Alias cells name them; L1 and L3 never existed. |
 | K01 to K73 | 2026-09-28 | The audit plan's cluster tokens, defined nowhere in the repository; the grouping stays in Git history. |
 | Phase 0 to Phase 4 | 2026-09-28 | The audit plan's ordering; slices carry order now. |
 | M1h's (D1) to (D6) | 2026-09-28 | Capability labels that collided with the decision log; they became prose. |
 | D13, D15 | never issued | Recorded so nobody looks for them. |
+| B497 | 2026-10-12 | Answered by [D143](#decisions): M2b's acceptance is an ordinary staged apply recorded as an owner-accepted ledger row ([B476](m2.md#b476)), and there is no runtime registry to promote. |
+| B498 | 2026-10-12 | Answered by [D143](#decisions): converge. [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply) retires the second executable and its engine (B513, B512, B518, B515). |
+| B501 | 2026-10-12 | Folded into B513 ([X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) under [D143](#decisions), which removes the three allow-list edges. |
+| B502 | 2026-10-12 | Moot under [D143](#decisions): no fixture state exists, and a leftover anchor refuses at index read with a named remedy (B513, [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)). |
+| B505 | 2026-10-12 | Moot under [D143](#decisions): B512 ([X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) keeps a failed resolution's adapter output in its attempt file. |
+| B507 | 2026-10-12 | Moot under [D143](#decisions): the example's `acceptance.py` and `test_acceptance.py` are deleted by B513 ([X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)). |
 
 ## Decisions
 
@@ -1118,7 +1334,7 @@ Requires cell as `owner decision: <question>`.
 - **D57** (2026-10-05, the owner): B17 to B24: X23 is dropped, and X24 keeps B19 to B22, re-planned with the role and request fixes of its lanes. B17 keeps its ID for the managed-OS work area's relocation, and B303 splits from it with per-invocation scratch, disjoint namespaces and the two-concurrent-installs test; B24 keeps its ID for cross-context scoping and an attributed refusal, and B304 splits from it with the exemption of an invocation's own in-flight jobs. B18, B23, B303 and B304 move to M3, B18 recording that context reads refuse during an apply and taking B265 into its exit evidence, and the parked B195, B237, B239, B250, B251, B259, B260 and B265 join them there.
 - **D58** (2026-10-05, the owner): B72: the lab-rhel ledger row of 2026-10-05, which matches B72's acceptance baseline and gate, is accepted for B72 too, so B72 leaves M4 for X38's record; the defects the run found stay M1 items.
 - **D59** (2026-10-05, the owner): M1's closing operator gate is the extended lab-rhel run on a clean build of X44's landing, on a host missing at least one native root so that setup or the controller stage downloads through the Python path: setup with the new bundle, media, context, secrets, a staged apply, preflight, plan, apply, `status` with its four JSON checks, `machine list` and `--power-status`, `machine exec` and `rsh`, restart, a destroy refused and then `machine stop`, destroy, a fresh apply, a host restart, `machine start` and `stop`, destroy, `status` after the destroy, the unit and time checks and an explicit `qemu-img info --force-share` read. One owner-accepted row completes the real-host evidence of B19, B20 and B277.
-- **D60** (2026-10-05, the owner): the real xFusion test follows M1, which closes without physical installation, and B73 to B78 stay in M4, B74 to B77 outside any planned slice. On the owner's explicit request of 2026-10-05, X45, the slice the session's plan called XB, runs out of sequence right after X43 and X24, in the same digest window, and delivers B73's repair and B305, the Redfish client on the owner's xFusion iBMC. A run on a disposable RHEL 9.8 controller, the lab-baremetal rehearsal and one xFusion server with a reduced first-test profile, run from a separate RHEL 9.8 controller (D109) and recorded as an observation, follow it.
+- **D60** (2026-10-05, the owner): the real physical-BMC test follows M1, which closes without physical installation, and B73 to B78 stay in M4, B74 to B77 outside any planned slice. On the owner's explicit request of 2026-10-05, X45, the slice the session's plan called XB, runs out of sequence right after X43 and X24, in the same digest window, and delivers B73's repair and B305, the Redfish client on the owner's physical BMC. A run on a disposable RHEL 9.8 controller, the lab-baremetal rehearsal and one physical server with a reduced first-test profile, run from a separate RHEL 9.8 controller (D109) and recorded as an observation, follow it.
 - **D61** (2026-10-05, accepted by the owner from the session's recommendations): B279 and B295: `spec.libvirt.uri` is an enumeration holding `qemu:///system`, which closes the command transports escaping cannot.
 - **D62** (2026-10-05, accepted by the owner from the session's recommendations): B280 and B282: an operator whose account comes from a directory service resolves through NSS with a pinned, root-owned `getent` under the same single-entry and clean-home checks, `/etc/passwd` serving only where `getent` is absent, and a `sudo -i` root shell resolves as direct root.
 - **D63** (2026-10-05, accepted by the owner from the session's recommendations): B281: store-wide verification stays, but a damaged context's refusal names the context, the store-relative entry and the errno, and `context delete --name <it> --purge` runs over exactly that context; per-context isolation is parked as B325.
@@ -1162,16 +1378,16 @@ Requires cell as `owner decision: <question>`.
 - **D101** (2026-10-05, accepted by the owner from the session's recommendations): B98 stays parked for pruning the narration; the amendment allowing short rationale and safety-invariant comments in the architecture spec, with a shrink-only per-package ratchet on the comment count, splits out as B336 in M1.
 - **D102** (2026-10-05, accepted by the owner from the session's recommendations): B301 adds a Not-yet-met line for removals that release service socket reservations without proving the sockets free; the proof is parked as B323, for the per-capability evidence functions B19 creates.
 - **D103** (2026-10-05, accepted by the owner from the session's recommendations): B73: the per-machine installer ISO is published only under the private token subtree and withdrawn after completion, the in-installer `curl --cacert` fetch stays, and private delivery requires a verified controller-to-BMC leg, because InsertMedia carries the token URL.
-- **D104** (2026-10-05, accepted by the owner from the session's recommendations): B305 and B319: on the xFusion iBMC, under `established` trust, the client reads `VerifyCertificate` and `HttpsTransferCertVerification` before the insert and refuses private delivery when either reads false, the operator importing the CA out of band, within B73's repair; the manager SecurityService root-CA import follows as B319, before the first real-hardware row. D121 (2026-10-07) amends which flag the read-back counts.
+- **D104** (2026-10-05, accepted by the owner from the session's recommendations): B305 and B319: on the physical BMC under test, under `established` trust, the client reads `VerifyCertificate` and `HttpsTransferCertVerification` before the insert and refuses private delivery when either reads false, the operator importing the CA out of band, within B73's repair; the manager SecurityService root-CA import follows as B319, before the first real-hardware row. D121 (2026-10-07) amends which flag the read-back counts.
 - **D105** (2026-10-05, accepted by the owner from the session's recommendations): the parked B96 to B107, B122, B161 to B167, B171, B180, B181, B193, B194, B196, B197, B199, B226, B227, B229 to B232, B235, B238, B243, B245, B247, B248, B256, B258, B261 to B263, B266 to B269, B273 and B274 stay parked.
 - **D106** (2026-10-05, accepted by the owner from the session's recommendations): B288: a RHEL controller accepts `lorax` and `xorriso` the operator installed from the host's own entitled, vendor-signed repositories, proved by presence like any root; an entitled-source adapter is parked as B330.
 - **D107** (2026-10-05, accepted by the owner from the session's recommendations): B292 and B297: the execution foundation keeps its byte-exact guard at every launch and gains a named check, a refusal naming package, build and file, a documented hold procedure and a regeneration tool in B292; in B297, within X43's window, setup qualifies vendor-signed glibc and libgcc within the qualified minor against the RPM database and records the proved digests as the receipt's requirement.
 - **D108** (2026-10-05, accepted by the owner from the session's recommendations): B292: on a FIPS-mode controller host, Bootwright's runtime brings its own cryptography, which the docs state and preflight reports beside the host's FIPS mode; a FIPS-qualified runtime is parked as B331.
-- **D109** (2026-10-05, accepted by the owner from the session's recommendations): the real-hardware test runs this build on a separate RHEL 9.8 controller in a subnet the BMC network reaches on the artifact ports, touching nothing on the owner's bastion; B280's host guidance says so.
+- **D109** (2026-10-05, accepted by the owner from the session's recommendations): the real-hardware test runs this build on a separate RHEL 9.8 controller in a subnet the BMC network reaches on the artifact ports, touching nothing on the owner's bastion; B280's host guidance says so. A test profile grants no authority over any other host.
 - **D110** (2026-10-05, accepted by the owner from the session's recommendations): B301 and B73: the operator owns the controller host's firewall, and the docs list each listener's ports by source with firewalld commands; a per-socket readiness check in preflight and plan is B318, before B78.
 - **D111** (2026-10-05, accepted by the owner from the session's recommendations): B282: operator-named paths are opened by a bounded helper under the invoking credentials, which passes the descriptors to root, and root keeps every proof.
 - **D112** (2026-10-05, accepted by the owner from the session's recommendations): B283: the machines spec documents what `auth.operatorIdentity` does today; running its client under the invoking account is parked as B332, after B282.
-- **D113** (2026-10-05, accepted by the owner from the session's recommendations): B305: generated serving certificates stay P-256; B305 records the iBMC's RSA premise with its check and, as the workaround, a `contextStore` RSA-2048 certificate set with `secret set`; a `keyType` for generation follows only if that check fails.
+- **D113** (2026-10-05, accepted by the owner from the session's recommendations): B305: generated serving certificates stay P-256; B305 records the physical BMC under test's RSA premise (it has fetched only from an RSA-2048 self-signed server, so whether it accepts a P-256 serving certificate is unproved) with its check and, as the workaround, a `contextStore` RSA-2048 certificate set with `secret set`; a `keyType` for generation follows only if that check fails. No hardware certificate-compatibility result is recorded here.
 - **D114** (2026-10-05, accepted by the owner from the session's recommendations): B299: a DNSServer keeps its wildcard bind default, the new pre-start check names a colliding socket, and the examples and docs declare explicit binds; a derived default is parked as B333.
 - **D115** (2026-10-05, accepted by the owner from the session's recommendations): B301: the examples bind their emulated BMCs to loopback, and the docs state that a privileged or cleartext-credential listener binds loopback or a host-only address unless its network is trusted; emulator TLS, a refusal of a non-loopback bind address and a confined SELinux type are parked as B334.
 - **D116** (2026-10-06, the owner): every safety or defect follow-up a slice finds in M1's journeys joins M1, folded into the next fitting slice or a final sweep slice before the closing run (D59); enabling and wording follow-ups stay parked. This amends D56 and D48 for follow-ups found from X39 on: a safety or defect follow-up found in M1's journeys joins M1 on the planned sweep slice X46, or on an earlier planned slice whose lane already owns its files, with the Alias `new, <date> (<slice>); attached to M1 on <date> (D116)`; an enabling, wording, test-depth or knowledge follow-up stays parked under D48. M1 takes X39's parked safety and defect follow-ups B339, B340, B342 to B344, B347, B349 to B351 and B356 on X46.
@@ -1187,5 +1403,120 @@ Requires cell as `owner decision: <question>`.
 - **D126** (2026-10-09, the owner): finish X44's remaining implementation while deferring the Go toolchain upgrade B470 requires. B470 and the failing vulnerability gate remain unmet; the deferral changes no exit gate or security requirement and declares neither X44 nor M1 complete.
 - **D127** (2026-10-09, the owner): rebase M1 on current main and implement X48 there, so the three-node RHEL fixture and future examples use all dependency-ready parallelism within the existing bound. B466 realizes shared profile publication under implementation/request `os-package-tree-v1` and evidence `os-package-tree-evidence-v1`, advances installation requests to `os-install-anaconda-v8`, and records effect, replay, inverse and compatibility boundaries in Managed OS. This also names X48 as the slice retiring libvirt's provider/Machine name collision refusal through separate durable namespaces. B470's existing upgrade deferral and every M1 exit gate remain unchanged.
 - **D128** (2026-10-10, the owner): keep M1's scope, sequence and completion gates unchanged. M2 is full managed IBM Ceph 9.9.x provisioning on libvirt+sushy and physical bare metal/BMC, with every provider provisioning feature qualified through B472, B80 and B81; M3 is full OpenShift cluster provisioning on those two provider paths, with complete coverage defined by B473. Move the former M4 Ceph scope to M2, former M5 first add-ons to M4, former M6 OpenShift Virtualization to M5, former M7 ACM/Argo CD/GitLab to M6, and former M2 standalone native rendering to the final M7. Move B70's shared physical erase gate from M3 to M2; managed storage projection and lifecycle qualification no longer wait for standalone rendering or OpenShift. B, X and prior D identifiers remain fixed, and dated history retains its original milestone numbers. Each scope transferred as a whole keeps its items and delivery evidence.
-- **D139** (2026-10-11, the owner): "every backlog to milestone M1 done, except the ones that i need to run myself the test in real bare metal and the one related to a go version that is not available in my machine". Recorded meaning: `make vulncheck`'s go1.26.8 standard-library findings (B470) no longer hold any other M1 item. An item completes when every other exit gate passes (`make check`'s other steps, `make race`, `make docs-check`, `./scripts/ansible-check` and its own tests), or awaits operator acceptance when it also has a host gate; B470 alone carries the vulnerability gate, on its own slice X67; M1 completes only after B470 and the owner's host gates. It amends D126's sentence that the deferral "declares neither X44 nor M1 complete" for X44's items and X48 to X51 (M1 itself stays incomplete), and it settles the 2026-10-11 audit's finding that X46's second pass completed under a different standard in favour of completion, so X46's second pass stays delivered. D129 to D138 are recorded on the M2 branch, not yet merged here.
+
+- **D129** (2026-10-11, the owner): define M2 before implementation and deliver
+  its Ceph journey in order: minimal three-node libvirt+sushy, full virtual
+  provider coverage, full physical BMC coverage, then two-data-site stretch
+  with a third-site monitor-only tiebreaker. Split B80/B81's combined outcomes
+  into independently qualified feature families and acceptance checkpoints;
+  B472 owns the release/coverage definition and B474 its executable projection.
+  Plan X52 to X66 alongside retained X47, with the [M2 page](m2.md) owning
+  their dependencies. B82 is parked without a concrete consumer; B346 joins
+  M2 for its FIPS access profile. The [provider matrix](../storage-coverage.md)
+  records native restrictions and alternate profiles; full coverage never
+  claims unsupported combinations. B491 must settle the online-cleanup versus
+  machine-quiescence contract, and B70 remains blocked on physical erase
+  evidence. This is a specs-only definition request: M1 gates remain, no
+  implementation slice is activated and no host operation is authorized.
+
+- **D130** (2026-10-11, the owner): M2 supports every cluster size IBM supports
+  for the qualified release and deployment mode. Features follow the provider's
+  requirements, including per-site/per-role capacity, topology and service
+  compatibility. Acceptance profiles are examples, not product limits; include
+  larger qualifying profiles for supported features that require them.
+  B472 records the support ranges and requirements, B474/B79/B490 qualify
+  admission and internal bounds, and B487/B488 cover the service-specific
+  stretch profiles.
+  The definition remains planning-only and changes no implementation authority.
+
+- **D131** (2026-10-11, the owner): name the M2 submilestones for future
+  reference: M2a detailed scope/task definition, M2b simple three-node
+  libvirt+sushy Ceph, M2c full-featured virtual Ceph, M2d full-featured physical
+  bare-metal/BMC Ceph, and M2e full-featured stretch for all provider-supported
+  desired-state configurations and sizes. The [M2 page](m2.md#submilestones)
+  owns their mapping and exit gates. M2a is definition only; executable work
+  remains in the existing slices mapped to M2b through M2e. This expressly
+  permits the suffixed submilestone IDs while retaining M2's single status and
+  all B/X/D identifiers. Pre-2026-09-28 M2a/M2b aliases keep their historical
+  meanings. Squash the M2 planning commits into one commit over the M1 base;
+  no implementation or host operation is authorized.
+
+- **D132** (2026-10-11, the owner): include the complete Ceph API and operator
+  authoring review in [M2a](m2.md#m2a). Preserve useful existing abstractions
+  and native declarative formats where they reduce operator learning; expose
+  imperative-only storage resources as declarative intent. Make small,
+  justified corrections, but obtain owner approval with current/proposed
+  examples before adopting substantial API changes. The
+  [review](../storage-api-review.md) records findings and pending proposals;
+  this decision does not approve those proposals, authorize implementation,
+  or declare M2a complete. B494 records the review's bounded admission defects.
+
+- **D133** (2026-10-11, the owner): approve the two substantial M2a API
+  proposals reviewed under D132. P1 consolidates daemon configuration and
+  placement into complete native Ceph service documents, with Bootwright
+  retaining proved Machine/site ownership, release pins and protected secret
+  bindings. P2 keeps pools/filesystems and adds separately owned declarative
+  resources for imperative-only objects; NFS exports and SMB resources retain
+  their native formats. The [native service](../storage-native-api.md) and
+  [resource](../storage-resources.md) specs own the target and migration;
+  B474 delivers the common schema path and each family item its qualified
+  extensions. This approves the breaking v1alpha1 authoring target, not a
+  version change, runtime implementation, sensitive-output command or host
+  operation. M1 and implementation promotion gates remain unchanged.
+
+- **D134** (2026-10-11, the owner): accept M2a's definition baseline and
+  explicitly authorize M2b implementation, its generic three-node example,
+  a locally ignored machine-specific copy, static execution review and an
+  operator setup/provision/test/cleanup runbook. M1's outstanding checks and
+  owner acceptance remain promotion gates. No privileged operator test or
+  push is authorized. Test runs resolve the latest provider release available
+  at setup and pin its exact artifacts for the whole run. Keep verified native
+  Ceph SSH mandatory: P3's proposed provider-default exception is rejected;
+  bootstrap remains gated until the entitled IBM artifact proves verification.
+
+- **D135** (2026-10-11, the owner): approve P4's verified-tunnel design and
+  qualification. Add `clusterSSH.transport: verified-tunnel` while retaining
+  required verification: an outer pinned OpenSSH connection forwards only to
+  the same authenticated host's loopback SSH endpoint, with no direct fallback.
+  Protected MGR mounts, staged bootstrap, server forwarding restrictions and
+  restart/failover/recovery are part of qualification. Approval changes the
+  target API and trust boundary; it grants no provider-default exception,
+  operator-evidence bypass or automatic artifact promotion. B472/B79/B80 own
+  the remaining exact-artifact and runtime evidence.
+
+- **D136** (2026-10-11, the owner): approve P5's protected RBD canary retention
+  until explicit cluster teardown. The fixed fixture owns a 16 MiB image,
+  retains its ID before writing/reading at most 1 MiB by ID, closes the client
+  and reports `cleanup: cluster-teardown-required`. No immediate deletion by
+  name is permitted; exact disposable-cluster removal owns the retained data.
+  This changes the test retention contract, not public input schemas or
+  ordinary cluster qualification gates.
+
+- **D137** (2026-10-11, the owner): approve P6's optional libvirt
+  `dataDisks[].media: ssd`. Explicit SSD data disks use virtio-SCSI with
+  `rotation_rate="1"`, starting at `/dev/sda`; root remains `/dev/vda` and
+  omission preserves the existing virtio-blk layout. Mixed profiles use
+  independent target sequences. Frozen requests, domain inspection, guest
+  device observation and native Ceph class must agree. This declares virtual
+  guest media behavior rather than physical host performance; existing
+  realizations keep their original requests and require teardown before a
+  changed layout is installed. Actual guest/runtime acceptance remains open.
+
+- **D138** (2026-10-11, the owner): clarify M2b's entitlement-driven artifact
+  acquisition. After an operator imports the registry credential into the
+  Entitlement's selected Secret, Bootwright resolves the provider image and
+  downloads required IBM images/packages itself. Remove the manual image
+  pre-pull and digest-discovery prerequisite from the example and runbook.
+  Preserve immutable resolution, original credential custody, verified TLS,
+  current qualification gates and the separate Red Hat media/source boundary.
+  This corrects the authorized M2b flow without changing public Storage schemas
+  or authorizing an agent-run privileged or entitled test.
+
+- **D139** (2026-10-11, the owner): "every backlog to milestone M1 done, except the ones that i need to run myself the test in real bare metal and the one related to a go version that is not available in my machine". Recorded meaning: `make vulncheck`'s go1.26.8 standard-library findings (B470) no longer hold any other M1 item. An item completes when every other exit gate passes (`make check`'s other steps, `make race`, `make docs-check`, `./scripts/ansible-check` and its own tests), or awaits operator acceptance when it also has a host gate; B470 alone carries the vulnerability gate, on its own slice X67; M1 completes only after B470 and the owner's host gates. It amends D126's sentence that the deferral "declares neither X44 nor M1 complete" for X44's items and X48 to X51 (M1 itself stays incomplete), and it settles the 2026-10-11 audit's finding that X46's second pass completed under a different standard in favour of completion, so X46's second pass stays delivered. D129 to D138, recorded on the M2 branch, precede it there.
 - **D140** (2026-10-11, taken by the session, pending the owner's review): `machine exec` and `cluster exec` stop at the payload, as `cluster oc` and `cluster kubectl` already did: the first operand that is not a flag starts the remote command and every later token is payload verbatim, flag-shaped or not, so a remote command's own `--context` or `--name` can never retarget the session. Bootwright flags go before the command; `--` is needed only when the payload's first token is flag-shaped, and a required Bootwright flag written after the payload is refused with where flags go. This replaces the earlier rule under which a recognized flag after the first operand still took effect; `TestPayloadParsing`, `TestPayloadTailNeverRetargetsTheSession` and `TestAFlagWrittenAfterThePayloadIsRefusedWithWhereFlagsGo` prove it.
+- **D141** (2026-10-12, taken by the session, pending the owner's review): vendor and device names were removed from D60, D104, D109 and D113 and the X45 record on 2026-10-11 for confidentiality; their operative content, restored here, is unchanged by the redaction. The constraints (D109's bastion), the observed firmware behaviors, the check procedures and the RSA-2048 workaround (D113) that the redaction dropped are written back in neutral wording ("the physical BMC under test"), in those decisions, in the X45 record and in the [Redfish knowledge page](../../.agents/knowledge/redfish-physical-bmc.md), and no vendor, model, firmware, serial or host name returns.
+- **D142** (2026-10-12, the owner): before 1.x no backward compatibility is wanted. An incomplete operation is bound to the blocks it froze, not to the build that froze them: another build, meaning other automation, another version or commit, or any build stamped `modified`, continues it exactly when it freezes the same blocks, every frozen member except the words they are presented in, and the execution closure check stays. No converter or older reader is added for any record or request version. B504 joins M1 as an exception to D48 and is delivered by X69, an out-of-sequence enabling slice implemented on the M2 branch at the owner's request.
+- **D143** (2026-10-12, the owner; the clauses after the owner's words are taken by the session, pending the owner's review): "The only binary that should implement all features of bootwright is bootwright itself; the operator declares desired state and runs bootwright apply, with --stage for phases; validation through machine exec / cluster exec; a bootwright command prints the dashboard access info", and, on the M2 branch, "Yes. Work and apply changes on branch M2". This settles [B498](#retired): converge, so the `bootwright-ceph-qualification` executable and its fixture engine are retired. It settles [B497](#retired): M2b's acceptance is an ordinary staged `bootwright apply` over the declared StorageCluster, StoragePool and StorageClient, recorded as an owner-accepted ledger row ([B476](m2.md#b476)); no fixture evidence closes an item, and there is no runtime registry to promote. [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply) delivers it. Taken by the session, pending the owner's review: (1) each build supports one reviewed, code-pinned release: IBM Storage Ceph 9.9.1.2, image `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9` tag `v9.9.1-25074`, packages `20.2.1-405.el9cp`, cephadm-ansible `5.0.3-1`; a different declared release, repository or tag refuses at admission naming the pinned one, and a newer release needs a reviewed pin bump. This amends D134's "latest provider release available at setup". (2) Apply resolves the pinned tag through the Entitlement's registry Secret to its linux/amd64 child manifest digest in a block that completes before any native effect and is frozen for continuation; an authored `sha256:` digest is admitted only when it equals that resolution; the digest is not code-pinned until B472's lock adds it. (3) `verified-tunnel` is the only supported transport; `native` stays refused (D134, D135). (4) The empty qualification registry and its refusal are removed by B512. Pinned-release admission, verified host keys, data-loss authorization and the frozen plan still protect apply. (5) Every guest proof the fixture made moves into ordinary per-host blocks (B518, B499) and is not dropped. (6) A managed cluster whose hosts are all Bootwright-owned virtual Machines that the same destroy removes is retired with them, with no native call (B515); removal while hosts survive stays [B491](m2.md#b491). (7) The dashboard is enabled after readiness, with user `admin`, a generated password in produced custody revealed only by `bootwright cluster info --secrets --name`, and Ceph's self-signed certificate whose SHA-256 `cluster info` prints. Bootwright never rotates it, and a password changed outside Bootwright refuses as drift. This is the public interface B489 left for owner approval, narrowed to that credential; client export stays B489, and certificates, roles, SSO and monitoring stay B479. (8) B476's 1 MiB RBD test is run by the operator through `bootwright cluster exec` with the bootstrap node's administrator keyring, keeping D136's retention (a retained 16 MiB image, no deletion by name, removed by teardown); Bootwright's canary and StorageClient-material harness retire. (9) `cluster list` and `cluster info` become available for every kind; `cluster rsh` and `cluster exec` connect for managed Ceph (node by name or FQDN, default first in canonical order, argv verbatim, exit 255 for every refusal before the session); ContainerCluster sessions stay [B101](#b101). (10) The owner's request is the dated waiver of M1, X52 and X53 for X70's implementation, and X70 joins D134's exception to the WIP limit; promotion still requires them. (11) A context holding a fixture anchor is retired with the build that prepared it; a later build refuses it, and its only fallback is `bootwright context delete --name <ctx> --purge --allow-orphans`, which abandons that context's Machines, disks and reserved bindings.
+- **D144** (2026-10-13, the owner): "check why those steps for vms were not performed in parallel. remember that any step that could be ran in parallel must be done as that, to optimize provision time". Failed blocks are retried concurrently under the admission rules of a first attempt (dependencies `done`, stage selected, once per invocation, exclusive resources free, the engine bound), beside every startable block; unproved effects are still resolved first with nothing beside them, and a selection that admits no failed block still refuses `lifecycle.stage`. This replaces the rule that a retry runs alone. [X71](delivered.md#x71--concurrent-retries) delivers it as B523.
+- **D145** (2026-10-13, taken by the session, pending the owner's review): the owner proposed to continue an operation under a rebuilt binary by comparing declared versions in place of the content digest, on the premise that the content digest hashes Ansible code. It does not: it is the implementation's contract identity, computed from its identity, its request and evidence versions and its effect pins, and no capability package reads the automation. A fix confined to automation, or to Go code that moves no version or pin, such as X72, X73, X75 and X76, therefore moves the automation digest and no content digest, request byte or version, so D142's rule already continues it once `setup` has projected the fix; the 35-minute destroy of the M2b run was advised, not required. Dropping the content digest from the rule would let a pin change (a Ceph image, the cephadm binary, a package set, a host path) continue an operation half done under the old pin. So: (1) D142's rule stands: a block continues under another build exactly when it freezes the same blocks, content digest included, and nothing here narrows a refusal. (2) A contract guard replaces the human rule that an automation change that alters what an effect is must move its content digest, where a tool can check it: a golden per implementation pins its content digest beside its Go request and evidence schemas and the persisted format versions quoted in the collection's embedded plugins and roles, and changing any of them while the content digest stays fails the build and cannot be recorded (`TestEveryImplementationMovesItsContentDigestWithItsContract`). It sees versions and Go schemas, not meaning: a raw-JSON member, such as the cluster services the Ceph core and host requests carry, is fingerprinted as opaque, and an unquoted, dynamically built or unversioned format is not seen. (3) Every attempt and resolution record names the build it ran under, an optional `build` member that moves no record version. A consequence for the owner to review: the member is compatible one way only, since a build from before X74 decodes records closed and refuses one that carries `build` as "lifecycle record is malformed or unsupported", so once a build that writes `build` has worked an operation, no earlier build can continue or remove it, and the removal under the build in hand is the way out. The alternative, moving the attempt record version, would have stranded every live operation at once. (4) A destroy continuation keeps X69's rule: its removal is derived from the frozen plan and runs under the build in hand, as a fresh removal does, and its proof compares what the removal decides, the authorizations it consumes, its groups and that each block's capability reads its frozen request; it cannot compare content digests, because the removal copies them from the frozen plan. An unknown removal block is observed by the build in hand, whose closed evidence decoding refuses evidence it cannot read, and every removal attempt and resolution names the build that ran it. (5) A continuation previewed under another build names the build that registered it and the steps this build runs, and `status` says whether the build in hand is another build. The preview has no JSON form because `plan`, `apply` and `destroy` have no JSON mode, so `status --output json` carries `anotherBuild` instead. (6) No content digest, request version, record version or plan encoding moves, so the owner's live operation, registered by 91855545e, continues under a build that contains X74. [X74](delivered.md#x74--continuation-under-a-rebuilt-binary) delivers it as B525.
+- **D146** (2026-10-13, the owner): "i had to run twice apply to make it work. it shouldn't be needed. check if you can fix it", after an `apply` resolved an unknown Ceph pool block as partly realized and stopped, and a second `apply` retried it and the client after it. This settles B529: a resolution is not an attempt. An invocation still observes a block at most once and never observes one its own attempt left unproved, but a block its resolution leaves `failed` is retried by that same invocation once every unproved effect is resolved, under the admission rules of any retry (stage selected, dependencies `done`, exclusive resources free, the engine bound), so its dependents start there too. A failed resolution admits further first attempts as a proved outcome does; a failed attempt, including that retry, still admits none. A fresh `destroy`'s resolutions of the apply it supersedes retry nothing. The resolution's progress row stays running into the retry and is settled `failed` when the invocation stops before the retry starts. It amends D144's "once per invocation" only in that a resolution no longer counts as the block's turn. [X82](delivered.md#x82--resolution-and-retry-in-one-invocation) delivers it as B529.

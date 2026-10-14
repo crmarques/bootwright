@@ -287,6 +287,10 @@ and the embedded `ansible` assets have roles of their own.
 why. A consumer of a realized Machine reads `substrate.TargetFor` and imports no
 substrate arm package.
 
+Storage's dependency-proof port reads detached original-apply facts.
+Composition binds the pure Substrate disk and Managed OS host-key validators;
+the storage capability does not decode another owner's record format.
+
 A lifecycle capability, like every application package that consumes the
 lifecycle port vocabulary, reads no JSON itself. It freezes its request through
 `reconciliation.Freeze`, reads it back through `reconciliation.ThawVersion`,
@@ -746,7 +750,7 @@ They accept these phases:
 | `group` | lifecycle | adapter → runner | `phase`, `group`, `status` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, `evidence`: an object of at least one member | none | last, once | Absent when the channel closes, the run has no result. |
 | `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp`, an acquisition class with `source`, or a native class | none | last, once, in place of `completed`: `release-stamp` while an `openshift-clients` tool is being installed; an acquisition class (`dns`, `certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`, `integrity`, `trust`, `storage`) naming the native package being staged, between `prepared` and `native`, or the tool being installed; a native class (`solver-conflict`, `missing-candidate`, `signature`, `database`, `transaction`, `postcondition`, `foundation`, `timeout`, `internal`) after `loaded` | The run fails with the [release-stamp refusal](controller.md#selection-and-command-journeys), or the diagnostic Go gives the [class](controller.md#selection-and-command-journeys), naming the source's host, instead of the generic adapter failure, even when the adapter's failed exit is read first; `internal` keeps the generic failure, and a native class after an authorized `native` is `controller.unknown`. |
-| `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason instead of the generic adapter failure, even when the adapter's failed exit is read first; the runner closes the acknowledgement channel and kills nothing, so the adapter is left to end on its own. |
+| `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply; optionally `detail`: at most 160 letters, digits and `_.:@-` naming a closed cause, optionally with the code site that refused, or an exception type and code site, never a value | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason, its message followed by any `detail`, instead of the generic adapter failure, even when the adapter's failed exit is read first; the runner closes the acknowledgement channel and kills nothing, so the adapter is left to end on its own. |
 
 `outcome` is `changed` or `unchanged`, and the controller runner refuses
 `unchanged` after an authorized `native`. `status` is `running`, `ok`, `failed`
@@ -877,11 +881,11 @@ An allowlisted registry resolves from explicit validated state:
 
 Supported matrices belong to the owning domain contract. When an operation is
 made immutable, each block freezes its selected implementation identity and
-content digest, and the operation freezes the automation it runs and the
-Python and Ansible
+content digest, and the operation freezes the Python and Ansible
 [execution closure](state-reconciliation.md#dependency-safety-during-recovery)
-it runs in; continuation refuses another implementation, automation or closure
-rather than silently selecting one. Recovery follows
+it runs in; continuation refuses another implementation or closure rather than
+silently selecting one, and runs another build's automation only where that
+build freezes the same blocks. Recovery follows
 [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 
 For an add-on, implementation selection also binds the exact package, catalog

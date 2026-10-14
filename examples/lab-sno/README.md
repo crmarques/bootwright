@@ -23,6 +23,7 @@ disk is written by the cluster's own installer rather than by a Kickstart.
 | [`sno-cluster-admin-ssh-key`](secret-descriptors/sno-cluster-admin-ssh-key.yaml) | The key authorized for the `core` account on every cluster node. |
 | [`artifact-server-tls`](secret-descriptors/artifact-server-tls.yaml) | Generated serving certificate; its subject alternative names must cover every address an HTTPS endpoint serves. |
 | [`lab-bmc-credentials`](secret-descriptors/lab-bmc-credentials.yaml) | Generated credentials the emulated BMC answers with. |
+| [`lab-bmc-tls`](secret-descriptors/lab-bmc-tls.yaml) | Generated serving certificate for the emulated BMC HTTPS listener at `127.0.0.1`. |
 
 ## What a single-node cluster does differently
 

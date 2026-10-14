@@ -180,7 +180,7 @@ Every document has exactly these top-level fields:
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `apiVersion` | string | yes | Exactly `bootwright.io/v1alpha1`. |
-| `kind` | string | yes | One of the 26 registered kinds; case-sensitive. |
+| `kind` | string | yes | One of the 27 registered kinds; case-sensitive. |
 | `metadata` | object | yes | Contains only `name` and optional `labels`. |
 | `metadata.name` | string | yes | DNS label matching `[a-z0-9]([-a-z0-9]*[a-z0-9])?`. |
 | `metadata.labels` | object | no | String-to-string map; keys emit lexically in effective state. |
@@ -259,7 +259,7 @@ for kind-of-thing discriminators. The who-runs-it axis is always
 
 ## Kind catalog
 
-The `v1alpha1` catalog contains exactly 26 authored kinds:
+The `v1alpha1` catalog contains exactly 27 authored kinds:
 
 | Schema catalog group | Kinds | Architectural semantic owner |
 | --- | --- | --- |
@@ -270,7 +270,7 @@ The `v1alpha1` catalog contains exactly 26 authored kinds:
 | Substrates | `InfraProvider` | Substrate |
 | Infrastructure services | `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer` | Infrastructure services |
 | Container clusters | `ContainerCluster` | Container cluster |
-| Storage | `StorageCluster`, `StoragePlacementPolicy`, `StoragePool`, `StorageFilesystem`, `StorageObjectGateway`, `StorageNFSExport`, `StorageExport` | Storage |
+| Storage | `StorageCluster`, `StoragePlacementPolicy`, `StoragePool`, `StorageClient`, `StorageFilesystem`, `StorageObjectGateway`, `StorageNFSExport`, `StorageExport` | Storage |
 | Add-ons | `ClusterAddon`, `ClusterAddonProfile`, `ClusterAddonBinding` | Add-ons |
 | Reserved operator automation | `CustomPlaybook` | Desired state owns boundary validation; no executable domain capability is implied. |
 
@@ -380,7 +380,7 @@ Canonical effective output:
    `MachineInstallProfile`, `NetworkConfig`, `InfraProvider`, `Proxy`,
    `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`,
    `ContainerCluster`, `StorageCluster`, `StoragePlacementPolicy`,
-   `StoragePool`, `StorageFilesystem`, `StorageObjectGateway`,
+   `StoragePool`, `StorageClient`, `StorageFilesystem`, `StorageObjectGateway`,
    `StorageNFSExport`, `StorageExport`, `ClusterAddon`,
    `ClusterAddonProfile`, `ClusterAddonBinding`, `CustomPlaybook`, then
    `Secret`;

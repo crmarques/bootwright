@@ -207,6 +207,19 @@ Dependency readiness never establishes service ownership, and
 [controller setup](controller.md#host-identity-and-shared-prerequisites)
 reserves nothing.
 
+Before image acquisition, publication or start, each service with an explicit
+bind address also reads its placement host's assigned addresses through a
+bounded, complete kernel query. An address absent from that observation, or
+present only as tentative or DAD-failed, refuses with `lifecycle.state` on the
+service, naming the socket. An unavailable or incomplete query proves no
+absence and fails before effects. Wildcard binds keep their existing readiness
+contract. This check assigns no address and changes no interface. A service
+on a managed bridge still waits for the provider that creates that bridge.
+The remedy restores the declared address or retires the frozen operation with
+its original build before importing corrected addresses, endpoints and TLS
+certificate names. Tests include
+`TestUnassignedBindRefusalNamesTheServiceAndFrozenInputRecovery`.
+
 ## Managed artifact serving
 
 The `ArtifactServer` capability serves static content over the declared

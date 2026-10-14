@@ -9,7 +9,7 @@ this page defines no accepted input, compatibility rule, or delivery state.
 ## Current infrastructure-service shape
 
 The earlier generic infrastructure-service decision below has been superseded.
-The current desired-state catalog contains 26 kinds: `Proxy`, `DNSServer`,
+The current desired-state catalog contains 27 kinds: `Proxy`, `DNSServer`,
 `NTPServer`, `ArtifactServer`, `Registry`, and `LoadBalancer` replace
 `InfraComponent`. Each declares managed deployment or external access through
 its own `management` field. Direct consumer references replace Environment
@@ -19,6 +19,11 @@ the former Environment controller proxy and nested Machine install proxy.
 This relationship adds no kind or inferred Machine role. Additional
 installation trust uses the cluster's direct Secret references; Environment
 has no separate CA list to merge into consumers.
+
+The approved M2 native-service consolidation adds minimal `StorageClient`
+admission and retires duplicate daemon helper fields. The
+[storage schema](../../specs/api/storage.md) owns the current supported shape
+and remaining qualification gates.
 
 This update does not reinstate the other shapes from the older 27-kind
 proposal. The [service schema](../../specs/api/infrastructure-services.md) owns

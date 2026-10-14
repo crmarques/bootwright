@@ -1,11 +1,13 @@
 # Physical Redfish BMCs: what firmware actually does
 
-The xFusion iBMC facts here are captured: the owner's iBMC captures of
-2026-05-22, from a 2288H V7 at iBMC 3.08.05.85, are archived outside the
-repository, and each fact names the capture it comes from;
-[the xFusion iBMC as captured](#the-xfusion-ibmc-as-captured) gathers them. The
-iDRAC-style and OpenBMC facts are still recalled from the pre-rewrite
-implementation of the bare-metal boot flow, re-read from that branch when
+The physical BMC facts here are captured: the owner's captures of the physical
+BMC under test are archived outside the repository, and each fact names the
+capture it comes from; [the physical BMC as
+captured](#the-physical-bmc-as-captured) gathers them. Vendor, model, firmware
+version and host identity are withheld for confidentiality, and the facts
+below are unchanged by that. The facts about other controllers are still
+recalled from the pre-rewrite implementation of the bare-metal boot flow,
+re-read from that branch when
 [substrates](../../specs/substrates.md#adapter-boundary) was written. The spec
 owns required behavior; this page records the firmware behavior that shaped it,
 so an implementation does not rediscover each item by failing against hardware.
@@ -19,15 +21,15 @@ the divergences below on the first real server.
 `sushy-tools` exposes VirtualMedia under the **system**:
 `/redfish/v1/Systems/<id>/VirtualMedia/Cd`. Other firmware exposes it only
 under the **manager** reached through the system's `Links.ManagedBy`, and
-iDRAC-style controllers expose the *same* resources under both, so a client that
+Controllers in a vendor-specific style expose the *same* resources under both, so a client that
 collects from both views must de-duplicate on the resolved URL or it probes and
 acts twice.
 
-The captured xFusion iBMC is a third case. Its system declares `VirtualMedia`,
+The captured physical BMC is a third case. Its system declares `VirtualMedia`,
 and `/redfish/v1/Systems/1/VirtualMedia` and `/redfish/v1/Managers/1/VirtualMedia`
-both answer 200, each listing CD, USBStick and iBMAUSBStick under its own URLs:
-two URLs present one device (the owner's iBMC capture of 2026-05-22 15:55Z, both
-VirtualMedia collections and all six members). URL de-duplication cannot merge
+both answer 200, each listing a CD and two USB-stick members under its own URLs:
+two URLs present one device (the capture of 15:55Z, both VirtualMedia
+collections and all six members). URL de-duplication cannot merge
 them, and the client takes the first optical candidate in sorted order, which
 is the manager's CD.
 
@@ -59,19 +61,19 @@ long before anything reads a boot device.
 Poll the resource to the state that was asked for, within a bound, and prefer
 `ForceOn` when the system advertises it in `ResetType@Redfish.AllowableValues`.
 
-`InsertMedia` is worse: the captured iBMC answers 202 with a Task body and a
+`InsertMedia` is worse: the captured BMC answers 202 with a Task body and a
 `Location` of `/redfish/v1/TaskService/Tasks/<n>/Monitor`, and the Task resource
 is the only place that reports the outcome. Its task reads `Running`, then
 `TaskState` `Exception` with `TaskStatus` `Warning` and `Messages` as **one
-object**, not a list: `iBMC.1.0.ConnectionFailed` when the BMC could not fetch
-the image (the owner's iBMC capture of 2026-05-22 15:09Z, insert task poll 2),
-`iBMC.1.0.ConnectionOccupied` when media was still connected (the capture of
+object**, not a list (`<registry>` stands for the withheld message registry prefix): `<registry>.ConnectionFailed` when the BMC could not fetch
+the image (the capture of 15:09Z, insert task poll 2),
+`<registry>.ConnectionOccupied` when media was still connected (the capture of
 15:55Z, insert task poll 2). The client reads either shape. A completed insert
 task was never captured. Normalize `/TaskService/TaskMonitors/<id>` and a
 trailing `/Monitor` to the Task resource, poll to a terminal state, and then
 confirm against the VirtualMedia resource itself.
 
-The read-back must allow for the echo. The captured iBMC reports a mounted
+The read-back must allow for the echo. The captured BMC reports a mounted
 image **without its non-default port**: an image requested at
 https://address:8443/name.iso reads back as https://address/name.iso (the
 capture of 15:55Z, the device's first read). So the client compares scheme,
@@ -104,7 +106,7 @@ the attempt.
 
 This one silently installs nothing. The BMC reports `On` the instant chassis
 power applies, minutes before UEFI reads the pending one-time
-`BootSourceOverrideEnabled=Once` / `Target=Cd` during POST. An iBMC that reads
+`BootSourceOverrideEnabled=Once` / `Target=Cd` during POST. A BMC that reads
 boot configuration live during POST will see a `Continuous`/`Hdd` override
 written seconds after power-on and boot the existing disk instead — the node
 comes up on its old operating system and the run fails much later, at an
@@ -132,7 +134,7 @@ does not list `Once` in `BootSourceOverrideEnabled@Redfish.AllowableValues`:
 the emulator reports every override as `Continuous` and advertises nothing, but
 one that offers `Once` and reports `Continuous` did not apply what was asked.
 The bound, 12 reads 5 s apart, is borrowed from the reference's power-state
-poll. On the captured iBMC the `Once`/`Cd` PATCH answered 200 with the system
+poll. On the captured BMC the `Once`/`Cd` PATCH answered 200 with the system
 body already reporting `Once`/`Cd`, and the next read reported it, so the
 read-back was satisfied on its first read (the capture of 15:55Z, the boot
 override and the system read after it). That system reports
@@ -142,8 +144,8 @@ answer with `ETag` headers; whether its PATCH needs `If-Match` was not
 captured.
 
 `VerifyCertificate` on a VirtualMedia member is read-only on some firmware,
-which answers 501, 400 or 405. The captured iBMC answers its PATCH 501
-`iBMC.1.0.PropertyModificationNotSupported` (the capture of 15:55Z, the
+which answers 501, 400 or 405. The captured BMC answers its PATCH 501
+`<registry>.PropertyModificationNotSupported` (the capture of 15:55Z, the
 VerifyCertificate PATCH). Bootwright's client tolerates exactly those, and only
 when it **restores** verification after an eject: a controller that cannot
 write the property leaves nothing to restore. Importing a certificate and
@@ -152,9 +154,9 @@ would fetch under a trust nobody declared (see the next section). The client
 ends any write at once on 401 and 403, which mean the account authenticated
 but lacks the privilege.
 
-The captured iBMC does **not** report a missing privilege that way. A PATCH of
+The captured BMC does **not** report a missing privilege that way. A PATCH of
 the manager's `HttpsTransferCertVerification` from an account without the
-privilege answered **400** `iBMC.1.0.PropertyModificationNeedPrivilege`, not
+privilege answered **400** `<registry>.PropertyModificationNeedPrivilege`, not
 401 or 403 (the capture of 15:09Z, the HTTPS transfer verification PATCH). The
 client's restore reads a 400 as a read-only property, which is harmless there
 because the device property answers 501 and the restore never writes the
@@ -176,7 +178,7 @@ but not always sufficient. The
 [DMTF CertificateCollection schema](https://github.com/DMTF/Redfish-Publications/blob/main/json-schema/CertificateCollection.json)
 publishes that collection only beneath `Systems/{id}/VirtualMedia/{id}` (and
 the ResourceBlocks copies), never beneath a manager, so a manager-scoped device
-such as iBMC's may offer no collection at all; the client follows the link the
+such as the captured BMC's may offer no collection at all; the client follows the link the
 member itself carries and builds no path. The
 [DMTF Certificate schema](https://github.com/DMTF/Redfish-Publications/blob/main/json-schema/Certificate.json)
 defines `CertificateType` `PEM` as a single certificate and `PEMchain` as a
@@ -189,9 +191,13 @@ settled after a proved eject:
 - `import-certificate` reads the collection in full (at most 8 members, failing
   closed beyond that), posts the server's certificate unless its DER is
   already there, turns `VerifyCertificate` on unless it reads `true`, and reads
-  the member back.
+  the member back. Where a manager publishes `HttpsTransferCertVerification`
+  (D121), the import writes no device flag, and a private insert still needs
+  every published switch on.
 - `disable-verification` writes `VerifyCertificate` `false` only when it reads
-  `true`; a refused write fails, because verification stays on.
+  `true`; a refused write fails, because verification stays on. Where a manager
+  publishes `HttpsTransferCertVerification` it refuses before any write,
+  naming that switch (D121, [B447](../../specs/milestones/m2.md#b447)).
 - There is **no fallback**. A member without `Certificates`, or a
   `VerifyCertificate` write answered 501, 400 or 405, fails the import naming
   the two exceptions an operator may declare instead, and a post refused while
@@ -200,34 +206,41 @@ settled after a proved eject:
   attempt itself wrote, and removal deletes only the member that is the given
   certificate.
 
-On the captured iBMC neither CD view links `Certificates`, so
+On the captured BMC neither CD view links `Certificates`, so
 `import-certificate` refuses there before any write; and `disable-verification`
-writes nothing, because `VerifyCertificate` already reads `false` and the
-manager's switch is what decides. Whether iDRAC-style or OpenBMC controllers
+used to write nothing, because `VerifyCertificate` already reads `false` and
+the manager's switch is what decides, so an operator who declared it was told
+nothing while the insert proceeded under whatever the switch held. It now
+refuses, naming the switch (B447). Whether other vendors' controllers
 expose `Certificates` on their device, accept a single-certificate `PEM`, and
 apply `VerifyCertificate` to the next insert rather than only to a new session
 is still unknown.
 
 Under `established`, an insert carrying private material reads, writing
-nothing, the device's `VerifyCertificate` and the `HttpsTransferCertVerification`
-of every security service a manager links, and refuses unless the device reads
-`true` and every service that reports the setting reads `true`. On the captured
-iBMC both read `false`, so the operator first turns HTTPS transfer verification
-on and imports the artifact server's CA out of band, through the iBMC, with an
-account holding the Security Configuration privilege.
+nothing, the `HttpsTransferCertVerification` of every security service a
+manager links. D121 (which amends D104) makes a published switch the only
+decider: every switch that is published must read `true`, and the device's
+`VerifyCertificate` counts only on firmware whose managers publish none, where
+an absent flag reads as off. On the captured BMC the switch and the device flag
+both read `false` in every capture, so the operator first turns HTTPS transfer
+verification on and imports the artifact server's CA out of band, through the
+BMC, with an account holding the privilege that governs security configuration.
 
 **UNVERIFIED premise, with its check.** Whether the device's
 `VerifyCertificate` reads `true` once `HttpsTransferCertVerification` is on was
-never captured. After enabling it, GET
-`/redfish/v1/Managers/1/VirtualMedia/CD` and record `VerifyCertificate`. If it
-stays `false`, every private delivery to this firmware refuses, and the
-decision behind the read-back must be revisited before the real-hardware run.
+never captured, and its device flag is read-only. After enabling the switch,
+GET `/redfish/v1/Managers/1/VirtualMedia/CD` and record `VerifyCertificate`,
+and record whether media releases after an `EjectMedia` that answers 202
+([B305](../../specs/milestones/m2.md#b305)'s observation). Under D121 a false
+device flag no longer refuses a private delivery, so the capture records the
+flag for the owner's acceptance; whether the BMC's fetch then verifies the
+server is the observation's question.
 
-## The xFusion iBMC as captured
+## The physical BMC as captured
 
-The owner's iBMC captures of 2026-05-22 come from an xFusion 2288H V7 at iBMC
-3.08.05.85 (the capture of 15:55Z, the system and manager reads). They hold no
-completed install, so they settle shapes, not an end-to-end run.
+The owner's captures come from one physical BMC under test (the capture of
+15:55Z, the system and manager reads). They hold no completed install, so they
+settle shapes, not an end-to-end run.
 
 - **Media actions.** The CD device, on both views, advertises the standard
   `InsertMedia` and `EjectMedia`, each with an ActionInfo, beside an OEM
@@ -250,16 +263,16 @@ completed install, so they settle shapes, not an end-to-end run.
   [B319](../../specs/milestones/m2.md#b319)'s.
 
 **Reachability is the BMC's.** The BMC fetches the image itself, over its own
-network. The host-name image URL failed with `iBMC.1.0.ConnectionFailed` (the
+network. The host-name image URL failed with `<registry>.ConnectionFailed` (the
 capture of 15:09Z, insert task poll 2) while the IP image URL, under the same
 trust settings, was presented as mounted by the capture of 15:55Z. Prefer an IP
 endpoint for the BMC's fetch, and check route, DNS and firewall from the BMC
 network, not from the controller.
 
-**Serving-certificate premise.** The iBMC has fetched only from an RSA-2048
+**Serving-certificate premise.** The physical BMC has fetched only from an RSA-2048
 self-signed server (the capture of 15:55Z, the artifact endpoint's TLS probe),
 while Bootwright's generated serving certificates are P-256
-([secrets](../../specs/secrets.md)). The iBMC's own HTTPS server enables
+([secrets](../../specs/secrets.md)). The BMC's own HTTPS server enables
 ECDHE-ECDSA suites (its security service's `SSLCipherSuites`), but its
 virtual-media ClientHello was never captured, so whether it accepts a P-256
 server is unproved.
@@ -332,9 +345,9 @@ is simply not polled, and the device read-back decides. This is the
 applied to Redfish, not an observed firmware behavior.
 
 `TransferProtocolType` must match the scheme of the image URL. The captured
-iBMC answers an http image URL with `TransferProtocolType` `HTTP` with 400
+BMC answers an http image URL with `TransferProtocolType` `HTTP` with 400
 `Base.1.0.ActionParameterValueFormatError` before it creates any task (the
-owner's iBMC capture of 2026-05-22 09:26, insert attempt 1); with Bootwright's
+capture of 09:26, insert attempt 1); with Bootwright's
 HTTPS artifact endpoint the value is `HTTPS` and the BMC must either trust that
 certificate or have verification off for the fetch.
 
@@ -362,7 +375,7 @@ refuses a bare-metal install address that does not.
 
 ## How to stay vendor-neutral
 
-The reference implementation supported iBMC, iDRAC-style and OpenBMC
+The reference implementation supported the captured BMC and other vendors'
 controllers with no vendor branch anywhere, and the technique is worth keeping
 exactly: **discover capabilities from the controller's own metadata, and let
 the metadata decide**. A vendor name never appears in a condition.
@@ -370,7 +383,7 @@ the metadata decide**. A vendor name never appears in a condition.
 - **Actions are collected from two places.** A resource's `Actions.<name>` is
   the standard location; `Oem.<vendor>.Actions.<name>` is where a vendor puts
   its own. Walking both, and recording which one an action came from, finds
-  xFusion's `#VirtualMedia.VmmControl` without knowing that xFusion exists.
+  a vendor's `#VirtualMedia.VmmControl` without knowing which vendor it is.
 - **An OEM action is used only when its `@Redfish.ActionInfo` proves it fits.**
   The reference accepted `VmmControl` only when its ActionInfo declared both an
   `Image` and a `VmmControlType` parameter, and the latter's `AllowableValues`
@@ -389,11 +402,12 @@ the metadata decide**. A vendor name never appears in a condition.
   the proved `VmmControl`, adding the presented `Image` only when its
   ActionInfo marks `Image` as `Required`. The reference's Disconnect payload
   was not recorded, so this rule is **not observed on hardware**. The captured
-  iBMC never needs it, because it advertises the standard `EjectMedia`.
+  BMC never needs it, because it advertises the standard `EjectMedia`.
 
-The reference used one fixed value, the iBMC certificate slot (`RootCertId` 8);
-which slot the manager's import takes is
-[B319](../../specs/milestones/m2.md#b319)'s to settle.
+The reference used one fixed value, the certificate slot the captured BMC's
+import used (`RootCertId` 8). No fixed slot number is a portable default: the
+manager's import must discover and qualify its slot selection, which
+[B319](../../specs/milestones/m2.md#b319) settles.
 
 ## Prove by observation, not by response status
 
@@ -417,7 +431,7 @@ read-back, treats an answer that is not a readable resource as not yet the
 state, so only exhaustion fails it. Its
 [tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_boot.py)
 drive four shapes through urllib, the emulator, a manager-scoped, a dual-view
-and a redacted xfusion shape built from the captures, and the
+and a redacted shape built from the captures, and the
 [discovery readings](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_redfish_discovery.py)
 are tested as pure functions.
 
@@ -444,7 +458,7 @@ rehearsable without hardware. A refusal names each declared NIC the inventory
 lacks, by its declared name and address, and each member that proved nothing,
 by its position, never a value the controller reported.
 
-**UNVERIFIED on the xFusion iBMC.** Its system links `EthernetInterfaces`, but
+**UNVERIFIED on the physical BMC under test.** Its system links `EthernetInterfaces`, but
 no capture reads the collection. The check: with the server powered off, GET
 `/redfish/v1/Systems/1/EthernetInterfaces` and each member, and record whether
 every member reports `MACAddress` or `PermanentMACAddress`. A member reporting

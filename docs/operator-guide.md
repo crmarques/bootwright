@@ -285,7 +285,7 @@ to the operator. Read the
 [listener contract](../specs/security.md#listener-exposure) before choosing a
 bind address: wildcard addresses expose every matching interface, DNS has no
 client authentication, and the emulated BMC has root access to libvirt and
-serves a basic-auth credential over HTTP. The emulated lab BMC stays on
+requires basic authentication over verified HTTPS. The emulated lab BMC stays on
 `127.0.0.1:8000`; it needs no LAN firewall opening.
 
 Open only the listeners a declared client needs. The lab defaults below are
@@ -345,7 +345,7 @@ same sockets and the same guest bridge.
 | --- | --- | --- |
 | [lab-rhel](../examples/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, a session through exec and rsh, a restart, a settled replay, a removal refused while the guest runs, a fresh apply and a host restart | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; next, M1's closing run ([D59](../specs/milestones/backlog.md#decisions)) |
 | [lab-sno](../examples/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
-| [lab-baremetal](../examples/lab-baremetal/README.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish controller, its installer image and host key published privately; the emulated rehearsal needs an https emulated controller, [B446](../specs/milestones/m2.md#b446) | [B73](../specs/milestones/m2.md#b73) operator gate, not run |
+| [lab-baremetal](../examples/lab-baremetal/README.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish controller, its installer image and host key published privately; the HTTPS emulated rehearsal still needs a CA trust chain accepted by the physical BMC contract, [B446](../specs/milestones/m2.md#b446) | [B73](../specs/milestones/m2.md#b73) operator gate, not run |
 
 Run each block from the repository root, one line at a time, and keep the
 sequence exactly as run: the ledger records it. After each operation, `status`
@@ -392,9 +392,9 @@ bundle a context is bound to. Run `setup` again after such a build;
 `preflight controller` reports the incompatible retained bundle and `apply`
 refuses rather than executing automation the receipt does not cover.
 
-An operation left incomplete by the previous build cannot be continued under
-the new one, because a continuation runs the automation it froze. Remove it
-instead: a fresh `destroy` supersedes any apply that did not complete and runs
+An operation left incomplete by the previous build that the new one cannot
+continue, as the paragraph on another build below says, is removed instead: a
+fresh `destroy` supersedes any apply that did not complete and runs
 under the build in hand, which is the ordinary loop when the repair is to the
 role that failed. An apply interrupted with Ctrl-C takes the same road, and the
 removal resolves each effect whose outcome the interrupt lost before it plans
@@ -421,9 +421,25 @@ the command, or run `bootwright context delete --name <context> --purge
 --allow-orphans` and remove the objects the refusal names by hand. Nothing
 re-binds the current Secrets in the lost binding's place.
 
-Changing a frozen block's Go request or plan shape changes its digests, so an
-operation registered by an earlier build can be neither continued nor removed
-by this one. Destroy or purge any live context before switching builds.
+Another build continues an incomplete apply only where it freezes the same
+blocks: planned again from the operation's frozen input, every step keeps its
+request, implementation, content digest, dependencies and claims, and only the
+words a step is presented in may differ. An incomplete destroy continues when
+the removal derived again from its own frozen plan consumes the same
+authorizations and every step's capability reads its frozen request. A fix that
+changes only automation, or only Go code that moves no version or pin, therefore
+continues the failed or unknown step once `bootwright setup` has run; run
+`setup` first, since the continuation runs the bundle the setup receipt names.
+An unknown step is observed first: when that leaves it failed, the same `apply`
+retries it and goes on with the steps after it. A build that would freeze a step
+differently refuses the continuation and names that step; `bootwright destroy --context <context>`
+under that build takes back what the operation owns, and the next `apply` plans
+afresh. A build that changes a frozen request's version or the plan's shape can
+do neither, so destroy with the build that applied it before switching. Do not
+switch back either: a build from before X74 cannot read the attempt and
+resolution records a later build wrote, which name the build that ran them, so
+once such a build has worked an operation, the removal under the build in hand
+is the way out.
 
 A build that changes the local keyring's format cannot open a keyring the
 earlier format wrote: every access to it, `secret encryption init` included,
@@ -470,9 +486,10 @@ effects.
 
 M1 also needs D59's extended [lab-rhel journey](../examples/lab-rhel/README.md#run-it)
 on a clean committed build. Before the new build touches a host, retire live
-contexts with the build that applied them as the
-[milestone status](../specs/milestones.md#status) requires. Use a disposable host
-missing at least one native root so setup or the controller stage acquires a
+contexts with the build that applied them where the
+[milestone status](../specs/milestones.md#status) requires it, which a fix
+confined to automation does not. Use a disposable host missing at least one
+native root so setup or the controller stage acquires a
 package through the private Python path; an already-prepared host does not
 qualify that part of the gate. Keep a local run record outside Git.
 

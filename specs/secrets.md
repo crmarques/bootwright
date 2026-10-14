@@ -268,7 +268,8 @@ call and is cleared when it returns, a call ended by cancellation included
 `TestBoundedConsumersOfTwoContextsReadTogetherAndLeaveTheKeyringAsTheyFoundIt`).
 Binding and release occur outside the lifecycle
 operation's own store transaction, because acquisition holds the same store
-lock. [Produced material](#produced-material) is the reverse: it is published
+lock.
+[Produced material](#produced-material) is the reverse: it is published
 and withdrawn only inside that transaction, through the secret area it lends.
 A binding an operation froze that can no longer be reopened, because the
 keyring no longer lists it or cannot read its material, is never re-bound from

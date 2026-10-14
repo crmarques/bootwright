@@ -64,3 +64,15 @@ Only the three fixed names cross, and `safeAssignment` re-checks the name
 against `controller.ProxyEnvironmentNames` and the value against printable
 ASCII, so no authored value can introduce another variable into a setuid
 invocation even if the caller passed one.
+
+## Listing the policy takes no `-u`
+
+On 2026-10-12, Fedora 43's sudo 1.9.17p2 printed its usage text and exited 1
+for `sudo -n -u '#0' -ll` and for `sudo -n -u root -l`. That is `-u` with
+`-l` and no command. The same host answered `sudo -n -ll` with `a password is
+required`, so that form parses. The input-logging probe sent the `-u` form, so
+every `secret set --password-stdin` refused with `secret.input` (sudo did not
+list its policy) even after `sudo -v`. The probe now sends the
+[specified](../../specs/secrets.md) `sudo -n -ll`. The default runas user is
+root, and runas-specific Defaults still appear under `Runas and Command-specific
+defaults`.

@@ -643,7 +643,8 @@ tests.
 `TestAPhysicalKickstartNeverClearsADiskItDidNotName`,
 `TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot`,
 `TestDevicePathRejectsNewline`, `TestLifecycleConcurrencyBound`,
-`TestFailedBlocksAreRetriedOneAtATime`,
+`TestFailedBlocksNamingOneResourceAreRetriedOneAtATime` (one shared resource
+only since D144),
 `TestContinuationRefusesWhenTheContextChangedBeforeMutation`,
 `TestPublicationLeavesNoStageOnFailure`, `TestTransitionTablesMatchSpec`,
 `TestDiagnosticCodesMatchOutputSpec`, `TestDocumentedBoundsMatchCode`,
@@ -3110,7 +3111,7 @@ refuses a content root with a `..` component ([B435](#x46--the-safety-and-defect
 a failed unit after a failed apply ([B436](#x46--the-safety-and-defect-sweep-of-m1)) and three continuation
 edges ([B437](#x46--the-safety-and-defect-sweep-of-m1)). Under D48 eight were parked: B438 to B445.
 
-### X45 — private installer delivery and the xFusion iBMC
+### X45 — private installer delivery and physical Redfish variants
 
 **Owner:** Substrate and Managed OS, with Infrastructure services. A slice of
 M4 delivered out of sequence on the owner's request (D60), on 2026-10-08 as one
@@ -3172,9 +3173,10 @@ journal for a failed fetch, and why the emulated rehearsal cannot run yet. The
 managed-OS, infrastructure-services, substrates and machines specs and the
 operator guide state it.
 
-**Outcome, B305:** the collection's one Redfish client drives the owner's xFusion
-iBMC as its captures of 2026-05-22 show it, proved by a redacted `xfusion`
-fixture running every parametrized operation. An echo that names no port
+**Outcome, B305:** the collection's one Redfish client drives the physical BMC
+under test as the owner's captures show it, proved by a redacted fixture of that
+captured shape running every parametrized operation. Physical qualification
+remains a separate gate. An echo that names no port
 matches the inserted image while a different explicit port still refuses; the
 InsertMedia body is exactly `Image`, `Inserted` and the transfer protocol; a
 task's one-object `Messages` yields its message id; a device presenting other
@@ -3193,9 +3195,9 @@ and the bytes, with the error log kept at warn. The MAC proof stays strict and
 its refusal names each declared NIC the inventory lacks and each member that
 proved nothing by position, never a reported value. The knowledge page on
 physical BMCs is rewritten from the captures without host names or serials, with
-the RSA premise and its check. The field lessons the page held before the
-rewrite stay in Git history, and [B74](m2.md#b74) to [B77](m2.md#b77) no longer
-cite them.
+the RSA premise and its check, and each of [B74](m2.md#b74) to
+[B77](m2.md#b77) points to the pre-rewrite page that holds its field lessons.
+Each of them retains its own implementation and host-qualification gates.
 
 **Review:** four sub-items in two lanes integrated without a conflict and with
 one integration fix: the insert bound grew by 3 minutes (36m20s to 39m20s) for
@@ -3211,7 +3213,7 @@ instead of the artifact server's unit; and the README's RSA-2048 command made a
 CA certificate, which Bootwright refuses. One fix round fixed all three, each
 with a test that fails without it, the first mutation-checked against dropping
 the argument and against a constant true and shown end to end through the
-`xfusion` emulator, where a private insert now refuses with no write. The check
+captured-shape emulator, where a private insert now refuses with no write. The check
 found no gap. The finding not confirmed, a spec sentence that read against the
 container cluster's plain-HTTP controller leg, which its spec already records as
 an exception, is part of [B452](backlog.md#b452).
@@ -3238,9 +3240,10 @@ three slices, and the next window opens with M4's [X47](m2.md#planned-slices) an
 **Operator-visible effects:** a physical installation whose controller leg is
 verified plans, applies and proves completion against its delivered key, and an
 unverified leg refuses before registration, directing the operator to an
-https address, the `tls.verify` opt-out's removal and `trustBundleRef`; the owner's iBMC needs `established` trust, the media CA
-imported out of band and its HTTPS transfer verification turned on, or the
-apply refuses with `NO_VERIFIED_FETCH`. A failed fetch names its causes and the
+https address, the `tls.verify` opt-out's removal and `trustBundleRef`; the
+physical BMC under test needs `established` trust, the media CA imported out of
+band and its HTTPS transfer verification turned on, or the apply refuses with
+`NO_VERIFIED_FETCH`. A failed fetch names its causes and the
 unit's journal, which now shows each completed request. A refused MAC proof
 names the declared NICs it lacks. An installation's run deadline grows by 3
 minutes, lab-rhel's to 4h9m20s. A failed attempt leaves its private subtree
@@ -3262,8 +3265,8 @@ vulnerabilities found in called code), and so did the four suites (units 264,
 `git diff --check`. The Go test step reused cached results for packages
 unchanged since the integration head's run. The adversarial review, by reviewers
 that did not write the diff, is the independent review the safety-class items
-name. No real-host run: the rehearsal, the xFusion observation and every effect
-on a host are unrun, and each depends on X47.
+name. No real-host run: the rehearsal, the physical BMC observation and every
+effect on a host are unrun, and each depends on X47.
 
 **Constraints left behind:** [B73](m2.md#b73) completes on an owner-accepted
 ledger row of the lab-baremetal rehearsal on a build that descends from this
@@ -3281,9 +3284,9 @@ D121 put on the new slice X47, a key type the controller's policy excludes
 ([B448](m2.md#b448)) and the insert bound ([B449](m2.md#b449)); under D48 three
 were parked: the private subtree on plain listeners ([B450](backlog.md#b450)),
 the host observations ([B451](backlog.md#b451)) and the wording and tests
-([B452](backlog.md#b452)). Already tracked: the iBMC's privilege refusal, HTTP
+([B452](backlog.md#b452)). Already tracked: the physical BMC's privilege refusal, HTTP
 400, joined [B319](m2.md#b319)'s definition; the libvirt identity path's FIPS
-key is [B346](backlog.md#b346); and the TLS half of [B334](backlog.md#b334)
+key is [B346](m2.md#b346); and the TLS half of [B334](backlog.md#b334)
 moved to B446 (D120).
 
 ### X46 — the safety and defect sweep of M1
@@ -4261,3 +4264,905 @@ tracks. The structural scratch rule reads text and traces no variable.
 No audit of interleaved native effects was recorded; the closing run is the
 stated gate, and a conflict it shows needs a narrow resource boundary, never a
 host-wide claim.
+
+### X69 — continuation under another build
+
+**Owner:** State reconciliation and CLI. An out-of-sequence enabling slice
+implemented on the M2 branch at the owner's request (D142), as one commit.
+**Items:** B504. **Decisions:** D142. **Integrated:** "feat(lifecycle):
+continue under another build that freezes the same blocks".
+
+**Outcome, B504:** another build continues an incomplete operation when, and
+only when, it freezes the same blocks. A continuation that was refused because
+the embedded automation differed now proves its blocks again. An apply plans the
+operation's frozen input again and proceeds when every block matches on every
+member the plan froze except the words it is shown in: its description, impacts
+and the groups' descriptions. A destroy derives the removal again from the
+operation's own frozen plan, which copies each block's request, implementation,
+content digest, stage and dependencies, so it compares what the removal decides
+(the authorizations it consumes and its groups) and whether every block's
+capability resolves and reads its frozen request, as a fresh removal does. A
+build counts as another build when its automation digest differs, when its
+version or commit differs from the operation's record, or when its own stamp
+says `Source: modified`, because a dirty build at the same commit is
+indistinguishable from the one that registered the operation. The proof is taken
+with the decision under the shared lock, since planning reads the media store
+under that store's own shared lock, and the exclusive re-proof reuses it only
+after finding every record unchanged; its zero value refuses. A refusal names
+the first block that would be frozen differently, or why the operation could not
+be planned again, and offers the removal that supersedes it where one may or the
+registering build. The Python and Ansible closure check is unchanged, the record
+keeps naming the build that registered the operation, and no record or request
+version moved. `status` offers the continuation under the same proof. A
+qualification still holds its original apply to the automation it registered
+under.
+
+**Guard tests:**
+`TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame`,
+`TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently`,
+`TestStatusOffersAnotherBuildTheContinuationItsBlocksAdmit`,
+`TestDifferingBlockIgnoresOnlyPresentationWords` and
+`TestAContinuationWithNoSameBlocksProofRefusesUnderAnotherBuild` in
+`internal/reconciliation/lifecycle`; the refused-continuation golden and rows,
+`TestARecordWithOnlyACommitNamesDevelAndTheCommit`,
+`TestAnEarlierVersionRecordNamesNoEarlierBuildOnceSetupKeepsRuns`,
+`TestContinuationRefusesDriftedInputExecutableOrHost` and
+`TestARepairThatMovesABlockLeavesAFailedApplyDestroyable`, changed to move a
+block with the automation; and
+`TestAnOperationRecordsTheBuildTheVersionCommandReports` for the modified stamp.
+
+**Constraints left behind:** an automation change that alters what an effect is
+must move its capability's content digest; the reviewer checks that on every
+`ansible/` change, and removal proves ownership and refuses a foreign object as
+the backstop. The proof compares blocks only: a continuation keeps the host
+reservations and the Secret binding its registration took. A destroy's proof
+cannot compare content digests, because its removal copies them from the frozen
+plan. What still needs the registering build: a frozen request version this
+build does not read (`reconciliation.ThawVersion`), a frozen plan this build
+cannot rebuild (`operationstore.ReadPlan`), and any store or record format move.
+A completed apply stays settled under a fixed build, so re-running a fixed step
+of it is still `destroy` then `apply`. M2's qualification engine binds its
+journal to one build and is not converged here ([B498](backlog.md#retired)). Since X69,
+an apply that another build continued keeps the automation it registered under,
+so qualification over it refuses under the build that continued it; qualifying
+needs an apply one build completed.
+
+### X70 — Ceph through the ordinary staged apply
+
+**Owner:** Storage and State reconciliation, with CLI, Environment, Secrets,
+Workspace, Substrate and Architecture. A product slice of M2b, integrated on
+the M2 branch as one commit at the owner's request (D143), which waived M1, X52
+and X53 for its implementation, pending the owner's review.
+**Items:** B513, B512, B518, B499, B517, B519, B515, B514, B516.
+**Decisions:** D143, with D134, D135, D136, D138 and D142. **Integrated:**
+"feat(storage): provision IBM Ceph through the ordinary staged apply".
+
+**Outcome, B513:** `bootwright` is the only executable. The
+`bootwright-ceph-qualification` entry point, its build tag, and its lifecycle
+journal, admission, discovery, live, disposal and retirement engine are
+deleted, with the operation-store records and goldens, the area-scoped secret
+custody, the keyring reservation API, the contexts update fence and the
+fixture ports of the Ceph capability. The fixture hooks leave the ordinary
+Ansible modules; the fixture modules, roles, playbooks, action plugins and tests
+are deleted, while the inherited crypto-policy proof the package transaction
+needs stays as `ceph_crypto_policy.py`, now unconditional. The example's helper
+scripts, the Makefile target, the vet tag and the `examples-test` target go
+with them, and the three architecture allow-list edges the fixture needed
+(B501's outcome) are removed. The operation index accepts only version 1: a
+version 2 index, or one carrying `qualification`, refuses as unreadable
+evidence with a remedy naming the build that prepared it, so such a context is
+retired with that build or abandoned with `context delete --purge
+--allow-orphans`; a damaged index takes the same path. A done apply still warns
+on changed input, and the next apply refuses it.
+
+**Outcome, B512:** the empty qualification registry, its two call sites, its
+remedy and the duplicate Python gate are gone. `Capability.Unsupported` admits
+one reviewed release per build (IBM Storage Ceph 9.9.1.2, packages
+20.2.1-405.el9cp, cephadm-ansible 5.0.3-1, image
+`cp.icr.io/cp/ibm-ceph/ceph-9-rhel9` at tag `v9.9.1-25074` or a `sha256:`
+digest, transport `verified-tunnel`) and refuses anything else before
+registration, credential reads or effects, naming the pinned values. A
+controller-local block `ceph-image-<cluster>` (`storage-ceph-image-v1`)
+resolves the tag through the Entitlement's registry Secret, manifest-only, to
+the single linux/amd64 child digest of its image index; the cluster, pool and
+client blocks depend on it and read the frozen digest from its evidence, so a
+continuation never resolves again and an authored digest unequal to the
+resolution refuses. A failed resolution keeps its adapter output in the
+attempt. The core request moved to v4 and the content digest changed; on the
+guest, `supported_transport` requires the tunnel, the pinned image and Ceph
+20.2.1.
+
+**Outcome, B518:** StorageCluster planning emits one
+`ceph-host-<cluster>-<machine>` block per host (`storage-ceph-host-v1`, stage
+clusters, exclusive per Machine), so hosts prepare concurrently and the cluster
+block waits for all of them. Each installs the signed packages with the
+inherited crypto-policy proof, pulls the frozen digest with a protected
+authfile and a signature policy limited to the pinned repository (at most three
+attempts of 1200 s, counted only once inspection proves the digest and
+linux/amd64), runs a contained probe that yields the ceph UID and GID, crypto
+policy, SELinux label and cephadm bytes equal to the authenticated RPM payload,
+and probes the native SSH route with synthetic keys on loopback. The cluster
+worker re-proves that runtime profile for the tunnel's manager identity, and a
+`cache` phase publishes the exact cephadm bytes on every host before enrollment.
+The host block fits 8365 s; the cluster block dropped its per-host package
+term. Host-block removal makes no effect: packages and the image are retained
+shared host state.
+
+**Outcome, B499:** each host block derives every selected device's native ID
+through the image's SDK from udev properties bound to the proved path, device
+number, serial, size and nonrotational presentation (the vendor_model_serial
+form for a SCSI SSD, the serial form for a virtio disk) and writes
+`device-identities.json`; the OSD checks read that record instead of the bare
+serial, and a missing or contradicting record refuses. Pool creation writes an
+attempt record before `osd pool create`; a retry adopts the pool only from that
+record and exactly one same-name pool with the frozen parameters, and refuses
+`pool-identity` otherwise.
+
+**Outcome, B517:** `cluster rsh` and `cluster exec` are available for a managed
+Ceph StorageCluster. `--node` selects by exact node name, then FQDN, and
+defaults to the first node in canonical order; a duplicate FQDN refuses. The
+node's Machine opens the same session as `machine rsh` and `machine exec`,
+with desired-state identity, the host-key proof, argv verbatim (D140) and the
+client's exit status. Every refusal before the session (`access.target`,
+`cluster.not-applicable` for external storage, `access.unavailable` for a
+ContainerCluster) exits 255 and reads no credential bytes.
+
+**Outcome, B519:** `cluster list` and `cluster info` are available for every
+selected ContainerCluster and StorageCluster, in canonical order, reading only
+validated desired state, durable block evidence, Machine host-key evidence and
+custody presence, with no host contact. A managed Ceph entry reports
+management, release, FSID, the frozen image reference, digest and platform,
+monitors mapped to declared nodes, the admin node, the exact `cluster exec`
+ceph prefix, and `ready` or `unavailable` with the `apply --stage clusters`
+remedy. `--secrets` settles applicability before any custody read and refuses
+`cluster.not-applicable` for a ContainerCluster or external storage.
+
+**Outcome, B515:** a managed Ceph cluster whose hosts are all
+Bootwright-owned virtual Machines removed by the same destroy is retired with
+them. The engine derives the retired set from the frozen removal plan through
+the `HostBound` and `HostRemoval` ports, lists the hosts under Stop first, and
+flags the Ceph block's probe, destroy and removal observation, which then
+answer from durable retirement evidence {action, cluster, fsid, retiredWith}
+with no host-contacting call, so continuation never contacts stopped hosts.
+While any host survives, the cluster keeps refusing with the B491 reason and
+prints the capability's own remedy. Each Machine inverse still re-proves its
+target stopped before deleting its domain and disks.
+
+**Outcome, B514:** after readiness the bootstrap host enables the dashboard
+module with TLS on 8443, a self-signed certificate only when none is stored,
+one attempt-marked MGR redeploy (after which the tunnel's mount and unit
+observation is re-proved), and an `admin` user whose 32-character password
+passes a local copy of the 9.9.1 policy, travels only on stdin, and enters
+produced custody as the cluster block's `dashboard` output. A lost response
+recaptures the retained password and never regenerates; a user without this
+operation's attempt marker refuses `dashboard-identity`; a hash mismatch
+refuses `dashboard-drift` and is never reset; a missing verifier refuses
+`dashboard-verify`. A ready observe recaptures through the read-only
+`dashboard_read`. Evidence moved to `ceph-core-evidence-v2` with the dashboard
+URL, certificate SHA-256, reachability and monitor addresses; `cluster info`
+prints them, `unproved` with a reason when unreachable, and `--secrets --name`
+reveals the password, warning on an unproved copy.
+
+**Outcome, B516:** the
+[three-node example](../../examples/libvirt-3-nodes-ceph/README.md) pins
+`image.version: v9.9.1-25074`, and its README is the staged-apply procedure
+(context, registry Secret, the four stages, validation through `cluster info`'s
+ceph prefix, the RBD client-data test, the dashboard login, the changed-intent
+check, a one-node outage, `machine stop`, destroy and purge), every command
+line checked against the catalog and host names checked through `machine exec
+... getent hosts`. The specs dropped their "Not yet met" lines for these items,
+and the knowledge pages record podman's pull-local `--signature-policy`
+position and how inspection reads evidence without the frozen request.
+
+**Guard tests:** `TestOneExecutable` (`test/architecture`);
+`TestAnIndexTheRetiredQualificationFixtureWroteRefusesWithItsExit`,
+`TestAContextHoldingTheRetiredFixturesIndexRefusesAndIsDeletedOnlyAsUnreadable`,
+`TestADamagedOperationIndexStillLetsTheAcknowledgedDeletionRemoveTheContext`,
+`TestEvidenceTheStoreProvesUnreadableRefusesWithItsOwnExit` and
+`TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses` for the retired
+index and the done-apply update; in `internal/storage/ceph`,
+`TestUnsupportedReleaseOrTransportRefusesBeforeRegistration`,
+`TestPlanEmitsTheImageBlockEveryCephBlockDependsOn`,
+`TestPrepareFillsTheImageFromTheOriginalResolutionWithoutResolvingAgain`,
+`TestPrepareRefusesMissingAmbiguousOrForeignResolution`,
+`TestAuthoredDigestMustEqualTheResolvedChildManifest`,
+`TestImageResolutionRunsOnTheControllerWithOnlyTheRegistryLoan`,
+`TestImageApplyRefusesUnprovedResolution`,
+`TestAFailedResolutionKeepsItsAdapterOutputInTheAttempt`,
+`TestPlanGoldenCarriesHostBlocksTheirDependenciesAndExclusivity`,
+`TestDeadlinesFitTheRunCeilingForThreeAndTheLargestAdmittedCluster`,
+`TestHostApplyLendsOnlyItsHostsMaterialAndTheRegistryAsAProtectedFile`,
+`TestHostApplyRefusesWithoutItsDependenciesEvidence`,
+`TestHostReleaseMakesNoEffectAndItsRemovalContactsNothing`,
+`TestQuiescenceDerivesFromRetirementWithEveryHostOnly`,
+`TestRetiredDestroyAndItsObservationRecordRetirementWithoutTheRunner`,
+`TestRetirementEvidenceIsAcceptedOnlyForARetiredDestroyOfItsOwnScope`,
+`TestEvidenceV2BoundsTheDashboardAndMonitorAddresses`,
+`TestProducedDashboardPasswordIsBoundedToTheGeneratorsShape` and
+`TestInspectReportsAnUnreachableOrUnservedDashboardUnproved`; the
+host-preparation and device-identity tests in `test_ceph_host_runtime.py`,
+`test_ceph_host_route_probe.py` and `test_ceph_host_execution.py`, the OSD
+identity and pool-attempt tests in `test_ceph_core.py`, and the dashboard tests
+in `test_ceph_dashboard.py`; the cluster session journeys
+`TestClusterSessionsReachTheSelectedCephNode`,
+`TestClusterSessionRefusalsExitTwoFiftyFiveBeforeAnyCredential`,
+`TestClusterSessionsOpenTheSelectedNodesMachine` and
+`TestClusterSessionRefusalsOpenNothing`; the inspection tests
+`TestListClustersReportsEverySelectedClusterInCanonicalOrder`,
+`TestClusterInfoReportsEachKindFromDesiredStateAndEvidence`,
+`TestMissingEvidenceReportsUnavailableWithTheApplyRemedy`,
+`TestSecretsRefusalsSettleTheTargetBeforeAnyEvidenceRead`,
+`TestSecretsRevealTheCustodiedDashboardPasswordAfterTheTargetSettles` and
+`TestClusterListAndInfoReadOnlyLocalStateForAnExplicitOrCurrentContext`, with
+the `cli-cluster-list` and `cli-cluster-info` goldens in `internal/cli/testdata`;
+the retirement tests `TestHostBoundEffectRetiresWithItsHostsWhichStopFirst`,
+`TestHostBoundEffectStaysOnlineWhileAnyHostSurvives`,
+`TestRetiredRemovalContinuesAfterAnUnknownInverseBeforeItsHost`,
+`TestRetiredRemovalFlagsOnlyItsOwnDestroyAndRemovalObservation`,
+`TestACephClusterRetiresWithEveryHostItRunsOnWithoutContactingThem`,
+`TestACephClusterWhoseHostsSurviveNamesItsOwnRemedy` and
+`TestAGuestRemovalDestroysItsHost`.
+
+**Constraints left behind:** each build supports one reviewed, code-pinned
+release, and the digest is frozen by the image block, not code-pinned, until
+B472's lock adds it. The runtime profile and host preparation run only on the
+apply path, and no host has run them yet: [B476](m2.md#b476)'s owner run is the
+acceptance. The package decision journal and the operation index format moved,
+so a context from an earlier build is destroyed with its applying build or
+abandoned with `--purge --allow-orphans`. Removal while hosts survive stays
+[B491](m2.md#b491). The dashboard keeps Ceph's self-signed certificate and
+Bootwright never rotates it. Cluster sessions exist only for managed Ceph;
+ContainerCluster sessions stay [B101](backlog.md#b101). D143's session clauses
+await the owner's review, and `make vulncheck` stays B470. B499 has no
+mutation checks, because the repository has no mutation-test pattern.
+`ProvedHost` is exported with no production caller: the plan's dependencies
+order the host blocks, and the guest re-proof fails closed. Inspection readiness
+derives from the current operation's evidence, so a live cluster reads
+`unavailable` during a later apply until its clusters stage runs again. The
+dashboard's TLS proof connects to the active MGR's declared address, and a lost
+redeploy response schedules the redeploy again. The Ceph modules reported a
+refusal only as a failure reason, never a named `refused` record, so their
+named remedies (a dashboard refusal on observe included, which fails the whole
+cluster observe) reached the operator as a generic diagnostic until
+[X72](#x72--ceph-refusals-reach-the-operator) delivered B520. The cluster block's call budget admits at most three hosts
+under `lifecycle.MaxDeadline`, as before X70 ([B79](m2.md#b79)).
+
+### X71 — concurrent retries
+
+**Owner:** State reconciliation, with CLI. An out-of-sequence defect slice of
+M2, integrated on the M2 branch as one commit at the owner's request (D144).
+**Items:** B523, new on 2026-10-13 from the owner's M2b Ceph run, Kind
+`defect`. **Decisions:** D144. **Integrated:** "fix(lifecycle): retry
+independent failed blocks concurrently".
+
+**Outcome, B523:** failed blocks are retried concurrently, as first attempts
+run. The live M2b run of 2026-10-13 interrupted `apply --stage clusters` while
+the three independent `ceph-host-ceph-lab-rhel-01`, `-02` and `-03` blocks ran
+together, leaving all three `failed`; the continuation previewed only rhel-01
+as `[retry]` (`Starts 1 of 20 blocks, 3 deferred`) and retried the three one
+after another, although they share no dependency and each holds only its own
+`ceph-host/<machine>` resource. The cause was the contract that a retry runs
+alone, which dependencies already made unnecessary, since a dependent never
+starts before its dependency is `done`. Admission now takes every failed block
+the selection admits that the invocation has not worked, beside every
+startable block, each starting once the bound and its exclusive resources
+admit it; a dependent of a failed block waits for that block's retry. Once a
+block the invocation worked fails, no further first attempt starts, while the
+failed blocks still waiting are retried. Unproved effects are still resolved
+first with nothing beside them, a failed block outside the selection is never
+retried, and a selection that admits no failed block still refuses
+`lifecycle.stage` before any effect; that rule holds only until the invocation
+works a block, so later admission never depends on which block completes
+first. A stage preview marks every failed block
+it would retry `retry` and every ready step beside them `start`, and counts
+them all as started. The operation is still recorded `running` once, before
+any block starts, and takes the state its blocks give it at the end, so no
+record or request version moved.
+
+**Guard tests:** `TestIndependentFailedBlocksAreRetriedTogether`,
+`TestAFailedBlockIsRetriedBeforeItsDependentsAndOnlyOncePerInvocation`,
+`TestFailedBlocksNamingOneResourceAreRetriedOneAtATime`,
+`TestAnUnprovedEffectIsResolvedBeforeAnyRetry`,
+`TestAdmissionAfterARetryDoesNotDependOnCompletionOrder`,
+`TestAFailedBlockOutsideTheSelectionIsNeverRetried` and
+`TestAStagePreviewMarksWhatTheNextApplyAdmits` in
+`internal/reconciliation/lifecycle`, and
+`TestPlanResultMarksEveryBlockTheNextApplyRetries` and
+`TestPlanResultMarksTheBlockTheNextApplyResolvesFirst` in `internal/cli`.
+
+**Constraints left behind:** a failed block whose retry fails again still lets
+the failed blocks waiting on a shared resource be retried in the same
+invocation, as before; only first attempts stop. The `lifecycle.stage`
+refusal still names only the first failed block's stage. The live
+confirmation is the next continuation of [B476](m2.md#b476)'s run.
+
+### X72 — Ceph refusals reach the operator
+
+**Owner:** Storage, with State reconciliation. An out-of-sequence defect slice
+of M2, integrated on the M2 branch as one commit at the owner's request of
+2026-10-13 to fix the live failure of B476's run. **Items:** B520.
+**Integrated:** "fix(ceph): name every host and cluster refusal to the
+operator".
+
+**Outcome, B520:** a refused Ceph host or cluster operation names its reason.
+The live M2b run of 2026-10-13 failed `ceph-host-ceph-lab-rhel-01` after 6m44s
+with only the censored result of the `no_log` module task, so neither the
+operator nor a developer could tell which reason the module raised. Each entry
+point of `storage_ceph_host` and `storage_ceph_core` now keeps the module's
+failure, publishes its reason through `ceph_cluster_protocol` as a `refused`
+record and then fails; the module task keeps `no_log`, and the record carries
+only a closed token the protocol checks against the union of the two blocks'
+reasons and a detail of at most 160 letters, digits and `_.:@-`. A native
+worker's refusal is named by the token its endpoint raised when the block names
+it, any other refusal is `unknown` or `remote-refusal`, an exception is
+`adapter-exception` with its type and code site, and a module that ends without
+a reason is `adapter-exception` with `module-failure`. The package worker,
+whose every failure used to reach the controller as `transport`, now returns
+its closed `packages` or `package-*` token with the site the shipped helpers
+attest, which the controller accepts only from that worker's closed set; a
+failure of the package resolution, signature or transaction helpers is named
+`package-resolution`, `package-signature` or `package-transaction`, and each
+package token has a host entry naming what the operator checks, such as
+`Entitlement.spec.license.accept` for `package-license`. `ceph_core.py` holds the
+tokens each block may publish, equal to the block's `hostRefusals` or
+`adapterRefusals` in `internal/storage/ceph`, so the runner reports that
+entry's diagnostic and remedy with the detail after its message. A named
+refusal ends the attempt with its entry's code, so every `lifecycle.unknown`
+entry now leaves the block's attempt outcome unknown, where the censored
+failure before was a failed exit: the next apply observes that block first and
+a host block resolves through `hostEffect`. Only the `lifecycle.unsupported`
+entries (`unsupported-release`, `package-license`, `package-platform`,
+`dashboard-verify` and `client-quiescence-unqualified`) still fail it. A
+refusal inside the package worker outside its closed set is published as
+`packages` with the original token in the detail. The owning
+contract is in [storage](../storage.md#bootstrap-identity-and-continuation).
+
+**Guard tests:** `TestAHostRefusalReachesTheOperatorWithItsRemedy`,
+`TestAPackageRefusalReachesTheOperatorWithWhatToCheck`,
+`TestANamedHostRefusalsCodeDecidesTheAttemptOutcome`,
+`TestAClusterRefusalReachesTheOperatorWithItsRemedy` and
+`TestEachCephBlockNamesExactlyTheRefusalsItsModuleMayPublish` in
+`internal/storage/ceph`,
+`TestAnUnnamedRefusalTokenReachesTheOperatorInTheUnknownDetail` in
+`internal/reconciliation/ansiblerunner`, and the collection's
+`tests/unit/test_ceph_refusal_record.py`, which runs each module over a
+refusal, renders each entry point's naming over what it registered and hands
+it to the protocol plugin, and the package cases of
+`tests/unit/plugins/module_utils/test_ceph_host_execution.py`, which carry a
+package refusal from the worker through the controller transport to its
+reason. Dropping the host entry point's refused publication, the remote token's
+naming, the protocol's refused phase, the `image-pull` or `package-license`
+entry, or the package worker's token (back to `transport` or `packages`) each
+failed a guard test.
+
+**Constraints left behind:** the tokens the workers raise outside a block's
+table (the cluster's `registry-ownership`, `host-time`, `device-not-empty`,
+`foreign-osd` and the other `*-unqualified` and `foreign-*` refusals among them)
+reach the operator through the block's generic `unknown` or `remote-refusal`
+diagnostic with the token in its detail, not a remedy of their own. The
+package worker now ships `ceph_native_worker` in its closure to name a site. The
+detail of a controller-local refusal is checked only against the protocol's
+character filter, not attested against the shipped sources; that is safe
+because every reason it names is a code literal. The automation digest moved. The live confirmation is the next continuation of
+[B476](m2.md#b476)'s run.
+
+### X73 — Contained probes proved as Podman reports them
+
+**Owner:** Storage. An out-of-sequence defect slice of M2, integrated on the M2
+branch as one commit at the owner's request of 2026-10-13 to fix the live
+failure of B476's run. **Items:** B524. **Integrated:** "fix(ceph): prove
+contained probes as podman 5.8 reports them".
+
+**Outcome, B524:** every Ceph host block of the M2b run of 2026-10-13 refused
+at `image-profile@ceph_host_runtime.prove_container:501` once X72 named it:
+the probe ran, and the proof before its removal read a `HOSTNAME` that Podman
+adds to a started container that sets none, so the exact five-variable
+environment check failed on every host. The probes now pin `--hostname` and
+its `HOSTNAME`, and the proof also requires that hostname. Running the real
+proofs against the frozen image under Podman 5.8 found two more refusals the
+next run would have met: Podman records a bind as
+`<source>:<target>:ro,z,rprivate,nosuid,nodev,rbind` and drops `z` once the
+start relabelled it, which the label and route probes' exact `ro,z` match
+refused; and its inspection has no `HostConfig.Sysctls`, which the route
+probe's sysctl match refused. A bind now needs `ro`, and `z` until the
+container has run, with only those recorded defaults beside them, and sysctls
+are proved from the recorded create command, which must name exactly the
+requested ones. The owning contract is in
+[storage coverage](../storage-coverage.md).
+
+**Guard tests:** the collection's
+`tests/unit/plugins/module_utils/test_ceph_host_runtime.py`, whose engine
+fixture now reports a container as Podman 5.8 does before and after its start:
+`test_a_started_probe_with_mounts_and_a_sysctl_is_proved_as_podman_reports_it`,
+`test_a_created_probe_with_mounts_or_sysctls_refuses_their_drift` and the
+`hostname`, `hostname-environment`, `duplicate-environment` and
+`requested-sysctl` drift cases. Against the previous module the fixture fails
+16 tests, among them the facts, profile and device-identity tests.
+
+**Constraints left behind:** a sysctl Podman adds from `containers.conf`
+`default_sysctls` is not visible to the proof, because Podman reports none.
+The route probe's exercise inside the image needs a root host to run as the
+ceph account and was not reproduced off a guest; its first run is the next
+continuation of [B476](m2.md#b476)'s run. The automation digest moved.
+
+### X74 — continuation under a rebuilt binary
+
+**Owner:** State reconciliation, with CLI and Storage. An out-of-sequence
+enabling slice of M2, integrated on the M2 branch as one commit at the owner's
+request of 2026-10-13 (D145). **Items:** B525, new on 2026-10-13 from the
+owner's M2b Ceph run, Kind `enabling`: it narrows no refusal and adds no
+effect, so `safety` does not fit, and it adds a guard, an audit member and a
+preview line around a rule D142 already settled. **Decisions:** D145.
+**Integrated:** "feat(lifecycle): audit and guard continuation under a rebuilt
+binary".
+
+**Outcome, B525:** the question after the live M2b run was whether a fix to a
+rebuilt binary must retire the operation it fixes. It need not: the 35-minute
+destroy that followed X73's fix was advised on a false premise. Every content
+digest is computed from the implementation's declared contract (its identity,
+request and evidence versions and effect pins) and no capability package reads
+the automation, so an `ansible/`-only fix moves the automation digest and no
+content digest, request byte or version. `proveSameBlocks` plans the same
+blocks, the closure check passes because the execution closure excludes the
+automation, and `setup` carries the closure onto the new automation, so the
+operation already continued under D142's rule. X74 keeps that rule (D145:
+dropping the content digest from it would continue an operation across a pin
+change) and adds what was missing around it. A contract guard pins, per
+implementation, the content digest beside its Go request and evidence schemas
+and the persisted format versions quoted in the collection's embedded plugins
+and roles, and fails the build when any of them changes with the digest unmoved;
+`-update` refuses to record it, and each digest is checked against the blocks
+the real capabilities plan on the contract examples. Every attempt and
+resolution record names the build it ran under (`build`: automation digest,
+content digest, executable version and commit, `modified`), optional, so the
+record version stays 1, and an adopted interrupted start names the build that
+adopts it. A destroy continuation keeps X69's rule: its removal is derived from
+the frozen plan and runs under the build in hand, as a fresh removal does, and
+its proof compares what the removal decides, the authorizations it consumes, its
+groups and that each block's capability reads its frozen request, never content
+digests, which the removal copies from the frozen plan; an unknown removal block
+is observed by the build in hand, whose closed evidence decoding refuses
+evidence it cannot read, and every removal attempt and resolution names the
+build that ran it. A continuation previewed under another build, by `plan` and
+by the `apply` or `destroy` confirmation, closes with a `Build` field naming the
+build that registered the operation and the steps this build runs, and `status`
+reports `anotherBuild` in JSON and a `, another build than this one` suffix on
+`Registered by`; the preview has no JSON form because `plan`, `apply` and
+`destroy` have no JSON mode. No content digest, request version, record version
+or plan encoding moved, so the owner's live operation, registered by 91855545e,
+continues under the X74 build. `setup --purge-old-bundles` never retires what
+such a continuation reads: it runs the current receipt's bundle, which
+retirement never removes, and the closure is unchanged. The fix path is `make
+build`, `bootwright setup`, then `bootwright apply` with the same `--stage`, as
+the [continuation knowledge
+page](../../.agents/knowledge/continuation-after-a-fix.md) records.
+
+**Guard tests:** `TestEveryImplementationMovesItsContentDigestWithItsContract`
+and `TestEveryAutomationVersionLiteralIsClassified` in `cmd/bootwright`, with
+the fifteen goldens under `cmd/bootwright/testdata/contracts`, scanning every
+`.py`, `.yml`, `.yaml` and `.j2` file of the collection's plugins and roles; the
+Ceph core golden carries the runtime-profile, device-identity and host-cache
+formats its workers read, and the Go request versions the roles check are
+classified as mirrored;
+`TestAnAttemptAndItsResolutionNameTheBuildTheyRanUnder`,
+`TestAnAdoptedStartNamesTheBuildThatAdoptsIt`,
+`TestAStartRefusesAnInvalidBuild` and
+`TestAnAttemptRecordWithoutABuildStaysReadable` in
+`internal/reconciliation/operationstore`, whose attempt and resolution goldens
+(`TestOperationRecordsMatchTheirGoldens`) gained `build`;
+`TestAnotherBuildRetriesAFailedBlockUnderItsOwnBuild`,
+`TestAnotherBuildResolvesAnUnknownApplyThenRetriesIt`,
+`TestAContinuationUnderAnotherBuildNamesTheStepsThisBuildRuns`,
+`TestAPreviewNamesNoOtherBuildWhereNoContinuationRunsUnderOne`,
+`TestAPreviewNamesNoOtherBuildWhenNoStepRunsUnderIt`,
+`TestStatusSaysWhetherAnotherBuildRegisteredTheOperation`,
+`TestARemovalUnderAnotherBuildNamesTheBuildThatRegisteredIt`,
+`TestACephClusterLeftUnknownContinuesUnderARebuiltBinary`, which replays the
+live case through the real Ceph capabilities, and
+`TestACephClusterContinuesOverRecordsAnEarlierBuildWrote`, which continues it
+over records that name no build, in
+`internal/reconciliation/lifecycle`, with
+`TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently` gaining two
+unknown-apply rows and
+`TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame` asserting the
+destroy resolution names the build; and `TestPlanNamesTheStepsAnotherBuildRuns`,
+`TestConfirmationNamesTheStepsAnotherBuildRuns` and
+`TestStatusSaysAnotherBuildRegisteredAnOperationWithoutExecutable` in
+`internal/cli`, with the goldens `cli-plan-continuation-other-build`,
+`cli-status-another-build` and `cli-status-another-build-json`; the other
+status JSON goldens gained `"anotherBuild": false`.
+
+**Constraints left behind:** the guard sees the Go request and evidence schemas
+and quoted version literals in the collection's embedded plugins and roles, not
+what a record or mark means; it fingerprints a raw-JSON member (the cluster
+services the Ceph core and host requests carry, the agent media's install and
+agent configurations) as opaque, and a version built dynamically, an unquoted
+one and an unversioned mark are invisible to it, so the schema nested in such a
+member and a change of meaning under an unmoved version stay the author's to
+catch, with removal's ownership proof as the backstop. A pin or version change
+still needs the destroy, since it moves the content digest. `build` is
+compatible one way only: a build from before X74 decodes records closed and
+refuses one that carries it as "lifecycle record is malformed or unsupported",
+so once a build that writes `build` has worked an operation, no earlier build
+can continue or remove it, and the removal under the build in hand is the way
+out (D145). `plan` still previews a continuation its `apply` refuses on recorded
+facts ([B526](backlog.md#b526)); no gate proves the approved bundle holds this
+executable's automation before work starts ([B527](backlog.md#b527)); `setup
+--purge-old-bundles` reads no operation record ([B528](backlog.md#b528)); and an
+unknown block a resolution leaves failed is retried by the next apply, so
+recovery can take two applies ([B529](#x82--resolution-and-retry-in-one-invocation)). Already present: an
+attempt record holds at most `MaxAttemptBytes` (64 KiB), the evidence bound most
+implementations use, so evidence at its maximum cannot fit one, and `build` adds
+about 300 bytes to every record.
+
+### X75 — Native sources behind root-owned links
+
+**Owner:** Storage. An out-of-sequence defect slice of M2, integrated on the M2
+branch as one commit at the owner's request of 2026-10-13 to fix the live
+failure of B476's run. **Items:** B530. **Integrated:** "fix(ceph): follow a
+root-owned link on a public root-only native source".
+
+**Outcome, B530:** the cluster block of the M2b run of 2026-10-13 refused on
+every host at `native-unknown:OSError@ceph_native.native_source:2029` once X72
+named it: `authorize` proves the guest sshd include closure before any effect,
+and RHEL 9's `50-redhat.conf` includes
+`/etc/crypto-policies/back-ends/opensshserver.config`, a root-owned symbolic
+link that `O_NOFOLLOW` refuses with ELOOP; its target
+`/usr/share/crypto-policies/DEFAULT/opensshserver.txt` carries a second hard
+link, which the one-name rule would have refused next. A public root-only
+source now follows a root-owned link through the same ownership proof, under
+a bound of eight, and may carry a package's hard links; a private source, an
+account source and a link anyone else owns still refuse, and a private source
+is still the only name of its inode. The owning contract is in
+[storage native API](../storage-native-api.md).
+
+**Guard tests:** the collection's
+`tests/unit/plugins/module_utils/test_ceph_tunnel_native.py`:
+`test_a_public_root_only_source_follows_the_root_owned_link_to_its_hard_linked_policy`
+(an absolute and a relative link target),
+`test_a_public_root_only_source_follows_links_only_within_the_bound` and
+`test_every_other_source_refuses_a_link_and_a_second_name`, over a fixture
+shaped like the RHEL 9 back-end; the existing drift cases keep refusing.
+
+**Constraints left behind:** the walk proves what sshd reads by following the
+same links sshd follows, but the whole chain is still never exercised against
+a live host before the next apply; the first run of the phases after
+`authorize` is the next continuation of [B476](m2.md#b476)'s run. An
+Ansible-only change moves the automation digest and no frozen block, so that
+continuation needs a rebuild and `setup`, not a destroy.
+
+### X76 — The live cluster phases as cephadm and ceph behave
+
+**Owner:** Storage. An out-of-sequence defect slice of M2, integrated on the M2
+branch as two commits at the owner's request of 2026-10-13 ("fix once for
+all") after the third first-call refusal of B476's run. **Items:** B531 (the
+bootstrap, configuration, readiness and timing phases), B532 (the observation
+and custody proofs). **Integrated:** "fix(ceph): survive the live cluster
+phases as cephadm and ceph behave" and "fix(ceph): observe the live host as
+cephadm leaves it".
+
+**Outcome:** an Opus audit of every phase after `authorize`, confirmed against
+the three RHEL 9.8 guests and the IBM Storage Ceph 9.9.1.2 image, found the
+defects the next live run would have met one by one, several of which would
+have left the cluster in a state only a destroy exits. B531: cephadm writes
+the bootstrap `ceph.conf` 0644 under sudo's umask, so capture now proves both
+outputs root's own single-link files inside the private FSID area and makes
+them 0600 through an O_NOFOLLOW descriptor before recording their identities,
+while an observation before capture proves cephadm's own modes and changes
+nothing; the `config-key` setter reads its value back through the text path,
+because `--format json` prepends a blank line; the call-home acceptance flag
+is read case-insensitively; an OSD the map holds before its first boot
+(`[{"id":0}]`) is starting, not malformed; phases wait, bounded (300 s, 5 s
+pause, inside a 480 s horizon under the 640 s worker budget), for the MON to
+map an available manager whose orchestrator answers after the service spec,
+`tunnel_mount` or the dashboard redeploy restart it, and manager-served reads
+repeat only while it restarts; readiness is HEALTH_OK or only checks in the
+closed tolerated set holding `CHA_ERROR_SENDING_REPORT`, and a readiness
+timeout names the blocking checks and pending daemons in its `not-ready:`
+detail; bootstrap runs under its own launcher admitting only that phase, an
+1800 s worker budget under the 1920 s ceiling with cephadm bounded at 1620 s,
+and the cluster block's deadline counts the bootstrap call and both readiness
+waits (21540 s for three hosts). B532: the mount-source identity walk follows
+a root-owned directory link such as `/var/run -> ../run`, bounded by
+`SOURCE_LINKS`, and records the resolved directory; the `selinux` directory
+cephadm makes for osd and ceph-volume containers is admitted root-owned with
+no bit beyond 0755 and never read; a daemon directory of Bootwright's fsid
+whose unit files are not yet written, whose systemd instance is not yet
+installed or whose `--rm` container is gone is reported not ready, while a
+container that exists and contradicts the request still refuses; and in the
+read-only `observe`, `host_state` and `bootstrap_state` paths a manager or
+seed daemon between containers is reported pending and named, where every
+action-time proof still requires it running. No ContentDigest input or
+request/evidence version moved, so the owner's live operation continued under
+the rebuilt binary. The contracts are in [storage](../storage.md) and
+[storage native API](../storage-native-api.md); the facts are in
+[the live-host knowledge page](../../.agents/knowledge/ibm-ceph-live-host-facts.md).
+
+**Guard tests:** in the collection's unit tests,
+`test_bootstrap_capture_makes_cephadms_public_config_private_before_recording_it`,
+`test_an_uncaptured_seed_is_proved_with_cephadms_own_modes_and_never_changed`,
+`test_a_stored_setting_is_read_back_as_the_cli_prints_it`,
+`test_the_call_home_acceptance_flag_reads_both_spellings_of_one_boolean`,
+`test_an_osd_the_map_holds_before_its_first_boot_is_starting_not_malformed`,
+`test_enrollment_waits_out_the_restarted_orchestrator_before_its_fence`,
+`test_the_initial_manager_redeploy_waits_for_the_restarted_manager_before_any_proof`,
+`test_an_orchestrator_read_while_the_manager_restarts_is_unfinished_not_refused`,
+`test_call_home_egress_alone_never_blocks_readiness_and_every_other_check_is_named`,
+`test_the_bootstrap_call_runs_alone_under_its_own_longer_budget`,
+`test_the_bootstrap_launcher_admits_only_bootstrap_within_its_ceiling`,
+`test_bind_source_under_a_root_owned_directory_link_is_the_resolved_directory`,
+`test_bind_source_follows_directory_links_only_within_the_bound`,
+`test_selinux_directory_cephadm_makes_for_osd_and_ceph_volume_is_metadata_only`,
+`test_daemon_directory_before_its_unit_files_is_not_running`,
+`test_daemon_whose_rm_container_is_gone_is_not_running`,
+`test_transient_states_never_admit_a_contradiction`,
+`test_observation_names_a_manager_cephadm_is_restarting_as_not_ready`,
+`test_observed_manager_between_containers_is_pending_while_an_action_refuses`,
+`test_seed_between_containers_is_observed_while_an_action_refuses` and
+`test_observed_running_manager_that_contradicts_the_request_still_refuses`,
+each run against the unmodified modules and failing there; in Go,
+`TestTheClusterDeadlineCountsTheWorkersOwnBudgets`.
+
+**Constraints left behind:** `READINESS_TIMEOUT` stays 900 s, because three
+hosts sit 60 s under the six-hour block ceiling; a timeout is recovered by a
+later apply's observation. `prove_seed`'s orchestrator reads after
+`bootstrap-original-ready.json` still require the seed manager active, and
+`tunnel_mount` keeps the 600 s `cephadm deploy` timeout inside its 640 s
+budget. The bootstrap launcher overrides `ceph_host_worker` globals from
+`ceph_core` rather than taking a phase and ceiling parameter. The `selinux`
+directory's contents are never inspected. `podman ps --format json` shapes
+were checked on the controller's 5.8.8, not the guests' 5.8.2. A manager whose
+unit is starting or stopping while its container exists is pending in that
+snapshot, and its mounts are proved by the next one. The independent review's
+seven minor findings, each transient and recovered by a later apply, are
+parked as [B533](backlog.md#b533). The first live run of every phase after
+`authorize` is the next continuation of [B476](m2.md#b476)'s run.
+
+### X77 — Device reads on a host claimed before its authorization
+
+**Owner:** Storage. An out-of-sequence defect slice of M2, integrated on the M2
+branch as one commit at the owner's request of 2026-10-13 to fix the live
+failure of B476's run. **Items:** B534. **Integrated:** "fix(ceph): read the
+devices of a host claimed before its authorization".
+
+**Outcome, B534:** the cluster block's retry under the X76 build refused at
+`native-refusal:registry-ownership@ceph_native.prove_registry:1413`: the first
+attempt had claimed every host and then failed inside `authorize` before the
+registry authfile was prepared, and `apply_tunnel_cluster` runs `devices` on
+every host before `claim` and `authorize`, where `devices` reproved the registry
+of any owned host. A host claimed before its authorization holds no registry
+yet, so every retry refused and any failure inside `authorize` wedged the
+operation. `devices` now reproves the registry only once `registry-file.json`
+records it; until then `authorize` prepares it with its full foreign-file
+checks. The owning contract is unchanged.
+
+**Guard tests:** the collection's `tests/unit/plugins/module_utils/test_ceph_registry.py`:
+`test_a_claimed_host_whose_authorization_never_published_its_registry_still_reads_its_devices`
+(a claimed host, and one whose authorization recorded only its intent), which
+failed on the previous module, and
+`test_a_published_registry_is_reproved_before_any_device_read`.
+
+**Constraints left behind:** none beyond X76's; the next continuation of
+[B476](m2.md#b476)'s run is its live confirmation.
+
+### X78 — Host trust compared in the form the transport bundle holds
+
+**Owner:** Storage. An out-of-sequence defect slice of M2, integrated on the M2
+branch as one commit at the owner's request of 2026-10-13 to fix the live
+failure of B476's run. **Items:** B535. **Integrated:** "fix(ceph): compare
+bootstrap host trust in the form the transport bundle holds".
+
+**Outcome, B535:** the cluster retry under the X77 build refused at
+`native-refusal:ownership@ceph_native.tunnel_bootstrap:1775`. `transport()`
+retains `known_hosts` as `ceph_tunnel.known_hosts` renders it (entries in host
+name order, one line each, no blank lines), while the controller sends each
+entry with `HostKey.Line`'s own line end followed by one more
+(`boundMaterial` in `internal/storage/ceph/materials.go`), and
+`tunnel_bootstrap` compared those raw bytes with the retained form, so the
+bootstrap could never start. It now renders the controller's material through
+the same function before comparing; host trust naming another host set still
+refuses. The unit fixture retained the raw bytes, which hid the mismatch.
+
+**Guard tests:** the collection's `tests/unit/plugins/module_utils/test_ceph_tunnel_native.py`:
+`test_bootstrap_accepts_the_controllers_known_hosts_in_the_form_the_bundle_holds`,
+which failed on the previous module, and
+`test_bootstrap_refuses_known_hosts_naming_fewer_hosts_than_the_bundle`; the
+`prepared_bootstrap` fixture now retains the rendered form.
+
+**Constraints left behind:** the controller still writes a blank line after
+each known_hosts entry; every reader renders it, so it is left as is. The next
+continuation of [B476](m2.md#b476)'s run is its live confirmation.
+
+### X79 — cephadm bootstrap reads its podman version
+
+**Owner:** Storage. An out-of-sequence defect slice of M2, integrated on the M2
+branch as one commit at the owner's request of 2026-10-13 to fix the live
+failure of B476's run. **Items:** B536. **Integrated:** "fix(ceph): let cephadm
+bootstrap read its podman version behind a no-change host proof".
+
+**Outcome, B536:** the first live `cephadm bootstrap` (IBM Storage Ceph
+9.9.1.2, cephadm 20.2.1-405) failed at "Creating mon..." with
+`native-refusal:native-command@ceph_native.command`: cephadm's `main()` skips
+its container-engine check for `bootstrap`, and the only bootstrap path that
+reads the podman version is its host preparation, which Bootwright skipped with
+`--skip-prepare-host`, so the first consumer of the version
+(`should_log_to_journald` for the mon's log target) raised `RuntimeError`
+before the mon store was made. Both bootstrap argv builders drop the flag, and
+before `bootstrap-attempt.json` is written the worker proves that cephadm's
+host preparation will change nothing: podman at or above cephadm's minimum,
+`/usr/sbin/lvcreate` executable, and, walking cephadm's own time-unit list in
+its order, an enabled and active unit reached before any installed unit cephadm
+would enable. A host that would be changed refuses `host-prerequisite` or
+`host-time` with no attempt record, so the bootstrap may be retried after the
+operator fixes it.
+
+**Guard tests:** the collection's `tests/unit/plugins/module_utils/test_ceph_tunnel_native.py`:
+`test_a_rhel_guest_with_running_chronyd_lets_cephadm_prepare_the_host_without_a_change`,
+`test_a_host_cephadm_would_change_while_preparing_it_refuses_before_any_bootstrap_record`
+(a disabled or enabled-but-stopped unit ahead of the running one, no unit, an
+old or unparsable podman, no lvcreate) and
+`test_a_host_preparation_refusal_leaves_no_bootstrap_attempt_so_the_bootstrap_may_be_retried`;
+the bootstrap argv tests assert the flag is absent.
+
+**Constraints left behind:** a bootstrap that fails after its attempt record
+leaves a partial seed the next apply never restarts; recovering one whose mon
+store was never made is parked as [B537](backlog.md#b537). The live run of
+[B476](m2.md#b476) is its confirmation.
+
+### X80 — Observation snapshots settle while cephadm converges
+
+**Owner:** Storage. An out-of-sequence defect slice of M2, integrated on the M2
+branch as one commit at the owner's request of 2026-10-13 to fix the live
+failure of B476's run. **Items:** B538. **Integrated:** "fix(ceph): observe a
+host's daemon layout again while cephadm converges".
+
+**Outcome, B538:** after a successful bootstrap, tunnel phases, cache, enroll
+and services (mon, mgr and osd.2 running on rhel-01, OSDs deploying on the
+other hosts), the cluster block's readiness wait refused
+`native-refusal:native-observation-unproved@ceph_native.daemons:1195`. The
+guest's layout read afterwards was valid in every respect the observer proves,
+and cephadm.log showed the manager deploying an OSD on that host in the second
+the attempt ended. `ceph_native_observe.daemons()` re-proves its snapshot (the
+listings at the end, each directory's and bound unit file's identity, the
+ancestry), and cephadm creating a daemon directory or rewriting `unit.meta` or
+`unit.image` during it failed that re-proof exactly as a foreign layout would,
+which ended the wait. A re-proof that finds something moved now raises
+`ObservationChangedRefusal`: a listing that differs at the end, an identity
+that differs between its first read and its re-check, an entry gone after it
+was listed, and a unit whose running state disagrees with its container's and
+reads differently when read again. `daemons()` takes the snapshot again, at
+most ten times 3 s apart within 60 s, and the worker refuses `not-ready` only
+when it never settles. The readiness wait treats exactly that remote
+`not-ready` from `observe` or `host_state` as not ready, polls again and names
+`unsettled@<host>` in its timeout detail; any other remote refusal still ends
+it at once. Owner, mode, link, name, FSID, content, image and unit
+contradictions still refuse `native-observation-unproved` with no retry. No
+version literal, content digest input or Go table changed; `not-ready` was
+already in both reason sets.
+
+**Guard tests:** the collection's
+`tests/unit/plugins/module_utils/test_ceph_native_observe.py`:
+`test_a_listing_changed_during_the_snapshot_settles_on_the_next`,
+`test_unit_meta_rewritten_during_the_snapshot_is_taken_again` (replaced and
+rewritten in place),
+`test_a_daemon_directory_removed_after_its_listing_is_a_change`,
+`test_a_unit_that_moved_between_its_read_and_its_container_is_a_change`,
+`test_a_snapshot_that_never_settles_is_changed_and_bounded` (the attempt bound
+and the horizon) and
+`test_worker_maps_an_unsettled_snapshot_to_not_ready_and_a_contradiction_to_unproved`,
+each of which failed on the previous modules, and
+`test_a_contradiction_refuses_at_once_without_another_snapshot`;
+`test_ceph_core.py`:
+`test_an_unsettled_snapshot_is_not_ready_and_the_wait_polls_again` and
+`test_a_host_that_never_settles_times_out_naming_it`, both of which failed on
+the previous module, and
+`test_a_contradiction_or_any_other_remote_refusal_still_ends_the_wait`.
+
+**Constraints left behind:** a read-only `observe` operation outside the
+readiness wait still refuses `not-ready` for a host that never settles rather
+than returning partial evidence. A transient name cephadm stages in the FSID
+directory (such as its `cephadm.<sha256>.new` upload) is still a foreign name.
+The next continuation of [B476](m2.md#b476)'s run is its live confirmation.
+
+### X81 — The pool block reads the pool ID Ceph's listing names
+
+**Owner:** Storage. An out-of-sequence defect slice of M2, integrated on the M2
+branch as one commit at the owner's request of 2026-10-13 to fix the live
+failure of B476's run. **Items:** B539. **Integrated:** "fix(ceph): read the
+pool ID Ceph's pool listing names".
+
+**Outcome, B539:** with the cluster block done, the pool block's
+`osd pool create` succeeded and the worker then failed
+`native-unknown:KeyError@ceph_native.pool:2432`, leaving the pool, its
+ownership and attempt records, and no recorded pool ID. Every read of
+`osd pool ls detail` took the ID from a `pool` key, which only `osd dump`
+uses; the listing names it `pool_id` (read from a monitor of the qualified
+image), and the test fixtures had copied the wrong shape. `Worker.pool_id`
+now takes `pool_id` from a listing entry and refuses `native-output` for
+anything but a non-negative integer, in the pool's create, resume and
+identity checks, the client's pool binding and the observation. The
+lost-reply resume accepted only the frozen PG count, which the PG
+autoscaler, on by default, may already have moved: a moved count is accepted
+only when the entry's `pg_autoscale_mode` is `on`. The observation refused
+`pool-identity` for a same-name pool with no recorded ID even when this
+operation's own attempt record named it, which would have kept the block
+unknown: that pool is now unfinished work (not ready, ID -1, partial), which
+the retry resumes without a second create; any other unrecorded or
+different ID still refuses. No version literal, content digest input or Go
+table changed; the Go evaluator already resolves that evidence as partial
+(`TestAbsentNativeResourceWithOwnedResidueRemainsPartial`).
+
+**Guard tests:** the collection's
+`tests/unit/plugins/module_utils/test_ceph_core.py`:
+`test_a_lost_creation_resumes_after_the_autoscaler_moved_pg_num_only_when_it_is_on`,
+`test_a_pool_listing_without_pool_id_refuses_as_native_output`,
+`test_a_pool_this_operation_created_without_a_recorded_id_observes_as_unfinished`
+and `test_an_unproved_pool_id_still_refuses_observation`, with the pool and
+client fixtures of `test_ceph_core.py` and `test_ceph_client_custody.py` now
+in the listing's real shape; 90 of these tests failed on the previous module.
+
+**Constraints left behind:** the resume still identifies its pool by name,
+type, rule and attempt record only, which a pool deleted and recreated under
+the same name between the create and the resume also satisfies; B540 tracks
+a stronger fingerprint. The next continuation of [B476](m2.md#b476)'s run is
+its live confirmation.
+
+### X82 — Resolution and retry in one invocation
+
+**Owner:** State reconciliation. An out-of-sequence enabling slice of M2,
+integrated on the M2 branch as one commit at the owner's request of
+2026-10-13. **Items:** B529, parked on 2026-10-13 by X74 for an owner
+decision and taken in by that request. **Decisions:** D146.
+**Integrated:** "fix(lifecycle): retry a block its resolution leaves failed
+in the same invocation".
+
+**Outcome, B529:** on the M2b run, the `apply --stage clusters` that
+continued after X81 resolved the unknown pool block as partly realized,
+recorded it `failed`, printed `[FAIL]` and stopped; a second `apply` retried
+the pool and ran the client. The scheduler marked a block worked when it
+started either an attempt or a resolution, so a block its resolution left
+`failed` counted as one this invocation had failed itself, and no first
+attempt followed either. It now keeps the blocks it observed apart from the
+blocks it attempted: an invocation observes a block at most once and never
+one its own attempt left unproved, and once every unproved effect is
+resolved, a block a resolution left `failed` is retried under the rules of
+any retry (stage selected, dependencies `done`, exclusive resources free, the
+bound), its dependents following in the same invocation. Only a failed
+attempt stops further first attempts. A fresh removal's observe-only
+resolutions retry nothing. The resolution of a block it will retry reports
+its row running ("the effect is unfinished; retrying it") instead of failed,
+so the retry continues that row; when the invocation stops before the retry
+starts, or the retry cannot start, the row is settled with the state the
+block keeps. A retry's own outcome replaces the resolution's diagnostic, so a
+successful retry reports no failure. The stage preview is unchanged: it marks
+the resolution, and the rest follows from what it proves. No record, request
+or evidence version, content digest or plan encoding moved.
+
+**Guard tests:** `internal/reconciliation/lifecycle`:
+`TestABlockItsResolutionLeavesFailedIsRetriedByTheSameApply` (no effect and
+partial), `TestARetryAfterAResolutionThatFailsAgainStopsFirstAttempts`,
+`TestABlockAResolutionLeavesFailedOutsideTheSelectionIsNotRetried`,
+`TestAnAnnouncedRetryThatNeverStartsIsSettledFailed` and
+`TestAFailedResolutionIsRetriedButAFailedAttemptIsNot`; the resolution
+journeys now converge in the invocation that resolves them
+(`TestUnknownOutcomeIsResolvedFromLiveEvidence`,
+`TestAPartlyRealizedBlockIsConvergedByTheOperationThatResolvesIt`,
+`TestAPartlyRemovedBlockIsConvergedByTheRemovalThatResolvesIt`,
+`TestAnotherBuildResolvesAnUnknownApplyThenRetriesIt`,
+`TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves`,
+`TestACephClusterLeftUnknownContinuesUnderARebuiltBinary`,
+`TestAKeptKubeconfigStoppedBetweenTheMoveAndTheRemovalIsInBothPlaces`), whose
+earlier versions, asserting the second invocation, fail on this scheduler; the kill harness's bound on the
+invocations a killed journey needs fell from 2 to 1 for the fresh apply,
+destroy, continuation, replacement and partial journeys and stays tight;
+`TestAPartlyRealizedBlockWhoseRetryFailsIsConvergedByRepeatingTheOperation`,
+`TestAPartlyRealizedBlockIsAlsoRemovable` and
+`TestAResolutionRemedyNamesTheCommandThatTakesItOn` keep the remedies of a
+resolution whose retry fails or never starts.
+
+**Constraints left behind:** a retry that records its start but whose log path
+cannot be formed or whose log cannot open leaves the resolution's row running
+and, with no cause of its own, replaces the resolution's remedy by the log
+fault the boundary reports; the operation is then `unknown`, which that
+remedy no longer described. The next continuation of [B476](m2.md#b476)'s run
+is its live confirmation.

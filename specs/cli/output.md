@@ -449,9 +449,94 @@ record could be read, the size and digest that record stated.
 
 ## Cluster discovery
 
-The `cluster list` and `cluster info` result shape, `accessCommands` included,
-is [deferred](../deferred/cli-access-and-rendering.md#cluster-discovery) to a
-parked item, [B101](../milestones/backlog.md#b101).
+`cluster list` and `cluster info` read only validated desired state, durable
+block evidence and custody presence. They contact no host and read no
+credential bytes unless `--secrets` asks.
+
+`cluster list` returns one `clusters` array containing both cluster kinds in
+ascending bytewise order of cluster name. Every entry identifies `name` and
+`kind`, with `kind` exactly `ContainerCluster` or `StorageCluster`. Human output
+shows the same names and kinds in the same order.
+
+`cluster info` retains its `context`, `clusters`, and `storage` result fields.
+`clusters` is the ContainerCluster array and `storage` is the StorageCluster
+array; each sorts by cluster name and is empty when its kind is not selected.
+Each cluster entry includes `name`, `kind`, and `accessCommands` alongside its
+endpoints and artifact metadata. Human output shows container clusters then
+storage clusters with the same membership and ordering as JSON. An explicitly
+selected unknown or excluded cluster fails `access.target` with exit `1` under
+the selected human or JSON failure mode; it never yields a successful empty
+selection. Without `--name`, the catalog's default-all selection applies.
+
+A managed Ceph StorageCluster entry adds these fields, in this order, after its
+`name`, `kind` and `accessCommands`:
+
+| Field | Contract |
+| --- | --- |
+| `management` | `managed`. |
+| `release` | The declared Ceph release. |
+| `fsid` | The cluster FSID its bootstrap evidence proves. |
+| `image` | `{reference, digest, platform}` of the [frozen image](../storage.md#frozen-release-and-trust), from the cluster's image evidence. |
+| `monitors` | `[{host, fqdn, address}]`, one per monitor in its cluster-block evidence, mapped to the declared node it runs on. |
+| `adminNode` | The declared name of the bootstrap node, which holds the administrator keyring. |
+| `cephCommand` | The exact prefix that runs the Ceph CLI as the administrator through `cluster exec`: `bootwright cluster exec --context <context> --name <cluster> --node <adminNode> -- sudo -n ceph --conf /var/lib/bootwright/ceph/<fsid>/ceph.conf --keyring /var/lib/bootwright/ceph/<fsid>/ceph.client.admin.keyring`. The operator appends the Ceph arguments. |
+| `status` | `ready`, or `unavailable` with a `reason` and the remedy `bootwright apply --context <context> --stage clusters` when the evidence above is missing; an unavailable entry omits the fields that evidence would carry. |
+| `dashboard` | `{status, user, urls, certificateSHA256}`: `status` is `ready`, or `unproved` with a `reason` when the apply could not reach the dashboard; `user` is the administrator account; `urls` and `certificateSHA256` are those the apply proved. |
+
+`--secrets --name <cluster>` adds `passwordValue` to `dashboard`, the only
+field that carries a secret. Its contract, refusals and warning are the
+[storage dashboard access](../cli.md#storage-dashboard-access).
+
+`accessCommands` contains exactly one entry for each canonical command, ordered
+`cluster exec`, `cluster kubeconfig`, `cluster kubectl`, `cluster oc`, then
+`cluster rsh`. Each entry orders these fields:
+
+| Field | Contract |
+| --- | --- |
+| `command` | Canonical command path without the executable. |
+| `status` | Exactly `not-applicable`, `not-implemented`, `unavailable`, or `ready`, selected by the precedence below. |
+| `node` | Default node's declared name for applicable `cluster rsh` and `cluster exec`; omitted for other entries. |
+| `reason` | Required non-empty safe explanation when status is not `ready`; omitted when ready. |
+
+Within an available `cluster info` result, evaluate each entry as follows:
+
+1. `not-applicable`: the cluster fails the catalog's
+   [applicability rule](commands.md#cluster-command-applicability).
+2. `not-implemented`: the command applies but this executable does not implement
+   the requested access use case, as for `cluster oc`, `cluster kubectl` and the
+   sessions of an OpenShift or OKD ContainerCluster.
+3. `unavailable`: the command applies and is implemented, but local access
+   metadata, credential-artifact availability, identity, ownership, or context
+   state does not establish the prerequisites. The reason identifies the
+   missing or blocking evidence and the safe next action.
+4. `ready`: the prerequisites are established by local context-owned metadata
+   and evidence. This means ready to open the session or request the explicit
+   export; it does not assert live endpoint readiness or success of later
+   execution.
+
+SSH entries describe the default node selected under
+[cluster sessions](../cli.md#cluster-sessions); readiness for that node makes no
+claim about other nodes. Inspection opens no credential bytes by default and
+performs no live probes to populate these fields. Secret declarations alone do
+not prove that access material is available. Sensitive `cluster info --secrets`
+retains its separate explicit disclosure boundary.
+
+Human `cluster info` includes these statuses and reasons, identifies the default
+SSH node, and gives context- and cluster-qualified invocation templates for
+applicable commands, including `--node` for SSH and `-- <command>...` for a
+required payload. A managed Ceph entry also shows its release, FSID, image
+reference and digest, monitors, administrator command and dashboard URLs, user
+and status. Unavailable and unimplemented templates are visibly labeled;
+inapplicable entries explain the restriction and offer no invocation template.
+A template is guidance, never an executable handoff or a promise of readiness.
+
+These inspection statuses do not alter invocation precedence: invoking an
+unavailable command still follows the no-context-read
+[unavailable-command gate](../cli.md#recognized-but-unavailable-commands).
+
+The `oc` and `kubectl` handoffs are
+[deferred](../deferred/cli-access-and-rendering.md) to the parked item
+[B101](../milestones/backlog.md#b101).
 
 ## Lifecycle and status results
 
@@ -476,9 +561,17 @@ and before its selection and `[after …]` markers. A closing `Concurrency`
 field reports the plan's own width, as `4 waves, widest 5 steps`, so a long
 plan that is one chain reads differently from a long plan that is wide, and
 when this build starts fewer blocks at a time than its widest wave holds it
-adds that bound, as `; this build starts 1 block at a time`. A fresh
+adds that bound, as `; this build starts 1 block at a time`. A continuation
+that another build than the one that registered the operation proved it freezes
+the same blocks adds a `Build` field after it, naming that build as `version`
+spells it and the steps this build runs, as `1.4.0 (9f2c1ab) registered this
+operation; steps 2, 3 run under this build`, `step 2 runs under this build` for
+one, and `another build registered this operation` first when no executable is
+recorded. Steps that are done or not selected are left out, and a fresh plan, a
+finalization, a continuation under the registering build and a continuation
+with no step left to run under this build carry no such field. A fresh
 `destroy`'s plan, previewed or presented, adds a `Stop first` field naming in
-plan order the Machines whose removal its quiescence gate observes on the host,
+plan order the Machines whose initial removal quiescence gate observes on the host,
 as `Stop first  rhel-01, rhel-02`, because that gate follows the prompt; a
 continuation is not gated again and carries none. Every
 presentation of a plan that consumes an authorization closes with a `Requires`
@@ -488,13 +581,24 @@ carries none, because the `apply` or `destroy` that completes it runs no block
 and requires no authorization. With a stage selection,
 each pending step also says whether this invocation would start it, that it is
 not selected, or which block it waits on, and a closing field reports how many
-blocks would start and how many are deferred. While a block is unproved or
-failed, the blocks the next `apply` works first are marked `resolve` or
-`retry` and counted as started, and every other ready step reads deferred,
-waiting on the first of them. A block row leads with its status
+blocks would start and how many are deferred. While a block is unproved, the
+blocks the next `apply` resolves are marked `resolve` and counted as started,
+and every other ready step reads deferred, waiting on the first of them; that
+`apply` then admits the rest by what the resolutions prove, retrying a block
+one leaves failed. While
+a block is failed, every failed block the next `apply` retries is marked
+`retry` and every ready step that starts beside them `start`, all counted as
+started, and a step that depends on a failed block reads deferred, waiting on
+it. A block row leads with its status
 token and names the block description and its outcome; its
 [presentation groups](#multi-machine-presentation) are never result rows. A
 preview and a refusal have no progress, result rows or log reference.
+
+A removal with online storage dependencies also names `Stop after storage
+cleanup`: those Machines stay reachable for storage cleanup, then destroy
+pauses with their stop commands before deleting any of their disks. Repeating
+destroy after the operator stops them resumes the registered removal. The
+field is absent when no such boundary exists.
 
 `status` is the machine-readable view of the same durable state and performs no
 probe. Its result orders these fields:
@@ -508,7 +612,7 @@ probe. Its result orders these fields:
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected managed shared services, `status` in the realization vocabulary below. |
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
 | `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. |
-| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
+| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |
 
 The cluster and shared rows share one realization vocabulary. Each object the
@@ -553,9 +657,11 @@ label controller readiness gives it, and a `pending` controller binding adds
 `bound by the first apply`.
 Its Lifecycle section also names the build that registered the operation, as
 `version` spells it, `<version> (<commit>)`, or `devel (<commit>)` for a build
-stamped with no version, and the host directory of its logs, which JSON leaves
-out, and an `Unresolved
-<block>` section follows it for each block that carries `unresolved`, with its
+stamped with no version, followed by `, another build than this one` when
+`anotherBuild` is true (alone, as `another build than this one`, when the
+record names no executable), and the host directory of its logs, which JSON
+leaves out, and an `Unresolved <block>` section follows it for each block that
+carries `unresolved`, with its
 `Reason` and `Remedy`.
 
 ## Diagnostic taxonomy and order
@@ -637,7 +743,7 @@ it to a variable.
 | `controller.unknown` | A local controller prerequisite action has an unresolved effect outcome. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
 | `lifecycle.unsupported` | This executable cannot realize a selected object: no capability claims its kind, or its capability reports the shape unsupported. |
-| `lifecycle.stage` | The stage selection admits no startable block, excludes the block the operation must retry, or is given to a `plan` that previews a `destroy`. |
+| `lifecycle.stage` | The stage selection admits no startable block, excludes every block the operation must retry, or is given to a `plan` that previews a `destroy`. |
 | `lifecycle.authorization` | The frozen plan requires an authorization that was not validly supplied, or a supplied one it does not require. |
 | `lifecycle.lease` | The context root lock or mutation lease cannot be safely acquired or recovered. |
 | `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |

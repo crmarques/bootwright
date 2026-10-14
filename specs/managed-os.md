@@ -167,8 +167,8 @@ through artifact servers placed on the controller, where the installer image
 is built and the package tree extracted, so an image or tree server placed on
 any other Machine refuses before registration. A virtual Machine whose
 provider host is not the image server's placement Machine refuses too, naming
-both: its emulated controller is reached over plain HTTP with its credential
-and fetches the image without verifying the server, which the
+both: its emulated controller uses verified HTTPS but fetches the image
+without verifying the server, which the
 [security spec](security.md#network-remote-systems-and-privilege) bounds to
 that one host. The network the Kickstart carries is one static IPv4 install
 address on one ethernet interface, its default route and the selected name
@@ -285,8 +285,14 @@ names, frozen in the request: a `hostKeyRef` Secret with no generated source
 refuses before registration, and an apply whose bound key is of another type
 than the frozen one refuses before any effect. Every SSH connection the
 installation makes to the machine pins `HostKeyAlgorithms` to the pinned key's
-type, an `ssh-rsa` key as `rsa-sha2-512,rsa-sha2-256`, so a controller under
-the FIPS crypto policy proves an rsa or ecdsa-p256 key.
+type, an `ssh-rsa` key as `rsa-sha2-512,rsa-sha2-256`. Before installation
+effects, the actual SSH placement host reads its crypto-policy directives
+and compiled OpenSSH policy. It proves that policy permits both the bound
+fleet identity and every delivered host-key type, naming the Secret and type
+on refusal. Unreadable, malformed or unsupported policy refuses. Subsequent
+connections intersect the pinned algorithms with this policy; explicit key
+pinning cannot re-enable an excluded signature. An absent system policy uses
+OpenSSH defaults. This proves access compatibility, not FIPS certification.
 
 **Publication.** The block publishes beneath the selected artifact server's
 served root under the
@@ -366,11 +372,13 @@ bounded by a [deadline](architecture.md#the-adapter-result-protocol) derived
 from the budgets it froze: their pauses back to back, one hour for the rest of
 the media work and each read's own time, and the
 [bound](substrates.md#identity-and-power-operations) of every call an apply
-makes to the machine's controller, 1 hour 4 minutes 20 seconds, which is 4 hours
-9 minutes 20 seconds for these budgets and within the runner's ceiling. Those
+makes to the machine's controller, 1 hour 11 minutes 20 seconds, which is 4 hours
+16 minutes 20 seconds for these budgets and within the runner's ceiling. Those
 calls are the pre-boot power read, the insert, the power-off, boot selection
 and power-on that boot the installer, the eject, disk selection and power-on
-that boot the installed system, and the eject the verification repeats. A
+that boot the installed system, and the eject the verification repeats. The insert allowance includes eight certificate collection members, five
+other certificate requests and one 412 retry: fourteen bounded requests,
+seven additional minutes at the thirty-second request timeout. A
 physical target powers nothing off and is inspected where a virtual one's power
 is read, which stays within those bounds while the inspection reads at most six
 interfaces. A run that reaches its deadline is killed, and
@@ -514,10 +522,12 @@ profile directory is removed without recursively deleting unrelated siblings.
 Removal consumes no data-loss authorization. Its
 quiescence follows the consumers under the lifecycle removal gate.
 
-The new block, installation request version, libvirt path versions and
-automation digest change frozen plans. Retire live contexts with the build
-that applied them before setup with this build, then start fresh. An old
-incomplete apply cannot silently continue across these changes.
+The new block, installation request version and libvirt path versions change
+frozen plans. Retire live contexts with the build that applied them before
+setup with this build, then start fresh. An old incomplete apply cannot
+silently continue across these changes. A moved automation digest alone
+freezes no block differently, so an apply continues across it once `setup` has
+run ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)).
 
 ### Physical installation
 
@@ -645,7 +655,7 @@ is not `absent`, other than the line's own default route, in declared order.
 | A credentialed proxy | a Machine's effective `spec.proxy` naming a Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, while its profile configures a repository | `the installed system's repositories would reach <proxy> through a credential or private trust anchor, which an installation cannot carry` | `select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of <machine> or of <profile>` |
 | An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A package tree server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation extracts and publishes its package tree on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint on <profile>` |
-| A Machine off the artifact server's host | a virtual Machine whose provider's `spec.libvirt.machineRef` is not the image server's `spec.machineRef` | `an emulated controller is reached over plain HTTP with its credential and fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on` | `<machine> is booted through a controller on <provider host> and <server> is placed on <server host>; place <provider> on <server host>` |
+| A Machine off the artifact server's host | a virtual Machine whose provider's `spec.libvirt.machineRef` is not the image server's `spec.machineRef` | `an emulated controller fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on` | `<machine> is booted through a controller on <provider host> and <server> is placed on <server host>; place <provider> on <server host>` |
 
 ## Adapter boundary
 

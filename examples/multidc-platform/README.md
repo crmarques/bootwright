@@ -1,10 +1,10 @@
 # Multi-datacenter platform
 
 This synthetic example follows the [Bootwright API](../../specs/api.md).
-It contains 106 Bootwright objects across 22 of the 26 kinds, plus four native
+It contains 106 Bootwright objects across 22 of the 27 kinds, plus four native
 add-on manifests. The graph has four container clusters, one storage cluster,
 32 Machines, and three reusable NMState configurations. `Registry`, `LoadBalancer`,
-`StorageNFSExport`, and `CustomPlaybook` are not needed for this topology.
+`StorageClient`, `StorageNFSExport`, and `CustomPlaybook` are not needed for this topology.
 
 The examples explicitly show applicable defaults to make the schemas easier
 to review. Optional fields remain optional; absent features and inactive union
@@ -18,8 +18,12 @@ are synthetic. Infrastructure IPv4 uses documentation ranges and domains use
 `example.com`. Some software coordinates are deliberately fictional. This is
 an API example, not a runnable deployment or evidence of release compatibility.
 
-Desired-state validation, effective rendering, durable contexts and local
-Secret storage are implemented. The [command catalog](../../specs/cli/commands.md)
+This is a future authoring reference. Current admission deliberately refuses
+its stretch topology, observability services, native service Secret binding,
+and CephFS/RGW/export resources until their qualified slices are delivered.
+It is not a currently validate-runnable graph. Desired-state validation,
+effective rendering, durable contexts and local Secret storage are implemented.
+The [command catalog](../../specs/cli/commands.md)
 names the available lifecycle commands; this graph includes platform kinds
 whose realization remains [future implementation work](../../specs/milestones.md).
 Admission does not establish executable service support, certificate validity,
@@ -52,9 +56,10 @@ Then follow the [storage cluster](clusters/ceph/cluster.yaml),
 | `Registry` | Managed or external registry connection and trust; not used here. |
 | `LoadBalancer` | Managed or external endpoint address provider; not used here. |
 | `ContainerCluster` | Container installation, node roles, endpoints, and cluster security. |
-| `StorageCluster` | Storage engine and cluster-owned topology, roles, bootstrap, and devices. |
+| `StorageCluster` | Storage engine, Machine/site/label/location topology, bootstrap, and native Ceph ServiceSpecs. |
 | `StoragePlacementPolicy` | An explicitly owned storage placement/protection policy. |
 | `StoragePool` | An owned pool with its policy, role, and application. |
+| `StorageClient` | Explicit pool access intent; not used here. |
 | `StorageFilesystem` | Pool composition and MDS configuration. |
 | `StorageObjectGateway` | RGW service and its shared public endpoint/ingresses. |
 | `StorageNFSExport` | An NFS service with export entries; not used here. |
@@ -141,10 +146,19 @@ boundary. See [container security](../../specs/api/container-clusters.md#securit
 ## Storage and add-ons
 
 Storage children use `clusterRef` and keep explicit placement-policy and pool
-references. The cluster owns Ceph topology, OSD devices, bootstrap identity,
-and roles. Explicit `cephadm` and six-host OSD placements show their defaults;
-the MON-only witness is excluded. The stretch placement policy shows its
-four replicas and minimum of two.
+references. The cluster owns Ceph topology and bootstrap identity.
+Native `ceph.services`
+select MON, MGR, OSD, and future observability placement by registered hostnames.
+The six-host OSD service uses native device fields; the MON-only witness is
+excluded. Node labels and CRUSH locations remain explicit. A protected
+`serviceBindings` reference supplies the future Grafana password without bytes.
+The former management gateway helper is retired; management-gateway and ingress
+intent requires a separately qualified native service definition in its later
+slice. Its retained future endpoint intent is HTTP on port `10443`, with
+authentication disabled and a management ingress at `198.51.100.58/25`,
+virtual router ID `42`, across the six data hosts. This is reference intent
+awaiting native field qualification, not an active helper. The stretch placement
+policy shows its four replicas and minimum of two.
 
 The gateway's `endpoint` groups DNS, transport, TLS, and ingresses. Its HTTPS
 endpoint uses one TLS Secret for certificate and key; ingress VIPs share that
@@ -181,14 +195,18 @@ Its eventual certificate must cover IP `192.0.2.127` and DNS name
 The image checksum is a quoted synthetic sentinel, not a verified hash.
 
 The example contains 110 YAML files: 106 Bootwright declarations and four
-native add-on payloads. Validate the complete graph without reading payload
-or Secret bytes:
+native add-on payloads. Inspect the complete reference graph without reading
+payload or Secret bytes.
+This command currently exits with explicit unsupported-feature diagnostics:
 
 ```sh
 bootwright validate -f examples/multidc-platform
 ```
 
-The compiler checks identities, references, address/prefix and NIC mappings,
-cluster membership, storage placement, add-on inputs, and Secret source
-declarations. Native network and installer release qualification remains part
+The admission test asserts the reference graph's expected future-feature
+refusals; it does not claim successful current admission or lifecycle support.
+Supported basic storage execution is covered by the separate three-node Ceph
+example. The compiler also checks identities, references, address/prefix and
+NIC mappings, cluster membership, add-on inputs, and Secret source declarations.
+Native network and installer release qualification remains part
 of the corresponding future renderer milestone.

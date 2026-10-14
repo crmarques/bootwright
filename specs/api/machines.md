@@ -82,6 +82,7 @@ certificate that is not a CA cannot be anchored by one and keeps
 | `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | yes | — | Listener address; one unicast IP address, so that every hosted Machine's controller endpoint names it: not unspecified, multicast or `255.255.255.255`, and not an IPv6 link-local, zoned or IPv4-mapped address. Loopback is admitted, and an IPv6 address normalizes to the spelling Go's `netip` prints. |
 | `spec.libvirt.bmcEmulationDefaults.port` | integer | no | `8000` | `1..65535`; the first port of the contiguous range the provider's emulated BMCs listen on. |
 | `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`; required while emulation is enabled. |
+| `spec.libvirt.bmcEmulationDefaults.certificateRef` | string | yes | — | Generated or stored `tlsCertificate` serving the emulated HTTPS controller; its SANs cover `bindAddress`, and admission refuses a generated one whose `ipAddresses` do not. Consumers pin its public certificate. Only emulator apply receives its private key. |
 | `spec.libvirt.machineProfiles` | array | no | `[]` | Provider-local set keyed by `name`; common profile shape below. |
 
 `bmcEmulationDefaults` is required and its defaults materialize. Only a
@@ -122,12 +123,19 @@ shape; the vSphere-only `template` and `failureDomainRef` fields belong to the
 | `cpu` | integer | no | `0` | `0..1024`; greater than zero for libvirt and vSphere. |
 | `memoryMiB` | integer | no | `0` | `0..16777216` (16 TiB); greater than zero for libvirt and vSphere. |
 | `diskGiB` | integer | no | `0` | `0..65536` (64 TiB); greater than zero for libvirt and vSphere. |
-| `dataDisks` | array | no | `[]` | Libvirt/vSphere only; set keyed by a required `name`, a DNS label, with `sizeGiB` `1..65536`. A libvirt profile declares at most 7 data disks, which the domain presents as `vdb` through `vdh`, and none named `root`, which names the root disk. |
+| `dataDisks` | array | no | `[]` | Libvirt/vSphere only; set keyed by a required `name`, a DNS label, with `sizeGiB` `1..65536`. A libvirt profile declares at most 7 data disks and none named `root`, which names the root disk. |
+| `dataDisks[].media` | string | no | omitted | Libvirt only: the sole admitted value is `ssd`. Explicit SSD disks use virtio-SCSI, nonrotational `rotation_rate=1` and successive `sda` through `sdg` targets. Omission preserves virtio-blk, with successive `vdb` through `vdh` targets among unmarked disks. Empty, null and other values refuse. The root remains `vda`. |
 | `tpm` | object | no | — | Libvirt/KubeVirt only; its presence requests TPM 2.0. |
 | `tpm.persistent` | boolean | KubeVirt only | `true` | Forbidden for libvirt, whose emulated TPM state is already persistent. |
 
 A libvirt or vSphere profile therefore sets all three sizes: an omitted one
 materializes `0`, which admission refuses at that profile's size.
+
+Virtual SSD media declares guest-visible behavior; it makes no claim about
+the physical host's storage performance. Each target sequence is independent
+in a mixed profile, in the effective disk order. Native consumers select the
+resulting guest path explicitly. Existing frozen requests retain their layout;
+changing media requires a new realization rather than modifying an owned disk.
 
 `networkAttachments[]` names are unique DNS labels. Each entry has required
 `name` and exactly one arm matching the provider's selected substrate; the

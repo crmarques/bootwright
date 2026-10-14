@@ -6,8 +6,7 @@ specs claim no availability. The catalog in
 every other command `bootwright --help` lists returns the
 [unavailable result](cli.md#recognized-but-unavailable-commands).
 
-- [M1](milestones/m1.md) to [M7](milestones/m7.md): one page per milestone,
-  with its scope, planned slices and open items.
+- [M1](milestones/m1.md) to [M7](milestones/m7.md): one page per milestone.
 - [Delivered](milestones/delivered.md): completed work, guard tests and
   constraints.
 - [Backlog](milestones/backlog.md): parked items, retired IDs and owner
@@ -18,28 +17,27 @@ every other command `bootwright --help` lists returns the
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
 | [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | the owner's closing run (D59, D125); B470 on X67 when authorized |
-| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x on libvirt+sushy and bare metal/BMC | M1 | in progress | after M1: X47, B73; define B472 |
+| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | the owner's B476 run (X54) on the latest build |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
 | [M5](milestones/m5.md) | OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44 and X48 to X51 are delivered (D139); B470 alone holds `make vulncheck`
-(D126).
+X44 and X48 to X51 (D139) and X70 (D143) are delivered; B470 alone holds
+`make vulncheck` (D126).
 
 - **Next for agents:** nothing in M1 until the owner's closing run or B470's
-  authorization; M2 plans on its own branch.
-- **Next for operator:** before a build that contains X48 touches a host,
-  destroy every live context with the build that applied it, then run `setup`
-  once with `--purge-old-bundles`: X21, X29 to X32, X43, X24, X45, X46, X48 and
-  X49 moved versions, the keyring format, the automation digest and plan
-  encoding. M1's
+  authorization, nor in M2b until the owner's B476 run.
+- **Next for operator:** before a build that moves a version, the keyring
+  format or plan encoding (X21, X29 to X32, X43, X24, X45, X46, X48, X49, X70)
+  touches a host, retire each live context with the build that applied or
+  prepared it, then run `setup --purge-old-bundles`; one that moves none, such
+  as an automation-only fix or X74, continues after `setup` (D145). M1's
   [closing validation](../docs/operator-guide.md#m1-closing-validation) covers
-  D59, D125, B19, B20, B270, B276, B277, B339 and B466. After M1: X47,
-  [B73](milestones/m2.md#b73)'s rehearsal, [B305](milestones/m2.md#b305)'s
-  observation and M2's cluster gates, then M3's [B61](milestones/m3.md#b61) and
-  cluster gates.
+  D59, D125, B19, B20, B270, B276, B277, B339 and B466. After M1: follow [M2b
+  to M2e](milestones/m2.md#submilestones), then M3's [B61](milestones/m3.md#b61)
+  and cluster gates.
 
 ## Scope rules
 
@@ -103,9 +101,10 @@ X44 and X48 to X51 are delivered (D139); B470 alone holds `make vulncheck`
 
 ## Identifiers
 
-- **M\<n\>, milestone.** A positive integer for a delivery sequence position;
-  never reused or suffixed except D128's renumbering of unfinished scopes.
-  New milestones append; dated history and B, X and D identifiers stay fixed.
+- **M\<n\>, milestone.** Sequence position; new milestones append. Exceptions:
+  D128's unfinished-scope renumbering and D131's
+  [M2a to M2e submilestones](milestones/m2.md#submilestones).
+  Other IDs and dated history stay fixed.
 - **B\<n\>, item.** One bounded outcome on exactly one milestone page, or
   parked in the backlog. The number encodes nothing and never changes: a new
   item takes one above the largest B under `specs/milestones/`, and a branch

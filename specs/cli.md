@@ -626,10 +626,12 @@ records `status` read, so it never offers a command those records refuse:
   reads no such record, so `status` names no lost record of a destroy it
   replaces as a contradiction;
 - over either incomplete operation whose continuation or resolution still has
-  a block to run, no continuation when the input revision or digest, the
-  automation digest or the frozen execution closure differs from what the
-  operation registered with, or when the controller state records no binding
-  for the context; the destroy that supersedes an incomplete apply stays
+  a block to run, no continuation when the input revision or digest or the
+  frozen execution closure differs from what the operation registered with,
+  when another build registered it and this executable does not freeze the
+  same blocks ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)),
+  or when the controller state records no binding for the context; the
+  destroy that supersedes an incomplete apply stays
   offered, and over a running, paused or unknown removal the deletion that
   refusal names is offered where it names one, and otherwise no step. `status`
   probes no host, so a binding recorded for another host is left to the
@@ -668,10 +670,15 @@ records call for.
 
 List and info commands derive their result from validated desired state,
 context-owned artifacts, and durable ownership evidence. A name can locate an
-entry but never proves identity or ownership. The one cluster access command
-available is the [administrator access export](#administrator-access-export);
-the detailed contract of cluster inspection, access handoff and node selection
-is [deferred](deferred/cli-access-and-rendering.md) to the parked item
+entry but never proves identity or ownership. `cluster list` and `cluster info`
+report each selected cluster under the
+[cluster discovery contract](cli/output.md#cluster-discovery). Access to a
+cluster is one of three contracts: the
+[administrator access export](#administrator-access-export) of a
+ContainerCluster, the [cluster sessions](#cluster-sessions) of a managed Ceph
+cluster, and that cluster's [storage dashboard access](#storage-dashboard-access).
+The `oc` and `kubectl` handoffs and the sessions on a ContainerCluster are
+[deferred](deferred/cli-access-and-rendering.md) to the parked item
 [B101](milestones/backlog.md#b101).
 
 `secret show` and `cluster kubeconfig` are raw sensitive-byte exports.
@@ -754,18 +761,17 @@ run in this order, each before the next:
 
 | Condition | Diagnostic, exit `1` | Next action |
 | --- | --- | --- |
-| No selected ContainerCluster or StorageCluster has the name, including one only an excluded file declares | `access.target`, naming the context and the name | name a ContainerCluster the context selects; `bootwright render effective --context <context>` lists them |
-| The name is a managed or external Ceph StorageCluster | `cluster.not-applicable`, naming `bootwright cluster kubeconfig`, the cluster, its kind and the applicable targets, OpenShift and OKD ContainerClusters | `bootwright render effective --context <context>` lists the clusters the context selects and their kinds |
+| No selected ContainerCluster or StorageCluster has the name, including one only an excluded file declares | `access.target`, naming the context and the name | name a ContainerCluster the context selects; `bootwright cluster info --context <context>` lists them |
+| The name is a managed or external Ceph StorageCluster | `cluster.not-applicable`, naming `bootwright cluster kubeconfig`, the cluster, its kind and the applicable targets, OpenShift and OKD ContainerClusters | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
 | The context's custody holds no kubeconfig for the ContainerCluster | `access.unavailable`, naming the cluster | `bootwright apply --context <context>` |
 
 The target and its applicability are settled from the compiled graph before
 any custody read, so a name that selects nothing, or selects a StorageCluster,
 reads no credential bytes. A store this build cannot open refuses with its own
 [`secret.store.*` diagnostic](secrets.md#local-keyring-v4). The discovery
-action is `render effective` because `cluster list` and `cluster info` are
-unavailable. On success, standard output is exactly the custodied bytes with no
-added LF, and standard error is empty, or, for a copy custody holds unproved,
-holds exactly one `access.unproved` warning naming the cluster and saying its
+action is `cluster info`. On success, standard output is exactly the custodied
+bytes with no added LF, and standard error is empty, or, for a copy custody
+holds unproved, holds exactly one `access.unproved` warning naming the cluster and saying its
 access was not proved, as the copy was kept from an installation whose
 completion was never proved; on any failure, standard output is empty
 and standard error holds exactly one diagnostic. The entry exists from the
@@ -858,6 +864,77 @@ refusal there and exits `1`, and the child writes no start line to a terminal,
 so the supervisor cannot tell that refusal from a remote command's `1` and
 keeps it. Once the session
 opened, its status is the result even after an interrupt.
+
+### Cluster sessions
+
+`cluster rsh` and `cluster exec` open one session on a node of a managed Ceph
+cluster. They resolve the explicit `--context`, or the current context, once;
+compile that context's effective state; and resolve `--name` in the selected
+graph's shared ContainerCluster/StorageCluster name namespace, never searching
+outside it. The node's `machineRef` then opens the session exactly as
+[`machine rsh` and `machine exec`](#machine-ssh-sessions) do: the identity,
+credential and host-key proof come from that Machine's desired state, the
+argument vector reaches the client verbatim, and the client's exit status is the
+result. `cluster rsh` accepts no command tail.
+
+`--node` resolves only within the cluster's declared node roster,
+`StorageCluster.spec.ceph.topology.nodes`. Canonical node order is ascending
+bytewise order of node `name`, independent of declaration or map order.
+Omission selects the first node in that order. An explicitly empty value is a
+usage error under the scalar input rules. A supplied value selects the node
+whose `name` it equals exactly, and failing that the node whose effective FQDN,
+including an authored override, it equals exactly. There is no further tier: a
+role is not a selector, because topology nodes carry no role. A node name wins
+over a FQDN that spells it. Node selection changes no desired state, canonical
+serialization or lifecycle scope.
+
+The checks run in this order, each before the next, and every refusal exits
+`255` with empty standard output, no connection attempt and no trust record:
+
+| Condition | Diagnostic | Next action |
+| --- | --- | --- |
+| No selected ContainerCluster or StorageCluster has the name, including one only an excluded file declares | `access.target`, naming the context and the name | name a cluster the context selects; `bootwright cluster info --context <context>` lists them |
+| The name is an external Ceph StorageCluster, which declares no node roster | `cluster.not-applicable`, naming the command, the cluster, its kind and the applicable target, a managed Ceph StorageCluster | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
+| The name is an OpenShift or OKD ContainerCluster | `access.unavailable`, naming the cluster and saying sessions are not available for its kind | none; the cluster is reached through `cluster kubeconfig` |
+| `--node` matches no node, or its FQDN match is shared by several nodes | `access.target`, naming the requested selector and the cluster | choose one declared node name; `bootwright cluster info --context <context> --name <cluster>` lists the nodes |
+
+The Machine behind the selected node then resolves as a `machine rsh` or
+`machine exec` target does, and refuses as that section states. Every refusal
+before the session opens reads no credential bytes, and the payload tail of
+`cluster exec` never selects the node or retargets the session. Help describes
+a session, not a descriptor.
+
+Sessions on OpenShift and OKD ContainerClusters are
+[deferred](deferred/cli-access-and-rendering.md#containercluster-access-handoffs-and-sessions)
+to the parked item [B101](milestones/backlog.md#b101).
+
+### Storage dashboard access
+
+A managed Ceph cluster's apply enables the Ceph dashboard and leaves its
+administrator password in the context's
+[custody](storage.md#secret-custody) as the produced output `dashboard` of the
+cluster's block. `cluster info` reports the dashboard's access information in
+the [managed Ceph entry](cli/output.md#cluster-discovery) without any secret:
+its status, user, URLs and certificate SHA-256 fingerprint.
+
+`cluster info --secrets --name <cluster>` additionally reveals the password as
+`passwordValue` in that entry's `dashboard`, on standard output only. Its checks
+run in this order, each before the next:
+
+| Condition | Diagnostic, exit `1` | Next action |
+| --- | --- | --- |
+| No selected ContainerCluster or StorageCluster has the name | `access.target`, naming the context and the name | `bootwright cluster info --context <context>` lists the clusters the context selects |
+| The name is an external Ceph StorageCluster | `cluster.not-applicable`, naming the cluster, its kind and the applicable target, a managed Ceph StorageCluster | as above |
+| The name is a ContainerCluster | `cluster.not-applicable`, naming `bootwright cluster kubeconfig` | as above |
+| The context's custody holds no dashboard password for the cluster | `access.unavailable`, naming the cluster | `bootwright apply --context <context> --stage clusters` |
+
+The target and its applicability are settled from the compiled graph before
+any custody read, so a refusal of the first three kinds reads no credential
+bytes. A copy that custody holds from an apply that never proved the dashboard
+reachable is revealed with exactly one `access.unproved` warning naming the
+cluster, and its `dashboard.status` is `unproved`. The value occurs only in
+the `passwordValue` field, and is never copied to a diagnostic, log, evidence
+record, plan or second stream.
 
 ### Host-key trust
 
