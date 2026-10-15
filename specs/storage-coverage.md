@@ -122,7 +122,14 @@ guessed serial projection or prefix-stripping comparison never proves the
 device. A missing or contradicting identity record refuses. Pool creation
 writes an attempt record before `osd pool create`; a retry adopts the pool
 only when that record exists and exactly one pool of that name exists with the
-frozen parameters, and otherwise refuses `pool-identity`.
+frozen parameters, and otherwise refuses `pool-identity`. A placement policy
+writes `ceph-policy-attempt-v1` before `osd crush rule create-replicated`, and
+adopts a same-name rule only with that record and the frozen
+take/chooseleaf/emit steps; otherwise it refuses `foreign-rule`. An
+erasure-coded pool proves that no profile and no rule of its name exist before
+writing `ceph-pool-attempt-v2`, sets its profile without `--force`, and accepts
+the stored profile only as the passed keys plus the frozen per-plugin defaults;
+otherwise it refuses `foreign-profile`, `foreign-rule` or `native-output`.
 
 For every matrix row, the release record names the primary vendor source and
 revision/date, support status (supported, preview, deprecated or unsupported),

@@ -22,6 +22,11 @@ from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import 
 DIGEST = "d" * 64
 PASSWORD = "REGISTRY-PASSWORD-SENTINEL"
 
+# The frozen replicated rbd pool the Go side sends with every optional member unset.
+POOL = {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""},
+        "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule", "minSize": 2,
+        "name": "volumes", "overwrites": False, "pgNum": 32, "quota": {"maxBytes": 0, "maxObjects": 0}, "role": "rbd", "size": 2, "type": "replicated"}
+
 
 @pytest.fixture
 def host_request(request_value):
@@ -276,7 +281,7 @@ def test_the_package_worker_names_only_its_closed_tokens_and_their_site():
 
 
 @pytest.mark.parametrize("change", [
-    {"action": "cluster"}, {"pool": {"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"}},
+    {"action": "cluster"}, {"pool": copy.deepcopy(POOL)},
     {"client": {"name": "consumer", "pool": "volumes", "access": "read-only"}},
 ])
 def test_host_request_admits_only_the_cluster_scope(host_request, change):

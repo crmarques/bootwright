@@ -63,6 +63,9 @@ def test_scope_is_shared_with_pool_and_client_without_private_package_inputs(clu
     wanted = staging.recovery_scope(cluster_request)
     cluster_request.update(action="client", client={"name": "consumer"}, packages={"fixture": "public package source"})
     assert staging.recovery_scope(cluster_request) == wanted
+    policy = {key: value for key, value in cluster_request.items() if key not in ("client", "packages")}
+    policy.update(action="policy", policy={"deviceClass": "ssd", "failureDomain": "host", "name": "fast", "root": "default", "rule": "fast", "size": 2})
+    assert staging.recovery_scope(policy) == wanted
 
 
 @pytest.mark.parametrize("attempted", [False, True])

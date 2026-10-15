@@ -29,6 +29,11 @@ IMAGE_ID = "c" * 64
 PASSWORD = "REGISTRY-PASSWORD-SENTINEL"
 PAYLOAD = b"#!/usr/bin/python3\n# synthetic cephadm payload\n"
 
+# The frozen replicated rbd pool the Go side sends with every optional member unset.
+POOL = {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""},
+        "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule", "minSize": 2,
+        "name": "volumes", "overwrites": False, "pgNum": 32, "quota": {"maxBytes": 0, "maxObjects": 0}, "role": "rbd", "size": 2, "type": "replicated"}
+
 
 @pytest.fixture(autouse=True)
 def injected_broker(monkeypatch):
@@ -1208,7 +1213,7 @@ def test_host_runtime_binds_one_scope_from_both_blocks(request_value):
     from_scope = runtime.HostRuntime(copy.deepcopy(scope), "node-1", packages=object())
     assert "action" not in from_cluster.request and from_cluster.request == from_scope.request == scope
     assert from_cluster.scope() == from_scope.scope() == runtime.scope(scope, "node-1")
-    pool = dict(request_value, action="pool", pool={"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"})
+    pool = dict(request_value, action="pool", pool=copy.deepcopy(POOL))
     for refused in (pool, dict(scope, pool=pool["pool"])):
         with pytest.raises(ceph_native.Refusal, match="^request$"):
             runtime.HostRuntime(copy.deepcopy(refused), "node-1", packages=object())

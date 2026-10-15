@@ -22,6 +22,11 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
 from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
 
+# The frozen replicated rbd pool the Go side sends with every optional member unset.
+POOL = {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""},
+        "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule", "minSize": 2,
+        "name": "volumes", "overwrites": False, "pgNum": 32, "quota": {"maxBytes": 0, "maxObjects": 0}, "role": "rbd", "size": 2, "type": "replicated"}
+
 
 def public_key():
     algorithm = b"ssh-ed25519"
@@ -263,11 +268,12 @@ def test_supported_transport_is_the_pinned_release_over_verified_tunnel_only(clu
     assert not ceph_native.supported_transport(without)
 
 
-@pytest.mark.parametrize("phase", ["claim", "authorize", "bootstrap", "enroll", "services", "pool", "client", "destroy"])
+@pytest.mark.parametrize("phase", ["claim", "authorize", "bootstrap", "enroll", "services", "pool", "client", "policy", "destroy"])
 def test_remote_dispatch_refuses_an_unsupported_release_before_any_effect(cluster_request, phase):
     cluster_request["clusterSSHTransport"] = "native"
-    resources = {"pool": {"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"},
-                 "client": {"name": "reader", "pool": "volumes", "access": "read-only"}}
+    resources = {"pool": copy.deepcopy(POOL),
+                 "client": {"name": "reader", "pool": "volumes", "access": "read-only"},
+                 "policy": {"deviceClass": "", "failureDomain": "host", "name": "fast", "root": "default", "rule": "fast", "size": 2}}
     if phase in resources:
         cluster_request.update({"action": phase, phase: resources[phase]})
     with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):

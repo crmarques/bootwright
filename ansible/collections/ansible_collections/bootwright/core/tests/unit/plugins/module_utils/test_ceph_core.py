@@ -115,6 +115,16 @@ def worker(core_request, answers, markers=None):
     return native, calls
 
 
+def replicated_pool(**changes):
+    """The frozen replicated rbd pool the Go side sends with every optional member unset."""
+    pool = {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""},
+            "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule",
+            "minSize": 2, "name": "volumes", "overwrites": False, "pgNum": 32, "quota": {"maxBytes": 0, "maxObjects": 0}, "role": "rbd", "size": 2,
+            "type": "replicated"}
+    pool.update(changes)
+    return pool
+
+
 def identities(core_request, form="{serial}"):
     """What each host's preparation derived; a virtio disk's native ID is its serial."""
     return {"version": ceph_native.DEVICE_IDENTITIES_VERSION, "fsid": core_request["fsid"],
@@ -182,7 +192,7 @@ def test_native_count_preserves_candidate_hosts(core_request):
     (2, 3, False, False, False),
 ])
 def test_pool_replication_requires_an_additional_osd_host(core_request, size, minimum, extra_osd, extra_mon, valid):
-    core_request.update(action="pool", pool={"name": "volumes", "size": size, "minSize": minimum, "pgNum": 32, "crushRule": "replicated_rule"})
+    core_request.update(action="pool", pool=replicated_pool(size=size, minSize=minimum))
     if extra_osd or extra_mon:
         host = copy.deepcopy(core_request["hosts"][0])
         host.update(name="node-4", machine="machine-4", address="192.0.2.4")
@@ -414,7 +424,7 @@ def test_fsid_json_object_is_checked_before_other_cluster_reads(core_request):
 
 
 def test_pool_numeric_identity_must_survive_recreation(core_request):
-    core_request.update(action="pool", pool={"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"})
+    core_request.update(action="pool", pool=replicated_pool())
     marks = Markers()
     marks.records["pool-volumes.json"] = core_request["pool"]
     marks.records["pool-id-volumes.json"] = {"id": 4}
@@ -422,6 +432,10 @@ def test_pool_numeric_identity_must_survive_recreation(core_request):
     with pytest.raises(ceph_native.Refusal, match="pool-identity"):
         native.pool()
     assert len(calls) == 1
+
+
+REPLICATED_RULE = {"rule_id": 0, "rule_name": "replicated_rule", "type": 1,
+                   "steps": [{"op": "take", "item": -1, "item_name": "default"}, {"op": "chooseleaf_firstn", "num": 0, "type": "host"}, {"op": "emit"}]}
 
 
 def pool_world(core_request, pools, effects):
@@ -436,11 +450,14 @@ def pool_world(core_request, pools, effects):
         if command == ("osd", "pool", "ls", "detail"):
             return 0, json.dumps(pools).encode()
         if command == ("osd", "crush", "rule", "dump", "replicated_rule"):
-            return 0, json.dumps({"rule_id": 0, "rule_name": "replicated_rule"}).encode()
+            return 0, json.dumps(REPLICATED_RULE).encode()
+        if command in (("osd", "crush", "rule", "ls"), ("osd", "erasure-code-profile", "ls")):
+            return 0, json.dumps(["replicated_rule"] if command[1] == "crush" else ["default"]).encode()
         effects.append(command)
         if command[:3] == ("osd", "pool", "create"):
             pools.append({"pool_name": command[3], "pool_id": 8, "type": 1, "crush_rule": 0, "pg_num": int(command[4]),
-                          "size": 3, "min_size": 2, "application_metadata": {}})
+                          "size": 3, "min_size": 2, "quota_max_bytes": 0, "quota_max_objects": 0, "options": {}, "flags_names": "hashpspool",
+                          "application_metadata": {}})
         if command[:3] == ("osd", "pool", "set"):
             pools[0][command[4]] = int(command[5])
         if command[0] == "/usr/bin/rbd":
@@ -450,16 +467,20 @@ def pool_world(core_request, pools, effects):
 
 
 def pool_worker(core_request, marks, pools, effects):
-    core_request.update(action="pool", pool={"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"})
+    core_request.update(action="pool", pool=replicated_pool())
     for value in pools:
         value.setdefault("size", 3)
         value.setdefault("min_size", 2)
+        value.setdefault("quota_max_bytes", 0)
+        value.setdefault("quota_max_objects", 0)
+        value.setdefault("options", {})
+        value.setdefault("flags_names", "hashpspool")
     native = ceph_native_resources.ResourceWorker(core_request, core_request["bootstrap"], run=pool_world(core_request, pools, effects), markers=marks)
     return native
 
 
 def pool_attempt(core_request):
-    return {"version": "ceph-pool-attempt-v1", "owner": core_request["owner"], "fsid": core_request["fsid"], "pool": core_request["pool"]}
+    return {"version": "ceph-pool-attempt-v2", "owner": core_request["owner"], "fsid": core_request["fsid"], "pool": core_request["pool"]}
 
 
 def test_pool_creation_journals_its_attempt_before_the_create(core_request):
@@ -552,8 +573,9 @@ def test_a_pool_listing_without_pool_id_refuses_as_native_output(core_request):
 
 
 def observed_pool(core_request, marks):
-    pools = [{"pool_name": "volumes", "pool_id": 8, "type": 1, "crush_rule": 0, "pg_num": 32, "size": 2, "min_size": 2,
-              "application_metadata": {"rbd": {}}}]
+    pools = [{"pool_name": "volumes", "pool_id": 8, "type": 1, "crush_rule": 0, "pg_num": 32, "size": 2, "min_size": 2, "pg_autoscale_mode": "on",
+              "flags_names": "hashpspool,selfmanaged_snaps", "quota_max_bytes": 0, "quota_max_objects": 0, "erasure_code_profile": "", "stripe_width": 0,
+              "options": {}, "application_metadata": {"rbd": {}}}]
     native = pool_worker(core_request, marks, pools, [])
     marks.records["pool-volumes.json"] = core_request["pool"]
     marks.records["pool-attempt-volumes.json"] = pool_attempt(core_request)
@@ -661,7 +683,7 @@ def test_client_recovery_reads_only_the_owned_principal(core_request, monkeypatc
 
 def test_absent_cluster_does_not_prove_unowned_pool_was_removed(core_request):
     core_request["action"] = "pool"
-    core_request["pool"] = {"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"}
+    core_request["pool"] = replicated_pool()
     native, unused = worker(core_request, {(core_request["cephadm"]["path"], "ls"): []})
     result = native.observe()
     assert not result["owned"]
@@ -1090,7 +1112,7 @@ def test_observation_proves_each_owned_osd_effective_memory(core_request):
 @pytest.mark.parametrize("owned", [True, False])
 def test_absent_native_resource_retains_owned_cleanup_work(core_request, action, owned):
     core_request.update(action=action, config=memory_config())
-    resource = ({"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"}
+    resource = (replicated_pool()
                 if action == "pool" else {"name": "consumer", "pool": "volumes", "access": "read-only"})
     core_request[action] = resource
     answers = memory_observation_answers(core_request)
@@ -1919,10 +1941,10 @@ def test_resource_phases_ship_in_their_own_module():
     modules = ceph_native_worker.MODULES
     assert modules[modules.index("ceph_native") + 1] == "ceph_native_resources"
     assert tuple(ceph_core.Transport.native_sources()) == modules
-    assert ceph_native_resources.PHASES == {"pool", "client", "client_read"} and not ceph_native_resources.PHASES & ceph_native.CORE_PHASES
+    assert ceph_native_resources.PHASES == {"pool", "client", "client_read", "policy"} and not ceph_native_resources.PHASES & ceph_native.CORE_PHASES
     assert ceph_native_resources.READ_ONLY_PHASES <= ceph_native_resources.PHASES
-    assert not any(hasattr(ceph_native.Worker, name) for name in ("pool", "client", "client_read"))
-    assert all(hasattr(ceph_native_resources.ResourceWorker, name) for name in ("pool", "client", "client_read"))
+    assert not any(hasattr(ceph_native.Worker, name) for name in ("pool", "client", "client_read", "policy"))
+    assert all(hasattr(ceph_native_resources.ResourceWorker, name) for name in ("pool", "client", "client_read", "policy"))
 
 
 def test_dispatch_routes_resource_actions_to_the_resource_worker(monkeypatch, core_request):
@@ -1948,12 +1970,13 @@ def test_dispatch_routes_resource_actions_to_the_resource_worker(monkeypatch, co
         request = dict(core_request, action=action)
         return ceph_native.dispatch({"request": request, "host": "node-1", "phase": phase, "private": {}})
 
-    for action, phase in (("pool", "pool"), ("pool", "observe"), ("client", "client"), ("client", "client_read"), ("client", "observe")):
+    for action, phase in (("pool", "pool"), ("pool", "observe"), ("client", "client"), ("client", "client_read"), ("client", "observe"),
+                          ("policy", "policy"), ("policy", "observe")):
         send(action, phase)
     send("cluster", "observe")
     assert reached == [("resource", "pool"), ("resource", "observe"), ("resource", "client"), ("resource", "client_read"),
-                       ("resource", "observe"), ("core", "observe")]
-    for phase in ("pool", "client", "client_read"):
+                       ("resource", "observe"), ("resource", "policy"), ("resource", "observe"), ("core", "observe")]
+    for phase in ("pool", "client", "client_read", "policy"):
         with pytest.raises(ceph_native.Refusal, match="^request$"):
             send("cluster", phase)
-    assert len(reached) == 6
+    assert len(reached) == 8

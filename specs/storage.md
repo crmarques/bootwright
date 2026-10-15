@@ -406,6 +406,31 @@ ownership merely by matching a name. A service may not adopt another object's
 pool or credential as its generated child. B472 and each resource item settle
 native identity and child-resource gaps before promotion.
 
+A placement policy and a pool each write their attempt record before the native
+create, and record the native rule or pool ID after it. A retry adopts a
+same-name rule, profile or pool only with that record and the frozen shape:
+the rule's steps, the stored profile as exactly the passed keys plus the
+plugin's frozen defaults, and the pool's type, rule and PG count; anything else
+refuses before an effect. Neither phase ever removes a pool, profile or rule. A
+monitor's PG refusal of the create (`ERANGE`) refuses `pg-budget`. When fewer
+hosts under root `default` hold an OSD of the class than the replica count or
+the erasure-code row requires, the policy or erasure-coded pool refuses
+`crush-capacity` before its rule or profile exists. Erasure-coded overwrites
+are irreversible, so they are enabled only for rbd and cephfs-data pools.
+Every pool setting after the create (size and minimum size, erasure-coded
+overwrites, both quotas, each declared compression option and the application
+of a pool that is not a replicated rbd pool) keeps the pool setter
+intent/completion records: it is sent only while its completion is absent and
+its observed value differs, then read back, and a completed setting is never
+sent again. A completed size or minimum size that drifted refuses
+`pool-identity`; another completed setting that drifted reads as not ready. A
+settled pool apply makes no native effect and reports no change. Pool
+readiness compares every frozen attribute (type, rule, size, minimum size,
+profile and stripe width, overwrites, bulk, autoscale mode, the PG count when
+the autoscaler is off, quota, application and each owned pool option), and an
+unset value must be absent; a mismatch is not ready, and only an identity
+contradiction refuses.
+
 Readiness reports bounded observations of FSID, quorum, orchestrator and host
 state, expected daemons, OSD membership, placement/capacity, pool protection,
 filesystem/MDS state and declared service endpoints as applicable. Waits bound

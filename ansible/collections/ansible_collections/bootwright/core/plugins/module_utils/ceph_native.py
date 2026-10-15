@@ -409,10 +409,10 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"pool", "client"})
+    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"pool", "client", "policy"})
     hosts = scope_checks(request)
     if request["action"] == "cluster":
-        require("pool" not in request and "client" not in request)
+        require("pool" not in request and "client" not in request and "policy" not in request)
         return request
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
     require(request["action"] in ceph_native_resources.ACTIONS)
@@ -3311,7 +3311,7 @@ class Worker:
 
     def unfinished(self, evidence):
         """Owned work without a current proof: partial, never ready."""
-        if self.request["action"] in ("pool", "client"):
+        if self.request["action"] in ("pool", "client", "policy"):
             resource = self.request[self.request["action"]]
             evidence["owned"] = self.markers.read(self.request["action"] + "-" + resource["name"] + ".json") == resource
         evidence["exists"] = evidence["owned"]
