@@ -403,6 +403,21 @@ metadata/index pools replicated and uses EC only where the release permits.
 The qualified patch decides supported EC plugins/profiles and workload limits;
 an older support article and a newer native option are not interchangeable.
 
+B81 records the EC decision (D160, OD25). A pool's
+`k+m` is a row of [Table 1](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-code-profiles)
+and the declared OSD hosts meet its minimum without
+`mon_osd_down_out_subtree_limit = host`: 2+2 needs 5, 4+2 needs 6, 5+2 needs
+7, 6+2 needs 8, 8+3 needs 11 and 8+4 needs 12. 2+2 on four hosts and the 8+6
+MSR case refuse, because the core config map admits neither that monitor
+option nor a special CRUSH rule. The plugin defaults to `isa`, `jerasure` is
+admitted only on 4+2, 8+3 and 8+4, and `clay`, `lrc` and `shec` refuse by
+omission from the [IBM plugin list](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=overview-erasure-code-plugins).
+FastEC (`allow_ec_optimizations`) is not exposed; its native default is false
+(upstream `global.yaml.in` at v20.2.1, unverified for the IBM image until
+B472). Site and rack failure domains and CRUSH roots other than `default` are
+parked (D160, OD25). The [admission contract](api/storage.md#pool-protection-and-erasure-coding)
+owns the rules.
+
 [SMB management](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=services-smb-cluster-share-management)
 requires compatible subvolume bindings: NFS and SMB cannot expose the same
 subvolume. SMB support is assessed by subfeature, not rejected wholesale as a
@@ -449,10 +464,8 @@ before B484's exit.
 | U09 | Replicated size above the OSD hosts that carry the pool rule's device class | [upstream CRUSH device classes](https://docs.ceph.com/en/tentacle/rados/operations/crush-map/#device-classes) (rule semantics, not an IBM statement) | [B81](milestones/m2.md#b81) | none yet: the OSD-host count ignores device class | gap | none until B81 counts only the OSD hosts of the rule's class |
 
 IBM supports EC 8+6 on four hosts with four OSDs each only as its MSR special
-case, which admission refuses today as U04a. [B81](milestones/m2.md#b81)
-records whether Bootwright supports MSR. If it does, U04a's combination gains
-"outside IBM's MSR case" and a profile claims MSR. If not, B81 records the
-decision and its source.
+case. B81 does not admit MSR; 8+6 refuses at admission as a profile outside
+Table 1 (D160, OD25).
 
 ## Acceptance evidence
 

@@ -156,6 +156,7 @@ func (r contractRow) binding() lifecycle.CapabilityBinding {
 func contractRows() []contractRow {
 	return []contractRow{
 		{kind: string(api.StorageCluster), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.StoragePlacementPolicy), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
 		{kind: string(api.StoragePool), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
 		{kind: string(api.StorageClient), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
 		{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, example: "libvirt-3-nodes-ceph", completedFrom: cephHostCompletedFrom},

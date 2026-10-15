@@ -94,11 +94,34 @@
   "owner": "apply-original",
   "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
   "pool": {
+    "application": "rbd",
+    "autoscale": {
+      "bulk": false,
+      "maxPGs": 0,
+      "minPGs": 0,
+      "mode": "on",
+      "targetBytes": 0,
+      "targetRatio": ""
+    },
+    "compression": {
+      "algorithm": "",
+      "maxBlob": 0,
+      "minBlob": 0,
+      "mode": "",
+      "requiredRatio": ""
+    },
     "crushRule": "replicated_rule",
     "minSize": 2,
     "name": "volumes",
+    "overwrites": false,
     "pgNum": 32,
-    "size": 2
+    "quota": {
+      "maxBytes": 0,
+      "maxObjects": 0
+    },
+    "role": "rbd",
+    "size": 2,
+    "type": "replicated"
   },
   "publicNetworks": [
     "192.0.2.0/24"
@@ -147,5 +170,5 @@
       "service_type": "mgr"
     }
   ],
-  "version": "ceph-core-v6"
+  "version": "ceph-core-v7"
 }

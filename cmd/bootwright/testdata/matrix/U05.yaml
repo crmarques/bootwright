@@ -21,10 +21,16 @@ expect:
   name: metadata-ec
   field: $.spec.role
   message: pool role does not permit erasure protection
-  remediation: "correct $.spec.role to satisfy this requirement: pool role does not permit erasure protection"
+  remediation: "use role rbd, cephfs-data or rgw for an erasure-coded pool, or set type: replicated"
 - code: api.invariant
   kind: StoragePool
   name: metadata-ec
   field: $.spec.type
   message: CephFS metadata pools require replicated protection
-  remediation: "correct $.spec.type to satisfy this requirement: CephFS metadata pools require replicated protection"
+  remediation: "set type: replicated for this cephfs-metadata pool"
+- code: api.invariant
+  kind: StoragePool
+  name: metadata-ec
+  field: $.spec.erasure
+  message: erasure profile 2+1 is not one of the erasure-coding profiles Bootwright supports
+  remediation: use 2+2, 4+2, 5+2, 6+2, 8+3 or 8+4

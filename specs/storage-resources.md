@@ -6,7 +6,8 @@ This page owns the target resource contract approved through P2 in the
 and their bindings; [Storage](storage.md) owns lifecycle, device safety and
 custody. [Provider coverage](storage-coverage.md) owns release qualification.
 
-**Current:** minimal `StorageClient` is admitted with core RBD pools. Native
+**Current:** `StoragePlacementPolicy`, `StoragePool` and minimal
+`StorageClient` are admitted and realized. Native
 effects remain artifact-gated. **Not yet met:** later P2 kinds, NFS ownership
 migration and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.
@@ -82,7 +83,7 @@ effects. No new field inherits an undocumented default from another resource.
 | Resource | Retained responsibility | Relationship to native services |
 | --- | --- | --- |
 | `StoragePlacementPolicy` | Reusable CRUSH placement and pool protection policy. | OSD topology supplies its proved failure domains; policy does not deploy OSDs. |
-| `StoragePool` | Pool identity, replicated/EC protection, application, PG/autoscaler, quota, compression and supported mirroring intent. | Services and resources reference owned pools; native auto-created pools require an explicitly recorded derived owner. |
+| `StoragePool` | Pool identity, replicated/EC protection, application, PG/autoscaler, quota, compression and supported mirroring intent. EC `rbd`/`cephfs-data` pools derive irreversible overwrite enablement; mirroring is [B483](milestones/m2.md#b483)'s. | Services and resources reference owned pools; native auto-created pools require an explicitly recorded derived owner. |
 | `StorageFilesystem` | Metadata/data-pool composition, default/layout, active ranks and standby/replay resource policy, declared subvolume groups. | One declared MDS service binds the native filesystem identity; placement and container configuration belong to that service. |
 | `StorageObjectGateway` | Logical object-storage scope, realm/zone relationships, owned pool layout and public endpoint identity/trust. | B477 binds its RGW service and any ingress services by full native identity. It no longer embeds daemon placement, frontend or ingress specifications. |
 | `StorageExport` | Existing Data Foundation handoff, or the external-details arm. | It waits for the resources and access material it describes; it neither creates an add-on nor becomes a general native-command resource. |

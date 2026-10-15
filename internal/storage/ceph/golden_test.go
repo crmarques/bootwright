@@ -76,12 +76,16 @@ func TestFrozenRequestGolden(t *testing.T) {
 		r.Hosts[i].Location = map[string]string{}
 		r.Hosts[i].KnownHosts = ""
 	}
-	for _, action := range []string{"cluster", "pool", "client"} {
+	for _, action := range []string{"cluster", "policy", "pool", "client"} {
 		r.Action = action
+		r.Policy = nil
 		r.Pool = nil
 		r.Client = nil
+		if action == "policy" {
+			r.Policy = &Policy{DeviceClass: "ssd", FailureDomain: "host", Name: "ssd-hosts", Root: "default", Rule: "ssd-hosts", Size: 2}
+		}
 		if action == "pool" {
-			r.Pool = &Pool{Name: "volumes", Size: 2, MinSize: 2, PGNum: 32, CrushRule: "replicated_rule"}
+			r.Pool = &Pool{Name: "volumes", Type: "replicated", Role: "rbd", Application: "rbd", Size: 2, MinSize: 2, PGNum: 32, CrushRule: "replicated_rule", Autoscale: PoolAutoscale{Mode: "on"}}
 		}
 		if action == "client" {
 			r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}

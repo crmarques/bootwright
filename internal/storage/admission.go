@@ -151,6 +151,7 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 	switch object.Kind() {
 	case api.StoragePlacementPolicy:
 		a.replication(owner, api.Object{})
+		a.policy(owner)
 	case api.StoragePool:
 		a.pool(owner)
 	case api.StorageFilesystem:

@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v3
-content-digest: f4f75bdd7bec94d32e5caa1ad1c47f4dcdb8521939e0e77c238a598b3f98478b
+content-digest: 97506b522ebf7f6d8f1c3eaa85247f9c464440383c498f50c8a7e80539be32fa
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-pool-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v2
 request-schema:
   action string
@@ -53,12 +53,50 @@ request-schema:
   packages.sources[].publicationPath string
   packages.sources[].url string
   packages.version string
+  policy *struct ceph.Policy omitempty
+  policy.deviceClass string
+  policy.failureDomain string
+  policy.name string
+  policy.root string
+  policy.rule string
+  policy.size int
   pool *struct ceph.Pool omitempty
+  pool.application string
+  pool.autoscale struct ceph.PoolAutoscale
+  pool.autoscale.bulk bool
+  pool.autoscale.maxPGs int
+  pool.autoscale.minPGs int
+  pool.autoscale.mode string
+  pool.autoscale.targetBytes int64
+  pool.autoscale.targetRatio string
+  pool.compression struct ceph.PoolCompression
+  pool.compression.algorithm string
+  pool.compression.maxBlob int64
+  pool.compression.minBlob int64
+  pool.compression.mode string
+  pool.compression.requiredRatio string
   pool.crushRule string
+  pool.erasure *struct ceph.PoolErasure omitempty
+  pool.erasure.codingChunks int
+  pool.erasure.dataChunks int
+  pool.erasure.deviceClass string
+  pool.erasure.failureDomain string
+  pool.erasure.plugin string
+  pool.erasure.profile string
+  pool.erasure.profileDefaults map[string]string
+  pool.erasure.root string
+  pool.erasure.stripeUnit int
+  pool.erasure.technique string
   pool.minSize int
   pool.name string
+  pool.overwrites bool
   pool.pgNum int
+  pool.quota struct ceph.PoolQuota
+  pool.quota.maxBytes int64
+  pool.quota.maxObjects int64
+  pool.role string
   pool.size int
+  pool.type string
   publicNetworks []string
   registry string
   registryRef string

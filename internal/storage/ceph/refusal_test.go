@@ -149,3 +149,14 @@ func TestEachCephBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 		}
 	}
 }
+
+func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
+	refusals := adapterRefusals()
+	generic := diagnostics.Of(refusals["native-output"])[0].Remediation
+	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget"} {
+		d := diagnostics.Of(refusals[reason])
+		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
+			t.Fatalf("%s reaches the operator as %+v", reason, d)
+		}
+	}
+}

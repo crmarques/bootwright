@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v6"
+const Version = "ceph-core-v7"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -43,12 +43,64 @@ type Tool struct {
 	Path           string `json:"path"`
 }
 
+type Policy struct {
+	DeviceClass   string `json:"deviceClass"`
+	FailureDomain string `json:"failureDomain"`
+	Name          string `json:"name"`
+	Root          string `json:"root"`
+	Rule          string `json:"rule"`
+	Size          int    `json:"size"`
+}
+
+type PoolAutoscale struct {
+	Bulk        bool   `json:"bulk"`
+	MaxPGs      int    `json:"maxPGs"`
+	MinPGs      int    `json:"minPGs"`
+	Mode        string `json:"mode"`
+	TargetBytes int64  `json:"targetBytes"`
+	TargetRatio string `json:"targetRatio"`
+}
+
+type PoolCompression struct {
+	Algorithm     string `json:"algorithm"`
+	MaxBlob       int64  `json:"maxBlob"`
+	MinBlob       int64  `json:"minBlob"`
+	Mode          string `json:"mode"`
+	RequiredRatio string `json:"requiredRatio"`
+}
+
+type PoolErasure struct {
+	CodingChunks    int               `json:"codingChunks"`
+	DataChunks      int               `json:"dataChunks"`
+	DeviceClass     string            `json:"deviceClass"`
+	FailureDomain   string            `json:"failureDomain"`
+	Plugin          string            `json:"plugin"`
+	Profile         string            `json:"profile"`
+	ProfileDefaults map[string]string `json:"profileDefaults"`
+	Root            string            `json:"root"`
+	StripeUnit      int               `json:"stripeUnit"`
+	Technique       string            `json:"technique"`
+}
+
+type PoolQuota struct {
+	MaxBytes   int64 `json:"maxBytes"`
+	MaxObjects int64 `json:"maxObjects"`
+}
+
 type Pool struct {
-	CrushRule string `json:"crushRule"`
-	MinSize   int    `json:"minSize"`
-	Name      string `json:"name"`
-	PGNum     int    `json:"pgNum"`
-	Size      int    `json:"size"`
+	Application string          `json:"application"`
+	Autoscale   PoolAutoscale   `json:"autoscale"`
+	Compression PoolCompression `json:"compression"`
+	CrushRule   string          `json:"crushRule"`
+	Erasure     *PoolErasure    `json:"erasure,omitempty"`
+	MinSize     int             `json:"minSize"`
+	Name        string          `json:"name"`
+	Overwrites  bool            `json:"overwrites"`
+	PGNum       int             `json:"pgNum"`
+	Quota       PoolQuota       `json:"quota"`
+	Role        string          `json:"role"`
+	Size        int             `json:"size"`
+	Type        string          `json:"type"`
 }
 
 type Client struct {
@@ -99,6 +151,7 @@ type Request struct {
 	Owner                    string                       `json:"owner,omitempty"`
 	PackageRepository        string                       `json:"packageRepository"`
 	Packages                 *PackageRequest              `json:"packages,omitempty"`
+	Policy                   *Policy                      `json:"policy,omitempty"`
 	Pool                     *Pool                        `json:"pool,omitempty"`
 	PublicNetworks           []string                     `json:"publicNetworks"`
 	Registry                 string                       `json:"registry"`

@@ -68,6 +68,8 @@ argument_specs:
             type: str
           packages:
             type: dict
+          policy:
+            type: dict
           pool:
             type: dict
           publicNetworks:
@@ -87,7 +89,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-core-v6]
+            choices: [ceph-core-v7]
       bootwright_ceph_digest:
         type: str
         required: true

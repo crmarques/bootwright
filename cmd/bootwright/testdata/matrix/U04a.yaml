@@ -10,5 +10,5 @@ expect:
   kind: StoragePool
   name: rbd-data
   field: $.spec.erasure
-  message: erasure data and coding chunks exceed declared OSD-host capacity
-  remediation: "correct $.spec.erasure to satisfy this requirement: erasure data and coding chunks exceed declared OSD-host capacity"
+  message: "erasure profile 2+2 needs at least 5 OSD hosts without mon_osd_down_out_subtree_limit = host; 3 are declared"
+  remediation: add OSD-bearing hosts until 5 carry OSDs, or choose a profile whose minimum the cluster meets

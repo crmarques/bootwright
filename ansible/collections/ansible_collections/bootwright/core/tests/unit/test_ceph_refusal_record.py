@@ -16,12 +16,13 @@ from __future__ import annotations
 import pathlib
 
 import pytest
+import yaml
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import ceph_cluster_protocol as protocol
 from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, ceph_core, ceph_native
-from ansible_collections.bootwright.core.plugins.modules import ceph_cluster, ceph_host
+from ansible_collections.bootwright.core.plugins.modules import ceph_cluster, ceph_cluster_protocol, ceph_host
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 LOADER = DataLoader()
@@ -167,3 +168,9 @@ def test_the_protocol_names_only_the_blocks_closed_reasons_and_a_value_free_deta
     adapter_protocol.publish({"phase": "refused", "reason": "transport", "detail": "password=" + SECRET}, protocol.CAPABILITY,
                              lambda record, acknowledge=False: records.append(record))
     assert records == [{"phase": "refused", "reason": "transport"}]
+
+
+def test_protocol_documentation_lists_every_refusal():
+    choices = yaml.safe_load(ceph_cluster_protocol.DOCUMENTATION)["options"]["reason"]["choices"]
+    assert len(set(choices)) == len(choices)
+    assert set(choices) == set(protocol.REFUSALS)

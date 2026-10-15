@@ -13,6 +13,12 @@ expect:
   message: native stretch lifecycle requires the later qualified stretch slice
   remediation: remove stretch from $.spec.ceph.topology; B486 delivers it
 - code: api.invariant
+  kind: StoragePlacementPolicy
+  name: ssd-hosts
+  field: $.spec.replicated
+  message: stretch fixes replicated protection at size four and minimum two
+  remediation: "correct $.spec.replicated to satisfy this requirement: stretch fixes replicated protection at size four and minimum two"
+- code: api.invariant
   kind: StoragePool
   name: rbd-data
   field: $.spec.replicated

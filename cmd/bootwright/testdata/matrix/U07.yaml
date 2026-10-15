@@ -9,6 +9,9 @@ expect:
 - kind: StorageCluster
   name: ceph-lab
   refusalRow: Incomplete or unsafe Ceph coordinates or transport
+- kind: StoragePlacementPolicy
+  name: ssd-hosts
+  refusalRow: Incomplete or unsafe Ceph coordinates or transport
 - kind: StoragePool
   name: rbd-data
   refusalRow: Incomplete or unsafe Ceph coordinates or transport

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -174,5 +175,57 @@ func TestMissingPrincipalNeverProvesOldSessionsQuiescent(t *testing.T) {
 		if err != nil || q.State != lifecycle.Unproved || q.Reason != survivingReason || runner.calls != 0 {
 			t.Fatalf("%s inferred quiescence without a session proof: %+v %v", kind, q, err)
 		}
+	}
+}
+
+func TestPolicyBlockRequiresClusterAndPoolRequiresPolicy(t *testing.T) {
+	objects := []api.Object{childOf(api.StoragePlacementPolicy, "fast", "ruleName", "fast-hosts", "crushDeviceClass", "ssd", "replicated", requestMap("size", 2, "minSize", 2))}
+	for _, object := range pinnedCatalog(t, nil).Objects() {
+		if object.Kind() == api.StoragePool {
+			object = object.WithSpec(object.Spec().With("placementPolicyRef", api.StringValue("fast")))
+		}
+		objects = append(objects, object)
+	}
+	catalog := api.NewCatalog(objects)
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+	definitions := map[string]reconciliation.BlockDefinition{}
+	all := []reconciliation.BlockDefinition{}
+	for _, capability := range []lifecycle.Capability{NewImage(nil), NewHost(nil), New(api.StorageCluster, nil), New(api.StoragePlacementPolicy, nil), New(api.StoragePool, nil), New(api.StorageClient, nil)} {
+		plan, err := capability.Plan(context.Background(), input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, definition := range plan.Definitions {
+			definitions[definition.ID] = definition
+		}
+		all = append(all, plan.Definitions...)
+	}
+	policy, pool := definitions["ceph-policy-fast"], definitions["ceph-pool-volumes"]
+	if policy.Kind != string(api.StoragePlacementPolicy) || policy.Object != "fast" || len(policy.Requires) != 0 || !slices.Equal(policy.Dependencies, []string{ClusterBlockID("example")}) {
+		t.Fatalf("the policy block is %+v", policy)
+	}
+	if !slices.Contains(pool.Requires, reconciliation.ObjectRef{Kind: string(api.StoragePlacementPolicy), Object: "fast"}) || !slices.Contains(pool.Requires, reconciliation.ObjectRef{Kind: string(api.StorageCluster), Object: "example"}) {
+		t.Fatalf("the pool block requires %+v", pool.Requires)
+	}
+	for _, kind := range []string{"Machine", "MachineInstallProfile"} {
+		for _, name := range []string{"node-1", "node-2", "node-3", "rhel"} {
+			all = append(all, reconciliation.BlockDefinition{ID: strings.ToLower(kind) + "-" + name, Description: "synthetic " + name, Stage: reconciliation.StageMachines, Kind: kind, Object: name, Implementation: "synthetic", ContentDigest: strings.Repeat("f", 64), Request: json.RawMessage(`{}`)})
+		}
+	}
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, all)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, block := range plan.Blocks {
+		if block.ID == "ceph-pool-volumes" && slices.Contains(block.Dependencies, "ceph-policy-fast") {
+			found++
+		}
+		if block.ID == "ceph-policy-fast" && slices.Equal(block.Dependencies, []string{"ceph-cluster-example"}) {
+			found++
+		}
+	}
+	if found != 2 {
+		t.Fatal("the planned pool does not depend on its policy block, or the policy block depends on more than its cluster block")
 	}
 }

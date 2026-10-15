@@ -5,9 +5,11 @@
 qualification for standalone native files. Until then the [storage admission
 contract](../api/storage.md) owns the kinds, references, replicated protection
 and graph invariants, and the closed schema in `api/v1alpha1/storage.go` is
-authoritative for field names, types and shapes. The core cluster, pool and
-client fields are realized for the pinned release
-([X70](../milestones/delivered.md#x70--ceph-through-the-ordinary-staged-apply));
+authoritative for field names, types and shapes. The core cluster, placement
+policy, pool and client fields are realized for the pinned release
+([X70](../milestones/delivered.md#x70--ceph-through-the-ordinary-staged-apply)),
+and [pool protection and erasure coding](../api/storage.md#pool-protection-and-erasure-coding)
+owns current policy and pool admission;
 later resource family tables stay historical, not the approved M2 target, until
 [B472](../milestones/m2.md#b472) revives them. The [native
 input](../storage-native-api.md) and [resource
@@ -104,7 +106,8 @@ custody semantics. Native execution remains gated.
 ## StoragePlacementPolicy
 
 This kind owns a reusable CRUSH placement policy and replicated defaults for
-one managed Ceph cluster.
+one managed Ceph cluster. The current admission and realization contract is
+[pool protection and erasure coding](../api/storage.md#pool-protection-and-erasure-coding).
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
@@ -123,7 +126,9 @@ Host-domain replica capacity cannot exceed the number of OSD hosts.
 ## StoragePool
 
 This kind owns one pool. Its `spec.type` selects protection, while the
-referenced cluster selects the storage engine.
+referenced cluster selects the storage engine. The current admission and
+realization contract is
+[pool protection and erasure coding](../api/storage.md#pool-protection-and-erasure-coding).
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
@@ -152,7 +157,8 @@ The erasure arm contains `dataChunks`, `codingChunks`, `plugin`,
 `parameters: map<string,string>`. Data and coding chunks are positive and
 required for erasure. `plugin` is empty or `jerasure`, `isa`, `clay`,
 `lrc`, or `shec`. The parameters map cannot repeat keys owned by typed fields
-or the derived failure domain. `stripeUnit` follows the shared lexical table.
+or the derived failure domain, and a non-empty map is refused at plan.
+`stripeUnit` follows the shared lexical table.
 
 Autoscale contains `mode` (`on`, `off`, or `warn`),
 `targetSizeRatio` (finite non-negative number), `targetSizeBytes` (string),
@@ -172,7 +178,9 @@ positive-pair ordering rule. Other compression fields require a mode.
 
 Pool roles agree with filesystem, gateway, NFS, and export consumers.
 CephFS metadata pools are replicated. Erasure is limited to supported roles,
-cannot be used with stretch, and `k+m` cannot exceed OSD-host capacity.
+cannot be used with stretch. For distribution `ibm`, `k+m` is a row of IBM
+Table 1 and the declared OSD hosts meet that row's minimum; other
+distributions keep `k+m` within OSD-host capacity.
 
 ## StorageFilesystem
 

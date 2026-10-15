@@ -310,3 +310,16 @@ func TestPoolEvidenceResourceIDIsDecimal(t *testing.T) {
 		t.Fatalf("an absent pool carried a resource identity: %s %v", effect, err)
 	}
 }
+
+func TestEvidencePolicyReadyNeedsRuleID(t *testing.T) {
+	policy := runtimeRequest()
+	policy.Action = "policy"
+	policy.Policy = &Policy{DeviceClass: "ssd", FailureDomain: "host", Name: "fast", Root: "default", Rule: "fast-hosts", Size: 2}
+	for id, want := range map[string]reconciliation.EffectState{"": reconciliation.EffectUnknown, "x1": reconciliation.EffectUnknown, "-1": reconciliation.EffectUnknown, "0": reconciliation.EffectCompleted, "7": reconciliation.EffectCompleted} {
+		e := readyEvidence(policy)
+		e.Resource = ResourceEvidence{ID: id}
+		if effect, _ := EvaluateEvidence(evidenceBytes(t, e), policy, "digest", false); effect != want {
+			t.Fatalf("ready policy evidence with rule id %q is %s, want %s", id, effect, want)
+		}
+	}
+}

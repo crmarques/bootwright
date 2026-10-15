@@ -11,4 +11,4 @@ expect:
   name: rbd-data
   field: $.spec.replicated.size
   message: host-domain replicas exceed declared OSD-host capacity
-  remediation: "correct $.spec.replicated.size to satisfy this requirement: host-domain replicas exceed declared OSD-host capacity"
+  remediation: add OSD-bearing hosts, or lower replicated.size to at most the declared OSD-host count

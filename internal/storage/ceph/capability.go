@@ -20,12 +20,16 @@ type Capability struct {
 
 func New(kind api.Kind, runner Runner) Capability { return Capability{kind: kind, runner: runner} }
 
+func ClusterBlockID(cluster string) string { return "ceph-cluster-" + cluster }
+
 func (c Capability) WithProofs(proofs DependencyProofs) Capability { c.proofs = proofs; return c }
 
 func (c Capability) request(catalog api.Catalog, object api.Object, contextName string) (Request, error) {
 	switch c.kind {
 	case api.StorageCluster:
 		return baseRequest(catalog, object, contextName)
+	case api.StoragePlacementPolicy:
+		return policyRequest(catalog, object, contextName)
 	case api.StoragePool:
 		return poolRequest(catalog, object, contextName)
 	case api.StorageClient:
@@ -68,6 +72,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			requires = slices.Compact(requires)
 		case api.StoragePool:
 			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageCluster), Object: request.Cluster})
+			if ref := object.Spec().Get("placementPolicyRef").Text(); ref != "" {
+				requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePlacementPolicy), Object: ref})
+			}
 		case api.StorageClient:
 			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.Client.Pool})
 		}
@@ -78,7 +85,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			consumes = []string{reconciliation.AuthorizationDataLoss}
 		}
 		dependencies := []string{}
-		if c.kind != api.StoragePool {
+		if c.kind == api.StoragePlacementPolicy {
+			dependencies = append(dependencies, ClusterBlockID(request.Cluster))
+		} else if c.kind != api.StoragePool {
 			dependencies = append(dependencies, ImageBlockID(request.Cluster))
 		}
 		if c.kind == api.StorageCluster {
@@ -144,8 +153,11 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if err != nil {
 		return Request{}, err
 	}
-	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePool: "pool", api.StorageClient: "client"}[c.kind]
+	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client"}[c.kind]
 	object := r.Cluster
+	if r.Action == "policy" && r.Policy != nil {
+		object = r.Policy.Name
+	}
 	if r.Action == "pool" && r.Pool != nil {
 		object = r.Pool.Name
 	}
