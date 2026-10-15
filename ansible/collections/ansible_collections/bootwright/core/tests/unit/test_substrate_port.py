@@ -59,6 +59,7 @@ COMPOSED = {
     "managedos_install_anaconda/tasks/boot.yml": [
         ("libvirt", "pre_boot"), ("baremetal", "pre_boot"), ("libvirt", "boot_media"), ("baremetal", "boot_media")],
     "managedos_install_anaconda/tasks/identity.yml": [("libvirt", "identity_read"), ("baremetal", "identity_read")],
+    "managedos_install_anaconda/tasks/network.yml": [("libvirt", "boot_disk"), ("baremetal", "boot_disk")],
 }
 
 # Only these read the media a machine presents; every other read is a power read.
@@ -67,6 +68,7 @@ READS = MEDIA_READS | {
     "machine_power_read_redfish/tasks/read.yml",
     "machine_power_redfish/tasks/power.yml",
     "managedos_install_anaconda/tasks/await.yml",
+    "managedos_install_anaconda/tasks/network.yml",
     "substrate_libvirt_machine/tasks/apply.yml",
     "substrate_libvirt_machine/tasks/observe.yml",
     "substrate_libvirt_machine/tasks/pre_boot.yml",
@@ -128,6 +130,8 @@ ASKED = {
     ("managedos_install_anaconda/tasks/await.yml", "baremetal", "boot_disk"): {BAREMETAL + "_disk_power_on": True},
     ("managedos_install_anaconda/tasks/boot.yml", "libvirt", "boot_media"): {
         LIBVIRT + "_boot_installer_powers_off": True},
+    ("managedos_install_anaconda/tasks/network.yml", "libvirt", "boot_disk"): {LIBVIRT + "_disk_power_on": True},
+    ("managedos_install_anaconda/tasks/network.yml", "baremetal", "boot_disk"): {BAREMETAL + "_disk_power_on": True},
 }
 
 ENDPOINTS = {
@@ -409,6 +413,7 @@ def test_a_cluster_removal_dispatches_nothing():
 # one attempt rather than ending the poll.
 @pytest.mark.parametrize("path, register, awaited, pending", [
     ("managedos_install_anaconda/tasks/await.yml", "managedos_install_anaconda_installer", "Off", "On"),
+    ("managedos_install_anaconda/tasks/network.yml", "managedos_install_anaconda_powered_off", "Off", "On"),
     ("substrate_libvirt_machine/tasks/apply.yml", "substrate_libvirt_machine_controller", "On", ""),
 ])
 def test_a_poll_spends_an_attempt_on_a_read_that_failed(path, register, awaited, pending):

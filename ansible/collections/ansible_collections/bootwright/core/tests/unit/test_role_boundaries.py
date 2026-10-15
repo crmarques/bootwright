@@ -123,6 +123,8 @@ UNITS = {
 # them, which would pass the poll rule vacuously.
 POLLS = {
     ("managedos_install_anaconda/tasks/await.yml", "managedos_install_anaconda_installer"),
+    ("managedos_install_anaconda/tasks/guest.yml", "managedos_install_anaconda_guest"),
+    ("managedos_install_anaconda/tasks/network.yml", "managedos_install_anaconda_powered_off"),
     ("managedos_install_anaconda/tasks/reachable.yml", "managedos_install_anaconda_reachable"),
     ("substrate_baremetal_machine/tasks/identity_read.yml", "substrate_baremetal_machine_marker_read"),
     ("substrate_libvirt_host/tasks/apply.yml", "substrate_libvirt_host_connection"),
@@ -147,6 +149,7 @@ CONTROLLER_FILES = {
     "managedos_install_anaconda/tasks/apply.yml",
     "managedos_install_anaconda/tasks/await.yml",
     "managedos_install_anaconda/tasks/boot.yml",
+    "managedos_install_anaconda/tasks/network.yml",
     "managedos_install_anaconda/tasks/observe.yml",
     "substrate_baremetal_machine/tasks/apply.yml",
     "substrate_baremetal_machine/tasks/boot_disk.yml",
@@ -650,7 +653,8 @@ ENDPOINT = "https://bmc.example.test/redfish/v1/Systems/1"
 SCOPE = dict({
     "bootwright_machine_power_request": {"identity": {"object": "metal"}},
     "bootwright_os_install_request": {"identity": {"object": "rhel-01"},
-                                      "budgets": {"installer": {"attempts": 180, "delaySeconds": 20}}},
+                                      "budgets": {"installer": {"attempts": 180, "delaySeconds": 20},
+                                                  "reboot": {"attempts": 60, "delaySeconds": 10}}},
     "bootwright_substrate_machine_request": {"identity": {"object": "rhel-01"}},
     "bootwright_substrate_physical_request": {"identity": {"object": "metal"}, "controller": {"endpoint": ENDPOINT}},
     "containercluster_install_agent_node": {"machine": "sno-01"},
@@ -927,8 +931,10 @@ def test_the_refusal_rule_rejects(tasks, reason):
 # /var/run is the alias of /run on every systemd host, so it is named too.
 SCRATCH_ROOTS = re.compile(r"(?<![\w.{}/-])/(?:var/tmp|var/run|tmp|run)(?:/[^\s'\"{}:;,)]*|(?![\w.-]))")
 
-# The two literals that name a host fact rather than scratch, each with why.
+# The literals that name a host fact rather than scratch, each with why.
 SCRATCH_ALLOWED = {
+    "/run/bootwright": "the installed guest's root-only runtime directory its network apply unit writes, never a"
+                       " path on the controller or a placement host",
     "/run/libvirt": "the libvirt socket directory a container mounts, not a file a role writes",
     "/run/nginx.pid": "the daemon's own pid file, named in the configuration it reads",
 }
@@ -960,7 +966,8 @@ def test_no_role_but_the_controller_stage_names_a_fixed_scratch_path():
 
 
 def test_the_allowlisted_host_paths_are_still_named_by_a_role():
-    text = "\n".join(path.read_text() for path in ROLES.rglob("*.j2"))
+    named = list(ROLES.rglob("*.j2")) + [path for path in ROLES.rglob("*.yml") if path.parent.name == "defaults"]
+    text = "\n".join(path.read_text() for path in named)
     assert all(allowed in text for allowed in SCRATCH_ALLOWED), "an allowlist entry no template names any longer"
 
 

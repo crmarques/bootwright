@@ -146,3 +146,45 @@ def test_every_entry_point_requires_the_frozen_network():
         assert {field: (option["type"], option["required"]) for field, option in network["options"].items()} == {
             "checkpointSeconds": ("int", True), "document": ("dict", True),
             "documentPath": ("str", True), "markerPath": ("str", True)}, entry
+
+
+# The network convergence waits, kept apart from BUDGETS, which the argument
+# specification's budgets are compared with. Distinct values, so each wait is
+# proved to read its own budget.
+NETWORK_BUDGETS = {
+    "networkApply": {"attempts": 17, "delaySeconds": 4},
+    "networkReconnect": {"attempts": 19, "delaySeconds": 6},
+    "reboot": {"attempts": 23, "delaySeconds": 8},
+}
+CHECKPOINT_SECONDS = 41
+
+
+def network_rendered(value):
+    """What one templated value is for a request freezing NETWORK_BUDGETS."""
+    scope = {"bootwright_os_install_request": {"budgets": NETWORK_BUDGETS,
+                                               "network": {"checkpointSeconds": CHECKPOINT_SECONDS}}}
+    return int(Templar(loader=LOADER, variables=scope).template(value))
+
+
+def guest_waits(command):
+    """The guest includes of network.yml running one command, with the budget each reads."""
+    found = []
+    for task in walk(trusted("network.yml")):
+        arguments = task.get("vars") or {}
+        if task.get("ansible.builtin.include_tasks") == "guest.yml" and arguments.get(
+                "managedos_install_anaconda_guest_command") == "{{ managedos_install_anaconda_network_%s }}" % command:
+            found.append((network_rendered(arguments.get("managedos_install_anaconda_guest_retries", "0")),
+                          network_rendered(arguments.get("managedos_install_anaconda_guest_pause", "0"))))
+    return found
+
+
+def test_the_network_waits_read_their_frozen_budgets():
+    apply, reconnect, reboot = (tuple(NETWORK_BUDGETS[name].values()) for name in ("networkApply", "networkReconnect", "reboot"))
+    assert guest_waits("wait") == [apply, apply, reconnect]
+    assert guest_waits("boot_id") == [reboot]
+    for command in ("read", "prepare", "start", "rollback", "commit", "mark", "poweroff", "show"):
+        assert set(guest_waits(command)) <= {(0, 0)}, command
+    poll = one("network.yml", lambda task: task.get("register") == "managedos_install_anaconda_powered_off")
+    assert (network_rendered(poll["retries"]), network_rendered(poll["delay"])) == reboot
+    pause = one("network.yml", lambda task: "ansible.builtin.pause" in task)
+    assert network_rendered(pause["ansible.builtin.pause"]["seconds"]) == CHECKPOINT_SECONDS + 30

@@ -74,7 +74,8 @@ MACHINE = {"answered": True, "controller": "quay.io/x@sha256:" + "0" * 64, "disk
 MACHINE_GONE = {"answered": True, "controller": "", "disks": [], "domain": "", "listener": False, "owned": False,
                 "state": "", "unit": ""}
 INSTALL = {"observation": {"image": True, "tree": True}, "marker": '{"context":"lab"}', "hostKey": "ssh-ed25519 AAAA",
-           "address": "198.51.100.11", "media": "", "power": "On", "reachable": True}
+           "address": "198.51.100.11", "media": "", "power": "On", "reachable": True, "network": True,
+           "networkReboot": True}
 CLUSTER = {"cluster": "c" * 64, "completed": True, "media": [], "missing": [], "ownMedia": [], "powered": ["sno-01"],
            "release": "4.21.15"}
 PHYSICAL = {"addresses": ["aa:bb:cc:dd:ee:01"], "failures": [], "manufacturer": "Acme", "model": "R740", "power": "Off",

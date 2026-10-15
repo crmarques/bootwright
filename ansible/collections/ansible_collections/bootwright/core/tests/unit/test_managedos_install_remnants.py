@@ -86,6 +86,8 @@ class Host:
             ]},
             "managedos_install_anaconda_work_parent": str(self.parent),
             "managedos_install_anaconda_work": str(self.work),
+            "managedos_install_anaconda_network_result": {"network": True, "networkReboot": True,
+                                                          "networkDifferences": [], "changed": False},
         })
         self.emitted = []
         self.built = None

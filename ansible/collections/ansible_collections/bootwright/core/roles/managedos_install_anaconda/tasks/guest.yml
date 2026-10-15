@@ -1,0 +1,118 @@
+---
+# One fixed command on the installed machine as the fleet account, pinned to
+# exactly the key its identity channel reported. The connection is the one
+# reachable.yml proves, option for option, so a command here never trusts a
+# first-use answer; test_guest_commands_pin_the_host_key holds the two equal.
+#
+# The caller names the command as a list of argv words and may give it
+# standard input, the only way a document or marker reaches the machine. The
+# caller owns the budget, as templates of frozen budgets. Every attempt is a
+# new connection; the result is censored and the caller names what failed.
+- name: Read the effective crypto policy on this connection's placement host
+  bootwright.core.ssh_key_policy:
+  register: managedos_install_anaconda_guest_ssh_policy
+
+- name: Publish the guest's own host key for this one connection
+  ansible.builtin.copy:
+    content: '{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key | trim }}'
+    dest: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Write the one-connection client configuration
+  ansible.builtin.copy:
+    content: '{{ managedos_install_anaconda_guest_ssh_policy.configuration }}'
+    dest: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Name the algorithms the guest's key is accepted under
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_guest_host_key_algorithms: >-
+      {{ managedos_install_anaconda_host_key
+         | bootwright.core.host_key_algorithms(managedos_install_anaconda_guest_ssh_policy.hostKeyAlgorithms) }}
+  changed_when: false
+
+- name: Run the fixed command as the fleet account on that exact key
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/ssh
+      - -F
+      - '{{ managedos_install_anaconda_scratch }}/ssh_config'
+      - -o
+      - 'UserKnownHostsFile={{ managedos_install_anaconda_scratch }}/known_hosts'
+      - -o
+      - GlobalKnownHostsFile=none
+      - -o
+      - KnownHostsCommand=none
+      - -o
+      - VerifyHostKeyDNS=no
+      - -o
+      - UpdateHostKeys=no
+      - -o
+      - CheckHostIP=no
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - 'HostKeyAlgorithms={{ managedos_install_anaconda_guest_host_key_algorithms }}'
+      - -o
+      - IdentitiesOnly=yes
+      - -o
+      - IdentityAgent=none
+      - -o
+      - PasswordAuthentication=no
+      - -o
+      - KbdInteractiveAuthentication=no
+      - -o
+      - GSSAPIAuthentication=no
+      - -o
+      - HostbasedAuthentication=no
+      - -o
+      - ForwardAgent=no
+      - -o
+      - ProxyCommand=none
+      - -o
+      - ProxyJump=none
+      - -o
+      - ControlMaster=no
+      - -o
+      - ControlPath=none
+      - -o
+      - BatchMode=yes
+      - -o
+      - ConnectTimeout=10
+      - -o
+      - ServerAliveInterval=15
+      - -o
+      - ServerAliveCountMax=3
+      - -i
+      - '{{ bootwright_os_install_material.fleetIdentity }}'
+      - '{{ bootwright_os_install_request.user }}@{{ bootwright_os_install_request.address }}'
+      - '{{ managedos_install_anaconda_guest_command | map("quote") | join(" ") }}'
+    stdin: '{{ managedos_install_anaconda_guest_stdin | default(omit) }}'
+    stdin_add_newline: false
+  register: managedos_install_anaconda_guest
+  retries: '{{ managedos_install_anaconda_guest_retries | default(0) | int }}'
+  delay: '{{ managedos_install_anaconda_guest_pause | default(1) | int }}'
+  until: managedos_install_anaconda_guest.rc | default(1) == 0
+         or (managedos_install_anaconda_guest.attempts | default(1) | int)
+            > (managedos_install_anaconda_guest_retries | default(0) | int)
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Remove the one-connection known-hosts file
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    state: absent
+  changed_when: false
+
+- name: Remove the one-connection client configuration
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    state: absent
+  changed_when: false

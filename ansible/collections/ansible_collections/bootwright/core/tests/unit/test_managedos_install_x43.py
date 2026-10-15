@@ -147,7 +147,8 @@ SSH_OPTIONS = (
     "ServerAliveInterval=15", "ServerAliveCountMax=3",
 )
 URI = "ansible.builtin.uri"
-OUTCOME = "{{ 'unchanged' if managedos_install_anaconda_was_installed | bool else 'changed' }}"
+OUTCOME = ("{{ 'unchanged' if (managedos_install_anaconda_was_installed | bool)"
+           " and not (managedos_install_anaconda_network_result.changed | default(true) | bool) else 'changed' }}")
 MARKER = '{"request":"' + "1" * 64 + '"}'
 
 
@@ -184,7 +185,7 @@ def test_a_first_install_reports_changed_and_a_replay_unchanged():
         assert frozen < guarded
         assert tasks[guarded]["when"] == "not (managedos_install_anaconda_was_installed | bool)"
 
-    def outcome(first_answer):
+    def outcome(first_answer, network_changed=False):
         material = {"marker": MARKER}
         first = Templar(loader=LOADER, variables=variables(
             bootwright_os_install_material=material, managedos_install_anaconda_answered=first_answer,
@@ -193,11 +194,15 @@ def test_a_first_install_reports_changed_and_a_replay_unchanged():
         # By completion the machine answers with the marker either way.
         after = Templar(loader=LOADER, variables=variables(
             bootwright_os_install_material=material, managedos_install_anaconda_answered=True,
-            managedos_install_anaconda_marker=MARKER, managedos_install_anaconda_was_installed=was_installed))
+            managedos_install_anaconda_marker=MARKER, managedos_install_anaconda_was_installed=was_installed,
+            managedos_install_anaconda_network_result={"changed": network_changed}))
         return after.template(trust_as_template(OUTCOME))
 
     assert outcome(False) == "changed"
     assert outcome(True) == "unchanged"
+    # A replay that had to converge the network changed the Machine.
+    assert outcome(True, network_changed=True) == "changed"
+    assert outcome(False, network_changed=True) == "changed"
 
     for path in sorted((ROLE / "tasks").glob("*.yml")):
         for task in flattened(path):

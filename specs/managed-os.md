@@ -465,12 +465,17 @@ complete one. A Machine that holds the marker and has not accepted the
 connection yet is converging rather than failed.
 
 **Replay.** A Machine whose guest already answers with the frozen marker
-reports `completed` with the same evidence, outcome `unchanged`, and boots
-nothing; an apply that booted the installer reports `changed`. The answer is
+boots no installer but still converges its
+[network](#network-convergence); it reports `completed` with the same
+evidence, and outcome `unchanged` only when the network marker names this
+request from an earlier boot and the running network matches its declaration.
+An apply that booted the installer, or that applied, rolled back or restarted
+the network, reports `changed`. The installer answer is
 the first identity read's, frozen before the boot, never the marker the
 installer has written by completion. The only
-differences it converges are its own published content and an ejection it did
-not complete, each performed again for a guest already holding that marker. A
+differences it converges are its own published content, an ejection it did
+not complete and the Machine's declared network, each performed again for a
+guest already holding that marker. A
 guest that
 answers with a different marker, or a powered-on guest with none, refuses:
 there is no reinstall path, and a fresh installation requires the Machine's
@@ -500,7 +505,10 @@ unfinished work is a positive partial realization the next attempt converges,
 which is either content it published on a powered-off guest that never
 installed, or the frozen marker with the completion not yet true. The frozen
 marker with a network not yet converged, rolled back, mismatched or drifted is
-a positive partial realization; network convergence never yields no effect. A
+a positive partial realization; network convergence never yields no effect. Over the pinned fleet
+connection, when it answers, the observation also reads the network marker,
+the boot ID and `nmstatectl show --json`, and compares the running network
+with its declaration. A
 delivered-key completion has nothing published beneath its private subtree,
 neither the key pair nor the image; that subtree left on a powered-off guest
 that never installed is its partial. Anything else
@@ -588,57 +596,132 @@ never rolls back a change the adapter is still proving. The Kickstart
 installs the `nmstate` package with the profile's packages, once even when
 the profile names it ([NMState install](https://nmstate.io/user/install.html)).
 
-**Protocol.** The adapter converges over the pinned fleet connection:
-`StrictHostKeyChecking=yes`, the host key the identity channel or the
-delivered key proved, and the document on standard input, never in argv. It
-checks that /usr/bin/nmstatectl exists; reads the guest's network marker, its
-`boot_id` and any pending checkpoint; writes the document and runs
-`nmstatectl apply --no-commit --timeout=<checkpointSeconds>` detached;
-reconnects at the install address, then runs `nmstatectl commit
-<checkpoint>`; writes the marker `{"bootId":...,"request":<digest>}`;
-restarts the machine through the guest's own `systemctl poweroff`, polls the
-controller to Off and boots the disk with power-on through the substrate's
-disk-boot entry point; proves a new `boot_id` on the pinned key; and compares
-`nmstatectl show --json` with the document. Sources:
-[nmstatectl(8)](https://www.mankier.com/8/nmstatectl) and NetworkManager's
-[D-Bus API](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.html)
-(`CheckpointCreate` and its `rollback_timeout`; the `Checkpoints` property,
-"The list of active checkpoints").
+Every installed Machine converges to its declared network after its
+installation is proved, on one code path: a declaration that already holds is
+inspected and left alone. The request, the document and the budgets are
+frozen with the installation; this section states what the adapter does with
+them.
 
-**Interruption.** An attempt interrupted before or after the commit is
-converged by the next attempt. A power loss while a checkpoint is pending is
-a stated residual risk.
+**Protocol.** The phase runs under `verify-installation`, after the fleet
+account accepted the reported key and after the work area and any private
+material are withdrawn, so neither outlives the power cycle. Every guest
+command is a fixed argument vector run as the fleet account over a new SSH
+connection with exactly the options of the reachability proof: the key the
+identity channel reported in a one-connection `known_hosts`,
+`StrictHostKeyChecking=yes`, no ambient configuration. Commands that need root
+run through `sudo -n` under the Kickstart's sudoers entry for the fleet
+account. Values reach the guest's scripts only as positional parameters, and
+the document and the marker only on standard input. In order:
 
-**Failure classes.** A lost connection is unknown. Every other failure,
-NetworkManager's rollback included, is failed with partial evidence; the
-phase never yields no effect.
+1. Wait, within the `networkApply` budget, for an apply unit an earlier
+   attempt left running, then read the guest's state once: whether
+   `/usr/bin/nmstatectl` exists, the boot ID, the state of the
+   `bootwright-network-apply.service` unit, the exit status, last output line
+   and last 512 error bytes the unit left in
+   `/run/bootwright/network-apply.{rc,log,err}`, the checkpoints NetworkManager
+   lists in its `Checkpoints` property, read with
+   [busctl(1)](https://www.freedesktop.org/software/systemd/man/latest/busctl.html),
+   and the network marker. A state that cannot be read refuses.
+2. Decide one step. A marker naming this request's digest from an earlier boot
+   is **inspect**; from this boot, **reboot**; a running unit is **wait**,
+   which refuses; a checkpoint the last log line names that NetworkManager
+   still lists is **rollback**, then apply; otherwise **apply**. A Machine
+   without `nmstatectl` refuses here, before any change.
+3. **Apply** writes the document, as sorted JSON, to
+   `/etc/bootwright/network.yml` (root, `0600`) and starts
+   `nmstatectl apply --no-commit --timeout=<checkpointSeconds>` as the
+   transient unit `bootwright-network-apply.service` of `Type=exec`, started
+   with `--no-block` so the connection returns at once
+   ([systemd-run(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html));
+   the unit's wrapper keeps nmstatectl's output, errors and exit status. The
+   adapter waits for the unit within `networkApply` and, when the connection
+   dropped, within `networkReconnect`. A connection still lost then waits
+   `checkpointSeconds + 30` seconds: NetworkManager rolls an uncommitted
+   checkpoint back in the daemon when its timeout ends, whatever happens to the
+   connection (`CheckpointCreate` `rollback_timeout`, the
+   [NetworkManager D-Bus API](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.html)).
+   It reads the state again; an exit status other than 0 is NetworkManager's
+   refusal, and nmstate verifies the applied state and rolls back a mismatch
+   ([nmstatectl(8)](https://www.mankier.com/8/nmstatectl)). Otherwise it runs
+   `nmstatectl commit` on the checkpoint and writes the marker
+   `{"bootId":"<boot ID>","request":"<digest>"}`, mode `0644`, atomically to
+   `/etc/bootwright/network-marker.json`. Nothing is written under
+   `/etc/nmstate`, and `--memory-only` is never used.
+4. **Restart.** After an apply or rollback, and on the reboot step, the adapter
+   asks the guest to power off with `systemctl --no-block poweroff`, polls the
+   management controller until it reports `Off` within the `reboot` budget,
+   boots the installed disk through the substrate's
+   [disk-boot entry point](substrates.md#identity-and-power-operations) with
+   power-on, and waits within `reboot` for the pinned connection to report a
+   boot ID other than the one before the power-off.
+5. **Compare.** It reads `nmstatectl show --json` and compares it with the
+   declared subset below. The completion then carries `network: true`,
+   `networkReboot: true` and `networkDifferences: []`.
 
-**Recovery.** The document is frozen with the installation, and a failed
-apply only continues exactly or is destroyed
-([state machine](state-reconciliation.md#state-machine), row "apply failed").
-A declaration error is therefore recovered only by `bootwright destroy`,
-which erases every Machine the context installed, then a fresh apply. A
-failure that may be transient reads `repeat bootwright apply; if it fails the
-same way, the declared network cannot be applied: run bootwright destroy,
-which erases the Machines this context installed, correct the network of
-<m>, then run bootwright apply`. A change that would leave the install address
-unreachable reads `the declared network of <m> cannot change under this
-apply: run bootwright destroy, which erases the Machines this context
-installed, correct the network of <m> so <address> stays reachable from the
-controller, then run bootwright apply`; a mismatch after the restart reads
-the same without the `so <address> stays reachable from the controller`
-clause.
+**Failures and recovery.** Every failure of the phase follows the proof that
+the guest holds this request's install marker, so the attempt fails and the
+resolution's observation reads a positive partial realization when the marker
+still reads, or unknown when the guest does not answer; never no effect. The
+document is frozen with the installation and the install marker names the
+request's digest, so neither a continuation nor a new plan can change the
+declared network of an installed Machine: a network declaration error is
+recovered only by `bootwright destroy`, which is context-wide, and a fresh
+apply. A refusal that may be transient (NetworkManager refused the document or
+the rollback, the change stayed uncommitted after the connection returned,
+nmstatectl reported no checkpoint, or the unit was still running after both
+budgets) ends with: `repeat bootwright apply; if it fails the same way, the
+declared network cannot be applied: run bootwright destroy, which erases the
+Machines this context installed, correct the network of <m>, then run
+bootwright apply`. A declared network that cut the controller off, which
+NetworkManager rolled back, ends with: `the declared network of <m> cannot
+change under this apply: run bootwright destroy, which erases the Machines this
+context installed, correct the network of <m> so <address> stays reachable from
+the controller, then run bootwright apply`; a running network that differs from
+its declaration after the restart ends with the same text without the
+reachability clause. A connection that does not come back says `its state is
+unknown: repeat bootwright apply, and if <m> stays unreachable, restore its
+network from its console`. A failed connection, commit, marker write or
+power-off request, a power-off the controller never reports and a guest that
+did not restart end with `repeat bootwright apply`.
 
-**Compared subset.** For each declared interface that is `up` or has no
-state: `type`, `state`, a declared `mtu`, and per family a declared
-`enabled`, `dhcp` and `autoconf`; the static address set, link-local
-addresses excluded; for a bond, its mode, its port set and each declared
-option as text; for a VLAN, `base-iface`, `id` and a declared `protocol`.
-Beyond the interfaces: a declared absent interface is missing; the non-absent
-routes of declared interfaces equal the running config set by destination,
-next-hop interface and address, a declared `metric`, and `table-id` or the
-main table; `dns-resolver.config.server` is equal in order, and a declared
-`search` is equal.
+**Interruption.** The guest's state decides the next attempt's step:
+
+| Interrupted | Guest state at the next attempt | Step | Outcome |
+| --- | --- | --- | --- |
+| before the apply | no log, no marker | apply | converges |
+| during the apply, the unit still running | unit active | wait, then reconnect | converges, or rolled back by the checkpoint |
+| after the apply, before the commit, checkpoint pending | log with the checkpoint, listed | rollback, then apply | converges |
+| after the apply, NetworkManager already rolled back | log with the checkpoint, not listed | apply | converges |
+| after the commit, before the marker | log with the checkpoint, not listed, network as declared | apply, commit, marker | converges |
+| after the marker, before the power-off | marker with the current boot ID | reboot | converges |
+| after the power-off, before the disk boot | machine off; the identity read at the top of the replay gets no answer | the existing replay path: installer boot of this same request, then the whole phase | converges at the cost of one installation |
+| after the disk boot, before the evidence | marker with an earlier boot ID | inspect | converges |
+| guest power loss with a checkpoint pending | no log (`/run` is volatile), no marker | apply | converges if the path still works, otherwise unknown |
+
+**Compared subset.** The comparison reads only what the document declares;
+nmstate verified the rest once, at apply. Each interface declared `up` or
+without a state must be present with an equal `type`, state `up` and an equal
+`mtu` when declared; per address family an equal `enabled` and `dhcp`, and
+`autoconf` for IPv6, when declared; and, when neither DHCP nor autoconf is on,
+the declared static addresses equal to the running ones, IPv6 link-local
+addresses aside. A bond has an equal `link-aggregation` mode, port set and each
+declared option as text; a VLAN an equal `base-iface` and `id`, and `protocol`
+when declared. An interface declared `absent` is not present. The declared
+routes that are not `absent` equal, one to one, the running routes on declared
+interfaces, matched on destination, `next-hop-interface` when declared,
+next-hop address, `metric` when declared and `table-id` (the main table when
+not declared). The resolver's `server` and `search` lists are equal in order
+when declared. At most 16 differences of at most 200 printable bytes are named.
+
+**Observation and drift.** The observation (D153's settle rule) reads, over the same pinned
+connection and only when the fleet account answered, the state of step 1 and
+`nmstatectl show --json`, and compares them; it applies, rolls back, commits,
+powers and restarts nothing. Its evidence carries `network`, true only when
+the marker names this request and the comparison matches; `networkReboot`,
+true when the marker names this request from an earlier boot; and
+`networkDifferences`. A completion proves its postcondition only with both
+booleans true, so a Machine whose network drifted reads as a positive partial
+realization in `bootwright diff --observe`. Nothing is repaired.
 
 **Evidence.** `network` is true only when the marker names this request and
 the comparison matched; `networkReboot` is true when the marker's boot ID
@@ -646,9 +729,6 @@ differs from the current one; `networkDifferences` holds at most 16 entries of
 at most 200 printable bytes each. Presence requires both booleans and no
 difference, and otherwise refuses `the installed machine's network does not
 match its declaration after a reboot`.
-
-**Observation.** An observation reads and repairs nothing (D153's settle
-rule); drift reads as partial in `bootwright diff --observe`.
 
 **Plan.** The plan shows the group `converge-network` and the impacts
 `configure-network <m>` and `restart <m>`.
@@ -894,4 +974,7 @@ control character, a Unicode line or paragraph separator, a double quote or a
 backslash refuses `api.value` before the adapter runs. No private key, password
 or other secret enters the Kickstart, the image, the package tree, the evidence
 or the logs, and the delivered host key reaches the machine only through the
-private subtree.
+private subtree. [Network convergence](#network-convergence) runs fixed
+commands, those needing root through `sudo -n`, over the fleet connection
+pinned to the key the identity channel reported; the network document and the
+network marker reach the guest only on standard input, never in an argument.

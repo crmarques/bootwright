@@ -51,6 +51,7 @@ GROUPS = {
     "managedos_install_anaconda/tasks/await.yml": 1,
     "managedos_install_anaconda/tasks/boot.yml": 2,
     "managedos_install_anaconda/tasks/identity.yml": 1,
+    "managedos_install_anaconda/tasks/network.yml": 1,
 }
 
 # The files that include a dispatching file, directly or through another file
@@ -75,7 +76,7 @@ INSERTING = {
 # vacuously.
 CONSUMED = {
     "containercluster_install_agent/tasks/apply.yml": {"boot.yml", "release.yml"},
-    "managedos_install_anaconda/tasks/apply.yml": {"await.yml", "boot.yml", "identity.yml"},
+    "managedos_install_anaconda/tasks/apply.yml": {"await.yml", "boot.yml", "identity.yml", "network.yml"},
 }
 
 

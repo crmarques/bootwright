@@ -13,6 +13,10 @@
       - bootwright_os_install_request.markerPath == '/etc/bootwright/install-marker.json'
       - bootwright_os_install_request.hostKeyPath == '/etc/bootwright/host-key.pub'
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
+      - bootwright_os_install_request.network.documentPath == '/etc/bootwright/network.yml'
+      - bootwright_os_install_request.network.markerPath == '/etc/bootwright/network-marker.json'
+      - bootwright_os_install_request.network.checkpointSeconds | int > 0
+      - bootwright_os_install_request.network.document is mapping
     quiet: true
   no_log: true
 
@@ -555,13 +559,6 @@
     - name: Prove the installed machine answers on the exact key it reported
       ansible.builtin.include_tasks: verify.yml
 
-    - name: Report installation verification completion
-      bootwright.core.managedos_install_protocol:
-        phase: group
-        group: verify-installation
-        status: ok
-      no_log: true
-
     # The work area and the private material are removed before the proof below,
     # so the evidence it publishes reports neither: material that only needed to
     # exist for one boot does not outlive it, and a completion inspected before
@@ -578,6 +575,18 @@
         state: absent
       when: managedos_install_anaconda_delivers_key | bool
       changed_when: managedos_install_anaconda_delivers_key | bool
+
+    # Converged on every installed Machine, after the work area and the private
+    # material are withdrawn, so neither outlives the power cycle it needs.
+    - name: Converge the installed machine to its declared network
+      ansible.builtin.include_tasks: network.yml
+
+    - name: Report installation verification completion
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: verify-installation
+        status: ok
+      no_log: true
 
     - name: Prove everything this installation publishes is in place
       bootwright.core.managedos_install_inspect:
@@ -599,7 +608,8 @@
   bootwright.core.managedos_install_protocol:
     phase: completed
     outcome: >-
-      {{ 'unchanged' if managedos_install_anaconda_was_installed | bool else 'changed' }}
+      {{ 'unchanged' if (managedos_install_anaconda_was_installed | bool)
+      and not (managedos_install_anaconda_network_result.changed | default(true) | bool) else 'changed' }}
     digest: '{{ bootwright_os_install_digest }}'
     observation: '{{ managedos_install_anaconda_after.observation }}'
     marker: '{{ managedos_install_anaconda_marker }}'
@@ -611,4 +621,7 @@
     media: "{{ managedos_install_anaconda_ejected.media | default('') | regex_replace('[0-9a-f]{64}', '<token>') }}"
     power: '{{ managedos_install_anaconda_ejected.power }}'
     privateDelivery: '{{ managedos_install_anaconda_delivers_key | bool }}'
+    network: '{{ managedos_install_anaconda_network_result.network | default(false) }}'
+    networkReboot: '{{ managedos_install_anaconda_network_result.networkReboot | default(false) }}'
+    networkDifferences: '{{ managedos_install_anaconda_network_result.networkDifferences | default([]) }}'
   no_log: true

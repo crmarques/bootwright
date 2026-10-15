@@ -108,3 +108,127 @@ managedos_install_anaconda_certificate: >-
 # starts, are budgets the request froze, never values of this role: the run's
 # deadline is derived from those budgets, so a wait this role chose could
 # outlast the deadline and be killed as a hang.
+
+# The fixed commands of post-install network convergence, each a list of argv
+# words run on the installed machine as the fleet account over the connection
+# pinned to the key its identity channel reported. Every value reaches a script
+# as a positional parameter after the name word, never inside the script text,
+# and the document and the marker arrive only on standard input. Root comes
+# from the kickstart's NOPASSWD sudoers entry for the fleet account. Nothing
+# is written under /etc/nmstate, which nmstate.service applies at boot.
+managedos_install_anaconda_network_unit: bootwright-network-apply.service
+managedos_install_anaconda_network_run: /run/bootwright
+managedos_install_anaconda_network_read:
+  - /usr/bin/sudo
+  - -n
+  - /usr/bin/sh
+  - -c
+  - |-
+    set -u
+    if test -x /usr/bin/nmstatectl; then echo nmstatectl=yes; else echo nmstatectl=no; fi
+    printf 'bootId=%s\n' "$(head -c 64 /proc/sys/kernel/random/boot_id)"
+    printf 'unit=%s\n' "$(systemctl is-active "$1" 2>/dev/null | head -c 32)"
+    printf 'rc=%s\n' "$(head -c 8 "$2/network-apply.rc" 2>/dev/null | tr -cd 0-9)"
+    printf 'checkpoint=%s\n' "$(tail -n 1 "$2/network-apply.log" 2>/dev/null | head -c 128 | tr -cd '[:graph:]')"
+    printf 'listed=%s\n' "$(busctl --system get-property org.freedesktop.NetworkManager \
+      /org/freedesktop/NetworkManager org.freedesktop.NetworkManager Checkpoints 2>/dev/null | head -c 4096 | tr -d '\n')"
+    printf 'marker=%s\n' "$(head -c 512 "$3" 2>/dev/null | tr -d '\n')"
+    printf 'error=%s\n' "$(tail -c 512 "$2/network-apply.err" 2>/dev/null | tr -c '[:print:]' ' ')"
+  - bootwright-network
+  - '{{ managedos_install_anaconda_network_unit }}'
+  - '{{ managedos_install_anaconda_network_run }}'
+  - '{{ bootwright_os_install_request.network.markerPath }}'
+# Exits 3 while the apply unit still runs and 0 otherwise; ssh itself exits 255.
+managedos_install_anaconda_network_wait:
+  - /usr/bin/sudo
+  - -n
+  - /usr/bin/sh
+  - -c
+  - |-
+    case "$(systemctl is-active "$1" 2>/dev/null)" in active|activating|deactivating|reloading|refreshing) exit 3;; esac
+  - bootwright-network
+  - '{{ managedos_install_anaconda_network_unit }}'
+managedos_install_anaconda_network_prepare:
+  - /usr/bin/sudo
+  - -n
+  - /usr/bin/sh
+  - -c
+  - |-
+    set -eu
+    umask 077
+    install -d -m 0700 -o root -g root "$2"
+    rm -f -- "$2/network-apply.log" "$2/network-apply.err" "$2/network-apply.rc"
+    install -m 0600 -o root -g root /dev/stdin "$1"
+  - bootwright-network
+  - '{{ bootwright_os_install_request.network.documentPath }}'
+  - '{{ managedos_install_anaconda_network_run }}'
+# A unit of Type=exec started with --no-block returns as soon as it runs, and
+# its wrapper keeps nmstatectl's output and exit status after it is collected.
+managedos_install_anaconda_network_start:
+  - /usr/bin/sudo
+  - -n
+  - /usr/bin/systemd-run
+  - --no-block
+  - --quiet
+  - --collect
+  - '--unit={{ managedos_install_anaconda_network_unit }}'
+  - -p
+  - Type=exec
+  - /usr/bin/sh
+  - -c
+  - |-
+    /usr/bin/nmstatectl apply --no-commit --timeout="$1" "$2" >"$3/network-apply.log" 2>"$3/network-apply.err"
+    echo "$?" >"$3/network-apply.rc"
+  - bootwright-network
+  - '{{ bootwright_os_install_request.network.checkpointSeconds | int }}'
+  - '{{ bootwright_os_install_request.network.documentPath }}'
+  - '{{ managedos_install_anaconda_network_run }}'
+managedos_install_anaconda_network_rollback:
+  - /usr/bin/sudo
+  - -n
+  - /usr/bin/sh
+  - -c
+  - |-
+    set -eu
+    /usr/bin/nmstatectl rollback "$1"
+    rm -f -- "$2/network-apply.log" "$2/network-apply.err" "$2/network-apply.rc"
+  - bootwright-network
+  - '{{ managedos_install_anaconda_network_state.checkpoint }}'
+  - '{{ managedos_install_anaconda_network_run }}'
+managedos_install_anaconda_network_commit:
+  - /usr/bin/sudo
+  - -n
+  - /usr/bin/nmstatectl
+  - commit
+  - '{{ managedos_install_anaconda_network_applied.checkpoint }}'
+managedos_install_anaconda_network_mark:
+  - /usr/bin/sudo
+  - -n
+  - /usr/bin/sh
+  - -c
+  - |-
+    set -eu
+    umask 022
+    cat >"$1.tmp"
+    chmod 0644 "$1.tmp"
+    mv -f -T "$1.tmp" "$1"
+    sync
+    rm -f -- "$2/network-apply.log" "$2/network-apply.err" "$2/network-apply.rc"
+  - bootwright-network
+  - '{{ bootwright_os_install_request.network.markerPath }}'
+  - '{{ managedos_install_anaconda_network_run }}'
+managedos_install_anaconda_network_poweroff:
+  - /usr/bin/sudo
+  - -n
+  - /usr/bin/systemctl
+  - --no-block
+  - poweroff
+managedos_install_anaconda_network_boot_id:
+  - /usr/bin/cat
+  - /proc/sys/kernel/random/boot_id
+managedos_install_anaconda_network_show:
+  - /usr/bin/sudo
+  - -n
+  - /usr/bin/nmstatectl
+  - show
+  - --json

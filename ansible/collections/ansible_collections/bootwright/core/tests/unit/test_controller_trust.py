@@ -43,7 +43,7 @@ PORT_BUNDLE = {"pre_boot": "substrate_baremetal_machine_target_ca", "boot_media"
 # The roles that reach a controller a bundle can anchor, and how many Redfish
 # module tasks each holds. Finding another number means the walk or a role
 # changed, and either must be looked at.
-BUNDLED = {"managedos_install_anaconda": 5, "substrate_baremetal_machine": 7, "machine_power_redfish": 5,
+BUNDLED = {"managedos_install_anaconda": 6, "substrate_baremetal_machine": 7, "machine_power_redfish": 5,
            "machine_power_read_redfish": 1, "substrate_libvirt_machine": 8, "containercluster_install_agent": 4}
 # The roles that make Redfish calls without a bundle, and why.
 UNBUNDLED = {
@@ -161,6 +161,7 @@ def test_every_bare_metal_include_passes_its_bundle():
         ("managedos_install_anaconda/tasks/await.yml", "boot_disk"),
         ("managedos_install_anaconda/tasks/boot.yml", "boot_media"),
         ("managedos_install_anaconda/tasks/boot.yml", "pre_boot"),
+        ("managedos_install_anaconda/tasks/network.yml", "boot_disk"),
     ])
 
 

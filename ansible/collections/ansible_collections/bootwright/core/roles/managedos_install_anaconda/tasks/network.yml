@@ -1,0 +1,478 @@
+---
+# Every installed Machine converges to its declared network after the
+# installation is proved, on one code path: an unchanged declaration is
+# inspected and left alone. The guest holds the state, so each step is decided
+# from one read of it: a marker of this request, an apply unit still running,
+# an uncommitted checkpoint, or nothing yet. nmstatectl applies the document
+# under a NetworkManager checkpoint that rolls itself back unless it is
+# committed, so a declaration that cuts the controller off is undone by the
+# machine itself. The machine is then powered off and its installed disk booted
+# through the substrate, and the network it starts with is compared with the
+# declaration. Every failure here follows the proved install marker, so the
+# resolution reads the Machine partial or unknown, never untouched.
+- name: Wait for an earlier network change on the machine to finish
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_wait }}'
+    managedos_install_anaconda_guest_retries: '{{ bootwright_os_install_request.budgets.networkApply.attempts | int }}'
+    managedos_install_anaconda_guest_pause: '{{ bootwright_os_install_request.budgets.networkApply.delaySeconds | int }}'
+
+- name: Read the machine's network convergence state
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_read }}'
+
+- name: Stop at a network state read the connection did not complete
+  ansible.builtin.fail:
+    msg: >-
+      the connection to Machine {{ bootwright_os_install_request.identity.object }}
+      at {{ bootwright_os_install_request.address }} failed while its network was read
+      (ssh exit status {{ managedos_install_anaconda_guest.rc | default('none') }}:
+      {{ (managedos_install_anaconda_guest.stderr | default('') | string | bootwright.core.printable)[-512:] }});
+      its state is unknown: repeat bootwright apply
+  when: managedos_install_anaconda_guest.rc | default(1) != 0
+
+# ansible-core templates a set_fact eagerly, so the step is named from the
+# state only after the state is a fact of its own.
+- name: Name the network state the machine reported
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_network_state: '{{ managedos_install_anaconda_guest.stdout | bootwright.core.managedos_network_state }}'
+  changed_when: false
+
+- name: Name the one next network step
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_network_step: >-
+      {{ managedos_install_anaconda_network_state | bootwright.core.managedos_network_step(bootwright_os_install_digest) }}
+  changed_when: false
+
+- name: Stop at a network state Bootwright cannot read
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} reported a network state
+      Bootwright cannot read:
+      {{ managedos_install_anaconda_network_state.reason | default('', true)
+      or 'its NetworkManager checkpoints could not be read' }};
+      repeat bootwright apply
+  when: managedos_install_anaconda_network_step == 'unreadable'
+
+- name: Stop at a machine that cannot apply a declared network
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} has no nmstatectl,
+      so its declared network cannot be applied; run bootwright destroy, which erases
+      the Machines this context installed, then apply with an install source that
+      carries the nmstate package
+  when: not (managedos_install_anaconda_network_state.nmstatectl | bool)
+
+- name: Stop at a network change that is still running
+  ansible.builtin.fail:
+    msg: >-
+      a network change on Machine {{ bootwright_os_install_request.identity.object }}
+      was still running after
+      {{ (bootwright_os_install_request.budgets.networkApply.attempts | int)
+      * (bootwright_os_install_request.budgets.networkApply.delaySeconds | int) }}
+      seconds; repeat bootwright apply
+  when: managedos_install_anaconda_network_step == 'wait'
+
+- name: Roll back the uncommitted network change an earlier attempt left
+  when: managedos_install_anaconda_network_step == 'rollback'
+  block:
+    - name: Roll back the uncommitted checkpoint
+      ansible.builtin.include_tasks: guest.yml
+      vars:
+        managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_rollback }}'
+
+    - name: Stop at a rollback NetworkManager refused
+      ansible.builtin.fail:
+        msg: >-
+          NetworkManager on Machine {{ bootwright_os_install_request.identity.object }}
+          refused to roll back the uncommitted network change
+          {{ managedos_install_anaconda_network_state.checkpoint }}:
+          {{ (managedos_install_anaconda_guest.stderr | default('') | string | bootwright.core.printable)[-512:] }};
+          repeat bootwright apply; if it fails the same way, the declared network cannot be
+          applied: run bootwright destroy, which erases the Machines this context installed,
+          correct the network of {{ bootwright_os_install_request.identity.object }},
+          then run bootwright apply
+      when: managedos_install_anaconda_guest.rc | default(1) != 0
+
+- name: Apply the declared network under a checkpoint that rolls itself back
+  when: managedos_install_anaconda_network_step in ['rollback', 'apply']
+  block:
+    - name: Write the declared network to the machine
+      ansible.builtin.include_tasks: guest.yml
+      vars:
+        managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_prepare }}'
+        managedos_install_anaconda_guest_stdin: '{{ bootwright_os_install_request.network.document | to_json(sort_keys=true) }}'
+
+    - name: Stop at a declared network the machine did not take
+      ansible.builtin.fail:
+        msg: >-
+          the declared network could not be written to Machine
+          {{ bootwright_os_install_request.identity.object }}
+          (ssh exit status {{ managedos_install_anaconda_guest.rc | default('none') }}:
+          {{ (managedos_install_anaconda_guest.stderr | default('') | string | bootwright.core.printable)[-512:] }});
+          repeat bootwright apply
+      when: managedos_install_anaconda_guest.rc | default(1) != 0
+
+    - name: Start applying the declared network
+      ansible.builtin.include_tasks: guest.yml
+      vars:
+        managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_start }}'
+
+    - name: Stop at a network apply that did not start
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} did not start applying
+          its declared network
+          (ssh exit status {{ managedos_install_anaconda_guest.rc | default('none') }}:
+          {{ (managedos_install_anaconda_guest.stderr | default('') | string | bootwright.core.printable)[-512:] }});
+          repeat bootwright apply
+      when: managedos_install_anaconda_guest.rc | default(1) != 0
+
+    - name: Wait for the network apply to finish
+      ansible.builtin.include_tasks: guest.yml
+      vars:
+        managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_wait }}'
+        managedos_install_anaconda_guest_retries: '{{ bootwright_os_install_request.budgets.networkApply.attempts | int }}'
+        managedos_install_anaconda_guest_pause: '{{ bootwright_os_install_request.budgets.networkApply.delaySeconds | int }}'
+
+    - name: Name how the wait for the network apply ended
+      ansible.builtin.set_fact:
+        managedos_install_anaconda_network_waited: '{{ managedos_install_anaconda_guest.rc | default(255) | int }}'
+      changed_when: false
+
+    # The new network may have moved the route the controller reached the
+    # machine on, so a connection that dropped is given its own budget to
+    # return before the change is judged.
+    - name: Reconnect to a machine whose network changed under the connection
+      when: managedos_install_anaconda_network_waited | int != 0
+      block:
+        - name: Wait for the machine to answer again
+          ansible.builtin.include_tasks: guest.yml
+          vars:
+            managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_wait }}'
+            managedos_install_anaconda_guest_retries: '{{ bootwright_os_install_request.budgets.networkReconnect.attempts | int }}'
+            managedos_install_anaconda_guest_pause: '{{ bootwright_os_install_request.budgets.networkReconnect.delaySeconds | int }}'
+
+        - name: Name how the reconnect ended
+          ansible.builtin.set_fact:
+            managedos_install_anaconda_network_waited: '{{ managedos_install_anaconda_guest.rc | default(255) | int }}'
+          changed_when: false
+
+    - name: Stop at a network apply that is still running
+      ansible.builtin.fail:
+        msg: >-
+          the network change on Machine {{ bootwright_os_install_request.identity.object }}
+          was still running after
+          {{ ((bootwright_os_install_request.budgets.networkApply.attempts | int)
+          * (bootwright_os_install_request.budgets.networkApply.delaySeconds | int))
+          + ((bootwright_os_install_request.budgets.networkReconnect.attempts | int)
+          * (bootwright_os_install_request.budgets.networkReconnect.delaySeconds | int)) }}
+          seconds; repeat bootwright apply; if it fails the same way, the declared network
+          cannot be applied: run bootwright destroy, which erases the Machines this context
+          installed, correct the network of {{ bootwright_os_install_request.identity.object }},
+          then run bootwright apply
+      when: managedos_install_anaconda_network_waited | int == 3
+
+    - name: Name whether the connection was lost while the network changed
+      ansible.builtin.set_fact:
+        managedos_install_anaconda_network_lost: '{{ managedos_install_anaconda_network_waited | int != 0 }}'
+      changed_when: false
+
+    # NetworkManager rolls an uncommitted checkpoint back in the daemon when
+    # its timeout ends, whatever happened to the connection, so after this
+    # pause the machine holds either the committed or the earlier network.
+    - name: Let the machine's own checkpoint timeout roll the change back
+      ansible.builtin.pause:
+        seconds: '{{ (bootwright_os_install_request.network.checkpointSeconds | int) + 30 }}'
+      when: managedos_install_anaconda_network_lost | bool
+
+    - name: Read what the network apply left
+      ansible.builtin.include_tasks: guest.yml
+      vars:
+        managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_read }}'
+
+    - name: Stop at a machine that did not answer after its network changed
+      ansible.builtin.fail:
+        msg: >-
+          the connection to Machine {{ bootwright_os_install_request.identity.object }}
+          at {{ bootwright_os_install_request.address }} was lost while its network changed,
+          and it did not answer again within
+          {{ ((bootwright_os_install_request.budgets.networkReconnect.attempts | int)
+          * (bootwright_os_install_request.budgets.networkReconnect.delaySeconds | int))
+          + (bootwright_os_install_request.network.checkpointSeconds | int) + 30 }}
+          seconds; its state is unknown: repeat bootwright apply, and if
+          {{ bootwright_os_install_request.identity.object }} stays unreachable, restore its
+          network from its console
+      when: managedos_install_anaconda_guest.rc | default(1) != 0
+
+    - name: Name the network state the apply left
+      ansible.builtin.set_fact:
+        managedos_install_anaconda_network_applied: '{{ managedos_install_anaconda_guest.stdout | bootwright.core.managedos_network_state }}'
+      changed_when: false
+
+    - name: Stop at an applied network state Bootwright cannot read
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} reported a network state
+          Bootwright cannot read:
+          {{ managedos_install_anaconda_network_applied.reason | default('', true)
+          or 'its NetworkManager checkpoints could not be read' }};
+          repeat bootwright apply
+      when: not (managedos_install_anaconda_network_applied.valid | bool)
+
+    - name: Stop at a declared network NetworkManager refused
+      ansible.builtin.fail:
+        msg: >-
+          NetworkManager refused the declared network of Machine
+          {{ bootwright_os_install_request.identity.object }}:
+          {{ managedos_install_anaconda_network_applied.error }};
+          repeat bootwright apply; if it fails the same way, the declared network cannot be
+          applied: run bootwright destroy, which erases the Machines this context installed,
+          correct the network of {{ bootwright_os_install_request.identity.object }},
+          then run bootwright apply
+      when:
+        - managedos_install_anaconda_network_applied.rc is not none
+        - managedos_install_anaconda_network_applied.rc | int != 0
+
+    - name: Stop at a network change still uncommitted after the connection returned
+      ansible.builtin.fail:
+        msg: >-
+          the network change on Machine {{ bootwright_os_install_request.identity.object }}
+          was still uncommitted after its connection returned;
+          repeat bootwright apply; if it fails the same way, the declared network cannot be
+          applied: run bootwright destroy, which erases the Machines this context installed,
+          correct the network of {{ bootwright_os_install_request.identity.object }},
+          then run bootwright apply
+      when:
+        - managedos_install_anaconda_network_lost | bool
+        - managedos_install_anaconda_network_applied.checkpoint in (managedos_install_anaconda_network_applied.listed or [])
+
+    - name: Stop at a declared network that cut the controller off
+      ansible.builtin.fail:
+        msg: >-
+          the declared network made {{ bootwright_os_install_request.address }} unreachable
+          from Machine {{ bootwright_os_install_request.placement.machine }}, and
+          NetworkManager rolled it back on Machine {{ bootwright_os_install_request.identity.object }};
+          the declared network of {{ bootwright_os_install_request.identity.object }} cannot
+          change under this apply: run bootwright destroy, which erases the Machines this
+          context installed, correct the network of {{ bootwright_os_install_request.identity.object }}
+          so {{ bootwright_os_install_request.address }} stays reachable from the controller,
+          then run bootwright apply
+      when: managedos_install_anaconda_network_lost | bool
+
+    - name: Stop at an apply that reported no checkpoint
+      ansible.builtin.fail:
+        msg: >-
+          nmstatectl on Machine {{ bootwright_os_install_request.identity.object }} reported
+          no checkpoint for the declared network;
+          repeat bootwright apply; if it fails the same way, the declared network cannot be
+          applied: run bootwright destroy, which erases the Machines this context installed,
+          correct the network of {{ bootwright_os_install_request.identity.object }},
+          then run bootwright apply
+      when: >-
+        managedos_install_anaconda_network_applied.rc is none
+        or managedos_install_anaconda_network_applied.checkpoint == ''
+
+    - name: Commit the declared network
+      ansible.builtin.include_tasks: guest.yml
+      vars:
+        managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_commit }}'
+
+    - name: Stop at a commit NetworkManager did not take
+      ansible.builtin.fail:
+        msg: >-
+          NetworkManager on Machine {{ bootwright_os_install_request.identity.object }} did not
+          commit the declared network (checkpoint
+          {{ managedos_install_anaconda_network_applied.checkpoint }}):
+          {{ (managedos_install_anaconda_guest.stderr | default('') | string | bootwright.core.printable)[-512:] }};
+          repeat bootwright apply
+      when: managedos_install_anaconda_guest.rc | default(1) != 0
+
+    # The exact bytes: the boot id the state read proved and the digest the
+    # entrypoint proved, so nothing else can reach the marker.
+    - name: Mark the machine with the network this request committed
+      ansible.builtin.include_tasks: guest.yml
+      vars:
+        managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_mark }}'
+        managedos_install_anaconda_guest_stdin: >-
+          {"bootId":"{{ managedos_install_anaconda_network_applied.bootId }}","request":"{{ bootwright_os_install_digest }}"}
+
+    - name: Stop at a network marker the machine did not take
+      ansible.builtin.fail:
+        msg: >-
+          the network marker could not be written on Machine
+          {{ bootwright_os_install_request.identity.object }}
+          (ssh exit status {{ managedos_install_anaconda_guest.rc | default('none') }}:
+          {{ (managedos_install_anaconda_guest.stderr | default('') | string | bootwright.core.printable)[-512:] }});
+          repeat bootwright apply
+      when: managedos_install_anaconda_guest.rc | default(1) != 0
+
+- name: Name the boot the restart must leave behind
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_network_boot_before: >-
+      {{ managedos_install_anaconda_network_applied.bootId
+         if managedos_install_anaconda_network_step in ['rollback', 'apply']
+         else managedos_install_anaconda_network_state.marker.bootId }}
+  when: managedos_install_anaconda_network_step in ['rollback', 'apply', 'reboot']
+  changed_when: false
+
+# Only a cold start proves the network the machine keeps: the installed disk is
+# booted through the substrate exactly as after the installer, and the boot id
+# proves the machine did start again.
+- name: Restart the machine on its committed network
+  when: managedos_install_anaconda_network_step in ['rollback', 'apply', 'reboot']
+  block:
+    - name: Ask the machine to power off
+      ansible.builtin.include_tasks: guest.yml
+      vars:
+        managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_poweroff }}'
+
+    - name: Stop at a machine that refused to power off
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} did not accept the
+          request to power off
+          (ssh exit status {{ managedos_install_anaconda_guest.rc | default('none') }}:
+          {{ (managedos_install_anaconda_guest.stderr | default('') | string | bootwright.core.printable)[-512:] }});
+          repeat bootwright apply
+      when: managedos_install_anaconda_guest.rc | default(1) | int not in [0, 255]
+
+    - name: Wait for the machine to power off
+      bootwright.core.redfish_system_read:
+        endpoint: '{{ managedos_install_anaconda_endpoint }}'
+        user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
+        password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
+        verify: '{{ managedos_install_anaconda_verify }}'
+        ca_data: '{{ managedos_install_anaconda_ca_data }}'
+        media: false
+      register: managedos_install_anaconda_powered_off
+      retries: '{{ bootwright_os_install_request.budgets.reboot.attempts | int }}'
+      delay: '{{ bootwright_os_install_request.budgets.reboot.delaySeconds | int }}'
+      until: (managedos_install_anaconda_powered_off.power | default('')) == 'Off'
+      failed_when: false
+      no_log: true
+
+    # ansible-core keeps nothing of a failure under no_log but that it failed,
+    # so what ended the wait is reported here, where no credential is.
+    - name: Stop at a machine that did not power off within its budget
+      ansible.builtin.assert:
+        that:
+          - (managedos_install_anaconda_powered_off.power | default('')) == 'Off'
+        fail_msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} did not power off when
+          asked within its budget of {{ bootwright_os_install_request.budgets.reboot.attempts | int }}
+          attempts {{ bootwright_os_install_request.budgets.reboot.delaySeconds | int }} seconds apart;
+          its management controller last answered
+          {{ ('power ' ~ (managedos_install_anaconda_powered_off.power | string | bootwright.core.printable)[:32])
+          if managedos_install_anaconda_powered_off.power is defined
+          else (managedos_install_anaconda_powered_off.msg | default('') | string | bootwright.core.printable)[:512] }};
+          repeat bootwright apply
+        quiet: true
+
+    - name: Boot the installed disk of a machine this substrate created
+      ansible.builtin.include_role:
+        name: bootwright.core.substrate_libvirt_machine
+        tasks_from: boot_disk
+      vars:
+        substrate_libvirt_machine_disk_endpoint: '{{ managedos_install_anaconda_endpoint }}'
+        substrate_libvirt_machine_disk_verify: '{{ managedos_install_anaconda_verify }}'
+        substrate_libvirt_machine_disk_ca: '{{ managedos_install_anaconda_controller_ca }}'
+        substrate_libvirt_machine_disk_user: '{{ bootwright_os_install_material.controllerUser }}'
+        substrate_libvirt_machine_disk_password: '{{ bootwright_os_install_material.controllerPassword }}'
+        substrate_libvirt_machine_disk_power_on: true
+      when: bootwright_os_install_request.target.substrate == 'libvirt'
+
+    - name: Boot the installed disk of an operator-owned machine
+      ansible.builtin.include_role:
+        name: bootwright.core.substrate_baremetal_machine
+        tasks_from: boot_disk
+      vars:
+        substrate_baremetal_machine_disk_endpoint: '{{ managedos_install_anaconda_endpoint }}'
+        substrate_baremetal_machine_disk_verify: '{{ managedos_install_anaconda_verify }}'
+        substrate_baremetal_machine_disk_ca: '{{ managedos_install_anaconda_controller_ca }}'
+        substrate_baremetal_machine_disk_user: '{{ bootwright_os_install_material.controllerUser }}'
+        substrate_baremetal_machine_disk_password: '{{ bootwright_os_install_material.controllerPassword }}'
+        substrate_baremetal_machine_disk_power_on: true
+      when: bootwright_os_install_request.target.substrate == 'baremetal'
+
+    # apply.yml refuses such a substrate before its first effect, which leaves
+    # this unreachable from there.
+    - name: Refuse a substrate this installation has no disk-boot binding for
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} names substrate
+          {{ bootwright_os_install_request.target.substrate }}, which this installation has
+          no boot_disk binding for, so its installed disk was not booted after the network
+          change; plan the installation again with this release
+      when: bootwright_os_install_request.target.substrate not in ['libvirt', 'baremetal']
+
+    - name: Wait for the restarted machine to answer on the key it reported
+      ansible.builtin.include_tasks: guest.yml
+      vars:
+        managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_boot_id }}'
+        managedos_install_anaconda_guest_retries: '{{ bootwright_os_install_request.budgets.reboot.attempts | int }}'
+        managedos_install_anaconda_guest_pause: '{{ bootwright_os_install_request.budgets.reboot.delaySeconds | int }}'
+
+    - name: Stop at a restarted machine that did not answer
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} did not answer at
+          {{ bootwright_os_install_request.address }} on the key it reported within
+          {{ (bootwright_os_install_request.budgets.reboot.attempts | int)
+          * (bootwright_os_install_request.budgets.reboot.delaySeconds | int) }}
+          seconds of its restart; its state is unknown: repeat bootwright apply, and if
+          {{ bootwright_os_install_request.identity.object }} stays unreachable, restore its
+          network from its console
+      when: managedos_install_anaconda_guest.rc | default(1) != 0
+
+    - name: Stop at a machine that did not restart
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} did not restart: it
+          reports the boot it had before it was powered off; repeat bootwright apply
+      when: (managedos_install_anaconda_guest.stdout | default('') | trim) == managedos_install_anaconda_network_boot_before
+
+- name: Read the network the machine runs
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_show }}'
+
+- name: Stop at a running network the machine did not report
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} did not answer at
+      {{ bootwright_os_install_request.address }} on the key it reported within
+      {{ (bootwright_os_install_request.budgets.reboot.attempts | int)
+      * (bootwright_os_install_request.budgets.reboot.delaySeconds | int) }}
+      seconds of its restart; its state is unknown: repeat bootwright apply, and if
+      {{ bootwright_os_install_request.identity.object }} stays unreachable, restore its
+      network from its console
+  when: managedos_install_anaconda_guest.rc | default(1) != 0
+
+- name: Compare the running network with its declaration
+  bootwright.core.managedos_network_compare:
+    document: '{{ bootwright_os_install_request.network.document }}'
+    running: '{{ managedos_install_anaconda_guest.stdout }}'
+  register: managedos_install_anaconda_network_compared
+
+- name: Stop at a running network that differs from its declaration
+  ansible.builtin.fail:
+    msg: >-
+      after a restart the network of Machine {{ bootwright_os_install_request.identity.object }}
+      differs from its declaration:
+      {{ managedos_install_anaconda_network_compared.differences | default([]) | join('; ') }};
+      the declared network of {{ bootwright_os_install_request.identity.object }} cannot
+      change under this apply: run bootwright destroy, which erases the Machines this
+      context installed, correct the network of {{ bootwright_os_install_request.identity.object }},
+      then run bootwright apply
+  when: not (managedos_install_anaconda_network_compared.matched | default(false) | bool)
+
+- name: Name the network this apply proved
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_network_result:
+      network: true
+      networkReboot: true
+      networkDifferences: []
+      changed: '{{ managedos_install_anaconda_network_step != "inspect" }}'
+  changed_when: false

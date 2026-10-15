@@ -26,6 +26,8 @@ POLICY_REFUSALS = ("ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-po
 POWER_STATES = ("", "On", "Off")
 MAX_MARKER = 4096
 MAX_HOST_KEY = 4096
+MAX_DIFFERENCES = 16
+MAX_DIFFERENCE_BYTES = 200
 # Shared package tree presence does not belong to a machine installation.
 CONTENT = ("image", "private", "work")
 
@@ -52,6 +54,17 @@ def flag(value):
     return str(value or "").strip().lower() in ("true", "yes", "1")
 
 
+def differences(value):
+    """The bounded differences of a running network from its declaration."""
+    value = [] if value in (None, "") else value
+    if not isinstance(value, list) or len(value) > MAX_DIFFERENCES:
+        raise ValueError("network differences")
+    for item in value:
+        if not isinstance(item, str) or not item.isprintable() or len(item.encode("utf-8")) > MAX_DIFFERENCE_BYTES:
+            raise ValueError("network difference")
+    return list(value)
+
+
 def presence(arguments, request_digest):
     """The evidence a completion proves.
 
@@ -71,6 +84,9 @@ def presence(arguments, request_digest):
         "image": bool(observation.get("image")),
         "marker": bounded(arguments.get("marker"), MAX_MARKER),
         "media": bounded(arguments.get("media"), 1024),
+        "network": flag(arguments.get("network")),
+        "networkDifferences": differences(arguments.get("networkDifferences")),
+        "networkReboot": flag(arguments.get("networkReboot")),
         "postcondition": False,
         "power": str(power),
         "private": bool(observation.get("private")),
@@ -87,6 +103,7 @@ def presence(arguments, request_digest):
         and not evidence["media"] and evidence["power"] == "On"
         and ((not evidence["image"]) if private_delivery else evidence["image"])
         and not evidence["private"] and evidence["reachable"]
+        and evidence["network"] and evidence["networkReboot"]
     )
     return evidence
 
@@ -116,6 +133,7 @@ def unproved(evidence, private_delivery=False):
         names.append("image")
     if not evidence["reachable"]:
         names.append("reachable")
+    names += [name for name in ("network", "networkReboot") if not evidence[name]]
     return names
 
 
@@ -129,6 +147,9 @@ def absence(arguments, request_digest):
         "image": False,
         "marker": "",
         "media": "",
+        "network": False,
+        "networkDifferences": [],
+        "networkReboot": False,
         "postcondition": bool(gone),
         "power": "",
         "private": False,

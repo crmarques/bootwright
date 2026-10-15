@@ -326,7 +326,8 @@ def test_observation_evidence_redacts_a_token_in_the_media_the_controller_report
 
 def presence(private_delivery, image):
     arguments = {"observation": {"image": image, "private": False}, "marker": "{}", "hostKey": "ssh-ed25519 AAAA",
-                 "address": "198.51.100.41", "media": "", "power": "On", "reachable": True, "digest": DIGEST}
+                 "address": "198.51.100.41", "media": "", "power": "On", "reachable": True, "digest": DIGEST,
+                 "network": True, "networkReboot": True}
     if private_delivery is not None:
         arguments["privateDelivery"] = private_delivery
     return arguments

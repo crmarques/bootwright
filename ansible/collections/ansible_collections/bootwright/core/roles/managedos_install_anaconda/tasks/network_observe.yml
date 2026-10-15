@@ -1,0 +1,50 @@
+---
+# What an apply proves of the installed machine's network, read and never
+# changed: the convergence marker, the boot it names and the running network
+# compared with the declaration. An unreadable answer proves nothing, and
+# nothing is rolled back, committed, applied or restarted here.
+- name: Read the machine's network convergence state
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_read }}'
+
+- name: Name the network state the machine reported
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_network_state: >-
+      {{ (managedos_install_anaconda_guest.stdout | default('') | bootwright.core.managedos_network_state)
+         if (managedos_install_anaconda_guest.rc | default(1) | int) == 0
+         else (none | bootwright.core.managedos_network_state) }}
+
+- name: Read the network the machine runs
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_show }}'
+  when:
+    - managedos_install_anaconda_network_state.valid | bool
+    - managedos_install_anaconda_network_state.nmstatectl | bool
+
+# A skipped read leaves the state read in the register, so the comparison
+# repeats the read's own condition.
+- name: Compare the running network with its declaration
+  bootwright.core.managedos_network_compare:
+    document: '{{ bootwright_os_install_request.network.document }}'
+    running: '{{ managedos_install_anaconda_guest.stdout }}'
+  register: managedos_install_anaconda_network_compared
+  when:
+    - managedos_install_anaconda_network_state.valid | bool
+    - managedos_install_anaconda_network_state.nmstatectl | bool
+    - managedos_install_anaconda_guest.rc | default(1) == 0
+
+- name: Name the network this observation proved
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_network_result:
+      network: >-
+        {{ (managedos_install_anaconda_network_state.valid | bool)
+           and (managedos_install_anaconda_network_state.marker.request | default('')) == bootwright_os_install_digest
+           and (managedos_install_anaconda_network_compared.matched | default(false) | bool) }}
+      networkReboot: >-
+        {{ (managedos_install_anaconda_network_state.valid | bool)
+           and (managedos_install_anaconda_network_state.marker.request | default('')) == bootwright_os_install_digest
+           and (managedos_install_anaconda_network_state.marker.bootId | default('')) != managedos_install_anaconda_network_state.bootId }}
+      networkDifferences: '{{ managedos_install_anaconda_network_compared.differences | default([]) }}'
+      changed: false

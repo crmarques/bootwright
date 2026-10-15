@@ -8,6 +8,10 @@
       - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
         ~ bootwright_os_install_request.identity.context ~ '/' ~ bootwright_os_install_request.identity.object ~ '/work'
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
+      - bootwright_os_install_request.network.documentPath == '/etc/bootwright/network.yml'
+      - bootwright_os_install_request.network.markerPath == '/etc/bootwright/network-marker.json'
+      - bootwright_os_install_request.network.checkpointSeconds | int > 0
+      - bootwright_os_install_request.network.document is mapping
     quiet: true
   no_log: true
 
@@ -59,6 +63,10 @@
         managedos_install_anaconda_reachable_pause: 1
       when: managedos_install_anaconda_host_key | default('') | trim | length > 0
 
+    - name: Read the installed machine's network the same way an apply proves it
+      ansible.builtin.include_tasks: network_observe.yml
+      when: managedos_install_anaconda_reachable.rc | default(1) == 0
+
   always:
     - name: Remove private connection files
       bootwright.core.lifecycle_scratch:
@@ -100,4 +108,7 @@
     media: "{{ managedos_install_anaconda_controller.media | default('') | regex_replace('[0-9a-f]{64}', '<token>') }}"
     power: '{{ managedos_install_anaconda_controller.power | default("") }}'
     privateDelivery: '{{ bootwright_os_install_request.private is defined }}'
+    network: '{{ managedos_install_anaconda_network_result.network | default(false) }}'
+    networkReboot: '{{ managedos_install_anaconda_network_result.networkReboot | default(false) }}'
+    networkDifferences: '{{ managedos_install_anaconda_network_result.networkDifferences | default([]) }}'
   no_log: true

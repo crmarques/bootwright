@@ -229,6 +229,8 @@ def install_arguments(**overrides):
         "media": "",
         "power": "On",
         "reachable": True,
+        "network": True,
+        "networkReboot": True,
     }
     arguments.update(overrides)
     return arguments
@@ -247,6 +249,10 @@ def test_an_installation_postcondition_needs_every_proof():
         # installation, and the observation that resolves an interrupted apply
         # proves it the same way the apply does.
         {"reachable": False},
+        # A Machine whose network was not converged and proved after a restart
+        # is not finished either, and a drifted one reads partial.
+        {"network": False},
+        {"networkReboot": False},
     ):
         assert not managedos_install_protocol.presence(install_arguments(**overrides), DIGEST)["postcondition"]
 
