@@ -4,6 +4,9 @@ This page owns the M2 target for the native service model approved in D133.
 [Storage admission](api/storage.md) and the closed schemas own current accepted
 input. M2b implements the common native path and strict MON/MGR/OSD admission;
 [B492](milestones/m2.md#b492) adds the MDS family.
+[B477](milestones/m2.md#b477) and [B478](milestones/m2.md#b478) add the RGW,
+ingress and NFS records, which planning refuses until their execution lanes
+land.
 Release-qualified projection, additional families and protected leaf registries
 remain gated by [B472](milestones/m2.md#b472), [B474](milestones/m2.md#b474)
 and each [service item](storage-coverage.md#feature-matrix).
@@ -228,7 +231,7 @@ Do not impose global uniqueness on the bare `service_id`. Any authored native
 
 `service_id` follows one table keyed by service type, with three states.
 Forbidden: `mon` and `mgr`, the native singletons that cephadm refuses with an
-ID. Native-required: `mds`; every row in this state is a type in cephadm's
+ID. Native-required: `mds`, `rgw`, `ingress` and `nfs`; every row in this state is a type in cephadm's
 `REQUIRES_SERVICE_ID` (container, ingress, iscsi, mds, nfs, nvmeof, rgw, smb,
 [upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L804-L813)),
 and later family slices add their rows. Bootwright-required: `osd`, which
@@ -267,6 +270,69 @@ filesystem binds its MDS service; an object gateway binds RGW and optional
 ingress. Native manager-generated SMB services remain derived children of the
 SMB resource owner and cannot also appear as independently managed entries.
 The [resource contract](storage-resources.md) owns those relationships.
+
+### RGW, ingress and NFS records
+
+Admission accepts `rgw`, `ingress` and `nfs` documents under closed records
+whose members and spelling follow IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema (the package the build pins); planning
+still refuses each of them `lifecycle.unsupported` until its execution lane.
+
+| Type | Admitted `spec` members |
+| --- | --- |
+| `rgw` | `rgw_realm`, `rgw_zonegroup`, `rgw_zone`, `rgw_frontend_port` (1-65535), `rgw_frontend_type`, `ssl`, `certificate_source`, `only_bind_port_on_networks`, `rgw_exit_timeout_secs` (at least 1) |
+| `ingress` | required `backend_service` and `virtual_ip`; `frontend_port`, `monitor_port`, `first_virtual_router_id` (1-255), `virtual_interface_networks`, `health_check_interval`, `keepalive_only`, `enable_haproxy_protocol`, `haproxy_peer_communication_port`, `ssl`, `certificate_source` |
+| `nfs` | `port`, `monitoring_port`, `virtual_ip`, `enable_haproxy_protocol` |
+
+`rgw_exit_timeout_secs` starts at 1 because the schema stores only truthy
+members and cephadm applies the option only when it is set
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/cephadmservice.py#L1323-L1324)).
+Every other member of the schema refuses at its own field with an owner:
+
+- Inline TLS material (`ssl_cert`, `ssl_key`) never appears in a native
+  document; the RGW legacy `rgw_frontend_ssl_certificate` refuses because the
+  schema migrates it into `ssl_cert` and `ssl_key`, so the stored service
+  would not match the document. Both bind through
+  [secret bindings](#secret-bindings).
+- Parked by D160 (OD26): cephadm-signed certificates (`generate_cert`,
+  `custom_sans`, `certificate_source: cephadm-signed`), RGW virtual-hosted
+  style (`wildcard_enabled`, `zonegroup_hostnames`), NFSv3 (`enable_nfsv3`,
+  `enable_nlm`), Kerberos and ID mapping (`idmap_conf`), NFS over TLS (`ssl`,
+  `ssl_*`, `certificate_source`, `custom_sans`, `tls_*`), kmip (`kmip_*`) and
+  NFS cluster QoS (`cluster_qos_*`).
+- NFS RDMA (`enable_rdma`, `rdma_port`) refuses: Bootwright does not support
+  it yet (D160, OD27).
+- RGW multisite (`zone_endpoints`, `rgw_realm_token`, `update_endpoints`,
+  `disable_multisite_sync_traffic`) belongs to
+  [B483](milestones/m2.md#b483); `data_pool_attributes` belongs to
+  StoragePool objects with role `rgw`.
+- Ingress credentials (`monitor_user`, `monitor_password`,
+  `keepalived_password`) stay derived confidential children cephadm
+  generates; Bootwright never authors or reads them. One ingress serves one
+  `virtual_ip`, so `virtual_ips_list` refuses.
+- Members with no qualified effect contract refuse: RGW
+  `rgw_frontend_extra_args`, `subcluster`, the counters caches, `d3n_cache`,
+  `qat` and `concentrator*`; ingress keepalived transport, HAProxy statistics
+  endpoint, backend TLS and cipher options; NFS `enable_virtual_server`,
+  `colocation_ports`, `monitoring_networks`, `monitoring_ip_addrs` and
+  `ip_addrs`.
+
+RGW value rules: `certificate_source` admits only `inline` (`reference` is not
+qualified) and only with `ssl: true`; `rgw_frontend_type` admits only `beast`;
+`rgw_realm` and `rgw_zone` appear together
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L1338-L1342));
+`placement.count_per_host` is at most 1; `only_bind_port_on_networks: true`
+needs service `networks`; `ssl: true` needs the `/spec/ssl_cert` and
+`/spec/ssl_key` bindings of one `tlsCertificate` Secret.
+
+NFS value rules from the same schema: `placement.count_per_host` refuses, and
+`virtual_ip` refuses together with service `networks`. `virtual_ip` is a bare
+address without a prefix length, zone or IPv4-mapped form, because cephadm
+binds the text verbatim
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nfs.py#L105-L107)).
+
+The `nfs` manager module is derived from the declared NFS services (D159
+clause 9): `spec.ceph.mgrModules` refuses it at its entry, and Bootwright
+enables it for a declared `nfs` service.
 
 ## Hosts, placement and CRUSH
 
@@ -371,11 +437,14 @@ omitted from this partial example.
 
 The binding registry is fixed per qualified service/resource schema. It names
 accepted Secret types, required parts, native encoding, byte bounds and
-related-field requirements. For example, a qualified RGW
+related-field requirements. For example, the qualified RGW leaves
+`/spec/ssl_cert` (the certificate part, chain allowed) and `/spec/ssl_key`
+(the private-key part) consume one `tlsCertificate` Secret together and take
+effect only with `ssl: true`. The legacy
 [`/spec/rgw_frontend_ssl_certificate`](https://docs.ceph.com/en/tentacle/cephadm/services/rgw/#setting-up-https)
-binding consumes `tlsCertificate` material and produces the provider-required
-PEM combination; a certificate-only native field consumes only the certificate
-part. The adapter never guesses from a field's suffix or permits an operator
+leaf refuses because IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema migrates it into those two leaves. NFS services
+take no bindings: NFS over TLS and kmip are parked by D160 (OD26). The adapter
+never guesses from a field's suffix or permits an operator
 to splice arbitrary secrets into command arguments or custom config.
 
 Admission validates descriptor/reference types and the native payload with

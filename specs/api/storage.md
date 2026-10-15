@@ -11,7 +11,12 @@ Current admission requires nonempty `spec.ceph.services`. Core MON, MGR and
 OSD documents are admitted, and so are MDS documents that a StorageFilesystem
 of the same cluster binds by name. StorageFilesystem itself stays refused until
 [B492](../milestones/m2.md#b492)'s filesystem lane, so no MDS service is
-planned before then. Retired daemon helpers, topology roles/devices and
+planned before then. RGW, ingress and NFS documents are admitted under their
+[native records](../storage-native-api.md#rgw-ingress-and-nfs-records), and
+planning refuses them `lifecycle.unsupported` until B477 and B478's execution
+lanes. `spec.ceph.mgrModules` admits `cephadm` and `rbd_support`; `nfs`
+refuses as derived from a declared NFS service (D159 clause 9); every other
+module refuses until its service owner. Retired daemon helpers, topology roles/devices and
 drivegroup wrappers refuse with their replacement path. Machine bindings,
 hostnames, labels, sites and locations remain under topology. Unsupported
 service families, options with unqualified effects and protected leaves

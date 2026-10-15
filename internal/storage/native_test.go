@@ -70,7 +70,7 @@ func TestNativeCorePayloadClosesUnknownFieldsAndUnsafeEffects(t *testing.T) {
 		{"unmanaged", "$.spec.ceph.services[2].unmanaged", m("service_type", "osd", "service_id", "data", "placement", m("label", "storage"), "unmanaged", true, "spec", m("data_devices", m("all", true)))},
 		{"container escape", "$.spec.ceph.services[2].extra_container_args", m("service_type", "osd", "service_id", "data", "placement", m("label", "storage"), "extra_container_args", api.StringList("--privileged"), "spec", m("data_devices", m("all", true)))},
 		{"native identity mismatch", "$.spec.ceph.services[2].service_name", m("service_type", "osd", "service_id", "data", "service_name", "osd.foreign", "placement", m("label", "storage"), "spec", m("data_devices", m("all", true)))},
-		{"future service", "$.spec.ceph.services[2].service_type", m("service_type", "rgw", "service_id", "objects", "placement", m("label", "storage"), "spec", api.MapValue())},
+		{"future service", "$.spec.ceph.services[2].service_type", m("service_type", "container", "service_id", "objects", "placement", m("label", "storage"), "spec", api.MapValue())},
 		{"inline native config", "$.spec.ceph.services[2].config", m("service_type", "osd", "service_id", "data", "placement", m("label", "storage"), "config", m("password", "never-echo-this"), "spec", m("data_devices", m("all", true)))},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

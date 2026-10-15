@@ -308,6 +308,9 @@ var nativeServiceTypes = []nativeServiceType{
 	{name: "mgr", label: "MGR", serviceID: serviceIDForbidden, core: true},
 	{name: "osd", label: "OSD", serviceID: serviceIDBootwright, core: true},
 	{name: "mds", label: "MDS", serviceID: serviceIDNative, noLeadingDigit: true},
+	{name: "rgw", label: "RGW", serviceID: serviceIDNative},
+	{name: "ingress", label: "ingress", serviceID: serviceIDNative},
+	{name: "nfs", label: "NFS", serviceID: serviceIDNative},
 }
 
 func nativeServiceTypeOf(name string) (nativeServiceType, bool) {
@@ -401,8 +404,9 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 				a.issue("api.invariant", field+"."+key, "native effect-bearing options are not qualified by this core consumer", "omit "+field+"."+key+" until its effect contract is qualified")
 			}
 		}
-		a.nativeShape(service.Get("spec"), shape, field+".spec", partial)
+		a.nativeShape(a.withoutRefusedMembers(service.Get("spec"), typeName, field+".spec"), shape, field+".spec", partial)
 		placed := a.nativePlacement(a.object, service.Get("placement"), field+".placement", partial)
+		a.nativeFamily(service, typeName, field, placed, partial)
 		if typeName == "osd" {
 			a.nativeOSD(service.Get("spec"), field+".spec", placed, partial)
 		}
@@ -447,6 +451,36 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 	a.nativeBindings(ceph, partial)
 }
 
+type refusedMember struct {
+	names           []string
+	message, remedy string
+}
+
+func (a *admission) withoutRefusedMembers(spec api.Value, typeName, field string) api.Value {
+	table := map[string][]refusedMember{"rgw": rgwRefusedMembers, "ingress": ingressRefusedMembers, "nfs": nfsRefusedMembers}[typeName]
+	if spec.Type() != api.Mapping {
+		return spec
+	}
+	for _, member := range spec.Fields() {
+		for _, row := range table {
+			if slices.Contains(row.names, member.Name) {
+				a.issue("api.invariant", field+"."+member.Name, row.message, strings.ReplaceAll(row.remedy, "<member>", member.Name))
+				spec = spec.Without(member.Name)
+			}
+		}
+	}
+	return spec
+}
+
+func (a *admission) nativeFamily(service api.Value, typeName, field string, _ []api.Value, partial bool) {
+	switch typeName {
+	case "rgw":
+		a.rgwRecord(service, field, partial)
+	case "nfs":
+		a.nfsRecord(service, field)
+	}
+}
+
 func (a *admission) nativeBindings(ceph api.Value, partial bool) {
 	refs := map[string]bool{}
 	for i, binding := range ceph.Get("serviceBindings").Items() {
@@ -456,8 +490,13 @@ func (a *admission) nativeBindings(ceph api.Value, partial bool) {
 			a.invalid(field+".serviceRef", "service binding identities must be unique")
 		}
 		refs[ref] = true
-		if _, found := NativeService(a.object, ref); !partial && !found {
+		service, found := NativeService(a.object, ref)
+		if !partial && !found {
 			a.invalid(field+".serviceRef", "service binding must resolve to one declared native service")
+		}
+		nfs := found && textOf(service, "service_type") == "nfs"
+		if nfs {
+			a.issue("api.invariant", field+".serviceRef", "NFS services take no secret bindings: Bootwright does not support NFS over TLS or kmip yet", "remove this spec.ceph.serviceBindings entry")
 		}
 		paths := []string{}
 		for j, secret := range binding.Get("secrets").Items() {
@@ -472,7 +511,9 @@ func (a *admission) nativeBindings(ceph api.Value, partial bool) {
 				}
 			}
 			paths = append(paths, pointer)
-			a.issue("api.invariant", leaf+".path", "secret leaf is not qualified for this service schema", "use the existing cluster SSH or entitlement Secret reference; service-specific bindings require their owning slice")
+		}
+		if !nfs && (found || !partial) {
+			a.bindingLeaves(binding, service, field, partial)
 		}
 	}
 }

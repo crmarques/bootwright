@@ -81,7 +81,7 @@ func TestNativeCoreSchemaAndBindingsUseOneClosedAuthoringPath(t *testing.T) {
 	if bindings.Shape.NameKey != "serviceRef" || secrets.Shape.NameKey != "path" || len(ref.Shape.Reference) != 1 || ref.Shape.Reference[0] != Secret {
 		t.Fatal("native binding must retain a typed descriptor-only reference")
 	}
-	for _, serviceType := range []string{"mon", "mgr", "osd", "mds"} {
+	for _, serviceType := range []string{"mon", "mgr", "osd", "mds", "rgw", "ingress", "nfs"} {
 		shape := StorageNativeServiceSpecSchema(serviceType)
 		if shape == nil || shape.Open {
 			t.Fatalf("native core %s lacks a closed payload", serviceType)
@@ -91,7 +91,18 @@ func TestNativeCoreSchemaAndBindingsUseOneClosedAuthoringPath(t *testing.T) {
 	if mds := StorageNativeServiceSpecSchema("mds"); len(mds.Fields) != 0 {
 		t.Fatal("native MDS spec carries no type-specific field")
 	}
-	if StorageNativeServiceSpecSchema("rgw") != nil {
+	for serviceType, refused := range map[string][]string{
+		"rgw":     {"rgw_frontend_ssl_certificate", "ssl_cert", "ssl_key"},
+		"ingress": {"monitor_password", "keepalived_password", "ssl_cert"},
+		"nfs":     {"ssl", "kmip_key", "enable_nfsv3"},
+	} {
+		for _, name := range refused {
+			if _, ok := StorageNativeServiceSpecSchema(serviceType).Field(name); ok {
+				t.Fatalf("native %s record admits refused member %s", serviceType, name)
+			}
+		}
+	}
+	if StorageNativeServiceSpecSchema("container") != nil {
 		t.Fatal("future family schema must be qualified by its owning slice")
 	}
 	client := Schema(StorageClient)

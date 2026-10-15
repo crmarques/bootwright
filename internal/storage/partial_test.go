@@ -19,6 +19,14 @@ func TestPartialValidationIssuesAlsoRefuseTheCompleteObject(t *testing.T) {
 		services[index] = change(services[index])
 		return spec.WithPath(api.ListValue(services...), "ceph", "services")
 	}
+	appendService := func(added api.Value) api.Object {
+		return edit(api.StorageCluster, "storage", func(s api.Value) api.Value {
+			return s.WithPath(api.ListValue(append(s.Get("ceph", "services").Items(), added)...), "ceph", "services")
+		})
+	}
+	rgw := m("service_type", "rgw", "service_id", "objects", "placement", m("label", "storage"))
+	nfs := m("service_type", "nfs", "service_id", "files", "placement", m("label", "storage"))
+	ingress := m("service_type", "ingress", "service_id", "rgw.objects", "placement", m("label", "storage"), "spec", m("backend_service", "rgw.objects", "virtual_ip", "192.0.2.50/24"))
 	entitlement := object(api.Entitlement, "ibm", m("type", "ibm-storage-ceph", "registry", m("credentialsRef", "registry"), "license", m("accept", false)))
 	for _, test := range []struct {
 		name   string
@@ -73,6 +81,17 @@ func TestPartialValidationIssuesAlsoRefuseTheCompleteObject(t *testing.T) {
 		})},
 		{"native binding paths", edit(api.StorageCluster, "storage", func(s api.Value) api.Value {
 			return s.WithPath(api.ListValue(m("serviceRef", "mgr", "secrets", api.ListValue(m("path", "/spec/key", "secretRef", "a"), m("path", "/spec/key/child", "secretRef", "b")))), "ceph", "serviceBindings")
+		})},
+		{"native RGW legacy certificate", appendService(rgw.With("spec", m("rgw_frontend_ssl_certificate", "material")))},
+		{"native RGW signed certificate", appendService(rgw.With("spec", m("ssl", true, "certificate_source", "cephadm-signed")))},
+		{"native RGW colocated daemons", appendService(rgw.With("placement", m("label", "storage", "count_per_host", 2)))},
+		{"native NFS version 3", appendService(nfs.With("spec", m("enable_nfsv3", true)))},
+		{"native NFS colocated daemons", appendService(nfs.With("placement", m("label", "storage", "count_per_host", 1)))},
+		{"native NFS prefixed VIP", appendService(nfs.With("spec", m("virtual_ip", "192.0.2.60/24")))},
+		{"native ingress password", appendService(ingress.WithPath(api.StringValue("material"), "spec", "monitor_password"))},
+		{"native NFS binding", edit(api.StorageCluster, "storage", func(s api.Value) api.Value {
+			s = s.WithPath(api.ListValue(append(s.Get("ceph", "services").Items(), nfs)...), "ceph", "services")
+			return s.WithPath(api.ListValue(m("serviceRef", "nfs.files", "secrets", api.ListValue(m("path", "/spec/ssl_cert", "secretRef", "a")))), "ceph", "serviceBindings")
 		})},
 		{"gateway plain TLS", edit(api.StorageObjectGateway, "objects", func(s api.Value) api.Value {
 			return s.WithPath(m("certificateRef", "certificate"), "endpoint", "tls")

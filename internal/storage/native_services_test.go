@@ -102,9 +102,9 @@ func TestServiceIDTableMatchesCephadmRequiresServiceID(t *testing.T) {
 }
 
 func TestUnimplementedServiceRemedyNamesImplementedTypes(t *testing.T) {
-	cluster, catalog := withMDSService(t, fixtureCatalog(), m("service_type", "rgw", "service_id", "objects", "placement", m("label", "mgr")))
+	cluster, catalog := withMDSService(t, fixtureCatalog(), m("service_type", "container", "service_id", "objects", "placement", m("label", "mgr")))
 	found := issuesAt(Validate(cluster, catalog), "$.spec.ceph.services[3].service_type")
-	if len(found) != 1 || found[0].Remediation != "select an implemented MON, MGR, OSD or MDS service, or wait for its owning service slice" {
+	if len(found) != 1 || found[0].Remediation != "select an implemented MON, MGR, OSD, MDS, RGW, ingress or NFS service, or wait for its owning service slice" {
 		t.Fatalf("unimplemented family remedy: %#v", found)
 	}
 }

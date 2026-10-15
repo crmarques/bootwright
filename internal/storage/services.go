@@ -8,6 +8,12 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos"
 )
 
+type derivedManagerModule struct{ module, family, item string }
+
+var derivedManagerModules = []derivedManagerModule{
+	{module: "nfs", family: "nfs", item: "B478"},
+}
+
 func (a *admission) clusterServices(ceph api.Value) {
 	public := a.prefixes(ceph.Get("networks", "publicCIDRs"), "$.spec.ceph.networks.publicCIDRs")
 	private := a.prefixes(ceph.Get("networks", "clusterCIDRs"), "$.spec.ceph.networks.clusterCIDRs")
@@ -22,8 +28,11 @@ func (a *admission) clusterServices(ceph api.Value) {
 	for _, issue := range configIssues {
 		a.issue(issue.Code, issue.Field, issue.Message, issue.Remediation)
 	}
-	for _, module := range ceph.Get("mgrModules").Strings() {
-		if !slices.Contains([]string{"cephadm", "rbd_support"}, module) {
+	for i, module := range ceph.Get("mgrModules").Strings() {
+		if at := slices.IndexFunc(derivedManagerModules, func(row derivedManagerModule) bool { return row.module == module }); at >= 0 {
+			row := derivedManagerModules[at]
+			a.issue("api.invariant", indexed("$.spec.ceph.mgrModules", i), "manager module "+row.module+" is derived from the declared "+row.family+" services", "remove "+row.module+" from spec.ceph.mgrModules; Bootwright enables it for a declared "+row.family+" service")
+		} else if !slices.Contains([]string{"cephadm", "rbd_support"}, module) {
 			a.invalid("$.spec.ceph.mgrModules", "manager module requires its qualified service owner")
 		}
 	}

@@ -32,6 +32,12 @@ func StorageNativeServiceSpecSchema(serviceType string) *Shape {
 		return record()
 	case "osd":
 		return record(required("data_devices", storageNativeDeviceSelector()), field("db_devices", storageNativeDeviceSelector()), field("wal_devices", storageNativeDeviceSelector()), field("encrypted", boolean()), field("tpm2", boolean()), field("osds_per_device", integer("1", "")), field("crush_device_class", nonempty()), field("filter_logic", enumeration("AND", "OR")), field("block_db_size", integer("1", "")), field("block_wal_size", integer("1", "")), field("db_slots", integer("1", "")), field("wal_slots", integer("1", "")), field("data_allocate_fraction", number("0", "1")), field("objectstore", enumeration("bluestore")), field("method", enumeration("lvm", "raw")))
+	case "rgw":
+		return record(field("rgw_realm", nonempty()), field("rgw_zonegroup", nonempty()), field("rgw_zone", nonempty()), field("rgw_frontend_port", integer("1", "65535")), field("rgw_frontend_type", enumeration("beast", "civetweb")), field("ssl", boolean()), field("certificate_source", enumeration("inline", "reference", "cephadm-signed")), field("only_bind_port_on_networks", boolean()), field("rgw_exit_timeout_secs", integer("1", "")))
+	case "ingress":
+		return record(required("backend_service", nonempty()), required("virtual_ip", nonempty()), field("frontend_port", integer("1", "65535")), field("monitor_port", integer("1", "65535")), field("first_virtual_router_id", integer("1", "255")), field("virtual_interface_networks", set(nonempty())), field("health_check_interval", nonempty()), field("keepalive_only", boolean()), field("enable_haproxy_protocol", boolean()), field("haproxy_peer_communication_port", integer("1", "65535")), field("ssl", boolean()), field("certificate_source", enumeration("inline", "reference", "cephadm-signed")))
+	case "nfs":
+		return record(field("port", integer("1", "65535")), field("monitoring_port", integer("1", "65535")), field("virtual_ip", nonempty()), field("enable_haproxy_protocol", boolean()))
 	default:
 		return nil
 	}
