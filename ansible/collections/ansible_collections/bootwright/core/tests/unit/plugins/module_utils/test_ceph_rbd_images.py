@@ -267,6 +267,15 @@ def test_rbd_observe_refuses_unrecorded_id_change():
     assert creates(world) == []
 
 
+def test_rbd_observe_absent_pool_reports_absent_image_without_rbd_call():
+    world = World()
+    world.pools = [entry for entry in world.pools if entry["pool_name"] != "volumes"]
+    native = worker(world, image_value())[0]
+    ready, evidence = observe(native)
+    assert ready is False and evidence["exists"] is False and evidence["resource"] == {"id": "", "path": ""}
+    assert world.argvs == []
+
+
 def test_rbd_declared_change_refuses_identity():
     world = World()
     native, marks = worker(world, image_value(sizeBytes=2 * GIB))

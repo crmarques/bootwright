@@ -66,6 +66,9 @@ def test_scope_is_shared_with_pool_and_client_without_private_package_inputs(clu
     policy = {key: value for key, value in cluster_request.items() if key not in ("client", "packages")}
     policy.update(action="policy", policy={"deviceClass": "ssd", "failureDomain": "host", "name": "fast", "root": "default", "rule": "fast", "size": 2})
     assert staging.recovery_scope(policy) == wanted
+    rbd = {key: value for key, value in cluster_request.items() if key not in ("client", "packages")}
+    rbd.update(action="rbd", rbd={"dataPool": "", "features": ["layering"], "name": "disk", "pool": "data", "sizeBytes": 1073741824})
+    assert staging.recovery_scope(rbd) == wanted
 
 
 @pytest.mark.parametrize("attempted", [False, True])

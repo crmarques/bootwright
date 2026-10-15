@@ -194,10 +194,12 @@ Admission refuses, before any effect:
 
 Ownership: the worker writes its attempt record before `rbd create`. A
 lost reply is adopted only with that record and an image of exactly the frozen
-shape with no snapshot; otherwise the image refuses `foreign-rbd-image`. An
-image whose ID, size, data pool or features contradict the record, or a
-recorded image that is gone, refuses `rbd-image-identity`; Bootwright never
-recreates, resizes, moves or re-features it. A trashed image has left the pool
+shape with no snapshot; otherwise the image refuses `foreign-rbd-image`. A
+StorageRBDImage whose declared `sizeBytes`, `dataPoolRef` or `features` differ
+from the recorded ones, a native image whose ID differs from the recorded one,
+or a recorded image that is gone refuses `rbd-image-identity`; a native image
+that drifted from the frozen size, data pool or features is not ready.
+Bootwright never recreates, resizes, moves or re-features it. A trashed image has left the pool
 directory, so it never blocks a create.
 
 Readiness proves the recorded image ID, the size, format 2, the data pool, and
