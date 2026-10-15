@@ -360,6 +360,21 @@ def test_fs_wait_ready_requires_active_ranks_and_replay(change):
     assert native.filesystem_ranks() == {"active": change not in ("replay-state", "foreign-active")}
 
 
+@pytest.mark.parametrize("standbys, ready", [([], False), (["other"], False), (["files"], True), (["files", "other"], True)])
+def test_fs_wait_ready_counts_bound_standbys_against_wanted(standbys, ready):
+    world = World()
+    world.activate = False
+    filesystem = fs_value(standbyCountWanted=1)
+    native, marks = worker(world, filesystem)
+    entry = world.add_filesystem("files", "cephfs-metadata", "cephfs-data", wanted=1)
+    world.standbys = [{"name": mds_name("node-" + str(index + 2), service=service), "rank": -1, "state": "up:standby"}
+                      for index, service in enumerate(standbys)]
+    entry["mdsmap"]["info"] = {"gid_1": {"name": mds_name("node-1"), "rank": 0, "state": "up:active"}}
+    marks.records.update({"filesystem-files.json": filesystem, "filesystem-id.files.json": {"id": 7}})
+    assert observe(native)[0] is ready
+    assert native.filesystem_ranks() == {"active": True}
+
+
 def test_fs_observe_lost_reply_is_unfinished_and_identity_changes_refuse():
     world = World()
     native, marks = worker(world)
