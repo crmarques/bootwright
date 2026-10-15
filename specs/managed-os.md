@@ -645,7 +645,10 @@ the document and the marker only on standard input. In order:
    [NetworkManager D-Bus API](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.html)).
    It reads the state again; an exit status other than 0 is NetworkManager's
    refusal, and nmstate verifies the applied state and rolls back a mismatch
-   ([nmstatectl(8)](https://www.mankier.com/8/nmstatectl)). Otherwise it runs
+   ([nmstatectl(8)](https://www.mankier.com/8/nmstatectl)); a checkpoint
+   NetworkManager no longer lists was rolled back by its timeout, whether or
+   not the controller saw its connection drop, and the commit is never tried
+   on it. Otherwise it runs
    `nmstatectl commit` on the checkpoint and writes the marker
    `{"bootId":"<boot ID>","request":"<digest>"}`, mode `0644`, atomically to
    `/etc/bootwright/network-marker.json`. Nothing is written under
@@ -676,7 +679,10 @@ budgets) ends with: `repeat bootwright apply; if it fails the same way, the
 declared network cannot be applied: run bootwright destroy, which erases the
 Machines this context installed, correct the network of <m>, then run
 bootwright apply`. A declared network that cut the controller off, which
-NetworkManager rolled back, ends with: `the declared network of <m> cannot
+NetworkManager rolled back (the connection dropped while the change ran, or the
+checkpoint was no longer listed when the connection returned, as when the
+controller's packets were dropped for longer than `checkpointSeconds`), ends
+with: `the declared network of <m> cannot
 change under this apply: run bootwright destroy, which erases the Machines this
 context installed, correct the network of <m> so <address> stays reachable from
 the controller, then run bootwright apply`; a running network that differs from

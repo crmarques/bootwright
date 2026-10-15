@@ -259,7 +259,14 @@
           context installed, correct the network of {{ bootwright_os_install_request.identity.object }}
           so {{ bootwright_os_install_request.address }} stays reachable from the controller,
           then run bootwright apply
-      when: managedos_install_anaconda_network_lost | bool
+      # A checkpoint NetworkManager no longer lists was rolled back by its own
+      # timeout, which a controller cut off for longer than the timeout never
+      # observes as a lost connection; the commit is never tried on it.
+      when: >-
+        managedos_install_anaconda_network_lost | bool
+        or (managedos_install_anaconda_network_applied.checkpoint != ''
+            and managedos_install_anaconda_network_applied.checkpoint
+                not in (managedos_install_anaconda_network_applied.listed or []))
 
     - name: Stop at an apply that reported no checkpoint
       ansible.builtin.fail:

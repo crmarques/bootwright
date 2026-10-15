@@ -403,10 +403,10 @@ NETWORK = {"checkpointSeconds": 300, "document": DOCUMENT, "documentPath": "/etc
            "markerPath": "/etc/bootwright/network-marker.json"}
 
 
-def guest_read(boot=BOOT_ID, rc="", checkpoint="", listed=(), marker=""):
+def guest_read(boot=BOOT_ID, rc="", checkpoint="", listed=(), marker="", unit="inactive", nmstatectl="yes"):
     """The READ script's output, one key=value line each."""
     return "".join("%s=%s\n" % pair for pair in (
-        ("nmstatectl", "yes"), ("bootId", boot), ("unit", "inactive"), ("rc", rc), ("checkpoint", checkpoint),
+        ("nmstatectl", nmstatectl), ("bootId", boot), ("unit", unit), ("rc", rc), ("checkpoint", checkpoint),
         ("listed", "ao %d%s" % (len(listed), "".join(' "%s"' % path for path in listed))),
         ("marker", marker), ("error", "")))
 
@@ -419,28 +419,39 @@ def answered(stdout="", rc=0):
     return {"rc": rc, "stdout": stdout, "stderr": ""}
 
 
+class Refused(Exception):
+    """A fail or assert fired, which ends the play as it ends the attempt."""
+
+
 class Guest:
     """Network task files run in order over one guest, each command answered
-    from a queue; every refusal that would fire is recorded, never raised."""
+    from a queue, with the frozen budgets; the first refusal that fires stops
+    the run, as ansible-core stops the attempt, and is recorded."""
 
-    def __init__(self, answers, matched=True):
+    def __init__(self, answers, matched=True, power="Off"):
         self.answers = {name: list(queue) for name, queue in answers.items()}
         self.matched = matched
+        self.power = power
         self.ran = []
         self.argv = {}
+        self.budgets = []
         self.fired = []
         self.scope = dict(defaults(), **{
             "bootwright_os_install_digest": DIGEST,
             "bootwright_os_install_request": {
                 "identity": {"object": MACHINE}, "address": ADDRESS, "placement": {"machine": "controller"},
                 "target": {"substrate": "libvirt"}, "network": NETWORK,
-                "budgets": {name: {"attempts": 12, "delaySeconds": 5}
-                            for name in ("networkApply", "networkReconnect", "reboot")},
+                "budgets": {"networkApply": {"attempts": 24, "delaySeconds": 5},
+                            "networkReconnect": {"attempts": 12, "delaySeconds": 5},
+                            "reboot": {"attempts": 60, "delaySeconds": 10}},
             },
         })
 
     def run(self, name):
-        self.perform(LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True), [])
+        try:
+            self.perform(LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True), [])
+        except Refused:
+            return self
         assert not any(self.answers.values()), ("commands never ran", self.answers)
         return self
 
@@ -468,12 +479,16 @@ class Guest:
             command = task["vars"][GUEST].rsplit("managedos_install_anaconda_network_", 1)[-1].strip(" }")
             self.ran.append(command)
             self.argv.setdefault(command, []).append([str(word) for word in templar.template(task["vars"][GUEST])])
+            if "managedos_install_anaconda_guest_retries" in task["vars"]:
+                self.budgets.append((command, str(templar.template(task["vars"]["managedos_install_anaconda_guest_retries"]))))
             self.scope["managedos_install_anaconda_guest"] = self.answers[command].pop(0)
         elif FAIL in task:
             self.fired.append(task["name"])
+            raise Refused(task["name"])
         elif "ansible.builtin.assert" in task:
             if not all(templar.evaluate_conditional(condition) for condition in task["ansible.builtin.assert"]["that"]):
                 self.fired.append(task["name"])
+                raise Refused(task["name"])
         elif SET_FACT in task:
             for fact, value in task[SET_FACT].items():
                 self.scope[fact] = templar.template(value)
@@ -481,9 +496,11 @@ class Guest:
             self.scope[task["register"]] = {"matched": self.matched,
                                             "differences": [] if self.matched else ["bond0 is down, declared up"]}
         elif REDFISH in task:
-            self.scope[task["register"]] = {"power": "Off"}
+            self.scope[task["register"]] = {"power": self.power}
+        elif "ansible.builtin.pause" in task:
+            self.ran.append("pause")
         else:
-            assert {"ansible.builtin.include_role", "ansible.builtin.pause"} & set(task), task["name"]
+            assert "ansible.builtin.include_role" in task, task["name"]
 
 
 def converging(first, *after):
@@ -522,6 +539,123 @@ def test_a_converging_network_fires_no_refusal(first, after, expected):
         assert rollback[rollback.index("bootwright-network") + 1] == EARLIER_CHECKPOINT
     if "commit" in after:
         assert guest.argv["commit"] == [["/usr/bin/sudo", "-n", "/usr/bin/nmstatectl", "commit", CHECKPOINT]]
+
+
+ROLLED_BACK = guest_read(rc="0", checkpoint=CHECKPOINT, listed=[])
+APPLY_PATH = ["wait", "read", "prepare", "start", "wait", "read", "commit", "mark", "poweroff", "boot_id", "show"]
+LOST_PATH = ["wait", "read", "prepare", "start", "wait", "wait", "pause", "read"]
+LOST_BUDGETS = [("wait", "24"), ("wait", "24"), ("wait", "12")]
+CONSOLE = "restore its network from its console"
+
+
+def applying(**changed):
+    """Answers for the whole apply path, any command's queue replaced."""
+    answers = {"wait": [answered(), answered()], "read": [answered(guest_read()), answered(APPLIED)],
+               "prepare": [answered()], "start": [answered()], "commit": [answered()], "mark": [answered()],
+               "poweroff": [answered()], "boot_id": [answered(NEW_BOOT_ID + "\n")], "show": [answered("{}")]}
+    answers.update(changed)
+    return answers
+
+
+def lost(second):
+    """Answers for a connection the apply dropped and did not return within both waits."""
+    return applying(wait=[answered(), answered(rc=255), answered(rc=255)], read=[answered(guest_read()), second])
+
+
+REFUSED = [
+    ("unanswered-read", applying(read=[answered(rc=255)]), "Stop at a network state read the connection did not complete",
+     ["wait", "read"], "its state is unknown"),
+    ("unreadable-read", applying(read=[answered("state: unknown\n")]), "Stop at a network state Bootwright cannot read",
+     ["wait", "read"], "repeat bootwright apply"),
+    ("no-nmstatectl", applying(read=[answered(guest_read(nmstatectl="no"))]),
+     "Stop at a machine that cannot apply a declared network", ["wait", "read"], "bootwright destroy"),
+    ("running", applying(read=[answered(guest_read(unit="active"))]), "Stop at a network change that is still running",
+     ["wait", "read"], "120 seconds; repeat bootwright apply"),
+    ("rollback-refused", applying(read=[answered(guest_read(checkpoint=EARLIER_CHECKPOINT, listed=[EARLIER_CHECKPOINT]))],
+                                  rollback=[answered(rc=1)]),
+     "Stop at a rollback NetworkManager refused", ["wait", "read", "rollback"], "bootwright destroy"),
+    ("prepare-refused", applying(prepare=[answered(rc=1)]), "Stop at a declared network the machine did not take",
+     ["wait", "read", "prepare"], "repeat bootwright apply"),
+    ("start-refused", applying(start=[answered(rc=1)]), "Stop at a network apply that did not start",
+     ["wait", "read", "prepare", "start"], "repeat bootwright apply"),
+    ("still-running", applying(wait=[answered(), answered(rc=3), answered(rc=3)]),
+     "Stop at a network apply that is still running", LOST_PATH[:6], "180 seconds; repeat bootwright apply"),
+    ("lost-unanswered", lost(answered(rc=255)), "Stop at a machine that did not answer after its network changed",
+     LOST_PATH, "390 seconds; its state is unknown: repeat bootwright apply, and if %s stays unreachable, %s" % (MACHINE, CONSOLE)),
+    ("lost-unreadable", lost(answered("state: unknown\n")), "Stop at an applied network state Bootwright cannot read",
+     LOST_PATH, "repeat bootwright apply"),
+    ("lost-uncommitted", lost(answered(APPLIED)), "Stop at a network change still uncommitted after the connection returned",
+     LOST_PATH, "bootwright destroy"),
+    ("lost-rolled-back", lost(answered(ROLLED_BACK)), "Stop at a declared network that cut the controller off",
+     LOST_PATH, "so %s stays reachable from the controller" % ADDRESS),
+    ("nm-refused", applying(read=[answered(guest_read()), answered(guest_read(rc="1", checkpoint=CHECKPOINT))]),
+     "Stop at a declared network NetworkManager refused", APPLY_PATH[:6], "bootwright destroy"),
+    ("rolled-back-unseen", applying(read=[answered(guest_read()), answered(ROLLED_BACK)]),
+     "Stop at a declared network that cut the controller off", APPLY_PATH[:6],
+     "so %s stays reachable from the controller" % ADDRESS),
+    ("no-checkpoint", applying(read=[answered(guest_read()), answered(guest_read(rc="0"))]),
+     "Stop at an apply that reported no checkpoint", APPLY_PATH[:6], "bootwright destroy"),
+    ("commit-refused", applying(commit=[answered(rc=1)]), "Stop at a commit NetworkManager did not take",
+     APPLY_PATH[:7], "repeat bootwright apply"),
+    ("mark-refused", applying(mark=[answered(rc=1)]), "Stop at a network marker the machine did not take",
+     APPLY_PATH[:8], "repeat bootwright apply"),
+    ("poweroff-refused", applying(poweroff=[answered(rc=1)]), "Stop at a machine that refused to power off",
+     APPLY_PATH[:9], "repeat bootwright apply"),
+    ("restart-unanswered", applying(boot_id=[answered(rc=255)]), "Stop at a restarted machine that did not answer",
+     APPLY_PATH[:10], "600 seconds of its restart; its state is unknown"),
+    ("not-restarted", applying(boot_id=[answered(BOOT_ID + "\n")]), "Stop at a machine that did not restart",
+     APPLY_PATH[:10], "did not restart"),
+    ("show-unanswered", applying(show=[answered(rc=255)]), "Stop at a running network the machine did not report",
+     APPLY_PATH, CONSOLE),
+]
+
+
+@pytest.mark.parametrize("answers, name, ran, remedy", [case[1:] for case in REFUSED], ids=[case[0] for case in REFUSED])
+def test_a_network_refusal_stops_the_attempt_where_it_fires(answers, name, ran, remedy):
+    guest = Guest(answers).run("network.yml")
+    assert guest.fired == [name] and guest.ran == ran
+    assert "managedos_install_anaconda_network_result" not in guest.scope
+    if ran[:6] == LOST_PATH[:6]:
+        assert guest.budgets[:3] == LOST_BUDGETS
+    task = next(task for task in flattened("network.yml") if task.get("name") == name)
+    message = Templar(loader=LOADER, variables=guest.scope).template(trust_as_template(task[FAIL]["msg"]))
+    assert MACHINE in message and remedy in message, message
+    if name.endswith("cut the controller off"):
+        assert "commit" not in guest.ran
+
+
+def test_a_restart_the_controller_never_reports_off_stops_before_the_disk_boot():
+    guest = Guest(applying(), power="On").run("network.yml")
+    assert guest.fired == ["Stop at a machine that did not power off within its budget"]
+    assert guest.ran == APPLY_PATH[:9] and "managedos_install_anaconda_network_result" not in guest.scope
+
+
+def test_a_declaration_that_differs_after_the_restart_is_refused():
+    guest = Guest(applying(), matched=False).run("network.yml")
+    assert guest.fired == ["Stop at a running network that differs from its declaration"]
+    assert guest.ran == APPLY_PATH and "managedos_install_anaconda_network_result" not in guest.scope
+
+
+@pytest.mark.parametrize("answers, ran", [
+    (applying(wait=[answered(), answered(rc=255), answered()]), APPLY_PATH[:5] + ["wait"] + APPLY_PATH[5:]),
+    (applying(poweroff=[answered(rc=255)]), APPLY_PATH),
+], ids=["reconnected", "poweroff-closed-the-connection"])
+def test_a_dropped_connection_that_returns_converges(answers, ran):
+    guest = Guest(answers).run("network.yml")
+    assert guest.fired == [] and guest.ran == ran and "pause" not in guest.ran
+    assert guest.scope["managedos_install_anaconda_network_result"]["network"] is True
+
+
+def test_the_guest_command_stops_retrying_at_its_first_success():
+    guest = ssh_task("guest.yml", "managedos_install_anaconda_guest")
+    assert guest["retries"] == "{{ managedos_install_anaconda_guest_retries | default(0) | int }}"
+    assert guest["delay"] == "{{ managedos_install_anaconda_guest_pause | default(1) | int }}"
+    for result, retries, done in (({"rc": 0, "attempts": 1}, 12, True), ({"rc": 1, "attempts": 1}, 12, False),
+                                  ({"rc": 1, "attempts": 12}, 12, False), ({"rc": 1, "attempts": 13}, 12, True),
+                                  ({"rc": 255, "attempts": 1}, 0, True), ({}, 12, False)):
+        templar = Templar(loader=LOADER, variables={"managedos_install_anaconda_guest": result,
+                                                    "managedos_install_anaconda_guest_retries": retries})
+        assert templar.evaluate_conditional(guest["until"]) is done, (result, retries)
 
 
 @pytest.mark.parametrize("first, matched, network, reboot", [
