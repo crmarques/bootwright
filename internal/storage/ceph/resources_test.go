@@ -277,3 +277,17 @@ func TestErasureProfileDefaultsFrozenPerPlugin(t *testing.T) {
 		}
 	}
 }
+
+func TestPoolReplicasFallBackToPolicyBeforeDefaults(t *testing.T) {
+	policy := childOf(api.StoragePlacementPolicy, "durable", "ruleName", "durable-hosts", "replicated", requestMap("size", 3, "minSize", 3))
+	inherited := childOf(api.StoragePool, "volumes", "type", "replicated", "role", "rbd", "placementPolicyRef", "durable")
+	r, err := planned(t, planCatalog(4, 4, nil, policy, inherited), api.StoragePool, "volumes")
+	if err != nil || r.Pool.Size != 3 || r.Pool.MinSize != 3 {
+		t.Fatalf("a pool without replicated values planned %+v (%v), want the policy's 3/3", r.Pool, err)
+	}
+	sized := childOf(api.StoragePool, "volumes", "type", "replicated", "role", "rbd", "placementPolicyRef", "durable", "replicated", requestMap("size", 3))
+	r, err = planned(t, planCatalog(4, 4, nil, policy, sized), api.StoragePool, "volumes")
+	if err != nil || r.Pool.Size != 3 || r.Pool.MinSize != 3 {
+		t.Fatalf("a pool overriding only size planned %+v (%v), want minSize 3 from the policy", r.Pool, err)
+	}
+}

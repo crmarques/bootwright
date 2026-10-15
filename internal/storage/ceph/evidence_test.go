@@ -323,3 +323,18 @@ func TestEvidencePolicyReadyNeedsRuleID(t *testing.T) {
 		}
 	}
 }
+
+func TestEvidencePolicyPartialNeedsDecimalRuleID(t *testing.T) {
+	policy := runtimeRequest()
+	policy.Action = "policy"
+	policy.Policy = &Policy{DeviceClass: "ssd", FailureDomain: "host", Name: "fast", Root: "default", Rule: "fast-hosts", Size: 2}
+	for id, want := range map[string]reconciliation.EffectState{"x1": reconciliation.EffectUnknown, "-1": reconciliation.EffectUnknown, "8": reconciliation.EffectPartial} {
+		partial := readyEvidence(policy)
+		partial.Ready, partial.Partial = false, true
+		partial.Resource = ResourceEvidence{ID: id}
+		effect, err := EvaluateEvidence(evidenceBytes(t, partial), policy, "digest", false)
+		if effect != want || (want == reconciliation.EffectUnknown) != (err != nil) {
+			t.Fatalf("partial policy evidence with rule id %q is %s (%v), want %s", id, effect, err, want)
+		}
+	}
+}

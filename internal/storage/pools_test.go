@@ -247,3 +247,23 @@ func TestGenericPoolRemediesNameTheNextStep(t *testing.T) {
 		t.Fatalf("cephfs-metadata erasure pool: %+v", issues)
 	}
 }
+
+func TestErasureDeviceClassMustBeAutomaticOrDeclared(t *testing.T) {
+	pool := ecPool("ec", chunks(4, 2, "crushDeviceClass", "fast"))
+	onlyIssue(t, admitted(clusterOf(t, 6, true), pool), "$.spec.erasure.crushDeviceClass", "device class fast is neither an automatic class (hdd, ssd, nvme) nor a crush_device_class an OSD service of this cluster declares", "use hdd, ssd or nvme, or declare crush_device_class: fast on the OSD service that owns those devices")
+	storage := m("label", "storage")
+	specLevel := osdWithClass(storage, m("crush_device_class", "fast", "data_devices", m("paths", api.StringList("/dev/vdb"))))
+	pathLevel := osdWithClass(storage, m("data_devices", m("paths", []api.Value{m("path", "/dev/vdb", "crush_device_class", "fast")})))
+	noIssues(t, admitted(clusterOf(t, 6, true, specLevel), pool))
+	noIssues(t, admitted(clusterOf(t, 6, true, pathLevel), pool))
+}
+
+func TestErasureHostMinimumCountsOnlyDeclaringHosts(t *testing.T) {
+	data := m("service_type", "osd", "service_id", "data", "placement", m("label", "storage"), "spec", m("data_devices", m("paths", api.StringList("/dev/vdb"))))
+	fast := func(hosts ...string) api.Value {
+		return osdWithClass(m("hosts", api.StringList(hosts...)), m("crush_device_class", "fast", "data_devices", m("paths", api.StringList("/dev/vdc"))))
+	}
+	pool := ecPool("ec", chunks(4, 2, "crushDeviceClass", "fast"))
+	onlyIssue(t, admitted(clusterOf(t, 6, true, data, fast("node-1", "node-2", "node-3", "node-4", "node-5")), pool), "$.spec.erasure", "erasure profile 4+2 needs at least 6 OSD hosts without mon_osd_down_out_subtree_limit = host; 5 are declared", "add OSD-bearing hosts until 6 carry OSDs, or choose a profile whose minimum the cluster meets")
+	noIssues(t, admitted(clusterOf(t, 6, true, data, fast("node-1", "node-2", "node-3", "node-4", "node-5", "node-6")), pool))
+}
