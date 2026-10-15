@@ -462,6 +462,83 @@ def test_policy_refuses_foreign_rule_and_adopts_only_recorded(case):
     assert not any(entry[:4] == ("osd", "crush", "rule", "create-replicated") for entry in world.log)
 
 
+AUTOSCALE_OFF = {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "off", "targetBytes": 0, "targetRatio": ""}
+
+
+@pytest.mark.parametrize("kind,autoscale,field,value,expected", [
+    ("replicated", None, "type", 3, False), ("replicated", None, "crush_rule", 9, False), ("replicated", None, "size", 3, False),
+    ("replicated", None, "min_size", 1, False), ("replicated", None, "pg_autoscale_mode", "off", False), ("replicated", None, "pg_num", 64, True),
+    ("replicated", None, "quota_max_objects", 5, False), ("replicated", AUTOSCALE_OFF, "pg_num", 64, False),
+    ("replicated", AUTOSCALE_OFF, "pg_autoscale_mode", "on", False), ("erasure", None, "type", 1, False), ("erasure", None, "crush_rule", 0, False),
+    ("erasure", None, "size", 5, False), ("erasure", None, "min_size", 4, False), ("erasure", None, "erasure_code_profile", "other", False),
+    ("erasure", None, "stripe_width", 8192, False), ("erasure", None, "profile", {"foo": "1"}, False), ("erasure", None, "pg_num", 128, True),
+])
+def test_pool_readiness_compares_every_frozen_attribute(kind, autoscale, field, value, expected):
+    world = World()
+    native, unused = resource(world, "pool", pool_value(kind, **({"autoscale": autoscale} if autoscale else {})))
+    native.pool()
+    assert ready(native)[0] is True
+    if field == "profile":
+        world.profiles["volumes"].update(value)
+    else:
+        world.entry("volumes")[field] = value
+    assert ready(native)[0] is expected
+
+
+def test_pool_erasure_lost_reply_refuses_another_profile():
+    world = World()
+    native, marks = resource(world, "pool", pool_value("erasure"))
+    native.pool()
+    del marks.records["pool-id-volumes.json"]
+    world.entry("volumes")["erasure_code_profile"] = "other"
+    with pytest.raises(ceph_native.Refusal, match="^pool-identity$"):
+        native.pool()
+    assert "pool-id-volumes.json" not in marks.records
+
+
+def foreign_create(world):
+    """A create-replicated that answers 0 over a same-name rule another actor made meanwhile (OSDMonitor.cc:11576-11582)."""
+    original = world.effect
+
+    def effect(command):
+        if command[:4] != ("osd", "crush", "rule", "create-replicated"):
+            return original(command)
+        world.mutations.append(command)
+        world.rules.setdefault(command[4], rule(9, command[4], 1, "ssd", chooseleaf="chooseleaf_indep"))
+        return 0, b""
+    world.effect = effect
+
+
+@pytest.mark.parametrize("case", ["steps-drift", "take-drift", "id-drift", "foreign-create", "id-without-rule"])
+def test_policy_identity_guards_after_and_around_creation(case):
+    world = World([["ssd"], ["ssd"], ["ssd"]])
+    native, marks = resource(world, "policy", policy_value(), count=3)
+    if case == "foreign-create":
+        foreign_create(world)
+    if case in ("foreign-create", "id-without-rule"):
+        if case == "id-without-rule":
+            marks.records["policy-fast.json"] = native.request["policy"]
+            marks.records["policy-id-fast.json"] = {"id": 5}
+        with pytest.raises(ceph_native.Refusal, match="^foreign-rule$"):
+            native.policy()
+        assert (case == "foreign-create") is any(entry[:4] == ("osd", "crush", "rule", "create-replicated") for entry in world.log)
+        assert ("write", "policy-id-fast.json") not in world.log
+        return
+    native.policy()
+    assert ready(native)[0] is True
+    steps = world.rules["ssd-hosts"]["steps"]
+    if case == "steps-drift":
+        steps[1]["op"] = "chooseleaf_indep"
+    elif case == "take-drift":
+        steps[0]["item_name"] = "default"
+    else:
+        marks.records["policy-id-fast.json"] = {"id": world.rules["ssd-hosts"]["rule_id"] + 1}
+        with pytest.raises(ceph_native.Refusal, match="^foreign-rule$"):
+            ready(native)
+        return
+    assert ready(native)[0] is False
+
+
 def test_crush_capacity_refuses_when_class_hosts_below_width():
     world = World([["ssd", "ssd"], ["ssd", "ssd"], ["hdd"], ["hdd"]])
     native, marks = resource(world, "policy", policy_value(size=3), count=4)
