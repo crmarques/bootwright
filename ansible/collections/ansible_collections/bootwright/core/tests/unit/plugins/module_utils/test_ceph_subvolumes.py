@@ -124,7 +124,10 @@ def worker(world, subvolume=None):
         marks.records.update({"pool-" + name + ".json": {"name": name}, "pool-id-" + name + ".json": {"id": identifier}})
     marks.records.update({"filesystem-files.json": fs_fixtures.fs_value(groups=[fs_fixtures.group_value()]), "filesystem-id.files.json": {"id": 7},
                           "group.files.csi.json": fs_fixtures.group_value()})
-    return ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks), marks
+    native = ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks)
+    clock = [0.0]
+    native.clock, native.pause = lambda: clock[0], lambda seconds: clock.__setitem__(0, clock[0] + seconds)
+    return native, marks
 
 
 def attempt(subvolume):
@@ -269,9 +272,42 @@ def test_subvolume_recorded_but_gone_refuses_identity():
     assert marks.records["subvolume-path.docs.json"]["path"].endswith(UUIDS[0])
 
 
+def test_subvolume_recorded_path_differs_refuses_identity():
+    world = World()
+    native, marks = worker(world)
+    native.subvolume()
+    world.existing(sub_value(), identifier=UUIDS[1])
+    before = list(world.mutations)
+    with pytest.raises(ceph_native.Refusal, match="^subvolume-identity$"):
+        native.subvolume()
+    assert [item for item in world.mutations[len(before):] if item[0] != "write"] == [] and world.subvolumes[("", "docs")]["metadata"] == {}
+    with pytest.raises(ceph_native.Refusal, match="^subvolume-identity$"):
+        observe(native)
+    assert marks.records["subvolume-path.docs.json"]["path"].endswith(UUIDS[0])
+
+
+def test_subvolume_observe_requires_the_recorded_fscid():
+    world = World()
+    native, marks = worker(world)
+    native.subvolume()
+    assert observe(native)[0] is True
+    marks.records["filesystem-id.files.json"] = {"id": 8}
+    ready, evidence = observe(native)
+    assert ready is False and evidence["resource"]["id"] == UUIDS[0]
+
+
+def test_subvolume_observe_refuses_a_foreign_subvolume():
+    world = World()
+    world.existing(sub_value())
+    native, marks = worker(world)
+    with pytest.raises(ceph_native.Refusal, match="^foreign-subvolume$"):
+        observe(native)
+    assert world.mutations == [] and not any(name.startswith("subvolume") for name in marks.records)
+
+
 @pytest.mark.parametrize("case,reason", [("filesystem-marker", "filesystem-identity"), ("fscid", "filesystem-identity"),
                                          ("unattached", "filesystem-identity"), ("group-marker", "foreign-subvolume-group"),
-                                         ("unowned-pool", "pool-identity")])
+                                         ("unowned-pool", "pool-identity"), ("group-gone", "filesystem-identity")])
 def test_subvolume_parent_proved_before_any_subvolume_command(case, reason):
     world = World()
     subvolume = sub_value(group="csi", pool="cephfs-extra" if case == "unattached" else "cephfs-data")
@@ -284,6 +320,8 @@ def test_subvolume_parent_proved_before_any_subvolume_command(case, reason):
         del marks.records["group.files.csi.json"]
     elif case == "unowned-pool":
         del marks.records["pool-id-cephfs-data.json"]
+    elif case == "group-gone":
+        del world.groups["csi"]
     with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):
         native.subvolume()
     assert volume_commands(world) == [] and world.mutations == []
