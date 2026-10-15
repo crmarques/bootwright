@@ -15,6 +15,7 @@ The scripted `rbd` below answers the upstream v20.2.1 shapes the worker reads; n
 
 from __future__ import annotations
 
+import contextlib
 import json
 
 import pytest
@@ -328,6 +329,56 @@ def test_rbd_request_validation_mirrors_admission(change):
         request = cluster()
         request.update(action="rbd", rbd=admitted)
         assert ceph_native.validate(request) is request
+
+
+def tunnel_worker(world, image, refuse_at=None):
+    """verified-tunnel: every native call must run inside the bootstrap hold, which proves the markers' ceph.conf and admin
+    keyring still match the original bootstrap material; this hold records entries and can refuse ownership at entry N."""
+    native, marks = worker(world, image)
+    native.request["clusterSSHTransport"] = "verified-tunnel"
+    state = {"inside": False, "entries": []}
+    run = world.run
+
+    def guarded(argv, data=b"", timeout=60):
+        if argv[0] == "/usr/bin/rbd":
+            assert state["inside"], argv
+        return run(argv, data=data, timeout=timeout)
+
+    @contextlib.contextmanager
+    def hold():
+        state["entries"].append(len(world.log))
+        ceph_native.require(refuse_at is None or len(state["entries"]) - 1 != refuse_at, "ownership")
+        assert not state["inside"]
+        state["inside"] = True
+        try:
+            yield
+        finally:
+            state["inside"] = False
+
+    native.run = guarded
+    native.bootstrap_hold = hold
+    return native, marks, state
+
+
+def test_rbd_native_calls_run_under_the_bootstrap_hold():
+    world = World()
+    image = image_value(dataPool="ec-data")
+    native, marks, state = tunnel_worker(world, image)
+    assert native.rbd() == {"changed": True} and observe(native)[0] is True
+    commands = [entry[0] for entry in world.log if entry[0] != "write" and entry[0] != "osd"]
+    assert commands == ["ls", "create", "info", "ls", "info"] and len(state["entries"]) == len([e for e in world.log if e[0] != "write"])
+    assert marks.records["rbd-id.disk.json"] == {"id": IMAGE_ID}
+    create = next(index for index, entry in enumerate(world.log) if entry[0] == "create")
+    create_hold = state["entries"].index(create)
+    for refuse_at in (0, create_hold):
+        world = World()
+        native, marks, state = tunnel_worker(world, image, refuse_at)
+        before = dict(marks.records)
+        with pytest.raises(ceph_native.Refusal, match="^ownership$"):
+            native.rbd()
+        assert creates(world) == [] and "rbd-id.disk.json" not in marks.records
+        if refuse_at == 0:
+            assert marks.records == before and world.mutations == [] and world.argvs == []
 
 
 def test_rbd_unfinished_reports_owned_mark_partial():
