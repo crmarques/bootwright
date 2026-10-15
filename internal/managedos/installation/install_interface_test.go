@@ -221,6 +221,7 @@ func TestEveryEthernetInterfaceIsPinnedByItsMAC(t *testing.T) {
 	}
 	metal := metalOn("enp1s0", hardwareNIC("enp1s0", "52:54:00:9A:1B:01"), hardwareNIC("nic-b", "52:54:00:9a:1b:0b"), hardwareNIC("enp2s0", "52:54:00:9a:1b:0c"))
 	metal = metal.WithSpec(metal.Spec().WithPath(api.ListValue(
+		api.MapValue(text("interfaceName", "enp1s0"), text("nicRef", "enp1s0")),
 		api.MapValue(text("interfaceName", "enp2s0"), text("nicRef", "nic-b")),
 	), "network", "interfaceBinding"))
 	physical := requestOf(t, metalCatalog(metal, metalNetwork(declaredInterface("enp1s0", "ethernet"), declaredInterface("enp2s0", "ethernet"))), "metal-01")
