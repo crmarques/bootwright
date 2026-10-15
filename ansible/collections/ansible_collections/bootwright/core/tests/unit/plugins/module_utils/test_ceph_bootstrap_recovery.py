@@ -69,6 +69,12 @@ def test_scope_is_shared_with_pool_and_client_without_private_package_inputs(clu
     rbd = {key: value for key, value in cluster_request.items() if key not in ("client", "packages")}
     rbd.update(action="rbd", rbd={"dataPool": "", "features": ["layering"], "name": "disk", "pool": "data", "sizeBytes": 1073741824})
     assert staging.recovery_scope(rbd) == wanted
+    filesystem = {key: value for key, value in cluster_request.items() if key not in ("client", "packages")}
+    group = {"gid": 0, "mode": "755", "name": "csi", "pool": "cephfs-data", "sizeBytes": 0, "uid": 0}
+    frozen = {"activeCount": 1, "dataPools": ["cephfs-data"], "defaultDataPool": "cephfs-data", "groups": [group], "mdsService": "mds.files",
+              "metadataPool": "cephfs-metadata", "name": "files", "standbyCountWanted": 0, "standbyReplay": False}
+    filesystem.update(action="filesystem", filesystem=frozen)
+    assert staging.recovery_scope(filesystem) == wanted
 
 
 @pytest.mark.parametrize("attempted", [False, True])
