@@ -16,6 +16,7 @@ import pytest
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_core, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_worker, ceph_package_worker, ceph_packages, native_diagnostics,
 )
+from ansible_collections.bootwright.core.plugins.modules import ceph_host
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_host_runtime as host_fixtures
 
 DIGEST = "d" * 64
@@ -284,3 +285,27 @@ def test_host_request_admits_only_the_cluster_scope(host_request, change):
         ceph_core.host_request(dict(host_request, cluster=dict(host_request["cluster"], **change)))
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_core.host_request(dict(host_request, version="ceph-host-v1"))
+
+
+@pytest.mark.parametrize("operation", ["apply", "observe", "destroy"])
+def test_the_host_module_binds_its_transport_to_the_frozen_scope(host_request, monkeypatch, operation):
+    reached = {}
+
+    class Module:
+        def __init__(self, **options):
+            self.params = {"request": copy.deepcopy(host_request), "operation": operation, "digest": DIGEST, "material": {}}
+
+        def fail_json(self, **failure):
+            raise AssertionError(failure)
+
+        def exit_json(self, **result):
+            reached["result"] = result
+
+    def execute_host(request, operation_name, digest, transport):
+        reached["call"] = (request, operation_name, digest, transport.request)
+        return {"changed": False}
+
+    monkeypatch.setattr(ceph_host, "AnsibleModule", Module)
+    monkeypatch.setattr(ceph_core, "execute_host", execute_host)
+    ceph_host.main()
+    assert reached == {"result": {"changed": False}, "call": (host_request, operation, DIGEST, host_request["cluster"])}

@@ -268,6 +268,19 @@ func TestPoolEvidenceResourceIDIsDecimal(t *testing.T) {
 		if effect, err := EvaluateEvidence(evidenceBytes(t, e), pool, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
 			t.Fatalf("pool id %q accepted: %s %v", id, effect, err)
 		}
+		partial := readyEvidence(pool)
+		partial.Ready, partial.Partial = false, true
+		partial.Resource = ResourceEvidence{ID: id}
+		effect, err := EvaluateEvidence(evidenceBytes(t, partial), pool, "digest", false)
+		if id == "" && (err != nil || effect != reconciliation.EffectPartial) || id != "" && (err == nil || effect != reconciliation.EffectUnknown) {
+			t.Fatalf("partial pool id %q: %s %v", id, effect, err)
+		}
+	}
+	partial := readyEvidence(pool)
+	partial.Ready, partial.Partial = false, true
+	partial.Resource = ResourceEvidence{ID: "8"}
+	if effect, err := EvaluateEvidence(evidenceBytes(t, partial), pool, "digest", false); err != nil || effect != reconciliation.EffectPartial {
+		t.Fatalf("partial pool id 8 rejected: %s %v", effect, err)
 	}
 	for _, action := range []string{"cluster", "pool", "client"} {
 		r := resourceRequest(action)
