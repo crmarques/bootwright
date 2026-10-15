@@ -80,11 +80,18 @@ func TestFilesystemNameLengthBound(t *testing.T) {
 	}
 }
 
+func requireResolvable(t *testing.T, catalog api.Catalog, service api.Value) {
+	t.Helper()
+	if _, issues := ResolveServicePlacement(find(t, catalog, api.StorageCluster, "storage"), service); len(issues) != 0 {
+		t.Fatalf("placement %v does not resolve: %v", service.Get("placement"), issues)
+	}
+}
+
 func TestMDSCoverage(t *testing.T) {
 	fs, _ := boundFilesystem(t)
 	hosts := func(count int) api.Value { return m("label", "mgr", "count", count) }
 	pairs := func(count int) api.Value {
-		return m("hosts", api.StringList("node-1", "node-2"), "count_per_host", count)
+		return m("hosts", api.StringList("node-1.storage.example.test", "node-2.storage.example.test"), "count_per_host", count)
 	}
 	for _, tt := range []struct {
 		mds           api.Value
@@ -97,8 +104,10 @@ func TestMDSCoverage(t *testing.T) {
 	} {
 		changed := fs.WithSpec(fs.Spec().With("mds", tt.mds))
 		service := m("service_type", "mds", "service_id", "files", "placement", tt.enough)
+		requireResolvable(t, withFilesystemServices(t, fixtureCatalog(), service), service)
 		noIssues(t, admitted(withFilesystemServices(t, fixtureCatalog(), service), changed))
 		service = service.With("placement", tt.fewer)
+		requireResolvable(t, withFilesystemServices(t, fixtureCatalog(), service), service)
 		onlyIssue(t, admitted(withFilesystemServices(t, fixtureCatalog(), service), changed), "$.spec.mds", tt.message, "add hosts to the placement of mds.files or raise its count, or lower spec.mds.activeCount, spec.mds.standbyCountWanted or spec.mds.standbyReplay")
 	}
 }
