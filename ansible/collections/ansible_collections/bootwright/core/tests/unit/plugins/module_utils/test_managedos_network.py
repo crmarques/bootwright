@@ -254,3 +254,62 @@ def test_compare_names_vlan_bond_and_family_fields():
 def test_a_running_network_without_interfaces_is_one_difference():
     assert compare(desired_document(), {"routes": {}}) == ["the running network lists no interfaces"]
     assert compare(desired_document(), []) == ["the running network lists no interfaces"]
+
+
+def running_route(document, destination):
+    return next(item for item in document["routes"]["config"] if item["destination"] == destination)
+
+
+def wrong_gateway(desired, running):
+    running_route(running, "0.0.0.0/0")["next-hop-address"] = "198.51.100.2"
+
+
+def wrong_metric(desired, running):
+    running_route(running, "192.0.2.0/24")["metric"] = 101
+
+
+def wrong_table(desired, running):
+    running_route(running, "0.0.0.0/0")["table-id"] = 100
+
+
+def dhcp_address(desired, running):
+    desired["interfaces"][4]["ipv4"].update(dhcp=True, address=[{"ip": "203.0.113.9", "prefix-length": 24}])
+
+
+def autoconf_address(desired, running):
+    desired["interfaces"][3]["ipv6"] = {"enabled": True, "autoconf": True,
+                                        "address": [{"ip": "2001:db8::11", "prefix-length": 64}]}
+
+
+def down_interface(desired, running):
+    desired["interfaces"].append({"name": "nic9", "type": "ethernet", "state": "down"})
+
+
+ONE_FIELD = {
+    "a running route via another gateway": (wrong_gateway, [
+        "route 0.0.0.0/0 via 198.51.100.1 on bond0.130: not configured",
+        "route 0.0.0.0/0 via 198.51.100.2 on bond0.130: configured but not declared",
+    ]),
+    "a running route of another metric": (wrong_metric, [
+        "route 192.0.2.0/24 via 203.0.113.1 on nic2: not configured",
+        "route 192.0.2.0/24 via 203.0.113.1 on nic2: configured but not declared",
+    ]),
+    "a running route in another table": (wrong_table, [
+        "route 0.0.0.0/0 via 198.51.100.1 on bond0.130: not configured",
+        "route 0.0.0.0/0 via 198.51.100.1 on bond0.130: configured but not declared",
+    ]),
+    "a dhcp family with an address the running side lacks": (dhcp_address, [
+        "interface nic2: ipv4 dhcp is false, declared true",
+    ]),
+    "an autoconf family with an address the running side lacks": (autoconf_address, [
+        "interface bond0.130: ipv6 autoconf is false, declared true",
+    ]),
+    "an interface declared down and missing": (down_interface, []),
+}
+
+
+@pytest.mark.parametrize("change,expected", list(ONE_FIELD.values()), ids=list(ONE_FIELD))
+def test_compare_names_one_changed_field(change, expected):
+    desired, running = desired_document(), running_document()
+    change(desired, running)
+    assert compare(desired, running) == expected
