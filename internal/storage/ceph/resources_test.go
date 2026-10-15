@@ -161,11 +161,21 @@ func TestPGBudgetCountsWidthAndMetadataMinimum(t *testing.T) {
 
 func TestPGBudgetIsPerCrushRule(t *testing.T) {
 	policy := childOf(api.StoragePlacementPolicy, "fast", "ruleName", "fast-hosts", "crushDeviceClass", "ssd", "replicated", requestMap("size", 2, "minSize", 2))
-	catalog := planCatalog(9, 9, withCorePair, policy,
+	bulk := replicatedPool("bulk", "autoscale", requestMap("pgNumMin", 300))
+	catalog := planCatalog(9, 9, withCorePair, policy, bulk,
 		replicatedPool("first", "placementPolicyRef", "fast", "autoscale", requestMap("pgNumMin", 200)),
 		replicatedPool("second", "placementPolicyRef", "fast", "autoscale", requestMap("pgNumMin", 200)))
 	_, err := planned(t, catalog, api.StoragePool, "first")
 	refusedWith(t, err, "api.invariant", "pool placement groups for CRUSH rule fast-hosts exceed the per-OSD bound (800 > 250 × 3)", "add OSDs, lower pgNumMin, or declare fewer pools on that rule")
+	if r, err := planned(t, catalog, api.StoragePool, "bulk"); err != nil || r.Pool.CrushRule != defaultRule {
+		t.Fatalf("a replicated_rule pool counted the placement groups of another rule: %v", err)
+	}
+	catalog = planCatalog(3, 3, withCorePair, policy, bulk, replicatedPool("solo", "placementPolicyRef", "fast", "autoscale", requestMap("pgNumMin", 300)))
+	for _, name := range []string{"bulk", "solo"} {
+		if _, err := planned(t, catalog, api.StoragePool, name); err != nil {
+			t.Fatalf("pool %s fits its own CRUSH rule but did not plan: %v", name, err)
+		}
+	}
 }
 
 func TestPGBudgetMgrPoolUsesEffectiveDefaultSize(t *testing.T) {
@@ -253,6 +263,10 @@ func TestPoolRequestGoldenErasureRBD(t *testing.T) {
 	r, err = planned(t, planCatalog(6, 6, nil, childOf(api.StoragePool, "objects", "type", "erasure", "role", "rgw", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))), api.StoragePool, "objects")
 	if err != nil || r.Pool.Overwrites || r.Pool.Application != "rgw" {
 		t.Fatalf("an erasure-coded rgw pool enables overwrites: %+v %v", r.Pool, err)
+	}
+	r, err = planned(t, planCatalog(6, 6, nil, childOf(api.StoragePool, "files", "type", "erasure", "role", "cephfs-data", "erasure", requestMap("dataChunks", 4, "codingChunks", 2))), api.StoragePool, "files")
+	if err != nil || !r.Pool.Overwrites || r.Pool.Application != "cephfs" {
+		t.Fatalf("an erasure-coded cephfs-data pool does not enable overwrites: %+v %v", r.Pool, err)
 	}
 }
 

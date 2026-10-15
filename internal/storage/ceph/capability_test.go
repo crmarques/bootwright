@@ -10,6 +10,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -178,7 +179,8 @@ func TestMissingPrincipalNeverProvesOldSessionsQuiescent(t *testing.T) {
 	}
 }
 
-func TestPolicyBlockRequiresClusterAndPoolRequiresPolicy(t *testing.T) {
+func policyPlanInput(t *testing.T) lifecycle.PlanInput {
+	t.Helper()
 	objects := []api.Object{childOf(api.StoragePlacementPolicy, "fast", "ruleName", "fast-hosts", "crushDeviceClass", "ssd", "replicated", requestMap("size", 2, "minSize", 2))}
 	for _, object := range pinnedCatalog(t, nil).Objects() {
 		if object.Kind() == api.StoragePool {
@@ -187,7 +189,33 @@ func TestPolicyBlockRequiresClusterAndPoolRequiresPolicy(t *testing.T) {
 		objects = append(objects, object)
 	}
 	catalog := api.NewCatalog(objects)
-	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+	return lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+}
+
+func TestPolicyExecutionMatchesItsFrozenIdentity(t *testing.T) {
+	capability := New(api.StoragePlacementPolicy, nil)
+	plan, err := capability.Plan(context.Background(), policyPlanInput(t))
+	if err != nil || len(plan.Definitions) != 1 {
+		t.Fatalf("the policy planned %+v (%v)", plan.Definitions, err)
+	}
+	r, err := DecodeRequest(plan.Definitions[0].Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := executionFor(t, r)
+	e.Block.BlockDefinition = plan.Definitions[0]
+	prepared, err := capability.prepare(context.Background(), e)
+	if err != nil || prepared.Action != "policy" || prepared.Policy == nil || prepared.Policy.Name != "fast" || prepared.Owner != "apply-original" {
+		t.Fatalf("a planned policy block did not match its frozen identity: %+v %v", prepared.Policy, err)
+	}
+	e.Block.Object = "example"
+	if _, err := capability.prepare(context.Background(), e); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+		t.Fatalf("a policy block named after its cluster matched the policy identity: %v", err)
+	}
+}
+
+func TestPolicyBlockRequiresClusterAndPoolRequiresPolicy(t *testing.T) {
+	input := policyPlanInput(t)
 	definitions := map[string]reconciliation.BlockDefinition{}
 	all := []reconciliation.BlockDefinition{}
 	for _, capability := range []lifecycle.Capability{NewImage(nil), NewHost(nil), New(api.StorageCluster, nil), New(api.StoragePlacementPolicy, nil), New(api.StoragePool, nil), New(api.StorageClient, nil)} {
