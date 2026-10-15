@@ -212,6 +212,23 @@ rm "$cutoff_input/infra/machines/nv-vlan.yaml" "$cutoff_input/infra/machines/nv-
 rm "$cutoff_input/infra/networkconfigs/nv-vlan.yaml" "$cutoff_input/infra/networkconfigs/nv-vlan-bond.yaml"
 ```
 
+The copy needs no external bridge, and the host apply proves every declared
+external bridge is present, so it must not name `br-nv` after the cleanup above
+removed it. In the copy's `infra/providers/lab-libvirt.yaml`, delete the
+`nv-trunk` entry at the end of `networkAttachments`, so the list ends with the
+managed attachment:
+
+```yaml
+  networkAttachments:
+    - name: nv-lab
+
+      libvirt:
+        bridge: virbr-nv
+        management: managed
+        address: 198.51.100.1/26
+        forward: nat
+```
+
 Append this entry to the `routes.config` list at the end of the copy's
 `infra/networkconfigs/nv-bond.yaml`:
 
