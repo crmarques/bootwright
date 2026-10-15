@@ -486,6 +486,30 @@ def test_groups_are_read_only_once_ranks_are_active():
     assert not any(command[:2] == ("fs", "subvolumegroup") for command in world.log)
 
 
+@pytest.mark.parametrize("case,reason", [("recreated", "filesystem-identity"), ("other-id", "filesystem-identity"), ("gone", "filesystem-identity"),
+                                         ("unmarked", "foreign-filesystem")])
+def test_groups_prove_the_owned_filesystem_before_any_group_command(case, reason):
+    world = World(standbys=("node-1", "node-2"))
+    native, marks = worker(world, fs_value(groups=[group_value()]))
+    native.filesystem()
+    if case == "recreated":
+        world.filesystems.clear()
+        world.standbys = [{"name": mds_name("node-3"), "rank": -1, "state": "up:standby"}]
+        world.add_filesystem("files", "cephfs-metadata", "cephfs-data", fscid=9)
+    elif case == "other-id":
+        marks.records["filesystem-id.files.json"] = {"id": 8}
+    elif case == "gone":
+        world.filesystems.clear()
+    else:
+        del marks.records["filesystem-files.json"]
+    world.log.clear()
+    before = list(marks.writes)
+    with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):
+        native.filesystem_groups()
+    assert not any(command[:2] == ("fs", "subvolumegroup") for command in world.log)
+    assert marks.writes == before and effects(world) == [FS_NEW] and world.groups == {}
+
+
 @pytest.mark.parametrize("change", ["name", "reserved", "unsorted", "mode", "pool", "service", "coverage", "default", "dot", "metadata-in-data"])
 def test_validation_refuses_a_filesystem_go_never_freezes(change):
     filesystem, count, service = fs_value(groups=[group_value("a"), group_value("b")]), None, "files"
