@@ -590,7 +590,7 @@ credentials and repeat the redirected command: it exits `1` with
 During an interactive apply on Fedora with sudo's `use_pty`, and separately on
 RHEL 9.8, send one Ctrl-C: the command waits for bounded cleanup. Send a second:
 it exits at once with status `130`, leaving a usable terminal. Record both
-observations for [B339](../specs/milestones/m1.md#b339); an unavailable platform
+observations for [B339](../specs/milestones/delivered.md#x93--the-owner-run-of-2026-10-14); an unavailable platform
 leaves its observation unrun.
 
 Record command results, build commit, clean source stamp and operation-log

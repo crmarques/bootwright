@@ -1726,11 +1726,11 @@ met and the log digests.
 
 **Constraints left behind:** the run does not show
 `qemu-img info --force-share` succeeding against a running domain's disk,
-which B49 also named ([B277](m1.md#b277)). It found [B275](#x40--machine-commands-status-secrets-and-validate-refusals) and
-[B276](m1.md#b276) and a new sighting of [B270](m1.md#b270), all parked
+which B49 also named ([B277](#x93--the-owner-run-of-2026-10-14)). It found [B275](#x40--machine-commands-status-secrets-and-validate-refusals) and
+[B276](#x93--the-owner-run-of-2026-10-14) and a new sighting of [B270](#x93--the-owner-run-of-2026-10-14), all parked
 under D48 until D56 attached them to M1. Lifecycle concurrency may now rise
 above one through [B303](#x48--bounded-concurrent-execution), and the adapter protocol, roles and
-codecs may collapse through [B19](m1.md#b19), [B20](m1.md#b20) and
+codecs may collapse through [B19](#x93--the-owner-run-of-2026-10-14), [B20](#x93--the-owner-run-of-2026-10-14) and
 [B22](#x24--adapter-protocol-managed-service-role-observation-reasons-and-canonical-json), each with the real-host evidence its own item names.
 
 ### X39 — untrusted input, trust and privilege boundaries
@@ -1896,7 +1896,7 @@ run.
 **Constraints left behind:** the helper path as root, directory accounts and
 a root-squashed home are proved only unprivileged
 ([B352](backlog.md#b352)), and a second Ctrl-C under a foreground `use_pty`
-leaves the cancellation running ([B339](m1.md#b339)). A host an
+leaves the cancellation running ([B339](#x93--the-owner-run-of-2026-10-14)). A host an
 earlier build already left with a partial bundle file under its final name
 still refuses that replay ([B356](#x42--media-contexts-setup-service-and-machine-admission)); X39 prevents new
 ones. Tracked elsewhere:
@@ -2664,7 +2664,7 @@ State reconciliation. Integrated on local `main` on 2026-10-07 as one commit,
 the first slice to move request versions and the automation digest.
 **Items:** B200, B264, B234, B295, B17, B296, B338, B297, B343, B384, B407,
 B410, B381, B403, B408, B409. **Decisions:** D56, D61, D66, D79, D93, D95 to
-D98, D107, D116. **Partly delivered:** [B270](m1.md#b270), its emulated BMC
+D98, D107, D116. **Partly delivered:** [B270](#x93--the-owner-run-of-2026-10-14), its emulated BMC
 unit.
 
 **Outcome, B295, B407 and B410:** a libvirt provider host now also claims its
@@ -2723,7 +2723,7 @@ recursively, and its refusal to remove a domain that is not shut off names
 **Outcome, B270 in part:** the emulated BMC unit stops with SIGINT, because the
 emulator runs as process 1 and has no SIGTERM handler, so podman waited out its
 timeout and killed it and the unit stayed failed. Its template golden holds the
-stop signal. The proxy unit's half is X24's ([B20](m1.md#b20)); B270 keeps its
+stop signal. The proxy unit's half is X24's ([B20](#x93--the-owner-run-of-2026-10-14)); B270 keeps its
 row, narrowed to the proxy, and the proof that no unit stays failed after a
 destroy needs a host.
 
@@ -2891,8 +2891,8 @@ listing no longer blocks other commands. Setup on a host whose glibc or libgcc
 dnf updated needs one `bootwright setup`, and its refusals name a cause class
 and a remedy instead of blaming the host.
 
-**Constraints left behind:** [B270](m1.md#b270) keeps the proxy unit's stop
-([B20](m1.md#b20), X24). A Machine and an InfraProvider of one name share a
+**Constraints left behind:** [B270](#x93--the-owner-run-of-2026-10-14) keeps the proxy unit's stop
+([B20](#x93--the-owner-run-of-2026-10-14), X24). A Machine and an InfraProvider of one name share a
 directory, and the Machine's destroy can remove the provider's pool
 ([B420](#x46--the-safety-and-defect-sweep-of-m1)); the 64-key reservation bound meets an unbounded
 attachment list ([B421](#x46--the-safety-and-defect-sweep-of-m1)); the install profile still admits fields
@@ -2914,7 +2914,7 @@ the second slice to move the automation digest and request versions, in the
 window X43 opened. **Items:** B242, B298, B299, B21, B223, B246, B22, B252,
 B382, B383, B404, B406, B359, B378. **Decisions:** D11, D56, D57, D66, D77,
 D99, D114, D116. **In-tree gates passed, host gate awaiting operator
-acceptance:** [B19](m1.md#b19), [B20](m1.md#b20) and [B270](m1.md#b270); their
+acceptance:** [B19](#x93--the-owner-run-of-2026-10-14), [B20](#x93--the-owner-run-of-2026-10-14) and [B270](#x93--the-owner-run-of-2026-10-14); their
 rows stay on M1 with Delivery `awaiting operator acceptance`. **Partly
 delivered:** [B233](#x44--help-completion-contracts-and-ratchets), its dead reporters.
 
@@ -3102,8 +3102,8 @@ the adapter on a live ansible-core, Squid on its pinned image and the
 cancellation of a live dnf tree are in-tree only ([B442](backlog.md#b442)). No
 real-host run.
 
-**Constraints left behind:** [B19](m1.md#b19), [B20](m1.md#b20) and
-[B270](m1.md#b270) complete on an owner-accepted ledger row of D59's closing
+**Constraints left behind:** [B19](#x93--the-owner-run-of-2026-10-14), [B20](#x93--the-owner-run-of-2026-10-14) and
+[B270](#x93--the-owner-run-of-2026-10-14) complete on an owner-accepted ledger row of D59's closing
 run, which carries their real-host apply, destroy and no-failed-unit proofs; the
 other host observations are [B442](backlog.md#b442). The binding-proof port
 stays [B302](#x44--help-completion-contracts-and-ratchets)'s and the artifact server's `Unsupported`
@@ -3303,7 +3303,7 @@ B402, B405, B420, B421, B422, B423, B424, B425, B426, B435, B436, B437, B440;
 in the second pass B379, B380, B453, B454, B455, B456, B457, B458, B459 and
 B465. **Decisions:** D56, D66, D73, D88, D89, D94, D116, D117, D118, D119, D123,
 D124. **In-tree gates passed, operator gate awaiting acceptance:**
-[B339](m1.md#b339), whose row stays on M1 with Delivery
+[B339](#x93--the-owner-run-of-2026-10-14), whose row stays on M1 with Delivery
 `awaiting operator acceptance`.
 
 **Outcome, B357:** a confirmed trust write that takes over an endpoint,
@@ -3616,7 +3616,7 @@ completed installation's kubeconfig survives a destroy whose publication failed,
 exported with an `access.unproved` warning. `machine list --power-status` shows
 progress. Input over automounted and root-squashed mounts names its cause.
 
-**Constraints left behind:** [B339](m1.md#b339) completes on an owner-accepted
+**Constraints left behind:** [B339](#x93--the-owner-run-of-2026-10-14) completes on an owner-accepted
 ledger row of D59's closing run; B379 and B380 completed in the second pass
 below. B342's evidence is the package test above, not the
 named case. Under D116 eight follow-ups joined M1 on X46: the secret and
@@ -3798,8 +3798,8 @@ make the lingering-adapter and reaping probes exact" (5ee8176d4, recorded with
 [X48](#x48--bounded-concurrent-execution)). **Items:** B95, B300, B224, B272,
 B336, B233, B301, B302, B255. **Decisions:** D59, D70, D100, D101, D102, D110,
 D115, and, recorded after the work, D126, D139 and D140. **In-tree gates passed,
-operator gates awaiting acceptance:** [B276](m1.md#b276) and
-[B277](m1.md#b277), whose rows stay on M1 with Delivery
+operator gates awaiting acceptance:** [B276](#x93--the-owner-run-of-2026-10-14) and
+[B277](#x93--the-owner-run-of-2026-10-14), whose rows stay on M1 with Delivery
 `awaiting operator acceptance`.
 
 **Outcome, B95:** every visible command has complete help with examples, its enum
@@ -3977,7 +3977,7 @@ operand on, so Bootwright flags go before it; `version` shows the automation
 digest; the examples' emulated BMCs listen on loopback, and the operator guide
 lists each listener's ports by source; and CI starts the race job on each push.
 
-**Constraints left behind:** [B276](m1.md#b276) and [B277](m1.md#b277) complete
+**Constraints left behind:** [B276](#x93--the-owner-run-of-2026-10-14) and [B277](#x93--the-owner-run-of-2026-10-14) complete
 on D59's owner-accepted closing run; the Zsh cases of the completion harness are
 unrun on hosts without Zsh; D140 awaited the owner's review until D148
 accepted it, and the routing guidance's restoration still awaits it; the narration that remains is [B98](backlog.md#b98)'s,
@@ -5489,7 +5489,7 @@ Python ABIs 3.14, 3.13 and 3.12, was generated by the session rather than the
 owner, so `scripts/tools/ansible-requirements.txt` moved its ansible-core pin
 from 2.21.4 to 2.21.5 to keep one version everywhere. The rest of B549 (the
 owner's `verify` run, `runtime-lock-v1`'s classification when B555 wires the
-lock, and X90's offline tooling) stays on [M1](m1.md#b549).
+lock, and X90's offline tooling) stays on [M1](#x93--the-owner-run-of-2026-10-14).
 
 **Outcome, B550:** one Go table in `internal/controller/prerequisites` names
 the controller's host packages by name or RPM capability (baseline
@@ -5700,7 +5700,7 @@ converter or reader of an old record is written.
 `execution-closure-v2` are classified in
 `cmd/bootwright/contract_versions_test.go` as runtime-identity store formats
 now that the receipt persists the lock digest. The owner's `verify` run,
-`--wheel-mirror` and `setup --download-only` stay on [M1](m1.md#b549) for X90.
+`--wheel-mirror` and `setup --download-only` stay on [M1](#x93--the-owner-run-of-2026-10-14) for X90.
 
 **Guard tests:** `internal/controller/prerequisites`:
 `TestAReadyHostMakesNoRequestAndNoWrite`,
@@ -5781,7 +5781,7 @@ v2 (X87 to X90), integrated on local main as one commit by the session on
 clause 9 choice as [X88](#x88--controller-setup-v2-cut-over). **Items:**
 B528 and B542, with B227, B231, B238, B263, B335, B429 and B527, each retired
 as moot by the deletions (with the deletions and documentation that
-[B555](m1.md#b555)'s constraints assign to X89, while B555 awaits the owner's
+[B555](#x93--the-owner-run-of-2026-10-14)'s constraints assign to X89, while B555 awaits the owner's
 fresh-install acceptance, and B557's note on the deleted
 harness). **Decisions:** D152,
 pending the owner's review. **Integrated:** "refactor(controller): remove the
@@ -6064,7 +6064,7 @@ the pip wheel and a byte copy of `lock.json` through verified partial files.
 `setup --dry-run --output json` lists every locked file of the embedded lock;
 with `--wheel-mirror`, the runtime action names the mirror and the listed URLs
 stay the lock's. The operator guide documents the two-step offline
-preparation. The owner's `verify` run stays on [M1](m1.md#b549).
+preparation. The owner's `verify` run stays on [M1](#x93--the-owner-run-of-2026-10-14).
 
 **Outcome, B557:** tool areas move from `controller/bundles/` to
 `controller/tools/<digest>/` under a bound of 16 of their own. Every
@@ -6153,8 +6153,8 @@ so no such store is known, and the fresh install covers one. Two X88 nits stay
 open: hostdnf has no preview-timeout test, and `qualifiedSystemExecutable` is
 duplicated in hostdnf and privilege. Nothing needing root was run: setup's
 install path, retention and the rebuild on a real store and the owner's fresh-install acceptance on Fedora 44 and a RHEL 9 VM
-([B555](m1.md#b555)) remain, with the owner's runtime-lock `verify` run
-([B549](m1.md#b549)) and X87's S0 baseline.
+([B555](#x93--the-owner-run-of-2026-10-14)) remain, with the owner's runtime-lock `verify` run
+([B549](#x93--the-owner-run-of-2026-10-14)) and X87's S0 baseline.
 
 ### X92 — Setup v2 review findings
 
@@ -6249,5 +6249,75 @@ fresh-install remedy text adds `--purge`, and a refused `setup --dry-run
 --output json` writes one envelope with its `result`, a new golden; no golden
 is deleted. A host an X90 build set up continues with build alone.
 **Constraints left behind:** nothing needing root was run; the owner's
-fresh-install acceptance ([B555](m1.md#b555)) covers the foreign-subtree
+fresh-install acceptance ([B555](#x93--the-owner-run-of-2026-10-14)) covers the foreign-subtree
 discard and the `python3.X` install on a real host.
+
+### X93 — the owner run of 2026-10-14
+
+**Owner:** State reconciliation and Controller setup; run by the operator on
+the owner's Fedora 44 laptop and on a RHEL 9.8 guest it installed, from
+2026-10-14 to 2026-10-15, on the clean build `80f18c937`, which descends from
+X44, X48 to X51 and X87 to X92. The owner accepted its rows on 2026-10-15.
+**Items:** B19, B20, B270, B276, B277, B339, B549, B555. **Decisions:** D152,
+D154. The run also observed M1's three-node gate, which stays on M1, blocked
+by the defect it found.
+
+**The fresh install.** No context remained under the old store: the old
+build `5345d2f95` listed none, and no domain, pool, unit, container or
+listener of Bootwright's existed. An empty provider directory a destroy of
+2026-10-05 had left under `/var/lib/libvirt/images/bootwright/lab-rhel` was
+removed by hand, then both store roots. X87's S0 baseline could not be taken,
+as M1's [plan](m1.md#controller-setup-v2) records.
+
+**Outcome, B549:** `scripts/runtime-lock verify` on the owner's host verified
+all 17 locked files; CI's `runtime-lock` workflow passed on the same commit.
+
+**Outcome, B555:** setup v2 met every target on both hosts. On Fedora 44
+(dnf5, Python 3.14.8, both host packages already present), the fresh setup
+took 7.2 s, the ready path 0.79 s and a second clean build with the same lock
+1.01 s, each later one `Nothing to do.`; the runtime held 40.7 MB in 2,477
+files and the wheel cache 10.5 MB in 11. On a RHEL 9.8 guest of the run
+(dnf 4.14.0, glibc 2.34) whose repositories were the controller's hosted DVD
+tree, setup showed dnf's own `--assumeno` preview of podman, python3.14 and
+19 dependencies, then took 42.7 s of which dnf 36 s; the ready path 0.63 s,
+the same-lock build 0.67 s; 41.2 MB in 2,477 files. `preflight controller`
+was ready on both after the controller stage, and a Redfish power read
+answered under the `FUTURE` and `DEFAULT` crypto-policies on Fedora.
+
+**Outcome, B19, B20, B270, B276 and B277:** the
+[lab-rhel journey](../../examples/lab-rhel/README.md#run-it) ran as written
+with the lab conventions only: the four services answered (the chrony check
+printed an offset within its ten seconds), RHEL 9.8 installed in 8m24s, the
+running guest's disk read `virtual-size` 64424509440 under `--force-share`,
+`machine exec` and `rsh` reached it with no trust prompt, a restart came back,
+the replay settled, a destroy refused `lifecycle.live` until the guest
+stopped, the removal and a fresh apply completed, and after a host restart
+`machine start` brought the guest back. After the last destroy no
+`bootwright-*` unit existed, failed or otherwise. The four JSON `status` cases
+under password-required sudo gave one document each and nothing on standard
+error: exit 0, exit 0, then exit 1 with `runtime.privilege` for the missing
+password and for sudo's denial of `/proc/<pid>/exe`.
+
+**Outcome, B339:** on Fedora 44 and on RHEL 9.8, both sudo 1.9.17p2 with
+`use_pty` at its default, one Ctrl-C during an interactive apply recorded the
+running block as `unknown`, exited 130 and left the terminal usable, and the
+next `apply` resolved the block and finished. Cleanup took under a second, so
+the second-press path never arose; D154 accepted the observation as B339's
+gate.
+
+**Observed, B466:** the
+[three-node journey](../../examples/lab-rhel-3-nodes/README.md), with 4 GiB
+guests, overlapped the four services, the three machine realizations beside
+the tree publication, and the three installations end to end (01:03:27 to
+01:12:12 UTC, then 01:18:19 to 01:27:24 in a fresh apply), with one tree
+publication block; the replay settled and both destroys left no unit or image
+directory. After the host restart the guests' network stayed down and
+`machine start` failed for all three ([B608](m1.md#b608)); the removal from
+that state completed. The row is an observation.
+
+**Constraints left behind:** B466 and M1 wait on B608. The run also found
+[B609](backlog.md#b609), [B610](backlog.md#b610), [B611](backlog.md#b611) and
+[B612](backlog.md#b612), parked under D48, and a dnf4 preview capture for
+[B560](backlog.md#b560); a dnf5 one did not arise, since nothing was missing on
+Fedora. The ledger rows hold the commands, outcomes and log digests; the
+evidence stays local to the owner.
