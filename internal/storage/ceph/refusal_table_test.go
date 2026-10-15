@@ -42,6 +42,11 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 			},
 			"empty release": set("", "ceph", "release"),
 		}},
+		"A replication network that a Ceph host has no address inside": {edits: map[string]func(api.Value) api.Value{
+			"no host address inside": func(spec api.Value) api.Value {
+				return spec.WithPath(api.StringList("198.51.100.0/24"), "ceph", "networks", "clusterCIDRs")
+			},
+		}, values: map[string]string{"<host>": "node-1", "<machine>": "node-1", "<cidrs>": "198.51.100.0/24"}},
 	}
 	refused := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"}
 	for _, row := range refusalTable(t) {

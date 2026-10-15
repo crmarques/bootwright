@@ -204,6 +204,9 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 
 func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string) error {
 	spec := cluster.Spec().Get("ceph")
+	if reason, remedy, gap := replicationNetworkGap(c, cluster); gap {
+		return failure("api.invariant", reason, remedy)
+	}
 	for _, node := range spec.Get("topology", "nodes").Items() {
 		m, _ := c.Find(api.Machine, node.Get("machineRef").Text())
 		ssh, ok := machine.SSH(m)
@@ -283,6 +286,38 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		return failure("lifecycle.unsupported", "the core IBM profile requires at least three owned hosts and a bootstrap host", "declare a provider-supported topology with at least three hosts")
 	}
 	return nil
+}
+
+func replicationNetworkGap(c api.Catalog, cluster api.Object) (string, string, bool) {
+	cidrs := cluster.Spec().Get("ceph", "networks", "clusterCIDRs").Strings()
+	if len(cidrs) == 0 {
+		return "", "", false
+	}
+	listed := strings.Join(cidrs, ", ")
+	for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+		m, found := c.Find(api.Machine, node.Get("machineRef").Text())
+		if !found || insideAnyNetwork(machine.IPAddresses(m), cidrs) {
+			continue
+		}
+		return "Ceph host " + storage.NativeHostname(node) + " (Machine " + m.Name() + ") has no address inside the replication networks " + listed,
+			"add an address inside one of " + listed + " to the network of " + m.Name() + ", or remove spec.ceph.networks.clusterCIDRs", true
+	}
+	return "", "", false
+}
+
+func insideAnyNetwork(addresses, cidrs []string) bool {
+	for _, value := range addresses {
+		address, err := netip.ParseAddr(value)
+		if err != nil {
+			continue
+		}
+		for _, cidr := range cidrs {
+			if prefix, err := netip.ParsePrefix(cidr); err == nil && prefix.Masked().Contains(address) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // selectDevices narrows destructive custody to the disks selected by native

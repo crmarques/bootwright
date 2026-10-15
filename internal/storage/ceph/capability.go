@@ -117,6 +117,9 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 			ceph.Get("image", "base").Text(), ceph.Get("image", "version").Text(), ceph.Get("cephadm", "clusterSSH", "transport").Text()) {
 			out = append(out, lifecycle.RefusalOf(object, unsupportedReason, unsupportedRemedy))
 		}
+		if reason, remedy, gap := replicationNetworkGap(state.Effective(), cluster); gap {
+			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
+		}
 	}
 	return out
 }
