@@ -55,6 +55,22 @@ def image_value(**changes):
     return image
 
 
+def pool_value():
+    """One admitted replicated rbd pool envelope member (validate_pool), to prove an `rbd` member beside it refuses."""
+    return {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""},
+            "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule",
+            "minSize": 2, "name": "volumes", "overwrites": False, "pgNum": 32, "quota": {"maxBytes": 0, "maxObjects": 0}, "role": "rbd", "size": 2,
+            "type": "replicated"}
+
+
+def client_value():
+    return {"name": "canary", "pool": "volumes", "access": "read-write"}
+
+
+def policy_value():
+    return {"deviceClass": "ssd", "failureDomain": "host", "name": "fast", "root": "default", "rule": "ssd-hosts", "size": 2}
+
+
 def info(image, **changes):
     """What `rbd info` reports for an image created with exactly the frozen values."""
     features = image["features"] + (["data-pool"] if image["dataPool"] else [])
@@ -268,6 +284,32 @@ def test_rbd_observe_refuses_unrecorded_id_change():
     assert creates(world) == []
 
 
+@pytest.mark.parametrize("path", ["adopt", "create"])
+@pytest.mark.parametrize("drift", [{"name": "other"}, {"id": "ABC"}, {"id": "0123456789abcde"}, {"id": 12}])
+def test_rbd_info_refuses_a_foreign_name_or_malformed_id_before_recording_it(path, drift):
+    """A wrong-shaped `rbd info` answer never reaches the write-once id marker (core evidence() would refuse it forever)."""
+    world = World()
+    image = image_value()
+    native, marks = worker(world, image)
+    if path == "adopt":
+        world.images[("volumes", "disk")] = info(image, **drift)
+        marks.records.update({"rbd-disk.json": image, "rbd-attempt.disk.json": attempt(image)})
+    else:
+        create = world.create
+
+        def drifted(args):
+            create(args)
+            world.images[("volumes", "disk")].update(drift)
+
+        world.create = drifted
+    with pytest.raises(ceph_native.Refusal, match="^native-output$"):
+        native.rbd()
+    assert "rbd-id.disk.json" not in marks.records and len(creates(world)) == (0 if path == "adopt" else 1)
+    with pytest.raises(ceph_native.Refusal, match="^native-output$"):
+        observe(native)
+    assert "rbd-id.disk.json" not in marks.records
+
+
 def test_rbd_observe_absent_pool_reports_absent_image_without_rbd_call():
     world = World()
     world.pools = [entry for entry in world.pools if entry["pool_name"] != "volumes"]
@@ -319,9 +361,12 @@ def test_rbd_request_validation_mirrors_admission(change):
         request.update(action="rbd", rbd=image_value(), **extra)
         with pytest.raises(ceph_native.Refusal, match="^request$"):
             ceph_native.validate(request)
-    for action in ("cluster", "pool"):
+    for action, member, value in (("cluster", None, None), ("pool", "pool", pool_value()), ("client", "client", client_value()),
+                                  ("policy", "policy", policy_value())):
         request = cluster()
-        request.update(action=action, rbd=image_value())
+        request.update(action=action, **({member: value} if member else {}))
+        assert ceph_native.validate(request) is request
+        request["rbd"] = image_value()
         with pytest.raises(ceph_native.Refusal, match="^request$"):
             ceph_native.validate(request)
     for admitted in (image_value(), image_value(features=[]), image_value(features=["layering"], sizeBytes=2 ** 63 - 1),

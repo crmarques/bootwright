@@ -18,3 +18,6 @@ expect:
 - kind: StorageClient
   name: rbd-canary
   refusalRow: Incomplete or unsafe Ceph coordinates or transport
+- kind: StorageRBDImage
+  name: rbd-disk
+  refusalRow: Incomplete or unsafe Ceph coordinates or transport

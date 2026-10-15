@@ -12,3 +12,9 @@ expect:
   field: $.spec.erasure
   message: "erasure profile 2+2 needs at least 5 OSD hosts without mon_osd_down_out_subtree_limit = host; 3 are declared"
   remediation: add OSD-bearing hosts until 5 carry OSDs, or choose a profile whose minimum the cluster meets
+- code: api.invariant
+  kind: StorageRBDImage
+  name: rbd-disk
+  field: $.spec.poolRef
+  message: "StoragePool rbd-data is erasure-coded; an RBD image keeps its header and metadata in a replicated pool"
+  remediation: point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef
