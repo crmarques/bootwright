@@ -79,6 +79,9 @@ func TestListenerRegistryRefusesPortOverlap(t *testing.T) {
 	requireBound(t, graphIssues(t, services), nfsAt+".spec.port", "node-1", rgwAt+".spec.rgw_frontend_port")
 	services[0] = rgwService(rgwPort(2049))
 	requireGraphAdmits(t, graphIssues(t, services))
+	services = keepaliveServices()
+	services[3] = withIngressSpec(services[3], "frontend_port", 2049)
+	requireBound(t, graphIssues(t, services), nfsIngressAt+".spec.frontend_port", "node-1", nfsAt+".spec.port")
 	rgw := plainRGW(rgwPort(2049)).With("placement", m("hosts", api.StringList("node-3.storage.example.test")))
 	disjoint := []api.Value{rgw, nfsService(api.MapValue()).With("placement", m("hosts", api.StringList("node-1.storage.example.test", "node-2.storage.example.test")))}
 	requireNoIssueAt(t, graphIssues(t, disjoint), rgwAt+".spec.rgw_frontend_port", "$.spec.ceph.services[4].spec.port")
