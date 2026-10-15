@@ -6,8 +6,8 @@ This page owns the target resource contract approved through P2 in the
 and their bindings; [Storage](storage.md) owns lifecycle, device safety and
 custody. [Provider coverage](storage-coverage.md) owns release qualification.
 
-**Current:** `StoragePlacementPolicy`, `StoragePool` and minimal
-`StorageClient` are admitted and realized. Native
+**Current:** `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage` and
+minimal `StorageClient` are admitted and realized. Native
 effects remain artifact-gated. **Not yet met:** later P2 kinds, NFS ownership
 migration and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.
@@ -140,9 +140,10 @@ striping, encryption and other supported creation options need a source-backed
 field record in B81 before promotion; they are neither guessed nor hidden in
 an arbitrary parameter map. Existing images with matching names remain foreign
 unless recorded ownership and native identity agree. Readiness verifies size,
-pool/data pool, native image ID and effective features. Snapshots, clones or
-watchers discovered during deletion must satisfy the qualified dependency and
-quiescence proof; force removal is not an ownership shortcut.
+pool/data pool, native image ID and effective features. Online removal, with
+its snapshot, clone and watcher proof, belongs to
+[B491](milestones/m2.md#b491) (D160, OD2); an image retires with its cluster's
+hosts.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -155,6 +156,63 @@ spec:
   poolRef: block-data
   sizeBytes: 10737418240
 ```
+
+### Promotion record
+
+Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image
+until [B472](milestones/m2.md#b472) or the owner's run confirms them.
+
+| Field | Grammar and rule | Native projection |
+| --- | --- | --- |
+| `metadata.name` | DNS label of at most 54 characters, so the block `ceph-rbd-<name>` fits 63. | Image name; positional `<pool>/<name>`. |
+| `clusterRef` | Required managed cluster. | None. |
+| `poolRef` | Required same-cluster replicated pool of role `rbd`. | The `<pool>` of `<pool>/<name>`. |
+| `sizeBytes` | Required integer from 1 to 9223372036854775807; with object-map at most 1073741824000000. | `--size <n>B`, exact bytes; a bare number would be MiB ([ArgumentTypes.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/tools/rbd/ArgumentTypes.cc#L404-L421), [strtol.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/common/strtol.cc#L137-L215)). |
+| `dataPoolRef` | Optional same-cluster pool of role `rbd`, replicated or erasure-coded, other than `poolRef`. | `--data-pool <pool>`; librbd then adds feature `data-pool`. |
+| `features` | Optional set of `layering`, `exclusive-lock`, `object-map`, `fast-diff`, `deep-flatten`, `journaling`, frozen in librbd's feature-bit order. | One `--image-feature <name>` per name, or `--image-feature ''` when explicitly empty ([ArgumentTypes.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/tools/rbd/ArgumentTypes.cc#L472-L496)). |
+| (fixed) | Image format 2. | `--image-format 2`. |
+
+An omitted `features` freezes librbd's `rbd_default_features`:
+`layering`, `exclusive-lock`, `object-map`, `fast-diff`, `deep-flatten`
+([rbd.yaml.in](https://github.com/ceph/ceph/blob/v20.2.1/src/common/options/rbd.yaml.in#L44-L54)). The worker
+always passes the frozen set, so a cluster option never changes it.
+
+Admission refuses, before any effect:
+
+- `fast-diff` without `object-map`, and `object-map` or `journaling` without
+  `exclusive-lock`, which librbd refuses
+  ([CreateRequest.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/librbd/image/CreateRequest.cc#L40-L61));
+- `object-map` without `fast-diff`, since librbd adds `fast-diff` and the
+  created image would differ from the declared set;
+- `dataPoolRef` equal to `poolRef`;
+- with `object-map`, a size above 256000000 objects of 4 MiB, which librbd
+  refuses at create
+  ([ObjectMap.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/librbd/ObjectMap.cc#L73-L76));
+- a name longer than 54 characters;
+- a `poolRef` or `dataPoolRef` of another cluster or without role `rbd`, and
+  an erasure-coded `poolRef`, whose image header needs a replicated pool.
+
+Ownership: the worker writes its attempt record before `rbd create`. A
+lost reply is adopted only with that record and an image of exactly the frozen
+shape with no snapshot; otherwise the image refuses `foreign-rbd-image`. An
+image whose ID, size, data pool or features contradict the record, or a
+recorded image that is gone, refuses `rbd-image-identity`; Bootwright never
+recreates, resizes, moves or re-features it. A trashed image has left the pool
+directory, so it never blocks a create.
+
+Readiness proves the recorded image ID, the size, format 2, the data pool, and
+the features plus the implicit `data-pool`, and that the image is no clone
+([Info.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/tools/rbd/action/Info.cc#L226-L238)). A consumer's
+snapshot does not make the image unready.
+
+Not admitted, as unknown fields:
+
+- RBD namespaces, parked by D160 (OD26); they also change client cap scope,
+  which [B489](milestones/m2.md#b489) owns;
+- striping and object size, parked by D160 (OD26);
+- encryption, parked by D160 (OD26); it also needs a Secrets binding;
+- mirroring image mode, which [B483](milestones/m2.md#b483) owns;
+- QoS.
 
 ## StorageClient
 
@@ -176,6 +234,8 @@ the selected access, and exact monitor/manager/OSD capabilities are frozen and
 observed. The permission covers the declared pool, not only one image; the
 plan reports that scope. An EC data pool or other additional access dependency
 requires B489's explicit extension, rather than silently widening these caps.
+A client on a pool whose StorageRBDImage declares any `dataPoolRef` refuses at
+plan until B489 derives the data-pool caps.
 User-supplied arbitrary capabilities and imported keys are not part of the
 minimal shape.
 

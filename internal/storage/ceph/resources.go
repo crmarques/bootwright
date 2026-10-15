@@ -289,8 +289,48 @@ func clientRequest(c api.Catalog, client api.Object, contextName string) (Reques
 	if r.Pool.Type == "erasure" {
 		return Request{}, failure("lifecycle.unsupported", "StorageClient "+client.Name()+" names erasure-coded pool "+pool.Name()+"; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool; caps on erasure-coded data pools are derived by B489 (X57)")
 	}
+	if image, data := dataPoolImage(c, client.Spec().Get("clusterRef").Text(), pool.Name()); image != "" {
+		return Request{}, failure("lifecycle.unsupported", "StorageClient "+client.Name()+" names pool "+pool.Name()+", whose StorageRBDImage "+image+" keeps its data in pool "+data+"; the client's caps cover only its declared pool", "point spec.poolRef at a pool whose images declare no dataPoolRef, or remove spec.dataPoolRef from StorageRBDImage "+image+"; B489 (X57) derives the data-pool caps")
+	}
 	r.Action = "client"
 	r.Pool = nil
 	r.Client = &Client{Name: client.Name(), Pool: pool.Name(), Access: client.Spec().Get("access").Text()}
+	return r, nil
+}
+
+func dataPoolImage(c api.Catalog, cluster, pool string) (image, data string) {
+	for _, candidate := range c.OfKind(api.StorageRBDImage) {
+		spec := candidate.Spec()
+		if spec.Get("clusterRef").Text() != cluster || spec.Get("poolRef").Text() != pool || spec.Get("dataPoolRef").Text() == "" {
+			continue
+		}
+		if image == "" || candidate.Name() < image {
+			image, data = candidate.Name(), spec.Get("dataPoolRef").Text()
+		}
+	}
+	return image, data
+}
+
+func rbdImageRequest(c api.Catalog, image api.Object, contextName string) (Request, error) {
+	spec := image.Spec()
+	pool, _ := c.Find(api.StoragePool, spec.Get("poolRef").Text())
+	r, err := poolRequest(c, pool, contextName)
+	if err != nil {
+		return Request{}, err
+	}
+	if r.Pool.Type != "replicated" {
+		return Request{}, failure("lifecycle.unsupported", "StorageRBDImage "+image.Name()+" names erasure-coded pool "+pool.Name()+"; an RBD image keeps its header and metadata in a replicated pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef")
+	}
+	dataPool := spec.Get("dataPoolRef").Text()
+	if dataPool != "" {
+		data, _ := c.Find(api.StoragePool, dataPool)
+		if _, err := poolRequest(c, data, contextName); err != nil {
+			return Request{}, err
+		}
+	}
+	size, _ := spec.Get("sizeBytes").Int64()
+	r.Action = "rbd"
+	r.Pool = nil
+	r.RBD = &RBDImage{DataPool: dataPool, Features: storage.RBDImageFeatures(spec), Name: image.Name(), Pool: pool.Name(), SizeBytes: size}
 	return r, nil
 }

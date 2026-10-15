@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v7"
+const Version = "ceph-core-v8"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -109,6 +109,14 @@ type Client struct {
 	Pool   string `json:"pool"`
 }
 
+type RBDImage struct {
+	DataPool  string   `json:"dataPool"`
+	Features  []string `json:"features"`
+	Name      string   `json:"name"`
+	Pool      string   `json:"pool"`
+	SizeBytes int64    `json:"sizeBytes"`
+}
+
 type nativePlacement struct {
 	Count        *int64   `json:"count,omitempty"`
 	CountPerHost *int64   `json:"count_per_host,omitempty"`
@@ -154,6 +162,7 @@ type Request struct {
 	Policy                   *Policy                      `json:"policy,omitempty"`
 	Pool                     *Pool                        `json:"pool,omitempty"`
 	PublicNetworks           []string                     `json:"publicNetworks"`
+	RBD                      *RBDImage                    `json:"rbd,omitempty"`
 	Registry                 string                       `json:"registry"`
 	RegistryRef              string                       `json:"registryRef"`
 	Release                  string                       `json:"release"`

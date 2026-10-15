@@ -364,7 +364,7 @@ func TestStorageIssueBoundAndSafeDiagnosticText(t *testing.T) {
 }
 
 func TestPartialDefaultsCheckOnlyProvableContradictions(t *testing.T) {
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport} {
+	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageRBDImage, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport} {
 		if issues := ValidatePartial(object(kind, "partial", api.MapValue()), api.Catalog{}); len(issues) != 0 {
 			t.Fatalf("empty %s fragment: %v", kind, issues)
 		}

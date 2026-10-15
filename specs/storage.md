@@ -431,6 +431,17 @@ the autoscaler is off, quota, application and each owned pool option), and an
 unset value must be absent; a mismatch is not ready, and only an identity
 contradiction refuses.
 
+An RBD image is created only in pools this operation created and still holds
+under their recorded IDs. It writes its attempt record before `rbd create`, and
+records the native image ID after it. A retry adopts a same-name image only
+with that record and an image of exactly the frozen size, format, data pool and
+features with no snapshot; an image without the record refuses
+`foreign-rbd-image`, and one that contradicts the record, or a recorded image
+that is gone, refuses `rbd-image-identity`. Image readiness compares the
+recorded ID, size, format 2, data pool and the frozen features plus the
+implicit `data-pool`, and refuses a clone; a consumer's snapshot does not make
+it unready. No phase removes, resizes, moves or re-features an image.
+
 Readiness reports bounded observations of FSID, quorum, orchestrator and host
 state, expected daemons, OSD membership, placement/capacity, pool protection,
 filesystem/MDS state and declared service endpoints as applicable. Waits bound

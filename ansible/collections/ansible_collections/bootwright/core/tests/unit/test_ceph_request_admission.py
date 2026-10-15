@@ -102,10 +102,11 @@ CORE = {
         "type": "erasure",
     },
     "publicNetworks": ["192.0.2.0/24"],
+    "rbd": {"dataPool": "", "features": ["layering"], "name": "disk", "pool": "data", "sizeBytes": 1073741824},
     "registry": "cp.icr.io",
     "registryRef": "ibm-registry",
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
-    "version": "ceph-core-v7",
+    "version": "ceph-core-v8",
 }
 
 IMAGE = {

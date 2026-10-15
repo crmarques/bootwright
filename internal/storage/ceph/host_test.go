@@ -24,11 +24,20 @@ import (
 
 func plannedBlocks(t *testing.T) map[string]reconciliation.Block {
 	t.Helper()
-	catalog := pinnedCatalog(t, nil)
+	blocks := map[string]reconciliation.Block{}
+	for _, block := range plannedCephPlan(t, childOf(api.StorageRBDImage, "disk", "poolRef", "volumes", "sizeBytes", 10737418240)).Blocks {
+		blocks[block.ID] = block
+	}
+	return blocks
+}
+
+func plannedCephPlan(t *testing.T, extra ...api.Object) reconciliation.Plan {
+	t.Helper()
+	catalog := api.NewCatalog(append(pinnedCatalog(t, nil).Objects(), extra...))
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
 	runner := &recordingRunner{}
 	var definitions []reconciliation.BlockDefinition
-	for _, capability := range []lifecycle.Capability{NewImage(runner), NewHost(runner), New(api.StorageCluster, runner), New(api.StoragePool, runner), New(api.StorageClient, runner)} {
+	for _, capability := range []lifecycle.Capability{NewImage(runner), NewHost(runner), New(api.StorageCluster, runner), New(api.StoragePool, runner), New(api.StorageClient, runner), New(api.StorageRBDImage, runner)} {
 		plan, err := capability.Plan(context.Background(), input)
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
@@ -47,11 +56,7 @@ func plannedBlocks(t *testing.T) map[string]reconciliation.Block {
 	if runner.calls != 0 {
 		t.Fatal("planning reached the runner")
 	}
-	blocks := map[string]reconciliation.Block{}
-	for _, block := range plan.Blocks {
-		blocks[block.ID] = block
-	}
-	return blocks
+	return plan
 }
 
 func TestPlanGoldenCarriesHostBlocksTheirDependenciesAndExclusivity(t *testing.T) {

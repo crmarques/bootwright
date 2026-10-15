@@ -88,5 +88,18 @@
     "id": "ceph-pool-volumes",
     "implementation": "storage-ceph-core-v3",
     "stage": "clusters"
+  },
+  {
+    "dependencies": [
+      "ceph-cluster-example",
+      "ceph-image-example",
+      "ceph-pool-volumes"
+    ],
+    "exclusive": [
+      "ceph/example"
+    ],
+    "id": "ceph-rbd-disk",
+    "implementation": "storage-ceph-core-v3",
+    "stage": "clusters"
   }
 ]

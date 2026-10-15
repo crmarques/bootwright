@@ -159,6 +159,7 @@ func contractRows() []contractRow {
 		{kind: string(api.StoragePlacementPolicy), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
 		{kind: string(api.StoragePool), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
 		{kind: string(api.StorageClient), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
+		{kind: string(api.StorageRBDImage), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
 		{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, example: "libvirt-3-nodes-ceph", completedFrom: cephHostCompletedFrom},
 		{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, example: "libvirt-3-nodes-ceph", presence: contractImagePresence, indivisible: true,
 			removalObservesNothing: "specs/storage.md, Frozen release and trust: a resolution retains nothing, so its removal takes back nothing a run could observe",

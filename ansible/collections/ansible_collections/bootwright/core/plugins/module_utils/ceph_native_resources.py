@@ -1,7 +1,7 @@
-"""Fixed Ceph pool, placement policy and client worker phases, shipped beside the core worker as source.
+"""Fixed Ceph pool, placement policy, client and RBD image worker phases, shipped beside the core worker as source.
 
-A cluster request and a host scope never load this module: only a pool, policy or
-client action reaches its validation and its worker. Like the core worker it imports
+A cluster request and a host scope never load this module: only a pool, policy, client or
+RBD image action reaches its validation and its worker. Like the core worker it imports
 only the target Python standard library and the core worker, and its native
 output stays private until projected into evidence.
 """
@@ -24,12 +24,18 @@ from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import
     Custody, Refusal, canonical, named, read_regular, require, unique_object,
 )
 
-ACTIONS = ("pool", "client", "policy")
-PHASES = frozenset(("pool", "client", "client_read", "policy"))
+ACTIONS = ("pool", "client", "policy", "rbd")
+PHASES = frozenset(("pool", "client", "client_read", "policy", "rbd"))
 READ_ONLY_PHASES = frozenset(("client_read",))
 
 POOL_ATTEMPT = "ceph-pool-attempt-v2"
 POLICY_ATTEMPT = "ceph-policy-attempt-v1"
+RBD_ATTEMPT = "ceph-rbd-image-attempt-v1"
+RBD_MEMBERS = frozenset(("dataPool", "features", "name", "pool", "sizeBytes"))
+# librbd's feature-bit order (src/tools/rbd/ArgumentTypes.cc:20-33), the order `rbd info` lists them in.
+RBD_FEATURES = ("layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten", "journaling")
+# librbd refuses an object map over 256000000 objects (src/librbd/ObjectMap.cc:73-76); rbd_default_order 22 makes them 4 MiB.
+RBD_OBJECT_MAP_BYTES = 256000000 << 22
 # Each supported erasure-code profile row and the OSD hosts it needs; jerasure only on its three rows.
 ERASURE_ROWS = {(2, 2): 5, (4, 2): 6, (5, 2): 7, (6, 2): 8, (8, 3): 11, (8, 4): 12}
 JERASURE_ROWS = frozenset(((4, 2), (8, 3), (8, 4)))
@@ -53,8 +59,9 @@ COMPRESSION_SETTERS = (("mode", "compression_mode"), ("algorithm", "compression_
 
 
 def validate(request, hosts):
-    """Admit one pool, placement policy or client resource beside its validated cluster scope."""
+    """Admit one pool, placement policy, client or RBD image resource beside its validated cluster scope."""
     osd_hosts = sum(bool(host["devices"]) for host in hosts)
+    require(request["action"] == "rbd" or "rbd" not in request)
     if request["action"] == "pool":
         require("client" not in request and "policy" not in request)
         validate_pool(request.get("pool"), osd_hosts)
@@ -67,6 +74,23 @@ def validate(request, hosts):
         require(named(client["name"]) and named(client["pool"]))
         require(client["access"] in ("read-only", "read-write"))
         require("pool" not in request and "policy" not in request)
+    elif request["action"] == "rbd":
+        require("pool" not in request and "client" not in request and "policy" not in request)
+        validate_rbd(request.get("rbd"))
+
+
+def validate_rbd(image):
+    """The frozen image the Go admission proved: known features in bit order, librbd's dependencies, the object-map bound."""
+    require(isinstance(image, dict) and set(image) == RBD_MEMBERS)
+    require(named(image["name"]) and "." not in image["name"] and named(image["pool"]))
+    require(image["dataPool"] == "" or named(image["dataPool"]) and image["dataPool"] != image["pool"])
+    require(type(image["sizeBytes"]) is int and 1 <= image["sizeBytes"] <= INT64)
+    features = image["features"]
+    require(isinstance(features, list) and features == [feature for feature in RBD_FEATURES if feature in features])
+    require("fast-diff" not in features or "object-map" in features)
+    require("object-map" not in features or "exclusive-lock" in features and "fast-diff" in features)
+    require("journaling" not in features or "exclusive-lock" in features)
+    require("object-map" not in features or image["sizeBytes"] <= RBD_OBJECT_MAP_BYTES)
 
 
 def bounded(value, maximum):
@@ -214,7 +238,7 @@ class ResourceWorker(ceph_native.Worker):
             attempted, completed = self.markers.read(attempt_name), self.markers.read(complete_name)
             require(attempted is None or attempted == init, "pool-identity")
             require(completed is None or completed == init and attempted == init, "pool-identity")
-            current = self.owned_pool(pool)
+            current = self.owned_pool(pool["name"])
             require(completed is None or "rbd" in current.get("application_metadata", {}), "pool-identity")
             if completed is None:
                 self.markers.write(attempt_name, init)
@@ -222,18 +246,13 @@ class ResourceWorker(ceph_native.Worker):
                 with proof:
                     self.command(["/usr/bin/rbd", "--conf", os.path.join(self.markers.path, "ceph.conf"), "--keyring",
                                   os.path.join(self.markers.path, "ceph.client.admin.keyring"), "pool", "init", name], json_result=False)
-                require("rbd" in self.owned_pool(pool).get("application_metadata", {}), "not-ready")
+                require("rbd" in self.owned_pool(pool["name"]).get("application_metadata", {}), "not-ready")
                 self.markers.write(complete_name, init)
             changed = completed is None or changed
         return {"changed": changed}
 
-    def owned_pool(self, pool):
-        entries = [entry for entry in self.pools() if entry.get("pool_name") == pool["name"]]
-        require(len(entries) == 1 and self.markers.read("pool-id-" + pool["name"] + ".json") == {"id": self.pool_id(entries[0])}, "pool-identity")
-        return entries[0]
-
     def pool_setting(self, pool, field, wanted):
-        current = self.owned_pool(pool)
+        current = self.owned_pool(pool["name"])
         require(type(current.get(field)) is int and current[field] > 0, "native-output")
         prefix = "pool-setting-" + pool["name"] + "-" + field
         intent = {"owner": self.request["owner"], "fsid": self.request["fsid"], "id": self.pool_id(current), "field": field, "value": wanted}
@@ -245,7 +264,7 @@ class ResourceWorker(ceph_native.Worker):
             self.markers.write(prefix + "-attempt.json", intent)
         if current[field] != wanted:
             self.ceph("osd", "pool", "set", pool["name"], field, str(wanted), json_result=False)
-            require(self.owned_pool(pool).get(field) == wanted, "not-ready")
+            require(self.owned_pool(pool["name"]).get(field) == wanted, "not-ready")
         if complete is None:
             self.markers.write(prefix + "-complete.json", intent)
 
@@ -352,7 +371,7 @@ class ResourceWorker(ceph_native.Worker):
         """One setting under the size pair's records, keyed by the numeric pool ID: the attempt before the effect, the setter only while
         the completion is absent and the observed value differs, the completion after the readback. A completed setting is never
         sent again; its later drift reads as not ready. Returns whether the completion was absent."""
-        current = self.owned_pool(pool)
+        current = self.owned_pool(pool["name"])
         prefix = "pool-setting-" + pool["name"] + "-" + field
         intent = {"owner": self.request["owner"], "fsid": self.request["fsid"], "id": self.pool_id(current), "field": field, "value": wanted}
         attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
@@ -364,7 +383,7 @@ class ResourceWorker(ceph_native.Worker):
             self.markers.write(prefix + "-attempt.json", intent)
         if not observed(current):
             self.ceph("osd", "pool", *argv, json_result=False)
-            require(observed(self.owned_pool(pool)), "not-ready")
+            require(observed(self.owned_pool(pool["name"])), "not-ready")
         self.markers.write(prefix + "-complete.json", intent)
         return True
 
@@ -612,6 +631,8 @@ class ResourceWorker(ceph_native.Worker):
             ready = self.observe_pool(evidence, ready)
         elif action == "policy":
             ready = self.observe_policy(evidence, ready)
+        elif action == "rbd":
+            ready = self.observe_rbd(evidence, ready)
         elif action == "client":
             client = self.request["client"]
             auth = self.ceph("auth", "ls")
@@ -713,3 +734,118 @@ class ResourceWorker(ceph_native.Worker):
         evidence["exists"] = owned or exists
         evidence["resource"] = {"id": "" if unrecorded or not exists else str(dump["rule_id"]), "path": ""}
         return ready and exists and not unrecorded and self.replicated_rule_matches(dump, policy)
+
+    def rbd_cli(self, *args, json_result=True):
+        """One rbd command with the operation's own admin custody, under the bootstrap hold as every native call."""
+        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
+        with proof:
+            return self.command(["/usr/bin/rbd", "--conf", os.path.join(self.markers.path, "ceph.conf"), "--keyring",
+                                 os.path.join(self.markers.path, "ceph.client.admin.keyring"), *args], json_result=json_result)
+
+    def rbd_names(self, pool):
+        result = self.rbd_cli("ls", "--format", "json", pool)
+        require(isinstance(result, list) and len(result) <= 1048576 and all(isinstance(item, str) for item in result), "native-output")
+        return result
+
+    def rbd_info(self, image):
+        """`rbd info --format json` (src/tools/rbd/action/Info.cc:226-238): the image's own name and its lowercase-hex ID."""
+        info = self.rbd_cli("info", "--format", "json", image["pool"] + "/" + image["name"])
+        require(isinstance(info, dict) and info.get("name") == image["name"] and isinstance(info.get("id"), str)
+                and ceph_native.RBD_IMAGE_ID.fullmatch(info["id"]) is not None, "native-output")
+        return info
+
+    def owned_pool(self, name):
+        """An image is only ever created in a pool this operation created and still holds under its recorded ID."""
+        pool = self.markers.read("pool-" + name + ".json")
+        require(isinstance(pool, dict) and pool.get("name") == name, "pool-identity")
+        identifier = self.markers.read("pool-id-" + name + ".json")
+        require(isinstance(identifier, dict) and set(identifier) == {"id"} and type(identifier["id"]) is int and identifier["id"] >= 0, "pool-identity")
+        selected = [entry for entry in self.pools() if isinstance(entry, dict) and entry.get("pool_name") == name]
+        require(len(selected) == 1 and self.pool_id(selected[0]) == identifier["id"], "pool-identity")
+        return selected[0]
+
+    def rbd_attempt(self):
+        return {"version": RBD_ATTEMPT, "owner": self.request["owner"], "fsid": self.request["fsid"], "rbd": self.request["rbd"]}
+
+    @staticmethod
+    def expected_features(image):
+        """librbd adds data-pool (bit 128, after every admitted feature) to an image with a data pool."""
+        return image["features"] + (["data-pool"] if image["dataPool"] else [])
+
+    def image_matches(self, info, image):
+        """The frozen shape as observed; a consumer's later snapshot never changes it."""
+        size = info.get("size")
+        data_pool = "data_pool" not in info if image["dataPool"] == "" else info.get("data_pool") == image["dataPool"]
+        return (type(size) is int and size == image["sizeBytes"] and info.get("format") == 2 and info.get("features") == self.expected_features(image)
+                and data_pool and "parent" not in info)
+
+    def created_image(self, info, image):
+        """At creation or lost-reply adoption the image is also untouched: no snapshot yet."""
+        return self.image_matches(info, image) and info.get("snapshot_count") == 0
+
+    def rbd_marks(self, image):
+        name = image["name"]
+        return "rbd-" + name + ".json", "rbd-attempt." + name + ".json", "rbd-id." + name + ".json"
+
+    def rbd(self):
+        """Create one owned image with exact bytes and features, or adopt this operation's own after a lost reply; never another's."""
+        require(self.markers.owned(), "ownership")
+        image = self.request["rbd"]
+        mark, attempt_name, id_name = self.rbd_marks(image)
+        marker = self.markers.read(mark)
+        require(marker is None or marker == image, "rbd-image-identity")
+        self.owned_pool(image["pool"])
+        if image["dataPool"]:
+            self.owned_pool(image["dataPool"])
+        exists = image["name"] in self.rbd_names(image["pool"])
+        require(marker is not None or not exists, "foreign-rbd-image")
+        self.markers.write(mark, image)
+        recorded = canonical(self.markers.read(attempt_name)) == canonical(self.rbd_attempt())
+        identity = self.markers.read(id_name)
+        if exists:
+            info = self.rbd_info(image)
+            if identity is None:
+                require(recorded, "foreign-rbd-image")
+                require(self.created_image(info, image), "rbd-image-identity")
+                self.markers.write(id_name, {"id": info["id"]})
+                return {"changed": True}
+            require(identity == {"id": info["id"]}, "rbd-image-identity")
+            return {"changed": False}
+        require(identity is None, "rbd-image-identity")
+        if not recorded:
+            self.markers.write(attempt_name, self.rbd_attempt())
+        self.rbd_cli(*self.rbd_create_args(image), json_result=False)
+        info = self.rbd_info(image)
+        require(self.created_image(info, image), "rbd-image-identity")
+        self.markers.write(id_name, {"id": info["id"]})
+        return {"changed": True}
+
+    @staticmethod
+    def rbd_create_args(image):
+        """Exact bytes (a bare number would be MiB), image format 2 and every feature explicit: '' passes the empty set, since an
+        absent option takes rbd_default_features (src/tools/rbd/ArgumentTypes.cc:404-421, :472-496)."""
+        args = ["create", "--size", str(image["sizeBytes"]) + "B", "--image-format", "2"]
+        for feature in image["features"] or [""]:
+            args += ["--image-feature", feature]
+        if image["dataPool"]:
+            args += ["--data-pool", image["dataPool"]]
+        return args + [image["pool"] + "/" + image["name"]]
+
+    def observe_rbd(self, evidence, ready):
+        image = self.request["rbd"]
+        mark, attempt_name, id_name = self.rbd_marks(image)
+        marker = self.markers.read(mark)
+        require(marker is None or marker == image, "rbd-image-identity")
+        owned = marker is not None
+        present = any(isinstance(entry, dict) and entry.get("pool_name") == image["pool"] for entry in self.pools())
+        exists = present and image["name"] in self.rbd_names(image["pool"])
+        require(owned or not exists, "foreign-rbd-image")
+        identity = self.markers.read(id_name)
+        info = self.rbd_info(image) if exists else None
+        # This operation's own lost creation reply is unfinished work the apply resumes, never a refusal.
+        unrecorded = exists and identity is None and canonical(self.markers.read(attempt_name)) == canonical(self.rbd_attempt())
+        require(not exists or unrecorded or identity == {"id": info["id"]}, "rbd-image-identity")
+        evidence["owned"] = owned
+        evidence["exists"] = owned or exists
+        evidence["resource"] = {"id": "" if unrecorded or not exists else info["id"], "path": ""}
+        return ready and exists and not unrecorded and self.image_matches(info, image)

@@ -76,11 +76,12 @@ func TestFrozenRequestGolden(t *testing.T) {
 		r.Hosts[i].Location = map[string]string{}
 		r.Hosts[i].KnownHosts = ""
 	}
-	for _, action := range []string{"cluster", "policy", "pool", "client"} {
+	for _, action := range []string{"cluster", "policy", "pool", "client", "rbd"} {
 		r.Action = action
 		r.Policy = nil
 		r.Pool = nil
 		r.Client = nil
+		r.RBD = nil
 		if action == "policy" {
 			r.Policy = &Policy{DeviceClass: "ssd", FailureDomain: "host", Name: "ssd-hosts", Root: "default", Rule: "ssd-hosts", Size: 2}
 		}
@@ -89,6 +90,9 @@ func TestFrozenRequestGolden(t *testing.T) {
 		}
 		if action == "client" {
 			r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
+		}
+		if action == "rbd" {
+			r.RBD = &RBDImage{Name: "disk", Pool: "volumes", SizeBytes: 10737418240, Features: []string{"layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten"}, DataPool: ""}
 		}
 		data, err := r.Canonical()
 		if err != nil {

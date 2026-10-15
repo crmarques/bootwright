@@ -67,6 +67,8 @@ func (a *admission) intrinsic() {
 			a.nativeServices(ceph, true)
 		}
 
+	case api.StorageRBDImage:
+		a.rbdImageIntrinsic()
 	case api.StorageObjectGateway:
 		if textOf(spec, "endpoint", "scheme") == "http" {
 			a.forbid(spec.Get("endpoint"), "$.spec.endpoint", "tls")

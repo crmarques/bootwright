@@ -22,7 +22,8 @@ provider-command escape hatch.
 `access: read-only|read-write`. The pool must be a same-cluster RBD pool; no
 implicit administrator capability is granted. `StoragePlacementPolicy` and
 `StoragePool` are admitted under
-[pool protection and erasure coding](#pool-protection-and-erasure-coding).
+[pool protection and erasure coding](#pool-protection-and-erasure-coding), and
+`StorageRBDImage` under [RBD images](#rbd-images).
 Other P2 resource additions remain target contracts, not admitted kinds.
 Future filesystem, object, NFS and export feature families are refused by
 current pure admission.
@@ -45,7 +46,7 @@ mechanics to capabilities the selected artifacts provably have or lack
 that adaptation neither approves nor refuses a selection.
 
 Ordinary apply realizes the core cluster, placement policies, replicated and
-erasure-coded pools and the client over `verified-tunnel`. `ceph.release` is the operator's release label;
+erasure-coded pools, RBD images and the client over `verified-tunnel`. `ceph.release` is the operator's release label;
 `ceph.packageVersion` selects the Ceph/cephadm RPM roots and
 `ceph.cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.
 Optional `ceph.nfsGanesha.packageVersion` selects the NFS-Ganesha RPM without
@@ -86,13 +87,13 @@ this field grants no exception to host-key verification. The three-node
 example selects `verified-tunnel` explicitly; its protected mounts and staged
 bootstrap remain subject to
 [release qualification](../storage-coverage.md#release-qualification).
-Core request v7 refuses continuation of v6 operations, image request v2 and
+Core request v8 refuses continuation of v7 operations, image request v2 and
 package request v2 refuse continuation of older operations, and core
 evidence v3 and host request v2 refuse continuation of operations an
 earlier build made; finish or remove old contexts with their original
 applying build. A host preparation request carries only its cluster's
-scope, never the core request's resource action, pool or client, so a
-resource change never moves it.
+scope, never the core request's resource action, pool, client or image,
+so a resource change never moves it.
 
 The existing native-section config map admits explicit fixed-memory and
 pool-default pairs for the minimal core configuration:
@@ -133,6 +134,7 @@ provider sizing and measured resource acceptance remain separate.
 | `StoragePlacementPolicy` | A reusable CRUSH placement policy and replicated defaults for one managed cluster. |
 | `StorageClient` | One pool-scoped RBD CephX principal with required same-cluster `poolRef` and explicit access. |
 | `StoragePool` | One pool. `spec.type` is `replicated` (default) or `erasure` and selects protection; the referenced cluster selects the storage engine. |
+| `StorageRBDImage` | One RBD image: same-cluster replicated rbd `poolRef`, exact `sizeBytes`, optional rbd `dataPoolRef` and a closed feature set; image format 2. |
 | `StorageFilesystem` | One CephFS filesystem: a same-cluster `cephfs-metadata` pool, one or more ordered `cephfs-data` pools, and its MDS policy. |
 | `StorageObjectGateway` | One RGW service and its optional public endpoint; ingresses belong to that endpoint and select no other backend. |
 | `StorageNFSExport` | One NFS-Ganesha service and zero or more exports; there is no separate `StorageNFSService` kind. |
@@ -233,7 +235,8 @@ native 32-bit stripe width. `spec.erasure.parameters` and a non-default
 derives irreversible overwrite enablement, as IBM's
 [erasure-coding overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites)
 require. A StorageClient on an erasure-coded pool refuses at plan; B489 owns
-caps on erasure-coded data pools.
+caps on erasure-coded data pools. A StorageClient on a pool whose
+StorageRBDImage declares any `dataPoolRef` refuses at plan.
 
 The initial `pg_num` is `clamp(32, pgNumMin, pgNumMax)` over the positive
 bounds. `autoscale.mode` is `on` when omitted or `off`; `warn` refuses at plan
@@ -252,6 +255,32 @@ cluster's pools on the rule (width is the replica size, or `k+m`; a
 times the effective default size (2 with the global 2/2 pair, else 3) on
 `replicated_rule`, must not exceed 250 times the selected OSD count, at least
 3, or 3 for a rule restricted to a device class.
+
+## RBD images
+
+`StorageRBDImage` is admitted for a managed cluster; its field record,
+ownership and readiness are in
+[StorageRBDImage](../storage-resources.md#storagerbdimage). Admission refuses
+with `api.invariant`, before any effect:
+
+- `features` naming `fast-diff` without `object-map`, `object-map` or
+  `journaling` without `exclusive-lock`, or `object-map` without `fast-diff`;
+- `dataPoolRef` equal to `poolRef`;
+- `sizeBytes` above 1073741824000000 while the effective features, the
+  defaults when `features` is omitted, hold `object-map`;
+- `metadata.name` longer than 54 characters;
+- a `poolRef` or `dataPoolRef` of another cluster or without role `rbd`;
+- an erasure-coded `poolRef`.
+
+A defaults fragment is checked only for the feature, data-pool and, when it
+declares `features`, size rules. `sizeBytes` is an integer from 1 to
+9223372036854775807; `features` is a set of `layering`, `exclusive-lock`,
+`object-map`, `fast-diff`, `deep-flatten` and `journaling`, so librbd's
+internal features refuse as values. Plan refuses an erasure-coded `poolRef`
+again and propagates every plan refusal of the image pool and data pool. A
+StorageClient on a pool whose StorageRBDImage declares any `dataPoolRef`
+refuses at plan, naming the lexically first such image, until
+[B489](../milestones/m2.md#b489) derives the data-pool caps.
 
 ## Complete-graph invariants
 

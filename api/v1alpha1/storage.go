@@ -4,6 +4,7 @@ func init() {
 	register(StorageCluster, storageClusterSchema)
 	register(StoragePlacementPolicy, storagePlacementPolicySchema)
 	register(StoragePool, storagePoolSchema)
+	register(StorageRBDImage, storageRBDImageSchema)
 	register(StorageFilesystem, storageFilesystemSchema)
 	register(StorageObjectGateway, storageObjectGatewaySchema)
 	register(StorageNFSExport, storageNFSExportSchema)
@@ -77,6 +78,10 @@ func storageClusterSchema() *Shape {
 
 func storageClientSchema() *Shape {
 	return record(required("clusterRef", ref(StorageCluster)), required("poolRef", ref(StoragePool)), required("access", enumeration("read-only", "read-write")))
+}
+
+func storageRBDImageSchema() *Shape {
+	return record(required("clusterRef", ref(StorageCluster)), required("poolRef", ref(StoragePool)), required("sizeBytes", integer("1", "9223372036854775807")), field("dataPoolRef", ref(StoragePool)), field("features", set(enumeration("layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten", "journaling"))))
 }
 
 func storagePlacementPolicySchema() *Shape {

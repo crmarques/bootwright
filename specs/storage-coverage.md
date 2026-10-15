@@ -130,6 +130,9 @@ erasure-coded pool proves that no profile and no rule of its name exist before
 writing `ceph-pool-attempt-v2`, sets its profile without `--force`, and accepts
 the stored profile only as the passed keys plus the frozen per-plugin defaults;
 otherwise it refuses `foreign-profile`, `foreign-rule` or `native-output`.
+An RBD image writes `ceph-rbd-image-attempt-v1` before `rbd create` and adopts
+a same-name image only with that record and the frozen shape; otherwise it
+refuses `foreign-rbd-image` or `rbd-image-identity`.
 
 For every matrix row, the release record names the primary vendor source and
 revision/date, support status (supported, preview, deprecated or unsupported),

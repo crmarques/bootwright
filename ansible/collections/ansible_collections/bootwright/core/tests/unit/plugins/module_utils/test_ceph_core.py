@@ -33,7 +33,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v7", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v8", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -208,7 +208,7 @@ def test_pool_replication_requires_an_additional_osd_host(core_request, size, mi
 
 
 def test_previous_core_request_version_refuses_before_any_native_effect(core_request):
-    core_request["version"] = "ceph-core-v6"
+    core_request["version"] = "ceph-core-v7"
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.Worker(core_request, core_request["bootstrap"],
                            run=lambda *args, **kwargs: pytest.fail("previous request reached native effects"))
@@ -328,6 +328,43 @@ def test_evidence_rejects_remote_secret_and_identity_substitution(core_request):
     value["owner"] = "another-operation"
     with pytest.raises(ceph_native.Refusal, match="evidence"):
         ceph_core.evidence(value, "d" * 64, core_request)
+
+
+RBD_IMAGE = {"dataPool": "", "features": ["layering"], "name": "disk", "pool": "volumes", "sizeBytes": 1024 ** 3}
+
+
+def test_rbd_evidence_admits_only_a_lowercase_hex_image_id(core_request):
+    request = dict(core_request, action="rbd", rbd=RBD_IMAGE)
+    value = dict(observation(request), request="d" * 64, resource={"id": "10226b8b4567", "path": ""})
+    assert ceph_core.evidence(value, "d" * 64, request) is value
+    for refused in ("ABC", "10226B8B4567", "a" * 15, "12-34"):
+        with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+            ceph_core.evidence(dict(value, resource={"id": refused, "path": ""}), "d" * 64, request)
+    pool = dict(observation(core_request), request="d" * 64, action="pool", resource={"id": "abc", "path": ""})
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        ceph_core.evidence(pool, "d" * 64)
+
+
+def test_rbd_apply_calls_the_rbd_phase(core_request, monkeypatch):
+    request = dict(core_request, action="rbd", rbd=RBD_IMAGE)
+    calls = []
+
+    class Transport:
+        def call(self, host, phase, timeout=None):
+            del timeout
+            calls.append(phase)
+            if phase == "observe":
+                done = "rbd" in calls
+                return dict(observation(request, ready=done), request="", removed=False, exists=done, partial=not done,
+                            resource={"id": "10226b8b4567" if done else "", "path": ""})
+            if phase == "host_state":
+                return {"name": host["name"], "owned": True, "exists": True}
+            return {"changed": phase == "rbd"}
+
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    result = ceph_core.execute(request, "apply", "d" * 64, Transport())
+    assert result["changed"] and result["evidence"]["resource"] == {"id": "10226b8b4567", "path": ""}
+    assert calls.count("rbd") == 1 and calls.index("rbd") > calls.index("observe")
 
 
 def test_ssh_uses_only_pinned_trust_and_literal_fixed_worker(core_request):
@@ -1941,10 +1978,10 @@ def test_resource_phases_ship_in_their_own_module():
     modules = ceph_native_worker.MODULES
     assert modules[modules.index("ceph_native") + 1] == "ceph_native_resources"
     assert tuple(ceph_core.Transport.native_sources()) == modules
-    assert ceph_native_resources.PHASES == {"pool", "client", "client_read", "policy"} and not ceph_native_resources.PHASES & ceph_native.CORE_PHASES
+    assert ceph_native_resources.PHASES == {"pool", "client", "client_read", "policy", "rbd"} and not ceph_native_resources.PHASES & ceph_native.CORE_PHASES
     assert ceph_native_resources.READ_ONLY_PHASES <= ceph_native_resources.PHASES
-    assert not any(hasattr(ceph_native.Worker, name) for name in ("pool", "client", "client_read", "policy"))
-    assert all(hasattr(ceph_native_resources.ResourceWorker, name) for name in ("pool", "client", "client_read", "policy"))
+    assert not any(hasattr(ceph_native.Worker, name) for name in ("pool", "client", "client_read", "policy", "rbd"))
+    assert all(hasattr(ceph_native_resources.ResourceWorker, name) for name in ("pool", "client", "client_read", "policy", "rbd"))
 
 
 def test_dispatch_routes_resource_actions_to_the_resource_worker(monkeypatch, core_request):

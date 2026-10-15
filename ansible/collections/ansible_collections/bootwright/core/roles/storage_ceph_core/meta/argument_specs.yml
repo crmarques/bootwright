@@ -76,6 +76,8 @@ argument_specs:
             type: list
             elements: str
             required: true
+          rbd:
+            type: dict
           registry:
             type: str
             required: true
@@ -89,7 +91,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-core-v7]
+            choices: [ceph-core-v8]
       bootwright_ceph_digest:
         type: str
         required: true

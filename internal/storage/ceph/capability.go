@@ -34,6 +34,8 @@ func (c Capability) request(catalog api.Catalog, object api.Object, contextName 
 		return poolRequest(catalog, object, contextName)
 	case api.StorageClient:
 		return clientRequest(catalog, object, contextName)
+	case api.StorageRBDImage:
+		return rbdImageRequest(catalog, object, contextName)
 	}
 	return Request{}, failure("lifecycle.unsupported", "the requested kind has no core Ceph adapter", "")
 }
@@ -77,6 +79,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			}
 		case api.StorageClient:
 			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.Client.Pool})
+		case api.StorageRBDImage:
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.RBD.Pool})
+			if request.RBD.DataPool != "" {
+				requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.RBD.DataPool})
+			}
 		}
 		impacts := []string{"realize Ceph " + request.Action + " " + object.Name()}
 		consumes := []string{}
@@ -94,8 +101,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			for _, host := range request.Hosts {
 				dependencies = append(dependencies, HostBlockID(request.Cluster, host.Machine))
 			}
-			slices.Sort(dependencies)
 		}
+		if c.kind == api.StorageRBDImage {
+			dependencies = append(dependencies, ClusterBlockID(request.Cluster))
+		}
+		slices.Sort(dependencies)
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: "ceph-" + request.Action + "-" + object.Name(), Description: strings.Join(impacts, ""), Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + request.Cluster}, Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical})
 		plan.Secrets = append(plan.Secrets, request.ClusterKeyRef, request.RegistryRef)
 		for _, h := range request.Hosts {
@@ -153,7 +163,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if err != nil {
 		return Request{}, err
 	}
-	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client"}[c.kind]
+	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd"}[c.kind]
 	object := r.Cluster
 	if r.Action == "policy" && r.Policy != nil {
 		object = r.Policy.Name
@@ -163,6 +173,9 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	}
 	if r.Action == "client" && r.Client != nil {
 		object = r.Client.Name
+	}
+	if r.Action == "rbd" && r.RBD != nil {
+		object = r.RBD.Name
 	}
 	if action == "" || r.Action != action || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")

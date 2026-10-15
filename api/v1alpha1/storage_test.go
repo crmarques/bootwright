@@ -1,9 +1,12 @@
 package v1alpha1
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestStorageWireShapesAreClosedAndVariantsAreExplicit(t *testing.T) {
-	for _, kind := range []Kind{StorageCluster, StoragePlacementPolicy, StoragePool, StorageClient, StorageFilesystem, StorageObjectGateway, StorageNFSExport, StorageExport} {
+	for _, kind := range []Kind{StorageCluster, StoragePlacementPolicy, StoragePool, StorageRBDImage, StorageClient, StorageFilesystem, StorageObjectGateway, StorageNFSExport, StorageExport} {
 		schema := Schema(kind)
 		if schema == nil || schema.Type != Mapping || schema.Open {
 			t.Fatalf("%s is not a registered closed object", kind)
@@ -98,6 +101,33 @@ func TestNativeCoreSchemaAndBindingsUseOneClosedAuthoringPath(t *testing.T) {
 		t.Fatal("minimal client must bind one pool and explicit bounded access")
 	}
 }
+func TestRBDImageSchemaIsClosedWithExactBounds(t *testing.T) {
+	schema := Schema(StorageRBDImage)
+	if schema == nil || schema.Open {
+		t.Fatal("StorageRBDImage must be a closed object")
+	}
+	for _, name := range []string{"clusterRef", "poolRef", "sizeBytes"} {
+		if field, ok := schema.Field(name); !ok || !field.Required {
+			t.Fatalf("StorageRBDImage must require %s", name)
+		}
+	}
+	size, _ := schema.Field("sizeBytes")
+	if size.Shape.Type != Integer || size.Shape.Minimum != "1" || size.Shape.Maximum != "9223372036854775807" {
+		t.Fatalf("sizeBytes bounds = %q..%q", size.Shape.Minimum, size.Shape.Maximum)
+	}
+	features, ok := schema.Field("features")
+	if !ok || features.Required || !features.Shape.Unique || features.Shape.Element == nil || !slices.Equal(features.Shape.Element.Enums, []string{"layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten", "journaling"}) {
+		t.Fatal("features must be an optional unique set of the six admitted names in librbd bit order")
+	}
+	dataPool, ok := schema.Field("dataPoolRef")
+	if !ok || dataPool.Required || !slices.Equal(dataPool.Shape.Reference, []Kind{StoragePool}) {
+		t.Fatal("dataPoolRef must be an optional StoragePool reference")
+	}
+	if len(schema.Fields) != 5 {
+		t.Fatalf("StorageRBDImage admits %d fields, want 5", len(schema.Fields))
+	}
+}
+
 func checkStorageShape(t *testing.T, shape *Shape) {
 	t.Helper()
 	seen := map[string]bool{}

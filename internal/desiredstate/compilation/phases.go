@@ -167,7 +167,7 @@ func normalizationOrder() []api.Kind {
 		api.Environment, api.Entitlement, api.Secret, api.NetworkConfig, api.MachineImage,
 		api.MachineInstallProfile, api.InfraProvider, api.Machine, api.Proxy, api.DNSServer,
 		api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.ContainerCluster,
-		api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageClient, api.StorageFilesystem,
+		api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageRBDImage, api.StorageClient, api.StorageFilesystem,
 		api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport, api.ClusterAddon,
 		api.ClusterAddonProfile, api.ClusterAddonBinding, api.CustomPlaybook,
 	}

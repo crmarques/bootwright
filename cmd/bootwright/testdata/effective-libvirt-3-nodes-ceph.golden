@@ -485,6 +485,15 @@ spec:
     mode: on
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: StorageRBDImage
+metadata:
+  name: rbd-disk
+spec:
+  clusterRef: ceph-lab
+  poolRef: rbd-data
+  sizeBytes: 1073741824
+---
+apiVersion: bootwright.io/v1alpha1
 kind: StorageClient
 metadata:
   name: rbd-canary

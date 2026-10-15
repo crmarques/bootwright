@@ -60,6 +60,8 @@ SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", 
                            "packageRepository", "clusterKeyRef", "registryRef", "registry"))
 SCOPE_OPTIONAL = frozenset(("config", "packages", "nfsGaneshaPackageVersion"))
 RESOURCE_ID = re.compile(r"(?:0|[1-9][0-9]{0,18})\Z")
+# librbd's image ID: lowercase hex cut to RBD_MAX_IMAGE_ID_LENGTH 14 (src/librbd/Utils.cc:75-93, src/include/rbd_types.h:86).
+RBD_IMAGE_ID = re.compile(r"[0-9a-f]{1,14}\Z")
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount", "cache", "enroll",
                          "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "observe", "bootstrap_state", "host_state", "dashboard_read"))
@@ -409,10 +411,10 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"pool", "client", "policy"})
+    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"pool", "client", "policy", "rbd"})
     hosts = scope_checks(request)
     if request["action"] == "cluster":
-        require("pool" not in request and "client" not in request and "policy" not in request)
+        require("pool" not in request and "client" not in request and "policy" not in request and "rbd" not in request)
         return request
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
     require(request["action"] in ceph_native_resources.ACTIONS)
@@ -438,7 +440,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v7")
+    require(request["version"] == "ceph-core-v8")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -3311,7 +3313,7 @@ class Worker:
 
     def unfinished(self, evidence):
         """Owned work without a current proof: partial, never ready."""
-        if self.request["action"] in ("pool", "client", "policy"):
+        if self.request["action"] in ("pool", "client", "policy", "rbd"):
             resource = self.request[self.request["action"]]
             evidence["owned"] = self.markers.read(self.request["action"] + "-" + resource["name"] + ".json") == resource
         evidence["exists"] = evidence["owned"]

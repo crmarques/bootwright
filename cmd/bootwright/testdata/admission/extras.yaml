@@ -359,3 +359,17 @@ spec:
   clusterRef: ceph-multidc-01
   poolRef: odf-hub-multidc-01-rbd
   access: read-only
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageRBDImage
+metadata:
+  name: acceptance-rbd-image
+
+spec:
+  clusterRef: ceph-multidc-01
+  poolRef: odf-hub-multidc-01-rbd
+  sizeBytes: 10737418240
+  features:
+    - layering
+    - exclusive-lock

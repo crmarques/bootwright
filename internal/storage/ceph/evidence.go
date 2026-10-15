@@ -17,6 +17,7 @@ const DashboardPort = "8443"
 var dashboardURL = regexp.MustCompile(`\Ahttps://(?:[A-Za-z0-9.-]{1,253}|\[[0-9A-Fa-f:.]{2,45}\]):8443/\z`)
 var certificateDigest = regexp.MustCompile(`\A[0-9a-f]{64}\z`)
 var resourceID = regexp.MustCompile(`\A(?:0|[1-9][0-9]{0,18})\z`)
+var rbdImageID = regexp.MustCompile(`\A[0-9a-f]{1,14}\z`)
 
 type MonitorAddress struct {
 	Address string `json:"address"`
@@ -241,6 +242,9 @@ func validateScope(e Evidence, r Request) bool {
 	if (r.Action == "pool" || r.Action == "policy") && e.Resource.ID != "" && !resourceID.MatchString(e.Resource.ID) {
 		return false
 	}
+	if r.Action == "rbd" && e.Resource.ID != "" && !rbdImageID.MatchString(e.Resource.ID) {
+		return false
+	}
 	return true
 }
 
@@ -262,6 +266,8 @@ func validateReady(e Evidence, r Request) bool {
 		return r.Pool != nil && resourceID.MatchString(e.Resource.ID)
 	case "client":
 		return r.Client != nil && e.Client == "client."+r.Client.Name
+	case "rbd":
+		return r.RBD != nil && rbdImageID.MatchString(e.Resource.ID)
 	}
 	return false
 }

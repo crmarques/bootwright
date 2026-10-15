@@ -47,6 +47,7 @@ CLUSTER_REASONS = (
     "package-limit", "package-timeout", "package-platform", "package-host", "call-home-drift", "config-drift", "partial-cluster", "not-ready",
     "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport",
     "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
+    "foreign-rbd-image", "rbd-image-identity",
 )
 
 
@@ -116,7 +117,7 @@ def evidence(value, request_digest, request=None):
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     dashboard_evidence(value)
-    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy"), "evidence")
+    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy", "rbd"), "evidence")
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
     ceph_native.require(value["health"] in ("", "HEALTH_OK", "HEALTH_WARN", "HEALTH_ERR"), "evidence")
     ceph_native.require(ceph_native.named(value["owner"]), "evidence")
@@ -129,8 +130,8 @@ def evidence(value, request_digest, request=None):
     ceph_native.require(isinstance(resource, dict) and set(resource) == {"id", "path"} and all(isinstance(resource[k], str) for k in ("id", "path")),
                         "evidence")
     ceph_native.require(resource["path"] == "", "evidence")
-    ceph_native.require(resource["id"] == "" or value["action"] in ("pool", "policy") and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None,
-                        "evidence")
+    ceph_native.require(resource["id"] == "" or value["action"] in ("pool", "policy") and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None
+                        or value["action"] == "rbd" and ceph_native.RBD_IMAGE_ID.fullmatch(resource["id"]) is not None, "evidence")
     ceph_native.require(isinstance(value["osds"], list) and len(value["osds"]) <= 8192, "evidence")
     for osd in value["osds"]:
         ceph_native.require(isinstance(osd, dict) and set(osd) == {"host", "path", "id", "uuid"}, "evidence")
@@ -580,6 +581,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
                 changed = transport.call(bootstrap, "pool")["changed"] or changed
             elif request["action"] == "policy":
                 changed = transport.call(bootstrap, "policy")["changed"] or changed
+            elif request["action"] == "rbd":
+                changed = transport.call(bootstrap, "rbd")["changed"] or changed
         if request["action"] == "client":
             produced = transport.call(bootstrap, "client")
             changed = produced["changed"] or changed
