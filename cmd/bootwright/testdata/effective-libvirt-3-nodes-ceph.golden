@@ -440,6 +440,11 @@ spec:
           data_devices:
             paths:
               - /dev/sda
+      - service_type: mds
+        service_id: files
+        placement:
+          label: ceph-core
+          count: 1
     topology:
       nodes:
         - name: rhel-01
@@ -466,6 +471,30 @@ spec:
   clusterRef: ceph-lab
   ruleName: ssd-hosts
   crushDeviceClass: ssd
+  replicated:
+    size: 2
+    minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: cephfs-data
+spec:
+  clusterRef: ceph-lab
+  type: replicated
+  role: cephfs-data
+  replicated:
+    size: 2
+    minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: cephfs-metadata
+spec:
+  clusterRef: ceph-lab
+  type: replicated
+  role: cephfs-metadata
   replicated:
     size: 2
     minSize: 2
@@ -501,6 +530,18 @@ spec:
   clusterRef: ceph-lab
   poolRef: rbd-data
   access: read-write
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: files
+spec:
+  clusterRef: ceph-lab
+  mdsServiceRef: mds.files
+  metadataPoolRef: cephfs-metadata
+  dataPoolRefs:
+    - name: cephfs-data
+      default: true
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret

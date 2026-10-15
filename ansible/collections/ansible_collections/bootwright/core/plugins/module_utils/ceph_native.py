@@ -411,10 +411,10 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"pool", "client", "policy", "rbd"})
+    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"pool", "client", "policy", "rbd", "filesystem"})
     hosts = scope_checks(request)
     if request["action"] == "cluster":
-        require("pool" not in request and "client" not in request and "policy" not in request and "rbd" not in request)
+        require(not {"pool", "client", "policy", "rbd", "filesystem"} & set(request))
         return request
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
     require(request["action"] in ceph_native_resources.ACTIONS)
@@ -440,7 +440,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v8")
+    require(request["version"] == "ceph-core-v9")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -3313,7 +3313,7 @@ class Worker:
 
     def unfinished(self, evidence):
         """Owned work without a current proof: partial, never ready."""
-        if self.request["action"] in ("pool", "client", "policy", "rbd"):
+        if self.request["action"] in ("pool", "client", "policy", "rbd", "filesystem"):
             resource = self.request[self.request["action"]]
             evidence["owned"] = self.markers.read(self.request["action"] + "-" + resource["name"] + ".json") == resource
         evidence["exists"] = evidence["owned"]

@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v8"
+const Version = "ceph-core-v9"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -93,6 +93,7 @@ type Pool struct {
 	Compression PoolCompression `json:"compression"`
 	CrushRule   string          `json:"crushRule"`
 	Erasure     *PoolErasure    `json:"erasure,omitempty"`
+	Filesystem  string          `json:"filesystem"`
 	MinSize     int             `json:"minSize"`
 	Name        string          `json:"name"`
 	Overwrites  bool            `json:"overwrites"`
@@ -115,6 +116,27 @@ type RBDImage struct {
 	Name      string   `json:"name"`
 	Pool      string   `json:"pool"`
 	SizeBytes int64    `json:"sizeBytes"`
+}
+
+type FilesystemGroup struct {
+	GID       int    `json:"gid"`
+	Mode      string `json:"mode"`
+	Name      string `json:"name"`
+	Pool      string `json:"pool"`
+	SizeBytes int64  `json:"sizeBytes"`
+	UID       int    `json:"uid"`
+}
+
+type Filesystem struct {
+	ActiveCount        int               `json:"activeCount"`
+	DataPools          []string          `json:"dataPools"`
+	DefaultDataPool    string            `json:"defaultDataPool"`
+	Groups             []FilesystemGroup `json:"groups"`
+	MDSService         string            `json:"mdsService"`
+	MetadataPool       string            `json:"metadataPool"`
+	Name               string            `json:"name"`
+	StandbyCountWanted int               `json:"standbyCountWanted"`
+	StandbyReplay      bool              `json:"standbyReplay"`
 }
 
 type nativePlacement struct {
@@ -151,6 +173,7 @@ type Request struct {
 	ClusterSSHUser           string                       `json:"clusterSSHUser"`
 	Config                   map[string]map[string]string `json:"config,omitempty"`
 	Controller               string                       `json:"controller"`
+	Filesystem               *Filesystem                  `json:"filesystem,omitempty"`
 	FSID                     string                       `json:"fsid,omitempty"`
 	Hosts                    []Host                       `json:"hosts"`
 	Image                    string                       `json:"image"`

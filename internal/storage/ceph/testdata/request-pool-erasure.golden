@@ -172,6 +172,7 @@
       "stripeUnit": 4096,
       "technique": "reed_sol_van"
     },
+    "filesystem": "",
     "minSize": 5,
     "name": "volumes",
     "overwrites": true,
@@ -241,5 +242,5 @@
       }
     }
   ],
-  "version": "ceph-core-v8"
+  "version": "ceph-core-v9"
 }

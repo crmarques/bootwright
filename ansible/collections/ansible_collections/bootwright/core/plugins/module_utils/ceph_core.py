@@ -47,7 +47,8 @@ CLUSTER_REASONS = (
     "package-limit", "package-timeout", "package-platform", "package-host", "call-home-drift", "config-drift", "partial-cluster", "not-ready",
     "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport",
     "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
-    "foreign-rbd-image", "rbd-image-identity",
+    "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
+    "mds-coverage",
 )
 
 
@@ -117,7 +118,7 @@ def evidence(value, request_digest, request=None):
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     dashboard_evidence(value)
-    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy", "rbd"), "evidence")
+    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy", "rbd", "filesystem"), "evidence")
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
     ceph_native.require(value["health"] in ("", "HEALTH_OK", "HEALTH_WARN", "HEALTH_ERR"), "evidence")
     ceph_native.require(ceph_native.named(value["owner"]), "evidence")
@@ -130,7 +131,8 @@ def evidence(value, request_digest, request=None):
     ceph_native.require(isinstance(resource, dict) and set(resource) == {"id", "path"} and all(isinstance(resource[k], str) for k in ("id", "path")),
                         "evidence")
     ceph_native.require(resource["path"] == "", "evidence")
-    ceph_native.require(resource["id"] == "" or value["action"] in ("pool", "policy") and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None
+    ceph_native.require(resource["id"] == ""
+                        or value["action"] in ("pool", "policy", "filesystem") and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None
                         or value["action"] == "rbd" and ceph_native.RBD_IMAGE_ID.fullmatch(resource["id"]) is not None, "evidence")
     ceph_native.require(isinstance(value["osds"], list) and len(value["osds"]) <= 8192, "evidence")
     for osd in value["osds"]:
@@ -523,6 +525,23 @@ def device_identities(request, transport):
     return result
 
 
+def apply_filesystem(request, bootstrap, transport, now, pause):
+    """Create the filesystem; its subvolume groups only once every active rank is held, which the volumes module needs to mount it."""
+    changed = transport.call(bootstrap, "filesystem")["changed"]
+    if not request["filesystem"]["groups"]:
+        return changed
+    deadline = now() + READINESS_TIMEOUT
+    while True:
+        ranks = transport.call(bootstrap, "filesystem_ranks")
+        ceph_native.require(isinstance(ranks, dict) and set(ranks) == {"active"} and type(ranks["active"]) is bool, "evidence")
+        if ranks["active"]:
+            break
+        remaining = deadline - now()
+        ceph_native.require(remaining > 0, "not-ready")
+        pause(min(READINESS_INTERVAL, remaining))
+    return transport.call(bootstrap, "filesystem_groups")["changed"] or changed
+
+
 def execute(request, operation, request_digest, transport, outputs=None, *, now=time.monotonic, pause=time.sleep, connect=tls_certificate):
     """Keep read-only observation distinct from any preparation or mutation."""
     ceph_native.validate(request)
@@ -577,12 +596,10 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
                     for host in request["hosts"]:
                         transport.call(host, "devices")
                     changed = transport.call(bootstrap, "services")["changed"] or changed
-            elif request["action"] == "pool":
-                changed = transport.call(bootstrap, "pool")["changed"] or changed
-            elif request["action"] == "policy":
-                changed = transport.call(bootstrap, "policy")["changed"] or changed
-            elif request["action"] == "rbd":
-                changed = transport.call(bootstrap, "rbd")["changed"] or changed
+            elif request["action"] in ("pool", "policy", "rbd"):
+                changed = transport.call(bootstrap, request["action"])["changed"] or changed
+            elif request["action"] == "filesystem":
+                changed = apply_filesystem(request, bootstrap, transport, now, pause) or changed
         if request["action"] == "client":
             produced = transport.call(bootstrap, "client")
             changed = produced["changed"] or changed

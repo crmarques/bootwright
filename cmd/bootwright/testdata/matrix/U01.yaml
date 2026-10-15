@@ -20,6 +20,18 @@ expect:
   remediation: "correct $.spec.replicated to satisfy this requirement: stretch fixes replicated protection at size four and minimum two"
 - code: api.invariant
   kind: StoragePool
+  name: cephfs-data
+  field: $.spec.replicated
+  message: stretch fixes replicated protection at size four and minimum two
+  remediation: "correct $.spec.replicated to satisfy this requirement: stretch fixes replicated protection at size four and minimum two"
+- code: api.invariant
+  kind: StoragePool
+  name: cephfs-metadata
+  field: $.spec.replicated
+  message: stretch fixes replicated protection at size four and minimum two
+  remediation: "correct $.spec.replicated to satisfy this requirement: stretch fixes replicated protection at size four and minimum two"
+- code: api.invariant
+  kind: StoragePool
   name: rbd-data
   field: $.spec.replicated
   message: stretch fixes replicated protection at size four and minimum two

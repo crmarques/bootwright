@@ -50,7 +50,8 @@ mechanics to capabilities the selected artifacts provably have or lack
 that adaptation neither approves nor refuses a selection.
 
 Ordinary apply realizes the core cluster, placement policies, replicated and
-erasure-coded pools, RBD images and the client over `verified-tunnel`. `ceph.release` is the operator's release label;
+erasure-coded pools, RBD images, CephFS filesystems with their subvolume
+groups and the client over `verified-tunnel`. `ceph.release` is the operator's release label;
 `ceph.packageVersion` selects the Ceph/cephadm RPM roots and
 `ceph.cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.
 Optional `ceph.nfsGanesha.packageVersion` selects the NFS-Ganesha RPM without
@@ -91,7 +92,7 @@ this field grants no exception to host-key verification. The three-node
 example selects `verified-tunnel` explicitly; its protected mounts and staged
 bootstrap remain subject to
 [release qualification](../storage-coverage.md#release-qualification).
-Core request v8 refuses continuation of v7 operations, image request v2 and
+Core request v9 refuses continuation of v8 operations, image request v2 and
 package request v2 refuse continuation of older operations, and core
 evidence v3 and host request v2 refuse continuation of operations an
 earlier build made; finish or remove old contexts with their original
@@ -325,9 +326,13 @@ before any effect:
 - a group `poolLayoutRef` that is not an attached data pool.
 
 A cephfs-metadata pool must be replicated under
-[pool protection](#pool-protection-and-erasure-coding). No capability of this
-build realizes StorageFilesystem yet, so apply refuses an operation that
-declares one before registration.
+[pool protection](#pool-protection-and-erasure-coding). The core capability
+realizes StorageFilesystem as block `ceph-filesystem-<name>`, which requires
+its metadata and data pools and depends on the cluster and image blocks; the
+[promotion record](../storage-resources.md#storagefilesystem) owns its native
+projection, refusals and readiness. Its plan re-refuses an erasure-coded
+default data pool and a cluster that projects no `mds.<filesystem>` service,
+and propagates every plan refusal of its pools.
 
 ## Complete-graph invariants
 

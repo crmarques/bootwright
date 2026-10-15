@@ -6,8 +6,8 @@ This page owns the target resource contract approved through P2 in the
 and their bindings; [Storage](storage.md) owns lifecycle, device safety and
 custody. [Provider coverage](storage-coverage.md) owns release qualification.
 
-**Current:** `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage` and
-minimal `StorageClient` are admitted and realized. Native
+**Current:** `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`,
+`StorageFilesystem` and minimal `StorageClient` are admitted and realized. Native
 effects remain artifact-gated. **Not yet met:** later P2 kinds, NFS ownership
 migration and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.
@@ -84,7 +84,7 @@ effects. No new field inherits an undocumented default from another resource.
 | --- | --- | --- |
 | `StoragePlacementPolicy` | Reusable CRUSH placement and pool protection policy. | OSD topology supplies its proved failure domains; policy does not deploy OSDs. |
 | `StoragePool` | Pool identity, replicated/EC protection, application, PG/autoscaler, quota, compression and supported mirroring intent. EC `rbd`/`cephfs-data` pools derive irreversible overwrite enablement; mirroring is [B483](milestones/m2.md#b483)'s. | Services and resources reference owned pools; native auto-created pools require an explicitly recorded derived owner. |
-| `StorageFilesystem` | Metadata/data-pool composition, default/layout, active ranks and standby/replay resource policy, declared subvolume groups. | One declared MDS service binds the native filesystem identity; placement and container configuration belong to that service. |
+| `StorageFilesystem` | Metadata/data-pool composition, default/layout, active ranks and standby/replay resource policy, declared subvolume groups; several filesystems per cluster. | `spec.mdsServiceRef` binds one declared MDS service whose `service_id` is the filesystem name; placement and container configuration belong to that service. One `ceph fs new` creates the native filesystem. |
 | `StorageObjectGateway` | Logical object-storage scope, realm/zone relationships, owned pool layout and public endpoint identity/trust. | B477 binds its RGW service and any ingress services by full native identity. It no longer embeds daemon placement, frontend or ingress specifications. |
 | `StorageExport` | Existing Data Foundation handoff, or the external-details arm. | It waits for the resources and access material it describes; it neither creates an add-on nor becomes a general native-command resource. |
 
@@ -98,8 +98,9 @@ normalization is recorded by the current admission contract until migrated.
 
 `StorageFilesystem.spec.mdsServiceRef` names its full native MDS service;
 `StorageObjectGateway.spec.serviceRef` names its full native RGW service.
-These references are required for the corresponding managed resource. The
-MDS `service_id` agrees with the native filesystem name. RGW realm/zone names
+These references are required for the corresponding managed resource; the
+MDS reference is current, the RGW reference is [B477](milestones/m2.md#b477)'s.
+The MDS `service_id` agrees with the native filesystem name. RGW realm/zone names
 agree with the gateway's owned object scope. Canonical service identities are
 looked up in the qualified identity table, not recovered by naively splitting
 on dots. B477's endpoint binding selects declared ingress services whose
@@ -112,11 +113,13 @@ its own owner and cannot also be claimed as generated. Failure to determine
 the effective map or prove compatible protection prevents readiness and any
 unqualified cascading cleanup.
 
-Filesystem creation/removal must respect the separate pool and MDS owners.
-The [native volume interface](https://docs.ceph.com/en/tentacle/cephfs/fs-volumes/)
-can create/remove pools and orchestrate MDS services. B492 must choose qualified
-operations that preserve these owners, rather than treating a convenient
-aggregate command as permission to delete another resource's dependencies.
+Filesystem creation respects the separate pool and MDS owners. A filesystem
+is created with `ceph fs new <fs> <metadata> <default> set max_mds <n>
+allow_standby_replay <true|false> standby_count_wanted <n>` over its owned
+pools, and further data pools attach with `ceph fs add_data_pool`. The
+[native volume interface](https://docs.ceph.com/en/tentacle/cephfs/fs-volumes/),
+which creates and removes pools and orchestrates MDS services, is never used,
+and no creation is ever forced.
 
 ## StorageRBDImage
 
@@ -261,6 +264,99 @@ spec:
   poolRef: block-data
   access: read-only
 ```
+
+## StorageFilesystem
+
+One object declares one CephFS filesystem over owned pools, bound to its own
+MDS service. [B492](milestones/m2.md#b492) owns its schema and lifecycle;
+[Storage admission](api/storage.md) owns its admission rules.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: files
+
+spec:
+  clusterRef: ceph-example
+  mdsServiceRef: mds.files
+  metadataPoolRef: files-metadata
+  dataPoolRefs:
+  - files-data
+  subvolumeGroups:
+  - name: csi
+```
+
+### Promotion record
+
+Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image
+until [B472](milestones/m2.md#b472) or the owner's run confirms them.
+
+| Field | Frozen value | Native projection |
+| --- | --- | --- |
+| `metadata.name` | The filesystem name, at most 47 characters so the block `ceph-filesystem-<name>` fits 63. | `<fs>` of `fs new`. |
+| `mdsServiceRef` | `mds.<name>`, a declared mds service of the cluster. | None; its daemons serve the ranks. |
+| `metadataPoolRef` | Owned replicated pool of role `cephfs-metadata`. | `<metadata>` of `fs new`. |
+| `dataPoolRefs` | The default pool first, then the others in declared order; the default is replicated. | `<default>` of `fs new`; each other pool through `fs add_data_pool <fs> <pool>`. |
+| `mds.activeCount` | Value, or 1 ([MDSMap.h](https://github.com/ceph/ceph/blob/v20.2.1/src/mds/MDSMap.h#L622)). | `set max_mds <n>`. |
+| `mds.standbyReplay` | Value, or false. | `set allow_standby_replay <true\|false>`. |
+| `mds.standbyCountWanted` | Value, or 0. | `set standby_count_wanted <n>`. |
+| `subvolumeGroups[].name` | Sorted by name. | `fs subvolumegroup create <fs> <group>`. |
+| `subvolumeGroups[].poolLayoutRef` | Value, or the default data pool. | `--pool_layout <pool>`. |
+| `subvolumeGroups[].mode` | Three octal digits; a leading `0` is dropped; omission `755` ([module.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/module.py#L723-L733)). | `--mode <mode>`. |
+| `subvolumeGroups[].uid`, `gid` | Value, or 0 ([group.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/fs/operations/group.py#L212-L233)). | `--uid <n> --gid <n>`. |
+| `subvolumeGroups[].sizeBytes` | Positive value, or 0 for no quota. | `--size <n>` only when positive. |
+
+A CephFS pool's frozen request names its derived filesystem: the
+StorageFilesystem of the same cluster whose metadata or data pool it is, or
+none. `fs new` records the application key `cephfs: {metadata|data: <fs>}` on
+its pools and sets `pg_num_min` 16, `recovery_priority` 5 and
+`pg_autoscale_bias` 4.0 on the metadata pool
+([FSCommands.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/FSCommands.cc#L315-L331));
+pool readiness accepts exactly those once the key names the pool's own
+filesystem, and that `pg_num_min` then replaces a frozen one.
+
+`fs new` carries the MDS settings in its creating proposal
+([FSCommands.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/FSCommands.cc#L251-L307)),
+so no `fs set` follows; `fs set max_mds` refuses while any filesystem health
+warning exists. Bootwright never passes `--force`,
+`--allow-dangerous-metadata-overlay`, `--fscid` or `--recover`, never sets an
+FSMap flag and never uses `fs volume`. An attached data pool is never added
+again: the monitor's pool check refuses it before its no-op
+([FSCommands.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/FSCommands.cc#L1077-L1092)).
+Subvolume groups are created only after every active rank is held, each with
+every attribute explicit; an owned group whose attributes differ is created
+once more, which rewrites them
+([volume.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/fs/volume.py#L1093-L1111)).
+
+Before `fs new` the worker proves, in order: its ownership mark, the pools it
+created under their recorded IDs carrying no other filesystem's key, that no
+filesystem of the name exists without its creation record, that the FSMap
+admits another filesystem when one exists (`enable_multiple`,
+[FSCommands.cc](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/FSCommands.cc#L216-L221)),
+and that enough standby daemons of the bound service are available for the
+active ranks plus the larger of the wanted standbys and one standby-replay
+follower per rank. Its attempt record precedes `fs new`; a lost reply is
+adopted only with that record and the frozen pools.
+
+| Refusal | Reached when |
+| --- | --- |
+| `foreign-filesystem` | A filesystem of the name exists, or one of its pools carries another filesystem's key, without this operation's creation record. |
+| `filesystem-identity` | The declared filesystem differs from the recorded one, the native filesystem ID differs from the recorded one, its pools differ, or a recorded filesystem is gone. |
+| `filesystem-multiple-disabled` | Another filesystem exists and the FSMap disables multiple filesystems. |
+| `foreign-subvolume-group` | A declared group exists that this operation did not create. |
+| `mds-coverage` | Fewer standby daemons of the bound service than the ranks, followers and wanted standbys need. |
+
+Readiness proves the recorded filesystem ID, the metadata and data pools by
+their recorded IDs in frozen order, `max_mds`, `allow_standby_replay` and
+`standby_count_wanted`, every rank below `max_mds` held by an `up:active`
+daemon of the bound service, one `up:standby-replay` follower per rank when
+replay is declared, at least the wanted standbys, and every declared group
+with its owner, mode, layout pool and quota
+([group.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/fs/operations/group.py#L113-L152)).
+A drifted value is not ready, never a refusal; an undeclared group is not read.
+Online removal moved to [B491](milestones/m2.md#b491) by D160 (OD2 (a)); a
+filesystem retires with its cluster's hosts.
 
 ## StorageSubvolume
 

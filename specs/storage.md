@@ -444,6 +444,26 @@ implicit `data-pool`, and a clone is not ready; a native image that drifted
 from them is not ready rather than refused, and a consumer's snapshot does not
 make it unready. No phase removes, resizes, moves or re-features an image.
 
+A CephFS filesystem is created only over pools this operation created and
+still holds under their recorded IDs, and only when no filesystem of its name
+exists. It writes its attempt record before the one `ceph fs new` that also
+sets `max_mds`, `allow_standby_replay` and `standby_count_wanted`, records the
+native filesystem ID after it, and attaches each further data pool not yet
+attached. A retry adopts a same-name filesystem only with that record and the
+frozen metadata and default data pools; otherwise it refuses
+`foreign-filesystem`, as it does for a pool another filesystem holds. A
+declared filesystem that differs from the recorded one, a native ID that
+differs, or a recorded filesystem that is gone refuses `filesystem-identity`.
+Before `fs new` it refuses `filesystem-multiple-disabled` when another
+filesystem exists and the FSMap disables multiple filesystems, and
+`mds-coverage` when the bound MDS service has fewer standby daemons than the
+filesystem needs. Subvolume groups follow once every active rank is held; a
+group created by someone else refuses `foreign-subvolume-group`. Readiness
+compares the pools, the MDS settings, the active ranks, standby-replay
+followers and standbys of the bound service, and each declared group's owner,
+mode, layout and quota; a drift is not ready rather than refused. No phase
+removes a filesystem or group, fails a rank, or forces an operation.
+
 Readiness reports bounded observations of FSID, quorum, orchestrator and host
 state, expected daemons, OSD membership, placement/capacity, pool protection,
 filesystem/MDS state and declared service endpoints as applicable. Waits bound

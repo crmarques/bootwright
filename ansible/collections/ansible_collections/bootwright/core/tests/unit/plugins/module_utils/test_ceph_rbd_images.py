@@ -37,7 +37,7 @@ def cluster(count=3):
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": GIB}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, count + 1)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v8", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
+    return {"controller": "controller", "version": "ceph-core-v9", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
             "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -58,7 +58,7 @@ def image_value(**changes):
 def pool_value():
     """One admitted replicated rbd pool envelope member (validate_pool), to prove an `rbd` member beside it refuses."""
     return {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""},
-            "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule",
+            "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule", "filesystem": "",
             "minSize": 2, "name": "volumes", "overwrites": False, "pgNum": 32, "quota": {"maxBytes": 0, "maxObjects": 0}, "role": "rbd", "size": 2,
             "type": "replicated"}
 

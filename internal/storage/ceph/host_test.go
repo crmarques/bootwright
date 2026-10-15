@@ -33,11 +33,16 @@ func plannedBlocks(t *testing.T) map[string]reconciliation.Block {
 
 func plannedCephPlan(t *testing.T, extra ...api.Object) reconciliation.Plan {
 	t.Helper()
-	catalog := api.NewCatalog(append(pinnedCatalog(t, nil).Objects(), extra...))
+	return plannedCephPlanWith(t, nil, extra...)
+}
+
+func plannedCephPlanWith(t *testing.T, change func(api.Value) api.Value, extra ...api.Object) reconciliation.Plan {
+	t.Helper()
+	catalog := api.NewCatalog(append(pinnedCatalog(t, change).Objects(), extra...))
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
 	runner := &recordingRunner{}
 	var definitions []reconciliation.BlockDefinition
-	for _, capability := range []lifecycle.Capability{NewImage(runner), NewHost(runner), New(api.StorageCluster, runner), New(api.StoragePool, runner), New(api.StorageClient, runner), New(api.StorageRBDImage, runner)} {
+	for _, capability := range []lifecycle.Capability{NewImage(runner), NewHost(runner), New(api.StorageCluster, runner), New(api.StoragePool, runner), New(api.StorageClient, runner), New(api.StorageRBDImage, runner), New(api.StorageFilesystem, runner)} {
 		plan, err := capability.Plan(context.Background(), input)
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))

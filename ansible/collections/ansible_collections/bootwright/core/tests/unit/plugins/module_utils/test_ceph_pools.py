@@ -32,7 +32,7 @@ def cluster(count=6):
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, count + 1)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v8", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
+    return {"controller": "controller", "version": "ceph-core-v9", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
             "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -47,7 +47,7 @@ def cluster(count=6):
 def pool_value(kind="replicated", role="rbd", plugin="isa", device_class="", **changes):
     pool = {"application": ceph_native_resources.APPLICATIONS[role],
             "autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""},
-            "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule",
+            "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule", "filesystem": "",
             "minSize": 2, "name": "volumes", "overwrites": False, "pgNum": 32, "quota": {"maxBytes": 0, "maxObjects": 0}, "role": role, "size": 2,
             "type": kind}
     if kind == "erasure":
@@ -436,14 +436,53 @@ def test_pool_max_pgs_below_the_default_caps_pg_num():
     ("cephfs-data", {"cephfs": {"data": "fs1"}, "rbd": {}}, False), ("cephfs-data", {"cephfs": {"data": ["fs1"]}}, False), ("cephfs-data", {}, False),
     ("cephfs-metadata", {"cephfs": {"metadata": "fs1"}}, True), ("cephfs-metadata", {"cephfs": {}}, True),
     ("cephfs-metadata", {"cephfs": {"data": "fs1"}}, False),
+    ("cephfs-data", {"cephfs": {"data": "fs2"}}, False), ("cephfs-metadata", {"cephfs": {"metadata": "fs2"}}, False),
 ])
 def test_pool_observe_accepts_cephfs_application_key_from_fs_new(role, metadata, expected):
+    """Only the key `fs new` records for the pool's role, naming the pool's own derived filesystem; an unowned pool never carries one."""
+    for owner in ("fs1", ""):
+        world = World()
+        native, unused = resource(world, "pool", pool_value(role=role, filesystem=owner))
+        native.pool()
+        assert ("osd", "pool", "application", "enable", "volumes", "cephfs") in world.log
+        world.entry("volumes")["application_metadata"] = metadata
+        if role == "cephfs-metadata" and metadata == {"cephfs": {"metadata": owner}}:
+            world.entry("volumes")["options"] = {"pg_num_min": 16, "recovery_priority": 5, "pg_autoscale_bias": 4.0}
+        assert ready(native)[0] is (expected and (owner != "" or metadata == {"cephfs": {}}))
+
+
+@pytest.mark.parametrize("metadata,options,expected", [
+    ({"cephfs": {"metadata": "fs1"}}, {"pg_num_min": 16, "recovery_priority": 5, "pg_autoscale_bias": 4.0}, True),
+    ({"cephfs": {"metadata": "fs1"}}, {"pg_num_min": 16, "recovery_priority": 5, "pg_autoscale_bias": 4}, True),
+    ({"cephfs": {"metadata": "fs1"}}, {}, True),
+    ({"cephfs": {"metadata": "fs1"}}, {"pg_num_min": 32, "recovery_priority": 5, "pg_autoscale_bias": 4.0}, False),
+    ({"cephfs": {"metadata": "fs1"}}, {"pg_num_min": 16, "recovery_priority": 4, "pg_autoscale_bias": 4.0}, False),
+    ({"cephfs": {"metadata": "fs1"}}, {"pg_num_min": 16, "recovery_priority": 5, "pg_autoscale_bias": 2.0}, False),
+    ({"cephfs": {"metadata": "fs1"}}, {"pg_num_min": 16.0}, False),
+    ({"cephfs": {}}, {"pg_num_min": 16, "recovery_priority": 5, "pg_autoscale_bias": 4.0}, False),
+    ({"cephfs": {}}, {"recovery_priority": 5}, False),
+    ({"cephfs": {"metadata": "fs2"}}, {"pg_num_min": 16, "recovery_priority": 5, "pg_autoscale_bias": 4.0}, False),
+])
+def test_pool_observe_tolerates_fs_new_metadata_options(metadata, options, expected):
+    """`fs new` sets pg_num_min 16, recovery_priority 5 and pg_autoscale_bias 4.0 on its metadata pool in the proposal that records the
+    pool's application key (src/mon/FSCommands.cc:315-331): tolerated exactly, and only once that key names the pool's own filesystem."""
     world = World()
-    native, unused = resource(world, "pool", pool_value(role=role))
+    native, unused = resource(world, "pool", pool_value(role="cephfs-metadata", filesystem="fs1"))
     native.pool()
-    assert ("osd", "pool", "application", "enable", "volumes", "cephfs") in world.log
     world.entry("volumes")["application_metadata"] = metadata
+    world.entry("volumes")["options"] = options
     assert ready(native)[0] is expected
+
+
+def test_pool_observe_keeps_a_frozen_pg_num_min_on_a_metadata_pool_before_fs_new():
+    world = World()
+    autoscale = {"bulk": False, "maxPGs": 0, "minPGs": 64, "mode": "on", "targetBytes": 0, "targetRatio": ""}
+    native, unused = resource(world, "pool", pool_value(role="cephfs-metadata", filesystem="fs1", autoscale=autoscale, pgNum=64))
+    native.pool()
+    assert world.entry("volumes")["options"] == {"pg_num_min": 64} and ready(native)[0] is True
+    world.entry("volumes")["application_metadata"] = {"cephfs": {"metadata": "fs1"}}
+    world.entry("volumes")["options"] = {"pg_num_min": 16, "recovery_priority": 5, "pg_autoscale_bias": 4.0}
+    assert ready(native)[0] is True
 
 
 @pytest.mark.parametrize("device_class,argv", [

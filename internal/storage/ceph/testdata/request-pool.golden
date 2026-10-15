@@ -111,6 +111,7 @@
       "requiredRatio": ""
     },
     "crushRule": "replicated_rule",
+    "filesystem": "",
     "minSize": 2,
     "name": "volumes",
     "overwrites": false,
@@ -170,5 +171,5 @@
       "service_type": "mgr"
     }
   ],
-  "version": "ceph-core-v8"
+  "version": "ceph-core-v9"
 }

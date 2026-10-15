@@ -1,7 +1,7 @@
-"""Fixed Ceph pool, placement policy, client and RBD image worker phases, shipped beside the core worker as source.
+"""Fixed Ceph pool, placement policy, client, RBD image and CephFS filesystem worker phases, shipped beside the core worker as source.
 
-A cluster request and a host scope never load this module: only a pool, policy, client or
-RBD image action reaches its validation and its worker. Like the core worker it imports
+A cluster request and a host scope never load this module: only a pool, policy, client,
+RBD image or filesystem action reaches its validation and its worker. Like the core worker it imports
 only the target Python standard library and the core worker, and its native
 output stays private until projected into evidence.
 """
@@ -24,13 +24,24 @@ from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import
     Custody, Refusal, canonical, named, read_regular, require, unique_object,
 )
 
-ACTIONS = ("pool", "client", "policy", "rbd")
-PHASES = frozenset(("pool", "client", "client_read", "policy", "rbd"))
-READ_ONLY_PHASES = frozenset(("client_read",))
+ACTIONS = ("pool", "client", "policy", "rbd", "filesystem")
+PHASES = frozenset(("pool", "client", "client_read", "policy", "rbd", "filesystem", "filesystem_ranks", "filesystem_groups"))
+READ_ONLY_PHASES = frozenset(("client_read", "filesystem_ranks"))
 
 POOL_ATTEMPT = "ceph-pool-attempt-v2"
 POLICY_ATTEMPT = "ceph-policy-attempt-v1"
 RBD_ATTEMPT = "ceph-rbd-image-attempt-v1"
+FILESYSTEM_ATTEMPT = "ceph-filesystem-attempt-v1"
+GROUP_ATTEMPT = "ceph-subvolume-group-attempt-v1"
+FILESYSTEM_MEMBERS = frozenset(("activeCount", "dataPools", "defaultDataPool", "groups", "mdsService", "metadataPool", "name", "standbyCountWanted",
+                                "standbyReplay"))
+GROUP_MEMBERS = frozenset(("gid", "mode", "name", "pool", "sizeBytes", "uid"))
+# The volumes module's own directories under /volumes (src/pybind/mgr/volumes/fs/operations/group.py, fs/volume.py).
+RESERVED_GROUPS = ("_nogroup", "_index", "_deleting", "_legacy")
+FILE_MODE = re.compile(r"[0-7]{3}")
+# The options `fs new` sets on its metadata pool in the proposal that records the pool's application key
+# (src/mon/FSCommands.cc:315-331; option names src/mon/OSDMonitor.cc:6215-6232).
+FS_NEW_METADATA_OPTIONS = (("pg_num_min", 16), ("recovery_priority", 5), ("pg_autoscale_bias", 4.0))
 RBD_MEMBERS = frozenset(("dataPool", "features", "name", "pool", "sizeBytes"))
 # librbd's feature-bit order (src/tools/rbd/ArgumentTypes.cc:20-33), the order `rbd info` lists them in.
 RBD_FEATURES = ("layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten", "journaling")
@@ -40,7 +51,8 @@ RBD_OBJECT_MAP_BYTES = 256000000 << 22
 ERASURE_ROWS = {(2, 2): 5, (4, 2): 6, (5, 2): 7, (6, 2): 8, (8, 3): 11, (8, 4): 12}
 JERASURE_ROWS = frozenset(((4, 2), (8, 3), (8, 4)))
 APPLICATIONS = {"rbd": "rbd", "cephfs-metadata": "cephfs", "cephfs-data": "cephfs", "rgw": "rgw"}
-POOL_MEMBERS = frozenset(("application", "autoscale", "compression", "crushRule", "minSize", "name", "overwrites", "pgNum", "quota", "role", "size", "type"))
+POOL_MEMBERS = frozenset(("application", "autoscale", "compression", "crushRule", "filesystem", "minSize", "name", "overwrites", "pgNum", "quota", "role",
+                          "size", "type"))
 ERASURE_MEMBERS = frozenset(("codingChunks", "dataChunks", "deviceClass", "failureDomain", "plugin", "profile", "profileDefaults", "root", "stripeUnit",
                              "technique"))
 PROFILE_DEFAULTS = frozenset(("crush-device-class", "crush-num-failure-domains", "crush-osds-per-failure-domain", "w", "jerasure-per-chunk-alignment"))
@@ -59,9 +71,10 @@ COMPRESSION_SETTERS = (("mode", "compression_mode"), ("algorithm", "compression_
 
 
 def validate(request, hosts):
-    """Admit one pool, placement policy, client or RBD image resource beside its validated cluster scope."""
+    """Admit one pool, placement policy, client, RBD image or filesystem resource beside its validated cluster scope."""
     osd_hosts = sum(bool(host["devices"]) for host in hosts)
     require(request["action"] == "rbd" or "rbd" not in request)
+    require(request["action"] == "filesystem" or "filesystem" not in request)
     if request["action"] == "pool":
         require("client" not in request and "policy" not in request)
         validate_pool(request.get("pool"), osd_hosts)
@@ -77,6 +90,9 @@ def validate(request, hosts):
     elif request["action"] == "rbd":
         require("pool" not in request and "client" not in request and "policy" not in request)
         validate_rbd(request.get("rbd"))
+    elif request["action"] == "filesystem":
+        require("pool" not in request and "client" not in request and "policy" not in request)
+        validate_filesystem(request.get("filesystem"), request["services"])
 
 
 def validate_rbd(image):
@@ -91,6 +107,41 @@ def validate_rbd(image):
     require("object-map" not in features or "exclusive-lock" in features and "fast-diff" in features)
     require("journaling" not in features or "exclusive-lock" in features)
     require("object-map" not in features or image["sizeBytes"] <= RBD_OBJECT_MAP_BYTES)
+
+
+def mds_service(filesystem, services):
+    """The one projected mds service whose service_id is the filesystem's name."""
+    matches = [service for service in services if service["service_type"] == "mds" and service.get("service_id") == filesystem["name"]]
+    require(len(matches) == 1)
+    return matches[0]
+
+
+def mds_needed(filesystem):
+    """Active ranks plus the larger of the wanted standbys and the standby-replay followers, one per active rank."""
+    active = filesystem["activeCount"]
+    return active + max(filesystem["standbyCountWanted"], active if filesystem["standbyReplay"] else 0)
+
+
+def validate_filesystem(filesystem, services):
+    """The frozen filesystem the Go admission proved: its own MDS service covers it, its default data pool leads its data pools."""
+    require(isinstance(filesystem, dict) and set(filesystem) == FILESYSTEM_MEMBERS)
+    name = filesystem["name"]
+    require(named(name) and "." not in name and not name[0].isdigit() and len(name) <= 47)
+    require(filesystem["mdsService"] == "mds." + name)
+    service = mds_service(filesystem, services)
+    pools = filesystem["dataPools"]
+    require(isinstance(pools, list) and bool(pools) and all(named(pool) for pool in pools) and len(set(pools)) == len(pools))
+    require(named(filesystem["metadataPool"]) and filesystem["metadataPool"] not in pools and filesystem["defaultDataPool"] == pools[0])
+    require(type(filesystem["activeCount"]) is int and 1 <= filesystem["activeCount"] <= 256 and type(filesystem["standbyReplay"]) is bool)
+    require(bounded(filesystem["standbyCountWanted"], 2147483647))
+    require(service["placement"].get("count", len(service["placement"]["hosts"])) >= mds_needed(filesystem))
+    groups = filesystem["groups"]
+    require(isinstance(groups, list) and all(isinstance(group, dict) and set(group) == GROUP_MEMBERS for group in groups))
+    names = [group["name"] for group in groups]
+    require(names == sorted(set(names)) and all(named(group) and group not in RESERVED_GROUPS for group in names))
+    for group in groups:
+        require(group["pool"] in pools and isinstance(group["mode"], str) and FILE_MODE.fullmatch(group["mode"]) is not None)
+        require(bounded(group["uid"], 2147483647) and bounded(group["gid"], 2147483647) and bounded(group["sizeBytes"], INT64))
 
 
 def bounded(value, maximum):
@@ -121,6 +172,7 @@ def validate_pool(pool, osd_hosts):
     require(set(pool) == POOL_MEMBERS | ({"erasure"} if erasure else set()))
     require(named(pool["name"]) and named(pool["crushRule"]) and isinstance(pool["role"], str) and pool["role"] in APPLICATIONS)
     require(pool["application"] == APPLICATIONS[pool["role"]])
+    require(pool["filesystem"] == "" or pool["role"] in ("cephfs-metadata", "cephfs-data") and named(pool["filesystem"]))
     require(type(pool["size"]) is int and type(pool["minSize"]) is int and type(pool["overwrites"]) is bool)
     if erasure:
         validate_erasure(pool, osd_hosts)
@@ -633,6 +685,8 @@ class ResourceWorker(ceph_native.Worker):
             ready = self.observe_policy(evidence, ready)
         elif action == "rbd":
             ready = self.observe_rbd(evidence, ready)
+        elif action == "filesystem":
+            ready = self.observe_filesystem(evidence, ready)
         elif action == "client":
             client = self.request["client"]
             auth = self.ceph("auth", "ls")
@@ -684,14 +738,28 @@ class ResourceWorker(ceph_native.Worker):
         ready = (ready and ("bulk" in flags) == autoscale["bulk"] and entry.get("pg_autoscale_mode") == autoscale["mode"]
                  and (autoscale["mode"] != "off" or entry.get("pg_num") == pool["pgNum"]))
         ready = (ready and entry.get("quota_max_bytes") == pool["quota"]["maxBytes"] and entry.get("quota_max_objects") == pool["quota"]["maxObjects"])
-        return ready and self.options_match(entry.get("options", {}), pool) and self.application_matches(entry.get("application_metadata"), pool)
+        metadata = entry.get("application_metadata")
+        return ready and self.options_match(entry.get("options", {}), pool, metadata) and self.application_matches(metadata, pool)
 
     @staticmethod
-    def options_match(options, pool):
-        """Each owned option is absent when its frozen value is unset, else equal; other owners' options are not read."""
+    def options_match(options, pool, metadata=None):
+        """Each owned option is absent when its frozen value is unset, else equal; other owners' options are not read.
+
+        A CephFS metadata pool also carries the three options `fs new` sets, exactly their values, once its application key names the
+        pool's own filesystem; `fs new`'s pg_num_min then replaces a frozen one. Before that none of them, beyond a frozen pg_num_min."""
         if not isinstance(options, dict):
             return False
-        return all(ResourceWorker.option_matches(options, option, pool[block][member]) for option, block, member in OWNED_OPTIONS)
+        settled = set()
+        if pool["role"] == "cephfs-metadata":
+            applied = pool["filesystem"] != "" and metadata == {"cephfs": {"metadata": pool["filesystem"]}}
+            for option, value in FS_NEW_METADATA_OPTIONS:
+                observed = options.get(option)
+                exact = type(observed) is int and observed == value or type(value) is float and type(observed) in (int, float) and float(observed) == value
+                if option in options and applied and exact:
+                    settled.add(option)
+                elif option in options and option != "pg_num_min":
+                    return False
+        return all(option in settled or ResourceWorker.option_matches(options, option, pool[block][member]) for option, block, member in OWNED_OPTIONS)
 
     @staticmethod
     def option_matches(options, option, frozen):
@@ -709,14 +777,14 @@ class ResourceWorker(ceph_native.Worker):
 
     @staticmethod
     def application_matches(metadata, pool):
-        """Exactly the derived application; a CephFS pool may carry only the one key `fs new` records for its role."""
+        """Exactly the derived application; a CephFS pool may carry only the one key `fs new` records for its role, naming its own filesystem."""
         if not isinstance(metadata, dict) or set(metadata) != {pool["application"]}:
             return False
         if pool["application"] != "cephfs":
             return True
         value = metadata["cephfs"]
         key = "data" if pool["role"] == "cephfs-data" else "metadata"
-        return value == {} or isinstance(value, dict) and set(value) == {key} and named(value[key])
+        return value == {} or pool["filesystem"] != "" and value == {key: pool["filesystem"]}
 
     def observe_policy(self, evidence, ready):
         policy = self.request["policy"]
@@ -754,13 +822,13 @@ class ResourceWorker(ceph_native.Worker):
                 and ceph_native.RBD_IMAGE_ID.fullmatch(info["id"]) is not None, "native-output")
         return info
 
-    def owned_pool(self, name):
-        """An image is only ever created in a pool this operation created and still holds under its recorded ID."""
+    def owned_pool(self, name, entries=None):
+        """An image or filesystem is only ever created in a pool this operation created and still holds under its recorded ID."""
         pool = self.markers.read("pool-" + name + ".json")
         require(isinstance(pool, dict) and pool.get("name") == name, "pool-identity")
         identifier = self.markers.read("pool-id-" + name + ".json")
         require(isinstance(identifier, dict) and set(identifier) == {"id"} and type(identifier["id"]) is int and identifier["id"] >= 0, "pool-identity")
-        selected = [entry for entry in self.pools() if isinstance(entry, dict) and entry.get("pool_name") == name]
+        selected = [entry for entry in (self.pools() if entries is None else entries) if isinstance(entry, dict) and entry.get("pool_name") == name]
         require(len(selected) == 1 and self.pool_id(selected[0]) == identifier["id"], "pool-identity")
         return selected[0]
 
@@ -849,3 +917,226 @@ class ResourceWorker(ceph_native.Worker):
         evidence["exists"] = owned or exists
         evidence["resource"] = {"id": "" if unrecorded or not exists else info["id"], "path": ""}
         return ready and exists and not unrecorded and self.image_matches(info, image)
+
+    def filesystem_marks(self):
+        name = self.request["filesystem"]["name"]
+        return "filesystem-" + name + ".json", "filesystem-attempt." + name + ".json", "filesystem-id." + name + ".json"
+
+    def filesystem_attempt(self):
+        return {"version": FILESYSTEM_ATTEMPT, "owner": self.request["owner"], "fsid": self.request["fsid"], "filesystem": self.request["filesystem"]}
+
+    def fs_dump(self):
+        """`ceph fs dump` (src/mds/FSMap.cc:131-176, src/mds/MDSMap.cc:190-273): the members read here, each of its native type."""
+        dump = self.ceph("fs", "dump")
+        require(isinstance(dump, dict) and isinstance(dump.get("feature_flags"), dict) and type(dump["feature_flags"].get("enable_multiple")) is bool,
+                "native-output")
+        standbys, filesystems = dump.get("standbys"), dump.get("filesystems")
+        require(isinstance(standbys, list) and all(isinstance(item, dict) and isinstance(item.get("name"), str) for item in standbys), "native-output")
+        require(isinstance(filesystems, list) and len(filesystems) <= 65536, "native-output")
+        for entry in filesystems:
+            mdsmap = entry.get("mdsmap") if isinstance(entry, dict) else None
+            require(type(entry.get("id") if isinstance(entry, dict) else None) is int and entry["id"] >= 0 and isinstance(mdsmap, dict), "native-output")
+            require(isinstance(mdsmap.get("fs_name"), str) and type(mdsmap.get("metadata_pool")) is int and isinstance(mdsmap.get("data_pools"), list)
+                    and all(type(pool) is int for pool in mdsmap["data_pools"]) and type(mdsmap.get("max_mds")) is int
+                    and type(mdsmap.get("standby_count_wanted")) is int and isinstance(mdsmap.get("flags_state"), dict)
+                    and type(mdsmap["flags_state"].get("allow_standby_replay")) is bool and isinstance(mdsmap.get("info"), dict), "native-output")
+            require(all(isinstance(key, str) and key.startswith("gid_") and isinstance(info, dict) and isinstance(info.get("name"), str)
+                        and type(info.get("rank")) is int and isinstance(info.get("state"), str) for key, info in mdsmap["info"].items()), "native-output")
+        names = [entry["mdsmap"]["fs_name"] for entry in filesystems]
+        require(len(set(names)) == len(names), "native-output")
+        return dump
+
+    def fs_entry(self, dump):
+        return next((entry for entry in dump["filesystems"] if entry["mdsmap"]["fs_name"] == self.request["filesystem"]["name"]), None)
+
+    def bound_mds(self, name):
+        """cephadm's MDS daemon ID <service_id>.<host short name>.<six lowercase letters> on one of the bound service's hosts."""
+        filesystem = self.request["filesystem"]
+        hosts = mds_service(filesystem, self.request["services"])["placement"]["hosts"]
+        return any(re.fullmatch(re.escape(filesystem["name"]) + r"\." + re.escape(host.split(".", 1)[0]) + r"\.[a-z]{6}", name) is not None
+                   for host in hosts)
+
+    def filesystem_pools(self):
+        """Every pool of the filesystem this operation created and holds by its recorded ID, carrying no other filesystem's key."""
+        filesystem = self.request["filesystem"]
+        entries, ids = self.pools(), {}
+        for name in [filesystem["metadataPool"]] + filesystem["dataPools"]:
+            entry = self.owned_pool(name, entries)
+            application = entry.get("application_metadata")
+            require(isinstance(application, dict) and set(application) == {"cephfs"} and isinstance(application["cephfs"], dict), "pool-identity")
+            require(all(value == filesystem["name"] for value in application["cephfs"].values()), "foreign-filesystem")
+            key = "metadata" if name == filesystem["metadataPool"] else "data"
+            require(application["cephfs"] in ({}, {key: filesystem["name"]}), "pool-identity")
+            ids[name] = self.pool_id(entry)
+        return ids
+
+    def created_filesystem(self, entry, ids):
+        """The pools `fs new` bound: the frozen metadata pool and the frozen default data pool first, by their recorded IDs."""
+        filesystem, mdsmap = self.request["filesystem"], entry["mdsmap"]
+        return (mdsmap["metadata_pool"] == ids[filesystem["metadataPool"]] and bool(mdsmap["data_pools"])
+                and mdsmap["data_pools"][0] == ids[filesystem["defaultDataPool"]])
+
+    def filesystem_proved(self, write=False):
+        """The marker, the pools, then the filesystem of the name: never another's, and once recorded always the recorded ID."""
+        require(self.request["action"] == "filesystem" and self.markers.owned(), "ownership")
+        filesystem = self.request["filesystem"]
+        mark, attempt_name, id_name = self.filesystem_marks()
+        marker = self.markers.read(mark)
+        require(marker is None or marker == filesystem, "filesystem-identity")
+        ids = self.filesystem_pools()
+        dump = self.fs_dump()
+        entry = self.fs_entry(dump)
+        require(marker is not None or entry is None, "foreign-filesystem")
+        if not write:
+            require(marker is not None and entry is not None and self.markers.read(id_name) == {"id": entry["id"]}, "filesystem-identity")
+            return dump, entry, ids
+        self.markers.write(mark, filesystem)
+        identity = self.markers.read(id_name)
+        if entry is not None and identity is None:
+            # A lost creation reply resumes only from this operation's own attempt record and the frozen pools.
+            require(canonical(self.markers.read(attempt_name)) == canonical(self.filesystem_attempt()), "foreign-filesystem")
+            require(self.created_filesystem(entry, ids), "filesystem-identity")
+            self.markers.write(id_name, {"id": entry["id"]})
+        elif entry is not None:
+            require(identity == {"id": entry["id"]}, "filesystem-identity")
+        else:
+            require(identity is None, "filesystem-identity")
+        return dump, entry, ids
+
+    def filesystem(self):
+        """Create one owned filesystem with its MDS settings in the one `fs new`, then attach its extra data pools; never forced."""
+        filesystem = self.request["filesystem"]
+        recorded = self.markers.read(self.filesystem_marks()[2]) is not None
+        dump, entry, ids = self.filesystem_proved(write=True)
+        changed = entry is not None and not recorded
+        if entry is None:
+            require(not dump["filesystems"] or dump["feature_flags"]["enable_multiple"] is True, "filesystem-multiple-disabled")
+            require(sum(self.bound_mds(item["name"]) for item in dump["standbys"]) >= mds_needed(filesystem), "mds-coverage")
+            self.markers.write(self.filesystem_marks()[1], self.filesystem_attempt())
+            self.ceph(*self.fs_new_args(), json_result=False)
+            entry = self.fs_entry(self.fs_dump())
+            require(entry is not None and self.created_filesystem(entry, ids), "filesystem-identity")
+            self.markers.write(self.filesystem_marks()[2], {"id": entry["id"]})
+            changed = True
+        for pool in filesystem["dataPools"][1:]:
+            if ids[pool] not in entry["mdsmap"]["data_pools"]:
+                self.ceph("fs", "add_data_pool", filesystem["name"], pool, json_result=False)
+                changed = True
+        return {"changed": changed}
+
+    def fs_new_args(self):
+        """`fs new` with its trailing `set` pairs applies them in the creating proposal (src/mon/MonCommands.h:356-367,
+        src/mon/FSCommands.cc:251-307); `fs set max_mds` would refuse under any filesystem health warning."""
+        filesystem = self.request["filesystem"]
+        return ("fs", "new", filesystem["name"], filesystem["metadataPool"], filesystem["defaultDataPool"], "set", "max_mds", str(filesystem["activeCount"]),
+                "allow_standby_replay", "true" if filesystem["standbyReplay"] else "false", "standby_count_wanted", str(filesystem["standbyCountWanted"]))
+
+    def ranks_active(self, entry):
+        """Each rank below max_mds held by an up:active daemon of the bound service."""
+        infos = entry["mdsmap"]["info"].values()
+        return all(any(info["rank"] == rank and info["state"] == "up:active" and self.bound_mds(info["name"]) for info in infos)
+                   for rank in range(self.request["filesystem"]["activeCount"]))
+
+    def filesystem_ranks(self):
+        unused, entry, unused_ids = self.filesystem_proved()
+        return {"active": self.ranks_active(entry)}
+
+    def group_marks(self, group):
+        name = self.request["filesystem"]["name"]
+        return "group." + name + "." + group["name"] + ".json", "group-attempt." + name + "." + group["name"] + ".json"
+
+    def group_attempt(self, group):
+        return {"version": GROUP_ATTEMPT, "owner": self.request["owner"], "fsid": self.request["fsid"], "filesystem": self.request["filesystem"]["name"],
+                "group": group}
+
+    def group_names(self):
+        """`fs subvolumegroup ls` (src/pybind/mgr/volumes/fs/volume.py:50-60): one {"name"} per group, served by the active manager."""
+        result = self.manager_retry(self.ceph, "fs", "subvolumegroup", "ls", self.request["filesystem"]["name"])
+        require(isinstance(result, list) and len(result) <= 65536 and all(isinstance(item, dict) and isinstance(item.get("name"), str) for item in result),
+                "native-output")
+        return {item["name"] for item in result}
+
+    def group_matches(self, group):
+        """`fs subvolumegroup info` (src/pybind/mgr/volumes/fs/operations/group.py:113-152): mode is the full st_mode, no quota is "infinite"."""
+        info = self.manager_retry(self.ceph, "fs", "subvolumegroup", "info", self.request["filesystem"]["name"], group["name"])
+        require(isinstance(info, dict) and all(type(info.get(key)) is int for key in ("uid", "gid", "mode")) and isinstance(info.get("data_pool"), str)
+                and (type(info.get("bytes_quota")) is int or info.get("bytes_quota") == "infinite"), "native-output")
+        return (info["uid"] == group["uid"] and info["gid"] == group["gid"] and info["mode"] & 0o7777 == int(group["mode"], 8)
+                and info["data_pool"] == group["pool"] and info["bytes_quota"] == (group["sizeBytes"] or "infinite"))
+
+    def group_create(self, group):
+        """Every attribute explicit (doc/cephfs/fs-volumes.rst; src/pybind/mgr/volumes/module.py:86-100); a repeat on an existing group
+        rewrites each of them (src/pybind/mgr/volumes/fs/volume.py:1093-1111)."""
+        args = ["fs", "subvolumegroup", "create", self.request["filesystem"]["name"], group["name"], "--pool_layout", group["pool"], "--uid",
+                str(group["uid"]), "--gid", str(group["gid"]), "--mode", group["mode"]]
+        if group["sizeBytes"]:
+            args += ["--size", str(group["sizeBytes"])]
+        self.manager_retry(self.ceph, *args, json_result=False)
+
+    def filesystem_groups(self):
+        """Create each declared group only after proving it absent, then converge an owned group's attributes with one more create."""
+        self.filesystem_proved()
+        names, changed = self.group_names(), False
+        for group in self.request["filesystem"]["groups"]:
+            mark, attempt_name = self.group_marks(group)
+            marker = self.markers.read(mark)
+            require(marker is None or marker == group, "filesystem-identity")
+            present = group["name"] in names
+            require(marker is not None or not present, "foreign-subvolume-group")
+            self.markers.write(mark, group)
+            if present:
+                require(canonical(self.markers.read(attempt_name)) == canonical(self.group_attempt(group)), "foreign-subvolume-group")
+            else:
+                self.markers.write(attempt_name, self.group_attempt(group))
+                self.group_create(group)
+                changed = True
+            if not self.group_matches(group):
+                self.group_create(group)
+                changed = True
+        return {"changed": changed}
+
+    def observe_filesystem(self, evidence, ready):
+        filesystem = self.request["filesystem"]
+        mark, attempt_name, id_name = self.filesystem_marks()
+        marker = self.markers.read(mark)
+        require(marker is None or marker == filesystem, "filesystem-identity")
+        dump = self.fs_dump()
+        entry = self.fs_entry(dump)
+        require(marker is not None or entry is None, "foreign-filesystem")
+        identity = self.markers.read(id_name)
+        # This operation's own lost creation reply is unfinished work the apply resumes, never a refusal.
+        unrecorded = entry is not None and identity is None and canonical(self.markers.read(attempt_name)) == canonical(self.filesystem_attempt())
+        require(unrecorded or (identity is None if entry is None else identity == {"id": entry["id"]}), "filesystem-identity")
+        evidence["owned"] = marker is not None
+        evidence["exists"] = marker is not None or entry is not None
+        evidence["resource"] = {"id": "" if unrecorded or entry is None else str(entry["id"]), "path": ""}
+        return ready and entry is not None and not unrecorded and self.filesystem_ready(dump, entry)
+
+    def filesystem_ready(self, dump, entry):
+        """The recorded pools in frozen order, the frozen MDS settings, every rank active with its follower, enough standbys, then the groups."""
+        filesystem, mdsmap = self.request["filesystem"], entry["mdsmap"]
+        recorded = [self.markers.read("pool-id-" + name + ".json") for name in [filesystem["metadataPool"]] + filesystem["dataPools"]]
+        if not all(isinstance(item, dict) and set(item) == {"id"} for item in recorded):
+            return False
+        ids = [item["id"] for item in recorded]
+        active = filesystem["activeCount"]
+        if (mdsmap["metadata_pool"] != ids[0] or mdsmap["data_pools"] != ids[1:] or mdsmap["max_mds"] != active
+                or mdsmap["flags_state"]["allow_standby_replay"] is not filesystem["standbyReplay"]
+                or mdsmap["standby_count_wanted"] != filesystem["standbyCountWanted"] or not self.ranks_active(entry)):
+            return False
+        followers = [info["rank"] for info in mdsmap["info"].values() if info["state"] == "up:standby-replay" and self.bound_mds(info["name"])]
+        if filesystem["standbyReplay"] and not all(rank in followers for rank in range(active)):
+            return False
+        if len(followers) + sum(self.bound_mds(item["name"]) for item in dump["standbys"]) < filesystem["standbyCountWanted"]:
+            return False
+        return self.groups_ready()
+
+    def groups_ready(self):
+        """Every declared group present with its marker and its frozen attributes; a group the filesystem holds beyond them is not read."""
+        groups = self.request["filesystem"]["groups"]
+        if not groups:
+            return True
+        names = self.group_names()
+        for group in groups:
+            require(self.markers.read(self.group_marks(group)[0]) is not None or group["name"] not in names, "foreign-subvolume-group")
+        return all(group["name"] in names and self.group_matches(group) for group in groups)

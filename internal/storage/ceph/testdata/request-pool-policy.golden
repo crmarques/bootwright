@@ -106,6 +106,7 @@
       "requiredRatio": ""
     },
     "crushRule": "fast-hosts",
+    "filesystem": "",
     "minSize": 2,
     "name": "volumes",
     "overwrites": false,
@@ -166,5 +167,5 @@
       }
     }
   ],
-  "version": "ceph-core-v8"
+  "version": "ceph-core-v9"
 }

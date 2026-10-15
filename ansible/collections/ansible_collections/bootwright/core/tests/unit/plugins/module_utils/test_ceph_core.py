@@ -33,7 +33,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v8", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v9", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -118,7 +118,7 @@ def worker(core_request, answers, markers=None):
 def replicated_pool(**changes):
     """The frozen replicated rbd pool the Go side sends with every optional member unset."""
     pool = {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""},
-            "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule",
+            "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule", "filesystem": "",
             "minSize": 2, "name": "volumes", "overwrites": False, "pgNum": 32, "quota": {"maxBytes": 0, "maxObjects": 0}, "role": "rbd", "size": 2,
             "type": "replicated"}
     pool.update(changes)
@@ -208,7 +208,7 @@ def test_pool_replication_requires_an_additional_osd_host(core_request, size, mi
 
 
 def test_previous_core_request_version_refuses_before_any_native_effect(core_request):
-    core_request["version"] = "ceph-core-v7"
+    core_request["version"] = "ceph-core-v8"
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.Worker(core_request, core_request["bootstrap"],
                            run=lambda *args, **kwargs: pytest.fail("previous request reached native effects"))
@@ -1978,10 +1978,11 @@ def test_resource_phases_ship_in_their_own_module():
     modules = ceph_native_worker.MODULES
     assert modules[modules.index("ceph_native") + 1] == "ceph_native_resources"
     assert tuple(ceph_core.Transport.native_sources()) == modules
-    assert ceph_native_resources.PHASES == {"pool", "client", "client_read", "policy", "rbd"} and not ceph_native_resources.PHASES & ceph_native.CORE_PHASES
-    assert ceph_native_resources.READ_ONLY_PHASES <= ceph_native_resources.PHASES
-    assert not any(hasattr(ceph_native.Worker, name) for name in ("pool", "client", "client_read", "policy", "rbd"))
-    assert all(hasattr(ceph_native_resources.ResourceWorker, name) for name in ("pool", "client", "client_read", "policy", "rbd"))
+    phases = {"pool", "client", "client_read", "policy", "rbd", "filesystem", "filesystem_ranks", "filesystem_groups"}
+    assert ceph_native_resources.PHASES == phases and not ceph_native_resources.PHASES & ceph_native.CORE_PHASES
+    assert ceph_native_resources.READ_ONLY_PHASES == {"client_read", "filesystem_ranks"}
+    assert not any(hasattr(ceph_native.Worker, name) for name in phases)
+    assert all(hasattr(ceph_native_resources.ResourceWorker, name) for name in phases)
 
 
 def test_dispatch_routes_resource_actions_to_the_resource_worker(monkeypatch, core_request):

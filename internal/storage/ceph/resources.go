@@ -3,7 +3,9 @@ package ceph
 import (
 	"fmt"
 	"math/big"
+	"slices"
 	"strconv"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/storage"
@@ -115,7 +117,7 @@ func poolOf(c api.Catalog, pool api.Object, r Request) (*Pool, error) {
 			Mode: s.Get("autoscale", "mode").Text(), TargetBytes: target, TargetRatio: ratio(s.Get("autoscale", "targetSizeRatio"))},
 		Compression: PoolCompression{Algorithm: s.Get("compression", "algorithm").Text(), MaxBlob: positiveOr(s.Get("compression", "maxBlobSize"), 0), MinBlob: positiveOr(s.Get("compression", "minBlobSize"), 0),
 			Mode: s.Get("compression", "mode").Text(), RequiredRatio: ratio(s.Get("compression", "requiredRatio"))},
-		Quota: PoolQuota{MaxBytes: positiveOr(s.Get("quota", "maxBytes"), 0), MaxObjects: positiveOr(s.Get("quota", "maxObjects"), 0)}}
+		Quota: PoolQuota{MaxBytes: positiveOr(s.Get("quota", "maxBytes"), 0), MaxObjects: positiveOr(s.Get("quota", "maxObjects"), 0)}, Filesystem: filesystemOwner(c, pool)}
 	if p.Type == "" {
 		p.Type = "replicated"
 	}
@@ -333,4 +335,84 @@ func rbdImageRequest(c api.Catalog, image api.Object, contextName string) (Reque
 	r.Pool = nil
 	r.RBD = &RBDImage{DataPool: dataPool, Features: storage.RBDImageFeatures(spec), Name: image.Name(), Pool: pool.Name(), SizeBytes: size}
 	return r, nil
+}
+
+func filesystemDataPools(spec api.Value) []string {
+	first, rest := "", []string{}
+	refs := spec.Get("dataPoolRefs").Items()
+	for _, ref := range refs {
+		name := ref.Text()
+		if ref.Type() != api.String {
+			name = ref.Get("name").Text()
+		}
+		if first == "" && (len(refs) == 1 || ref.Get("default").Bool()) {
+			first = name
+			continue
+		}
+		rest = append(rest, name)
+	}
+	return append([]string{first}, rest...)
+}
+
+func filesystemOwner(c api.Catalog, pool api.Object) string {
+	s, owner := pool.Spec(), ""
+	for _, fs := range c.OfKind(api.StorageFilesystem) {
+		spec := fs.Spec()
+		if spec.Get("clusterRef").Text() != s.Get("clusterRef").Text() || owner != "" && owner < fs.Name() {
+			continue
+		}
+		if s.Get("role").Text() == "cephfs-metadata" && spec.Get("metadataPoolRef").Text() == pool.Name() ||
+			s.Get("role").Text() == "cephfs-data" && slices.Contains(filesystemDataPools(spec), pool.Name()) {
+			owner = fs.Name()
+		}
+	}
+	return owner
+}
+
+func filesystemRequest(c api.Catalog, fs api.Object, contextName string) (Request, error) {
+	spec := fs.Spec()
+	data := filesystemDataPools(spec)
+	var r Request
+	for i, name := range append([]string{spec.Get("metadataPoolRef").Text()}, data...) {
+		pool, _ := c.Find(api.StoragePool, name)
+		request, err := poolRequest(c, pool, contextName)
+		if err != nil {
+			return Request{}, err
+		}
+		if i == 1 && request.Pool.Type != "replicated" {
+			return Request{}, failure("lifecycle.unsupported", "StorageFilesystem "+fs.Name()+" names erasure-coded pool "+name+" as its default data pool; ceph fs new refuses it unless forced, and Bootwright never forces it", "mark a replicated cephfs-data pool default in spec.dataPoolRefs and attach erasure-coded pools as additional data pools")
+		}
+		if i == 0 {
+			r = request
+		}
+	}
+	cluster, _ := c.Find(api.StorageCluster, r.Cluster)
+	if _, projected := storage.NativeService(cluster, "mds."+fs.Name()); !projected {
+		return Request{}, failure("api.invariant", "StorageCluster "+r.Cluster+" projects no MDS service mds."+fs.Name()+" for StorageFilesystem "+fs.Name(), "declare the mds service entry with service_id "+fs.Name()+" in spec.ceph.services")
+	}
+	mds := spec.Get("mds")
+	r.Action = "filesystem"
+	r.Pool = nil
+	r.Filesystem = &Filesystem{ActiveCount: int(positiveOr(mds.Get("activeCount"), 1)), DataPools: data, DefaultDataPool: data[0], Groups: filesystemGroups(spec, data[0]), MDSService: "mds." + fs.Name(),
+		MetadataPool: spec.Get("metadataPoolRef").Text(), Name: fs.Name(), StandbyCountWanted: int(positiveOr(mds.Get("standbyCountWanted"), 0)), StandbyReplay: mds.Get("standbyReplay").Bool()}
+	return r, nil
+}
+
+func filesystemGroups(spec api.Value, defaultPool string) []FilesystemGroup {
+	groups := []FilesystemGroup{}
+	for _, group := range spec.Get("subvolumeGroups").Items() {
+		pool, mode := group.Get("poolLayoutRef").Text(), group.Get("mode").Text()
+		if pool == "" {
+			pool = defaultPool
+		}
+		if mode == "" {
+			mode = "755"
+		}
+		if len(mode) == 4 {
+			mode = strings.TrimPrefix(mode, "0")
+		}
+		groups = append(groups, FilesystemGroup{GID: int(positiveOr(group.Get("gid"), 0)), Mode: mode, Name: group.Get("name").Text(), Pool: pool, SizeBytes: positiveOr(group.Get("sizeBytes"), 0), UID: int(positiveOr(group.Get("uid"), 0))})
+	}
+	slices.SortFunc(groups, func(a, b FilesystemGroup) int { return strings.Compare(a.Name, b.Name) })
+	return groups
 }

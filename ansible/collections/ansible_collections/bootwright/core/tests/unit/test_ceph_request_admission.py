@@ -43,6 +43,9 @@ CORE = {
     "clusterSSHUser": "operator",
     "config": {"global": {"osd_pool_default_size": "2"}},
     "controller": "controller",
+    "filesystem": {"activeCount": 1, "dataPools": ["files-data"], "defaultDataPool": "files-data",
+                   "groups": [{"gid": 0, "mode": "755", "name": "csi", "pool": "files-data", "sizeBytes": 0, "uid": 0}], "mdsService": "mds.files",
+                   "metadataPool": "files-metadata", "name": "files", "standbyCountWanted": 0, "standbyReplay": False},
     "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
     "hosts": [{
         "address": "192.0.2.1",
@@ -80,6 +83,7 @@ CORE = {
         "autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""},
         "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""},
         "crushRule": "data",
+        "filesystem": "",
         "erasure": {
             "codingChunks": 2,
             "dataChunks": 4,
@@ -106,7 +110,7 @@ CORE = {
     "registry": "cp.icr.io",
     "registryRef": "ibm-registry",
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
-    "version": "ceph-core-v8",
+    "version": "ceph-core-v9",
 }
 
 IMAGE = {

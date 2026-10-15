@@ -15,6 +15,15 @@ expect:
 - kind: StoragePool
   name: rbd-data
   refusalRow: Incomplete or unsafe Ceph coordinates or transport
+- kind: StoragePool
+  name: cephfs-metadata
+  refusalRow: Incomplete or unsafe Ceph coordinates or transport
+- kind: StoragePool
+  name: cephfs-data
+  refusalRow: Incomplete or unsafe Ceph coordinates or transport
+- kind: StorageFilesystem
+  name: files
+  refusalRow: Incomplete or unsafe Ceph coordinates or transport
 - kind: StorageClient
   name: rbd-canary
   refusalRow: Incomplete or unsafe Ceph coordinates or transport

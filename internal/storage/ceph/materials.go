@@ -119,6 +119,12 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 		if r.Action == "cluster" {
 			nativeCalls, waits = 7*len(r.Hosts)+6, bootstrapCall+2*readinessWait
 		}
+		if r.Action == "filesystem" && r.Filesystem != nil {
+			nativeCalls, waits = 2*len(r.Hosts)+3+len(r.Filesystem.DataPools)+len(r.Filesystem.Groups), readinessWait
+			if len(r.Filesystem.Groups) > 0 {
+				waits += readinessWait
+			}
+		}
 	}
 	deadline := time.Duration(nativeCalls*nativeCall+waits+60) * time.Second
 	if deadline > lifecycle.MaxDeadline {
@@ -145,6 +151,11 @@ func adapterRefusals() map[string]error {
 	out["crush-capacity"] = failure("lifecycle.unknown", "fewer OSD hosts under root default carry the frozen device class than the protection width needs", "add OSD hosts whose OSDs carry that device class, or change crushDeviceClass, then apply again")
 	out["foreign-rbd-image"] = failure("lifecycle.unknown", "an RBD image of the StorageRBDImage's name exists in its pool that this operation did not create", "rename the StorageRBDImage, or remove or rename the foreign image outside Bootwright; an image without this operation's creation record is never adopted")
 	out["rbd-image-identity"] = failure("lifecycle.unknown", "the RBD image is not the one this operation created, is gone, or no longer matches its declared size, data pool or features", "inspect it with rbd info and rbd trash ls; restore the StorageRBDImage's sizeBytes, dataPoolRef and features to the values it was created with, since Bootwright never recreates, resizes, moves or re-features an image it created")
+	out["foreign-filesystem"] = failure("lifecycle.unknown", "a CephFS filesystem of the StorageFilesystem's name exists, or uses one of its pools, that this operation did not create", "rename the StorageFilesystem or give it other pools, or remove the foreign filesystem outside Bootwright; a filesystem without this operation's creation record is never adopted")
+	out["filesystem-identity"] = failure("lifecycle.unknown", "the CephFS filesystem is not the one this operation created, is gone, or no longer matches its declared pools", "inspect it with ceph fs dump; restore the StorageFilesystem to the pools and settings it was created with, since Bootwright never recreates a filesystem or moves its pools")
+	out["filesystem-multiple-disabled"] = failure("lifecycle.unknown", "the cluster's FSMap disables multiple filesystems", "the cluster's enable_multiple flag is off; declare one filesystem, or enable the flag outside Bootwright")
+	out["foreign-subvolume-group"] = failure("lifecycle.unknown", "a subvolume group of the declared name exists in the filesystem that this operation did not create", "rename the group in spec.subvolumeGroups, or remove the foreign group outside Bootwright; Bootwright never re-creates a group it did not create, because a native create rewrites its attributes")
+	out["mds-coverage"] = failure("lifecycle.unknown", "fewer MDS daemons of the bound service are available than the filesystem's active ranks, standby-replay followers and wanted standbys need", "check the MDS daemons with ceph orch ps --daemon_type mds, add hosts to the mds service placement or lower spec.mds.activeCount or spec.mds.standbyCountWanted, then apply again")
 	out["pg-budget"] = failure("lifecycle.unknown", "the monitor refused the pool: placement groups per OSD on its CRUSH rule would exceed mon_max_pg_per_osd", "add OSDs, lower pgNumMin or targetSizeRatio, or declare fewer pools on that CRUSH rule, then apply again")
 	for _, reason := range []string{"request", "artifact", "ownership", "evidence", "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license", "package-limit", "package-timeout", "package-platform", "package-host", "call-home-drift", "config-drift", "partial-cluster", "not-ready", "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport", "remote-refusal", "adapter-exception"} {
 		out[reason] = failure("lifecycle.unknown", "the Ceph adapter could not prove its "+reason+" boundary", "inspect the retained operation evidence before continuing")

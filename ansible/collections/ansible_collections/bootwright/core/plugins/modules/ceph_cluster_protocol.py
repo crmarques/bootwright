@@ -26,7 +26,7 @@ options:
       remote-refusal, adapter-exception, cache-unproved, dashboard-identity, dashboard-drift, dashboard-policy, dashboard-verify, pool-identity,
       client-quiescence-unqualified, native-option-undeclared, call-home-unqualified, call-home-drift, config-drift, partial-cluster,
       not-removed, cluster-unavailable, device, dashboard-manager, foreign-pool, foreign-profile, foreign-rule, crush-capacity, pg-budget, foreign-rbd-image,
-      rbd-image-identity]
+      rbd-image-identity, foreign-filesystem, filesystem-identity, filesystem-multiple-disabled, foreign-subvolume-group, mds-coverage]
   detail:
     description: Non-secret refusal cause, a refusal name or an exception type and code site.
     type: str

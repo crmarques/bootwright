@@ -132,7 +132,12 @@ the stored profile only as the passed keys plus the frozen per-plugin defaults;
 otherwise it refuses `foreign-profile`, `foreign-rule` or `native-output`.
 An RBD image writes `ceph-rbd-image-attempt-v1` before `rbd create` and adopts
 a same-name image only with that record and the frozen shape; otherwise it
-refuses `foreign-rbd-image` or `rbd-image-identity`.
+refuses `foreign-rbd-image` or `rbd-image-identity`. A CephFS filesystem writes
+`ceph-filesystem-attempt-v1` before `ceph fs new` and a subvolume group
+`ceph-subvolume-group-attempt-v1` before `fs subvolumegroup create`; each adopts
+only with its record, and otherwise refuses `foreign-filesystem`,
+`filesystem-identity`, `filesystem-multiple-disabled`, `mds-coverage` or
+`foreign-subvolume-group`.
 
 For every matrix row, the release record names the primary vendor source and
 revision/date, support status (supported, preview, deprecated or unsupported),

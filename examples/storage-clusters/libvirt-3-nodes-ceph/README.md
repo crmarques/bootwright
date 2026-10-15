@@ -1,6 +1,6 @@
 # Three-node Ceph on libvirt and sushy
 
-This example declares three managed RHEL guests, explicit virtual SSD data disks, native MON/MGR/OSD documents, a size-2/min-size-2 RBD pool, an SSD placement policy (owned CRUSH rule `ssd-hosts`), a 1 GiB RBD image (`rbd-disk`) and a pool-scoped client. Addresses and names are synthetic. Copy the input to an operator-owned directory before adjusting it; keep real inputs and credentials outside tracked files.
+This example declares three managed RHEL guests, explicit virtual SSD data disks, native MON/MGR/OSD/MDS documents, a size-2/min-size-2 RBD pool, an SSD placement policy (owned CRUSH rule `ssd-hosts`), a 1 GiB RBD image (`rbd-disk`), a CephFS filesystem (`files`) on two size-2 pools with one MDS daemon and a pool-scoped client. Addresses and names are synthetic. Copy the input to an operator-owned directory before adjusting it; keep real inputs and credentials outside tracked files.
 
 The minimal virtual journey has operator acceptance; full Ceph feature and release qualification remain open in [M2](../../../specs/milestones/m2.md#m2b). The current lifecycle supports this core profile; other admitted storage declarations may refuse before effects. Standalone storage rendering (`render storage`) is recognized but unavailable. This runbook uses validation and lifecycle plans.
 

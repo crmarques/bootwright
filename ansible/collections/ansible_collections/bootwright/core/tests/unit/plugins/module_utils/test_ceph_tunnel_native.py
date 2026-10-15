@@ -24,8 +24,9 @@ from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import 
 
 # The frozen replicated rbd pool the Go side sends with every optional member unset.
 POOL = {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""},
-        "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule", "minSize": 2,
-        "name": "volumes", "overwrites": False, "pgNum": 32, "quota": {"maxBytes": 0, "maxObjects": 0}, "role": "rbd", "size": 2, "type": "replicated"}
+        "compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}, "crushRule": "replicated_rule", "filesystem": "",
+        "minSize": 2, "name": "volumes", "overwrites": False, "pgNum": 32, "quota": {"maxBytes": 0, "maxObjects": 0}, "role": "rbd", "size": 2,
+        "type": "replicated"}
 
 
 def public_key():
@@ -40,7 +41,7 @@ def cluster_request():
               "user": "operator", "port": 22, "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}],
               "labels": [], "location": {}, "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v8", "action": "cluster", "cluster": "example", "owner": "apply-example",
+    return {"controller": "controller", "version": "ceph-core-v9", "action": "cluster", "cluster": "example", "owner": "apply-example",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
