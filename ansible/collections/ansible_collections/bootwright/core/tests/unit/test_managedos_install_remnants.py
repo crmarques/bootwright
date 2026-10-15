@@ -74,6 +74,7 @@ class Host:
                 "address": "198.51.100.11",
                 "bootMedia": dict(BOOT),
                 "image": {"path": str(self.image)},
+                "installerArguments": ["ifname=enp1s0:52:54:00:00:00:01", "ifname=enp2s0:52:54:00:00:00:02"],
                 "tree": {"path": str(self.tree)},
                 "treeMedia": dict(DVD),
             },
@@ -87,6 +88,7 @@ class Host:
             "managedos_install_anaconda_work": str(self.work),
         })
         self.emitted = []
+        self.built = None
         self.reads = {}
         self.after = {}
         self.environment = {}
@@ -211,6 +213,7 @@ class Host:
         if argv[0] == "/usr/bin/mv":
             os.rename(self.inside(argv[-2]), self.inside(argv[-1]))
         elif argv[0] == "/usr/bin/mkksiso":
+            self.built = argv
             output = self.inside(argv[-1])
             assert not output.exists(), "%s already exists" % output
             output.write_bytes(b"built")
@@ -256,6 +259,16 @@ def test_an_apply_clears_only_its_own_interrupted_build(tmp_path, monkeypatch):
     assert (second.work / "install.iso").read_bytes() == b"built"
     second.run("destroy.yml")
     assert first.work.exists() and not second.work.exists()
+
+
+def test_the_installer_image_boots_with_the_frozen_installer_arguments(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch)
+    host.run("apply.yml", through=BUILD)
+    assert host.built == [
+        "/usr/bin/mkksiso", "--ks", str(host.work / "ks.cfg"),
+        "--cmdline", "ifname=enp1s0:52:54:00:00:00:01 ifname=enp2s0:52:54:00:00:00:02",
+        "--rm-args", "rd.live.check", str(tmp_path / "media" / BOOT["name"]), str(host.work / "install.iso"),
+    ]
 
 
 def test_an_install_never_changes_the_shared_tree(tmp_path, monkeypatch):

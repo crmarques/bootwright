@@ -218,7 +218,7 @@ func physicalInstallation() Installation {
 		Address: "198.51.100.11", Channel: substrate.ChannelDeliveredKey,
 		ExpectedMACs: []string{"52:54:00:9a:1b:01", "52:54:00:9a:1b:02"},
 		Hostname:     "metal-01.metal.example.test", Interface: "eno1",
-		InterfaceMAC: "52:54:00:9a:1b:01", Keyboard: "us", Language: "en_US.UTF-8",
+		InterfaceType: "ethernet", Keyboard: "us", Language: "en_US.UTF-8",
 		MarkerPath: MarkerPath, HostKeyPath: HostKeyPath, HostKeyType: "ed25519", PackageSource: "cdrom",
 		Physical: true, Prefix: 24, RootDevice: "/dev/sda", Timezone: "UTC", User: "bootwright",
 	}
@@ -287,7 +287,7 @@ eula --agreed
 poweroff
 
 cdrom
-network --bootproto=static --device=52:54:00:9a:1b:01 --ip=198.51.100.11 --netmask=255.255.255.0 --hostname=metal-01.metal.example.test --onboot=on --activate
+network --bootproto=static --device=eno1 --ip=198.51.100.11 --netmask=255.255.255.0 --hostname=metal-01.metal.example.test --onboot=on --activate
 
 lang en_US.UTF-8
 keyboard --vckeymap=us
@@ -361,18 +361,6 @@ rm -f /root/anaconda-ks.cfg /root/original-ks.cfg /run/install/ks.cfg
 `
 	if rendered != want {
 		t.Fatalf("physical kickstart =\n%s\nwant\n%s", rendered, want)
-	}
-}
-
-// The machine is addressed by its hardware address, because the interface name
-// a booted installer assigns is not the name the declaration used.
-func TestAPhysicalInstallationAddressesItsInterfaceByHardwareAddress(t *testing.T) {
-	rendered, err := RenderKickstart(physicalInstallation())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(rendered, "--device=52:54:00:9a:1b:01") {
-		t.Fatal("the network line does not address the interface by its hardware address")
 	}
 }
 
@@ -478,7 +466,7 @@ func TestADeliveredKeyOfAnUnknownTypeRefuses(t *testing.T) {
 // contract serves both without either leaking into the other.
 func TestAVirtualInstallationRendersNoPhysicalProof(t *testing.T) {
 	input := physicalInstallation()
-	input.Channel, input.Physical, input.ExpectedMACs, input.InterfaceMAC = substrate.ChannelGuestAgent, false, nil, ""
+	input.Channel, input.Physical, input.ExpectedMACs = substrate.ChannelGuestAgent, false, nil
 	rendered, err := RenderKickstart(input)
 	if err != nil {
 		t.Fatal(err)

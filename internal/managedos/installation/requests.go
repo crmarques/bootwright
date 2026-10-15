@@ -151,10 +151,13 @@ type Request struct {
 	// through its guest agent. Exactly one of Image and Private is set: a
 	// delivered-key Machine's image names the private URL in its Kickstart,
 	// so it is published beneath Private instead.
-	Image      *Publication         `json:"image,omitempty"`
-	Kickstart  string               `json:"kickstart"`
-	MarkerPath string               `json:"markerPath"`
-	Placement  machineref.Placement `json:"placement"`
+	Image *Publication `json:"image,omitempty"`
+	// InstallerArguments pin each available ethernet interface's name to its
+	// hardware address with dracut ifname=, in composed order.
+	InstallerArguments []string             `json:"installerArguments"`
+	Kickstart          string               `json:"kickstart"`
+	MarkerPath         string               `json:"markerPath"`
+	Placement          machineref.Placement `json:"placement"`
 	// Private is the subtree this block owns for material only the installing
 	// machine may read: the delivered key pair and the installer image. The
 	// attempt mints the unguessable final segment, so this names the parent

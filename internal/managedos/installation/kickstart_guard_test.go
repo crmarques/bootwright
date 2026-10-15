@@ -121,7 +121,7 @@ func TestEveryKickstartValueRefusesALineBreak(t *testing.T) {
 // leading '%' opens or closes a section. An element of a comma-joined list
 // also refuses the comma.
 func TestASingleTokenKickstartValueRefusesSeparatorsAndSections(t *testing.T) {
-	listed := []string{"AdditionalLocale", "DisabledServices", "EnabledServices", "Nameservers", "NTPServers"}
+	listed := []string{"AdditionalLocale", "BondPorts", "DisabledServices", "EnabledServices", "Nameservers", "NTPServers"}
 	for _, field := range kickstartStrings(t) {
 		if field.name == "PackageSource" || field.name == "Repositories.Name" {
 			continue

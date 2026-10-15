@@ -28,6 +28,9 @@
     "object": "metal-01",
     "profile": "rhel-9-8"
   },
+  "installerArguments": [
+    "ifname=enp1s0:52:54:00:9a:1b:01"
+  ],
   "kickstart": "text\n",
   "markerPath": "/etc/bootwright/install-marker.json",
   "placement": {
@@ -67,5 +70,5 @@
   },
   "tlsCertificateRef": "lab-artifacts-tls",
   "user": "bootwright",
-  "version": "os-install-anaconda-v8"
+  "version": "os-install-anaconda-v9"
 }

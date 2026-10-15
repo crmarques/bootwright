@@ -107,11 +107,12 @@ func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 	request := Request{
 		Address: "198.51.100.41/24", BootMedia: Media{Name: bootImageName, SHA256: bootDigest, Size: 1105199104}, Budgets: installationBudgets,
 		FleetKeyRef: "bootwright-machine-key", HostKeyPath: HostKeyPath, Hostname: "metal-01.lab.example.test",
-		Identity:   Identity{Block: BlockID("metal-01"), Context: testContext, Object: "metal-01", Profile: "rhel-9-8"},
-		Kickstart:  "text\n",
-		MarkerPath: MarkerPath,
-		Placement:  machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
-		Private:    &Publication{Path: "/srv/private/os/metal-01", URL: "https://artifacts.lab.example.test/private/os/metal-01"},
+		Identity:           Identity{Block: BlockID("metal-01"), Context: testContext, Object: "metal-01", Profile: "rhel-9-8"},
+		InstallerArguments: []string{"ifname=enp1s0:52:54:00:9a:1b:01"},
+		Kickstart:          "text\n",
+		MarkerPath:         MarkerPath,
+		Placement:          machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
+		Private:            &Publication{Path: "/srv/private/os/metal-01", URL: "https://artifacts.lab.example.test/private/os/metal-01"},
 		Target: Target{
 			Channel: substrate.ChannelDeliveredKey,
 			Controller: Controller{

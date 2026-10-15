@@ -28,6 +28,9 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 	if err != nil {
 		return Installation{}, err
 	}
+	if reason, remediation := installInterfaceRefusal(catalog, machine, template, iface, hostOfRequest(request.Target)); reason != "" {
+		return Installation{}, refusal("lifecycle.unsupported", reason, remediation)
+	}
 	hostname, err := machineHostname(machine)
 	if err != nil {
 		return Installation{}, err
@@ -55,6 +58,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		return Installation{}, refusal("lifecycle.unsupported", reason, remediation)
 	}
 	repositories := repositoriesFor(customizations)
+	_, gateway := installGatewayRoute(template, iface)
 	route := proxyRouteFor(catalog, machine, profile)
 	for index := range repositories {
 		repositories[index].Proxy = route.proxyFor(repositories[index].BaseURL, request)
@@ -67,7 +71,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		ExcludeDocs:      customizations.Get("packages", "excludeDocs").Bool(),
 		Firewall:         firewallChoice(customizations),
 		Formats:          formats,
-		Gateway:          substrate.DefaultGateway(template),
+		Gateway:          gateway,
 		Hostname:         hostname,
 		Interface:        iface,
 		Keyboard:         orDefault(customizations.Get("localization", "keyboard").Text(), "us"),
@@ -87,9 +91,11 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		WeakDeps:         weakDepsChoice(customizations),
 	}
 	installation.Channel, installation.Physical = request.Target.Channel, request.Target.Physical
+	topology := readInstallTopology(template, iface)
+	installation.InterfaceType, installation.VLANBase, installation.VLANID = topology.Type, topology.VLANBase, topology.VLANID
+	installation.BondPorts, installation.BondOptions = topology.Ports, topology.Options
 	installation.HostKeyType = request.Target.HostKeyType
 	if request.Target.Hardware != nil {
-		installation.InterfaceMAC = installInterfaceMAC(machine, request.Target.Hardware, iface)
 		for _, declared := range request.Target.Hardware.Interfaces {
 			installation.ExpectedMACs = append(installation.ExpectedMACs, declared.MACAddress)
 		}
@@ -105,26 +111,6 @@ func identityPackages(target Target) []string {
 		return []string{guestAgent}
 	}
 	return nil
-}
-
-// installInterfaceMAC resolves the hardware address of the interface the
-// installation configures. A physical machine is addressed by that address
-// rather than by a kernel interface name, because the name a booted installer
-// assigns is not the name the declaration used.
-func installInterfaceMAC(machine api.Object, hardware *Hardware, iface string) string {
-	nic := iface
-	for _, binding := range machine.Spec().Get("network", "interfaceBinding").Items() {
-		if binding.Get("interfaceName").Text() == iface {
-			nic = binding.Get("nicRef").Text()
-			break
-		}
-	}
-	for _, declared := range hardware.Interfaces {
-		if declared.Name == nic {
-			return declared.MACAddress
-		}
-	}
-	return ""
 }
 
 // packageSource is what Anaconda installs from: the boot media itself when the

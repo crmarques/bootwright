@@ -149,7 +149,7 @@ func automationFormats() map[string]automationFormat {
 		"machine-libvirt-v6":        {class: formatMirrored},
 		"machine-baremetal-v2":      {class: formatMirrored},
 		"os-package-tree-v1":        {class: formatMirrored},
-		"os-install-anaconda-v8":    {class: formatMirrored},
+		"os-install-anaconda-v9":    {class: formatMirrored},
 		"cluster-media-agent-v5":    {class: formatMirrored},
 		"cluster-install-agent-v4":  {class: formatMirrored},
 		"artifact-server-nginx-v2":  {class: formatMirrored},

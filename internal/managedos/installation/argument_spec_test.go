@@ -25,6 +25,7 @@ type specOption struct {
 	Type     string                `yaml:"type"`
 	Required bool                  `yaml:"required"`
 	Choices  []string              `yaml:"choices"`
+	Elements string                `yaml:"elements"`
 	Options  map[string]specOption `yaml:"options"`
 }
 
@@ -119,6 +120,17 @@ func (o specOption) refusals(path string, value any) []string {
 			return []string{fmt.Sprintf("%s is %q, and the role admits only %q", path, text, o.Choices)}
 		}
 		return nil
+	case "list":
+		items, ok := value.([]any)
+		if !ok {
+			return []string{fmt.Sprintf("%s is %T, not a list", path, value)}
+		}
+		if o.Elements == "" {
+			found = append(found, path+" declares a list without elements")
+		}
+		for index, item := range items {
+			found = append(found, specOption{Type: o.Elements}.refusals(fmt.Sprintf("%s[%d]", path, index), item)...)
+		}
 	case "int":
 		if number, ok := value.(json.Number); !ok {
 			found = append(found, fmt.Sprintf("%s is %T, not an integer", path, value))

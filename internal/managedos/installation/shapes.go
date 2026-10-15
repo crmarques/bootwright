@@ -16,12 +16,12 @@ const carriedMTU = 1500
 
 // refusedNetwork says why the installation cannot carry the network a Machine
 // composes, or nothing when it can. The Kickstart configures one static IPv4
-// address on one ethernet device, its default route and the selected name
+// address on its install interface, its default route and the selected name
 // servers; anything else the Machine declares would be dropped, so it is
 // refused rather than installed in part. It reads the composed network, so an
 // override is read as the Machine realizes it; a network that does not compose
 // is admission's refusal.
-func refusedNetwork(catalog api.Catalog, machine api.Object) (reason, remediation string) {
+func refusedNetwork(catalog api.Catalog, machine api.Object, host installHost) (reason, remediation string) {
 	composed, issues := machineref.ComposeNetwork(machine, catalog)
 	if len(issues) != 0 {
 		return "", ""
@@ -39,11 +39,14 @@ func refusedNetwork(catalog api.Catalog, machine api.Object) (reason, remediatio
 	if !composed.Present() {
 		return "", ""
 	}
-	if declared, ok := findNamed(composed.Get("interfaces"), "name", iface); ok && declared.Get("type").Text() != "ethernet" {
-		return "a managed-OS installation configures its install interface as one ethernet device and cannot carry a bonded, VLAN or other logical install interface",
-			"assign the install address of " + machine.Identity() + " to an ethernet interface; a bonded or VLAN install interface is not yet supported"
+	template, err := substrate.NetworkTemplate(catalog, machine)
+	if err != nil {
+		return "", ""
 	}
-	if uncarried := uncarriedNetwork(catalog, machine, composed, selected, iface); len(uncarried) != 0 {
+	if reason, remediation := installInterfaceRefusal(catalog, machine, template, iface, host); reason != "" {
+		return reason, remediation
+	}
+	if uncarried := uncarriedNetwork(machine, composed, selected, iface, readInstallTopology(template, iface).Bond); len(uncarried) != 0 {
 		return "a managed-OS installation configures only the install address, its default route and the selected name servers, and cannot carry the other network content the Machine declares",
 			"remove " + strings.Join(uncarried, ", ") + " from the network of " + machine.Identity() + ", or install its operating system outside Bootwright"
 	}
@@ -56,7 +59,7 @@ func refusedNetwork(catalog api.Catalog, machine api.Object) (reason, remediatio
 // default route the line carries. Search domains, a disabled IPv6 family and
 // the default route's own table and metric are accepted although the line
 // does not carry them, until the installed system converges to its network.
-func uncarriedNetwork(catalog api.Catalog, machine api.Object, composed api.Value, selected, iface string) []string {
+func uncarriedNetwork(machine api.Object, composed api.Value, selected, iface, bond string) []string {
 	var uncarried []string
 	for _, address := range machine.Spec().Get("network", "addresses").Items() {
 		if address.Has("interface") && address.Get("name").Text() != selected {
@@ -66,7 +69,7 @@ func uncarriedNetwork(catalog api.Catalog, machine api.Object, composed api.Valu
 	interfaces := composed.Get("interfaces").Items()
 	for _, declared := range interfaces {
 		name := declared.Get("name").Text()
-		if name != iface && available(declared) && declared.Get("type").Text() != "ethernet" {
+		if name != iface && name != bond && available(declared) && declared.Get("type").Text() != "ethernet" {
 			uncarried = append(uncarried, "interface "+name)
 		}
 	}
@@ -76,26 +79,11 @@ func uncarriedNetwork(catalog api.Catalog, machine api.Object, composed api.Valu
 			uncarried = append(uncarried, "mtu "+mtu.Text()+" on "+declared.Get("name").Text())
 		}
 	}
-	// The line carries the gateway DefaultGateway reads from the composed
-	// network, so the carried route is the first zero-prefix IPv4 route through
-	// the install interface, or through none named, whose next hop is that
-	// gateway.
-	gateway := ""
-	if template, err := substrate.NetworkTemplate(catalog, machine); err == nil {
-		gateway = substrate.DefaultGateway(template)
-	}
-	carried := false
-	for _, route := range composed.Get("routes", "config").Items() {
-		if route.Get("state").Text() == "absent" {
-			continue
+	carried, _ := installGatewayRoute(composed, iface)
+	for index, route := range composed.Get("routes", "config").Items() {
+		if route.Get("state").Text() != "absent" && index != carried {
+			uncarried = append(uncarried, "route "+route.Get("destination").Text())
 		}
-		destination := route.Get("destination").Text()
-		hop := route.Get("next-hop-interface")
-		if !carried && substrate.DefaultRouteIPv4(destination) && (!hop.Present() || hop.Text() == iface) && route.Get("next-hop-address").Text() == gateway {
-			carried = true
-			continue
-		}
-		uncarried = append(uncarried, "route "+destination)
 	}
 	return uncarried
 }

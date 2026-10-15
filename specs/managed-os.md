@@ -471,7 +471,7 @@ referenced install profile in the `machines` stage. It realizes the
 `MachineInstallProfile` publication under implementation and request version
 `os-package-tree-v1`; each machine installation requires that profile
 publication alongside its own Machine realization and referenced services.
-An installation uses request version `os-install-anaconda-v8`. Profiles using
+An installation uses request version `os-install-anaconda-v9`. Profiles using
 a URL package source contribute no publication block.
 
 The request freezes only context and profile identity, artifact-server
@@ -617,9 +617,10 @@ Each row is one refusal of the installation capability, and
 `TestManagedOSRefusalTableMatchesUnsupported` holds its `Unsupported` to it.
 The refused object is always the Machine whose installation is refused. The
 target rows are checked first, then the network rows, for an `anaconda`
-installation alone because only its Kickstart has a network line, then the
-profile rows, then the publication rows, each group in table order, and only
-the first row a Machine meets is reported. Its reason and remedy are the diagnostic's
+installation alone because only its Kickstart has a network line, the rows that
+read the Machine's hardware NICs or its libvirt attachment only once its target
+derives, then the profile rows, then the publication rows, each group in
+table order, and only the first row a Machine meets is reported. Its reason and remedy are the diagnostic's
 message and remediation, in which `<machine>` is that Machine, `<profile>` the
 `MachineInstallProfile` it selects and `<hints>` every root-device hint it
 declares other than `deviceName`, as `spec.os.install.rootDeviceHints.<hint>`
@@ -627,9 +628,19 @@ in name order, separated by `, `. `<network>` is the network content the
 [install line](#installation) cannot carry, separated by `, `: `address <name>`
 for each other interface-assigned address in declared order, then
 `interface <name>` for each other available interface that is not `ethernet`,
-then `mtu <value> on <name>` for each available interface whose `mtu` is not
-1500, both in composed order, then `route <destination>` for each route that
+the install interface or the bond a VLAN install interface is over, then
+`mtu <value> on <name>` for each available interface whose `mtu` is not 1500,
+both in composed order, then `route <destination>` for each route that
 is not `absent`, other than the line's own default route, in declared order.
+`<name>` is the first `ethernet` interface, in composed order, the row
+describes; `<bond>` is the install interface when it is a bond, else the bond
+its VLAN is over; `<declared mode>` is `mode <value>` for a scalar
+`link-aggregation.mode`, else `no mode`; `<mode>` is that bond's
+`link-aggregation.mode`; `<option>` is the first `link-aggregation.options`
+name, in byte order, the row describes, or `*` when `link-aggregation.options`
+is not a mapping; `<interface>` is the install interface; `<bridge>` is the
+`libvirt.bridge` of the Machine's managed attachment and `<id>` its install
+VLAN's `vlan.id`.
 `<proxy>` is the `Proxy` the Machine's effective `spec.proxy` selects.
 `<server>` is the selected `ArtifactServer` and `<server host>` the Machine its
 `spec.machineRef` names; `<provider>` is the Machine's `InfraProvider` and
@@ -642,8 +653,16 @@ is not `absent`, other than the line's own default route, in declared order.
 | An unverified fetch of private material | `spec.hardware.management.bmc.virtualMedia.tls.trust: disable-verification` on a Machine whose installation delivers private material | `a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server` | `declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on <machine>, or established when its controller already trusts the server` |
 | An unverified controller leg for private delivery | a Machine whose installation delivers private material, with a non-https `spec.hardware.management.bmc.address` or `tls.verify: false` | `a Machine whose installation delivers private material hands its controller the private installer image URL, so the controller must be reached over https with its certificate verified` | `address the controller of <machine> with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out on <machine> or in spec.baremetal.defaults.bmc of <provider>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
 | A DHCP-only install | an effective `spec.network.installAddressRef` naming no `spec.network.addresses` entry with an `interface` and an IPv4 address with its prefix; admission refuses it first, so no validated graph reaches this row | `a managed-OS installation configures one static IPv4 install address, and the Machine selects none; DHCP installation is not supported` | `assign an IPv4 address with its prefix to the install interface in spec.network.addresses of <machine> and select it with spec.network.installAddressRef` |
-| A non-ethernet install interface | the install address's `interface` composed with a `type` other than `ethernet`, such as `vlan` or `bond`, on any substrate | `a managed-OS installation configures its install interface as one ethernet device and cannot carry a bonded, VLAN or other logical install interface` | `assign the install address of <machine> to an ethernet interface; a bonded or VLAN install interface is not yet supported` |
-| Network content the Kickstart cannot carry | another interface-assigned address, another available interface that is not `ethernet`, an `mtu` other than 1500 or a route other than the install line's default route, in the composed network | `a managed-OS installation configures only the install address, its default route and the selected name servers, and cannot carry the other network content the Machine declares` | `remove <network> from the network of <machine>, or install its operating system outside Bootwright` |
+| A kernel-style interface name | any available composed `ethernet` interface whose `name` matches `^eth[0-9]+$`, on any substrate | `a managed-OS installation names each ethernet interface after its hardware address, and a kernel-style name such as <name> can collide with the names the kernel assigns` | `rename interface <name> in the network of <machine> to a name outside the kernel's ethN scheme, such as its predictable name` |
+| An ethernet interface without a hardware address | on a `baremetal` provider, an available composed `ethernet` interface that resolves, through its `spec.network.interfaceBinding` `nicRef` or else the `spec.hardware.nics` entry of its own name, to no NIC, or to one whose `macAddress` differs from its authored `mac-address` | `a managed-OS installation names each ethernet interface after its hardware address, and interface <name> of <machine> resolves to no declared hardware NIC, or to one whose address differs from its mac-address` | `bind interface <name> to its hardware NIC in spec.network.interfaceBinding of <machine>, or mark it absent in its network` |
+| A bond install interface without its ports | the install interface, or the base of a `vlan` install interface, is a `bond` whose `link-aggregation.port` is absent or empty, or names a port that is not an available composed `ethernet` interface, or one whose `controller` names another interface | `the installer configures a bonded install interface from its named ports, and bond <bond> of <machine> names no port, or a port that is not an available ethernet interface aggregated by it` | `list the ethernet interfaces bond <bond> aggregates in its link-aggregation.port in the network of <machine>` |
+| A bond install interface without a carried mode | that bond's `link-aggregation.mode` absent or not one of `balance-rr`, `active-backup`, `balance-xor`, `broadcast`, `802.3ad`, `balance-tlb`, `balance-alb` | `the installer configures a bond only by its full mode name, and bond <bond> of <machine> declares <declared mode>` | `set link-aggregation.mode of <bond> to one of balance-rr, active-backup, balance-xor, broadcast, 802.3ad, balance-tlb or balance-alb in the network of <machine>` |
+| A bond mode the libvirt substrate does not qualify | on a `libvirt` provider, that bond's `link-aggregation.mode` other than `active-backup`; the API and a `baremetal` provider admit all seven modes | `a libvirt bridge qualifies only active-backup bonding, and bond <bond> of <machine> declares mode <mode>` | `set link-aggregation.mode of <bond> on <machine> to active-backup; the other modes are qualified on physical hosts in M2d (B78)` |
+| A bond option the installer cannot carry | that bond's `link-aggregation.options` not a mapping, or an option named `mode` or not matching `[a-z0-9_]+`, or whose value is not a string, integer, number or boolean or holds `;`, `=`, whitespace, a quote, a backslash or `#` | `the installer receives bond options as one option list, and link-aggregation.options.<option> of <bond> on <machine> cannot be written into it` | `remove link-aggregation.options.<option> from <bond> in the network of <machine>, or give it a plain value` |
+| A VLAN install interface the installer cannot carry | a `vlan` install interface whose `vlan.base-iface` is not an available `ethernet` or `bond` interface, whose `vlan.id` is not 1 to 4094, whose `vlan.protocol` is not absent or `802.1q`, or whose name starts with `vlan` but is not `vlan<id>`, or holds a `.` but is not a prefix, one `.` and the id | `the installer configures a VLAN install interface only as an 802.1Q VLAN with an id from 1 to 4094 over an available ethernet or bond interface, named vlan and its id, a prefix, a dot and its id, or a name with no dot that does not start with vlan, and <interface> of <machine> is not one` | `declare <interface> in the network of <machine> with vlan.base-iface an available ethernet or bond interface, vlan.id from 1 to 4094, no vlan.protocol other than 802.1q, and a name of one of those forms` |
+| A VLAN install interface on a managed libvirt network | on a `libvirt` provider, a `vlan` install interface while `spec.network.attachmentRef` names a `management: managed` attachment | `a managed libvirt network gives its host an untagged address on <bridge>, so the controller cannot reach the VLAN install address of <machine>` | `attach <machine> to an external bridge whose host carries VLAN <id>, or install over an untagged interface` |
+| Two owners of the installed name servers | a network with DNS server selections whose composed native document also authors `dns-resolver.config.server` | `the installed name servers of <machine> are its network's DNS server selections, and its native dns-resolver.config.server declares them a second time` | `remove dns-resolver.config.server from the network of <machine>, or remove its DNS server selections` |
+| Network content the Kickstart cannot carry | another interface-assigned address, another available interface that is not `ethernet`, the install interface or the bond its VLAN is over, an `mtu` other than 1500 or a route other than the install line's default route, in the composed network; until post-install network convergence ([B326](milestones/m1.md#b326)) carries them | `a managed-OS installation configures only the install address, its default route and the selected name servers, and cannot carry the other network content the Machine declares` | `remove <network> from the network of <machine>, or install its operating system outside Bootwright` |
 | Another installer | a profile's `spec.installer` without `anaconda`, such as `templateClone` | `this executable installs an operating system only through the anaconda installer, which the install profile does not select` | `select spec.installer.anaconda on <profile>` |
 | A package mirror | a profile's `spec.installer.anaconda.packageSource.mirror` | `the install profile selects spec.installer.anaconda.packageSource.mirror, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.mirror from <profile>` |
 | Packages from a subscription | a profile's `spec.installer.anaconda.packageSource.fromSubscription` | `the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.fromSubscription from <profile>` |

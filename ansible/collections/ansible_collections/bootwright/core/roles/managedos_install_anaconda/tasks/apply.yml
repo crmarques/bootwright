@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v8'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v9'
       - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
@@ -238,6 +238,8 @@
           - /usr/bin/mkksiso
           - --ks
           - '{{ managedos_install_anaconda_work }}/ks.cfg'
+          - --cmdline
+          - '{{ bootwright_os_install_request.installerArguments | join(" ") }}'
           - --rm-args
           - rd.live.check
           - '{{ managedos_install_anaconda_boot_media }}'

@@ -49,6 +49,9 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 	onMetal := map[string]string{"<machine>": "Machine/metal-01"}
 	onProfile := map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8"}
 	onGuest := map[string]string{"<machine>": "Machine/rhel-01"}
+	onBond := map[string]string{"<machine>": "Machine/rhel-01", "<bond>": "bond0"}
+	dnsOwned := networkConfig()
+	dnsOwned = dnsOwned.WithSpec(dnsOwned.Spec().WithPath(api.MapValue(field("config", api.MapValue(field("server", api.StringList("192.0.2.53"))))), "nmstate", "dns-resolver"))
 	unselected := guest(field("network", guest().Spec().Get("network").Without("installAddressRef").With("addresses", api.ListValue(
 		api.MapValue(text("name", "fqdn"), text("address", "rhel-01.lab.example.test")),
 	))))
@@ -104,11 +107,26 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		"FIPS": {labCatalog(installProfile(field("customizations", customizations.With("security", api.MapValue(
 			field("fips", api.MapValue(field("enabled", api.BoolValue(true))))))))), "Machine/rhel-01", onProfile},
 		"A DHCP-only install": {labCatalog(unselected), "Machine/rhel-01", onGuest},
-		"A non-ethernet install interface": {labCatalog(vlan, networkWith(
-			api.MapValue(text("name", "enp1s0"), text("type", "ethernet")),
-			api.MapValue(text("name", "enp1s0.100"), text("type", "vlan"),
-				field("vlan", api.MapValue(text("base-iface", "enp1s0"), number("id", "100")))),
-		)), "Machine/rhel-01", onGuest},
+		"A kernel-style interface name": {labCatalog(networkWith(declaredInterface("enp1s0", "ethernet"), declaredInterface("eth0", "ethernet"))),
+			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<name>": "eth0"}},
+		"An ethernet interface without a hardware address": {metalCatalog(metalOn("enp1s0", hardwareNIC("enp1s0", "52:54:00:9a:1b")),
+			metalNetwork(declaredInterface("enp1s0", "ethernet"))), "Machine/metal-01", map[string]string{"<machine>": "Machine/metal-01", "<name>": "enp1s0"}},
+		"A bond install interface without its ports": {labCatalog(installingOn("bond0"), networkWith(bondPort("enp1s0", "bond0"),
+			declaredInterface("bond0", "bond", field("link-aggregation", api.MapValue(text("mode", "active-backup"), field("port", api.ListValue())))))),
+			"Machine/rhel-01", onBond},
+		"A bond install interface without a carried mode": {bondedGuest(bondInterface("bond0", api.StringValue("lacp"), api.Value{}, "enp1s0", "enp2s0")),
+			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<bond>": "bond0", "<declared mode>": "mode lacp"}},
+		"A bond mode the libvirt substrate does not qualify": {bondedGuest(bondInterface("bond0", api.StringValue("802.3ad"), api.Value{}, "enp1s0", "enp2s0")),
+			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<bond>": "bond0", "<mode>": "802.3ad"}},
+		"A bond option the installer cannot carry": {bondedGuest(bondInterface("bond0", api.StringValue("active-backup"), api.MapValue(text("primary", "a;b")), "enp1s0", "enp2s0")),
+			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<bond>": "bond0", "<option>": "primary"}},
+		"A VLAN install interface the installer cannot carry": {labCatalog(externalProvider(), installingOn("enp1s0.4095"),
+			networkWith(declaredInterface("enp1s0", "ethernet"), vlanInterface("enp1s0.4095", "enp1s0", "4095"))),
+			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<interface>": "enp1s0.4095"}},
+		"A VLAN install interface on a managed libvirt network": {labCatalog(vlan, networkWith(
+			declaredInterface("enp1s0", "ethernet"), vlanInterface("enp1s0.100", "enp1s0", "100"),
+		)), "Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<bridge>": "virbr-lab", "<id>": "100"}},
+		"Two owners of the installed name servers": {labCatalog(dnsOwned), "Machine/rhel-01", onGuest},
 		"Network content the Kickstart cannot carry": {labCatalog(secondary, withRoutes(networkWith(
 			api.MapValue(text("name", "enp1s0"), text("type", "ethernet"), number("mtu", "9000")),
 			api.MapValue(text("name", "enp2s0"), text("type", "ethernet")),

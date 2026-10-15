@@ -82,7 +82,7 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 		// could drop what the Machine declares; any other installer is
 		// refused as the profile's own choice.
 		if profile.Spec().Has("installer", "anaconda") {
-			if reason, remediation := refusedNetwork(catalog, machine); reason != "" {
+			if reason, remediation := refusedNetwork(catalog, machine, hostOfTarget(derived, derivedOK)); reason != "" {
 				found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 				continue
 			}
@@ -228,6 +228,9 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 		return Request{}, Requirements{}, err
 	}
 	request.Address, request.Hostname = install.Address, install.Hostname
+	if request.InstallerArguments, err = installerArguments(catalog, machine, request); err != nil {
+		return Request{}, Requirements{}, err
+	}
 	kickstart, err := RenderKickstart(install)
 	if err != nil {
 		return Request{}, Requirements{}, err

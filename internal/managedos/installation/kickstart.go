@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v6"
+const kickstartVersion = "kickstart-anaconda-v7"
 
 // hostKeySource is the key a guest-agent installation republishes. Ed25519 is
 // the type its identity operation binds, and generating it here rather than at
@@ -75,9 +75,9 @@ type Installation struct {
 	// before it erases anything.
 	ExpectedMACs []string
 	Physical     bool
-	// InterfaceMAC addresses the installation interface by hardware address
-	// rather than by a kernel name the booted installer may not reproduce.
-	InterfaceMAC     string
+	// BondOptions are mode=<mode> and then each option in name order.
+	BondOptions      []string
+	BondPorts        []string
 	DisabledServices []string
 	EnabledServices  []string
 	ExcludeDocs      bool
@@ -90,6 +90,7 @@ type Installation struct {
 	HostKeyType   string
 	Hostname      string
 	Interface     string
+	InterfaceType string
 	Keyboard      string
 	Language      string
 	MarkerPath    string
@@ -103,6 +104,8 @@ type Installation struct {
 	SELinux       string
 	Timezone      string
 	User          string
+	VLANBase      string
+	VLANID        int
 	WeakDeps      string
 }
 
@@ -188,7 +191,10 @@ var kickstartFields = []struct {
 	{"an additional locale", "spec.customizations.localization.additionalLocales of the install profile", kickstartListElement, func(i Installation) []string { return i.AdditionalLocale }},
 	{"the identity channel", "the Machine's substrate", kickstartToken, func(i Installation) []string { return []string{i.Channel} }},
 	{"a declared hardware address", "spec.hardware.nics of the Machine", kickstartToken, func(i Installation) []string { return i.ExpectedMACs }},
-	{"the install interface's hardware address", "spec.hardware.nics of the Machine", kickstartToken, func(i Installation) []string { return []string{i.InterfaceMAC} }},
+	{"the install interface type", "the type of the install interface in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return []string{i.InterfaceType} }},
+	{"the VLAN base interface", "vlan.base-iface of the install interface in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return []string{i.VLANBase} }},
+	{"a bond port", "link-aggregation.port of the install bond in the Machine's NMState network configuration", kickstartListElement, func(i Installation) []string { return i.BondPorts }},
+	{"a bond option", "link-aggregation of the install bond in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return i.BondOptions }},
 	{"a disabled service", "spec.customizations.services.disabled of the install profile", kickstartListElement, func(i Installation) []string { return i.DisabledServices }},
 	{"an enabled service", "spec.customizations.services.enabled of the install profile", kickstartListElement, func(i Installation) []string { return i.EnabledServices }},
 	{"the firewall choice", "spec.customizations.security.firewall.enabled of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Firewall} }},
@@ -318,15 +324,12 @@ func networkLine(input Installation) (string, error) {
 	if input.Prefix < 1 || input.Prefix > 32 {
 		return "", refusal("api.value", "the Machine's install address carries no usable prefix", "correct the selected install address")
 	}
-	device := input.Interface
-	if input.InterfaceMAC != "" {
-		device = input.InterfaceMAC
+	fields, err := interfaceFields(input)
+	if err != nil {
+		return "", err
 	}
-	fields := []string{
-		"network", "--bootproto=static", "--device=" + device,
-		"--ip=" + input.Address, "--netmask=" + netmask(input.Prefix),
-		"--hostname=" + input.Hostname, "--onboot=on", "--activate",
-	}
+	fields = append(fields, "--ip="+input.Address, "--netmask="+netmask(input.Prefix),
+		"--hostname="+input.Hostname, "--onboot=on", "--activate")
 	if input.Gateway != "" {
 		fields = append(fields, "--gateway="+input.Gateway)
 	}
@@ -334,6 +337,36 @@ func networkLine(input Installation) (string, error) {
 		fields = append(fields, "--nameserver="+strings.Join(input.Nameservers, ","))
 	}
 	return strings.Join(fields, " "), nil
+}
+
+// interfaceFields name the install interface: a VLAN by its base device, and
+// a bond, or the bond a VLAN is over, with its ports and options.
+func interfaceFields(input Installation) ([]string, error) {
+	kind, vlan := input.InterfaceType, input.InterfaceType == "vlan"
+	if kind != "ethernet" && kind != "bond" && !vlan {
+		return nil, refusal("lifecycle.state", "the install interface type "+kind+" is not ethernet, bond or vlan", "plan the installation again with this release")
+	}
+	bonded := kind == "bond" || vlan && len(input.BondPorts) != 0
+	if vlan && (input.VLANBase == "" || input.VLANID < 1 || input.VLANID > 4094) ||
+		bonded && (len(input.BondPorts) == 0 || len(input.BondOptions) == 0 || !strings.HasPrefix(input.BondOptions[0], "mode=")) {
+		return nil, refusal("lifecycle.state", "the install interface "+input.Interface+" carries an incomplete bond or VLAN", "plan the installation again with this release")
+	}
+	device := input.Interface
+	if vlan {
+		device = input.VLANBase
+	}
+	fields := []string{"network", "--bootproto=static", "--device=" + device}
+	if bonded {
+		separator := ","
+		if slices.ContainsFunc(input.BondOptions, func(option string) bool { return strings.Contains(option, ",") }) {
+			separator = ";"
+		}
+		fields = append(fields, "--bondslaves="+strings.Join(input.BondPorts, ","), "--bondopts="+strings.Join(input.BondOptions, separator))
+	}
+	if vlan {
+		fields = append(fields, "--vlanid="+strconv.Itoa(input.VLANID), "--interfacename="+input.Interface)
+	}
+	return fields, nil
 }
 
 func netmask(prefix int) string {
