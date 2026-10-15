@@ -60,9 +60,12 @@
   "owned": true,
   "owner": "apply-original",
   "partial": false,
-  "poolID": -1,
   "ready": true,
   "removed": false,
   "request": "digest",
-  "version": "ceph-core-evidence-v2"
+  "resource": {
+    "id": "",
+    "path": ""
+  },
+  "version": "ceph-core-evidence-v3"
 }

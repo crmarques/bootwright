@@ -94,7 +94,7 @@ IMAGE = {
     "version": "ceph-image-v2",
 }
 
-HOST = {"cluster": CORE, "host": "node-1", "version": "ceph-host-v1"}
+HOST = {"cluster": {key: value for key, value in CORE.items() if key != "action"}, "host": "node-1", "version": "ceph-host-v2"}
 
 # Role, its entry points, the request variable and the request carrying every
 # member the Go side encodes, with the variables its entry point also requires.

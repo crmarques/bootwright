@@ -17,8 +17,8 @@ import tempfile
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_observe, ceph_native_worker,
-    ceph_package_sources, ceph_package_worker, ceph_packages, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody,
+    adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_observe,
+    ceph_native_worker, ceph_package_sources, ceph_package_worker, ceph_packages, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody,
     native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
 )
 
@@ -111,7 +111,7 @@ def evidence(value, request_digest, request=None):
     if isinstance(value, dict) and value.get("version") == ceph_host_runtime.EVIDENCE_VERSION:
         return host_evidence(value, request_digest, request)
     fields = {"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs",
-              "mgrActive", "mgrStandbys", "osds", "poolID", "client", "dashboard"}
+              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard"}
     ceph_native.require(isinstance(value, dict) and set(value) == fields, "evidence")
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
@@ -125,7 +125,11 @@ def evidence(value, request_digest, request=None):
         ceph_native.require(len(set(value[field])) == len(value[field]), "evidence")
     for field in ("mgrActive", "client"):
         ceph_native.require(value[field] == "" or ceph_native.named(value[field]), "evidence")
-    ceph_native.require(type(value["poolID"]) is int and value["poolID"] >= -1, "evidence")
+    resource = value["resource"]
+    ceph_native.require(isinstance(resource, dict) and set(resource) == {"id", "path"} and all(isinstance(resource[k], str) for k in ("id", "path")),
+                        "evidence")
+    ceph_native.require(resource["path"] == "", "evidence")
+    ceph_native.require(resource["id"] == "" or value["action"] == "pool" and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None, "evidence")
     ceph_native.require(isinstance(value["osds"], list) and len(value["osds"]) <= 8192, "evidence")
     for osd in value["osds"]:
         ceph_native.require(isinstance(osd, dict) and set(osd) == {"host", "path", "id", "uuid"}, "evidence")
@@ -241,8 +245,8 @@ def ssh_argv(host, key, known_hosts, source, worker_budget=None, *, worker_ceili
 class Transport:
     """No material value appears in arguments, environment, errors or logs."""
 
-    def __init__(self, request, material, run=ceph_native.bounded_command):
-        self.request = ceph_native.validate(request)
+    def __init__(self, request, material, run=ceph_native.bounded_command, *, scope=False):
+        self.request = ceph_native.validate_scope(request) if scope else ceph_native.validate(request)
         self.material = material
         self.run = run
 
@@ -290,7 +294,7 @@ class Transport:
     @staticmethod
     def native_sources():
         modules = (native_diagnostics, native_specializations, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
-                   ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
+                   ceph_native_resources, ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
@@ -624,10 +628,10 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 
 def host_request(value):
-    """A frozen host block request: its cluster's request and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v1")
-    cluster = ceph_native.validate(value["cluster"])
-    ceph_native.require(cluster["action"] == "cluster" and "packages" in cluster)
+    """A frozen host block request: its cluster's host scope and one of its hosts."""
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v2")
+    cluster = ceph_native.validate_scope(value["cluster"])
+    ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)
     ceph_native.require(sum(source["host"] == value["host"] for source in cluster["packages"]["sources"]) == 1)
     return value

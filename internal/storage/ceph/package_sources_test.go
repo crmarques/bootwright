@@ -87,18 +87,22 @@ func TestPackageSourceBindingUsesOriginalApplyPinWithoutAliasing(t *testing.T) {
 	original := r.Packages
 	source := r.Packages.Sources[0]
 	proof := packageProofs{tree: PackageTree{Context: "synthetic", Media: source.Media, MediaSHA256: strings.Repeat("a", 64), MediaSize: 123456, Path: source.PublicationPath}}
-	if err := bindPackageSources(lifecycle.Execution{Context: "renamed"}, &r, proof); err != nil {
+	bound, err := bindPackageSources(lifecycle.Execution{Context: "renamed"}, r.Packages, proof)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if original.Sources[0].MediaSHA256 != "" || r.Packages.Sources[0].MediaSHA256 != proof.tree.MediaSHA256 {
+	if original.Sources[0].MediaSHA256 != "" || bound.Sources[0].MediaSHA256 != proof.tree.MediaSHA256 {
 		t.Fatal("binding aliased the frozen plan or lost its original pin")
 	}
 	proof.tree.Path += "/another"
-	if err := bindPackageSources(lifecycle.Execution{}, &r, proof); err == nil {
+	if _, err := bindPackageSources(lifecycle.Execution{}, bound, proof); err == nil {
 		t.Fatal("accepted another DVD publication")
 	}
-	if err := bindPackageSources(lifecycle.Execution{}, &r, nil); err == nil {
+	if _, err := bindPackageSources(lifecycle.Execution{}, bound, nil); err == nil {
 		t.Fatal("accepted absent evidence owner")
+	}
+	if _, err := bindPackageSources(lifecycle.Execution{}, nil, proof); err == nil {
+		t.Fatal("accepted absent package source")
 	}
 }
 
@@ -120,7 +124,7 @@ func TestPackageMaterialLendsOnlyServingCertificate(t *testing.T) {
 		}
 	}
 	for _, host := range cluster.Hosts {
-		r := HostRequest{Version: HostVersion, Cluster: cluster, Host: host.Name}
+		r := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host.Name}
 		_, files, cleanup, err := hostMaterial(e, r, "apply", dependencyProofs{})
 		if err != nil {
 			t.Fatal(err)

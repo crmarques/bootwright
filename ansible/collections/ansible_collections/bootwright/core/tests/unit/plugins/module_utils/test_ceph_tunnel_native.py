@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime, ceph_native, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
 from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
 
@@ -1604,6 +1605,7 @@ def decided_worker(cluster_request, tmp_path, monkeypatch, decided, requested):
     commands = []
     worker.command = lambda argv, **kwargs: commands.append(argv) or decided.rpm(argv)
     monkeypatch.setattr(ceph_native, "read_regular", lambda path, maximum: b"native " + path.encode())
+    monkeypatch.setattr(ceph_native_resources, "read_regular", lambda path, maximum: b"native " + path.encode())
     return worker, commands
 
 
@@ -1614,7 +1616,7 @@ def test_installed_ceph_packages_are_the_frozen_decision_whatever_form_dnf_was_g
     identity = worker.verify_tool()
     assert set(identity) == {"sha256", "packageVersion", "clients"} and identity["packageVersion"] == requested
     assert [argv for argv in commands if "-q" in argv] == [["/usr/bin/rpm", "-q", "--qf", PACKAGE_QUERY, name] for name in ("cephadm", "ceph-common")]
-    worker.verify_client_generator()
+    ceph_native_resources.ResourceWorker.verify_client_generator(worker)
     assert worker.markers.records["client-generator.json"]["packageVersion"] == requested
     assert set(worker.markers.records["client-generator.json"]) == {"path", "packageVersion", "sha256"}
 
@@ -1637,15 +1639,15 @@ def test_the_client_generator_follows_the_frozen_ceph_common_identity(cluster_re
     worker.verify_tool = lambda: None
     decided.installed["ceph-common"] = (2, "20.2.2", "350.el9cp", "x86_64")
     with pytest.raises(ceph_native.Refusal, match="^artifact$"):
-        worker.verify_client_generator()
+        ceph_native_resources.ResourceWorker.verify_client_generator(worker)
     decided.installed["ceph-common"] = SIGNED["ceph-common"]
     original = decided.rpm
     decided.rpm = lambda argv: original(argv).replace(b"ceph-common", b"ceph-base") if "-qf" in argv else original(argv)
     with pytest.raises(ceph_native.Refusal, match="^artifact$"):
-        worker.verify_client_generator()
+        ceph_native_resources.ResourceWorker.verify_client_generator(worker)
     assert "client-generator.json" not in worker.markers.records
     decided.rpm = original
-    worker.verify_client_generator()
+    ceph_native_resources.ResourceWorker.verify_client_generator(worker)
     assert worker.markers.records["client-generator.json"]["packageVersion"] == "20.2.2"
 
 

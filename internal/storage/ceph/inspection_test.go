@@ -45,7 +45,7 @@ func inspectedClusterEvidence(t *testing.T, edit func(*Evidence)) json.RawMessag
 	e := Evidence{
 		Version: EvidenceVersion, Request: "digest", Action: "cluster", Owner: "apply", FSID: inspectedFSID, Owned: true, Exists: true, Ready: true,
 		Health: "HEALTH_OK", Hosts: []string{"rhel-01.lab.test"}, Monitors: []string{"rhel-03", "rhel-01.lab.test", "rhel-02.lab.test"},
-		MGRActive: "rhel-01.lab.test", MGRStandbys: []string{"rhel-03"}, OSDs: []OSDEvidence{}, PoolID: -1,
+		MGRActive: "rhel-01.lab.test", MGRStandbys: []string{"rhel-03"}, OSDs: []OSDEvidence{},
 		MonAddrs:  []MonitorAddress{{Host: "rhel-02.lab.test", Address: "198.51.100.12"}},
 		Dashboard: DashboardEvidence{URL: "https://rhel-01.lab.test:8443/", CertificateSHA256: inspectedCertificate, Reachable: true},
 	}
@@ -106,7 +106,7 @@ func TestInspectReadsFSIDImageAndMonitorsFromTheCurrentOperationsEvidence(t *tes
 
 func TestInspectReportsAReasonUnlessBothProofsAreCompleteAndReady(t *testing.T) {
 	catalog, cluster := inspectedCluster()
-	otherAction := inspectedClusterEvidence(t, func(e *Evidence) { e.Action = "pool"; e.PoolID = 1 })
+	otherAction := inspectedClusterEvidence(t, func(e *Evidence) { e.Action = "pool"; e.Resource = ResourceEvidence{ID: "1"} })
 	tests := []struct {
 		name   string
 		proofs func() []lifecycle.BlockEvidence

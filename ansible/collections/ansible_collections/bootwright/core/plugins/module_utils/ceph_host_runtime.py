@@ -34,7 +34,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
-VERSION = "ceph-host-v1"
+VERSION = "ceph-host-v2"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
 ROUTE_VERSION = "ceph-host-route-v2"
 DEVICES_VERSION = "ceph-device-identities-v1"
@@ -420,14 +420,14 @@ class HostRuntime:
     """One host's preparation; the controller supplies only fixed phases."""
 
     def __init__(self, request, host, command=None, *, clock=time.monotonic, pause=time.sleep, markers=None, packages=None):
-        self.request = ceph_native.validate(request)
-        self.host = next((item for item in request["hosts"] if item["name"] == host), None)
-        require(self.host is not None and request["action"] == "cluster", "request")
+        self.request = ceph_native.host_scope(request)
+        self.host = next((item for item in self.request["hosts"] if item["name"] == host), None)
+        require(self.host is not None, "request")
         self.run = command or ceph_native.bounded_command
         self.clock = clock
         self.pause = pause
         self.markers = markers
-        self.packages = packages or ceph_native.Markers(request, root=PACKAGE_ROOT)
+        self.packages = packages or ceph_native.Markers(self.request, root=PACKAGE_ROOT)
 
     def command(self, argv, timeout, limit, reason="native-command", *, environment=None, secrets=()):
         options = {"environment": environment} if environment else {}

@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_resources
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 
@@ -134,7 +134,7 @@ def client(tmp_path, monkeypatch):
         assert data == b""
         return 0, json.dumps(value).encode()
 
-    native = ceph_native.Worker(request, request["bootstrap"], run=run, markers=markers)
+    native = ceph_native_resources.ResourceWorker(request, request["bootstrap"], run=run, markers=markers)
     native.verify_tool = lambda: {"synthetic-artifact": True}
     native.verify_client_generator = lambda: None
     # The independently tested cluster producer proves the original admin
@@ -478,7 +478,7 @@ def test_native_effect_is_not_admitted_when_ready_publication_failed(client):
 def test_generator_requires_exact_package_owner_and_pins_only_binary_identity(client, monkeypatch):
     native = client.native
     calls = []
-    monkeypatch.setattr(ceph_native, "read_regular", lambda path, maximum: b"synthetic-authtool-binary")
+    monkeypatch.setattr(ceph_native_resources, "read_regular", lambda path, maximum: b"synthetic-authtool-binary")
 
     def command(argv, **kwargs):
         calls.append((argv, kwargs))
@@ -486,11 +486,11 @@ def test_generator_requires_exact_package_owner_and_pins_only_binary_identity(cl
 
     native.command = command
     native.packages = tunnel_native.Decided("20.2.1-405.el9cp")
-    ceph_native.Worker.verify_client_generator(native)
+    ceph_native_resources.ResourceWorker.verify_client_generator(native)
     assert calls == [(["/usr/bin/rpm", "-qf", "--qf", "%{NAME} " + tunnel_native.PACKAGE_QUERY, "/usr/bin/ceph-authtool"], {"json_result": False})]
     record = client.markers.records["client-generator.json"]
     assert record == {"path": "/usr/bin/ceph-authtool", "packageVersion": "20.2.1-405.el9cp",
                       "sha256": hashlib.sha256(b"synthetic-authtool-binary").hexdigest()}
     native.command = lambda *args, **kwargs: b"foreign-package 2 20.2.2 349.el9cp x86_64"
     with pytest.raises(ceph_native.Refusal, match="artifact"):
-        ceph_native.Worker.verify_client_generator(native)
+        ceph_native_resources.ResourceWorker.verify_client_generator(native)

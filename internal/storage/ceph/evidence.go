@@ -10,12 +10,13 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v2"
+const EvidenceVersion = "ceph-core-evidence-v3"
 
 const DashboardPort = "8443"
 
 var dashboardURL = regexp.MustCompile(`\Ahttps://(?:[A-Za-z0-9.-]{1,253}|\[[0-9A-Fa-f:.]{2,45}\]):8443/\z`)
 var certificateDigest = regexp.MustCompile(`\A[0-9a-f]{64}\z`)
+var resourceID = regexp.MustCompile(`\A(?:0|[1-9][0-9]{0,18})\z`)
 
 type MonitorAddress struct {
 	Address string `json:"address"`
@@ -34,6 +35,12 @@ type OSDEvidence struct {
 	Path string `json:"path"`
 	UUID string `json:"uuid"`
 }
+
+type ResourceEvidence struct {
+	ID   string `json:"id"`
+	Path string `json:"path"`
+}
+
 type Evidence struct {
 	Action      string            `json:"action"`
 	Client      string            `json:"client"`
@@ -50,10 +57,10 @@ type Evidence struct {
 	Owned       bool              `json:"owned"`
 	Owner       string            `json:"owner"`
 	Partial     bool              `json:"partial"`
-	PoolID      int               `json:"poolID"`
 	Ready       bool              `json:"ready"`
 	Removed     bool              `json:"removed"`
 	Request     string            `json:"request"`
+	Resource    ResourceEvidence  `json:"resource"`
 	Version     string            `json:"version"`
 }
 
@@ -70,7 +77,7 @@ func decodeEvidence(data []byte) (Evidence, error) {
 	if err != nil || len(fields) != 20 {
 		return Evidence{}, evidenceFailure()
 	}
-	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "poolID", "client", "dashboard"}
+	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard"}
 	for _, key := range required {
 		v, ok := fields[key]
 		if !ok || string(v) == "null" {
@@ -100,6 +107,10 @@ func decodeEvidence(data []byte) (Evidence, error) {
 	}
 	dashboard, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](fields["dashboard"], 60*1024, "Ceph dashboard members")
 	if err != nil || !closedMembers(dashboard, "url", "certificateSHA256", "reachable") {
+		return Evidence{}, evidenceFailure()
+	}
+	resource, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](fields["resource"], 60*1024, "Ceph resource members")
+	if err != nil || !closedMembers(resource, "id", "path") {
 		return Evidence{}, evidenceFailure()
 	}
 	return e, nil
@@ -215,13 +226,19 @@ func validateScope(e Evidence, r Request) bool {
 	if !subsetNames(e.Monitors, mons) || !subsetNames(append(active, e.MGRStandbys...), mgrs) {
 		return false
 	}
+	if e.Resource.Path != "" {
+		return false
+	}
 	if r.Action == "client" {
-		return r.Client != nil && (e.Client == "" || e.Client == "client."+r.Client.Name) && e.PoolID == -1
+		return r.Client != nil && (e.Client == "" || e.Client == "client."+r.Client.Name) && e.Resource == (ResourceEvidence{})
 	}
 	if e.Client != "" {
 		return false
 	}
-	if r.Action == "cluster" && e.PoolID != -1 {
+	if r.Action == "cluster" && e.Resource != (ResourceEvidence{}) {
+		return false
+	}
+	if r.Action == "pool" && e.Resource.ID != "" && !resourceID.MatchString(e.Resource.ID) {
 		return false
 	}
 	return true
@@ -240,7 +257,7 @@ func validateReady(e Evidence, r Request) bool {
 	case "cluster":
 		return true
 	case "pool":
-		return r.Pool != nil && e.PoolID >= 0
+		return r.Pool != nil && resourceID.MatchString(e.Resource.ID)
 	case "client":
 		return r.Client != nil && e.Client == "client."+r.Client.Name
 	}
@@ -270,7 +287,7 @@ func EvaluateEvidence(data []byte, r Request, digest string, removal bool) (reco
 		if r.Action == "cluster" && (!sameNames(e.Hosts, hostNames(r)) || len(e.Monitors) != 0 || len(e.OSDs) != 0 || e.MGRActive != "" || len(e.MGRStandbys) != 0) {
 			return reconciliation.EffectUnknown, evidenceFailure()
 		}
-		if e.PoolID != -1 || e.Client != "" {
+		if e.Resource != (ResourceEvidence{}) || e.Client != "" {
 			return reconciliation.EffectUnknown, evidenceFailure()
 		}
 		if removal {

@@ -1,19 +1,14 @@
 implementation: storage-ceph-host-v1
-content-digest: d85bc6e0522859ddf1adcfb0d7ee50f9d1e63d13260ce963fb6852662c5b9912
+content-digest: a8d2bc7d282f00cbe2d2114525c07278967a1e7f6eb32af455be4ac008f61f28
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v1, ceph-host-route-v2, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-runtime-profile-v3
 request-schema:
-  cluster struct ceph.Request
-  cluster.action string
+  cluster struct ceph.ClusterScope
   cluster.ansiblePackageVersion string
   cluster.bootstrap string
   cluster.callHome string
   cluster.cephadm struct ceph.Tool
   cluster.cephadm.packageVersion string
   cluster.cephadm.path string
-  cluster.client *struct ceph.Client omitempty
-  cluster.client.access string
-  cluster.client.name string
-  cluster.client.pool string
   cluster.cluster string
   cluster.clusterKeyRef string
   cluster.clusterNetworks []string
@@ -54,12 +49,6 @@ request-schema:
   cluster.packages.sources[].publicationPath string
   cluster.packages.sources[].url string
   cluster.packages.version string
-  cluster.pool *struct ceph.Pool omitempty
-  cluster.pool.crushRule string
-  cluster.pool.minSize int
-  cluster.pool.name string
-  cluster.pool.pgNum int
-  cluster.pool.size int
   cluster.publicNetworks []string
   cluster.registry string
   cluster.registryRef string

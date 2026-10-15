@@ -57,7 +57,7 @@ func (r *fleetRunner) Run(_ context.Context, run lifecycle.RunRequest) (lifecycl
 	}
 	evidence := ceph.Evidence{
 		Action: request.Action, Exists: true, FSID: request.FSID, Health: "HEALTH_OK", Hosts: fleetHosts, MGRActive: fleetHosts[0], MGRStandbys: fleetHosts[1:2],
-		Monitors: fleetHosts, OSDs: []ceph.OSDEvidence{}, Owned: true, Owner: request.Owner, PoolID: -1, Ready: true, Request: run.Digest, Version: ceph.EvidenceVersion,
+		Monitors: fleetHosts, OSDs: []ceph.OSDEvidence{}, Owned: true, Owner: request.Owner, Ready: true, Request: run.Digest, Version: ceph.EvidenceVersion,
 		MonAddrs: []ceph.MonitorAddress{},
 	}
 	for index, host := range fleetHosts {
@@ -69,7 +69,7 @@ func (r *fleetRunner) Run(_ context.Context, run lifecycle.RunRequest) (lifecycl
 		evidence.Dashboard = ceph.DashboardEvidence{URL: "https://" + fleetHosts[0] + ":8443/", CertificateSHA256: strings.Repeat("c", 64), Reachable: true}
 		produced = []lifecycle.Produced{{Name: ceph.DashboardOutput, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(fleetDashboardPassword)})}}
 	case "pool":
-		evidence.PoolID = 1
+		evidence.Resource = ceph.ResourceEvidence{ID: "1"}
 	case "client":
 		evidence.Client = "client." + request.Client.Name
 		credential := `[{"caps":{"mgr":"profile rbd pool=volumes","mon":"profile rbd","osd":"profile rbd pool=volumes"},"entity":"client.consumer","key":"` + base64.StdEncoding.EncodeToString([]byte("consumer-key")) + `"}]`

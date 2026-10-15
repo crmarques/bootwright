@@ -104,31 +104,30 @@ func packageEndpoint(c api.Catalog, server api.Object, selection api.Value, iden
 	return candidates[0], nil
 }
 
-func bindPackageSources(e lifecycle.Execution, r *Request, readers DependencyProofs) error {
-	if r.Packages == nil {
-		return failure("lifecycle.state", "cluster apply has no frozen package source", "")
+func bindPackageSources(e lifecycle.Execution, packages *PackageRequest, readers DependencyProofs) (*PackageRequest, error) {
+	if packages == nil {
+		return nil, failure("lifecycle.state", "cluster apply has no frozen package source", "")
 	}
 	if readers == nil {
-		return failure("lifecycle.state", "Ceph DVD proof reader is not bound", "")
+		return nil, failure("lifecycle.state", "Ceph DVD proof reader is not bound", "")
 	}
 	proofs := e.ApplyProved
 	if len(proofs) == 0 {
 		proofs = e.Proved
 	}
-	bound := *r.Packages
+	bound := *packages
 	bound.Sources = slices.Clone(bound.Sources)
 	for i, source := range bound.Sources {
 		tree, err := readers.PackageTree(proofs, source.Profile)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if tree.Context == "" || tree.Media != source.Media || tree.Path != source.PublicationPath || tree.MediaSize <= 0 || len(tree.MediaSHA256) != 64 || strings.Trim(tree.MediaSHA256, "0123456789abcdef") != "" {
-			return failure("lifecycle.state", "the DVD package source differs from its original apply publication", "restore the frozen hosted DVD publication")
+			return nil, failure("lifecycle.state", "the DVD package source differs from its original apply publication", "restore the frozen hosted DVD publication")
 		}
 		bound.Sources[i].MediaSHA256, bound.Sources[i].MediaSize = tree.MediaSHA256, tree.MediaSize
 	}
-	r.Packages = &bound
-	return nil
+	return &bound, nil
 }
 
 func packageCertificateVariable(index int) string { return "packageCA" + strconv.Itoa(index) }

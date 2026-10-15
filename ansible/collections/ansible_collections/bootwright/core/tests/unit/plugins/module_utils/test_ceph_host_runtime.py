@@ -1200,3 +1200,15 @@ def test_successful_pull_retry_does_not_project_an_earlier_broker_refusal(reques
     with worker.journal(create=True) as durable:
         assert worker.pull(durable, registry(request_value), 4285) is True
     assert pull_argv_count(podman) == 2 and "pulled.json" in markers.records
+
+
+def test_host_runtime_binds_one_scope_from_both_blocks(request_value):
+    scope = {key: value for key, value in request_value.items() if key != "action"}
+    from_cluster = runtime.HostRuntime(copy.deepcopy(request_value), "node-1", packages=object())
+    from_scope = runtime.HostRuntime(copy.deepcopy(scope), "node-1", packages=object())
+    assert "action" not in from_cluster.request and from_cluster.request == from_scope.request == scope
+    assert from_cluster.scope() == from_scope.scope() == runtime.scope(scope, "node-1")
+    pool = dict(request_value, action="pool", pool={"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"})
+    for refused in (pool, dict(scope, pool=pool["pool"])):
+        with pytest.raises(ceph_native.Refusal, match="^request$"):
+            runtime.HostRuntime(copy.deepcopy(refused), "node-1", packages=object())

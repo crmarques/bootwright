@@ -17,15 +17,43 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v1"
+const HostVersion = "ceph-host-v2"
 const HostEvidenceVersion = "ceph-host-evidence-v1"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
 
+type ClusterScope struct {
+	AnsiblePackageVersion    string                       `json:"ansiblePackageVersion"`
+	Bootstrap                string                       `json:"bootstrap"`
+	CallHome                 string                       `json:"callHome"`
+	Cephadm                  Tool                         `json:"cephadm"`
+	Cluster                  string                       `json:"cluster"`
+	ClusterKeyRef            string                       `json:"clusterKeyRef"`
+	ClusterNetworks          []string                     `json:"clusterNetworks"`
+	ClusterSSHTransport      string                       `json:"clusterSSHTransport"`
+	ClusterSSHUser           string                       `json:"clusterSSHUser"`
+	Config                   map[string]map[string]string `json:"config,omitempty"`
+	Controller               string                       `json:"controller"`
+	FSID                     string                       `json:"fsid,omitempty"`
+	Hosts                    []Host                       `json:"hosts"`
+	Image                    string                       `json:"image"`
+	MonIP                    string                       `json:"monIP"`
+	NFSGaneshaPackageVersion string                       `json:"nfsGaneshaPackageVersion,omitempty"`
+	Owner                    string                       `json:"owner,omitempty"`
+	PackageRepository        string                       `json:"packageRepository"`
+	Packages                 *PackageRequest              `json:"packages,omitempty"`
+	PublicNetworks           []string                     `json:"publicNetworks"`
+	Registry                 string                       `json:"registry"`
+	RegistryRef              string                       `json:"registryRef"`
+	Release                  string                       `json:"release"`
+	Services                 []json.RawMessage            `json:"services"`
+	Version                  string                       `json:"version"`
+}
+
 type HostRequest struct {
-	Cluster Request `json:"cluster"`
-	Host    string  `json:"host"`
-	Version string  `json:"version"`
+	Cluster ClusterScope `json:"cluster"`
+	Host    string       `json:"host"`
+	Version string       `json:"version"`
 }
 
 func (r HostRequest) canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph host") }
@@ -35,8 +63,8 @@ func DecodeHostRequest(data []byte) (HostRequest, error) {
 	if err != nil {
 		return HostRequest{}, err
 	}
-	if r.Cluster.Version != Version || r.Cluster.Action != "cluster" || r.Cluster.Packages == nil {
-		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request does not carry its cluster's package-bearing request", "")
+	if r.Cluster.Version != Version || r.Cluster.Packages == nil {
+		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request does not carry its cluster's package-bearing scope", "")
 	}
 	if _, ok := r.target(); !ok {
 		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request names a host outside its cluster", "")
@@ -205,7 +233,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			return plan, err
 		}
 		for _, host := range cluster.Hosts {
-			request := HostRequest{Version: HostVersion, Cluster: cluster, Host: host.Name}
+			request := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host.Name}
 			index, _ := request.source()
 			source := cluster.Packages.Sources[index]
 			canonical, err := request.canonical()
@@ -373,13 +401,11 @@ func (c HostCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifec
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
-	if err := bindPackageSources(e, &r.Cluster, c.proofs); err != nil {
+	if r.Cluster.Packages, err = bindPackageSources(e, r.Cluster.Packages, c.proofs); err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	host, _ := r.target()
-	scoped := r.Cluster
-	scoped.Hosts = []Host{host}
-	if err := proveDisks(e, scoped, c.proofs); err != nil {
+	if err := proveDisks(e, Request{Hosts: []Host{host}}, c.proofs); err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	result, err := c.run(ctx, e, "apply", r)

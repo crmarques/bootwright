@@ -13,7 +13,7 @@ description:
   - Observation never pulls, installs or changes host state; release retains the shared packages and image.
 options:
   request:
-    description: Frozen Ceph host request with its cluster request and durable runtime identity.
+    description: Frozen Ceph host request with its cluster's host scope and durable runtime identity.
     type: dict
     required: true
   operation:
@@ -79,7 +79,7 @@ def main():
     params = module.params
     try:
         request = ceph_core.host_request(params["request"])
-        transport = ceph_core.Transport(request["cluster"], params["material"])
+        transport = ceph_core.Transport(request["cluster"], params["material"], scope=True)
         result = ceph_core.execute_host(request, params["operation"], params["digest"], transport)
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.HOST_REASONS)

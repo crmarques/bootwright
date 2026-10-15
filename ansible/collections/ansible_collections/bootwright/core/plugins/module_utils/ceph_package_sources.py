@@ -35,7 +35,7 @@ COMPS_PROLOG = re.compile(rb"""\A(?:<\?xml\s{1,8}version=(["'])1\.0\1(?:\s{1,8}e
 
 
 def source_for(request, host):
-    ceph_native.validate(request)
+    ceph_native.validate_scope(request)
     package = request.get("packages")
     ceph_native.require(isinstance(package, dict) and set(package) == {"version", "licenseAccepted", "sources"}, "packages")
     ceph_native.require(package["version"] == "ceph-packages-v2" and package["licenseAccepted"] is True, "packages")

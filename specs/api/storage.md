@@ -81,8 +81,11 @@ example selects `verified-tunnel` explicitly; its protected mounts and staged
 bootstrap remain subject to
 [release qualification](../storage-coverage.md#release-qualification).
 Core request v6, image request v2 and package request v2 refuse continuation
-of older operations; finish or remove old contexts with their original
-applying build.
+of older operations, and core evidence v3 and host request v2 refuse
+continuation of operations an earlier build made; finish or remove old
+contexts with their original applying build. A host preparation request
+carries only its cluster's scope, never the core request's resource action,
+pool or client, so a resource change never moves it.
 
 The existing native-section config map admits explicit fixed-memory and
 pool-default pairs for the minimal core configuration:

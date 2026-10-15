@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v3
-content-digest: b319848dbf006996f774f3b30dff2c158f6be6b8618df4e7c811069370a930a1
+content-digest: f4f75bdd7bec94d32e5caa1ad1c47f4dcdb8521939e0e77c238a598b3f98478b
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-pool-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v2
 request-schema:
   action string
@@ -90,8 +90,10 @@ evidence-schema:
   owned bool
   owner string
   partial bool
-  poolID int
   ready bool
   removed bool
   request string
+  resource struct ceph.ResourceEvidence
+  resource.id string
+  resource.path string
   version string

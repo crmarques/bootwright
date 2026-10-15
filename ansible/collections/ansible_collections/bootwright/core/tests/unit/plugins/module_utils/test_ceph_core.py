@@ -15,7 +15,9 @@ import sys
 import pytest
 import yaml
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_host_worker, ceph_native, ceph_native_worker, ceph_tunnel_staging
+from ansible_collections.bootwright.core.plugins.module_utils import (
+    ceph_core, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_worker, ceph_tunnel_staging,
+)
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics, native_specializations
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
@@ -88,7 +90,8 @@ def worker(core_request, answers, markers=None):
         answers.setdefault(("mon", "dump"), {"mons": []})
         answers.setdefault(("mgr", "services"), {})
         answers.setdefault(("config-key", "ls"), [])
-    native = ceph_native.Worker(core_request, core_request["bootstrap"], run=run, markers=markers)
+    kind = ceph_native_resources.ResourceWorker if core_request["action"] in ceph_native_resources.ACTIONS else ceph_native.Worker
+    native = kind(core_request, core_request["bootstrap"], run=run, markers=markers)
     native.verify_tool = lambda: {"qualified-test-artifact": True}
     # These phase tests borrow an already proved daemon snapshot. The direct
     # filesystem/systemd/Podman owner is exercised in test_ceph_native_observe.
@@ -120,10 +123,10 @@ def identities(core_request, form="{serial}"):
 
 
 def observation(core_request, ready=False):
-    return {"version": "ceph-core-evidence-v2", "request": "", "action": core_request["action"], "owner": core_request["owner"], "fsid": core_request["fsid"],
+    return {"version": "ceph-core-evidence-v3", "request": "", "action": core_request["action"], "owner": core_request["owner"], "fsid": core_request["fsid"],
             "owned": True, "exists": ready, "ready": ready, "removed": not ready, "partial": False, "health": "HEALTH_OK" if ready else "",
             "hosts": [h["name"] for h in core_request["hosts"]] if ready else [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [],
-            "osds": [], "poolID": -1, "client": "", "dashboard": dict(EMPTY_DASHBOARD)}
+            "osds": [], "resource": {"id": "", "path": ""}, "client": "", "dashboard": dict(EMPTY_DASHBOARD)}
 
 
 def failing_command(core_request, applied):
@@ -254,6 +257,23 @@ def test_remote_dispatch_cannot_bypass_the_supported_transport(core_request, cha
         ceph_native.dispatch({"request": core_request, "host": "node-1", "phase": "claim", "private": {}})
 
 
+def test_dispatch_reaches_osd_prepare_only_over_a_supported_transport(core_request, monkeypatch):
+    sentinel = {"changed": False, "sentinel": "osd_prepare"}
+    reached = []
+
+    def osd_prepare(worker):
+        reached.append(worker.host["name"])
+        return sentinel
+
+    monkeypatch.setattr(ceph_native.Worker, "osd_prepare", osd_prepare)
+    supported = dict(core_request, clusterSSHTransport="verified-tunnel")
+    assert ceph_native.dispatch({"request": supported, "host": "node-1", "phase": "osd_prepare", "private": {}}) is sentinel
+    assert reached == ["node-1"]
+    with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
+        ceph_native.dispatch({"request": core_request, "host": "node-1", "phase": "osd_prepare", "private": {}})
+    assert reached == ["node-1"]
+
+
 def test_observation_calls_only_read_phases_and_all_hosts(core_request):
     class Transport:
         def __init__(self):
@@ -335,9 +355,9 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
         envelope = json.loads(data)
         assert set(envelope) == {"sources", "payload", "budget"}
         assert envelope["payload"]["private"] == {"registryJSON": "REGISTRY-SECRET-SENTINEL"}
-        assert set(envelope["sources"]) == {"ceph_native", "ceph_native_observe", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody",
-                                            "ceph_host_route_probe", "ceph_host_runtime", "native_diagnostics", "native_specializations",
-                                            "ceph_pull_broker"}
+        assert set(envelope["sources"]) == {"ceph_native", "ceph_native_observe", "ceph_native_resources", "ceph_tunnel", "ceph_tunnel_staging",
+                                            "ceph_tunnel_custody", "ceph_host_route_probe", "ceph_host_runtime", "native_diagnostics",
+                                            "native_specializations", "ceph_pull_broker"}
         assert 0 < envelope["budget"] <= min(640, timeout - 1)
         return 0, b'{"ok":true,"result":{"changed":false}}'
 
@@ -434,7 +454,7 @@ def pool_worker(core_request, marks, pools, effects):
     for value in pools:
         value.setdefault("size", 3)
         value.setdefault("min_size", 2)
-    native = ceph_native.Worker(core_request, core_request["bootstrap"], run=pool_world(core_request, pools, effects), markers=marks)
+    native = ceph_native_resources.ResourceWorker(core_request, core_request["bootstrap"], run=pool_world(core_request, pools, effects), markers=marks)
     return native
 
 
@@ -545,11 +565,11 @@ def test_a_pool_this_operation_created_without_a_recorded_id_observes_as_unfinis
     native = observed_pool(core_request, marks)
     evidence = native.empty_evidence()
     assert native.observe_resource(evidence, True) is False
-    assert evidence["owned"] and evidence["exists"] and evidence["poolID"] == -1
+    assert evidence["owned"] and evidence["exists"] and evidence["resource"] == {"id": "", "path": ""}
     marks.records["pool-id-volumes.json"] = {"id": 8}
     evidence = native.empty_evidence()
     assert native.observe_resource(evidence, True) is True
-    assert evidence["poolID"] == 8
+    assert evidence["resource"] == {"id": "8", "path": ""}
 
 
 @pytest.mark.parametrize("case", ["no-attempt", "foreign-attempt", "other-id"])
@@ -668,6 +688,8 @@ def test_owned_cluster_without_daemons_does_not_prove_cleanup(core_request):
 
 @pytest.mark.parametrize("phase", ["observe", "host_state", "client_read"])
 def test_native_reads_require_unchanged_artifacts_before_observation(core_request, phase):
+    if phase == "client_read":
+        core_request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "read-only"})
     native, calls = worker(core_request, {})
 
     def refuse_artifact():
@@ -1084,7 +1106,7 @@ def test_absent_native_resource_retains_owned_cleanup_work(core_request, action,
     result = native.observe()
     assert result["owned"] is owned and result["exists"] is owned
     assert result["partial"] is owned and result["ready"] is False
-    assert result["removed"] is False and result["poolID"] == -1 and result["client"] == ""
+    assert result["removed"] is False and result["resource"] == {"id": "", "path": ""} and result["client"] == ""
     result["request"] = "d" * 64
     ceph_core.evidence(result, "d" * 64, core_request)
     with pytest.raises(ceph_native.Refusal, match="^client-quiescence-unqualified$"):
@@ -1876,3 +1898,28 @@ def test_core_observation_refuses_a_malformed_pending_list(core_request, pending
 
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
         ceph_core.observe_state(core_request, "d" * 64, core_request["hosts"][0], Transport())
+
+
+def test_evidence_resource_member(core_request):
+    value = dict(observation(core_request), request="d" * 64)
+    assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, core_request)["resource"] == {"id": "", "path": ""}
+    pool = dict(value, action="pool", resource={"id": "8", "path": ""})
+    assert ceph_core.evidence(copy.deepcopy(pool), "d" * 64)["resource"] == {"id": "8", "path": ""}
+    legacy = {key: item for key, item in value.items() if key != "resource"}
+    refused = [dict(legacy, poolID=-1), dict(value, poolID=-1), dict(value, resource={"id": "", "path": "", "zone": ""}), dict(value, resource={"id": ""}),
+               dict(pool, resource={"id": 8, "path": ""}), dict(pool, resource={"id": "-1", "path": ""}), dict(pool, resource={"id": "01", "path": ""}),
+               dict(pool, resource={"id": "8", "path": "/volumes"}), dict(pool, resource=None), dict(value, resource={"id": "8", "path": ""}),
+               dict(value, action="client", resource={"id": "8", "path": ""})]
+    for bad in refused:
+        with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+            ceph_core.evidence(copy.deepcopy(bad), "d" * 64)
+
+
+def test_resource_phases_ship_in_their_own_module():
+    modules = ceph_native_worker.MODULES
+    assert modules[modules.index("ceph_native") + 1] == "ceph_native_resources"
+    assert tuple(ceph_core.Transport.native_sources()) == modules
+    assert ceph_native_resources.PHASES == {"pool", "client", "client_read"} and not ceph_native_resources.PHASES & ceph_native.CORE_PHASES
+    assert ceph_native_resources.READ_ONLY_PHASES <= ceph_native_resources.PHASES
+    assert not any(hasattr(ceph_native.Worker, name) for name in ("pool", "client", "client_read"))
+    assert all(hasattr(ceph_native_resources.ResourceWorker, name) for name in ("pool", "client", "client_read"))

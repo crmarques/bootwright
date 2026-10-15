@@ -25,12 +25,13 @@ PASSWORD = "REGISTRY-PASSWORD-SENTINEL"
 @pytest.fixture
 def host_request(request_value):
     cluster = copy.deepcopy(request_value)
+    del cluster["action"]
     cluster["packages"] = {"version": "ceph-packages-v2", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
-    return {"version": "ceph-host-v1", "cluster": cluster, "host": "node-2"}
+    return {"version": "ceph-host-v2", "cluster": cluster, "host": "node-2"}
 
 
 request_value = host_fixtures.request_value
@@ -144,7 +145,8 @@ def test_the_long_call_carries_the_credential_only_on_protected_stdin(host_reque
         calls.append((argv, data, timeout))
         return 0, b'{"ok":true,"result":{"changed":true}}'
 
-    transport = ceph_core.Transport(host_request["cluster"], {"sshKey": str(key), "knownHosts": str(known), "registryJSON": str(registry)}, run=run)
+    material = {"sshKey": str(key), "knownHosts": str(known), "registryJSON": str(registry)}
+    transport = ceph_core.Transport(host_request["cluster"], material, run=run, scope=True)
     host = host_request["cluster"]["hosts"][1]
     assert transport.host_profile(host) == {"changed": True}
     argv, data, timeout = calls[0]
@@ -171,7 +173,7 @@ def test_every_other_host_phase_keeps_the_ordinary_ceiling(host_request, tmp_pat
         calls.append((argv, data, timeout))
         return 0, b'{"ok":true,"result":{"changed":false}}'
 
-    transport = ceph_core.Transport(host_request["cluster"], {"sshKey": str(key), "knownHosts": str(known)}, run=run)
+    transport = ceph_core.Transport(host_request["cluster"], {"sshKey": str(key), "knownHosts": str(known)}, run=run, scope=True)
     for phase in ("route", "device_identity", "host_observe", "host_devices"):
         transport.call(host_request["cluster"]["hosts"][1], phase)
     assert all(timeout == 660 and json.loads(data)["budget"] <= 640 for unused, data, timeout in calls)
@@ -223,7 +225,7 @@ def package_transport(host_request, tmp_path, output):
         path.write_text(value)
         path.chmod(0o600)
         material[name] = str(path)
-    return ceph_core.Transport(host_request["cluster"], material, run=lambda argv, data, timeout: (0, output))
+    return ceph_core.Transport(host_request["cluster"], material, run=lambda argv, data, timeout: (0, output), scope=True)
 
 
 def unaccepted_license():
@@ -270,3 +272,15 @@ def test_the_package_worker_names_only_its_closed_tokens_and_their_site():
         value = json.loads(result.stdout)
         assert result.stderr == b"" and value["reason"] == reason and value.pop("cause").startswith(cause) and value == {"ok": False, "reason": reason}
         assert PASSWORD.encode() not in result.stdout
+
+
+@pytest.mark.parametrize("change", [
+    {"action": "cluster"}, {"pool": {"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"}},
+    {"client": {"name": "consumer", "pool": "volumes", "access": "read-only"}},
+])
+def test_host_request_admits_only_the_cluster_scope(host_request, change):
+    assert ceph_core.host_request(copy.deepcopy(host_request)) == host_request
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_core.host_request(dict(host_request, cluster=dict(host_request["cluster"], **change)))
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_core.host_request(dict(host_request, version="ceph-host-v1"))

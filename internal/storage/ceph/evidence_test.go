@@ -10,7 +10,7 @@ import (
 )
 
 func readyEvidence(r Request) Evidence {
-	e := Evidence{Version: EvidenceVersion, Request: "digest", Action: r.Action, Owner: r.Owner, FSID: r.FSID, Owned: true, Exists: true, Ready: true, Health: "HEALTH_OK", Hosts: hostNames(r), Monitors: hostNames(r), MGRActive: "node-1", MGRStandbys: []string{"node-2"}, MonAddrs: []MonitorAddress{}, OSDs: []OSDEvidence{}, PoolID: -1}
+	e := Evidence{Version: EvidenceVersion, Request: "digest", Action: r.Action, Owner: r.Owner, FSID: r.FSID, Owned: true, Exists: true, Ready: true, Health: "HEALTH_OK", Hosts: hostNames(r), Monitors: hostNames(r), MGRActive: "node-1", MGRStandbys: []string{"node-2"}, MonAddrs: []MonitorAddress{}, OSDs: []OSDEvidence{}}
 	for i, h := range r.Hosts {
 		e.OSDs = append(e.OSDs, OSDEvidence{Host: h.Name, Path: "/dev/vdb", ID: i, UUID: "osd-" + h.Name})
 		if r.Action == "cluster" {
@@ -64,7 +64,7 @@ func TestEvidenceRequiresExactOwnedReadyServiceAndDiskScope(t *testing.T) {
 
 func TestDaemonAbsenceNeverProvesClusterCleanup(t *testing.T) {
 	r := runtimeRequest()
-	e := Evidence{Version: EvidenceVersion, Request: "digest", Action: r.Action, Owner: r.Owner, FSID: r.FSID, Owned: true, Removed: true, Hosts: hostNames(r), Monitors: []string{}, MGRStandbys: []string{}, MonAddrs: []MonitorAddress{}, OSDs: []OSDEvidence{}, PoolID: -1}
+	e := Evidence{Version: EvidenceVersion, Request: "digest", Action: r.Action, Owner: r.Owner, FSID: r.FSID, Owned: true, Removed: true, Hosts: hostNames(r), Monitors: []string{}, MGRStandbys: []string{}, MonAddrs: []MonitorAddress{}, OSDs: []OSDEvidence{}}
 	effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", true)
 	if err == nil || effect != reconciliation.EffectUnknown {
 		t.Fatalf("daemon absence claimed full disk/key cleanup: %s %v", effect, err)
@@ -114,7 +114,7 @@ func TestPoolAndClientRequireHealthyCompleteCore(t *testing.T) {
 			r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
 			e := readyEvidence(r)
 			if action == "pool" {
-				e.PoolID = 1
+				e.Resource = ResourceEvidence{ID: "1"}
 			} else {
 				e.Client = "client.consumer"
 			}
@@ -145,7 +145,6 @@ func TestAbsentNativeResourceWithOwnedResidueRemainsPartial(t *testing.T) {
 			e := readyEvidence(r)
 			e.Ready = false
 			e.Partial = true
-			e.PoolID = -1
 			e.Client = ""
 			for _, removal := range []bool{false, true} {
 				effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", removal)
@@ -206,12 +205,95 @@ func TestEvidenceV2BoundsTheDashboardAndMonitorAddresses(t *testing.T) {
 	pool.Action = "pool"
 	pool.Pool = &Pool{Name: "volumes"}
 	e := readyEvidence(pool)
-	e.PoolID = 1
+	e.Resource = ResourceEvidence{ID: "1"}
 	if _, err := EvaluateEvidence(evidenceBytes(t, e), pool, "digest", false); err != nil {
 		t.Fatal(err)
 	}
 	e.Dashboard = DashboardEvidence{URL: "https://node-1:8443/"}
 	if _, err := EvaluateEvidence(evidenceBytes(t, e), pool, "digest", false); err == nil {
 		t.Fatal("a pool block carried dashboard evidence")
+	}
+}
+
+func resourceRequest(action string) Request {
+	r := runtimeRequest()
+	r.Action = action
+	switch action {
+	case "pool":
+		r.Pool = &Pool{Name: "volumes"}
+	case "client":
+		r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
+	}
+	return r
+}
+
+func TestEvidenceResourceMembersClosed(t *testing.T) {
+	r := runtimeRequest()
+	data := evidenceBytes(t, readyEvidence(r))
+	if effect, err := EvaluateEvidence(data, r, "digest", false); err != nil || effect != reconciliation.EffectCompleted {
+		t.Fatalf("ready evidence rejected: %s %v", effect, err)
+	}
+	for name, change := range map[string]func(map[string]json.RawMessage){
+		"extra member":       func(f map[string]json.RawMessage) { f["resource"] = json.RawMessage(`{"id":"","key":"","path":""}`) },
+		"null":               func(f map[string]json.RawMessage) { f["resource"] = json.RawMessage(`null`) },
+		"missing path":       func(f map[string]json.RawMessage) { f["resource"] = json.RawMessage(`{"id":""}`) },
+		"numeric id":         func(f map[string]json.RawMessage) { f["resource"] = json.RawMessage(`{"id":1,"path":""}`) },
+		"poolID beside":      func(f map[string]json.RawMessage) { f["poolID"] = json.RawMessage(`-1`) },
+		"poolID in place of": func(f map[string]json.RawMessage) { delete(f, "resource"); f["poolID"] = json.RawMessage(`-1`) },
+	} {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(data, &fields); err != nil {
+			t.Fatal(err)
+		}
+		change(fields)
+		bad, _ := json.Marshal(fields)
+		if effect, err := EvaluateEvidence(bad, r, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+			t.Fatalf("%s accepted: %s %v", name, effect, err)
+		}
+	}
+}
+
+func TestPoolEvidenceResourceIDIsDecimal(t *testing.T) {
+	pool := resourceRequest("pool")
+	for _, id := range []string{"0", "8"} {
+		e := readyEvidence(pool)
+		e.Resource = ResourceEvidence{ID: id}
+		if effect, err := EvaluateEvidence(evidenceBytes(t, e), pool, "digest", false); err != nil || effect != reconciliation.EffectCompleted {
+			t.Fatalf("pool id %q rejected: %s %v", id, effect, err)
+		}
+	}
+	for _, id := range []string{"", "-1", "01", "1.0", " 1", "x", strings.Repeat("1", 20)} {
+		e := readyEvidence(pool)
+		e.Resource = ResourceEvidence{ID: id}
+		if effect, err := EvaluateEvidence(evidenceBytes(t, e), pool, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+			t.Fatalf("pool id %q accepted: %s %v", id, effect, err)
+		}
+	}
+	for _, action := range []string{"cluster", "pool", "client"} {
+		r := resourceRequest(action)
+		e := readyEvidence(r)
+		if action == "client" {
+			e.Client = "client.consumer"
+		}
+		e.Resource = ResourceEvidence{ID: "1", Path: "/volumes"}
+		if action != "pool" {
+			e.Resource.Path = ""
+			if effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+				t.Fatalf("%s accepted a resource id: %s %v", action, effect, err)
+			}
+			e.Resource = ResourceEvidence{Path: "/volumes"}
+		}
+		if effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+			t.Fatalf("%s accepted a resource path: %s %v", action, effect, err)
+		}
+	}
+	absent := readyEvidence(pool)
+	absent.Exists, absent.Ready = false, false
+	if effect, err := EvaluateEvidence(evidenceBytes(t, absent), pool, "digest", false); err != nil || effect != reconciliation.EffectNoEffect {
+		t.Fatalf("an absent pool was not a no-effect observation: %s %v", effect, err)
+	}
+	absent.Resource = ResourceEvidence{ID: "1"}
+	if effect, err := EvaluateEvidence(evidenceBytes(t, absent), pool, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+		t.Fatalf("an absent pool carried a resource identity: %s %v", effect, err)
 	}
 }

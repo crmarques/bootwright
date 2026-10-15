@@ -196,7 +196,7 @@ func TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem(t *testing.
 	}
 	bootstrap, err := json.Marshal(ceph.Evidence{
 		Version: ceph.EvidenceVersion, Request: "digest", Action: "cluster", Owner: "apply", FSID: "6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b", Owned: true, Exists: true, Ready: true,
-		Health: "HEALTH_OK", Hosts: []string{"rhel-01.lab.test"}, Monitors: []string{"rhel-01.lab.test"}, MGRActive: "rhel-01.lab.test", MGRStandbys: []string{}, OSDs: []ceph.OSDEvidence{}, PoolID: -1,
+		Health: "HEALTH_OK", Hosts: []string{"rhel-01.lab.test"}, Monitors: []string{"rhel-01.lab.test"}, MGRActive: "rhel-01.lab.test", MGRStandbys: []string{}, OSDs: []ceph.OSDEvidence{},
 		MonAddrs:  []ceph.MonitorAddress{{Host: "rhel-01.lab.test", Address: "198.51.100.11"}},
 		Dashboard: ceph.DashboardEvidence{URL: "https://rhel-01.lab.test:8443/", CertificateSHA256: strings.Repeat("c", 64), Reachable: true},
 	})

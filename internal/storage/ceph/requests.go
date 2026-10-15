@@ -1,11 +1,9 @@
 package ceph
 
 import (
-	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/netip"
 	"slices"
 	"strings"
@@ -113,6 +111,14 @@ type Request struct {
 func (r Request) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph") }
 func DecodeRequest(data []byte) (Request, error) {
 	return reconciliation.ThawVersion[Request](data, "Ceph", Version)
+}
+
+func scopeOf(r Request) ClusterScope {
+	return ClusterScope{AnsiblePackageVersion: r.AnsiblePackageVersion, Bootstrap: r.Bootstrap, CallHome: r.CallHome, Cephadm: r.Cephadm, Cluster: r.Cluster,
+		ClusterKeyRef: r.ClusterKeyRef, ClusterNetworks: r.ClusterNetworks, ClusterSSHTransport: r.ClusterSSHTransport, ClusterSSHUser: r.ClusterSSHUser,
+		Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
+		NFSGaneshaPackageVersion: r.NFSGaneshaPackageVersion, Owner: r.Owner, PackageRepository: r.PackageRepository, Packages: r.Packages,
+		PublicNetworks: r.PublicNetworks, Registry: r.Registry, RegistryRef: r.RegistryRef, Release: r.Release, Services: r.Services, Version: r.Version}
 }
 
 func FSIDFor(operation, cluster string) string {
@@ -279,78 +285,6 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 	return nil
 }
 
-func projectServices(r *Request, cluster api.Object) error {
-	spec := cluster.Spec().Get("ceph")
-	services := spec.Get("services").Items()
-	rank := func(service api.Value) int {
-		if at := slices.Index([]string{"mon", "mgr", "osd"}, service.Get("service_type").Text()); at >= 0 {
-			return at
-		}
-		return 3
-	}
-	slices.SortStableFunc(services, func(left, right api.Value) int {
-		return cmp.Or(cmp.Compare(rank(left), rank(right)), strings.Compare(storage.NativeServiceName(left), storage.NativeServiceName(right)))
-	})
-	for _, svc := range services {
-		t := svc.Get("service_type").Text()
-		if t != "mon" && t != "mgr" && t != "osd" {
-			return failure("lifecycle.unsupported", "a selected service has no core lifecycle", "use only MON, MGR and OSD services until its feature item is delivered")
-		}
-		for _, field := range svc.Fields() {
-			if !slices.Contains([]string{"service_type", "service_id", "placement", "spec"}, field.Name) {
-				return failure("lifecycle.unsupported", "a native service option has not been qualified for core execution", "use only service_type, service_id, placement and the supported spec")
-			}
-		}
-		for _, h := range svc.Get("placement", "hosts").Items() {
-			if h.Type() != api.String || strings.ContainsAny(h.Text(), ":=") {
-				return failure("lifecycle.unsupported", "decorated native host placement requires additional network or daemon identity handling", "use bare native hostnames or a label for the core profile")
-			}
-		}
-		if svc.Has("extra_container_args") || svc.Has("extra_entrypoint_args") || svc.Has("custom_configs") || svc.Has("config") || svc.Get("unmanaged").Bool() {
-			return failure("lifecycle.unsupported", "core services cannot carry unqualified additional effects", "remove the unqualified service options")
-		}
-		names, issues := storage.ResolveServicePlacement(cluster, svc)
-		if len(issues) != 0 {
-			return failure("api.invariant", "native service placement could not be resolved", "correct the service placement")
-		}
-		hosts := []string{}
-		for _, n := range names {
-			for _, node := range spec.Get("topology", "nodes").Items() {
-				if node.Get("name").Text() == n {
-					hosts = append(hosts, storage.NativeHostname(node))
-				}
-			}
-		}
-		projected := nativeService{ServiceType: t, ServiceID: svc.Get("service_id").Text(), Placement: nativePlacement{Hosts: hosts}}
-		if t == "mgr" && r.ClusterSSHTransport == "verified-tunnel" && !slices.Contains(hosts, r.Bootstrap) {
-			return failure("lifecycle.unsupported", "the verified-tunnel candidate requires bootstrap to be an eligible MGR host", "include the bootstrap host in MGR placement before qualifying this core profile")
-		}
-		if n, ok := svc.Get("placement", "count").Int64(); ok {
-			projected.Placement.Count = &n
-		}
-		if n, ok := svc.Get("placement", "count_per_host").Int64(); ok {
-			projected.Placement.CountPerHost = &n
-			if n != 1 {
-				return failure("lifecycle.unsupported", "core placement supports one daemon per selected host", "omit count_per_host or set it to 1")
-			}
-		}
-		if t == "osd" {
-			if err := checkDevices(*r, names, cluster, svc); err != nil {
-				return err
-			}
-			projected.Spec = &nativeOSD{DataDevices: nativeDevices{Paths: svc.Get("spec", "data_devices", "paths").Strings()}}
-		} else if svc.Get("spec").Len() != 0 || svc.Get("service_id").Present() {
-			return failure("lifecycle.unsupported", "core MON/MGR service-specific options are not yet qualified", "declare MON/MGR placement without spec or service_id")
-		}
-		data, err := json.Marshal(projected)
-		if err != nil {
-			return err
-		}
-		r.Services = append(r.Services, data)
-	}
-	return nil
-}
-
 // selectDevices narrows destructive custody to the disks selected by native
 // OSD documents. Other declared data disks never enter the Ceph envelope.
 func selectDevices(r *Request) {
@@ -422,59 +356,6 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 		}
 	}
 	return nil
-}
-
-func poolRequest(c api.Catalog, pool api.Object, contextName string) (Request, error) {
-	cluster, _ := c.Find(api.StorageCluster, pool.Spec().Get("clusterRef").Text())
-	r, err := baseRequest(c, cluster, contextName)
-	if err != nil {
-		return Request{}, err
-	}
-	s := pool.Spec()
-	if s.Get("type").Text() != "replicated" || s.Get("role").Text() != "rbd" || s.Has("placementPolicyRef") || s.Has("quota") || s.Has("compression") || s.Has("mirroring") {
-		return Request{}, failure("lifecycle.unsupported", "the core pool adapter realizes only replicated RBD pools", "use a replicated RBD pool without later-feature policies")
-	}
-	size, ok := s.Get("replicated", "size").Int64()
-	if !ok || size == 0 {
-		size = 3
-	}
-	minSize, ok := s.Get("replicated", "minSize").Int64()
-	if !ok || minSize == 0 {
-		minSize = 2
-	}
-	if size < 2 || minSize < 2 || minSize > size {
-		return Request{}, failure("api.invariant", "core pools require at least two replicas and minSize between two and size", "set replicated.size to at least 2 and replicated.minSize between 2 and replicated.size")
-	}
-	osdHosts := 0
-	for _, host := range r.Hosts {
-		if len(host.Devices) > 0 {
-			osdHosts++
-		}
-	}
-	if size >= int64(osdHosts) {
-		return Request{}, failure("api.invariant", fmt.Sprintf("IBM replication size %d requires more than %d OSD-bearing hosts; %d are declared", size, size, osdHosts), "add OSD-bearing hosts, or explicitly select size 2 and minSize 2 for a three-host cluster; omitted or zero size retains the default of 3")
-	}
-	if s.Has("autoscale") && (s.Get("autoscale").Len() != 1 || s.Get("autoscale", "mode").Text() != "on") {
-		return Request{}, failure("lifecycle.unsupported", "additional autoscaler settings require pool feature qualification", "use autoscale.mode: on or omit autoscale for the core profile")
-	}
-	if s.Has("application") && s.Get("application").Text() != "rbd" {
-		return Request{}, failure("api.invariant", "RBD pool application must agree with its role", "set application to rbd")
-	}
-	r.Action = "pool"
-	r.Pool = &Pool{Name: pool.Name(), Size: int(size), MinSize: int(minSize), PGNum: 32, CrushRule: "replicated_rule"}
-	return r, nil
-}
-
-func clientRequest(c api.Catalog, client api.Object, contextName string) (Request, error) {
-	pool, _ := c.Find(api.StoragePool, client.Spec().Get("poolRef").Text())
-	r, err := poolRequest(c, pool, contextName)
-	if err != nil {
-		return Request{}, err
-	}
-	r.Action = "client"
-	r.Pool = nil
-	r.Client = &Client{Name: client.Name(), Pool: pool.Name(), Access: client.Spec().Get("access").Text()}
-	return r, nil
 }
 
 func hostRequirement(host Host) reconciliation.ObjectRef {

@@ -233,7 +233,7 @@ def installed_headers(plan, expected):
 
 def prepare(request, host, certificate, *, acquisition=None, journal=None):
     source = ceph_package_sources.source_for(request, host)
-    ceph_native.require(request["action"] == "cluster" and ceph_native.supported_transport(request), "unsupported-release")
+    ceph_native.require(ceph_native.supported_transport(request), "unsupported-release")
     ceph_native.require(os.geteuid() == 0, "packages")
     ceph_native.require(isinstance(certificate, str), "material")
     host_admission(request)

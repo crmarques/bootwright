@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -204,7 +205,7 @@ func hostExecution(t *testing.T, host string) (lifecycle.Execution, HostRequest,
 	for i := range cluster.Hosts {
 		cluster.Hosts[i].HostKeyRef = cluster.Hosts[i].Name + "-host-key"
 	}
-	r := HostRequest{Version: HostVersion, Cluster: cluster, Host: host}
+	r := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host}
 	canonical, err := r.canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -422,5 +423,121 @@ func TestHostReleaseImpactNamesTheRetainedRuntimeAndPackageRecords(t *testing.T)
 				t.Fatalf("%s impact %q does not name %q", definition.ID, definition.Impacts[0], want)
 			}
 		}
+	}
+}
+
+func jsonNames(t reflect.Type) []string {
+	names := []string{}
+	for field := range t.Fields() {
+		names = append(names, strings.Split(field.Tag.Get("json"), ",")[0])
+	}
+	slices.Sort(names)
+	return names
+}
+
+func reachableTypes(t reflect.Type, seen map[reflect.Type]bool) {
+	if seen[t] {
+		return
+	}
+	seen[t] = true
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Array:
+		reachableTypes(t.Elem(), seen)
+	case reflect.Map:
+		reachableTypes(t.Key(), seen)
+		reachableTypes(t.Elem(), seen)
+	case reflect.Struct:
+		for field := range t.Fields() {
+			reachableTypes(field.Type, seen)
+		}
+	}
+}
+
+func withoutMembers(t *testing.T, data []byte, drop ...string) string {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range drop {
+		delete(fields, name)
+	}
+	out, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}
+
+func TestHostRequestCarriesNoResourcePayload(t *testing.T) {
+	blocks := plannedBlocks(t)
+	for _, machineName := range []string{"node-1", "node-2", "node-3"} {
+		block := blocks[HostBlockID("example", machineName)]
+		var request, cluster map[string]json.RawMessage
+		if err := json.Unmarshal(block.Request, &request); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(request["cluster"], &cluster); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"action", "pool", "client"} {
+			if _, ok := cluster[name]; ok {
+				t.Fatalf("%s: the host request carries the core request's %s", block.ID, name)
+			}
+		}
+		if string(cluster["version"]) != `"`+Version+`"` || string(request["version"]) != `"`+HostVersion+`"` {
+			t.Fatalf("%s: versions %s %s", block.ID, cluster["version"], request["version"])
+		}
+		if machineName == "node-1" {
+			matchesGolden(t, "request-host", block.Request, false)
+		}
+	}
+	for _, name := range jsonNames(reflect.TypeFor[ClusterScope]()) {
+		if slices.Contains([]string{"action", "pool", "client"}, name) {
+			t.Fatalf("ClusterScope has the resource member %s", name)
+		}
+	}
+}
+
+func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
+	seen := map[reflect.Type]bool{}
+	reachableTypes(reflect.TypeFor[HostRequest](), seen)
+	for _, forbidden := range []reflect.Type{reflect.TypeFor[Request](), reflect.TypeFor[Pool](), reflect.TypeFor[Client]()} {
+		if seen[forbidden] {
+			t.Fatalf("the host request reaches %s, so its schema moves the host contract", forbidden)
+		}
+	}
+	want := []string{"ansiblePackageVersion", "bootstrap", "callHome", "cephadm", "cluster", "clusterKeyRef", "clusterNetworks", "clusterSSHTransport", "clusterSSHUser",
+		"config", "controller", "fsid", "hosts", "image", "monIP", "nfsGaneshaPackageVersion", "owner", "packageRepository", "packages", "publicNetworks", "registry",
+		"registryRef", "release", "services", "version"}
+	slices.Sort(want)
+	if got := jsonNames(reflect.TypeFor[ClusterScope]()); !slices.Equal(got, want) {
+		t.Fatalf("ClusterScope members %v, want %v", got, want)
+	}
+	r := packageRequest(t)
+	r.Owner, r.FSID = "apply-original", FSIDFor("apply-original", r.Cluster)
+	r.Config = map[string]map[string]string{"global": {"osd_pool_default_size": "2"}}
+	r.Cephadm = Tool{Path: "/usr/sbin/cephadm", PackageVersion: "synthetic-cephadm-1"}
+	r.Release, r.AnsiblePackageVersion = "synthetic-release", "synthetic-ansible-1"
+	r.PackageRepository, r.NFSGaneshaPackageVersion = "https://publisher.example.test/ceph", "synthetic-ganesha-1"
+	r.MonIP, r.ClusterSSHUser, r.CallHome = "192.0.2.1", "operator", "enabled"
+	r.PublicNetworks, r.ClusterNetworks = []string{"192.0.2.0/24"}, []string{"198.51.100.0/24"}
+	r.Action, r.Pool, r.Client = "pool", &Pool{Name: "volumes"}, &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
+	scope := scopeOf(r)
+	for field, value := range reflect.ValueOf(scope).Fields() {
+		if value.IsZero() {
+			t.Fatalf("the fixture leaves ClusterScope.%s unset", field.Name)
+		}
+	}
+	scoped, err := reconciliation.Freeze(scope, "Ceph scope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, err := r.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := withoutMembers(t, scoped), withoutMembers(t, full, "action", "pool", "client"); got != want {
+		t.Fatalf("scopeOf lost a member:\n%s\n%s", got, want)
 	}
 }
