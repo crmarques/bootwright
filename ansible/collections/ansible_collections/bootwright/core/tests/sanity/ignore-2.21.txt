@@ -21,6 +21,7 @@ plugins/modules/lifecycle_scratch.py validate-modules:missing-gplv3-license
 plugins/modules/machine_power_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_install_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_install_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/managedos_network_compare.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_tree_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/managedos_tree_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/redfish_boot.py validate-modules:missing-gplv3-license
