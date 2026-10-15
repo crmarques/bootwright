@@ -300,9 +300,16 @@ checks:
   Machine's root device from explicit data, DB, and WAL paths;
 - policies, pools, filesystems, gateways, NFS exports, and storage exports
   reference the same cluster under each kind's management-mode constraints and
-  use compatible pool roles and protection modes; and
+  use compatible pool roles and protection modes;
 - addresses, CIDRs, DNS labels, paths, ports, service IDs, VRRP IDs, config
-  ownership, and Secret types do not conflict across the aggregate graph.
+  ownership, and Secret types do not conflict across the aggregate graph;
+- ingress virtual IPs are `address/prefix` inside a declared public CIDR with
+  its prefix length, neither its network nor its broadcast address, and
+  equal, after parsing, to no Machine address and no other ingress virtual
+  IP; and
+- an NFS service's mode follows its ingress, and the HAProxy mode that hides
+  client addresses refuses
+  ([NFS modes](../storage-native-api.md#rgw-ingress-and-nfs-records)).
 
 Stretch admission remains unavailable until its provider-qualified slice.
 

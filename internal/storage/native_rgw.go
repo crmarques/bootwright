@@ -21,13 +21,7 @@ var rgwRefusedMembers = []refusedMember{
 
 func (a *admission) rgwRecord(service api.Value, field string, partial bool) {
 	spec := service.Get("spec")
-	sourceRemedy := "omit spec.certificate_source or set it to inline, and " + tlsBindingRemedy
-	switch textOf(spec, "certificate_source") {
-	case "cephadm-signed":
-		a.issue("api.invariant", field+".spec.certificate_source", "cephadm-signed certificates are not supported by Bootwright yet", sourceRemedy)
-	case "reference":
-		a.issue("api.invariant", field+".spec.certificate_source", "certificate manager references are not qualified", sourceRemedy)
-	}
+	a.certificateSource(spec, field)
 	if textOf(spec, "rgw_frontend_type") == "civetweb" {
 		a.issue("api.invariant", field+".spec.rgw_frontend_type", "only the beast frontend is qualified", "set spec.rgw_frontend_type to beast or omit it")
 	}
@@ -42,13 +36,39 @@ func (a *admission) rgwRecord(service api.Value, field string, partial bool) {
 	if spec.Get("only_bind_port_on_networks").Bool() && service.Get("networks").Len() == 0 {
 		a.issue("api.invariant", field+".spec.only_bind_port_on_networks", "only_bind_port_on_networks needs the service networks it binds to", "declare networks on this service or omit spec.only_bind_port_on_networks")
 	}
-	if partial {
-		return
+	if !partial {
+		a.tlsBindingRules(service, field, !frontedByIngress(a.object, service))
 	}
+}
+
+func (a *admission) certificateSource(spec api.Value, field string) {
+	sourceRemedy := "omit spec.certificate_source or set it to inline, and " + tlsBindingRemedy
+	switch textOf(spec, "certificate_source") {
+	case "cephadm-signed":
+		a.issue("api.invariant", field+".spec.certificate_source", "cephadm-signed certificates are not supported by Bootwright yet", sourceRemedy)
+	case "reference":
+		a.issue("api.invariant", field+".spec.certificate_source", "certificate manager references are not qualified", sourceRemedy)
+	}
+}
+
+func (a *admission) tlsBindingRules(service api.Value, field string, terminates bool) {
+	spec := service.Get("spec")
 	if spec.Has("certificate_source") && !spec.Get("ssl").Bool() {
 		a.issue("api.invariant", field+".spec.certificate_source", "cephadm ignores certificate_source unless ssl is true", "set spec.ssl: true or omit spec.certificate_source")
 	}
-	if spec.Get("ssl").Bool() && !serviceBindsLeaves(a.object, service, "/spec/ssl_cert", "/spec/ssl_key") {
+	if terminates && spec.Get("ssl").Bool() && !serviceBindsLeaves(a.object, service, "/spec/ssl_cert", "/spec/ssl_key") {
 		a.issue("api.invariant", field+".spec.ssl", "TLS needs the /spec/ssl_cert and /spec/ssl_key bindings of one tlsCertificate Secret", "add a spec.ceph.serviceBindings entry for this service that binds /spec/ssl_cert and /spec/ssl_key to one tlsCertificate Secret; cephadm-signed certificates are not supported by Bootwright yet")
+	}
+}
+
+func (a *admission) rgwBehindIngress(service api.Value, field string) {
+	if hosts, _ := ResolveServicePlacement(a.object, service); len(hosts) < 2 {
+		a.issue("api.invariant", field+".placement", "an RGW service behind an ingress needs at least two eligible hosts", "select at least two declared storage hosts in the RGW placement")
+	}
+	if count := service.Get("placement", "count"); count.Present() && numeric(count).Cmp(big.NewInt(2)) < 0 {
+		a.issue("api.invariant", field+".placement.count", "an RGW service behind an ingress runs at least two daemons", "set placement.count to 2 or more, or omit it")
+	}
+	if service.Get("spec", "ssl").Bool() {
+		a.issue("api.invariant", field+".spec.ssl", "TLS terminates at the ingress, not at the RGW daemons", "set spec.ssl: false on the RGW service and bind the certificate to its ingress")
 	}
 }

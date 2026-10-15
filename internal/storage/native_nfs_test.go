@@ -29,6 +29,14 @@ func TestNFSServiceRefusesAnyBinding(t *testing.T) {
 	if leaf := issuesUnder(issues, "$.spec.ceph.serviceBindings[0].secrets"); len(leaf) != 0 {
 		t.Fatalf("NFS binding leaves were also checked: %#v", leaf)
 	}
+	issues = graphIssues(t, graphServices(), leaves("ingress.nfs.files", "/spec/ssl_cert", "tls-a"))
+	found = issuesAt(issues, "$.spec.ceph.serviceBindings[0].serviceRef")
+	if len(found) != 1 || found[0].Message != "the NFS service and its ingress take no secret bindings: Bootwright does not support NFS over TLS or kmip yet" || found[0].Remediation != "remove this spec.ceph.serviceBindings entry" {
+		t.Fatalf("NFS ingress binding: %#v", found)
+	}
+	if leaf := issuesUnder(issues, "$.spec.ceph.serviceBindings[0].secrets"); len(leaf) != 0 {
+		t.Fatalf("NFS ingress binding leaves were also checked: %#v", leaf)
+	}
 }
 
 func TestNFSAndIngressRefusedMembersNameTheirRemedy(t *testing.T) {
@@ -53,10 +61,9 @@ func TestNFSAndIngressRefusedMembersNameTheirRemedy(t *testing.T) {
 }
 
 func TestNFSServiceIntrinsicRules(t *testing.T) {
-	cluster, catalog := withMDSService(t, fixtureCatalog(), nfsService(m("port", 2049, "monitoring_port", 9587, "virtual_ip", "192.0.2.60", "enable_haproxy_protocol", true)))
-	if found := issuesUnder(Validate(cluster, catalog), "$.spec.ceph.services[3]"); len(found) != 0 {
-		t.Fatalf("qualified NFS record refused: %#v", found)
-	}
+	services := graphServices()
+	services[2] = nfsService(m("port", 2049, "monitoring_port", 9587, "virtual_ip", "192.0.2.60", "enable_haproxy_protocol", true))
+	requireGraphAdmits(t, graphIssues(t, services))
 	for _, tt := range []struct {
 		name, field, message string
 		service              api.Value
@@ -68,9 +75,9 @@ func TestNFSServiceIntrinsicRules(t *testing.T) {
 		{"VIP with networks", ".spec.virtual_ip", "cephadm refuses virtual_ip together with service networks", nfsService(m("virtual_ip", "192.0.2.60")).With("networks", api.StringList("192.0.2.0/24"))},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			cluster, catalog := withMDSService(t, fixtureCatalog(), tt.service)
-			issues := Validate(cluster, catalog)
-			found := issuesAt(issues, "$.spec.ceph.services[3]"+tt.field)
+			services := graphServices()
+			services[2] = tt.service
+			found := issuesAt(graphIssues(t, services), nfsAt+tt.field)
 			if len(found) != 1 || found[0].Message != tt.message || found[0].Code != "api.invariant" {
 				t.Fatalf("NFS rule: %#v", found)
 			}

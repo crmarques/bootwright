@@ -447,6 +447,7 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 	}
 	if !partial {
 		a.nativeAllocationConflicts(ceph)
+		a.nativeServiceGraph(ceph)
 	}
 	a.nativeBindings(ceph, partial)
 }
@@ -472,10 +473,12 @@ func (a *admission) withoutRefusedMembers(spec api.Value, typeName, field string
 	return spec
 }
 
-func (a *admission) nativeFamily(service api.Value, typeName, field string, _ []api.Value, partial bool) {
+func (a *admission) nativeFamily(service api.Value, typeName, field string, placed []api.Value, partial bool) {
 	switch typeName {
 	case "rgw":
 		a.rgwRecord(service, field, partial)
+	case "ingress":
+		a.ingressRecord(service, field, placed, partial)
 	case "nfs":
 		a.nfsRecord(service, field)
 	}
@@ -494,9 +497,12 @@ func (a *admission) nativeBindings(ceph api.Value, partial bool) {
 		if !partial && !found {
 			a.invalid(field+".serviceRef", "service binding must resolve to one declared native service")
 		}
-		nfs := found && textOf(service, "service_type") == "nfs"
-		if nfs {
-			a.issue("api.invariant", field+".serviceRef", "NFS services take no secret bindings: Bootwright does not support NFS over TLS or kmip yet", "remove this spec.ceph.serviceBindings entry")
+		refusal := ""
+		if found {
+			refusal = noBindingRefusal(a.object, service)
+		}
+		if refusal != "" {
+			a.issue("api.invariant", field+".serviceRef", refusal, "remove this spec.ceph.serviceBindings entry")
 		}
 		paths := []string{}
 		for j, secret := range binding.Get("secrets").Items() {
@@ -512,7 +518,7 @@ func (a *admission) nativeBindings(ceph api.Value, partial bool) {
 			}
 			paths = append(paths, pointer)
 		}
-		if !nfs && (found || !partial) {
+		if refusal == "" && (found || !partial) {
 			a.bindingLeaves(binding, service, field, partial)
 		}
 	}

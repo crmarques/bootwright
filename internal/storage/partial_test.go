@@ -89,6 +89,11 @@ func TestPartialValidationIssuesAlsoRefuseTheCompleteObject(t *testing.T) {
 		{"native NFS colocated daemons", appendService(nfs.With("placement", m("label", "storage", "count_per_host", 1)))},
 		{"native NFS prefixed VIP", appendService(nfs.With("spec", m("virtual_ip", "192.0.2.60/24")))},
 		{"native ingress password", appendService(ingress.WithPath(api.StringValue("material"), "spec", "monitor_password"))},
+		{"native ingress interval", appendService(ingress.WithPath(api.StringValue("5x"), "spec", "health_check_interval"))},
+		{"native ingress bare VIP", appendService(ingress.WithPath(api.StringValue("192.0.2.60"), "spec", "virtual_ip"))},
+		{"native ingress modes", appendService(ingress.WithPath(api.BoolValue(true), "spec", "keepalive_only").WithPath(api.BoolValue(true), "spec", "enable_haproxy_protocol"))},
+		{"native ingress host bits", appendService(ingress.WithPath(api.StringList("192.0.2.5/24"), "spec", "virtual_interface_networks"))},
+		{"native ingress signed certificate", appendService(ingress.WithPath(api.StringValue("cephadm-signed"), "spec", "certificate_source"))},
 		{"native NFS binding", edit(api.StorageCluster, "storage", func(s api.Value) api.Value {
 			s = s.WithPath(api.ListValue(append(s.Get("ceph", "services").Items(), nfs)...), "ceph", "services")
 			return s.WithPath(api.ListValue(m("serviceRef", "nfs.files", "secrets", api.ListValue(m("path", "/spec/ssl_cert", "secretRef", "a")))), "ceph", "serviceBindings")

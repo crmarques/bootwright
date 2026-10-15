@@ -21,6 +21,8 @@ type BindingSlot struct {
 var bindingSlots = []BindingSlot{
 	{ServiceType: "rgw", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key", Requires: "ssl"},
 	{ServiceType: "rgw", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert", Requires: "ssl"},
+	{ServiceType: "ingress", Backend: "rgw", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key", Requires: "ssl"},
+	{ServiceType: "ingress", Backend: "rgw", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert", Requires: "ssl"},
 }
 
 func NativeBindingSlot(cluster api.Object, serviceRef, path string) (BindingSlot, bool) {
@@ -32,15 +34,22 @@ func NativeBindingSlot(cluster api.Object, serviceRef, path string) (BindingSlot
 		if slot.ServiceType != textOf(service, "service_type") || slot.Path != path {
 			continue
 		}
-		if slot.Backend != "" {
-			backend, found := NativeService(cluster, textOf(service, "spec", "backend_service"))
-			if !found || textOf(backend, "service_type") != slot.Backend {
-				continue
-			}
+		if slot.Backend != "" && ingressBackendType(cluster, service) != slot.Backend {
+			continue
 		}
 		return slot, true
 	}
 	return BindingSlot{}, false
+}
+
+func noBindingRefusal(cluster api.Object, service api.Value) string {
+	switch {
+	case textOf(service, "service_type") == "nfs":
+		return "NFS services take no secret bindings: Bootwright does not support NFS over TLS or kmip yet"
+	case textOf(service, "service_type") == "ingress" && ingressBackendType(cluster, service) == "nfs":
+		return "the NFS service and its ingress take no secret bindings: Bootwright does not support NFS over TLS or kmip yet"
+	}
+	return ""
 }
 
 type boundLeaf struct {

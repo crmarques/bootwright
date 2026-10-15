@@ -322,13 +322,68 @@ qualified) and only with `ssl: true`; `rgw_frontend_type` admits only `beast`;
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L1338-L1342));
 `placement.count_per_host` is at most 1; `only_bind_port_on_networks: true`
 needs service `networks`; `ssl: true` needs the `/spec/ssl_cert` and
-`/spec/ssl_key` bindings of one `tlsCertificate` Secret.
+`/spec/ssl_key` bindings of one `tlsCertificate` Secret unless an ingress
+fronts the service.
 
 NFS value rules from the same schema: `placement.count_per_host` refuses, and
 `virtual_ip` refuses together with service `networks`. `virtual_ip` is a bare
 address without a prefix length, zone or IPv4-mapped form, because cephadm
 binds the text verbatim
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nfs.py#L105-L107)).
+
+Ingress value rules: `health_check_interval` is digits followed by `s`, `m`
+or `h`, as IBM's `IngressSpec.validate` requires; `virtual_ip` is
+`address/prefix` without a zone or IPv4-mapped form; each
+`virtual_interface_networks` entry is a network prefix without host bits,
+because cephadm compares it with the host's network keys as text
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/ingress.py#L322-L325)),
+and lies inside the declared public CIDRs; `keepalive_only` and
+`enable_haproxy_protocol` exclude each other. Unless `keepalive_only: true`,
+`frontend_port` and `monitor_port` are required, and the frontend, monitor
+and peer ports differ (an NFS ingress reserves 1024 for HAProxy peers unless
+`haproxy_peer_communication_port` names another). The ingress placement
+selects at least two eligible hosts.
+
+The ingress record is a per-backend arm table (program C8). `backend_service`
+resolves by exact qualified name, never by splitting on `.`, to one declared
+service of the same cluster whose type has an arm; one ingress serves each
+backend service in this build. An arm-only member that the resolved arm does
+not list refuses at its field.
+
+| Arm | Arm-only members | Meaning |
+| --- | --- | --- |
+| `rgw` | `ssl`, `certificate_source` | TLS terminates at the ingress through the `/spec/ssl_cert` and `/spec/ssl_key` [bindings](#secret-bindings), with the RGW `certificate_source` rules |
+| `nfs` | `keepalive_only`, `enable_haproxy_protocol`, `haproxy_peer_communication_port` | the NFS mode below |
+
+Other backends wait for their owning item (B479 adds the management
+gateway's arm). An RGW service behind an ingress selects at least two
+eligible hosts, its `placement.count` is absent or at least 2, and it keeps
+`ssl` false: TLS terminates at the ingress (IBM's high-availability guide for
+the Ceph Object Gateway).
+
+An NFS service's mode follows the ingress that fronts it:
+
+| Mode | Ingress | NFS service |
+| --- | --- | --- |
+| direct | none | no `virtual_ip`, no `enable_haproxy_protocol` |
+| keepalive-only | `keepalive_only: true` | `placement.count: 1` over at least two eligible hosts; `virtual_ip` required and equal to the ingress virtual IP address; no `enable_haproxy_protocol` |
+| haproxy-protocol | `enable_haproxy_protocol: true` | `enable_haproxy_protocol: true`; `placement.count` present and below the eligible host count; `virtual_ip` optional and, when present, equal to the ingress virtual IP address |
+| haproxy-standard | neither flag | refuses at the ingress `enable_haproxy_protocol` |
+
+HAProxy without the PROXY protocol hides client addresses, so IP level
+restrictions on NFS exports would not function
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/doc/mgr/nfs.rst#L111-L128)).
+The native NFS module sets the NFS `virtual_ip` in both ingress modes
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/nfs/cluster.py#L77-L97)),
+and cephadm adds it to Ganesha's HAProxy hosts
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nfs.py#L133-L136)).
+
+Every virtual IP comparison uses parsed addresses, and later renderings use
+the canonical form. An ingress `virtual_ip` lies inside a declared public CIDR
+and carries that CIDR's prefix length; it is neither the CIDR's network
+address nor, for IPv4 below `/31`, its broadcast address; and its address
+equals no declared Machine address and no other ingress `virtual_ip` of any
+StorageCluster. Diagnostics name the field, never the authored address.
 
 The `nfs` manager module is derived from the declared NFS services (D159
 clause 9): `spec.ceph.mgrModules` refuses it at its entry, and Bootwright
@@ -440,10 +495,12 @@ accepted Secret types, required parts, native encoding, byte bounds and
 related-field requirements. For example, the qualified RGW leaves
 `/spec/ssl_cert` (the certificate part, chain allowed) and `/spec/ssl_key`
 (the private-key part) consume one `tlsCertificate` Secret together and take
-effect only with `ssl: true`. The legacy
+effect only with `ssl: true`; an ingress whose backend is an RGW service
+takes the same two leaves under the same rules. The legacy
 [`/spec/rgw_frontend_ssl_certificate`](https://docs.ceph.com/en/tentacle/cephadm/services/rgw/#setting-up-https)
 leaf refuses because IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema migrates it into those two leaves. NFS services
-take no bindings: NFS over TLS and kmip are parked by D160 (OD26). The adapter
+and the ingress that fronts one take no bindings: NFS over TLS and kmip are
+parked by D160 (OD26). The adapter
 never guesses from a field's suffix or permits an operator
 to splice arbitrary secrets into command arguments or custom config.
 
