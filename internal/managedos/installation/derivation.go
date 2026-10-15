@@ -80,7 +80,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		MarkerPath:       MarkerPath,
 		Nameservers:      nameservers,
 		NTPServers:       timeSources,
-		Packages:         SortedUnique(append(append(customizations.Get("packages", "install").Strings(), identityPackages(request.Target)...), langpacks...)),
+		Packages:         SortedUnique(append(append(customizations.Get("packages", "install").Strings(), identityPackages(request.Target)...), append(langpacks, networkPackages()...)...)),
 		PackageSource:    source,
 		Prefix:           prefix,
 		Repositories:     repositories,
@@ -111,6 +111,10 @@ func identityPackages(target Target) []string {
 		return []string{guestAgent}
 	}
 	return nil
+}
+
+func networkPackages() []string {
+	return []string{"nmstate"}
 }
 
 // packageSource is what Anaconda installs from: the boot media itself when the

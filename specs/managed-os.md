@@ -310,9 +310,9 @@ is over, an `mtu` other than 1500, and a route that is not `absent` other than
 the line's default route. Search domains, a disabled IPv6 family, an `mtu` of
 1500 and a `table-id` or `metric` on the default route are accepted although
 the line does not carry them, as the lab-rhel example declares them: 1500 is
-the MTU the installed system takes by default. That content refuses only until
-post-install network convergence ([B326](milestones/m1.md#b326)) applies the
-composed network to the installed system.
+the MTU the installed system takes by default. That content refuses until
+[network convergence](#network-convergence) applies it
+([B326](milestones/m1.md#b326)).
 
 What the `%post` does about the host key follows the
 [identity channel](substrates.md#identity-and-power-operations). For the guest
@@ -404,30 +404,37 @@ this installer powers the machine off when it is done. The power-off of a
 machine its substrate created, which narrows the window in which it was started
 after the proof, the media selection and the power-on, polled to on, happen
 inside that entry point; an operator-owned physical machine is never powered
-off by an installation.
+off through its controller by an installation; the restart of
+[network convergence](#network-convergence) is the installed system's own
+power-off, asked over the pinned connection.
 Anaconda installs unattended and powers the machine off when it is done, which
 is what lets the block eject the media and boot the installed system from disk
 deliberately rather than racing a reboot: once the installer has powered the
 machine off, the block ejects the media and boots the installed disk through
 the substrate's disk-boot entry point.
 
-**Budgets.** Each of the three waits an apply performs while the machine
-installs and starts is a budget its request freezes, as a number of retries and
-the seconds between them, never a value the adapter chooses: the installer
-powering the machine off (180 retries 20 seconds apart), the installed machine
-answering through its identity channel (120 retries 30 seconds apart) and its
-fleet account accepting the reported key (30 retries 10 seconds apart), 7,500
-seconds of pauses in all. A read the controller does not answer spends one
+**Budgets.** Each of the six waits an apply performs while the machine
+installs, starts and converges is a budget its request freezes, as a number of
+retries and the seconds between them, never a value the adapter chooses: the
+installer powering the machine off (180 retries 20 seconds apart), the
+installed machine answering through its identity channel (120 retries 30
+seconds apart), its fleet account accepting the reported key (30 retries 10
+seconds apart), `networkApply` (24 retries 5 seconds apart),
+`networkReconnect` (12 retries 5 seconds apart) and `reboot` (60 retries 10
+seconds apart), which bounds each of the restart's two waits: 8,880 seconds of
+pauses in all, the restart's budget counted twice. A read the controller does not answer spends one
 retry of the installer wait rather than ending it. Every run of the block is
 bounded by a [deadline](architecture.md#the-adapter-result-protocol) derived
-from the budgets it froze: their pauses back to back, one hour for the rest of
+from the budgets it froze: their pauses back to back, the network checkpoint's
+rollback time and 30 seconds, 330 seconds, one hour for the rest of
 the media work and each read's own time, and the
 [bound](substrates.md#identity-and-power-operations) of every call an apply
-makes to the machine's controller, 1 hour 11 minutes 20 seconds, which is 4 hours
-16 minutes 20 seconds for these budgets and within the runner's ceiling. Those
+makes to the machine's controller, 1 hour 17 minutes 20 seconds, which is 4 hours
+50 minutes 50 seconds for these budgets and within the runner's ceiling. Those
 calls are the pre-boot power read, the insert, the power-off, boot selection
 and power-on that boot the installer, the eject, disk selection and power-on
-that boot the installed system, and the eject the verification repeats. The insert allowance includes eight certificate collection members, five
+that boot the installed system, the eject the verification repeats, and the
+disk selection and power-on of the network restart. The insert allowance includes eight certificate collection members, five
 other certificate requests and one 412 retry: fourteen bounded requests,
 seven additional minutes at the thirty-second request timeout. A
 physical target powers nothing off and is inspected where a virtual one's power
@@ -446,8 +453,10 @@ selected install address accepting that exact key and the fleet identity for the
 `bootwright` account, through a generated client configuration that keeps only
 the host crypto policy, with no ambient known hosts, proxy, control or identity
 directive and with `ServerAliveInterval=15` and `ServerAliveCountMax=3`, the virtual media ejected, and the Machine reported
-powered on. The evidence records the marker digest, the host public key, the
-address and whether that connection was accepted; a later consumer that
+powered on, and the installed system converged to its declared network and
+proved it after a restart, as [network convergence](#network-convergence)
+states. The evidence records the marker digest, the host public key, the
+address, whether that connection was accepted and the network result; a later consumer that
 connects to the Machine binds that key, never a first-use answer from the
 network. An observation proves completion the same way, because it is what
 resolves an interrupted apply: an observation that proves the marker and the
@@ -489,7 +498,9 @@ and no published content is positive no effect, which is what an apply stopped
 before it published anything leaves; and this operation's own
 unfinished work is a positive partial realization the next attempt converges,
 which is either content it published on a powered-off guest that never
-installed, or the frozen marker with the completion not yet true. A
+installed, or the frozen marker with the completion not yet true. The frozen
+marker with a network not yet converged, rolled back, mismatched or drifted is
+a positive partial realization; network convergence never yields no effect. A
 delivered-key completion has nothing published beneath its private subtree,
 neither the key pair nor the image; that subtree left on a powered-off guest
 that never installed is its partial. Anything else
@@ -515,6 +526,137 @@ Machines under the
 that was already booted keeps running on the guest after cancellation; the
 attempt becomes unknown and is resolved from the marker.
 
+### Network convergence
+
+**Scope.** Every installed `anaconda` Machine converges its declared network
+once, inside its `os-install-<machine>` block, after its completion is
+otherwise verified (D159 clause 11 in the [backlog](milestones/backlog.md),
+and OD24 (A) among [M2c's open decisions](milestones/m2.md#m2c-open-decisions)). Every consumer that requires
+`Machine/<m>`, a Ceph host or an agent installation, waits for it.
+
+**Document.** The request freezes the NMState document the installed system
+applies. It is the Machine's
+[composed network](api/machines.md#nmstate-composition-subset), with four
+rules applied in this order:
+
+1. Composition injects each interface-assigned static address as
+   `ipv4.address` or `ipv6.address` entries of `ip` and `prefix-length`, with
+   `enabled: true` and `dhcp: false` (and `autoconf: false` for IPv6), and the
+   `mac-address` of each interface binding, bare metal's implied same-name
+   bindings included. A network that does not compose refuses as before.
+2. A `mac-address` composition injected is dropped: an interface keeps one
+   only when the authored network, its template with the Machine's overrides
+   merged, declares it, and then exactly as authored. NMState changes an
+   interface identified by name to hold a given MAC address, and the names
+   are already pinned by the `ifname=` installer arguments.
+3. When the network selects DNS servers, `dns-resolver.config.server` is the
+   Kickstart's name servers in their order, keeping an authored `search` and
+   every other key; with no selection, `dns-resolver` stays exactly as
+   composed. NMState's static DNS config, when defined, overrides the current
+   one. Selections together with an authored `server` already refuse.
+4. `routes.config` is one `{next-hop-interface: <name>, state: absent}` entry
+   per composed interface whose `state` is neither `absent` nor `ignore`, in
+   composed order, followed by every composed route in declared order. An
+   absent route entry deletes every route it matches, so the routes the
+   running system holds on those interfaces are replaced by the declared
+   ones; that both behave within one apply is proved only on a live run.
+
+The document, encoded as JSON, longer than 32 KiB refuses with `api.value`,
+`the composed network of <machine> exceeds 32 KiB, which its installation
+does not carry`, remediation `reduce the network configuration of
+<machine>`, because the whole request is bounded at 64 KiB. A document whose
+JSON reads back differently once its numbers are decoded as 64-bit floats, as
+the frozen request is read, refuses with `api.value`, `the composed network
+of <machine> holds a number its frozen installation cannot carry exactly`,
+remediation `write each number in the network of <machine> as an integer of
+at most 15 digits, or as text`. Both refusals come from the request builder
+before registration and are not rows of the [refusal table](#refusal-table).
+
+The install path holds by construction: the install interface keeps the
+install address with `state: up` or no state, and the Kickstart's gateway
+stays a non-absent default route through the install interface or through
+none, because the address comes from the Machine's own assignment, the
+gateway from the same routes, and the purge comes first. The rules follow
+the [NMState YAML API](https://nmstate.io/devel/yaml_api.html).
+
+**Request.** The request's `network` freezes `checkpointSeconds` 300,
+`documentPath` /etc/bootwright/network.yml, `markerPath`
+/etc/bootwright/network-marker.json and the document; its budgets add
+`networkApply`, `networkReconnect` and `reboot`. The checkpoint exceeds the
+apply and reconnect pauses plus 60 seconds, 240 seconds, so NetworkManager
+never rolls back a change the adapter is still proving. The Kickstart
+installs the `nmstate` package with the profile's packages, once even when
+the profile names it ([NMState install](https://nmstate.io/user/install.html)).
+
+**Protocol.** The adapter converges over the pinned fleet connection:
+`StrictHostKeyChecking=yes`, the host key the identity channel or the
+delivered key proved, and the document on standard input, never in argv. It
+checks that /usr/bin/nmstatectl exists; reads the guest's network marker, its
+`boot_id` and any pending checkpoint; writes the document and runs
+`nmstatectl apply --no-commit --timeout=<checkpointSeconds>` detached;
+reconnects at the install address, then runs `nmstatectl commit
+<checkpoint>`; writes the marker `{"bootId":...,"request":<digest>}`;
+restarts the machine through the guest's own `systemctl poweroff`, polls the
+controller to Off and boots the disk with power-on through the substrate's
+disk-boot entry point; proves a new `boot_id` on the pinned key; and compares
+`nmstatectl show --json` with the document. Sources:
+[nmstatectl(8)](https://www.mankier.com/8/nmstatectl) and NetworkManager's
+[D-Bus API](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.html)
+(`CheckpointCreate` and its `rollback_timeout`; the `Checkpoints` property,
+"The list of active checkpoints").
+
+**Interruption.** An attempt interrupted before or after the commit is
+converged by the next attempt. A power loss while a checkpoint is pending is
+a stated residual risk.
+
+**Failure classes.** A lost connection is unknown. Every other failure,
+NetworkManager's rollback included, is failed with partial evidence; the
+phase never yields no effect.
+
+**Recovery.** The document is frozen with the installation, and a failed
+apply only continues exactly or is destroyed
+([state machine](state-reconciliation.md#state-machine), row "apply failed").
+A declaration error is therefore recovered only by `bootwright destroy`,
+which erases every Machine the context installed, then a fresh apply. A
+failure that may be transient reads `repeat bootwright apply; if it fails the
+same way, the declared network cannot be applied: run bootwright destroy,
+which erases the Machines this context installed, correct the network of
+<m>, then run bootwright apply`. A change that would leave the install address
+unreachable reads `the declared network of <m> cannot change under this
+apply: run bootwright destroy, which erases the Machines this context
+installed, correct the network of <m> so <address> stays reachable from the
+controller, then run bootwright apply`; a mismatch after the restart reads
+the same without the `so <address> stays reachable from the controller`
+clause.
+
+**Compared subset.** For each declared interface that is `up` or has no
+state: `type`, `state`, a declared `mtu`, and per family a declared
+`enabled`, `dhcp` and `autoconf`; the static address set, link-local
+addresses excluded; for a bond, its mode, its port set and each declared
+option as text; for a VLAN, `base-iface`, `id` and a declared `protocol`.
+Beyond the interfaces: a declared absent interface is missing; the non-absent
+routes of declared interfaces equal the running config set by destination,
+next-hop interface and address, a declared `metric`, and `table-id` or the
+main table; `dns-resolver.config.server` is equal in order, and a declared
+`search` is equal.
+
+**Evidence.** `network` is true only when the marker names this request and
+the comparison matched; `networkReboot` is true when the marker's boot ID
+differs from the current one; `networkDifferences` holds at most 16 entries of
+at most 200 printable bytes each. Presence requires both booleans and no
+difference, and otherwise refuses `the installed machine's network does not
+match its declaration after a reboot`.
+
+**Observation.** An observation reads and repairs nothing (D153's settle
+rule); drift reads as partial in `bootwright diff --observe`.
+
+**Plan.** The plan shows the group `converge-network` and the impacts
+`configure-network <m>` and `restart <m>`.
+
+**Unverified until the owner's run.** A reboot with a pending checkpoint;
+Anaconda's connection profiles beside NMState's; the NMState version RHEL 9.8
+ships; and RHEL-29001.
+
 ### Shared package-tree publication
 
 For a hosted package source, Managed OS plans one block per context and
@@ -522,7 +664,7 @@ referenced install profile in the `machines` stage. It realizes the
 `MachineInstallProfile` publication under implementation and request version
 `os-package-tree-v1`; each machine installation requires that profile
 publication alongside its own Machine realization and referenced services.
-An installation uses request version `os-install-anaconda-v9`. Profiles using
+An installation uses request version `os-install-anaconda-v10`. Profiles using
 a URL package source contribute no publication block.
 
 The request freezes only context and profile identity, artifact-server
