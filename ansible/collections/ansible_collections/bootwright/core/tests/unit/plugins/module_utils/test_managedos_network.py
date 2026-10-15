@@ -1,8 +1,9 @@
 """Network convergence reads one guest state, takes one step and compares a subset.
 
-The checkpoint shapes follow nmstatectl(8) 2.2.62, whose --no-commit prints the
-checkpoint as the last line of its output
-(https://www.mankier.com/8/nmstatectl), and busctl(1) get-property, which
+The checkpoint shapes follow nmstate 2.x, whose nmstatectl --no-commit names
+the checkpoint only in its INFO log on standard error ("Created checkpoint
+<path>", rust/src/lib/query_apply/net_state.rs on the base branch of
+https://github.com/nmstate/nmstate), and busctl(1) get-property, which
 prints an object-path array as its signature, its count and each quoted path
 (https://www.freedesktop.org/software/systemd/man/latest/busctl.html).
 """

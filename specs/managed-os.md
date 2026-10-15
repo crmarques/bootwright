@@ -616,15 +616,18 @@ the document and the marker only on standard input. In order:
 1. Wait, within the `networkApply` budget, for an apply unit an earlier
    attempt left running, then read the guest's state once: whether
    `/usr/bin/nmstatectl` exists, the boot ID, the state of the
-   `bootwright-network-apply.service` unit, the exit status, last output line
-   and last 512 error bytes the unit left in
-   `/run/bootwright/network-apply.{rc,log,err}`, the checkpoints NetworkManager
+   `bootwright-network-apply.service` unit, the exit status and last 512 error
+   bytes the unit left in `/run/bootwright/network-apply.{rc,err}`, the last
+   checkpoint path its error log names (nmstate 2.x prints the diff on standard
+   output and names the checkpoint only in its `Created checkpoint <path>` INFO
+   log line on standard error, `rust/src/lib/query_apply/net_state.rs` of
+   [nmstate](https://github.com/nmstate/nmstate)), the checkpoints NetworkManager
    lists in its `Checkpoints` property, read with
    [busctl(1)](https://www.freedesktop.org/software/systemd/man/latest/busctl.html),
    and the network marker. A state that cannot be read refuses.
 2. Decide one step. A marker naming this request's digest from an earlier boot
    is **inspect**; from this boot, **reboot**; a running unit is **wait**,
-   which refuses; a checkpoint the last log line names that NetworkManager
+   which refuses; a checkpoint the error log names that NetworkManager
    still lists is **rollback**, then apply; otherwise **apply**. A Machine
    without `nmstatectl` refuses here, before any change.
 3. **Apply** writes the document, as sorted JSON, to
@@ -690,9 +693,9 @@ did not restart end with `repeat bootwright apply`.
 | --- | --- | --- | --- |
 | before the apply | no log, no marker | apply | converges |
 | during the apply, the unit still running | unit active | wait, then reconnect | converges, or rolled back by the checkpoint |
-| after the apply, before the commit, checkpoint pending | log with the checkpoint, listed | rollback, then apply | converges |
-| after the apply, NetworkManager already rolled back | log with the checkpoint, not listed | apply | converges |
-| after the commit, before the marker | log with the checkpoint, not listed, network as declared | apply, commit, marker | converges |
+| after the apply, before the commit, checkpoint pending | error log naming the checkpoint, listed | rollback, then apply | converges |
+| after the apply, NetworkManager already rolled back | error log naming the checkpoint, not listed | apply | converges |
+| after the commit, before the marker | error log naming the checkpoint, not listed, network as declared | apply, commit, marker | converges |
 | after the marker, before the power-off | marker with the current boot ID | reboot | converges |
 | after the power-off, before the disk boot | machine off; the identity read at the top of the replay gets no answer | the existing replay path: installer boot of this same request, then the whole phase | converges at the cost of one installation |
 | after the disk boot, before the evidence | marker with an earlier boot ID | inspect | converges |

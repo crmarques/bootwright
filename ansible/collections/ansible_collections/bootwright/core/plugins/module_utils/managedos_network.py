@@ -34,7 +34,7 @@ LINK_LOCAL = ipaddress.ip_network("fe80::/10")
 
 
 def checkpoint_from_log(text):
-    """The checkpoint nmstatectl --no-commit printed as its last line, or ''."""
+    """The checkpoint path the last line of the read names, or ''."""
     if not isinstance(text, str):
         return ""
     lines = [line.strip() for line in text.splitlines() if line.strip()]

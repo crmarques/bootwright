@@ -129,7 +129,8 @@ managedos_install_anaconda_network_read:
     printf 'bootId=%s\n' "$(head -c 64 /proc/sys/kernel/random/boot_id)"
     printf 'unit=%s\n' "$(systemctl is-active "$1" 2>/dev/null | head -c 32)"
     printf 'rc=%s\n' "$(head -c 8 "$2/network-apply.rc" 2>/dev/null | tr -cd 0-9)"
-    printf 'checkpoint=%s\n' "$(tail -n 1 "$2/network-apply.log" 2>/dev/null | head -c 128 | tr -cd '[:graph:]')"
+    printf 'checkpoint=%s\n' "$(grep -o '/org/freedesktop/NetworkManager/Checkpoint/[0-9]*' "$2/network-apply.err" 2>/dev/null \
+      | tail -n 1 | head -c 128 | tr -cd '[:graph:]')"
     printf 'listed=%s\n' "$(busctl --system get-property org.freedesktop.NetworkManager \
       /org/freedesktop/NetworkManager org.freedesktop.NetworkManager Checkpoints 2>/dev/null | head -c 4096 | tr -d '\n')"
     printf 'marker=%s\n' "$(head -c 512 "$3" 2>/dev/null | tr -d '\n')"

@@ -21,6 +21,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from ansible.errors import AnsibleUndefinedVariable
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
@@ -334,8 +335,22 @@ def stub(directory, name, output, sentinel):
     path.chmod(0o755)
 
 
+# nmstatectl 2.x prints only the applied diff as YAML on standard output and
+# names the checkpoint in env_logger INFO lines on standard error
+# (rust/src/cli/apply.rs apply_state and rust/src/cli/result.rs; "Created
+# checkpoint" and "Skipping commit for checkpoint" in
+# rust/src/lib/query_apply/net_state.rs, base branch of
+# https://github.com/nmstate/nmstate).
+APPLY_STDOUT = "---\ninterfaces:\n- name: bond0\n  type: bond\n  state: up\n"
+APPLY_STDERR = (
+    "[2026-10-15T10:00:00Z INFO  nmstatectl] Nmstate version: 2.2.62\n"
+    "[2026-10-15T10:00:01Z INFO  nmstate::query_apply::net_state] Created checkpoint %s\n"
+    "[2026-10-15T10:00:04Z INFO  nmstate::query_apply::net_state] Skipping commit for checkpoint %s\n"
+) % (CHECKPOINT, CHECKPOINT)
+
+
 def test_the_read_script_output_parses(tmp_path):
-    tools = {name: shutil.which(name) for name in ("head", "tail", "tr")}
+    tools = {name: shutil.which(name) for name in ("grep", "head", "tail", "tr")}
     assert all(tools.values()), tools
     stubs = tmp_path / "bin"
     stubs.mkdir()
@@ -346,8 +361,8 @@ def test_the_read_script_output_parses(tmp_path):
     run = tmp_path / "run"
     run.mkdir()
     (run / "network-apply.rc").write_text("0\n")
-    (run / "network-apply.log").write_text("applying\n%s\n" % CHECKPOINT)
-    (run / "network-apply.err").write_text("warning\tline\n")
+    (run / "network-apply.log").write_text(APPLY_STDOUT)
+    (run / "network-apply.err").write_text(APPLY_STDERR)
     marker = tmp_path / "network-marker.json"
     marker.write_text('{"bootId":"%s","request":"%s"}\n' % (BOOT_ID, DIGEST))
     script = scripts()["managedos_install_anaconda_network_read"]
@@ -361,4 +376,213 @@ def test_the_read_script_output_parses(tmp_path):
     assert state["unit"] == "inactive" and state["running"] is False
     assert state["rc"] == 0 and state["checkpoint"] == CHECKPOINT and state["listed"] == [CHECKPOINT]
     assert state["marker"] == {"bootId": BOOT_ID, "request": DIGEST}
-    assert state["error"].startswith("warning line")
+    assert state["error"].endswith("Skipping commit for checkpoint %s " % CHECKPOINT)
+
+
+NEW_BOOT_ID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4e"
+EARLIER_BOOT_ID = "1a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4f"
+SET_FACT = "ansible.builtin.set_fact"
+COMPARE = "bootwright.core.managedos_network_compare"
+REDFISH = "bootwright.core.redfish_system_read"
+NETWORK = {"checkpointSeconds": 300, "document": DOCUMENT, "documentPath": "/etc/bootwright/network.yml",
+           "markerPath": "/etc/bootwright/network-marker.json"}
+
+
+def guest_read(boot=BOOT_ID, rc="", checkpoint="", listed=(), marker=""):
+    """The READ script's output, one key=value line each."""
+    return "".join("%s=%s\n" % pair for pair in (
+        ("nmstatectl", "yes"), ("bootId", boot), ("unit", "inactive"), ("rc", rc), ("checkpoint", checkpoint),
+        ("listed", "ao %d%s" % (len(listed), "".join(' "%s"' % path for path in listed))),
+        ("marker", marker), ("error", "")))
+
+
+def marker_of(boot):
+    return '{"bootId":"%s","request":"%s"}' % (boot, DIGEST)
+
+
+def answered(stdout="", rc=0):
+    return {"rc": rc, "stdout": stdout, "stderr": ""}
+
+
+class Guest:
+    """Network task files run in order over one guest, each command answered
+    from a queue; every refusal that would fire is recorded, never raised."""
+
+    def __init__(self, answers, matched=True):
+        self.answers = {name: list(queue) for name, queue in answers.items()}
+        self.matched = matched
+        self.ran = []
+        self.fired = []
+        self.scope = dict(defaults(), **{
+            "bootwright_os_install_digest": DIGEST,
+            "bootwright_os_install_request": {
+                "identity": {"object": MACHINE}, "address": ADDRESS, "placement": {"machine": "controller"},
+                "target": {"substrate": "libvirt"}, "network": NETWORK,
+                "budgets": {name: {"attempts": 12, "delaySeconds": 5}
+                            for name in ("networkApply", "networkReconnect", "reboot")},
+            },
+        })
+
+    def run(self, name):
+        self.perform(LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True), [])
+        assert not any(self.answers.values()), ("commands never ran", self.answers)
+        return self
+
+    def reached(self, conditions):
+        templar = Templar(loader=LOADER, variables=self.scope)
+        return all(templar.evaluate_conditional(condition) for condition in conditions)
+
+    def perform(self, listed, inherited):
+        for task in listed:
+            own = task.get("when", [])
+            conditions = inherited + (own if isinstance(own, list) else [own])
+            if "block" in task:
+                if self.reached(conditions):
+                    self.perform(task["block"], [])
+                continue
+            if not self.reached(conditions):
+                if "register" in task:
+                    self.scope[task["register"]] = {"changed": False, "skipped": True}
+                continue
+            self.step(task)
+
+    def step(self, task):
+        templar = Templar(loader=LOADER, variables=self.scope)
+        if task.get(INCLUDE) == "guest.yml":
+            command = task["vars"][GUEST].rsplit("managedos_install_anaconda_network_", 1)[-1].strip(" }")
+            self.ran.append(command)
+            self.scope["managedos_install_anaconda_guest"] = self.answers[command].pop(0)
+        elif FAIL in task:
+            self.fired.append(task["name"])
+        elif "ansible.builtin.assert" in task:
+            if not all(templar.evaluate_conditional(condition) for condition in task["ansible.builtin.assert"]["that"]):
+                self.fired.append(task["name"])
+        elif SET_FACT in task:
+            for fact, value in task[SET_FACT].items():
+                self.scope[fact] = templar.template(value)
+        elif COMPARE in task:
+            self.scope[task["register"]] = {"matched": self.matched,
+                                            "differences": [] if self.matched else ["bond0 is down, declared up"]}
+        elif REDFISH in task:
+            self.scope[task["register"]] = {"power": "Off"}
+        else:
+            assert {"ansible.builtin.include_role", "ansible.builtin.pause"} & set(task), task["name"]
+
+
+def converging(first, *after):
+    """Answers for a guest whose network converges after the first read."""
+    answers = {"wait": [answered()], "read": [answered(first)], "boot_id": [answered(NEW_BOOT_ID + "\n")],
+               "show": [answered("{}")]}
+    for name in after:
+        answers.setdefault(name, []).append(answered())
+    return answers
+
+
+APPLIED = guest_read(rc="0", checkpoint=CHECKPOINT, listed=[CHECKPOINT])
+
+
+@pytest.mark.parametrize("first, after, expected", [
+    (guest_read(), ("prepare", "start", "wait", "commit", "mark", "poweroff"),
+     ["wait", "read", "prepare", "start", "wait", "read", "commit", "mark", "poweroff", "boot_id", "show"]),
+    (guest_read(rc="", checkpoint=CHECKPOINT, listed=[CHECKPOINT]),
+     ("rollback", "prepare", "start", "wait", "commit", "mark", "poweroff"),
+     ["wait", "read", "rollback", "prepare", "start", "wait", "read", "commit", "mark", "poweroff", "boot_id", "show"]),
+    (guest_read(marker=marker_of(BOOT_ID)), ("poweroff",), ["wait", "read", "poweroff", "boot_id", "show"]),
+    (guest_read(marker=marker_of(EARLIER_BOOT_ID)), (), ["wait", "read", "show"]),
+], ids=["apply", "rollback", "reboot", "inspect"])
+def test_a_converging_network_fires_no_refusal(first, after, expected):
+    answers = converging(first, *after)
+    if "commit" in after:
+        answers["read"].append(answered(APPLIED))
+    if "poweroff" not in after:
+        answers.pop("boot_id")
+    guest = Guest(answers).run("network.yml")
+    assert guest.fired == [] and guest.ran == expected
+    assert guest.scope["managedos_install_anaconda_network_result"] == {
+        "network": True, "networkReboot": True, "networkDifferences": [], "changed": expected != ["wait", "read", "show"]}
+
+
+@pytest.mark.parametrize("first, matched, network, reboot", [
+    (guest_read(marker=marker_of(EARLIER_BOOT_ID)), True, True, True),
+    (guest_read(marker=marker_of(EARLIER_BOOT_ID)), False, False, True),
+    (guest_read(marker=marker_of(BOOT_ID)), True, True, False),
+    (guest_read(), True, False, False),
+    (None, True, False, False),
+], ids=["settled", "drifted", "this-boot", "unmarked", "unreadable"])
+def test_an_observation_proves_the_network_only_from_its_own_marker(first, matched, network, reboot):
+    if first is None:
+        answers = {"read": [answered(rc=255)]}
+    else:
+        answers = {"read": [answered(first)], "show": [answered("{}")]}
+    guest = Guest(answers, matched=matched).run("network_observe.yml")
+    assert guest.fired == []
+    assert guest.scope["managedos_install_anaconda_network_result"] == {
+        "network": network, "networkReboot": reboot,
+        "networkDifferences": [] if matched or first is None else ["bond0 is down, declared up"], "changed": False}
+
+
+def publication(name, **scope):
+    task = next(task for task in flattened(name) if (task.get(PROTOCOL) or {}).get("phase") == "completed")
+    variables = dict(defaults(), **{
+        "bootwright_os_install_digest": DIGEST,
+        "bootwright_os_install_request": {"address": ADDRESS},
+        "managedos_install_anaconda_was_installed": True,
+        "managedos_install_anaconda_after": {"observation": {"image": True, "tree": True}},
+        "managedos_install_anaconda_observed": {"observation": {"image": True, "tree": True}},
+        "managedos_install_anaconda_marker": '{"context":"lab"}',
+        "managedos_install_anaconda_host_key": "ssh-ed25519 AAAA",
+        "managedos_install_anaconda_reachable": {"rc": 0},
+        "managedos_install_anaconda_ejected": {"media": "", "power": "On"},
+        "managedos_install_anaconda_controller": {"media": "", "power": "On"},
+        "managedos_install_anaconda_delivers_key": False,
+    })
+    variables.update(scope)
+    return protocol.completion(Templar(loader=LOADER, variables=variables).template(task[PROTOCOL]))
+
+
+@pytest.mark.parametrize("name", ["apply.yml", "observe.yml"])
+def test_a_completion_publishes_the_network_the_role_proved(name):
+    proved = {"network": True, "networkReboot": True, "networkDifferences": [], "changed": False}
+    evidence, unmet = publication(name, managedos_install_anaconda_network_result=proved)
+    assert unmet is None and evidence["postcondition"] is True
+    assert (evidence["network"], evidence["networkReboot"], evidence["networkDifferences"]) == (True, True, [])
+    drifted = dict(proved, network=False, networkDifferences=["bond0 is down, declared up"])
+    evidence = publication(name, managedos_install_anaconda_network_result=drifted)[0]
+    assert (evidence["network"], evidence["networkDifferences"]) == (False, ["bond0 is down, declared up"])
+    evidence, unmet = publication(name)
+    assert (evidence["network"], evidence["networkReboot"], evidence["networkDifferences"]) == (False, False, [])
+    assert evidence["postcondition"] is False and protocol.unproved(evidence) == ["network", "networkReboot"]
+    if name == "apply.yml":
+        assert unmet is not None
+
+
+NETWORK_CONDITIONS = [
+    "bootwright_os_install_request.network.documentPath == '/etc/bootwright/network.yml'",
+    "bootwright_os_install_request.network.markerPath == '/etc/bootwright/network-marker.json'",
+    "bootwright_os_install_request.network.checkpointSeconds | int > 0",
+    "bootwright_os_install_request.network.document is mapping",
+]
+
+
+def refuses(conditions, request):
+    templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": request})
+    try:
+        return not all(templar.evaluate_conditional(condition) for condition in conditions)
+    except AnsibleUndefinedVariable:
+        return True
+
+
+@pytest.mark.parametrize("name", ["apply.yml", "observe.yml"])
+def test_a_request_without_its_network_refuses_before_any_effect(name):
+    first = LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True)[0]
+    assert first["name"] == "Validate the frozen installation request"
+    that = first["ansible.builtin.assert"]["that"]
+    conditions = [condition for condition in that if "request.network" in condition]
+    assert conditions == NETWORK_CONDITIONS
+    assert not refuses(conditions, {"network": NETWORK})
+    for request in ({}, {"network": dict(NETWORK, documentPath="/etc/nmstate/network.yml")},
+                    {"network": dict(NETWORK, markerPath="/etc/bootwright/install-marker.json")},
+                    {"network": dict(NETWORK, checkpointSeconds=0)},
+                    {"network": dict(NETWORK, document=[DOCUMENT])},
+                    {"network": {key: value for key, value in NETWORK.items() if key != "document"}}):
+        assert refuses(conditions, request), request
