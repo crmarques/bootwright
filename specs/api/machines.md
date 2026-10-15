@@ -153,7 +153,7 @@ changing media requires a new realization rather than modifying an owned disk.
 
 | Arm | Exact fields | Rule |
 | --- | --- | --- |
-| `baremetal` | none | Names a physical network a Machine may select; it configures nothing. A VLAN interface is [B74](../milestones/m1.md#b74)'s. |
+| `baremetal` | none | Names a physical network a Machine may select; it configures nothing. VLAN and bond interfaces are declared in the Machine's NMState network; the attachment configures nothing for them. |
 | `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `bridge` is 1 to 15 bytes of letters, digits, `_`, `.` or `-`, and neither `.` nor `..`; a `+` is refused because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. On one host, no two providers declare a managed attachment of one name, a bridge a managed attachment defines is named by no other attachment, of the same provider or another, and no two managed attachments, of one provider or two, declare overlapping prefixes, IPv4 or IPv6; each refuses at admission, naming both providers. A libvirt provider declares at most 20 managed attachments (its host reservation's key bound). |
 
 ## Machine
@@ -432,10 +432,9 @@ install interface yet, so that remedy first selects one with
 `network.configRef` or `network.inline`. That refusal is the only one at
 `network.installAddressRef`: the rule that network selections require a
 configured network does not repeat it.
-Its static installation interface is `ethernet`, `vlan`, or `bond`. A `vlan`
-or `bond` install interface is admitted for a later bonded or VLAN
-installation, and the managed-OS installation refuses it before registration,
-as [the refusal table](../managed-os.md#refusal-table) states.
+Its static installation interface is `ethernet`, `vlan`, or `bond`, installed
+as [managed OS](../managed-os.md#installation) projects it, with the refusals
+[its table](../managed-os.md#refusal-table) lists.
 Every installation consumer uses the same `installAddressRef` selection;
 there is no first-interface fallback.
 
@@ -783,12 +782,18 @@ eligible address or refuses; declaration order provides no fallback.
 Realization and installation read the same composed map, without the injected
 addresses and MACs: a libvirt domain attaches one interface per composed
 `ethernet` interface whose `state` is neither `absent` nor `ignore`. The
-gateway a managed-OS installation carries is the `next-hop-address` of the
-first composed route that is not `absent`, whose destination is a zero-prefix
-IPv4 CIDR and whose next hop is an IPv4 address. The installation refuses every
-other route, and a default route through another interface, before
-registration ([managed OS](../managed-os.md#installation)), so the carried
-gateway is the install interface's.
+gateway a managed-OS installation carries is the install interface's default
+route: the `next-hop-address` of the first composed route that is not `absent`,
+whose destination is a zero-prefix IPv4 CIDR, whose next hop is an IPv4 address
+and whose `next-hop-interface` is absent or the install interface. The
+installation's renderer also reads `controller`, `link-aggregation.mode`,
+`link-aggregation.port`, `link-aggregation.options`, `vlan.base-iface`,
+`vlan.id` and `vlan.protocol` of the install interface and its bond, and
+`dns-resolver.config.server` ([managed OS](../managed-os.md#installation));
+admission does not interpret them. Until post-install network convergence
+([B326](../milestones/m1.md#b326)) the installation refuses, before
+registration, every other route and the other content its line does not
+carry.
 
 The fully composed NMState map is internal compiler evidence. Canonical
 effective inspection preserves the normalized template, references, overrides,

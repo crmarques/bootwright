@@ -223,8 +223,9 @@ The limitation is tracked under
 
 ## What it does not cover
 
-Physical erase on destroy is outside this contract. Bonded and VLAN install
-interfaces are not derived by this example. Default virtual-media trust uses
-`import-certificate`; its firmware compatibility still requires hardware
-qualification. This example also omits encrypted disks and Satellite package
-sources.
+Physical erase on destroy is outside this contract. This example installs
+over one ethernet interface; a bonded or VLAN install interface is projected as
+[managed OS](../../../specs/managed-os.md#installation) states. Default
+virtual-media trust uses `import-certificate`; its firmware compatibility still
+requires hardware qualification. This example also omits encrypted disks and
+Satellite package sources.

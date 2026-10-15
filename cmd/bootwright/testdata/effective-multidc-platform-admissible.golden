@@ -1135,13 +1135,13 @@ spec:
     providerRef: bare-metal
   hardware:
     nics:
-      - name: eth0
+      - name: nic0
         macAddress: 02:00:00:00:00:00
-      - name: eth1
+      - name: nic1
         macAddress: 02:00:00:00:00:01
-      - name: eth2
+      - name: nic2
         macAddress: 02:00:00:00:00:02
-      - name: eth3
+      - name: nic3
         macAddress: 02:00:00:00:00:03
     management:
       bmc:
@@ -1185,14 +1185,14 @@ spec:
         address: 203.0.113.1/24
         interface: bond0.300
     interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
-      - nicRef: eth1
-        interfaceName: eth1
-      - nicRef: eth2
-        interfaceName: eth2
-      - nicRef: eth3
-        interfaceName: eth3
+      - nicRef: nic0
+        interfaceName: nic0
+      - nicRef: nic1
+        interfaceName: nic1
+      - nicRef: nic2
+        interfaceName: nic2
+      - nicRef: nic3
+        interfaceName: nic3
     overrides: {}
   access:
     ssh:
@@ -1216,13 +1216,13 @@ spec:
     providerRef: bare-metal
   hardware:
     nics:
-      - name: eth0
+      - name: nic0
         macAddress: 02:00:00:00:00:04
-      - name: eth1
+      - name: nic1
         macAddress: 02:00:00:00:00:05
-      - name: eth2
+      - name: nic2
         macAddress: 02:00:00:00:00:06
-      - name: eth3
+      - name: nic3
         macAddress: 02:00:00:00:00:07
     management:
       bmc:
@@ -1266,14 +1266,14 @@ spec:
         address: 203.0.113.2/24
         interface: bond0.300
     interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
-      - nicRef: eth1
-        interfaceName: eth1
-      - nicRef: eth2
-        interfaceName: eth2
-      - nicRef: eth3
-        interfaceName: eth3
+      - nicRef: nic0
+        interfaceName: nic0
+      - nicRef: nic1
+        interfaceName: nic1
+      - nicRef: nic2
+        interfaceName: nic2
+      - nicRef: nic3
+        interfaceName: nic3
     overrides: {}
   access:
     ssh:
@@ -1297,13 +1297,13 @@ spec:
     providerRef: bare-metal
   hardware:
     nics:
-      - name: eth0
+      - name: nic0
         macAddress: 02:00:00:00:00:08
-      - name: eth1
+      - name: nic1
         macAddress: 02:00:00:00:00:09
-      - name: eth2
+      - name: nic2
         macAddress: 02:00:00:00:00:0a
-      - name: eth3
+      - name: nic3
         macAddress: 02:00:00:00:00:0b
     management:
       bmc:
@@ -1347,14 +1347,14 @@ spec:
         address: 203.0.113.3/24
         interface: bond0.300
     interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
-      - nicRef: eth1
-        interfaceName: eth1
-      - nicRef: eth2
-        interfaceName: eth2
-      - nicRef: eth3
-        interfaceName: eth3
+      - nicRef: nic0
+        interfaceName: nic0
+      - nicRef: nic1
+        interfaceName: nic1
+      - nicRef: nic2
+        interfaceName: nic2
+      - nicRef: nic3
+        interfaceName: nic3
     overrides: {}
   access:
     ssh:
@@ -1378,13 +1378,13 @@ spec:
     providerRef: bare-metal
   hardware:
     nics:
-      - name: eth0
+      - name: nic0
         macAddress: 02:00:00:00:00:0c
-      - name: eth1
+      - name: nic1
         macAddress: 02:00:00:00:00:0d
-      - name: eth2
+      - name: nic2
         macAddress: 02:00:00:00:00:0e
-      - name: eth3
+      - name: nic3
         macAddress: 02:00:00:00:00:0f
     management:
       bmc:
@@ -1428,14 +1428,14 @@ spec:
         address: 203.0.113.4/24
         interface: bond0.300
     interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
-      - nicRef: eth1
-        interfaceName: eth1
-      - nicRef: eth2
-        interfaceName: eth2
-      - nicRef: eth3
-        interfaceName: eth3
+      - nicRef: nic0
+        interfaceName: nic0
+      - nicRef: nic1
+        interfaceName: nic1
+      - nicRef: nic2
+        interfaceName: nic2
+      - nicRef: nic3
+        interfaceName: nic3
     overrides: {}
   access:
     ssh:
@@ -1459,13 +1459,13 @@ spec:
     providerRef: bare-metal
   hardware:
     nics:
-      - name: eth0
+      - name: nic0
         macAddress: 02:00:00:00:00:10
-      - name: eth1
+      - name: nic1
         macAddress: 02:00:00:00:00:11
-      - name: eth2
+      - name: nic2
         macAddress: 02:00:00:00:00:12
-      - name: eth3
+      - name: nic3
         macAddress: 02:00:00:00:00:13
     management:
       bmc:
@@ -1509,14 +1509,14 @@ spec:
         address: 203.0.113.5/24
         interface: bond0.300
     interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
-      - nicRef: eth1
-        interfaceName: eth1
-      - nicRef: eth2
-        interfaceName: eth2
-      - nicRef: eth3
-        interfaceName: eth3
+      - nicRef: nic0
+        interfaceName: nic0
+      - nicRef: nic1
+        interfaceName: nic1
+      - nicRef: nic2
+        interfaceName: nic2
+      - nicRef: nic3
+        interfaceName: nic3
     overrides: {}
   access:
     ssh:
@@ -1540,13 +1540,13 @@ spec:
     providerRef: bare-metal
   hardware:
     nics:
-      - name: eth0
+      - name: nic0
         macAddress: 02:00:00:00:00:14
-      - name: eth1
+      - name: nic1
         macAddress: 02:00:00:00:00:15
-      - name: eth2
+      - name: nic2
         macAddress: 02:00:00:00:00:16
-      - name: eth3
+      - name: nic3
         macAddress: 02:00:00:00:00:17
     management:
       bmc:
@@ -1590,14 +1590,14 @@ spec:
         address: 203.0.113.6/24
         interface: bond0.300
     interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
-      - nicRef: eth1
-        interfaceName: eth1
-      - nicRef: eth2
-        interfaceName: eth2
-      - nicRef: eth3
-        interfaceName: eth3
+      - nicRef: nic0
+        interfaceName: nic0
+      - nicRef: nic1
+        interfaceName: nic1
+      - nicRef: nic2
+        interfaceName: nic2
+      - nicRef: nic3
+        interfaceName: nic3
     overrides: {}
   access:
     ssh:
@@ -1778,7 +1778,7 @@ spec:
         ipv6:
           enabled: false
         mtu: 1500
-        name: eth0
+        name: nic0
         state: up
         type: ethernet
       - controller: bond0
@@ -1787,7 +1787,7 @@ spec:
         ipv6:
           enabled: false
         mtu: 1500
-        name: eth1
+        name: nic1
         state: up
         type: ethernet
       - controller: bond0
@@ -1796,7 +1796,7 @@ spec:
         ipv6:
           enabled: false
         mtu: 1500
-        name: eth2
+        name: nic2
         state: up
         type: ethernet
       - controller: bond0
@@ -1805,7 +1805,7 @@ spec:
         ipv6:
           enabled: false
         mtu: 1500
-        name: eth3
+        name: nic3
         state: up
         type: ethernet
       - ipv4:
@@ -1817,10 +1817,10 @@ spec:
           options:
             miimon: "100"
           port:
-            - eth0
-            - eth1
-            - eth2
-            - eth3
+            - nic0
+            - nic1
+            - nic2
+            - nic3
         mtu: 1500
         name: bond0
         state: up

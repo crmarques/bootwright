@@ -189,9 +189,10 @@ it for a later one, and no lifecycle requires or consumes it.
 effective state alone: text mode; the accepted license; the install source;
 `lang`, `keyboard` and `timezone` with the selected NTP servers from
 `localization` and the profile's effective NTP selections; one static
-`network` line from the Machine's selected install address, its interface's
-prefix, the default route and the selected DNS servers, with the Machine's
-effective `fqdn` as hostname (the line is static only: a DHCP-only or
+`network` line that configures the Machine's install interface, a plain,
+bonded, VLAN or VLAN-over-bond interface, with its selected install address
+and prefix, the install interface's default route and the selected DNS
+servers, with the Machine's effective `fqdn` as hostname (the line is static only: a DHCP-only or
 IPv6-only install network, or a Machine with no network configuration, is
 refused at admission, at the Machine's
 [install address](api/machines.md#network-configuration)); a locked root
@@ -242,27 +243,76 @@ subdomains, an IP address or CIDR block the IP literals it equals or contains,
 and any other entry the host it names, its `:port` ignored, all compared
 without case. The `.repo` file is the only place the proxy is written.
 
-Each selected DNS or NTP address is a managed server's endpoint address, or
-an external server's declared `address`. The `network` line carries nothing
-else of the Machine's network, which the installation reads
-[composed](api/machines.md#nmstate-composition-subset), with its overrides
-merged, as the Machine realizes it. A selected install address that is not an
-interface-assigned IPv4 address with its prefix, an install interface whose
-composed `type` is not `ethernet`, and any other network content refuse before
-registration, naming the Machine: another interface-assigned address, another
-available interface that is not `ethernet`, an `mtu` other than 1500, or a
-route that is not `absent` other than the line's own default route. That route
-is the first route whose destination is a zero-prefix IPv4 CIDR, whose `next-hop-interface` is absent or is
-the install interface and whose `next-hop-address` is the gateway the line
-carries, the next hop of the first composed route that is not `absent`,
-whose destination is a zero-prefix IPv4 CIDR and whose next hop is an IPv4
-address, read after `spec.network.overrides` merge into the template. Search
-domains, a disabled IPv6 family, an `mtu` of 1500 and a `table-id` or
-`metric` on the default route are accepted although the line does not carry
-them, as the lab-rhel example declares them: 1500 is the MTU
-the installed system takes by default, and the installed system applies none
-of the others until post-install network convergence
-([B326](milestones/m1.md#b326)).
+Each selected DNS or NTP address is a managed server's endpoint address, or an
+external server's declared `address`.
+
+The `network` line configures the install interface, the `interface` of the
+selected install address, in Anaconda's `network` grammar, read from the
+Machine's network [composed](api/machines.md#nmstate-composition-subset) with
+its overrides merged, as the Machine realizes it. `<common>` is
+`--ip=<address> --netmask=<mask> --hostname=<fqdn> --onboot=on --activate`,
+followed by `--gateway=<gateway>` when the install interface has a default
+route and `--nameserver=<servers>` when the network selects DNS servers:
+
+| Install interface | Line |
+| --- | --- |
+| `ethernet` | `network --bootproto=static --device=<interface> <common>` |
+| `bond` | `network --bootproto=static --device=<interface> --bondslaves=<ports> --bondopts=<options> <common>` |
+| `vlan` over an `ethernet` base | `network --bootproto=static --device=<base> --vlanid=<id> --interfacename=<interface> <common>` |
+| `vlan` over a `bond` base | `network --bootproto=static --device=<base> --bondslaves=<ports> --bondopts=<options> --vlanid=<id> --interfacename=<interface> <common>` |
+
+`<interface>` is the install interface, `<base>` its `vlan.base-iface` and
+`<id>` its `vlan.id`. `<ports>` is the bond's `link-aggregation.port` in
+declared order, joined by `,`. `<options>` is `mode=` and the bond's
+`link-aggregation.mode`, then each `link-aggregation.options` entry as
+`<name>=<value>` in name order, a boolean written `true` or `false`, joined by
+`,`, or by `;` when a value holds a `,`. Anaconda accepts only full mode names
+and logs and skips an option NetworkManager rejects, so the options other than
+the mode are carried as declared but not proved at installation. `--device` is
+a declared interface name, never a hardware address. The gateway is the
+`next-hop-address` of the first composed route that is not `absent`, whose
+destination is a zero-prefix IPv4 CIDR, whose next hop is an IPv4 address and
+whose `next-hop-interface` is absent or the install interface; with none, the
+line carries no `--gateway`. The line carries no `--mtu`: Anaconda applies it
+to the main connection alone, so the installer runs at the default MTU. When
+the network selects no DNS server, an authored `dns-resolver.config.server` is
+kept as declared and the line carries no `--nameserver`.
+
+The installer's kernel command line pins every available composed `ethernet`
+interface name to its hardware address with dracut's `ifname=<name>:<mac>`, in
+composed order. The pins are frozen in the request as `installerArguments` and
+passed, joined by spaces, as the one `mkksiso --cmdline` value. A libvirt
+Machine's address is the one its realization gives the domain interface
+([substrates](substrates.md#machine-realization)); a physical Machine's is the
+`macAddress` of the hardware NIC the interface's
+`spec.network.interfaceBinding` binds, else of the NIC of its own name, the set
+the `%pre` target proof also requires. Anaconda writes each pin to the
+installed system as `/etc/systemd/network/10-anaconda-ifname-<name>.link`, so
+the installer and the installed system use the declared names on both
+substrates. dracut reserves the kernel's `ethN` names, which therefore refuse.
+Sources:
+[RHEL 9 Kickstart `network`](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-commands-and-options-reference_rhel-installer#network_kickstart-commands-for-network-configuration),
+[pykickstart network.py](https://raw.githubusercontent.com/pykickstart/pykickstart/master/pykickstart/commands/network.py),
+[Anaconda nm_client.py](https://raw.githubusercontent.com/rhinstaller/anaconda/rhel-9/pyanaconda/modules/network/nm_client.py),
+[Anaconda installation.py](https://raw.githubusercontent.com/rhinstaller/anaconda/rhel-9/pyanaconda/modules/network/installation.py),
+[lorax mkksiso](https://raw.githubusercontent.com/weldr/lorax/rhel9-branch/src/bin/mkksiso)
+and [dracut.cmdline(7)](https://man7.org/linux/man-pages/man7/dracut.cmdline.7.html).
+VLAN over bond and the `.link` persistence on the RHEL 9.8 build are proved by
+the owner's emulated rehearsal, not in-tree.
+
+A selected install address that is not an interface-assigned IPv4 address with
+its prefix, an install interface the line cannot configure, and any network
+content the line does not carry refuse before registration, naming the
+Machine, as the [refusal table](#refusal-table) lists. The content the line
+does not carry is another interface-assigned address, another available
+interface that is not `ethernet`, the install interface or the bond its VLAN
+is over, an `mtu` other than 1500, and a route that is not `absent` other than
+the line's default route. Search domains, a disabled IPv6 family, an `mtu` of
+1500 and a `table-id` or `metric` on the default route are accepted although
+the line does not carry them, as the lab-rhel example declares them: 1500 is
+the MTU the installed system takes by default. That content refuses only until
+post-install network convergence ([B326](milestones/m1.md#b326)) applies the
+composed network to the installed system.
 
 What the `%post` does about the host key follows the
 [identity channel](substrates.md#identity-and-power-operations). For the guest
@@ -298,7 +348,8 @@ OpenSSH defaults. This proves access compatibility, not FIPS certification.
 served root under the
 [consumer publication contract](infrastructure-services.md#consumer-publication):
 the per-Machine installer image, built by `mkksiso` from the frozen boot media
-with the derived Kickstart implanted and the media check removed from every
+with the derived Kickstart implanted, the frozen installer arguments added to
+every boot entry's kernel command line, and the media check removed from every
 boot entry, at `os/<machine>/install.iso` for a Machine proved through its
 guest agent, and for a delivered-key Machine at
 `private/os/<machine>/<token>/install.iso`, beside `identity` and
@@ -693,7 +744,8 @@ published and before the machine is read, given media or booted, and each
 dispatching task file refuses it again with a terminal fail after its
 dispatch. The
 adapter renders the frozen Kickstart, invokes `mkksiso` and the archive tooling
-with exact argument vectors, and returns bounded structured evidence. The fleet
+with exact argument vectors, the installer arguments reaching `mkksiso` as one
+`--cmdline` argument, and returns bounded structured evidence. The fleet
 key's public half reaches it as a value, substituted between the double
 quotes of the `sshkey` directive after the renderer's guard; one that holds a
 control character, a Unicode line or paragraph separator, a double quote or a

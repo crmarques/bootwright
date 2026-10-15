@@ -41,32 +41,32 @@ spec:
         interface: bond0.300
 
     interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
+      - nicRef: nic0
+        interfaceName: nic0
 
-      - nicRef: eth1
-        interfaceName: eth1
+      - nicRef: nic1
+        interfaceName: nic1
 
-      - nicRef: eth2
-        interfaceName: eth2
+      - nicRef: nic2
+        interfaceName: nic2
 
-      - nicRef: eth3
-        interfaceName: eth3
+      - nicRef: nic3
+        interfaceName: nic3
 
     overrides: {}
 
   hardware:
     nics:
-      - name: eth0
+      - name: nic0
         macAddress: 02:00:00:00:00:14
 
-      - name: eth1
+      - name: nic1
         macAddress: 02:00:00:00:00:15
 
-      - name: eth2
+      - name: nic2
         macAddress: 02:00:00:00:00:16
 
-      - name: eth3
+      - name: nic3
         macAddress: 02:00:00:00:00:17
 
     management:

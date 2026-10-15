@@ -15,7 +15,7 @@ spec:
 
   nmstate:
     interfaces:
-      - name: eth0
+      - name: nic0
         type: ethernet
         controller: bond0
         state: up
@@ -27,7 +27,7 @@ spec:
         ipv6:
           enabled: false
 
-      - name: eth1
+      - name: nic1
         type: ethernet
         controller: bond0
         state: up
@@ -39,7 +39,7 @@ spec:
         ipv6:
           enabled: false
 
-      - name: eth2
+      - name: nic2
         type: ethernet
         controller: bond0
         state: up
@@ -51,7 +51,7 @@ spec:
         ipv6:
           enabled: false
 
-      - name: eth3
+      - name: nic3
         type: ethernet
         controller: bond0
         state: up
@@ -75,10 +75,10 @@ spec:
             miimon: "100"
 
           port:
-            - eth0
-            - eth1
-            - eth2
-            - eth3
+            - nic0
+            - nic1
+            - nic2
+            - nic3
 
         ipv4:
           enabled: false
