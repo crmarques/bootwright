@@ -1,0 +1,14 @@
+row: U04a
+base: libvirt-3-nodes-ceph
+phase: admission
+edits:
+- file: storage/pool.yaml
+  replace: "  type: replicated\n  role: rbd\n\n  replicated:\n    size: 2\n    minSize: 2\n"
+  with: "  type: erasure\n  role: rbd\n\n  erasure:\n    dataChunks: 2\n    codingChunks: 2\n"
+expect:
+- code: api.invariant
+  kind: StoragePool
+  name: rbd-data
+  field: $.spec.erasure
+  message: erasure data and coding chunks exceed declared OSD-host capacity
+  remediation: "correct $.spec.erasure to satisfy this requirement: erasure data and coding chunks exceed declared OSD-host capacity"

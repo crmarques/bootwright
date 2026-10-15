@@ -48,10 +48,11 @@ ansible-check:
 
 # Guidance links, cited paths and tests, command lines, and the tables specs
 # share with code: diagnostics, bounds, the command catalog and transitions, the
-# capabilities' and the engine's refusal tables, and the destinations the
-# operator guide lists for a proxied network.
+# capabilities' and the engine's refusal tables, the Ceph matrix catalog and
+# combination table, and the destinations the operator guide lists for a
+# proxied network.
 docs-check:
-	$(GO) test -count=1 -run '^(TestDocs|TestDiagnosticCodesMatchOutputSpec|TestDocumentedBoundsMatchCode|TestCommandCatalogMatchesSpec|TestTransitionTablesMatchSpec|TestUnclaimedObjectTableMatchesTheEngine|Test[A-Za-z]*RefusalTableMatchesUnsupported|Test[A-Za-z]*ObservableFieldTableMatchesProjector)' ./test/architecture ./internal/cli ./internal/reconciliation/lifecycle ./internal/controller/bundlelocal ./internal/containercluster/agentinstall ./internal/controller/clients ./internal/infrastructureservices/artifactserver ./internal/managedos/installation ./internal/substrate/libvirt
+	$(GO) test -count=1 -run '^(TestDocs|TestDiagnosticCodesMatchOutputSpec|TestDocumentedBoundsMatchCode|TestCommandCatalogMatchesSpec|TestTransitionTablesMatchSpec|TestUnclaimedObjectTableMatchesTheEngine|Test[A-Za-z]*RefusalTableMatchesUnsupported|Test[A-Za-z]*ObservableFieldTableMatchesProjector|TestCephMatrix|TestCephProfile)' ./test/architecture ./internal/cli ./internal/reconciliation/lifecycle ./internal/controller/bundlelocal ./internal/containercluster/agentinstall ./internal/controller/clients ./internal/infrastructureservices/artifactserver ./internal/managedos/installation ./internal/substrate/libvirt ./internal/storage/ceph ./cmd/bootwright
 
 # The probe tier: the narrowest checks of each file this branch changed, which
 # stop at the first failure. It is no gate; make check is.

@@ -1,0 +1,30 @@
+row: U05
+base: libvirt-3-nodes-ceph
+phase: admission
+add:
+- path: storage/metadata-ec.yaml
+  document: |
+    apiVersion: bootwright.io/v1alpha1
+    kind: StoragePool
+    metadata:
+      name: metadata-ec
+    spec:
+      clusterRef: ceph-lab
+      type: erasure
+      role: cephfs-metadata
+      erasure:
+        dataChunks: 2
+        codingChunks: 1
+expect:
+- code: api.invariant
+  kind: StoragePool
+  name: metadata-ec
+  field: $.spec.role
+  message: pool role does not permit erasure protection
+  remediation: "correct $.spec.role to satisfy this requirement: pool role does not permit erasure protection"
+- code: api.invariant
+  kind: StoragePool
+  name: metadata-ec
+  field: $.spec.type
+  message: CephFS metadata pools require replicated protection
+  remediation: "correct $.spec.type to satisfy this requirement: CephFS metadata pools require replicated protection"

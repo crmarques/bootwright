@@ -16,6 +16,15 @@ validate or import that directory, rather than its category or all of
 | `container-clusters/` | [lab-sno](container-clusters/lab-sno/README.md) | Install single-node OpenShift on a libvirt guest. |
 | `full-platforms/` | [multidc-platform](full-platforms/multidc-platform/README.md) | Authoring reference for a multi-datacenter platform; current admission refuses its unsupported features. |
 
+The [Ceph profile catalog](../specs/storage-coverage.md#profile-catalog) splits
+[B484](../specs/milestones/m2.md#b484)'s full virtual matrix into separate
+`storage-clusters/` profiles, each with the runbook sections that page requires:
+`libvirt-6-nodes-ceph-pools/`, `libvirt-6-nodes-ceph-services/`,
+`libvirt-4-nodes-ceph-observability/`, `libvirt-5-nodes-ceph-nvmeof/`,
+`libvirt-3-nodes-ceph-host-variants/`, `libvirt-3-nodes-ceph-disconnected/` and
+`libvirt-2x4-nodes-ceph-multisite/`. Each name becomes a table row when its
+profile lands.
+
 Machine and cluster examples include the infrastructure they need. There is no
 dependency on running another example first. Their shared service addresses and
 ports mean these lab scenarios should run one at a time on a host unless you

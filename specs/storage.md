@@ -181,6 +181,20 @@ claim stretch readiness. [B486](milestones/m2.md#b486) qualifies native stretch,
 [B487](milestones/m2.md#b487) its service/endpoint restrictions, and
 [B488](milestones/m2.md#b488) its failure and recovery acceptance.
 
+### Refusal table
+
+Each row is one refusal of the Ceph capability, and
+`TestCephRefusalTableMatchesUnsupported` holds its `Unsupported` to it before
+operation registration and secret custody. Its reason and remedy are the
+refusal's reason and remediation. The capability refuses the StorageCluster
+and every StoragePool and StorageClient whose `clusterRef` names it, each with
+the same row. [Unsupported combinations](storage-coverage.md#unsupported-combinations)
+links each matrix combination that this table refuses.
+
+| Refusal | Path | Reason | Remedy |
+| --- | --- | --- | --- |
+| Incomplete or unsafe Ceph coordinates or transport | a StorageCluster, or a StoragePool or StorageClient whose `clusterRef` names it, declaring an empty `ceph.release`, `ceph.packageVersion`, `ceph.cephadm.ansible.packageVersion` or `ceph.image.version`, an empty `ceph.image.base`, or a `ceph.cephadm.clusterSSH.transport` other than `verified-tunnel`, an omitted transport included | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verified-tunnel transport; native transport is refused and host-key verification cannot be disabled` |
+
 ## Bootstrap identity and continuation
 
 A cluster receives one stable FSID UUID, durably bound to its context, owning

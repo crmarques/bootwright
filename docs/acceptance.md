@@ -56,6 +56,28 @@ and count each directory's files with `sudo find <directory> -type f`. Switch
 the crypto policy with `sudo update-crypto-policies --set FUTURE`, and back
 with `--set DEFAULT`, around the Redfish check.
 
+## Ceph matrix row
+
+[B484](../specs/milestones/m2.md#b484)'s owner gate is one row per profile of
+the [profile catalog](../specs/storage-coverage.md#profile-catalog), each on a
+clean build that descends from B484's acceptance baseline. The run follows
+the profile README's runbook. Copy this template into the ledger and replace
+every `<...>`:
+
+```text
+| <YYYY-MM-DD> | Commit <sha>; Source clean | Retained locally | examples/storage-clusters/<profile directory> (<profile ID>) with the lab conventions only | Retained locally | <profile ID> matrix qualification: <the families, failover, interruption, replay, changed intent and removal the row accepts> | Retained locally | observation, not acceptance |
+```
+
+The locally retained evidence records the host, the command sequence, each
+family's result, every refusal met, the log digests and these measured budget
+fields: `Guests`, `Declared vCPU`, `Declared RAM GiB`, `Declared disk GiB`,
+`MemAvailable at (a)/(b)/(c)`, `Minimum MemAvailable during clusters stage`,
+`Allocated vs apparent disk bytes`, `Per-guest balloon RSS`, `Daemons by type`,
+`Clusters-stage wall time` and `OOM kills`; the public `Outcome` names the
+accepted qualification. Count `OOM kills` as the `Out of memory` lines in each
+guest's journal over the run, read through `cluster exec` or the console. A
+nonzero count fails the row.
+
 ## Ledger
 
 **B615 retrospective baseline:** X99 records B615's implementation baseline

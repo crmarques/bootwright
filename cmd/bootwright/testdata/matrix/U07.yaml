@@ -1,0 +1,17 @@
+row: U07
+base: libvirt-3-nodes-ceph
+phase: unsupported
+edits:
+- file: storage/cluster.yaml
+  replace: "        transport: verified-tunnel\n"
+  with: "        transport: native\n"
+expect:
+- kind: StorageCluster
+  name: ceph-lab
+  refusalRow: Incomplete or unsafe Ceph coordinates or transport
+- kind: StoragePool
+  name: rbd-data
+  refusalRow: Incomplete or unsafe Ceph coordinates or transport
+- kind: StorageClient
+  name: rbd-canary
+  refusalRow: Incomplete or unsafe Ceph coordinates or transport

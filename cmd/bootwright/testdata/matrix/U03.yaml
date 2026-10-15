@@ -1,0 +1,14 @@
+row: U03
+base: libvirt-3-nodes-ceph
+phase: admission
+edits:
+- file: storage/pool.yaml
+  replace: "    size: 2\n"
+  with: "    size: 3\n"
+expect:
+- code: api.invariant
+  kind: StoragePool
+  name: rbd-data
+  field: $.spec.replicated.size
+  message: IBM host-domain replication requires an additional OSD-bearing host beyond the effective replica size
+  remediation: "add OSD-bearing hosts, or explicitly select replicated.size: 2 and minSize: 2 for three OSD-bearing hosts; omitted or zero size retains the default of 3"

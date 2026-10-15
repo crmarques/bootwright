@@ -1,0 +1,14 @@
+row: U02
+base: libvirt-3-nodes-ceph
+phase: admission
+edits:
+- file: storage/pool.yaml
+  replace: "    size: 2\n"
+  with: "    size: 4\n"
+expect:
+- code: api.invariant
+  kind: StoragePool
+  name: rbd-data
+  field: $.spec.replicated.size
+  message: host-domain replicas exceed declared OSD-host capacity
+  remediation: "correct $.spec.replicated.size to satisfy this requirement: host-domain replicas exceed declared OSD-host capacity"

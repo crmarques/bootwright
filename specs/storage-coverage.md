@@ -213,6 +213,132 @@ guests, and a three-host lab cannot qualify EC profiles needing more distinct
 failure domains. The full physical suite repeats the applicable matrix on
 real hardware; emulated results do not substitute for it.
 
+### Profile catalog
+
+Each profile is a public example directory `libvirt-<n>-nodes-ceph-<profile>/`
+under `examples/`, where `<n>` counts its Ceph hosts (`2x4` for two clusters
+of four), with one README runbook. The catalog follows these rules:
+
+- Every Ceph daemon placement follows IBM's
+  [colocation page](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=recommendations-colocation)
+  for the daemons it names. For a daemon the page does not name, the delivering
+  family item records the placement it qualified. Whether admission enforces
+  the page's list stays with [B472](milestones/m2.md#b472).
+- Declared guest memory follows [OD21](milestones/m2.md#m2c-open-decisions).
+  Under its recommended option each guest declares at least the per-guest sum
+  of IBM's
+  [minimum hardware figures](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=recommendations-minimum-hardware-considerations)
+  for its daemons plus 2 GiB of operating-system headroom, plus the family
+  item's recorded figure for a daemon that page does not list. Until OD21 is
+  answered, both RAM totals are shown. Counts, roles, colocation, replica and
+  quorum rules and CPU prerequisites are never relaxed under either option.
+- An NVMe-oF gateway host keeps IBM's figures: 4 vCPUs and 8 GB per gateway in
+  addition to its colocated OSD's 5 GB. Its provider host CPU is Intel 64, 6th
+  generation or later, with AVX-512, exposed under host-passthrough. An AMD
+  CPU with AVX-512 is not accepted until [B480](milestones/m2.md#b480) records
+  IBM's position.
+- Each profile reserves 4 GiB of controller memory, as the
+  [three-node example](../examples/storage-clusters/libvirt-3-nodes-ceph/README.md) does.
+- A profile with more than three Ceph hosts in one cluster plans only after
+  [OD22](milestones/m2.md#m2c-open-decisions)'s execution-budget item.
+- P0 is [B476](milestones/delivered.md#x94--post-destroy-cluster-inspection)'s profile and is shown for reference only:
+  it claims no B484 coverage. P6 claims the core cells (single public network,
+  one explicit data disk, explicit 2/2 replicated pool, minimal pool client);
+  P5 also covers the data disk and the 2/2 pool.
+
+The Coverage cell lists entries separated by `; `. Each entry is a Family name
+of the [feature matrix](#feature-matrix), optionally followed by details in
+one pair of parentheses. Until a profile's directory lands, its Example cell
+reads `planned:` and names the directory. Once it lands, the cell links the
+directory, and the Guests, vCPU, RAM and Root+data cells must be exact
+numbers. `TestCephProfileCatalogCoversEveryVirtualMatrixRow` requires every
+feature-matrix family except Physical provisioning and Stretch, and each core
+cell, in some P1 to P7 Coverage cell. `TestCephProfileBudgetsMatchExamples`
+holds each linked example's guests to its row: the sum of `cpu`, `memoryMiB`,
+`diskGiB` and `dataDisks[].sizeGiB` of each substrate-realized Machine's provider
+profile. Its RAM must equal one of the two RAM cells.
+`TestCephProfilesPlanWithoutRefusal` plans each linked example through the
+production capabilities with no `Unsupported` refusal and one Ceph host block
+per topology node.
+
+| Profile | Example | Coverage | Ceph hosts and daemons | IBM per guest (GB) | Other guests | Networks | Lab per guest under OD21 (b) | Guests | vCPU | RAM GiB under OD21 (b) | RAM GiB under OD21 (a) | Root+data GiB | External dependencies | Delivered by |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| P0 core (B476 only, not counted) | [libvirt-3-nodes-ceph/](../examples/storage-clusters/libvirt-3-nodes-ceph/) | none: B476's profile, shown for reference | 3: MON 3, MGR 2, OSD 3 | 11, 11, 8 (sum 30) | none | public | 8 GiB (B476's values, fixed OSD memory target) | 3 | 12 | 24 | 24 | 180+240 | IBM entitlement | [B476](milestones/delivered.md#x94--post-destroy-cluster-inspection) |
+| P1 pools (representative larger) | planned: `libvirt-6-nodes-ceph-pools/` | Hosts and native bootstrap (public and cluster networks); Devices and OSDs (two drive groups, HDD data with DB on SSD, device classes, encrypted OSDs, TPM2 variant if B475 qualifies it); CRUSH and pools (replicated 3/2, EC 4+2 RBD data pool with overwrites and replicated metadata on six hosts, EC 2+2, device-class rule, quota, compression, autoscale bounds, RBD images) | 6: MON 5 on h1-h5 (3 if B472 records a narrower MON range), MGR 2 on h1 and h2, OSD 12 (2 per host) | h1, h2 16; h3-h5 13; h6 10 (sum 81) | none | public, cluster | h1, h2 18; h3-h5 15; h6 12 GiB; 4 vCPU; 60 root, 40 SSD, 40 HDD and 10 SSD (DB) GiB | 6 | 24 | 93 | 60 | 360+540 | IBM entitlement | [B81](milestones/m2.md#b81), [B475](milestones/m2.md#b475), [B326](milestones/m1.md#b326); OD22's budget item |
+| P2 services | planned: `libvirt-6-nodes-ceph-services/` | CephFS (replicated metadata, replicated and EC 2+2 data, layouts, MDS active and standby-replay, subvolume groups and subvolumes); RGW (realm, zonegroup and zone, two RGW daemons, TLS, ingress VIP, users and buckets as OD3 decides); NFS (multi-active count 2 over 3 candidate hosts, ingress, CephFS export, RGW export only if OD4 admits it); SMB (user mode, clustered count 2 if B482 supports it, share on its own subvolume); Access and handoff (CephFS, S3, NFS and SMB client evidence) | 6: h1, h2 MON, MGR, OSD and MDS; h3 MON, OSD and RGW; h4, h5 OSD and NFS (candidates h4-h6); h6 OSD and RGW; SMB and ingress placement as B482 and B477 qualify | h1, h2 14; h3 9; h4, h5 5+?; h6 6 (sum 53+) | 1 client (RHEL 9.8, DVD packages per family) | public (VIPs in it) | h1, h2 16; h3 11; h4, h5 7+?; h6 8 GiB; client 4 GiB; Ceph 4 vCPU, client 2; Ceph 60 root and 60 SSD GiB, client 40 root GiB | 7 | 26 | >=69 | 64 | 400+360 | AD only if B482 qualifies AD mode (operator-declared) | [B492](milestones/m2.md#b492), [B477](milestones/m2.md#b477), [B478](milestones/m2.md#b478), [B482](milestones/m2.md#b482), [B489](milestones/m2.md#b489); OD22's budget item |
+| P3 observability | planned: `libvirt-4-nodes-ceph-observability/` | Observability and management (Prometheus, Grafana, Alertmanager, node and Ceph exporters, retention, alerts, SNMP gateway, management gateway with a keepalive-only ingress VIP, OAuth2 SSO through oauth2-proxy with roles, TLS, log collection with Loki and Alloy as IBM 9.9.1 documents only if B479 records the pinned image's support) | 4: h1, h2 MON, MGR and OSD; h3 MON and OSD; h4 OSD and the observability stack; management gateway and oauth2-proxy placement as B479 qualifies | h1, h2 11; h3 8; h4 5+? (sum 35+) | none | public (VIP in it) | h1, h2 13; h3 10; h4 7+? GiB; 4 vCPU; 60 root (h4 80) and 60 data GiB | 4 | 16 | >=43 | 36 | 260+240 | an OIDC IdP of a kind IBM names and an SNMP receiver, both operator-provided | [B479](milestones/m2.md#b479); OD22's budget item |
+| P4 NVMe-oF | planned: `libvirt-5-nodes-ceph-nvmeof/` | NVMe-oF (one gateway group, 2 gateways for HA, listeners, subsystems and NQNs, namespaces on owned RBD images, host NQN authorization, DH-HMAC-CHAP only if OD13 admits it, initiator failover); iSCSI (refusal only, unless B481 records IBM support) | 5: h1, h2 MON, MGR and OSD; h3 MON and OSD; h4, h5 OSD and NVMe-oF gateway | h1, h2 11; h3 8; h4, h5 13 (sum 56) | 1 initiator client (RHEL 9.8, nvme-cli) | public | h1, h2 13; h3 10; h4, h5 15 GiB and 8 vCPU; others 4 vCPU; client 4 GiB, 2 vCPU; 60 root and 60 data GiB, client 40 root GiB | 6 | 30 | 70 | 60 | 340+300 | provider host CPU: Intel 64, 6th generation or later, AVX-512 | [B480](milestones/m2.md#b480), [B481](milestones/m2.md#b481); OD22's budget item |
+| P5 host variants | planned: `libvirt-3-nodes-ceph-host-variants/` | Host and security variants (active-backup bond over 2 NICs, VLAN carrying the cluster network over the bond, final NMState, RHSM registration, FIPS without OSPP, CephX key type, LUKS root with TPM2 unlock and recovery, reboot access); Devices and OSDs (one explicit data disk); CRUSH and pools (explicit 2/2 replicated pool) | 3: MON 3, MGR 2, OSD 3 | 11, 11, 8 (sum 30) | none | public (bond), cluster (VLAN on the bond) | 13, 13, 10 GiB; 4 vCPU; 60 root and 80 data GiB; 2 NICs | 3 | 12 | 36 | 24 | 180+240 | Red Hat registration credentials (operator Secret) | [B326](milestones/m1.md#b326), [B74](milestones/m1.md#b74), [B75](milestones/m1.md#b75), [B76](milestones/m1.md#b76), [B77](milestones/m1.md#b77), [B346](milestones/m1.md#b346) |
+| P6 disconnected (also the B484 core) | planned: `libvirt-3-nodes-ceph-disconnected/` | Disconnected supply (controller-local mirror registry, CA and pull-secret custody, every image the profile deploys, no public route); Hosts and native bootstrap (single public network); Devices and OSDs (one explicit data disk); CRUSH and pools (explicit 2/2 replicated pool); Access and handoff (minimal pool client) | 3: MON 3, MGR 2, OSD 3, and the auxiliary services B493 qualifies (at least the monitoring set and ingress) | 11, 11, 8 plus auxiliaries (sum 30+) | none | public with `forward: none` | 13, 13, 10 GiB plus auxiliaries; 4 vCPU; 60 root and 80 data GiB | 3 | 12 | >=36 | 24 | 180+240 | mirrored images the operator prepares through B493's command | [B493](milestones/m2.md#b493) |
+| P7 multi-cluster | planned: `libvirt-2x4-nodes-ceph-multisite/` | Multi-cluster services (RGW multisite realm across two clusters, RBD mirroring, CephFS snapshot mirroring only if OD27 records IBM support, initial sync, peer unavailable, operator failover and removal) | 2 clusters of 4: h1, h2 MON, MGR, OSD and MDS; h3 MON, OSD and RGW; h4 OSD and rbd-mirror (and cephfs-mirror as B483 qualifies) | h1, h2 14; h3 9; h4 5+? (42+ per cluster) | 1 client | one public network per cluster, routed through the provider host | h1, h2 16; h3 11; h4 7+? GiB; client 4 GiB; Ceph 4 vCPU, client 2; Ceph 60 root and 60 data GiB, client 40 root GiB | 9 | 34 | >=104 | 68 | 520+480 | none beyond the IBM entitlement | [B483](milestones/m2.md#b483), [B477](milestones/m2.md#b477), [B492](milestones/m2.md#b492), [B489](milestones/m2.md#b489); OD22's budget item |
+
+The iSCSI family is refusal-only unless [B481](milestones/m2.md#b481) records
+IBM support. Physical provisioning and Stretch are M2d and M2e rows outside
+this catalog.
+
+### Profile runbooks
+
+Each P1 to P7 README has these `##` headings, each once and in this order.
+Other headings may sit between them:
+
+1. `## Budget and prerequisites`: the catalog row's numbers (IBM per guest and
+   declared), external dependencies, the 4 GiB controller reserve, and for an
+   NVMe-oF profile the provider CPU checks `grep -c avx512f /proc/cpuinfo` and
+   `grep -m1 'model name' /proc/cpuinfo`.
+2. `## Initial setup`
+3. `## IBM entitlement`: both as the
+   [three-node example](../examples/storage-clusters/libvirt-3-nodes-ceph/README.md) does.
+4. `## Create the context`: `validate` with its exact files-seen and
+   objects-decoded counts, `context init`, `context update`, `context use`,
+   `secret generate`, `secret set` and `secret check`.
+5. `## Apply by stage`: controller, infra-components and substrates, machines,
+   then clusters, with the per-guest read-only checks before clusters. The memory
+   sampler below runs during `apply --stage clusters`.
+6. `## Validate the cluster`: `cluster info` and read-only native checks (`-s`,
+   `health detail`, `orch ls`, `orch ps`, `osd tree`, `osd pool ls detail`, and the
+   family's own list commands with its redaction filters), never a
+   secret-bearing export.
+7. `## Client access`: the family item's own client evidence, run from the
+   client guest or through `cluster exec`.
+8. `## Failover`: stop the declared gateway or daemon host with
+   `bootwright machine stop`, then record native health and the client result
+   within a stated timeout, and the declared recovery action. A profile without
+   a gateway runs the one-node outage of the three-node example here.
+9. `## Interruption and continuation`: one Ctrl-C of `apply --stage clusters`
+   after the first Ceph block starts, `status`, the same command again, and
+   the record that it continued the same operation.
+10. `## Replay`: `apply` on the done context settles without effect.
+11. `## Check that changed intent is refused`
+12. `## Measured budget`: the commands below and every measured budget field
+    of the [Ceph matrix row](../docs/acceptance.md#ceph-matrix-row), by name.
+13. `## Cleanup`: `destroy --authorize data-loss` refused while hosts run,
+    `machine stop` of the whole group, destroy again, and the absence checks.
+
+Measured budget commands are operator-run and read-only. Run them before the
+first apply (a), after `apply --stage clusters` (b), and after the client and
+failover checks (c):
+
+```text
+nproc
+grep MemAvailable /proc/meminfo
+sudo du -sb --apparent-size /var/lib/libvirt/images/bootwright/<context>
+sudo du -sb /var/lib/libvirt/images/bootwright/<context>
+virsh --connect qemu:///system domstats --balloon --vcpu
+<cephCommand> orch ps --format json-pretty
+<cephCommand> df
+```
+
+The memory sampler starts in a second terminal just before
+`apply --stage clusters` and stops with Ctrl-C when that command returns:
+
+```text
+while sleep 10; do date +%s; grep MemAvailable /proc/meminfo; done > "$ev/memavailable-clusters.txt"
+```
+
+`TestCephProfileRunbooksHaveRequiredSections` checks each linked P1 to P7
+README for these headings and for every measured budget field name in its
+`## Measured budget` section.
+
 ## Stretch constraints
 
 IBM's [stretch-mode contract](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=storage-stretch-mode)
@@ -289,6 +415,45 @@ authored under a second owner.
 requires the management gateway, OAuth2 proxy, a qualified identity provider
 and user-role mapping; configuring a redirect alone is not SSO acceptance.
 
+## Unsupported combinations
+
+Each row is a combination that a primary source calls unsupported. It names
+the item that owns the refusal and the diagnostic that refuses it before any
+effect. The diagnostic owns its text, so this table restates no reason or
+remedy. An admission refusal's code, field, message and remediation are pinned
+by the row's fixture. An `Unsupported` refusal's reason and remedy are a row of
+the [Ceph refusal table](storage.md#refusal-table), which the fixture names.
+`TestCephMatrixCombinationFixturesRefuse` applies each `tested` row's fixture
+to its base example and asserts exactly the diagnostics it lists.
+`TestEveryCephMatrixFixtureHasATestedRow` refuses a fixture without a `tested`
+row. A `gap` row is a combination that the code still admits. It has no
+fixture, names the item that must deliver the refusal, and blocks
+[B484](milestones/m2.md#b484)'s exit. The row turns `tested` when that item
+refuses the combination. It is removed when the item records the combination
+as supported, with a source, and a profile claims it. Every refusal names the
+object, the reason and a concrete next step. A remediation that still reads
+`correct <field> to satisfy this requirement` is replaced with a concrete one
+before B484's exit.
+
+| ID | Combination | Source | Owner | Owning diagnostic | Status | Fixture |
+| --- | --- | --- | --- | --- | --- | --- |
+| U01 | Stretch topology in a non-stretch milestone | [Stretch constraints](#stretch-constraints) (M2e) | [B486](milestones/m2.md#b486) | admission `api.invariant` on StorageCluster `$.spec.ceph.topology.stretch`, beside `api.invariant` on each StoragePool `$.spec.replicated` that the stretch default makes invalid | tested | [U01.yaml](../cmd/bootwright/testdata/matrix/U01.yaml) |
+| U02 | Host-domain replicas above the declared OSD hosts | [IBM colocation](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=recommendations-colocation) | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.replicated.size` | tested | [U02.yaml](../cmd/bootwright/testdata/matrix/U02.yaml) |
+| U03 | Replicated size equal to the OSD-host count on IBM | [IBM colocation](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=recommendations-colocation) ("three replicas is four nodes") | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.replicated.size` (IBM's extra-host rule) | tested | [U03.yaml](../cmd/bootwright/testdata/matrix/U03.yaml) |
+| U04a | EC `k+m` above the declared OSD hosts | [IBM EC profiles](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-code-profiles), Table 1 | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.erasure` | tested | [U04a.yaml](../cmd/bootwright/testdata/matrix/U04a.yaml) |
+| U04b | EC 2+2 on exactly four OSD hosts without `mon_osd_down_out_subtree_limit = host` | [IBM EC profiles](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-code-profiles), Table 1 (2+2 needs five hosts, four only as the edge case) | [B81](milestones/m2.md#b81) | none yet: admission admits it | gap | none until B81 refuses it on a four-OSD-host base |
+| U04c | An EC `k`/`m` pair that Table 1 does not list, such as 3+1 | [IBM EC profiles](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-code-profiles), Table 1 (unsupported by omission) | [B81](milestones/m2.md#b81) | none yet: admission admits it | gap | none until B81 refuses it or records, with a source, that admission does not restrict pairs |
+| U05 | EC on a pool role that does not permit it (today only `cephfs-metadata`) | [IBM EC overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites) | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.role` | tested | [U05.yaml](../cmd/bootwright/testdata/matrix/U05.yaml) |
+| U06 | EC CephFS metadata pool | [IBM EC overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites) | [B81](milestones/m2.md#b81), [B492](milestones/m2.md#b492) | admission `api.invariant` on StoragePool `$.spec.type` | tested | [U06.yaml](../cmd/bootwright/testdata/matrix/U06.yaml) |
+| U07 | `clusterSSH.transport: native`, or the transport omitted | [Release qualification](#release-qualification); [upstream ssh.py v20.2.1](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161) | [B79](milestones/m2.md#b79) (refusal), B595 (table) | [Ceph refusal table](storage.md#refusal-table): Incomplete or unsafe Ceph coordinates or transport | tested | [U07.yaml](../cmd/bootwright/testdata/matrix/U07.yaml) |
+| U09 | Replicated size above the OSD hosts that carry the pool rule's device class | [upstream CRUSH device classes](https://docs.ceph.com/en/tentacle/rados/operations/crush-map/#device-classes) (rule semantics, not an IBM statement) | [B81](milestones/m2.md#b81) | none yet: the OSD-host count ignores device class | gap | none until B81 counts only the OSD hosts of the rule's class |
+
+IBM supports EC 8+6 on four hosts with four OSDs each only as its MSR special
+case, which admission refuses today as U04a. [B81](milestones/m2.md#b81)
+records whether Bootwright supports MSR. If it does, U04a's combination gains
+"outside IBM's MSR case" and a profile claims MSR. If not, B81 records the
+decision and its source.
+
 ## Acceptance evidence
 
 Each profile records its frozen build/release, redacted effective-intent and
@@ -298,6 +463,11 @@ exact continuation, failover/recovery where applicable, removal result and
 operation-log digest. The [acceptance rules](milestones.md#completion-and-verification)
 govern owner acceptance. Local machine inventories, addresses, credentials,
 firmware captures and test-site mappings are not part of the public profile.
+
+For [B484](milestones/m2.md#b484), each catalog profile P1 to P7 needs its own
+owner-accepted ledger row on B484's acceptance baseline. The row uses the
+[Ceph matrix row](../docs/acceptance.md#ceph-matrix-row) template; its locally
+retained evidence holds the measured budget fields. P0 belongs to B476 alone.
 
 In-tree gates qualify contracts without hosts. The operator gates perform
 native execution, inject failures externally, restore the lab and record
