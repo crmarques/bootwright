@@ -306,7 +306,32 @@ checks:
 - ingress virtual IPs are `address/prefix` inside a declared public CIDR with
   its prefix length, neither its network nor its broadcast address, and
   equal, after parsing, to no Machine address and no other ingress virtual
-  IP; and
+  IP;
+- the listener registry resolves every native listener with the release
+  defaults before comparing (IBM's `get_port_start`): on every storage host
+  the Ceph monitors (3300, 6789), the messenger range 6800-7568
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/common/options/global.yaml.in#L1221-L1234))
+  and ceph-exporter (9926); an RGW service's `rgw_frontend_port` (80, or 443
+  with `ssl`); an NFS service's `port` (2049), `monitoring_port` (9587) and
+  its fixed cluster QoS listener (31311); and an ingress service's
+  `frontend_port`, `monitor_port` and HAProxy peer port (1024 for an NFS
+  backend unless `haproxy_peer_communication_port` names another). Each
+  listener holds every eligible host of its service's placement. An ingress
+  frontend binds its virtual IP
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/ingress.py#L206-L211)),
+  an NFS `port` with a `virtual_ip` and without the HAProxy protocol binds
+  that `virtual_ip`
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nfs.py#L100-L113)),
+  an RGW service with `only_bind_port_on_networks` binds the host's Machine
+  address inside its `networks` when one is declared
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/cephadmservice.py#L1139-L1150)),
+  and every other listener binds all addresses. Two listeners on one port of
+  one host refuse unless both bind distinct specific addresses; the refusal
+  names the host and the other listener;
+- two ingress services of any StorageCluster whose networks (the virtual
+  IP's network and `virtual_interface_networks`) overlap use different
+  keepalived virtual router IDs; an omitted `first_virtual_router_id` is 50,
+  and each ingress takes one ID because `virtual_ips_list` is refused; and
 - an NFS service's mode follows its ingress, and the HAProxy mode that hides
   client addresses refuses
   ([NFS modes](../storage-native-api.md#rgw-ingress-and-nfs-records)).

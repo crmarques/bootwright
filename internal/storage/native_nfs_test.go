@@ -62,7 +62,7 @@ func TestNFSAndIngressRefusedMembersNameTheirRemedy(t *testing.T) {
 
 func TestNFSServiceIntrinsicRules(t *testing.T) {
 	services := graphServices()
-	services[2] = nfsService(m("port", 2049, "monitoring_port", 9587, "virtual_ip", "192.0.2.60", "enable_haproxy_protocol", true))
+	services[2] = nfsService(m("port", 12049, "monitoring_port", 9587, "virtual_ip", "192.0.2.60", "enable_haproxy_protocol", true))
 	requireGraphAdmits(t, graphIssues(t, services))
 	for _, tt := range []struct {
 		name, field, message string

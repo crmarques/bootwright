@@ -30,15 +30,15 @@ func graphServices() []api.Value {
 	return []api.Value{
 		rgwService(qualifiedRGWSpec()),
 		graphIngress("rgw.objects", "rgw.objects", "192.0.2.61/24", m("frontend_port", 8080, "monitor_port", 1967)),
-		nfsService(m("enable_haproxy_protocol", true)),
-		graphIngress("nfs.files", "nfs.files", "192.0.2.60/24", m("frontend_port", 2049, "monitor_port", 9049, "enable_haproxy_protocol", true)),
+		nfsService(m("port", 12049, "enable_haproxy_protocol", true)),
+		graphIngress("nfs.files", "nfs.files", "192.0.2.60/24", m("frontend_port", 2049, "monitor_port", 9049, "enable_haproxy_protocol", true, "first_virtual_router_id", 51)),
 	}
 }
 
 func keepaliveServices() []api.Value {
 	services := graphServices()
 	services[2] = nfsService(m("virtual_ip", "192.0.2.60")).With("placement", m("label", "storage", "count", 1))
-	services[3] = graphIngress("nfs.files", "nfs.files", "192.0.2.60/24", m("keepalive_only", true))
+	services[3] = graphIngress("nfs.files", "nfs.files", "192.0.2.60/24", m("keepalive_only", true, "first_virtual_router_id", 51))
 	return services
 }
 
