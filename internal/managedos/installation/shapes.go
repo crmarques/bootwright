@@ -2,7 +2,6 @@ package installation
 
 import (
 	"net/netip"
-	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
@@ -10,25 +9,21 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// carriedMTU is the one MTU an installed system takes without being told,
-// so declaring it asks for nothing the installation leaves out.
-const carriedMTU = 1500
-
-// refusedNetwork says why the installation cannot carry the network a Machine
-// composes, or nothing when it can. The Kickstart configures one static IPv4
-// address on its install interface, its default route and the selected name
-// servers; anything else the Machine declares would be dropped, so it is
-// refused rather than installed in part. It reads the composed network, so an
-// override is read as the Machine realizes it; a network that does not compose
-// is admission's refusal.
+// refusedNetwork says why the installation cannot install the network a
+// Machine composes, or nothing when it can. The Kickstart configures the static
+// IPv4 install address on its install interface, its default route and the
+// selected name servers; network convergence applies every other composed
+// content after installation, so this refuses only a missing static install
+// address and an install interface the line cannot configure. It reads the
+// composed network, so an override is read as the Machine realizes it; a
+// network that does not compose is admission's refusal.
 func refusedNetwork(catalog api.Catalog, machine api.Object, host installHost) (reason, remediation string) {
 	composed, issues := machineref.ComposeNetwork(machine, catalog)
 	if len(issues) != 0 {
 		return "", ""
 	}
 	network := machine.Spec().Get("network")
-	selected := network.Get("installAddressRef").Text()
-	entry, found := findNamed(network.Get("addresses"), "name", selected)
+	entry, found := findNamed(network.Get("addresses"), "name", network.Get("installAddressRef").Text())
 	iface := entry.Get("interface").Text()
 	prefix, err := netip.ParsePrefix(entry.Get("address").Text())
 	if !found || iface == "" || err != nil || !prefix.Addr().Is4() {
@@ -43,49 +38,7 @@ func refusedNetwork(catalog api.Catalog, machine api.Object, host installHost) (
 	if err != nil {
 		return "", ""
 	}
-	if reason, remediation := installInterfaceRefusal(catalog, machine, template, iface, host); reason != "" {
-		return reason, remediation
-	}
-	if uncarried := uncarriedNetwork(machine, composed, selected, iface, readInstallTopology(template, iface).Bond); len(uncarried) != 0 {
-		return "a managed-OS installation configures only the install address, its default route and the selected name servers, and cannot carry the other network content the Machine declares",
-			"remove " + strings.Join(uncarried, ", ") + " from the network of " + machine.Identity() + ", or install its operating system outside Bootwright"
-	}
-	return "", ""
-}
-
-// uncarriedNetwork names the composed network content the install line leaves
-// out: every other assigned address, every other available logical interface,
-// every MTU but the one the system takes anyway, and every route but the
-// default route the line carries. Search domains, a disabled IPv6 family and
-// the default route's own table and metric are accepted although the line
-// does not carry them, until the installed system converges to its network.
-func uncarriedNetwork(machine api.Object, composed api.Value, selected, iface, bond string) []string {
-	var uncarried []string
-	for _, address := range machine.Spec().Get("network", "addresses").Items() {
-		if address.Has("interface") && address.Get("name").Text() != selected {
-			uncarried = append(uncarried, "address "+address.Get("name").Text())
-		}
-	}
-	interfaces := composed.Get("interfaces").Items()
-	for _, declared := range interfaces {
-		name := declared.Get("name").Text()
-		if name != iface && name != bond && available(declared) && declared.Get("type").Text() != "ethernet" {
-			uncarried = append(uncarried, "interface "+name)
-		}
-	}
-	for _, declared := range interfaces {
-		mtu := declared.Get("mtu")
-		if value, ok := mtu.Int64(); available(declared) && mtu.Present() && (!ok || value != carriedMTU) {
-			uncarried = append(uncarried, "mtu "+mtu.Text()+" on "+declared.Get("name").Text())
-		}
-	}
-	carried, _ := installGatewayRoute(composed, iface)
-	for index, route := range composed.Get("routes", "config").Items() {
-		if route.Get("state").Text() != "absent" && index != carried {
-			uncarried = append(uncarried, "route "+route.Get("destination").Text())
-		}
-	}
-	return uncarried
+	return installInterfaceRefusal(catalog, machine, template, iface, host)
 }
 
 func available(iface api.Value) bool {

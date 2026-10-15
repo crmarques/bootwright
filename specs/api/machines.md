@@ -790,10 +790,9 @@ installation's renderer also reads `controller`, `link-aggregation.mode`,
 `link-aggregation.port`, `link-aggregation.options`, `vlan.base-iface`,
 `vlan.id` and `vlan.protocol` of the install interface and its bond, and
 `dns-resolver.config.server` ([managed OS](../managed-os.md#installation));
-admission does not interpret them. Until post-install network convergence
-([B326](../milestones/m1.md#b326)) the installation refuses, before
-registration, every other route and the other content its line does not
-carry.
+admission does not interpret them. Every other route and the other content
+the line does not carry are applied after installation by
+[network convergence](../managed-os.md#network-convergence).
 
 The fully composed NMState map is internal compiler evidence. Canonical
 effective inspection preserves the normalized template, references, overrides,

@@ -171,9 +171,10 @@ both: its emulated controller uses verified HTTPS but fetches the image
 without verifying the server, which the
 [security spec](security.md#network-remote-systems-and-privilege) bounds to
 that one host. The network the Kickstart carries is one static IPv4 install
-address on one ethernet interface, its default route and the selected name
-servers; a Machine declaring a network the line cannot carry refuses before
-registration, as the [derived installation](#installation) states. Publicly
+address on its install interface, its default route and the selected name
+servers, as the [derived installation](#installation) states;
+[network convergence](#network-convergence) applies the rest of the declared
+network after installation. Publicly
 served content remains secret-free by construction; the one thing an installation
 may deliver confidentially is the host key it installs, and the installer image
 of a delivered-key Machine, whose Kickstart names the key's private URL, both
@@ -301,17 +302,12 @@ VLAN over bond and the `.link` persistence on the RHEL 9.8 build are proved by
 the owner's emulated rehearsal, not in-tree.
 
 A selected install address that is not an interface-assigned IPv4 address with
-its prefix, an install interface the line cannot configure, and any network
-content the line does not carry refuse before registration, naming the
-Machine, as the [refusal table](#refusal-table) lists. The content the line
-does not carry is another interface-assigned address, another available
-interface that is not `ethernet`, the install interface or the bond its VLAN
-is over, an `mtu` other than 1500, and a route that is not `absent` other than
-the line's default route. Search domains, a disabled IPv6 family, an `mtu` of
-1500 and a `table-id` or `metric` on the default route are accepted although
-the line does not carry them, as the lab-rhel example declares them: 1500 is
-the MTU the installed system takes by default. That content refuses until
-[network convergence](#network-convergence) applies it
+its prefix, and an install interface the line cannot configure, refuse before
+registration, naming the Machine, as the [refusal table](#refusal-table)
+lists. The line carries nothing else the Machine declares: other
+interface-assigned addresses, other interfaces, MTUs, routes other than its
+default route and the resolver's search list are applied after the
+installation by [network convergence](#network-convergence)
 ([B326](milestones/m1.md#b326)).
 
 What the `%post` does about the host key follows the
@@ -906,16 +902,8 @@ table order, and only the first row a Machine meets is reported. Its reason and 
 message and remediation, in which `<machine>` is that Machine, `<profile>` the
 `MachineInstallProfile` it selects and `<hints>` every root-device hint it
 declares other than `deviceName`, as `spec.os.install.rootDeviceHints.<hint>`
-in name order, separated by `, `. `<network>` is the network content the
-[install line](#installation) cannot carry, separated by `, `: `address <name>`
-for each other interface-assigned address in declared order, then
-`interface <name>` for each other available interface that is not `ethernet`,
-the install interface or the bond a VLAN install interface is over, then
-`mtu <value> on <name>` for each available interface whose `mtu` is not 1500,
-both in composed order, then `route <destination>` for each route that
-is not `absent`, other than the line's own default route, in declared order.
-`<name>` is the first `ethernet` interface, in composed order, the row
-describes; `<bond>` is the install interface when it is a bond, else the bond
+in name order, separated by `, `. `<name>` is the first `ethernet` interface,
+in composed order, the row describes; `<bond>` is the install interface when it is a bond, else the bond
 its VLAN is over; `<declared mode>` is `mode <value>` for a scalar
 `link-aggregation.mode`, else `no mode`; `<mode>` is that bond's
 `link-aggregation.mode`; `<option>` is the first `link-aggregation.options`
@@ -944,7 +932,6 @@ VLAN's `vlan.id`.
 | A VLAN install interface the installer cannot carry | a `vlan` install interface whose `vlan.base-iface` is not an available `ethernet` or `bond` interface, whose `vlan.id` is not 1 to 4094, whose `vlan.protocol` is not absent or `802.1q`, or whose name starts with `vlan` but is not `vlan<id>`, or holds a `.` but is not a prefix, one `.` and the id | `the installer configures a VLAN install interface only as an 802.1Q VLAN with an id from 1 to 4094 over an available ethernet or bond interface, named vlan and its id, a prefix, a dot and its id, or a name with no dot that does not start with vlan, and <interface> of <machine> is not one` | `declare <interface> in the network of <machine> with vlan.base-iface an available ethernet or bond interface, vlan.id from 1 to 4094, no vlan.protocol other than 802.1q, and a name of one of those forms` |
 | A VLAN install interface on a managed libvirt network | on a `libvirt` provider, a `vlan` install interface while `spec.network.attachmentRef` names a `management: managed` attachment | `a managed libvirt network gives its host an untagged address on <bridge>, so the controller cannot reach the VLAN install address of <machine>` | `attach <machine> to an external bridge whose host carries VLAN <id>, or install over an untagged interface` |
 | Two owners of the installed name servers | a network with DNS server selections whose composed native document also authors `dns-resolver.config.server` | `the installed name servers of <machine> are its network's DNS server selections, and its native dns-resolver.config.server declares them a second time` | `remove dns-resolver.config.server from the network of <machine>, or remove its DNS server selections` |
-| Network content the Kickstart cannot carry | another interface-assigned address, another available interface that is not `ethernet`, the install interface or the bond its VLAN is over, an `mtu` other than 1500 or a route other than the install line's default route, in the composed network; until post-install network convergence ([B326](milestones/m1.md#b326)) carries them | `a managed-OS installation configures only the install address, its default route and the selected name servers, and cannot carry the other network content the Machine declares` | `remove <network> from the network of <machine>, or install its operating system outside Bootwright` |
 | Another installer | a profile's `spec.installer` without `anaconda`, such as `templateClone` | `this executable installs an operating system only through the anaconda installer, which the install profile does not select` | `select spec.installer.anaconda on <profile>` |
 | A package mirror | a profile's `spec.installer.anaconda.packageSource.mirror` | `the install profile selects spec.installer.anaconda.packageSource.mirror, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.mirror from <profile>` |
 | Packages from a subscription | a profile's `spec.installer.anaconda.packageSource.fromSubscription` | `the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.fromSubscription from <profile>` |

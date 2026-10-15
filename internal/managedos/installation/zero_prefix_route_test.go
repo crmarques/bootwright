@@ -1,16 +1,14 @@
 package installation
 
 import (
-	"slices"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-// The refusal and the gateway the Kickstart carries read a route's destination
-// one way, so every spelling of a zero-prefix IPv4 destination is the default
-// route the install line carries, and a route that is not one is not.
+// Every spelling of a zero-prefix IPv4 destination is the default route the
+// install line carries, and a second default route the line does not carry
+// installs too: network convergence applies it after installation.
 func TestEveryZeroPrefixSpellingOfTheDefaultRouteIsCarried(t *testing.T) {
 	install := api.MapValue(text("name", "enp1s0"), text("type", "ethernet"))
 	route := func(destination, hop string, fields ...api.FieldValue) api.Value {
@@ -29,22 +27,13 @@ func TestEveryZeroPrefixSpellingOfTheDefaultRouteIsCarried(t *testing.T) {
 			})
 		}
 	}
-	refusal := func(destination string) []lifecycle.Refusal {
-		return []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01", Reason: uncarriedReason,
-			Remediation: "remove route " + destination + " from the network of Machine/rhel-01, or install its operating system outside Bootwright"}}
-	}
-	for name, test := range map[string]struct {
-		routes      []api.Value
-		destination string
-	}{
-		"an IPv6 default route beside the carried one": {[]api.Value{route("0.0.0.0/0", "198.51.100.1"), route("::/0", "2001:db8::1")}, "::/0"},
-		"a second zero-prefix spelling":                {[]api.Value{route("0.0.0.0/0", "198.51.100.1"), route("192.0.2.0/0", "198.51.100.1")}, "192.0.2.0/0"},
+	for name, routes := range map[string][]api.Value{
+		"an IPv6 default route beside the carried one": {route("0.0.0.0/0", "198.51.100.1"), route("::/0", "2001:db8::1")},
+		"a second zero-prefix spelling":                {route("0.0.0.0/0", "198.51.100.1"), route("192.0.2.0/0", "198.51.100.1")},
 	} {
 		t.Run(name, func(t *testing.T) {
-			config := withRoutes(networkWith(install), test.routes...)
-			if refused := Refusals(labCatalog(config)); !slices.Equal(refused, refusal(test.destination)) {
-				t.Fatalf("refusals = %+v, want %+v", refused, refusal(test.destination))
-			}
+			config := withRoutes(networkWith(install), routes...)
+			expectNoRefusal(t, labCatalog(config))
 		})
 	}
 }

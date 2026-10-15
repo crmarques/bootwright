@@ -449,7 +449,7 @@ func TestTheLibvirtBondRefusalNamesMachineInterfaceAndMode(t *testing.T) {
 	expectNetworkRefusal(t, labCatalog(externalProvider(), installingOn("bond0.200"), networkWith(overBond...)), reason, remediation)
 }
 
-func TestContentOutsideTheInstallTopologyStillRefuses(t *testing.T) {
+func TestSecondaryAddressesMTUAndRoutesNoLongerRefuse(t *testing.T) {
 	expectNoRefusal(t, labCatalog(externalProvider(), installingOn("bond0.200"), networkWith(vlanOverBond()...)))
 	extra := vlanOverBond(declaredInterface("enp3s0", "ethernet"), activeBackup("bond1", "enp4s0"), declaredInterface("enp4s0", "ethernet", text("controller", "bond1")),
 		vlanInterface("enp3s0.300", "enp3s0", "300"))
@@ -462,8 +462,23 @@ func TestContentOutsideTheInstallTopologyStillRefuses(t *testing.T) {
 	), "network", "addresses"))
 	routes := withRoutes(networkWith(extra...), api.MapValue(text("destination", "0.0.0.0/0"), text("next-hop-address", "198.51.100.1")),
 		api.MapValue(text("destination", "203.0.113.0/24"), text("next-hop-address", "198.51.100.254")))
-	expectNetworkRefusal(t, labCatalog(externalProvider(), secondary, routes), uncarriedReason,
-		"remove address cluster, interface bond1, interface enp3s0.300, mtu 9000 on bond0, route 203.0.113.0/24 from the network of Machine/rhel-01, or install its operating system outside Bootwright")
+	catalog := labCatalog(externalProvider(), secondary, routes)
+	expectNoRefusal(t, catalog)
+	document := documentOf(t, catalog, "rhel-01")
+	for _, name := range []string{"bond1", "enp3s0.300"} {
+		if documentInterface(document, name) == nil {
+			t.Errorf("the network document has no interface %s: %v", name, document["interfaces"])
+		}
+	}
+	if mtu := encodedAt(t, documentInterface(document, "bond0"), "mtu"); mtu != "9000" {
+		t.Errorf("bond0 mtu = %s", mtu)
+	}
+	if address := encodedAt(t, documentInterface(document, "enp3s0"), "ipv4", "address"); !strings.Contains(address, `{"ip":"192.0.2.50","prefix-length":24}`) {
+		t.Errorf("enp3s0 addresses = %s", address)
+	}
+	if config := encodedAt(t, document, "routes", "config"); !strings.Contains(config, `{"destination":"203.0.113.0/24","next-hop-address":"198.51.100.254"}`) {
+		t.Errorf("routes = %s", config)
+	}
 }
 
 func TestTheRequestBuilderRefusesWhatUnsupportedRefuses(t *testing.T) {

@@ -14,10 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// uncarriedReason is the reason of the refusal-table row for network content
-// the Kickstart cannot carry.
-const uncarriedReason = "a managed-OS installation configures only the install address, its default route and the selected name servers, and cannot carry the other network content the Machine declares"
-
 // networkWith is the lab network configuration declaring the given interfaces.
 func networkWith(interfaces ...api.Value) api.Object {
 	config := networkConfig()
@@ -175,31 +171,27 @@ func TestAnotherInstallerIsRefusedBeforeItsNetwork(t *testing.T) {
 }
 
 // The installation reads the network the Machine composes, so content only an
-// override declares is refused as surely as content the template declares.
-func TestOverrideContentIsRefused(t *testing.T) {
-	for name, test := range map[string]struct {
-		overrides api.Value
-		network   string
-	}{
-		"an mtu": {api.MapValue(field("interfaces", api.ListValue(api.MapValue(text("name", "enp1s0"), number("mtu", "9000"))))), "mtu 9000 on enp1s0"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			overridden := guest(field("network", guest().Spec().Get("network").With("overrides", test.overrides)))
-			want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01", Reason: uncarriedReason,
-				Remediation: "remove " + test.network + " from the network of Machine/rhel-01, or install its operating system outside Bootwright"}}
-			if refused := Refusals(labCatalog(overridden)); !slices.Equal(refused, want) {
-				t.Fatalf("refusals = %+v, want %+v", refused, want)
-			}
-		})
+// override declares is installed as surely as content the template declares,
+// and an override is refused as surely as the template it changes.
+func TestOverrideContentIsReadAsComposed(t *testing.T) {
+	overriding := func(interfaces ...api.Value) api.Catalog {
+		return labCatalog(guest(field("network", guest().Spec().Get("network").With("overrides",
+			api.MapValue(field("interfaces", api.ListValue(interfaces...)))))))
 	}
+	jumbo := overriding(api.MapValue(text("name", "enp1s0"), number("mtu", "9000")))
+	expectNoRefusal(t, jumbo)
+	if mtu := encodedAt(t, documentInterface(documentOf(t, jumbo, "rhel-01"), "enp1s0"), "mtu"); mtu != "9000" {
+		t.Fatalf("enp1s0 mtu = %s", mtu)
+	}
+	expectNetworkRefusal(t, overriding(declaredInterface("eth1", "ethernet")),
+		"a managed-OS installation names each ethernet interface after its hardware address, and a kernel-style name such as eth1 can collide with the names the kernel assigns",
+		"rename interface eth1 in the network of Machine/rhel-01 to a name outside the kernel's ethN scheme, such as its predictable name")
 }
 
-// The install line configures its gateway on the install interface once, so
-// only the first default route through that interface, or through none named,
-// is carried. A default route through another interface would be installed on
-// the install interface instead, and one behind the carried route would be
-// dropped, so either is refused rather than installed in part.
-func TestOnlyTheDefaultRouteTheLineCarriesIsExempt(t *testing.T) {
+// A default route the install line does not configure as its gateway, through
+// another interface or behind the one it carries, installs: network
+// convergence applies it after installation.
+func TestADefaultRouteTheLineDoesNotCarryInstalls(t *testing.T) {
 	defaultRoute := func(fields ...api.FieldValue) api.Value {
 		return api.MapValue(append([]api.FieldValue{text("destination", "0.0.0.0/0"), text("next-hop-address", "198.51.100.1")}, fields...)...)
 	}
@@ -208,14 +200,17 @@ func TestOnlyTheDefaultRouteTheLineCarriesIsExempt(t *testing.T) {
 		"behind the carried one":    {defaultRoute(), defaultRoute(number("table-id", "100"))},
 	} {
 		t.Run(name, func(t *testing.T) {
-			config := withRoutes(networkWith(
+			catalog := labCatalog(withRoutes(networkWith(
 				api.MapValue(text("name", "enp1s0"), text("type", "ethernet")),
 				api.MapValue(text("name", "enp2s0"), text("type", "ethernet")),
-			), routes...)
-			want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01", Reason: uncarriedReason,
-				Remediation: "remove route 0.0.0.0/0 from the network of Machine/rhel-01, or install its operating system outside Bootwright"}}
-			if refused := Refusals(labCatalog(config)); !slices.Equal(refused, want) {
-				t.Fatalf("refusals = %+v, want %+v", refused, want)
+			), routes...))
+			expectNoRefusal(t, catalog)
+			request := requestOf(t, catalog, "rhel-01")
+			if config := encodedAt(t, request.Network.Document, "routes", "config"); !strings.Contains(config, `"destination":"0.0.0.0/0"`) {
+				t.Fatalf("routes = %s", config)
+			}
+			if gateway := lineOption(networkLineOf(t, request), "gateway"); name == "through another interface" && gateway != "" {
+				t.Fatalf("the install line carries gateway %s through another interface", gateway)
 			}
 		})
 	}
@@ -228,7 +223,8 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 	hinted := guest()
 	hinted = hinted.WithSpec(hinted.Spec().WithPath(
 		api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))), "os", "install", "rootDeviceHints"))
-	jumbo := networkWith(api.MapValue(text("name", "enp1s0"), text("type", "ethernet"), number("mtu", "9000")))
+	kernelNamed := networkWith(declaredInterface("enp1s0", "ethernet"), declaredInterface("eth0", "ethernet"))
+	kernel, kernelRemedy := kernelReason("eth0")
 	mirrored := installProfile()
 	mirrored = mirrored.WithSpec(mirrored.Spec().WithPath(api.MapValue(field("mirror", api.MapValue(
 		text("baseURL", "https://example.test/os")))), "installer", "anaconda", "packageSource"))
@@ -237,11 +233,10 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 		catalog             api.Catalog
 		reason, remediation string
 	}{
-		"a target before its network": {labCatalog(hinted, jumbo),
+		"a target before its network": {labCatalog(hinted, kernelNamed),
 			"a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares",
 			"remove spec.os.install.rootDeviceHints.rotational from Machine/rhel-01"},
-		"a network before its profile": {labCatalog(jumbo, mirrored), uncarriedReason,
-			"remove mtu 9000 on enp1s0 from the network of Machine/rhel-01, or install its operating system outside Bootwright"},
+		"a network before its profile": {labCatalog(kernelNamed, mirrored), kernel, kernelRemedy},
 		"a profile before its servers": {labCatalog(mirrored, servicesHost(), onServices),
 			"the install profile selects spec.installer.anaconda.packageSource.mirror, which carries secret bytes or effects this executable does not prove",
 			"remove spec.installer.anaconda.packageSource.mirror from MachineInstallProfile/rhel-9-8"},
