@@ -2906,6 +2906,15 @@ spec:
       mode: "755"
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: StorageSubvolume
+metadata:
+  name: acceptance-subvolume
+spec:
+  clusterRef: ceph-multidc-01
+  filesystemRef: odf-cephfs
+  sizeBytes: 10737418240
+---
+apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon
 metadata:
   name: nmstate

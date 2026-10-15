@@ -544,6 +544,15 @@ spec:
       default: true
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: StorageSubvolume
+metadata:
+  name: docs
+spec:
+  clusterRef: ceph-lab
+  filesystemRef: files
+  sizeBytes: 1073741824
+---
+apiVersion: bootwright.io/v1alpha1
 kind: Secret
 metadata:
   name: artifact-server-tls

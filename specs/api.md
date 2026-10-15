@@ -270,7 +270,7 @@ The `v1alpha1` catalog contains exactly 27 authored kinds:
 | Substrates | `InfraProvider` | Substrate |
 | Infrastructure services | `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer` | Infrastructure services |
 | Container clusters | `ContainerCluster` | Container cluster |
-| Storage | `StorageCluster`, `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`, `StorageClient`, `StorageFilesystem`, `StorageObjectGateway`, `StorageNFSExport`, `StorageExport` | Storage |
+| Storage | `StorageCluster`, `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`, `StorageClient`, `StorageFilesystem`, `StorageSubvolume`, `StorageObjectGateway`, `StorageNFSExport`, `StorageExport` | Storage |
 | Add-ons | `ClusterAddon`, `ClusterAddonProfile`, `ClusterAddonBinding` | Add-ons |
 | Reserved operator automation | `CustomPlaybook` | Desired state owns boundary validation; no executable domain capability is implied. |
 
@@ -381,9 +381,9 @@ Canonical effective output:
    `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`,
    `ContainerCluster`, `StorageCluster`, `StoragePlacementPolicy`,
    `StoragePool`, `StorageRBDImage`, `StorageClient`, `StorageFilesystem`,
-   `StorageObjectGateway`, `StorageNFSExport`, `StorageExport`, `ClusterAddon`,
-   `ClusterAddonProfile`, `ClusterAddonBinding`, `CustomPlaybook`, then
-   `Secret`;
+   `StorageSubvolume`, `StorageObjectGateway`, `StorageNFSExport`,
+   `StorageExport`, `ClusterAddon`, `ClusterAddonProfile`,
+   `ClusterAddonBinding`, `CustomPlaybook`, then `Secret`;
 2. orders objects within a kind by `metadata.name`;
 3. emits fields in the order defined by the owning schema, closed map keys in
    schema order, and other string map keys lexically;

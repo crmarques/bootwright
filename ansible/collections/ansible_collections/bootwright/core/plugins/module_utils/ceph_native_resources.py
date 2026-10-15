@@ -1,7 +1,7 @@
-"""Fixed Ceph pool, placement policy, client, RBD image and CephFS filesystem worker phases, shipped beside the core worker as source.
+"""Fixed Ceph pool, placement policy, client, RBD image, CephFS filesystem and subvolume worker phases, shipped beside the core worker as source.
 
 A cluster request and a host scope never load this module: only a pool, policy, client,
-RBD image or filesystem action reaches its validation and its worker. Like the core worker it imports
+RBD image, filesystem or subvolume action reaches its validation and its worker. Like the core worker it imports
 only the target Python standard library and the core worker, and its native
 output stays private until projected into evidence.
 """
@@ -24,8 +24,8 @@ from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import
     Custody, Refusal, canonical, named, read_regular, require, unique_object,
 )
 
-ACTIONS = ("pool", "client", "policy", "rbd", "filesystem")
-PHASES = frozenset(("pool", "client", "client_read", "policy", "rbd", "filesystem", "filesystem_ranks", "filesystem_groups"))
+ACTIONS = ("pool", "client", "policy", "rbd", "filesystem", "subvolume")
+PHASES = frozenset(("pool", "client", "client_read", "policy", "rbd", "filesystem", "filesystem_ranks", "filesystem_groups", "subvolume"))
 READ_ONLY_PHASES = frozenset(("client_read", "filesystem_ranks"))
 
 POOL_ATTEMPT = "ceph-pool-attempt-v2"
@@ -33,6 +33,10 @@ POLICY_ATTEMPT = "ceph-policy-attempt-v1"
 RBD_ATTEMPT = "ceph-rbd-image-attempt-v1"
 FILESYSTEM_ATTEMPT = "ceph-filesystem-attempt-v1"
 GROUP_ATTEMPT = "ceph-subvolume-group-attempt-v1"
+SUBVOLUME_ATTEMPT = "ceph-subvolume-attempt-v1"
+SUBVOLUME_MEMBERS = frozenset(("filesystem", "gid", "group", "mode", "name", "pool", "sizeBytes", "uid"))
+# A subvolume's user metadata key: printable ASCII, stored lower case (doc/cephfs/fs-volumes.rst:572-575).
+OWNER_KEY = "bootwright-owner"
 FILESYSTEM_MEMBERS = frozenset(("activeCount", "dataPools", "defaultDataPool", "groups", "mdsService", "metadataPool", "name", "standbyCountWanted",
                                 "standbyReplay"))
 GROUP_MEMBERS = frozenset(("gid", "mode", "name", "pool", "sizeBytes", "uid"))
@@ -75,6 +79,7 @@ def validate(request, hosts):
     osd_hosts = sum(bool(host["devices"]) for host in hosts)
     require(request["action"] == "rbd" or "rbd" not in request)
     require(request["action"] == "filesystem" or "filesystem" not in request)
+    require(request["action"] == "subvolume" or "subvolume" not in request)
     if request["action"] == "pool":
         require("client" not in request and "policy" not in request)
         validate_pool(request.get("pool"), osd_hosts)
@@ -93,6 +98,20 @@ def validate(request, hosts):
     elif request["action"] == "filesystem":
         require("pool" not in request and "client" not in request and "policy" not in request)
         validate_filesystem(request.get("filesystem"), request["services"])
+    elif request["action"] == "subvolume":
+        require("pool" not in request and "client" not in request and "policy" not in request)
+        validate_subvolume(request.get("subvolume"))
+
+
+def validate_subvolume(subvolume):
+    """The frozen subvolume the Go admission proved: its name fits its block identity, its group is "" (the native default) or a declared one."""
+    require(isinstance(subvolume, dict) and set(subvolume) == SUBVOLUME_MEMBERS)
+    name, filesystem, group = subvolume["name"], subvolume["filesystem"], subvolume["group"]
+    require(named(name) and "." not in name and len(name) <= 48)
+    require(named(filesystem) and "." not in filesystem and len(filesystem) <= 47)
+    require(group == "" or named(group) and group not in RESERVED_GROUPS)
+    require(named(subvolume["pool"]) and isinstance(subvolume["mode"], str) and FILE_MODE.fullmatch(subvolume["mode"]) is not None)
+    require(bounded(subvolume["uid"], 2147483647) and bounded(subvolume["gid"], 2147483647) and bounded(subvolume["sizeBytes"], INT64))
 
 
 def validate_rbd(image):
@@ -687,6 +706,8 @@ class ResourceWorker(ceph_native.Worker):
             ready = self.observe_rbd(evidence, ready)
         elif action == "filesystem":
             ready = self.observe_filesystem(evidence, ready)
+        elif action == "subvolume":
+            ready = self.observe_subvolume(evidence, ready)
         elif action == "client":
             client = self.request["client"]
             auth = self.ceph("auth", "ls")
@@ -1049,9 +1070,9 @@ class ResourceWorker(ceph_native.Worker):
         return {"version": GROUP_ATTEMPT, "owner": self.request["owner"], "fsid": self.request["fsid"], "filesystem": self.request["filesystem"]["name"],
                 "group": group}
 
-    def group_names(self):
+    def group_names(self, filesystem):
         """`fs subvolumegroup ls` (src/pybind/mgr/volumes/fs/volume.py:50-60): one {"name"} per group, served by the active manager."""
-        result = self.manager_retry(self.ceph, "fs", "subvolumegroup", "ls", self.request["filesystem"]["name"])
+        result = self.manager_retry(self.ceph, "fs", "subvolumegroup", "ls", filesystem)
         require(isinstance(result, list) and len(result) <= 65536 and all(isinstance(item, dict) and isinstance(item.get("name"), str) for item in result),
                 "native-output")
         return {item["name"] for item in result}
@@ -1076,7 +1097,7 @@ class ResourceWorker(ceph_native.Worker):
     def filesystem_groups(self):
         """Create each declared group only after proving it absent, then converge an owned group's attributes with one more create."""
         self.filesystem_proved()
-        names, changed = self.group_names(), False
+        names, changed = self.group_names(self.request["filesystem"]["name"]), False
         for group in self.request["filesystem"]["groups"]:
             mark, attempt_name = self.group_marks(group)
             marker = self.markers.read(mark)
@@ -1136,7 +1157,147 @@ class ResourceWorker(ceph_native.Worker):
         groups = self.request["filesystem"]["groups"]
         if not groups:
             return True
-        names = self.group_names()
+        names = self.group_names(self.request["filesystem"]["name"])
         for group in groups:
             require(self.markers.read(self.group_marks(group)[0]) is not None or group["name"] not in names, "foreign-subvolume-group")
         return all(group["name"] in names and self.group_matches(group) for group in groups)
+
+    def subvolume_marks(self):
+        name = self.request["subvolume"]["name"]
+        return "subvolume-" + name + ".json", "subvolume-attempt." + name + ".json", "subvolume-path." + name + ".json"
+
+    def subvolume_attempt(self):
+        return {"version": SUBVOLUME_ATTEMPT, "owner": self.request["owner"], "fsid": self.request["fsid"], "subvolume": self.request["subvolume"]}
+
+    def subvolume_cli(self, verb, positional=(), options=(), json_result=True):
+        """One `fs subvolume` command, in the frozen group only when one is named: an explicit `--group_name _nogroup` refuses EPERM
+        (src/pybind/mgr/volumes/fs/operations/group.py:21-32), and omitting it selects the default group."""
+        subvolume = self.request["subvolume"]
+        group = ("--group_name", subvolume["group"]) if subvolume["group"] else ()
+        return self.manager_retry(self.ceph, "fs", "subvolume", *(verb + (subvolume["filesystem"],) + positional + group + options), json_result=json_result)
+
+    def subvolume_names(self):
+        """`fs subvolume ls` (src/pybind/mgr/volumes/fs/volume.py:637-649): one {"name"} per subvolume; [] for a default group never created
+        (src/pybind/mgr/volumes/fs/operations/group.py:61-68)."""
+        result = self.subvolume_cli(("ls",))
+        require(isinstance(result, list) and len(result) <= 1048576 and all(isinstance(item, dict) and isinstance(item.get("name"), str) for item in result),
+                "native-output")
+        return {item["name"] for item in result}
+
+    def subvolume_info(self):
+        """`fs subvolume info` (src/pybind/mgr/volumes/fs/operations/versions/subvolume_base.py:473-547): mode is the full st_mode, no quota
+        is "infinite"."""
+        info = self.subvolume_cli(("info",), (self.request["subvolume"]["name"],))
+        require(isinstance(info, dict) and all(isinstance(info.get(key), str) for key in ("path", "type", "state", "data_pool", "pool_namespace"))
+                and all(type(info.get(key)) is int for key in ("uid", "gid", "mode"))
+                and (type(info.get("bytes_quota")) is int or info.get("bytes_quota") == "infinite"), "native-output")
+        return info
+
+    def subvolume_owner(self):
+        """`fs subvolume metadata ls` answers every user key; `metadata get` of a missing key fails like any other failure."""
+        result = self.subvolume_cli(("metadata", "ls"), (self.request["subvolume"]["name"],))
+        require(isinstance(result, dict) and len(result) <= 4096 and all(isinstance(k, str) and isinstance(v, str) for k, v in result.items()),
+                "native-output")
+        return result.get(OWNER_KEY)
+
+    def subvolume_create(self):
+        """Every attribute explicit (src/pybind/mgr/volumes/module.py:139-157); never namespace isolation, earmark, normalization or case
+        sensitivity. A create on an existing subvolume rewrites its attributes (src/pybind/mgr/volumes/fs/volume.py:249-290)."""
+        subvolume = self.request["subvolume"]
+        args = ("--pool_layout", subvolume["pool"], "--uid", str(subvolume["uid"]), "--gid", str(subvolume["gid"]), "--mode", subvolume["mode"])
+        if subvolume["sizeBytes"]:
+            args += ("--size", str(subvolume["sizeBytes"]))
+        self.subvolume_cli(("create",), (subvolume["name"],), args, json_result=False)
+
+    def subvolume_matches(self, info, mode=True):
+        """The frozen shape as observed; the earmark, normalization and case sensitivity a consumer may set later are never read."""
+        subvolume = self.request["subvolume"]
+        prefix = "/volumes/" + (subvolume["group"] or "_nogroup") + "/" + subvolume["name"] + "/"
+        return (info["type"] == "subvolume" and info["state"] == "complete" and info["path"].startswith(prefix)
+                and ceph_native.SUBVOLUME_UUID.fullmatch(info["path"][len(prefix):]) is not None and info["data_pool"] == subvolume["pool"]
+                and info["pool_namespace"] == "" and info["bytes_quota"] == (subvolume["sizeBytes"] or "infinite") and info["uid"] == subvolume["uid"]
+                and info["gid"] == subvolume["gid"] and (not mode or info["mode"] & 0o7777 == int(subvolume["mode"], 8)))
+
+    def subvolume_parent(self):
+        """The filesystem, the layout pool and the group this operation created, proved before any `fs subvolume` command."""
+        subvolume = self.request["subvolume"]
+        name = subvolume["filesystem"]
+        marker = self.markers.read("filesystem-" + name + ".json")
+        require(isinstance(marker, dict) and marker.get("name") == name, "filesystem-identity")
+        entries = self.pools()
+        entry = next((item for item in self.fs_dump()["filesystems"] if item["mdsmap"]["fs_name"] == name), None)
+        require(entry is not None and self.markers.read("filesystem-id." + name + ".json") == {"id": entry["id"]}, "filesystem-identity")
+        pool = self.owned_pool(subvolume["pool"], entries)
+        require(self.pool_id(pool) in entry["mdsmap"]["data_pools"], "filesystem-identity")
+        if subvolume["group"]:
+            require(self.markers.read("group." + name + "." + subvolume["group"] + ".json") is not None, "foreign-subvolume-group")
+            require(subvolume["group"] in self.group_names(name), "filesystem-identity")
+
+    def subvolume_created(self):
+        """Create, then once more only when the mode alone differs: a fresh create sets it through mkdirs under the manager's umask
+        (src/pybind/mgr/volumes/fs/operations/versions/subvolume_v2.py:157-183), a repeat with lchmod (subvolume_base.py:296-300)."""
+        info = self.subvolume_info()
+        require(self.subvolume_matches(info, mode=False), "subvolume-identity")
+        if not self.subvolume_matches(info):
+            self.subvolume_create()
+            info = self.subvolume_info()
+        require(self.subvolume_matches(info), "subvolume-identity")
+        self.markers.write(self.subvolume_marks()[2], {"path": info["path"]})
+
+    def subvolume(self):
+        """Create one owned subvolume only after proving it absent, or adopt this operation's own after a lost reply; never another's."""
+        require(self.markers.owned(), "ownership")
+        subvolume = self.request["subvolume"]
+        mark, attempt_name, path_name = self.subvolume_marks()
+        marker = self.markers.read(mark)
+        require(marker is None or marker == subvolume, "subvolume-identity")
+        self.subvolume_parent()
+        present = subvolume["name"] in self.subvolume_names()
+        require(marker is not None or not present, "foreign-subvolume")
+        self.markers.write(mark, subvolume)
+        recorded = canonical(self.markers.read(attempt_name)) == canonical(self.subvolume_attempt())
+        path, changed = self.markers.read(path_name), False
+        if present and path is None:
+            require(recorded, "foreign-subvolume")
+            self.subvolume_created()
+            changed = True
+        elif present:
+            require(path == {"path": self.subvolume_info()["path"]}, "subvolume-identity")
+        else:
+            require(path is None, "subvolume-identity")
+            if not recorded:
+                self.markers.write(attempt_name, self.subvolume_attempt())
+            self.subvolume_create()
+            self.subvolume_created()
+            changed = True
+        owner = self.subvolume_owner()
+        require(owner in (None, self.request["owner"]), "subvolume-identity")
+        if owner is None:
+            self.subvolume_cli(("metadata", "set"), (subvolume["name"], OWNER_KEY, self.request["owner"]), json_result=False)
+            require(self.subvolume_owner() == self.request["owner"], "subvolume-identity")
+            changed = True
+        return {"changed": changed}
+
+    def observe_subvolume(self, evidence, ready):
+        subvolume = self.request["subvolume"]
+        mark, attempt_name, path_name = self.subvolume_marks()
+        marker = self.markers.read(mark)
+        require(marker is None or marker == subvolume, "subvolume-identity")
+        owned = marker is not None
+        name = subvolume["filesystem"]
+        entry = next((item for item in self.fs_dump()["filesystems"] if item["mdsmap"]["fs_name"] == name), None)
+        # Listing a missing filesystem or group fails, so absence of either is absence of the subvolume.
+        present = (entry is not None and (not subvolume["group"] or subvolume["group"] in self.group_names(name))
+                   and subvolume["name"] in self.subvolume_names())
+        require(owned or not present, "foreign-subvolume")
+        info = self.subvolume_info() if present else None
+        path = self.markers.read(path_name)
+        # This operation's own lost creation reply is unfinished work the apply resumes, never a refusal.
+        unrecorded = present and path is None and canonical(self.markers.read(attempt_name)) == canonical(self.subvolume_attempt())
+        require(not present or unrecorded or path == {"path": info["path"]}, "subvolume-identity")
+        evidence["owned"] = owned
+        evidence["exists"] = owned or present
+        recorded = present and not unrecorded
+        evidence["resource"] = {"id": info["path"].rsplit("/", 1)[1], "path": info["path"]} if recorded else {"id": "", "path": ""}
+        return (ready and recorded and self.markers.read("filesystem-id." + name + ".json") == {"id": entry["id"]} and self.subvolume_matches(info)
+                and self.subvolume_owner() == self.request["owner"])

@@ -105,6 +105,9 @@ func (a *admission) lexicalValues() {
 			a.lexical(group.Get("mode"), indexed("$.spec.subvolumeGroups", i)+".mode", fileMode.MatchString(textOf(group, "mode")))
 		}
 	}
+	if a.object.Kind() == api.StorageSubvolume {
+		a.lexical(spec.Get("mode"), "$.spec.mode", fileMode.MatchString(textOf(spec, "mode")))
+	}
 }
 func (a *admission) osdLexical(osd api.Value, field string) {
 	for _, key := range []string{"blockDBSize", "blockWALSize"} {

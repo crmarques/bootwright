@@ -6,7 +6,7 @@ import (
 )
 
 func TestStorageWireShapesAreClosedAndVariantsAreExplicit(t *testing.T) {
-	for _, kind := range []Kind{StorageCluster, StoragePlacementPolicy, StoragePool, StorageRBDImage, StorageClient, StorageFilesystem, StorageObjectGateway, StorageNFSExport, StorageExport} {
+	for _, kind := range []Kind{StorageCluster, StoragePlacementPolicy, StoragePool, StorageRBDImage, StorageClient, StorageFilesystem, StorageSubvolume, StorageObjectGateway, StorageNFSExport, StorageExport} {
 		schema := Schema(kind)
 		if schema == nil || schema.Type != Mapping || schema.Open {
 			t.Fatalf("%s is not a registered closed object", kind)
@@ -187,5 +187,39 @@ func TestFilesystemSchemaBindsItsMDSServiceAndRetiresDaemonHelpers(t *testing.T)
 	uid, _ := groups.Shape.Element.Field("uid")
 	if size.Shape.Minimum != "1" || size.Shape.Maximum != "9223372036854775807" || uid.Shape.Minimum != "0" || uid.Shape.Maximum != "2147483647" {
 		t.Fatal("group sizeBytes must be positive and uid an int32")
+	}
+}
+
+func TestSubvolumeSchemaIsClosedWithExactBounds(t *testing.T) {
+	schema := Schema(StorageSubvolume)
+	if schema == nil || schema.Open {
+		t.Fatal("StorageSubvolume must be a closed object")
+	}
+	names := []string{}
+	for _, field := range schema.Fields {
+		names = append(names, field.Name)
+	}
+	if !slices.Equal(names, []string{"clusterRef", "filesystemRef", "group", "sizeBytes", "poolLayoutRef", "uid", "gid", "mode"}) {
+		t.Fatalf("StorageSubvolume fields = %v", names)
+	}
+	for name, required := range map[string]bool{"clusterRef": true, "filesystemRef": true, "group": false, "sizeBytes": false, "poolLayoutRef": false, "uid": false, "gid": false, "mode": false} {
+		if field, _ := schema.Field(name); field.Required != required {
+			t.Fatalf("StorageSubvolume %s required = %t", name, field.Required)
+		}
+	}
+	for name, bounds := range map[string][2]string{"sizeBytes": {"1", "9223372036854775807"}, "uid": {"0", "2147483647"}, "gid": {"0", "2147483647"}} {
+		if field, _ := schema.Field(name); field.Shape.Type != Integer || field.Shape.Minimum != bounds[0] || field.Shape.Maximum != bounds[1] {
+			t.Fatalf("%s bounds = %q..%q", name, field.Shape.Minimum, field.Shape.Maximum)
+		}
+	}
+	for name, kind := range map[string]Kind{"clusterRef": StorageCluster, "filesystemRef": StorageFilesystem, "poolLayoutRef": StoragePool} {
+		if field, _ := schema.Field(name); !slices.Equal(field.Shape.Reference, []Kind{kind}) {
+			t.Fatalf("%s must reference %s", name, kind)
+		}
+	}
+	for _, name := range []string{"group", "mode"} {
+		if field, _ := schema.Field(name); field.Shape.Type != String {
+			t.Fatalf("%s must be a string", name)
+		}
 	}
 }

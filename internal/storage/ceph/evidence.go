@@ -18,6 +18,19 @@ var dashboardURL = regexp.MustCompile(`\Ahttps://(?:[A-Za-z0-9.-]{1,253}|\[[0-9A
 var certificateDigest = regexp.MustCompile(`\A[0-9a-f]{64}\z`)
 var resourceID = regexp.MustCompile(`\A(?:0|[1-9][0-9]{0,18})\z`)
 var rbdImageID = regexp.MustCompile(`\A[0-9a-f]{1,14}\z`)
+var subvolumeUUID = regexp.MustCompile(`\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z`)
+
+func subvolumePath(s *Subvolume, id string) string {
+	group := s.Group
+	if group == "" {
+		group = "_nogroup"
+	}
+	return "/volumes/" + group + "/" + s.Name + "/" + id
+}
+
+func subvolumeResource(e Evidence, r Request) bool {
+	return r.Subvolume != nil && subvolumeUUID.MatchString(e.Resource.ID) && e.Resource.Path == subvolumePath(r.Subvolume, e.Resource.ID)
+}
 
 type MonitorAddress struct {
 	Address string `json:"address"`
@@ -227,6 +240,9 @@ func validateScope(e Evidence, r Request) bool {
 	if !subsetNames(e.Monitors, mons) || !subsetNames(append(active, e.MGRStandbys...), mgrs) {
 		return false
 	}
+	if r.Action == "subvolume" {
+		return e.Client == "" && r.Subvolume != nil && (e.Resource == ResourceEvidence{} || subvolumeResource(e, r))
+	}
 	if e.Resource.Path != "" {
 		return false
 	}
@@ -270,6 +286,8 @@ func validateReady(e Evidence, r Request) bool {
 		return r.RBD != nil && rbdImageID.MatchString(e.Resource.ID)
 	case "filesystem":
 		return r.Filesystem != nil && resourceID.MatchString(e.Resource.ID)
+	case "subvolume":
+		return subvolumeResource(e, r)
 	}
 	return false
 }

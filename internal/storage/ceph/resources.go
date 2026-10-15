@@ -416,3 +416,38 @@ func filesystemGroups(spec api.Value, defaultPool string) []FilesystemGroup {
 	slices.SortFunc(groups, func(a, b FilesystemGroup) int { return strings.Compare(a.Name, b.Name) })
 	return groups
 }
+
+func subvolumeRequest(c api.Catalog, subvolume api.Object, contextName string) (Request, error) {
+	spec := subvolume.Spec()
+	fs, _ := c.Find(api.StorageFilesystem, spec.Get("filesystemRef").Text())
+	r, err := filesystemRequest(c, fs, contextName)
+	if err != nil {
+		return Request{}, err
+	}
+	frozen := Subvolume{Filesystem: fs.Name(), Group: spec.Get("group").Text(), Mode: "755", Name: subvolume.Name(), Pool: r.Filesystem.DefaultDataPool, SizeBytes: positiveOr(spec.Get("sizeBytes"), 0)}
+	for _, group := range r.Filesystem.Groups {
+		if group.Name == frozen.Group {
+			frozen.Pool, frozen.UID, frozen.GID = group.Pool, group.UID, group.GID
+		}
+	}
+	if pool := spec.Get("poolLayoutRef").Text(); pool != "" {
+		frozen.Pool = pool
+	}
+	if uid, ok := spec.Get("uid").Int64(); ok && spec.Has("uid") {
+		frozen.UID = int(uid)
+	}
+	if gid, ok := spec.Get("gid").Int64(); ok && spec.Has("gid") {
+		frozen.GID = int(gid)
+	}
+	if mode := spec.Get("mode").Text(); mode != "" {
+		frozen.Mode = mode
+		if len(mode) == 4 {
+			frozen.Mode = strings.TrimPrefix(mode, "0")
+		}
+	}
+	r.Action = "subvolume"
+	r.Filesystem = nil
+	r.Pool = nil
+	r.Subvolume = &frozen
+	return r, nil
+}

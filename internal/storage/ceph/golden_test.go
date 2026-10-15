@@ -76,12 +76,13 @@ func TestFrozenRequestGolden(t *testing.T) {
 		r.Hosts[i].Location = map[string]string{}
 		r.Hosts[i].KnownHosts = ""
 	}
-	for _, action := range []string{"cluster", "policy", "pool", "client", "rbd"} {
+	for _, action := range []string{"cluster", "policy", "pool", "client", "rbd", "subvolume"} {
 		r.Action = action
 		r.Policy = nil
 		r.Pool = nil
 		r.Client = nil
 		r.RBD = nil
+		r.Subvolume = nil
 		if action == "policy" {
 			r.Policy = &Policy{DeviceClass: "ssd", FailureDomain: "host", Name: "ssd-hosts", Root: "default", Rule: "ssd-hosts", Size: 2}
 		}
@@ -93,6 +94,9 @@ func TestFrozenRequestGolden(t *testing.T) {
 		}
 		if action == "rbd" {
 			r.RBD = &RBDImage{Name: "disk", Pool: "volumes", SizeBytes: 10737418240, Features: []string{"layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten"}, DataPool: ""}
+		}
+		if action == "subvolume" {
+			r.Subvolume = &Subvolume{Filesystem: "files", Mode: "755", Name: "docs", Pool: "fs-data"}
 		}
 		data, err := r.Canonical()
 		if err != nil {

@@ -26,8 +26,10 @@ provider-command escape hatch.
 `access: read-only|read-write`. The pool must be a same-cluster RBD pool; no
 implicit administrator capability is granted. `StoragePlacementPolicy` and
 `StoragePool` are admitted under
-[pool protection and erasure coding](#pool-protection-and-erasure-coding), and
-`StorageRBDImage` under [RBD images](#rbd-images).
+[pool protection and erasure coding](#pool-protection-and-erasure-coding),
+`StorageRBDImage` under [RBD images](#rbd-images), `StorageFilesystem` under
+[CephFS filesystems](#cephfs-filesystems) and `StorageSubvolume` under
+[CephFS subvolumes](#cephfs-subvolumes).
 Other P2 resource additions remain target contracts, not admitted kinds.
 Future object, NFS and export feature families are refused by current pure
 admission.
@@ -51,7 +53,8 @@ that adaptation neither approves nor refuses a selection.
 
 Ordinary apply realizes the core cluster, placement policies, replicated and
 erasure-coded pools, RBD images, CephFS filesystems with their subvolume
-groups and the client over `verified-tunnel`. `ceph.release` is the operator's release label;
+groups, CephFS subvolumes and the client over `verified-tunnel`.
+`ceph.release` is the operator's release label;
 `ceph.packageVersion` selects the Ceph/cephadm RPM roots and
 `ceph.cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.
 Optional `ceph.nfsGanesha.packageVersion` selects the NFS-Ganesha RPM without
@@ -92,7 +95,7 @@ this field grants no exception to host-key verification. The three-node
 example selects `verified-tunnel` explicitly; its protected mounts and staged
 bootstrap remain subject to
 [release qualification](../storage-coverage.md#release-qualification).
-Core request v9 refuses continuation of v8 operations, image request v2 and
+Core request v10 refuses continuation of v9 operations, image request v2 and
 package request v2 refuse continuation of older operations, and core
 evidence v3 and host request v2 refuse continuation of operations an
 earlier build made; finish or remove old contexts with their original
@@ -141,6 +144,7 @@ provider sizing and measured resource acceptance remain separate.
 | `StoragePool` | One pool. `spec.type` is `replicated` (default) or `erasure` and selects protection; the referenced cluster selects the storage engine. |
 | `StorageRBDImage` | One RBD image: same-cluster replicated rbd `poolRef`, exact `sizeBytes`, optional rbd `dataPoolRef` and a closed feature set; image format 2. |
 | `StorageFilesystem` | One CephFS filesystem: a same-cluster `cephfs-metadata` pool, one or more ordered `cephfs-data` pools (the default replicated), its rank and standby policy, subvolume groups, and the native MDS service it binds through `mdsServiceRef`. |
+| `StorageSubvolume` | One CephFS subvolume in a same-cluster `filesystemRef`, optionally in one of its declared groups, with an optional quota, layout pool, owner and mode. |
 | `StorageObjectGateway` | One RGW service and its optional public endpoint; ingresses belong to that endpoint and select no other backend. |
 | `StorageNFSExport` | One NFS-Ganesha service and zero or more exports; there is no separate `StorageNFSService` kind. |
 | `StorageExport` | One downstream storage surface: the `dataFoundation` arm for a managed cluster, `externalDetails` for an external one. |
@@ -333,6 +337,31 @@ its metadata and data pools and depends on the cluster and image blocks; the
 projection, refusals and readiness. Its plan re-refuses an erasure-coded
 default data pool and a cluster that projects no `mds.<filesystem>` service,
 and propagates every plan refusal of its pools.
+
+## CephFS subvolumes
+
+`StorageSubvolume` is admitted for a managed cluster; its field record,
+ownership and readiness are in the
+[promotion record](../storage-resources.md#storagesubvolume). Its schema
+requires `clusterRef` and `filesystemRef`; `group` and `mode` are non-empty
+strings, `sizeBytes` an integer from 1 to 9223372036854775807 (an omission
+sets no quota), `uid` and `gid` integers from 0 to 2147483647 and
+`poolLayoutRef` a StoragePool reference. `namespaceIsolated`, `earmark`,
+`normalization` and `casesensitive` are not fields and refuse `api.field`.
+Admission refuses with `api.invariant`, before any effect:
+
+- `metadata.name` longer than 48 characters, which would not fit its block
+  identity `ceph-subvolume-<name>` of at most 63 characters;
+- a `filesystemRef` of another cluster;
+- a `group` that the filesystem's `spec.subvolumeGroups` does not declare;
+- a `poolLayoutRef` of another cluster, without role `cephfs-data`, or not
+  one of the filesystem's `dataPoolRefs`;
+- a `mode` outside `^0?[0-7]{3}$`, also in a defaults fragment.
+
+The core capability realizes StorageSubvolume as block
+`ceph-subvolume-<name>`, which requires its filesystem and depends on the
+cluster and image blocks. Its plan builds the filesystem's request first, so
+every filesystem and pool plan refusal also refuses the subvolume.
 
 ## Complete-graph invariants
 

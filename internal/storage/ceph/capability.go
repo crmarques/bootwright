@@ -38,6 +38,8 @@ func (c Capability) request(catalog api.Catalog, object api.Object, contextName 
 		return rbdImageRequest(catalog, object, contextName)
 	case api.StorageFilesystem:
 		return filesystemRequest(catalog, object, contextName)
+	case api.StorageSubvolume:
+		return subvolumeRequest(catalog, object, contextName)
 	}
 	return Request{}, failure("lifecycle.unsupported", "the requested kind has no core Ceph adapter", "")
 }
@@ -90,6 +92,8 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			for _, pool := range append([]string{request.Filesystem.MetadataPool}, request.Filesystem.DataPools...) {
 				requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
 			}
+		case api.StorageSubvolume:
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: request.Subvolume.Filesystem})
 		}
 		impacts := []string{"realize Ceph " + request.Action + " " + object.Name()}
 		consumes := []string{}
@@ -108,7 +112,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 				dependencies = append(dependencies, HostBlockID(request.Cluster, host.Machine))
 			}
 		}
-		if c.kind == api.StorageRBDImage || c.kind == api.StorageFilesystem {
+		if c.kind == api.StorageRBDImage || c.kind == api.StorageFilesystem || c.kind == api.StorageSubvolume {
 			dependencies = append(dependencies, ClusterBlockID(request.Cluster))
 		}
 		slices.Sort(dependencies)
@@ -169,7 +173,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if err != nil {
 		return Request{}, err
 	}
-	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem"}[c.kind]
+	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume"}[c.kind]
 	object := r.Cluster
 	if r.Action == "policy" && r.Policy != nil {
 		object = r.Policy.Name
@@ -185,6 +189,9 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	}
 	if r.Action == "filesystem" && r.Filesystem != nil {
 		object = r.Filesystem.Name
+	}
+	if r.Action == "subvolume" && r.Subvolume != nil {
+		object = r.Subvolume.Name
 	}
 	if action == "" || r.Action != action || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")

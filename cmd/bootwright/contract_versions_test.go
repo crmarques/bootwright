@@ -115,6 +115,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-rbd-image-attempt-v1":         core,
 		"ceph-filesystem-attempt-v1":        core,
 		"ceph-subvolume-group-attempt-v1":   core,
+		"ceph-subvolume-attempt-v1":         core,
 		"ceph-client-auth-v1":               core,
 		"ceph-dashboard-redeploy-v1":        core,
 		"ceph-dashboard-port-repair-v1":     core,
@@ -143,7 +144,7 @@ func automationFormats() map[string]automationFormat {
 
 		"ceph-host-v2":                {class: formatMirrored},
 		"ceph-host-evidence-v1":       {class: formatMirrored},
-		"ceph-core-v9":                {class: formatMirrored},
+		"ceph-core-v10":               {class: formatMirrored},
 		"ceph-core-evidence-v3":       {class: formatMirrored},
 		"ceph-packages-v2":            {class: formatMirrored},
 		"ceph-image-v2":               {class: formatMirrored},

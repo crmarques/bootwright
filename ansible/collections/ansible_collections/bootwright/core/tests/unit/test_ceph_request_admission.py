@@ -110,7 +110,8 @@ CORE = {
     "registry": "cp.icr.io",
     "registryRef": "ibm-registry",
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
-    "version": "ceph-core-v9",
+    "subvolume": {"filesystem": "files", "gid": 0, "group": "", "mode": "755", "name": "docs", "pool": "files-data", "sizeBytes": 0, "uid": 0},
+    "version": "ceph-core-v10",
 }
 
 IMAGE = {

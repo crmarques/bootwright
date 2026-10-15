@@ -137,7 +137,9 @@ refuses `foreign-rbd-image` or `rbd-image-identity`. A CephFS filesystem writes
 `ceph-subvolume-group-attempt-v1` before `fs subvolumegroup create`; each adopts
 only with its record, and otherwise refuses `foreign-filesystem`,
 `filesystem-identity`, `filesystem-multiple-disabled`, `mds-coverage` or
-`foreign-subvolume-group`.
+`foreign-subvolume-group`. A CephFS subvolume writes
+`ceph-subvolume-attempt-v1` before `fs subvolume create` and adopts only with
+its record; otherwise it refuses `foreign-subvolume` or `subvolume-identity`.
 
 For every matrix row, the release record names the primary vendor source and
 revision/date, support status (supported, preview, deprecated or unsupported),

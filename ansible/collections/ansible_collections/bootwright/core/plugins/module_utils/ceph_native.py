@@ -62,6 +62,10 @@ SCOPE_OPTIONAL = frozenset(("config", "packages", "nfsGaneshaPackageVersion"))
 RESOURCE_ID = re.compile(r"(?:0|[1-9][0-9]{0,18})\Z")
 # librbd's image ID: lowercase hex cut to RBD_MAX_IMAGE_ID_LENGTH 14 (src/librbd/Utils.cc:75-93, src/include/rbd_types.h:86).
 RBD_IMAGE_ID = re.compile(r"[0-9a-f]{1,14}\Z")
+# A subvolume's path is /volumes/<group or _nogroup>/<name>/<uuid4> (src/pybind/mgr/volumes/fs/operations/versions/subvolume_v2.py:167).
+SUBVOLUME_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
+SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,127})/[a-z0-9](?:[-a-z0-9]{0,46}[a-z0-9])?/"
+                            r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\Z")
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount", "cache", "enroll",
                          "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "observe", "bootstrap_state", "host_state", "dashboard_read"))
@@ -411,10 +415,10 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"pool", "client", "policy", "rbd", "filesystem"})
+    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"pool", "client", "policy", "rbd", "filesystem", "subvolume"})
     hosts = scope_checks(request)
     if request["action"] == "cluster":
-        require(not {"pool", "client", "policy", "rbd", "filesystem"} & set(request))
+        require(not {"pool", "client", "policy", "rbd", "filesystem", "subvolume"} & set(request))
         return request
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
     require(request["action"] in ceph_native_resources.ACTIONS)
@@ -440,7 +444,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v9")
+    require(request["version"] == "ceph-core-v10")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -3313,7 +3317,7 @@ class Worker:
 
     def unfinished(self, evidence):
         """Owned work without a current proof: partial, never ready."""
-        if self.request["action"] in ("pool", "client", "policy", "rbd", "filesystem"):
+        if self.request["action"] in ("pool", "client", "policy", "rbd", "filesystem", "subvolume"):
             resource = self.request[self.request["action"]]
             evidence["owned"] = self.markers.read(self.request["action"] + "-" + resource["name"] + ".json") == resource
         evidence["exists"] = evidence["owned"]

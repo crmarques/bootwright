@@ -6,6 +6,7 @@ func init() {
 	register(StoragePool, storagePoolSchema)
 	register(StorageRBDImage, storageRBDImageSchema)
 	register(StorageFilesystem, storageFilesystemSchema)
+	register(StorageSubvolume, storageSubvolumeSchema)
 	register(StorageObjectGateway, storageObjectGatewaySchema)
 	register(StorageNFSExport, storageNFSExportSchema)
 	register(StorageExport, storageExportSchema)
@@ -101,6 +102,10 @@ func storageFilesystemSchema() *Shape {
 	mds := record(field("activeCount", integer("1", "256")), field("standbyReplay", boolean()), field("standbyCountWanted", integer("0", "2147483647")))
 	group := record(required("name", nonempty()), field("poolLayoutRef", ref(StoragePool)), field("mode", nonempty()), field("uid", integer("0", "2147483647")), field("gid", integer("0", "2147483647")), field("sizeBytes", integer("1", "9223372036854775807")))
 	return record(required("clusterRef", ref(StorageCluster)), required("mdsServiceRef", nonempty()), required("metadataPoolRef", ref(StoragePool)), required("dataPoolRefs", nonemptyArray(array(dataPool))), field("mds", mds), field("subvolumeGroups", named(group)))
+}
+
+func storageSubvolumeSchema() *Shape {
+	return record(required("clusterRef", ref(StorageCluster)), required("filesystemRef", ref(StorageFilesystem)), field("group", nonempty()), field("sizeBytes", integer("1", "9223372036854775807")), field("poolLayoutRef", ref(StoragePool)), field("uid", integer("0", "2147483647")), field("gid", integer("0", "2147483647")), field("mode", nonempty()))
 }
 
 func storageObjectGatewaySchema() *Shape {

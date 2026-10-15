@@ -2,7 +2,7 @@
 - name: Validate the frozen Ceph request
   ansible.builtin.assert:
     that:
-      - bootwright_ceph_request.version == 'ceph-core-v9'
+      - bootwright_ceph_request.version == 'ceph-core-v10'
       - bootwright_ceph_digest is match('^[0-9a-f]{64}$')
       - ansible_connection == 'local'
     quiet: true

@@ -42,7 +42,7 @@ func plannedCephPlanWith(t *testing.T, change func(api.Value) api.Value, extra .
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
 	runner := &recordingRunner{}
 	var definitions []reconciliation.BlockDefinition
-	for _, capability := range []lifecycle.Capability{NewImage(runner), NewHost(runner), New(api.StorageCluster, runner), New(api.StoragePool, runner), New(api.StorageClient, runner), New(api.StorageRBDImage, runner), New(api.StorageFilesystem, runner)} {
+	for _, capability := range []lifecycle.Capability{NewImage(runner), NewHost(runner), New(api.StorageCluster, runner), New(api.StoragePool, runner), New(api.StorageClient, runner), New(api.StorageRBDImage, runner), New(api.StorageFilesystem, runner), New(api.StorageSubvolume, runner)} {
 		plan, err := capability.Plan(context.Background(), input)
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))

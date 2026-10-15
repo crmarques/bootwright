@@ -48,7 +48,7 @@ CLUSTER_REASONS = (
     "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport",
     "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
-    "mds-coverage",
+    "mds-coverage", "foreign-subvolume", "subvolume-identity",
 )
 
 
@@ -108,6 +108,19 @@ def refusal(error, reasons):
     return "adapter-exception", detail
 
 
+def subvolume_resource(resource, request):
+    """A subvolume's resource is empty, or its uuid with the exact path the frozen subvolume's group and name place it at."""
+    if resource == {"id": "", "path": ""}:
+        return
+    match = ceph_native.SUBVOLUME_PATH.fullmatch(resource["path"])
+    ceph_native.require(ceph_native.SUBVOLUME_UUID.fullmatch(resource["id"]) is not None and match is not None and match.group(1) == resource["id"],
+                        "evidence")
+    if request is not None:
+        subvolume = request["subvolume"]
+        path = "/volumes/" + (subvolume["group"] or "_nogroup") + "/" + subvolume["name"] + "/" + resource["id"]
+        ceph_native.require(resource["path"] == path, "evidence")
+
+
 def evidence(value, request_digest, request=None):
     """The closed public projection, checked before any result publication."""
     if isinstance(value, dict) and value.get("version") == ceph_host_runtime.EVIDENCE_VERSION:
@@ -118,7 +131,7 @@ def evidence(value, request_digest, request=None):
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     dashboard_evidence(value)
-    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy", "rbd", "filesystem"), "evidence")
+    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume"), "evidence")
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
     ceph_native.require(value["health"] in ("", "HEALTH_OK", "HEALTH_WARN", "HEALTH_ERR"), "evidence")
     ceph_native.require(ceph_native.named(value["owner"]), "evidence")
@@ -130,8 +143,11 @@ def evidence(value, request_digest, request=None):
     resource = value["resource"]
     ceph_native.require(isinstance(resource, dict) and set(resource) == {"id", "path"} and all(isinstance(resource[k], str) for k in ("id", "path")),
                         "evidence")
-    ceph_native.require(resource["path"] == "", "evidence")
-    ceph_native.require(resource["id"] == ""
+    if value["action"] == "subvolume":
+        subvolume_resource(resource, request)
+    else:
+        ceph_native.require(resource["path"] == "", "evidence")
+    ceph_native.require(resource["id"] == "" or value["action"] == "subvolume"
                         or value["action"] in ("pool", "policy", "filesystem") and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None
                         or value["action"] == "rbd" and ceph_native.RBD_IMAGE_ID.fullmatch(resource["id"]) is not None, "evidence")
     ceph_native.require(isinstance(value["osds"], list) and len(value["osds"]) <= 8192, "evidence")
@@ -596,7 +612,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
                     for host in request["hosts"]:
                         transport.call(host, "devices")
                     changed = transport.call(bootstrap, "services")["changed"] or changed
-            elif request["action"] in ("pool", "policy", "rbd"):
+            elif request["action"] in ("pool", "policy", "rbd", "subvolume"):
                 changed = transport.call(bootstrap, request["action"])["changed"] or changed
             elif request["action"] == "filesystem":
                 changed = apply_filesystem(request, bootstrap, transport, now, pause) or changed

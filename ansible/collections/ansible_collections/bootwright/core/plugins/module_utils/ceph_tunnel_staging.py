@@ -49,7 +49,7 @@ def named(value):
 def bindings(request):
     """Validate the staging subset without inferring ownership from native names."""
     require(isinstance(request, dict))
-    require(request.get("version") == "ceph-core-v9" and request.get("clusterSSHTransport") == "verified-tunnel")
+    require(request.get("version") == "ceph-core-v10" and request.get("clusterSSHTransport") == "verified-tunnel")
     require(named(request.get("owner")) and named(request.get("bootstrap")))
     fsid = request.get("fsid")
     try:
@@ -103,7 +103,7 @@ def stage_intent(request):
 def recovery_scope(request):
     """Bind all cluster authoring, without consumer actions or private material."""
     bindings(request)
-    excluded = {"action", "pool", "client", "policy", "rbd", "filesystem", "packages"}
+    excluded = {"action", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "packages"}
     return {"version": "ceph-bootstrap-recovery-v1",
             "cluster": {name: value for name, value in request.items() if name not in excluded}}
 

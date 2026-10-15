@@ -75,6 +75,10 @@ def test_scope_is_shared_with_pool_and_client_without_private_package_inputs(clu
               "metadataPool": "cephfs-metadata", "name": "files", "standbyCountWanted": 0, "standbyReplay": False}
     filesystem.update(action="filesystem", filesystem=frozen)
     assert staging.recovery_scope(filesystem) == wanted
+    subvolume = {key: value for key, value in cluster_request.items() if key not in ("client", "packages")}
+    subvolume.update(action="subvolume", subvolume={"filesystem": "files", "gid": 0, "group": "csi", "mode": "755", "name": "docs", "pool": "cephfs-data",
+                                                    "sizeBytes": 1073741824, "uid": 0})
+    assert staging.recovery_scope(subvolume) == wanted
 
 
 @pytest.mark.parametrize("attempted", [False, True])

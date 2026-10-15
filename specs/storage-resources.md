@@ -7,7 +7,8 @@ and their bindings; [Storage](storage.md) owns lifecycle, device safety and
 custody. [Provider coverage](storage-coverage.md) owns release qualification.
 
 **Current:** `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`,
-`StorageFilesystem` and minimal `StorageClient` are admitted and realized. Native
+`StorageFilesystem`, `StorageSubvolume` and minimal `StorageClient` are
+admitted and realized. Native
 effects remain artifact-gated. **Not yet met:** later P2 kinds, NFS ownership
 migration and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.
@@ -372,15 +373,17 @@ constructing the native internal directory layout.
 | `group` | Optional name in that filesystem's declared `subvolumeGroups`. Omission selects the native default group, recorded as such; empty refuses. |
 | `sizeBytes` | Optional positive integer byte quota, at most signed 64-bit and within native limits. Omission requests no subvolume-specific quota; ancestor quotas still apply. Explicit zero refuses. |
 | `poolLayoutRef` | Optional eligible data pool attached to the filesystem. Omission inherits the group/filesystem layout; the effective selection is frozen. |
-| `uid`, `gid` | Optional non-negative integer ownership IDs, with zero preserved. Omission freezes the qualified native defaults. |
-| `mode` | Optional octal string under the existing group-mode grammar; omission freezes the qualified native default. |
+| `uid`, `gid` | Optional integer 0..2147483647, zero preserved. Omission freezes the declared group's frozen uid/gid, or 0 in the default group. |
+| `mode` | Optional octal string under the existing group-mode grammar; omission freezes `755` ([module.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/module.py#L777)), never the group's mode. |
 
 `metadata.name` is the native subvolume name within its parent scope. A
 positive quota is a limit, not a reservation or guarantee of free capacity.
 Readiness checks the native subvolume identity/path, layout, quota and owner
-metadata. Removal can be asynchronous; B492 defines evidence that deletion is
-settled and preserves unresolved native work through continuation. This does
-not introduce snapshot retention or cloning by implication.
+metadata. Online removal moved to [B491](milestones/m2.md#b491) by D160
+(OD2 (a)), with the proof that the native `fs subvolume rm`, which moves a
+subvolume to the trash and purges it later, has settled; a subvolume retires
+with its cluster's hosts. This does not introduce snapshot retention or
+cloning by implication.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -394,6 +397,67 @@ spec:
   group: applications
   sizeBytes: 10737418240
 ```
+
+### Promotion record
+
+Upstream facts are Ceph v20.2.1 and stay unverified for the IBM image
+until [B472](milestones/m2.md#b472) or the owner's run confirms them. The
+block is `ceph-subvolume-<name>`: `metadata.name` has at most 48 characters so
+it fits 63. It requires its StorageFilesystem and depends by ID on its
+cluster's core and image blocks, never through `Requires StorageCluster`
+(D159 clause 10), so a destroy removes the subvolume before its filesystem and
+the filesystem before its pools.
+
+| Field | Frozen value | Native projection |
+| --- | --- | --- |
+| `metadata.name` | The subvolume name. | `<sub_name>`. |
+| `filesystemRef` | The filesystem name. | `<vol_name>`. |
+| `group` | Value, or `""` for the native default group; never `_nogroup`, which an explicit `--group_name` refuses ([group.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/fs/operations/group.py#L21-L32)). | `--group_name <g>` only when non-empty. |
+| `poolLayoutRef` | Value; else the declared group's frozen pool; else the filesystem's default data pool. | `--pool_layout <pool>`, always. |
+| `uid`, `gid` | Value with zero preserved; else the declared group's frozen value; else 0. | `--uid <n> --gid <n>`, always. |
+| `mode` | Three octal digits, a leading `0` dropped; else `755`; never the group's mode. | `--mode <mode>`, always. |
+| `sizeBytes` | Positive value, or 0 for no quota. | `--size <n>` only when positive. |
+
+The plan builds the filesystem's own request first, so every filesystem and
+pool plan refusal also refuses the subvolume.
+
+Before any `fs subvolume` command the worker proves, in order: its ownership
+mark; the filesystem's creation mark and its recorded filesystem ID in
+`fs dump`; the layout pool it created, under its recorded ID and attached to
+the filesystem; and, for a named group, the group's creation mark and its
+presence in `fs subvolumegroup ls`. It then proves the subvolume absent with
+`fs subvolume ls`, writes the attempt record `ceph-subvolume-attempt-v1`, and
+runs `fs subvolume create` with every attribute explicit. A fresh create sets
+the mode only through `mkdirs` under the manager's umask
+([subvolume_v2.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/fs/operations/versions/subvolume_v2.py#L157-L183)),
+so when the mode alone differs the worker creates once more, which sets it,
+before it records the path `fs subvolume info` reports. Once the path is
+recorded it never creates again: a repeat create rewrites the attributes and
+resets the earmark
+([volume.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/fs/volume.py#L249-L290)).
+It then sets the user metadata `bootwright-owner` to the operation ID
+([fs-volumes.rst](https://github.com/ceph/ceph/blob/v20.2.1/doc/cephfs/fs-volumes.rst#L572-L575))
+and reads it back with `fs subvolume metadata ls`. A lost reply is adopted
+only with the attempt record and the frozen shape. Bootwright never runs
+`fs subvolume rm`, `resize`, `snapshot`, `clone`, `authorize`, `evict`,
+`earmark`, `metadata get` or `fs volume`.
+
+| Refusal | Reached when |
+| --- | --- |
+| `foreign-subvolume` | A subvolume of the name exists in the filesystem and group without this operation's creation record. |
+| `subvolume-identity` | The declared subvolume differs from the recorded one, the recorded path differs or the subvolume is gone, the created shape differs from the frozen one, or the owner metadata names another operation. |
+
+Readiness proves the path equals the recorded one, `type` `subvolume`, `state`
+`complete`, `data_pool`, an empty `pool_namespace`, `bytes_quota` (the size or
+`infinite`), uid, gid, `mode & 0o7777` and the owner metadata
+([subvolume_base.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/fs/operations/versions/subvolume_base.py#L473-L547)).
+A drifted value is not ready, never a refusal; the earmark, normalization and
+case sensitivity are not read. Evidence reports the subvolume's UUID and its
+path `/volumes/<group or _nogroup>/<name>/<uuid>`. A consumer binds the path
+`ProvedSubvolume` reports from the applied creation proof and never constructs
+one. Namespace isolation and the earmark refuse as unknown fields and stay
+parked by D160 (OD26 (a)); normalization and case sensitivity are
+[B482](milestones/m2.md#b482)'s.
 
 ## StorageNFSExport
 

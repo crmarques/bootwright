@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v9"
+const Version = "ceph-core-v10"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -139,6 +139,17 @@ type Filesystem struct {
 	StandbyReplay      bool              `json:"standbyReplay"`
 }
 
+type Subvolume struct {
+	Filesystem string `json:"filesystem"`
+	GID        int    `json:"gid"`
+	Group      string `json:"group"`
+	Mode       string `json:"mode"`
+	Name       string `json:"name"`
+	Pool       string `json:"pool"`
+	SizeBytes  int64  `json:"sizeBytes"`
+	UID        int    `json:"uid"`
+}
+
 type nativePlacement struct {
 	Count        *int64   `json:"count,omitempty"`
 	CountPerHost *int64   `json:"count_per_host,omitempty"`
@@ -190,6 +201,7 @@ type Request struct {
 	RegistryRef              string                       `json:"registryRef"`
 	Release                  string                       `json:"release"`
 	Services                 []json.RawMessage            `json:"services"`
+	Subvolume                *Subvolume                   `json:"subvolume,omitempty"`
 	Version                  string                       `json:"version"`
 }
 

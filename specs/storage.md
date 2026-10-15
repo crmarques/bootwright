@@ -464,6 +464,23 @@ followers and standbys of the bound service, and each declared group's owner,
 mode, layout and quota; a drift is not ready rather than refused. No phase
 removes a filesystem or group, fails a rank, or forces an operation.
 
+A CephFS subvolume is created only after the worker proves the filesystem,
+the layout pool and the named group this operation created, under their
+recorded IDs and marks, and proves with `fs subvolume ls` that no subvolume of
+its name exists in that filesystem and group. It writes its attempt record
+before `fs subvolume create` with every attribute explicit, creates once more
+when only the mode differs because a fresh create applies the manager's umask,
+records the reported path, and sets the owner metadata `bootwright-owner` to
+the operation ID. A retry adopts a same-name subvolume only with that record
+and the frozen shape; otherwise it refuses `foreign-subvolume`. A declared
+subvolume that differs from the recorded one, a recorded path that differs or
+is gone, a created shape that differs, or owner metadata naming another
+operation refuses `subvolume-identity`. Readiness compares the recorded path,
+type, state, layout pool, namespace, quota, owner, mode and owner metadata; a
+drift is not ready rather than refused. No phase removes, resizes, snapshots,
+clones or re-creates a recorded subvolume; it retires with its cluster's
+hosts, and [B491](milestones/m2.md#b491) owns its online removal.
+
 Readiness reports bounded observations of FSID, quorum, orchestrator and host
 state, expected daemons, OSD membership, placement/capacity, pool protection,
 filesystem/MDS state and declared service endpoints as applicable. Waits bound

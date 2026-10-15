@@ -90,10 +90,12 @@ argument_specs:
             type: list
             elements: dict
             required: true
+          subvolume:
+            type: dict
           version:
             type: str
             required: true
-            choices: [ceph-core-v9]
+            choices: [ceph-core-v10]
       bootwright_ceph_digest:
         type: str
         required: true

@@ -30,3 +30,6 @@ expect:
 - kind: StorageRBDImage
   name: rbd-disk
   refusalRow: Incomplete or unsafe Ceph coordinates or transport
+- kind: StorageSubvolume
+  name: docs
+  refusalRow: Incomplete or unsafe Ceph coordinates or transport
