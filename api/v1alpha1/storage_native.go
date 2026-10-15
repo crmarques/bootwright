@@ -28,7 +28,7 @@ func StorageNativeServiceSpecSchema(serviceType string) *Shape {
 	case "mon":
 		locations := &Shape{Type: Mapping, Open: true, Element: array(nonempty()), Atomic: true}
 		return record(field("crush_locations", locations))
-	case "mgr":
+	case "mgr", "mds":
 		return record()
 	case "osd":
 		return record(required("data_devices", storageNativeDeviceSelector()), field("db_devices", storageNativeDeviceSelector()), field("wal_devices", storageNativeDeviceSelector()), field("encrypted", boolean()), field("tpm2", boolean()), field("osds_per_device", integer("1", "")), field("crush_device_class", nonempty()), field("filter_logic", enumeration("AND", "OR")), field("block_db_size", integer("1", "")), field("block_wal_size", integer("1", "")), field("db_slots", integer("1", "")), field("wal_slots", integer("1", "")), field("data_allocate_fraction", number("0", "1")), field("objectstore", enumeration("bluestore")), field("method", enumeration("lvm", "raw")))

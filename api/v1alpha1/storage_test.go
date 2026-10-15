@@ -78,12 +78,15 @@ func TestNativeCoreSchemaAndBindingsUseOneClosedAuthoringPath(t *testing.T) {
 	if bindings.Shape.NameKey != "serviceRef" || secrets.Shape.NameKey != "path" || len(ref.Shape.Reference) != 1 || ref.Shape.Reference[0] != Secret {
 		t.Fatal("native binding must retain a typed descriptor-only reference")
 	}
-	for _, serviceType := range []string{"mon", "mgr", "osd"} {
+	for _, serviceType := range []string{"mon", "mgr", "osd", "mds"} {
 		shape := StorageNativeServiceSpecSchema(serviceType)
 		if shape == nil || shape.Open {
 			t.Fatalf("native core %s lacks a closed payload", serviceType)
 		}
 		checkStorageShape(t, shape)
+	}
+	if mds := StorageNativeServiceSpecSchema("mds"); len(mds.Fields) != 0 {
+		t.Fatal("native MDS spec carries no type-specific field")
 	}
 	if StorageNativeServiceSpecSchema("rgw") != nil {
 		t.Fatal("future family schema must be qualified by its owning slice")

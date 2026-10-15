@@ -1,0 +1,148 @@
+package storage
+
+import (
+	"slices"
+	"strings"
+	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+func withMDSService(t *testing.T, catalog api.Catalog, service api.Value) (api.Object, api.Catalog) {
+	t.Helper()
+	cluster := find(t, catalog, api.StorageCluster, "storage")
+	services := append(cluster.Spec().Get("ceph", "services").Items(), service)
+	changed := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "ceph", "services"))
+	return changed, replace(catalog, changed)
+}
+
+func mdsService(id ...string) api.Value {
+	service := m("service_type", "mds", "placement", m("label", "mgr", "count", 2))
+	if len(id) == 1 {
+		service = service.With("service_id", api.StringValue(id[0]))
+	}
+	return service
+}
+
+func issuesAt(issues []api.Issue, field string) []api.Issue {
+	found := []api.Issue{}
+	for _, issue := range issues {
+		if issue.Field == field {
+			found = append(found, issue)
+		}
+	}
+	return found
+}
+
+func partialMDS(service api.Value) api.Object {
+	return object(api.StorageCluster, "storage", m("ceph", m("services", api.ListValue(m("service_type", "mon"), m("service_type", "mgr"), m("service_type", "osd", "service_id", "data"), service))))
+}
+
+func TestMDSServiceRequiresServiceID(t *testing.T) {
+	cluster, catalog := withMDSService(t, fixtureCatalog(), mdsService())
+	found := issuesAt(Validate(cluster, catalog), "$.spec.ceph.services[3].service_id")
+	if len(found) != 1 || found[0].Code != "api.required" {
+		t.Fatalf("MDS service without service_id: %#v", found)
+	}
+	if found := issuesAt(ValidatePartial(partialMDS(mdsService()), catalog), "$.spec.ceph.services[3].service_id"); len(found) != 0 {
+		t.Fatalf("partial MDS input requires its ID too early: %#v", found)
+	}
+}
+
+func TestMDSServiceIDCannotStartWithDigit(t *testing.T) {
+	const field = "$.spec.ceph.services[3].service_id"
+	cluster, catalog := withMDSService(t, fixtureCatalog(), mdsService("1files"))
+	for _, issues := range [][]api.Issue{Validate(cluster, catalog), ValidatePartial(partialMDS(mdsService("1files")), catalog)} {
+		found := issuesAt(issues, field)
+		if len(found) != 1 || found[0].Code != "api.invariant" || found[0].Message != "MDS service IDs cannot start with a numeric digit" {
+			t.Fatalf("leading-digit MDS ID: %#v", found)
+		}
+	}
+	cluster, catalog = withMDSService(t, fixtureCatalog(), mdsService("files"))
+	if found := issuesAt(Validate(cluster, catalog), field); len(found) != 0 {
+		t.Fatalf("bound MDS ID refused: %#v", found)
+	}
+}
+
+func TestServiceIDTableMatchesCephadmRequiresServiceID(t *testing.T) {
+	// REQUIRES_SERVICE_ID, https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L804-L813
+	requiresServiceID := []string{"container", "ingress", "iscsi", "mds", "nfs", "nvmeof", "rgw", "smb"}
+	core := []string{}
+	for _, row := range nativeServiceTypes {
+		switch row.serviceID {
+		case serviceIDNative:
+			if !slices.Contains(requiresServiceID, row.name) {
+				t.Fatalf("%s requires a native ID cephadm does not require", row.name)
+			}
+		case serviceIDBootwright:
+			if row.name != "osd" {
+				t.Fatalf("%s requires a Bootwright-only ID", row.name)
+			}
+		case serviceIDForbidden:
+			if row.name != "mon" && row.name != "mgr" {
+				t.Fatalf("%s forbids an ID cephadm admits", row.name)
+			}
+		}
+		if row.core {
+			core = append(core, row.name)
+		}
+		if shape := api.StorageNativeServiceSpecSchema(row.name); shape == nil || shape.Open {
+			t.Fatalf("%s row lacks a closed native schema", row.name)
+		}
+	}
+	for _, name := range []string{"mon", "mgr", "osd"} {
+		row, ok := nativeServiceTypeOf(name)
+		if !ok || (name == "osd") != (row.serviceID == serviceIDBootwright) || (name != "osd") != (row.serviceID == serviceIDForbidden) {
+			t.Fatalf("%s has the wrong service_id rule", name)
+		}
+	}
+	if !slices.Equal(core, []string{"mon", "mgr", "osd"}) {
+		t.Fatalf("core rows: %v", core)
+	}
+}
+
+func TestUnimplementedServiceRemedyNamesImplementedTypes(t *testing.T) {
+	cluster, catalog := withMDSService(t, fixtureCatalog(), m("service_type", "rgw", "service_id", "objects", "placement", m("label", "mgr")))
+	found := issuesAt(Validate(cluster, catalog), "$.spec.ceph.services[3].service_type")
+	if len(found) != 1 || found[0].Remediation != "select an implemented MON, MGR, OSD or MDS service, or wait for its owning service slice" {
+		t.Fatalf("unimplemented family remedy: %#v", found)
+	}
+}
+
+func TestUnboundMDSServiceRefuses(t *testing.T) {
+	const field = "$.spec.ceph.services[3].service_id"
+	const message = "MDS service is not bound by a StorageFilesystem of this cluster"
+	cluster, catalog := withMDSService(t, fixtureCatalog(), mdsService("files"))
+	if found := issuesAt(Validate(cluster, catalog), field); len(found) != 0 {
+		t.Fatalf("bound MDS service refused: %#v", found)
+	}
+	cluster, catalog = withMDSService(t, fixtureCatalog(), mdsService("other"))
+	found := issuesAt(Validate(cluster, catalog), field)
+	if len(found) != 1 || found[0].Message != message || strings.Contains(found[0].Message+found[0].Remediation, "other") {
+		t.Fatalf("unbound MDS service: %#v", found)
+	}
+	filesystem := find(t, catalog, api.StorageFilesystem, "files")
+	moved := replace(fixtureCatalog(), filesystem.WithSpec(filesystem.Spec().With("clusterRef", api.StringValue("elsewhere"))))
+	cluster, catalog = withMDSService(t, moved, mdsService("files"))
+	if found := issuesAt(Validate(cluster, catalog), field); len(found) != 1 || found[0].Message != message {
+		t.Fatalf("filesystem of another cluster bound the MDS service: %#v", found)
+	}
+	for _, issue := range ValidatePartial(partialMDS(mdsService("other")), catalog) {
+		if issue.Message == message {
+			t.Fatalf("partial input checked the binding: %#v", issue)
+		}
+	}
+}
+
+func TestNativeServiceResolvesQualifiedReference(t *testing.T) {
+	cluster, _ := withMDSService(t, fixtureCatalog(), mdsService("files"))
+	for ref, want := range map[string]bool{"osd.data": true, "mds.files": true, "mon": true, "mds": false, "mds.other": false, "osd": false} {
+		service, ok := NativeService(cluster, ref)
+		if ok != want || ok && NativeServiceName(service) != ref {
+			t.Fatalf("NativeService(%q) = %v, %v", ref, service, ok)
+		}
+	}
+	if _, ok := NativeService(find(t, fixtureCatalog(), api.StorageCluster, "storage"), "mds.files"); ok {
+		t.Fatal("an undeclared MDS service resolved")
+	}
+}

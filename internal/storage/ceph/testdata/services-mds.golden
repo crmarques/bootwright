@@ -1,0 +1,12 @@
+{
+  "placement": {
+    "count": 2,
+    "hosts": [
+      "node-1",
+      "node-2",
+      "node-3"
+    ]
+  },
+  "service_id": "files",
+  "service_type": "mds"
+}

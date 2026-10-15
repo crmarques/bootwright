@@ -288,6 +288,79 @@ func (a *admission) nativeShape(value api.Value, shape *api.Shape, field string,
 	}
 }
 
+type serviceIDRule int
+
+const (
+	serviceIDForbidden serviceIDRule = iota
+	serviceIDNative
+	serviceIDBootwright
+)
+
+type nativeServiceType struct {
+	name, label    string
+	serviceID      serviceIDRule
+	noLeadingDigit bool
+	core           bool
+}
+
+var nativeServiceTypes = []nativeServiceType{
+	{name: "mon", label: "MON", serviceID: serviceIDForbidden, core: true},
+	{name: "mgr", label: "MGR", serviceID: serviceIDForbidden, core: true},
+	{name: "osd", label: "OSD", serviceID: serviceIDBootwright, core: true},
+	{name: "mds", label: "MDS", serviceID: serviceIDNative, noLeadingDigit: true},
+}
+
+func nativeServiceTypeOf(name string) (nativeServiceType, bool) {
+	for _, row := range nativeServiceTypes {
+		if row.name == name {
+			return row, true
+		}
+	}
+	return nativeServiceType{}, false
+}
+
+func implementedServiceRemedy() string {
+	labels := make([]string, 0, len(nativeServiceTypes))
+	for _, row := range nativeServiceTypes {
+		labels = append(labels, row.label)
+	}
+	last := len(labels) - 1
+	return "select an implemented " + strings.Join(labels[:last], ", ") + " or " + labels[last] + " service, or wait for its owning service slice"
+}
+
+func NativeService(cluster api.Object, ref string) (api.Value, bool) {
+	var result api.Value
+	count := 0
+	for _, service := range cluster.Spec().Get("ceph", "services").Items() {
+		if NativeServiceName(service) == ref {
+			result = service
+			count++
+		}
+	}
+	return result, count == 1
+}
+
+func (a *admission) nativeServiceID(service api.Value, row nativeServiceType, field string, partial bool) {
+	id := textOf(service, "service_id")
+	switch {
+	case service.Has("service_id") && (row.serviceID == serviceIDForbidden || !nativeID.MatchString(id)):
+		a.invalid(field+".service_id", "native singleton services omit service_id; other IDs use the qualified name grammar")
+	case service.Has("service_id") && row.noLeadingDigit && id[0] >= '0' && id[0] <= '9':
+		a.invalid(field+".service_id", row.label+" service IDs cannot start with a numeric digit")
+	case !service.Has("service_id") && row.serviceID != serviceIDForbidden && !partial:
+		a.required(service, "service_id", field)
+	case service.Has("service_id") && row.name == "mds" && !partial:
+		a.mdsBinding(id, field)
+	}
+}
+
+func (a *admission) mdsBinding(id, field string) {
+	if filesystem, ok := a.catalog.Find(api.StorageFilesystem, id); ok && textOf(filesystem.Spec(), "clusterRef") == a.object.Name() {
+		return
+	}
+	a.issue("api.invariant", field+".service_id", "MDS service is not bound by a StorageFilesystem of this cluster", "declare a StorageFilesystem of this cluster whose name is this service_id, or remove the MDS service")
+}
+
 func (a *admission) nativeServices(ceph api.Value, partial bool) {
 	services := ceph.Get("services").Items()
 	seen := map[string]bool{}
@@ -304,8 +377,9 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 		if typeName == "" && partial {
 			continue
 		}
-		if shape == nil {
-			a.issue("api.invariant", field+".service_type", "native service family is not implemented by this storage consumer", "select an implemented MON, MGR or OSD service, or wait for its owning service slice")
+		row, known := nativeServiceTypeOf(typeName)
+		if !known || shape == nil {
+			a.issue("api.invariant", field+".service_type", "native service family is not implemented by this storage consumer", implementedServiceRemedy())
 			continue
 		}
 		name := NativeServiceName(service)
@@ -313,12 +387,7 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 			a.invalid(field+".service_id", "qualified native service identities must be unique")
 		}
 		seen[name], core[typeName] = true, true
-		if service.Has("service_id") && (!nativeID.MatchString(textOf(service, "service_id")) || typeName == "mon" || typeName == "mgr") {
-			a.invalid(field+".service_id", "native singleton services omit service_id; other IDs use the qualified name grammar")
-		}
-		if typeName == "osd" && !partial {
-			a.required(service, "service_id", field)
-		}
+		a.nativeServiceID(service, row, field, partial)
 		if service.Has("service_name") && textOf(service, "service_name") != name {
 			a.invalid(field+".service_name", "native service_name must agree with its qualified identity")
 		}
@@ -366,8 +435,8 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 		}
 	}
 	if !partial {
-		for _, name := range []string{"mon", "mgr", "osd"} {
-			if !core[name] {
+		for _, row := range nativeServiceTypes {
+			if row.core && !core[row.name] {
 				a.invalid("$.spec.ceph.services", "managed data-bearing Ceph requires explicit MON, MGR and OSD services")
 			}
 		}
@@ -387,13 +456,7 @@ func (a *admission) nativeBindings(ceph api.Value, partial bool) {
 			a.invalid(field+".serviceRef", "service binding identities must be unique")
 		}
 		refs[ref] = true
-		found := false
-		for _, service := range ceph.Get("services").Items() {
-			if NativeServiceName(service) == ref {
-				found = true
-			}
-		}
-		if !partial && !found {
+		if _, found := NativeService(a.object, ref); !partial && !found {
 			a.invalid(field+".serviceRef", "service binding must resolve to one declared native service")
 		}
 		paths := []string{}

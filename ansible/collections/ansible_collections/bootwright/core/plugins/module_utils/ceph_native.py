@@ -88,6 +88,15 @@ MANAGER_FAILURES = ("native-command", "native-timeout", "native-output")
 TOLERATED_HEALTH = frozenset(("CHA_ERROR_SENDING_REPORT",))
 HEALTH_CHECK = re.compile(r"[A-Z][A-Z0-9_]{0,63}\Z")
 PENDING_DAEMON = re.compile(r"(mon|mgr)\.[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
+# Each admitted daemon type: (executor, host rule identity|request|service, counted toward readiness, image rule).
+DAEMON_TYPES = {
+    "mon": ("cluster", "identity", True, "ceph"),
+    "mgr": ("cluster", "identity", True, "ceph"),
+    "osd": ("cluster", "request", True, "ceph"),
+    "crash": ("cluster", "request", True, "ceph"),
+    "ceph-exporter": ("cluster", "request", True, "ceph"),
+    "mds": ("cluster", "service", True, "ceph"),
+}
 
 
 def supported_transport(request):
@@ -569,7 +578,7 @@ def validate_services(request, hosts, seen):
     for service in services:
         require(isinstance(service, dict))
         kind = service.get("service_type")
-        require(kind in ("mon", "mgr", "osd"), "service-unqualified")
+        require(kind in ("mon", "mgr", "osd", "mds"), "service-unqualified")
         kinds.add(kind)
         require(not set(service) - {"service_type", "service_id", "placement", "spec"}, "service-unqualified")
         identity = (kind, service.get("service_id", ""))
@@ -582,6 +591,11 @@ def validate_services(request, hosts, seen):
         require(len(set(placement["hosts"])) == len(placement["hosts"]))
         require("count" not in placement or type(placement["count"]) is int and 1 <= placement["count"] <= len(placement["hosts"]), "placement-unqualified")
         require("count_per_host" not in placement or type(placement["count_per_host"]) is int and placement["count_per_host"] == 1, "placement-unqualified")
+        if kind == "mds":
+            identifier = service.get("service_id")
+            require(named(identifier) and not identifier[0].isdigit(), "service-unqualified")
+            require("spec" not in service, "service-unqualified")
+            continue
         if kind != "osd":
             require(not service.get("spec") and not service.get("service_id"), "service-unqualified")
             continue
@@ -647,6 +661,17 @@ def daemon_identity_host(kind, identifier, hosts):
             matches.append(host)
     require(len(matches) == 1, "foreign-service")
     return matches[0]
+
+
+def service_daemon(kind, daemon, services):
+    """The one declared service whose native daemon ID <service_id>.<host short name>.<six lowercase letters> names this daemon on one of its hosts."""
+    hostname, identifier = daemon.get("hostname"), daemon.get("daemon_id")
+    require(isinstance(hostname, str) and named(identifier), "foreign-service")
+    stem = re.escape(hostname.split(".", 1)[0])
+    matches = [s for s in services if s["service_type"] == kind
+               and re.fullmatch(re.escape(s["service_id"]) + r"\." + stem + r"\.[a-z]{6}", identifier) is not None]
+    require(len(matches) == 1 and hostname in matches[0]["placement"]["hosts"], "foreign-service")
+    return matches[0]["service_id"]
 
 
 def read_regular(path, maximum=MAX_INPUT, private=False):
@@ -3356,16 +3381,22 @@ class Worker:
         with self.manager_served():
             running = self.ceph("orch", "ps")
         require(isinstance(running, list), "native-output")
+        served = {}
         for daemon in running:
-            require(isinstance(daemon, dict) and daemon.get("daemon_type") in ("mon", "mgr", "osd", "crash", "ceph-exporter"), "foreign-service")
+            require(isinstance(daemon, dict) and daemon.get("daemon_type") in DAEMON_TYPES, "foreign-service")
+            unused, host_rule, counted, image_rule = DAEMON_TYPES[daemon["daemon_type"]]
             require(daemon.get("hostname") in wanted, "foreign-service")
-            if daemon["daemon_type"] in ("mon", "mgr"):
+            if host_rule == "identity":
                 expected = expected_mons if daemon["daemon_type"] == "mon" else expected_mgrs
                 require(daemon_identity_host(daemon["daemon_type"], daemon.get("daemon_id"), expected) == daemon["hostname"], "foreign-service")
+            elif host_rule == "service":
+                served.setdefault(service_daemon(daemon["daemon_type"], daemon, self.request["services"]), []).append(daemon.get("daemon_id"))
             images = daemon.get("container_image_digests") or []
             require(isinstance(images, list) and all(isinstance(image, str) for image in images), "native-output")
-            require(not images or self.request["image"] in images, "artifact")
-            ready = ready and type(daemon.get("status")) is int and daemon["status"] == 1 and self.request["image"] in images
+            if image_rule == "ceph":
+                require(not images or self.request["image"] in images, "artifact")
+            if counted:
+                ready = ready and type(daemon.get("status")) is int and daemon["status"] == 1 and self.request["image"] in images
         mon_hosts = {d["daemon_id"]: d["hostname"] for d in running if d["daemon_type"] == "mon"}
         require(len(mon_hosts) == sum(daemon["daemon_type"] == "mon" for daemon in running), "native-output")
         ready = ready and set(mon_hosts) == set(mon_names)
@@ -3379,6 +3410,11 @@ class Worker:
         evidence["mgrStandbys"] = list(dict.fromkeys(mapped_standbys))
         ready = ready and len(set([evidence["mgrActive"], *mapped_standbys])) == len(mgr_names)
         require(all(name in expected_mgrs for name in [evidence["mgrActive"], *evidence["mgrStandbys"]] if name), "foreign-service")
+        for service in self.request["services"]:
+            if service["service_type"] == "mds":
+                identifiers = served.get(service["service_id"], [])
+                require(len(set(identifiers)) == len(identifiers), "native-output")
+                ready = ready and len(identifiers) == service["placement"].get("count", len(service["placement"]["hosts"]))
         ready = self.observe_osds(evidence, running, ready)
         ready = self.observe_resource(evidence, ready)
         if self.request["action"] == "cluster":

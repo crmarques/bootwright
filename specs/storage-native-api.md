@@ -2,7 +2,8 @@
 
 This page owns the M2 target for the native service model approved in D133.
 [Storage admission](api/storage.md) and the closed schemas own current accepted
-input. M2b implements the common native path and strict MON/MGR/OSD admission.
+input. M2b implements the common native path and strict MON/MGR/OSD admission;
+[B492](milestones/m2.md#b492) adds the MDS family.
 Release-qualified projection, additional families and protected leaf registries
 remain gated by [B472](milestones/m2.md#b472), [B474](milestones/m2.md#b474)
 and each [service item](storage-coverage.md#feature-matrix).
@@ -142,7 +143,9 @@ Candidate daemon inventory uses bounded direct filesystem, systemd and Podman
 inspection instead of `cephadm ls`, whose inspected logging initialization can
 create shared native files. It holds and re-proves protected directory and
 metadata bindings, checks the exact original FSID, unit and immutable image,
-and projects only existing public daemon fields. Beside the daemon
+and projects only existing public daemon fields. The admitted daemon
+directory types are those of the daemon-type table below: MON, MGR, OSD, MDS,
+crash and ceph-exporter. Beside the daemon
 directories, the cluster directory may hold only cephadm's cache binary, its
 `config`, `crash` and `removed` directories and the root-owned `selinux`
 directory it makes for OSD and ceph-volume containers on an SELinux host. A
@@ -222,6 +225,34 @@ or the native singleton name. Thus `rgw.objects`, `nfs.files`,
 `ingress.files`, `mon`, `mgr` and `grafana` have separate identities.
 Do not impose global uniqueness on the bare `service_id`. Any authored native
 `service_name` must agree with the identity computed by the provider schema.
+
+`service_id` follows one table keyed by service type, with three states.
+Forbidden: `mon` and `mgr`, the native singletons that cephadm refuses with an
+ID. Native-required: `mds`; every row in this state is a type in cephadm's
+`REQUIRES_SERVICE_ID` (container, ingress, iscsi, mds, nfs, nvmeof, rgw, smb,
+[upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L804-L813)),
+and later family slices add their rows. Bootwright-required: `osd`, which
+cephadm admits with or without an ID; Bootwright requires one for a stable
+qualified OSD service identity. Every ID uses `[A-Za-z0-9][A-Za-z0-9_.-]*`, and
+an `mds` ID never starts with a digit, which cephadm's
+[MDS specification](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L2833-L2859)
+refuses. An `mds` service binds exactly one StorageFilesystem of the same
+cluster whose name is its `service_id`, because cephadm sets `mds_join_fs` to
+the service ID
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/cephadmservice.py#L950-L960));
+an MDS service that no filesystem of its cluster binds refuses at admission.
+
+The cluster block applies MON, MGR, OSD and MDS services in its one services
+batch. Core observation admits a daemon only through its type's row in one
+daemon-type table, which names the executor, the host rule, whether the daemon
+counts toward readiness and the image rule. MON and MGR daemons map to their
+hosts through their native identity; OSD, crash and ceph-exporter daemons run
+on any frozen request host; an MDS daemon is admitted only on a host of the one
+declared MDS service its native daemon ID
+`<service_id>.<host short name>.<six lowercase letters>` names
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966)).
+An MDS service is ready when its placement count of daemons runs with the
+frozen image; no active rank is required before its filesystem exists.
 
 `serviceRef` is a scalar exact reference to this registry in the already
 selected cluster. It is not a Bootwright object name, may contain native dots,

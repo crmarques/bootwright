@@ -24,8 +24,8 @@ func projectServices(r *Request, cluster api.Object) error {
 	})
 	for _, svc := range services {
 		t := svc.Get("service_type").Text()
-		if t != "mon" && t != "mgr" && t != "osd" {
-			return failure("lifecycle.unsupported", "a selected service has no core lifecycle", "use only MON, MGR and OSD services until its feature item is delivered")
+		if !slices.Contains([]string{"mon", "mgr", "osd", "mds"}, t) {
+			return failure("lifecycle.unsupported", "a selected service has no core lifecycle", "use only MON, MGR, OSD and MDS services until its feature item is delivered")
 		}
 		for _, field := range svc.Fields() {
 			if !slices.Contains([]string{"service_type", "service_id", "placement", "spec"}, field.Name) {
@@ -65,13 +65,20 @@ func projectServices(r *Request, cluster api.Object) error {
 				return failure("lifecycle.unsupported", "core placement supports one daemon per selected host", "omit count_per_host or set it to 1")
 			}
 		}
-		if t == "osd" {
+		switch t {
+		case "osd":
 			if err := checkDevices(*r, names, cluster, svc); err != nil {
 				return err
 			}
 			projected.Spec = &nativeOSD{DataDevices: nativeDevices{Paths: svc.Get("spec", "data_devices", "paths").Strings()}}
-		} else if svc.Get("spec").Len() != 0 || svc.Get("service_id").Present() {
-			return failure("lifecycle.unsupported", "core MON/MGR service-specific options are not yet qualified", "declare MON/MGR placement without spec or service_id")
+		case "mds":
+			if svc.Get("spec").Len() != 0 || !svc.Get("service_id").Present() {
+				return failure("lifecycle.unsupported", "core MDS services carry only service_id and placement", "declare the MDS service with its service_id and placement and no spec")
+			}
+		default:
+			if svc.Get("spec").Len() != 0 || svc.Get("service_id").Present() {
+				return failure("lifecycle.unsupported", "core MON/MGR service-specific options are not yet qualified", "declare MON/MGR placement without spec or service_id")
+			}
 		}
 		data, err := json.Marshal(projected)
 		if err != nil {

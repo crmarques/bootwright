@@ -8,7 +8,10 @@ separate declarative objects. Bootwright fields use camel case; complete
 native service documents retain native snake case.
 
 Current admission requires nonempty `spec.ceph.services`. Core MON, MGR and
-OSD documents are admitted; retired daemon helpers, topology roles/devices and
+OSD documents are admitted, and so are MDS documents that a StorageFilesystem
+of the same cluster binds by name. StorageFilesystem itself stays refused until
+[B492](../milestones/m2.md#b492)'s filesystem lane, so no MDS service is
+planned before then. Retired daemon helpers, topology roles/devices and
 drivegroup wrappers refuse with their replacement path. Machine bindings,
 hostnames, labels, sites and locations remain under topology. Unsupported
 service families, options with unqualified effects and protected leaves
