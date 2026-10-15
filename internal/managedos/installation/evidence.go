@@ -1,8 +1,17 @@
 package installation
 
-import "github.com/crmarques/bootwright/internal/reconciliation"
+import (
+	"unicode"
+
+	"github.com/crmarques/bootwright/internal/reconciliation"
+)
 
 const maxEvidenceBytes = 64 << 10
+
+const (
+	maxNetworkDifferences     = 16
+	maxNetworkDifferenceBytes = 200
+)
 
 // Evidence is the only result shape the installation adapter may return. It
 // records what a later consumer needs — the marker digest, the guest's host key
@@ -13,11 +22,14 @@ type Evidence struct {
 	HostKey string `json:"hostKey"`
 	// Image is the installer image still published, publicly or beneath the
 	// private subtree. A completed private installation has withdrawn it.
-	Image         bool   `json:"image"`
-	Marker        string `json:"marker"`
-	Media         string `json:"media"`
-	Postcondition bool   `json:"postcondition"`
-	Power         string `json:"power"`
+	Image              bool     `json:"image"`
+	Marker             string   `json:"marker"`
+	Media              string   `json:"media"`
+	Network            bool     `json:"network"`
+	NetworkDifferences []string `json:"networkDifferences"`
+	NetworkReboot      bool     `json:"networkReboot"`
+	Postcondition      bool     `json:"postcondition"`
+	Power              string   `json:"power"`
 	// Private is material only the installing machine may read. A completed
 	// installation has already withdrawn it, so evidence still reporting it is
 	// unfinished work rather than a settled state.
@@ -76,6 +88,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	if !evidence.Reachable {
 		return refusal("lifecycle.state", "the installed machine did not answer as its fleet account", "")
 	}
+	if !evidence.Network || !evidence.NetworkReboot || len(evidence.NetworkDifferences) != 0 {
+		return refusal("lifecycle.state", "the installed machine's network does not match its declaration after a reboot", "")
+	}
 	if evidence.Media != "" {
 		return refusal("lifecycle.state", "the installation left its virtual media inserted", "")
 	}
@@ -106,6 +121,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 func HostKeyEvidence(data []byte) (address, hostKey string, err error) {
 	evidence, err := reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "installation")
 	if err != nil {
+		return "", "", err
+	}
+	if err := boundedNetworkDifferences(evidence); err != nil {
 		return "", "", err
 	}
 	if evidence.Absent || evidence.HostKey == "" || evidence.Address == "" {
@@ -211,8 +229,25 @@ func decodeEvidence(data []byte, digest string) (Evidence, error) {
 	if err != nil {
 		return Evidence{}, err
 	}
+	if err := boundedNetworkDifferences(evidence); err != nil {
+		return Evidence{}, err
+	}
 	if evidence.Request != digest {
 		return Evidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")
 	}
 	return evidence, nil
+}
+
+func boundedNetworkDifferences(evidence Evidence) error {
+	bounded := len(evidence.NetworkDifferences) <= maxNetworkDifferences
+	for _, difference := range evidence.NetworkDifferences {
+		bounded = bounded && len(difference) <= maxNetworkDifferenceBytes
+		for _, r := range difference {
+			bounded = bounded && unicode.IsPrint(r)
+		}
+	}
+	if !bounded {
+		return refusal("lifecycle.state", "the installation evidence reports unbounded network differences", "")
+	}
+	return nil
 }

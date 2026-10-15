@@ -120,14 +120,25 @@ func (b Budget) duration() time.Duration {
 // through its identity channel, and for its fleet account to accept the key
 // that channel reported.
 type Budgets struct {
-	Identity     Budget `json:"identity"`
-	Installer    Budget `json:"installer"`
-	Reachability Budget `json:"reachability"`
+	Identity         Budget `json:"identity"`
+	Installer        Budget `json:"installer"`
+	NetworkApply     Budget `json:"networkApply"`
+	NetworkReconnect Budget `json:"networkReconnect"`
+	Reachability     Budget `json:"reachability"`
+	Reboot           Budget `json:"reboot"`
 }
 
 // total is every pause the budgets allow, back to back.
 func (b Budgets) total() time.Duration {
-	return b.Installer.duration() + b.Identity.duration() + b.Reachability.duration()
+	return b.Installer.duration() + b.Identity.duration() + b.Reachability.duration() +
+		b.NetworkApply.duration() + b.NetworkReconnect.duration() + 2*b.Reboot.duration()
+}
+
+type Network struct {
+	CheckpointSeconds int            `json:"checkpointSeconds"`
+	Document          map[string]any `json:"document"`
+	DocumentPath      string         `json:"documentPath"`
+	MarkerPath        string         `json:"markerPath"`
 }
 
 // Request is the complete frozen intent for one Anaconda installation. It
@@ -157,6 +168,7 @@ type Request struct {
 	InstallerArguments []string             `json:"installerArguments"`
 	Kickstart          string               `json:"kickstart"`
 	MarkerPath         string               `json:"markerPath"`
+	Network            Network              `json:"network"`
 	Placement          machineref.Placement `json:"placement"`
 	// Private is the subtree this block owns for material only the installing
 	// machine may read: the delivered key pair and the installer image. The
@@ -177,7 +189,7 @@ type Request struct {
 // Deadline bounds every run of this request: its budgets back to back, and
 // the margin for everything else an apply does.
 func (r Request) Deadline() time.Duration {
-	return r.Budgets.total() + mediaMargin
+	return r.Budgets.total() + time.Duration(r.Network.CheckpointSeconds)*time.Second + networkRollbackGrace + mediaMargin
 }
 
 // Canonical encodes the request exactly as the plan digest and the adapter both

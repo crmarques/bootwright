@@ -1107,6 +1107,7 @@ func contractInstallationPresence(t *testing.T, execution lifecycle.Execution) m
 		"postcondition": true, "marker": string(marker), "address": request.Address,
 		"hostKey": "ssh-ed25519 contract-host-key", "reachable": true,
 		"power": "On", "image": true, "tree": request.Tree != nil,
+		"network": true, "networkReboot": true, "networkDifferences": []any{},
 	}
 	if request.TreeMedia != nil {
 		presence["treeIdentity"] = request.TreeMedia.SHA256

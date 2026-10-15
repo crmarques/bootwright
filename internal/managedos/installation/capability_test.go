@@ -68,7 +68,7 @@ func completeEvidence(request Request, digest, marker string) json.RawMessage {
 	data, _ := json.Marshal(Evidence{
 		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: marker,
 		Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: request.Tree != nil,
-		TreeIdentity: treeIdentity(request),
+		TreeIdentity: treeIdentity(request), Network: true, NetworkReboot: true, NetworkDifferences: []string{},
 	})
 	return data
 }
@@ -800,4 +800,28 @@ func TestDeliveredKeyMatchesRefusesAnotherType(t *testing.T) {
 		t.Fatalf("a matching key refused: %v", diagnostics.Of(err))
 	}
 	expectRefusal(t, deliveredKeyMatches(request, "ecdsa-sha2-nistp384 AAAAE2VjZHNhExample"), "lifecycle.state")
+}
+
+// An apply converges the declared network after the installation it proves,
+// under the group the adapter reports its progress in, and says it configures
+// and restarts the machine; a removal does neither.
+func TestTheApplyDeclaresNetworkConvergence(t *testing.T) {
+	request, _ := onlyRequest(t, labCatalog())
+	apply := groups(reconciliation.Apply, request)
+	if len(apply) < 2 || apply[len(apply)-2].ID != "verify-installation" || apply[len(apply)-1].ID != "converge-network" {
+		t.Fatalf("apply groups = %+v", apply)
+	}
+	for _, group := range groups(reconciliation.Destroy, request) {
+		if group.ID == "converge-network" {
+			t.Fatalf("destroy groups = %+v", groups(reconciliation.Destroy, request))
+		}
+	}
+	for _, impact := range []string{"configure-network rhel-01", "restart rhel-01"} {
+		if !slices.Contains(impacts(reconciliation.Apply, request), impact) {
+			t.Errorf("apply impacts %q lack %q", impacts(reconciliation.Apply, request), impact)
+		}
+		if slices.Contains(impacts(reconciliation.Destroy, request), impact) {
+			t.Errorf("destroy impacts %q hold %q", impacts(reconciliation.Destroy, request), impact)
+		}
+	}
 }

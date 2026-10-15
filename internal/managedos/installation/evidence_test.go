@@ -2,9 +2,11 @@ package installation
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 func encode(t *testing.T, evidence Evidence) []byte {
@@ -151,6 +153,34 @@ func TestEvidenceIsBoundedAndStrictlyShaped(t *testing.T) {
 	if err := ValidateAbsence(oversized, "digest"); err == nil {
 		t.Fatal("unbounded evidence was accepted")
 	}
+	bounded := make([]string, 16)
+	for index := range bounded {
+		bounded[index] = strings.Repeat("d", 200)
+	}
+	partial := Evidence{Marker: "{}", Power: "On", Request: "digest"}
+	partial.NetworkDifferences = bounded
+	if err := ValidatePartial(encode(t, partial), "digest", "{}"); err != nil {
+		t.Fatalf("sixteen differences of 200 bytes were refused: %v", diagnostics.Of(err))
+	}
+	for name, differences := range map[string][]string{
+		"seventeen differences": append(append([]string{}, bounded...), "d"),
+		"a long difference":     {strings.Repeat("d", 201)},
+		"a control character":   {"mtu \x07"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			unbounded := partial
+			unbounded.NetworkDifferences = differences
+			err := ValidatePartial(encode(t, unbounded), "digest", "{}")
+			expectRefusal(t, err, "lifecycle.state")
+			if message := diagnostics.Of(err)[0].Message; message != "the installation evidence reports unbounded network differences" {
+				t.Fatalf("refusal = %q", message)
+			}
+			unbounded.Address, unbounded.HostKey = "192.0.2.10", "ssh-ed25519 AAAA"
+			if _, _, err := HostKeyEvidence(encode(t, unbounded)); err == nil {
+				t.Fatal("a host key with unbounded network differences was accepted")
+			}
+		})
+	}
 }
 
 // An installation whose machine cannot be logged in to is not finished. Both
@@ -164,6 +194,7 @@ func TestCompletionRequiresTheFleetAccountToAnswer(t *testing.T) {
 	complete := Evidence{
 		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: "{}",
 		Postcondition: true, Power: "On", Reachable: true, Request: "digest",
+		Network: true, NetworkReboot: true, NetworkDifferences: []string{},
 	}
 	if err := ValidatePresence(encode(t, complete), request, "digest", "{}"); err != nil {
 		t.Fatalf("a reachable installation was refused: %v", err)
@@ -196,7 +227,7 @@ func TestPresenceRequiresTheTreeTheOperationFroze(t *testing.T) {
 	complete := Evidence{
 		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: string(marker),
 		Postcondition: true, Power: "On", Reachable: true, Request: "digest", Tree: true, TreeContent: true,
-		TreeIdentity: dvdDigest,
+		TreeIdentity: dvdDigest, Network: true, NetworkReboot: true, NetworkDifferences: []string{},
 	}
 	if err := ValidatePresence(encode(t, complete), request, "digest", string(marker)); err != nil {
 		t.Fatalf("the frozen tree was refused: %v", err)
@@ -221,6 +252,7 @@ func TestPresenceOfAPrivateInstallationRequiresItsImageWithdrawn(t *testing.T) {
 	withdrawn := Evidence{
 		Address: private.Address, HostKey: "ssh-ed25519 AAAAHOST", Marker: "{}",
 		Postcondition: true, Power: "On", Reachable: true, Request: "digest",
+		Network: true, NetworkReboot: true, NetworkDifferences: []string{},
 	}
 	if err := ValidatePresence(encode(t, withdrawn), private, "digest", "{}"); err != nil {
 		t.Fatalf("a private installation that withdrew everything was refused: %v", diagnostics.Of(err))
@@ -260,5 +292,70 @@ func TestSharedTreeAloneIsNoMachineEffect(t *testing.T) {
 	}
 	if err := ValidateWithdrawn(encode(t, evidence), "digest"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A completed installation proves its declared network after a restart, with
+// nothing differing; a network applied but never restarted, or one that
+// drifted, is not finished.
+func TestPresenceRequiresTheNetworkProvedAfterAReboot(t *testing.T) {
+	request := Request{Address: "198.51.100.11"}
+	complete := Evidence{
+		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: "{}",
+		Postcondition: true, Power: "On", Reachable: true, Request: "digest",
+		Network: true, NetworkReboot: true, NetworkDifferences: []string{},
+	}
+	if err := ValidatePresence(encode(t, complete), request, "digest", "{}"); err != nil {
+		t.Fatalf("a converged installation was refused: %v", diagnostics.Of(err))
+	}
+	for name, change := range map[string]func(*Evidence){
+		"network unproved":       func(e *Evidence) { e.Network = false },
+		"never restarted":        func(e *Evidence) { e.NetworkReboot = false },
+		"a declared value drift": func(e *Evidence) { e.NetworkDifferences = []string{"mtu of bond0 is 1500, declared 9000"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			unproved := complete
+			change(&unproved)
+			err := ValidatePresence(encode(t, unproved), request, "digest", "{}")
+			expectRefusal(t, err, "lifecycle.state")
+			if message := diagnostics.Of(err)[0].Message; message != "the installed machine's network does not match its declaration after a reboot" {
+				t.Fatalf("refusal = %q", message)
+			}
+		})
+	}
+}
+
+// A network that failed to converge leaves the frozen marker on a running
+// machine, so the apply is part way through and never had no effect.
+func TestANetworkFailureIsPartialNeverNoEffect(t *testing.T) {
+	request := Request{Address: "198.51.100.11"}
+	failed := encode(t, Evidence{
+		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Marker: "{}", Power: "On",
+		Reachable: true, Request: "digest", NetworkDifferences: []string{},
+	})
+	if effect, _ := installationEffect(reconciliation.Apply, failed, request, "digest", "{}"); effect != reconciliation.EffectPartial {
+		t.Fatalf("a failed network convergence reads as %s, want partial", effect)
+	}
+	if err := ValidateNoEffect(failed, "digest"); err == nil {
+		t.Fatal("a failed network convergence was accepted as no effect")
+	}
+}
+
+// A network that drifted after its restart is partial while the adapter has
+// not claimed its postcondition, and unknown when it claims one it did not
+// prove.
+func TestADriftedNetworkIsPartial(t *testing.T) {
+	request := Request{Address: "198.51.100.11"}
+	drifted := Evidence{
+		Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Marker: "{}", Power: "On",
+		Image: true, Reachable: true, Request: "digest", NetworkReboot: true,
+		NetworkDifferences: []string{"mtu of bond0 is 1500, declared 9000"},
+	}
+	if effect, _ := installationEffect(reconciliation.Apply, encode(t, drifted), request, "digest", "{}"); effect != reconciliation.EffectPartial {
+		t.Fatalf("a drifted network reads as %s, want partial", effect)
+	}
+	drifted.Postcondition = true
+	if effect, _ := installationEffect(reconciliation.Apply, encode(t, drifted), request, "digest", "{}"); effect != reconciliation.EffectUnknown {
+		t.Fatalf("a drifted network claimed complete reads as %s, want unknown", effect)
 	}
 }

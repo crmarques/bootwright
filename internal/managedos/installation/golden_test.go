@@ -111,8 +111,17 @@ func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 		InstallerArguments: []string{"ifname=enp1s0:52:54:00:9a:1b:01"},
 		Kickstart:          "text\n",
 		MarkerPath:         MarkerPath,
-		Placement:          machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
-		Private:            &Publication{Path: "/srv/private/os/metal-01", URL: "https://artifacts.lab.example.test/private/os/metal-01"},
+		Network: Network{
+			CheckpointSeconds: networkCheckpointSeconds,
+			Document: map[string]any{"interfaces": []any{map[string]any{
+				"name": "enp1s0", "type": "ethernet", "state": "up", "mtu": int64(1500),
+				"ipv4": map[string]any{"enabled": true, "dhcp": false, "address": []any{map[string]any{"ip": "198.51.100.41", "prefix-length": int64(24)}}},
+			}}},
+			DocumentPath: NetworkDocumentPath,
+			MarkerPath:   NetworkMarkerPath,
+		},
+		Placement: machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
+		Private:   &Publication{Path: "/srv/private/os/metal-01", URL: "https://artifacts.lab.example.test/private/os/metal-01"},
 		Target: Target{
 			Channel: substrate.ChannelDeliveredKey,
 			Controller: Controller{
@@ -218,30 +227,30 @@ func TestEvidenceMatchesItsGoldens(t *testing.T) {
 			Evidence{
 				Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: string(marker),
 				Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: true, TreeContent: true,
-				TreeIdentity: dvdDigest,
+				TreeIdentity: dvdDigest, Network: true, NetworkReboot: true, NetworkDifferences: []string{},
 			},
 			func(data []byte) error { return ValidatePresence(data, request, digest, string(marker)) },
 		},
 		// absence() once every published path is gone.
 		"removed": {
-			Evidence{Absent: true, Postcondition: true, Request: digest},
+			Evidence{Absent: true, NetworkDifferences: []string{}, Postcondition: true, Request: digest},
 			func(data []byte) error { return ValidateAbsence(data, digest) },
 		},
 		// An observed presence() for an apply stopped before it published
 		// anything: the controller reports the machine off and nothing else
 		// is found, which is positive no effect.
 		"no-effect": {
-			Evidence{Address: request.Address, Power: "Off", Request: digest},
+			Evidence{Address: request.Address, NetworkDifferences: []string{}, Power: "Off", Request: digest},
 			func(data []byte) error { return ValidateNoEffect(data, digest) },
 		},
 		// Shared tree content survives this machine's completed withdrawal.
 		"removal-partial-tree": {
-			Evidence{Address: request.Address, Request: digest, TreeContent: true},
+			Evidence{Address: request.Address, NetworkDifferences: []string{}, Request: digest, TreeContent: true},
 			func(data []byte) error { return ValidateWithdrawn(data, digest) },
 		},
 		// Only the machine's work area is unfinished withdrawal here.
 		"removal-remnants": {
-			Evidence{Address: request.Address, Request: digest, TreeStaging: true, Work: true},
+			Evidence{Address: request.Address, NetworkDifferences: []string{}, Request: digest, TreeStaging: true, Work: true},
 			func(data []byte) error { return ValidateWithdrawalUnfinished(data, digest) },
 		},
 	} {

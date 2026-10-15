@@ -14,8 +14,20 @@
       "attempts": 180,
       "delaySeconds": 20
     },
+    "networkApply": {
+      "attempts": 24,
+      "delaySeconds": 5
+    },
+    "networkReconnect": {
+      "attempts": 12,
+      "delaySeconds": 5
+    },
     "reachability": {
       "attempts": 30,
+      "delaySeconds": 10
+    },
+    "reboot": {
+      "attempts": 60,
       "delaySeconds": 10
     }
   },
@@ -33,6 +45,31 @@
   ],
   "kickstart": "text\n",
   "markerPath": "/etc/bootwright/install-marker.json",
+  "network": {
+    "checkpointSeconds": 300,
+    "document": {
+      "interfaces": [
+        {
+          "ipv4": {
+            "address": [
+              {
+                "ip": "198.51.100.41",
+                "prefix-length": 24
+              }
+            ],
+            "dhcp": false,
+            "enabled": true
+          },
+          "mtu": 1500,
+          "name": "enp1s0",
+          "state": "up",
+          "type": "ethernet"
+        }
+      ]
+    },
+    "documentPath": "/etc/bootwright/network.yml",
+    "markerPath": "/etc/bootwright/network-marker.json"
+  },
   "placement": {
     "connection": "local",
     "machine": "controller"
@@ -70,5 +107,5 @@
   },
   "tlsCertificateRef": "lab-artifacts-tls",
   "user": "bootwright",
-  "version": "os-install-anaconda-v9"
+  "version": "os-install-anaconda-v10"
 }

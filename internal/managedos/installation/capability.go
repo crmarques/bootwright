@@ -187,7 +187,9 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 	if verb != reconciliation.Destroy {
 		impacts = append(impacts,
 			"install-operating-system "+request.Identity.Object,
-			"power-on "+request.Identity.Object)
+			"power-on "+request.Identity.Object,
+			"configure-network "+request.Identity.Object,
+			"restart "+request.Identity.Object)
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)
@@ -202,6 +204,7 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 		{"await-installation", "wait for the installer to write the disk and power the machine off"},
 		{"await-machine", "wait for the installed machine to boot and answer through its own channel"},
 		{"verify-installation", "prove the installed machine answers on the key it reported"},
+		{"converge-network", "apply the declared network, restart the machine and prove its network"},
 	}
 	if verb == reconciliation.Destroy {
 		steps = [][2]string{

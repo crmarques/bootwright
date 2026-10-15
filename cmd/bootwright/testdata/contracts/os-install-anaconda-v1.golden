@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: 6d328b2aa0c57e69b80dfa44444dec36df0e6077942e5860f3a815acb30addc9
+content-digest: 418f688137631970734f5e1649f3db6950312e02c950a7e2b58053757e98836e
 automation-formats: none
 request-schema:
   address string
@@ -14,9 +14,18 @@ request-schema:
   budgets.installer struct installation.Budget
   budgets.installer.attempts int
   budgets.installer.delaySeconds int
+  budgets.networkApply struct installation.Budget
+  budgets.networkApply.attempts int
+  budgets.networkApply.delaySeconds int
+  budgets.networkReconnect struct installation.Budget
+  budgets.networkReconnect.attempts int
+  budgets.networkReconnect.delaySeconds int
   budgets.reachability struct installation.Budget
   budgets.reachability.attempts int
   budgets.reachability.delaySeconds int
+  budgets.reboot struct installation.Budget
+  budgets.reboot.attempts int
+  budgets.reboot.delaySeconds int
   fleetKeyRef string
   hostKeyPath string
   hostname string
@@ -32,6 +41,11 @@ request-schema:
   installerArguments []string
   kickstart string
   markerPath string
+  network struct installation.Network
+  network.checkpointSeconds int
+  network.document opaque
+  network.documentPath string
+  network.markerPath string
   placement struct machine.Placement
   placement.address string omitempty
   placement.connection string
@@ -84,6 +98,9 @@ evidence-schema:
   image bool
   marker string
   media string
+  network bool
+  networkDifferences []string
+  networkReboot bool
   postcondition bool
   power string
   private bool

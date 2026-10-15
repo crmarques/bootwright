@@ -1,8 +1,9 @@
-"""The managed-OS installation's three install waits are budgets its request froze.
+"""The managed-OS installation's six waits are budgets its request froze.
 
-The installer's power-off, the identity answer and the fleet account's
-reachability are what an apply waits for while the machine installs and
-starts. The run's deadline is derived from those budgets, so one of these
+The installer's power-off, the identity answer, the fleet account's
+reachability, the network's apply and reconnection, and each wait of the
+restart that proves it are what an apply waits for while the machine installs,
+starts and converges its network. The run's deadline is derived from those budgets, so one of these
 waits the role chose for itself could outlast that deadline and be killed as a
 hang, and a budget the role stopped reading would leave the deadline covering
 a wait nothing performs. The controller's own power and media polls and an
@@ -42,7 +43,10 @@ COUNTS = ("_retries", "_pause", "_delay", "_attempts")
 BUDGETS = {
     "identity": {"attempts": 11, "delaySeconds": 5},
     "installer": {"attempts": 7, "delaySeconds": 3},
+    "networkApply": {"attempts": 17, "delaySeconds": 4},
+    "networkReconnect": {"attempts": 19, "delaySeconds": 6},
     "reachability": {"attempts": 13, "delaySeconds": 2},
+    "reboot": {"attempts": 23, "delaySeconds": 7},
 }
 
 
@@ -131,3 +135,14 @@ def test_every_entry_point_requires_every_budget():
             assert budget["required"] is True, (entry, name)
             assert {field: (option["type"], option["required"]) for field, option in budget["options"].items()} == {
                 "attempts": ("int", True), "delaySeconds": ("int", True)}, (entry, name)
+
+
+def test_every_entry_point_requires_the_frozen_network():
+    specs = LOADER.load_from_file(str(ROLE / "meta" / "argument_specs.yml"))["argument_specs"]
+    assert set(specs) == {"apply", "observe", "destroy"}
+    for entry, spec in specs.items():
+        network = spec["options"]["bootwright_os_install_request"]["options"]["network"]
+        assert network["type"] == "dict" and network["required"] is True, entry
+        assert {field: (option["type"], option["required"]) for field, option in network["options"].items()} == {
+            "checkpointSeconds": ("int", True), "document": ("dict", True),
+            "documentPath": ("str", True), "markerPath": ("str", True)}, entry

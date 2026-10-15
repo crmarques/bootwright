@@ -3,6 +3,7 @@ package installation
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,7 +18,7 @@ const Implementation = "os-install-anaconda-v1"
 // same kind through another implementation, so a block resolves by both.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v9"
+const requestVersion = "os-install-anaconda-v10"
 
 // installationBudgets are the waits every installation this build plans
 // freezes. The installer takes minutes to write a disk; a physical server adds
@@ -25,9 +26,12 @@ const requestVersion = "os-install-anaconda-v9"
 // once sshd has started, after the identity channel already does. Each is
 // generous and bounded rather than open-ended.
 var installationBudgets = Budgets{
-	Installer:    Budget{Attempts: 180, DelaySeconds: 20},
-	Identity:     Budget{Attempts: 120, DelaySeconds: 30},
-	Reachability: Budget{Attempts: 30, DelaySeconds: 10},
+	Installer:        Budget{Attempts: 180, DelaySeconds: 20},
+	Identity:         Budget{Attempts: 120, DelaySeconds: 30},
+	Reachability:     Budget{Attempts: 30, DelaySeconds: 10},
+	NetworkApply:     Budget{Attempts: 24, DelaySeconds: 5},
+	NetworkReconnect: Budget{Attempts: 12, DelaySeconds: 5},
+	Reboot:           Budget{Attempts: 60, DelaySeconds: 10},
 }
 
 // mediaMargin is what a run's deadline allows beyond its budgets: the bound of
@@ -43,15 +47,15 @@ const mediaMargin = time.Hour + controllerCalls
 
 // controllerCalls are the calls an apply makes to the machine's controller,
 // each allowed its bound: the pre-boot power read, the insert, the power-off,
-// the boot selection and the power-on that boot the installer, the eject and
-// the disk selection and power-on that boot the installed system, and the
-// eject the verification repeats. That is the libvirt arm's sequence. The
-// bare-metal arm powers nothing off and inspects its machine where the libvirt
-// arm reads its power, so its sequence stays within this one while that
-// inspection makes at most eight requests: the system, its interface
-// collection and six interfaces.
+// the boot selection and the power-on that boot the installer, the eject, the
+// disk selection and power-on that boot the installed system, the eject the
+// verification repeats, and the disk selection and power-on of the restart
+// that proves its network. That is the libvirt arm's sequence. The bare-metal
+// arm powers nothing off and inspects its machine where the libvirt arm reads
+// its power, so its sequence stays within this one while that inspection makes
+// at most eight requests: the system, its interface collection and six.
 const controllerCalls = substrate.ControllerPowerReadBound + substrate.ControllerInsertBound +
-	3*substrate.ControllerPowerBound + 2*substrate.ControllerBootSelectionBound + 2*substrate.ControllerEjectBound
+	4*substrate.ControllerPowerBound + 3*substrate.ControllerBootSelectionBound + 2*substrate.ControllerEjectBound
 
 // consumerPrefix is the subtree this capability owns beneath a managed artifact
 // server's served root. The server owns the root; this block owns exactly
@@ -83,6 +87,15 @@ const (
 	HostKeyPath = "/etc/bootwright/host-key.pub"
 )
 
+const (
+	NetworkDocumentPath = "/etc/bootwright/network.yml"
+	NetworkMarkerPath   = "/etc/bootwright/network-marker.json"
+)
+
+const networkCheckpointSeconds = 300
+
+const networkRollbackGrace = 30 * time.Second
+
 // frozenTooling is the tooling closure an earlier build named here, which the
 // controller stage now owns. It stays in the content digest unchanged, so
 // deleting the name moved no frozen plan.
@@ -100,7 +113,7 @@ func ContentDigest() string {
 		"bootwright.managedos.install-anaconda-v1",
 		Implementation, requestVersion, kickstartVersion,
 		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
-		frozenTooling,
+		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), frozenTooling,
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

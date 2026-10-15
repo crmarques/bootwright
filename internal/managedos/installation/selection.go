@@ -231,6 +231,9 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if request.InstallerArguments, err = installerArguments(catalog, machine, request); err != nil {
 		return Request{}, Requirements{}, err
 	}
+	if request.Network, err = networkFor(catalog, machine, install); err != nil {
+		return Request{}, Requirements{}, err
+	}
 	kickstart, err := RenderKickstart(install)
 	if err != nil {
 		return Request{}, Requirements{}, err
