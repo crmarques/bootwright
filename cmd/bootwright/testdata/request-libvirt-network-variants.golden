@@ -1,0 +1,854 @@
+{
+  "libvirtHosts": [
+    {
+      "firewallReadyUnit": "bootwright-lab-lab-libvirt-firewalld-ready.service",
+      "identity": {
+        "block": "substrate-host-lab-libvirt",
+        "context": "lab",
+        "object": "lab-libvirt"
+      },
+      "networks": [
+        {
+          "address": "198.51.100.1/26",
+          "bridge": "virbr-nv",
+          "forward": "nat",
+          "managed": true,
+          "name": "bootwright-lab-nv-lab"
+        },
+        {
+          "bridge": "br-nv",
+          "managed": false,
+          "name": "bootwright-lab-nv-trunk"
+        }
+      ],
+      "packages": [
+        "libvirt-client",
+        "libvirt-daemon",
+        "libvirt-daemon-driver-network",
+        "libvirt-daemon-driver-qemu",
+        "libvirt-daemon-driver-storage-core",
+        "qemu-img",
+        "qemu-kvm",
+        "swtpm",
+        "swtpm-tools"
+      ],
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "poolName": "bootwright-lab-lab-libvirt-vmedia",
+      "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
+      "provisioned": false,
+      "services": [
+        "virtqemud.service",
+        "virtnetworkd.service",
+        "virtstoraged.service"
+      ],
+      "uri": "qemu:///system",
+      "version": "substrate-host-libvirt-v5"
+    }
+  ],
+  "libvirtMachines": [
+    {
+      "controller": {
+        "address": "127.0.0.1",
+        "certificateRef": "lab-bmc-tls",
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "https://127.0.0.1:8000/redfish/v1/Systems/aba29103-d1de-8981-82e0-9cff228257f9",
+        "image": "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e",
+        "port": 8000,
+        "unit": "bootwright-lab-bmc-nv-bond"
+      },
+      "directory": "/var/lib/libvirt/images/bootwright/lab/machines/nv-bond",
+      "disks": [
+        {
+          "name": "root",
+          "path": "/var/lib/libvirt/images/bootwright/lab/machines/nv-bond/root.qcow2",
+          "sizeGiB": 60,
+          "target": "vda"
+        }
+      ],
+      "domain": "bootwright-lab-nv-bond",
+      "egress": {
+        "noProxy": []
+      },
+      "identity": {
+        "block": "machine-nv-bond",
+        "context": "lab",
+        "object": "nv-bond"
+      },
+      "interfaces": [
+        {
+          "bridge": "virbr-nv",
+          "macAddress": "52:54:00:e2:e9:54",
+          "name": "nic0",
+          "network": "bootwright-lab-nv-lab"
+        },
+        {
+          "bridge": "virbr-nv",
+          "macAddress": "52:54:00:97:ce:40",
+          "name": "nic1",
+          "network": "bootwright-lab-nv-lab"
+        }
+      ],
+      "memoryMiB": 8192,
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "poolName": "bootwright-lab-lab-libvirt-vmedia",
+      "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
+      "tpm": true,
+      "uri": "qemu:///system",
+      "uuid": "aba29103-d1de-8981-82e0-9cff228257f9",
+      "vcpu": 4,
+      "version": "machine-libvirt-v6"
+    },
+    {
+      "controller": {
+        "address": "127.0.0.1",
+        "certificateRef": "lab-bmc-tls",
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "https://127.0.0.1:8001/redfish/v1/Systems/99955efc-42ad-8162-a1fb-9cdabe3b8e57",
+        "image": "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e",
+        "port": 8001,
+        "unit": "bootwright-lab-bmc-nv-vlan"
+      },
+      "directory": "/var/lib/libvirt/images/bootwright/lab/machines/nv-vlan",
+      "disks": [
+        {
+          "name": "root",
+          "path": "/var/lib/libvirt/images/bootwright/lab/machines/nv-vlan/root.qcow2",
+          "sizeGiB": 60,
+          "target": "vda"
+        }
+      ],
+      "domain": "bootwright-lab-nv-vlan",
+      "egress": {
+        "noProxy": []
+      },
+      "identity": {
+        "block": "machine-nv-vlan",
+        "context": "lab",
+        "object": "nv-vlan"
+      },
+      "interfaces": [
+        {
+          "bridge": "br-nv",
+          "macAddress": "52:54:00:b3:96:58",
+          "name": "nic0",
+          "network": ""
+        }
+      ],
+      "memoryMiB": 8192,
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "poolName": "bootwright-lab-lab-libvirt-vmedia",
+      "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
+      "tpm": true,
+      "uri": "qemu:///system",
+      "uuid": "99955efc-42ad-8162-a1fb-9cdabe3b8e57",
+      "vcpu": 4,
+      "version": "machine-libvirt-v6"
+    },
+    {
+      "controller": {
+        "address": "127.0.0.1",
+        "certificateRef": "lab-bmc-tls",
+        "credentialsRef": "lab-bmc-credentials",
+        "endpoint": "https://127.0.0.1:8002/redfish/v1/Systems/f84ec133-de31-8b74-9989-e15275b6bca9",
+        "image": "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e",
+        "port": 8002,
+        "unit": "bootwright-lab-bmc-nv-vlan-bond"
+      },
+      "directory": "/var/lib/libvirt/images/bootwright/lab/machines/nv-vlan-bond",
+      "disks": [
+        {
+          "name": "root",
+          "path": "/var/lib/libvirt/images/bootwright/lab/machines/nv-vlan-bond/root.qcow2",
+          "sizeGiB": 60,
+          "target": "vda"
+        }
+      ],
+      "domain": "bootwright-lab-nv-vlan-bond",
+      "egress": {
+        "noProxy": []
+      },
+      "identity": {
+        "block": "machine-nv-vlan-bond",
+        "context": "lab",
+        "object": "nv-vlan-bond"
+      },
+      "interfaces": [
+        {
+          "bridge": "br-nv",
+          "macAddress": "52:54:00:88:5b:99",
+          "name": "nic0",
+          "network": ""
+        },
+        {
+          "bridge": "br-nv",
+          "macAddress": "52:54:00:2c:47:47",
+          "name": "nic1",
+          "network": ""
+        }
+      ],
+      "memoryMiB": 8192,
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "poolName": "bootwright-lab-lab-libvirt-vmedia",
+      "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
+      "tpm": true,
+      "uri": "qemu:///system",
+      "uuid": "f84ec133-de31-8b74-9989-e15275b6bca9",
+      "vcpu": 4,
+      "version": "machine-libvirt-v6"
+    }
+  ],
+  "installations": [
+    {
+      "address": "198.51.100.11",
+      "bootMedia": {
+        "name": "rhel-9.8-x86_64-boot.iso",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "size": 1105199104
+      },
+      "budgets": {
+        "identity": {
+          "attempts": 120,
+          "delaySeconds": 30
+        },
+        "installer": {
+          "attempts": 180,
+          "delaySeconds": 20
+        },
+        "networkApply": {
+          "attempts": 24,
+          "delaySeconds": 5
+        },
+        "networkReconnect": {
+          "attempts": 12,
+          "delaySeconds": 5
+        },
+        "reachability": {
+          "attempts": 30,
+          "delaySeconds": 10
+        },
+        "reboot": {
+          "attempts": 60,
+          "delaySeconds": 10
+        }
+      },
+      "fleetKeyRef": "bootwright-machine-key",
+      "hostKeyPath": "/etc/bootwright/host-key.pub",
+      "hostname": "nv-bond.lab.example.test",
+      "identity": {
+        "block": "os-install-nv-bond",
+        "context": "lab",
+        "object": "nv-bond",
+        "profile": "rhel-9-8"
+      },
+      "image": {
+        "certificateRef": "artifact-server-tls",
+        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/nv-bond/install.iso",
+        "url": "https://192.0.2.1:8443/os/nv-bond/install.iso"
+      },
+      "installerArguments": [
+        "ifname=nic0:52:54:00:e2:e9:54",
+        "ifname=nic1:52:54:00:97:ce:40"
+      ],
+      "kickstart": "# Generated by Bootwright. Do not edit.\ntext\neula --agreed\npoweroff\n\nurl --url=http://192.0.2.1:8080/os/rhel-9-8/tree\nnetwork --bootproto=static --device=bond0 --bondslaves=nic0,nic1 --bondopts=mode=active-backup,miimon=100 --ip=198.51.100.11 --netmask=255.255.255.192 --hostname=nv-bond.lab.example.test --onboot=on --activate --gateway=198.51.100.1 --nameserver=192.0.2.1\n\nlang en_US.UTF-8\nkeyboard --vckeymap=us\ntimezone Etc/UTC --utc --ntpservers=192.0.2.1\n\nrootpw --lock\nuser --name=bootwright --groups=wheel --lock\nsshkey --username=bootwright \"@@BOOTWRIGHT_AUTHORIZED_KEY@@\"\n\nignoredisk --only-use=vda\nclearpart --all --initlabel --drives=vda\nautopart --type=lvm\n\nselinux --enforcing\n\nservices --enabled=chronyd,qemu-guest-agent,sshd\n\n%packages --excludedocs --exclude-weakdeps\n@^minimal-environment\nchrony\nnmstate\nqemu-guest-agent\n%end\n\n%post --erroronfail\nset -eu\ninstall -d -m 0755 /etc/bootwright\ncat \u003e /etc/bootwright/install-marker.json \u003c\u003c'BOOTWRIGHT_MARKER_EOF'\n@@BOOTWRIGHT_MARKER@@\nBOOTWRIGHT_MARKER_EOF\nchmod 0444 /etc/bootwright/install-marker.json\n/usr/bin/ssh-keygen -A\ninstall -m 0444 /etc/ssh/ssh_host_ed25519_key.pub /etc/bootwright/host-key.pub\ntest -s /etc/bootwright/host-key.pub\nif grep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=' /etc/sysconfig/qemu-ga; then\nsed -i '/^FILTER_RPC_ARGS=/s/--allow-rpcs=/--allow-rpcs=guest-file-open,guest-file-close,guest-file-read,/' /etc/sysconfig/qemu-ga\ngrep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=guest-file-open,guest-file-close,guest-file-read,' /etc/sysconfig/qemu-ga\nelif grep -q '^FILTER_RPC_ARGS=.*--block-rpcs=' /etc/sysconfig/qemu-ga; then\nsed -i '/^FILTER_RPC_ARGS=/s/guest-file-open,//;/^FILTER_RPC_ARGS=/s/guest-file-close,//;/^FILTER_RPC_ARGS=/s/guest-file-read,//' /etc/sysconfig/qemu-ga\n! grep -q '^FILTER_RPC_ARGS=.*guest-file-open' /etc/sysconfig/qemu-ga\nfi\ninstall -d -m 0750 /etc/sudoers.d\nprintf '%s\\n' 'bootwright ALL=(ALL) NOPASSWD: ALL' \u003e /etc/sudoers.d/60-bootwright\nchmod 0440 /etc/sudoers.d/60-bootwright\ninstall -d -m 0755 /etc/ssh/sshd_config.d\nprintf '%s\\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' \u003e /etc/ssh/sshd_config.d/60-bootwright.conf\nchmod 0600 /etc/ssh/sshd_config.d/60-bootwright.conf\nrm -f /root/anaconda-ks.cfg /root/original-ks.cfg /run/install/ks.cfg\n%end\n",
+      "markerPath": "/etc/bootwright/install-marker.json",
+      "network": {
+        "checkpointSeconds": 300,
+        "document": {
+          "dns-resolver": {
+            "config": {
+              "search": [
+                "lab.example.test"
+              ],
+              "server": [
+                "192.0.2.1"
+              ]
+            }
+          },
+          "interfaces": [
+            {
+              "controller": "bond0",
+              "ipv4": {
+                "enabled": false
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "name": "nic0",
+              "state": "up",
+              "type": "ethernet"
+            },
+            {
+              "controller": "bond0",
+              "ipv4": {
+                "enabled": false
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "name": "nic1",
+              "state": "up",
+              "type": "ethernet"
+            },
+            {
+              "ipv4": {
+                "address": [
+                  {
+                    "ip": "198.51.100.11",
+                    "prefix-length": 26
+                  }
+                ],
+                "dhcp": false,
+                "enabled": true
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "link-aggregation": {
+                "mode": "active-backup",
+                "options": {
+                  "miimon": 100
+                },
+                "port": [
+                  "nic0",
+                  "nic1"
+                ]
+              },
+              "name": "bond0",
+              "state": "up",
+              "type": "bond"
+            },
+            {
+              "ipv4": {
+                "address": [
+                  {
+                    "ip": "203.0.113.11",
+                    "prefix-length": 24
+                  }
+                ],
+                "dhcp": false,
+                "enabled": true
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "mtu": 1400,
+              "name": "bond0.140",
+              "state": "up",
+              "type": "vlan",
+              "vlan": {
+                "base-iface": "bond0",
+                "id": 140
+              }
+            }
+          ],
+          "routes": {
+            "config": [
+              {
+                "next-hop-interface": "nic0",
+                "state": "absent"
+              },
+              {
+                "next-hop-interface": "nic1",
+                "state": "absent"
+              },
+              {
+                "next-hop-interface": "bond0",
+                "state": "absent"
+              },
+              {
+                "next-hop-interface": "bond0.140",
+                "state": "absent"
+              },
+              {
+                "destination": "0.0.0.0/0",
+                "metric": 100,
+                "next-hop-address": "198.51.100.1",
+                "next-hop-interface": "bond0",
+                "table-id": 254
+              },
+              {
+                "destination": "192.0.2.0/24",
+                "metric": 200,
+                "next-hop-address": "198.51.100.1",
+                "next-hop-interface": "bond0",
+                "table-id": 254
+              }
+            ]
+          }
+        },
+        "documentPath": "/etc/bootwright/network.yml",
+        "markerPath": "/etc/bootwright/network-marker.json"
+      },
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "target": {
+        "channel": "guest-agent",
+        "controller": {
+          "credentialsRef": "lab-bmc-credentials",
+          "endpoint": "https://127.0.0.1:8000/redfish/v1/Systems/aba29103-d1de-8981-82e0-9cff228257f9",
+          "tlsVerify": true,
+          "trustBundleRef": "lab-bmc-tls",
+          "virtualMedia": {
+            "removeCertificate": false,
+            "restoreVerification": false,
+            "trust": "established"
+          }
+        },
+        "domain": "bootwright-lab-nv-bond",
+        "physical": false,
+        "substrate": "libvirt",
+        "uri": "qemu:///system"
+      },
+      "tree": {
+        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
+        "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
+      },
+      "treeMedia": {
+        "name": "rhel-9.8-x86_64-dvd.iso",
+        "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "size": 13107200000
+      },
+      "user": "bootwright",
+      "version": "os-install-anaconda-v10"
+    },
+    {
+      "address": "198.51.100.71",
+      "bootMedia": {
+        "name": "rhel-9.8-x86_64-boot.iso",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "size": 1105199104
+      },
+      "budgets": {
+        "identity": {
+          "attempts": 120,
+          "delaySeconds": 30
+        },
+        "installer": {
+          "attempts": 180,
+          "delaySeconds": 20
+        },
+        "networkApply": {
+          "attempts": 24,
+          "delaySeconds": 5
+        },
+        "networkReconnect": {
+          "attempts": 12,
+          "delaySeconds": 5
+        },
+        "reachability": {
+          "attempts": 30,
+          "delaySeconds": 10
+        },
+        "reboot": {
+          "attempts": 60,
+          "delaySeconds": 10
+        }
+      },
+      "fleetKeyRef": "bootwright-machine-key",
+      "hostKeyPath": "/etc/bootwright/host-key.pub",
+      "hostname": "nv-vlan.lab.example.test",
+      "identity": {
+        "block": "os-install-nv-vlan",
+        "context": "lab",
+        "object": "nv-vlan",
+        "profile": "rhel-9-8"
+      },
+      "image": {
+        "certificateRef": "artifact-server-tls",
+        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/nv-vlan/install.iso",
+        "url": "https://192.0.2.1:8443/os/nv-vlan/install.iso"
+      },
+      "installerArguments": [
+        "ifname=nic0:52:54:00:b3:96:58"
+      ],
+      "kickstart": "# Generated by Bootwright. Do not edit.\ntext\neula --agreed\npoweroff\n\nurl --url=http://192.0.2.1:8080/os/rhel-9-8/tree\nnetwork --bootproto=static --device=nic0 --vlanid=120 --interfacename=nic0.120 --ip=198.51.100.71 --netmask=255.255.255.192 --hostname=nv-vlan.lab.example.test --onboot=on --activate --gateway=198.51.100.65 --nameserver=192.0.2.1\n\nlang en_US.UTF-8\nkeyboard --vckeymap=us\ntimezone Etc/UTC --utc --ntpservers=192.0.2.1\n\nrootpw --lock\nuser --name=bootwright --groups=wheel --lock\nsshkey --username=bootwright \"@@BOOTWRIGHT_AUTHORIZED_KEY@@\"\n\nignoredisk --only-use=vda\nclearpart --all --initlabel --drives=vda\nautopart --type=lvm\n\nselinux --enforcing\n\nservices --enabled=chronyd,qemu-guest-agent,sshd\n\n%packages --excludedocs --exclude-weakdeps\n@^minimal-environment\nchrony\nnmstate\nqemu-guest-agent\n%end\n\n%post --erroronfail\nset -eu\ninstall -d -m 0755 /etc/bootwright\ncat \u003e /etc/bootwright/install-marker.json \u003c\u003c'BOOTWRIGHT_MARKER_EOF'\n@@BOOTWRIGHT_MARKER@@\nBOOTWRIGHT_MARKER_EOF\nchmod 0444 /etc/bootwright/install-marker.json\n/usr/bin/ssh-keygen -A\ninstall -m 0444 /etc/ssh/ssh_host_ed25519_key.pub /etc/bootwright/host-key.pub\ntest -s /etc/bootwright/host-key.pub\nif grep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=' /etc/sysconfig/qemu-ga; then\nsed -i '/^FILTER_RPC_ARGS=/s/--allow-rpcs=/--allow-rpcs=guest-file-open,guest-file-close,guest-file-read,/' /etc/sysconfig/qemu-ga\ngrep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=guest-file-open,guest-file-close,guest-file-read,' /etc/sysconfig/qemu-ga\nelif grep -q '^FILTER_RPC_ARGS=.*--block-rpcs=' /etc/sysconfig/qemu-ga; then\nsed -i '/^FILTER_RPC_ARGS=/s/guest-file-open,//;/^FILTER_RPC_ARGS=/s/guest-file-close,//;/^FILTER_RPC_ARGS=/s/guest-file-read,//' /etc/sysconfig/qemu-ga\n! grep -q '^FILTER_RPC_ARGS=.*guest-file-open' /etc/sysconfig/qemu-ga\nfi\ninstall -d -m 0750 /etc/sudoers.d\nprintf '%s\\n' 'bootwright ALL=(ALL) NOPASSWD: ALL' \u003e /etc/sudoers.d/60-bootwright\nchmod 0440 /etc/sudoers.d/60-bootwright\ninstall -d -m 0755 /etc/ssh/sshd_config.d\nprintf '%s\\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' \u003e /etc/ssh/sshd_config.d/60-bootwright.conf\nchmod 0600 /etc/ssh/sshd_config.d/60-bootwright.conf\nrm -f /root/anaconda-ks.cfg /root/original-ks.cfg /run/install/ks.cfg\n%end\n",
+      "markerPath": "/etc/bootwright/install-marker.json",
+      "network": {
+        "checkpointSeconds": 300,
+        "document": {
+          "dns-resolver": {
+            "config": {
+              "search": [
+                "lab.example.test"
+              ],
+              "server": [
+                "192.0.2.1"
+              ]
+            }
+          },
+          "interfaces": [
+            {
+              "ipv4": {
+                "enabled": false
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "name": "nic0",
+              "state": "up",
+              "type": "ethernet"
+            },
+            {
+              "ipv4": {
+                "address": [
+                  {
+                    "ip": "198.51.100.71",
+                    "prefix-length": 26
+                  }
+                ],
+                "dhcp": false,
+                "enabled": true
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "name": "nic0.120",
+              "state": "up",
+              "type": "vlan",
+              "vlan": {
+                "base-iface": "nic0",
+                "id": 120
+              }
+            },
+            {
+              "ipv4": {
+                "address": [
+                  {
+                    "ip": "203.0.113.12",
+                    "prefix-length": 24
+                  }
+                ],
+                "dhcp": false,
+                "enabled": true
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "mtu": 1400,
+              "name": "nic0.140",
+              "state": "up",
+              "type": "vlan",
+              "vlan": {
+                "base-iface": "nic0",
+                "id": 140
+              }
+            }
+          ],
+          "routes": {
+            "config": [
+              {
+                "next-hop-interface": "nic0",
+                "state": "absent"
+              },
+              {
+                "next-hop-interface": "nic0.120",
+                "state": "absent"
+              },
+              {
+                "next-hop-interface": "nic0.140",
+                "state": "absent"
+              },
+              {
+                "destination": "0.0.0.0/0",
+                "metric": 100,
+                "next-hop-address": "198.51.100.65",
+                "next-hop-interface": "nic0.120",
+                "table-id": 254
+              },
+              {
+                "destination": "192.0.2.0/24",
+                "metric": 200,
+                "next-hop-address": "198.51.100.65",
+                "next-hop-interface": "nic0.120",
+                "table-id": 254
+              }
+            ]
+          }
+        },
+        "documentPath": "/etc/bootwright/network.yml",
+        "markerPath": "/etc/bootwright/network-marker.json"
+      },
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "target": {
+        "channel": "guest-agent",
+        "controller": {
+          "credentialsRef": "lab-bmc-credentials",
+          "endpoint": "https://127.0.0.1:8001/redfish/v1/Systems/99955efc-42ad-8162-a1fb-9cdabe3b8e57",
+          "tlsVerify": true,
+          "trustBundleRef": "lab-bmc-tls",
+          "virtualMedia": {
+            "removeCertificate": false,
+            "restoreVerification": false,
+            "trust": "established"
+          }
+        },
+        "domain": "bootwright-lab-nv-vlan",
+        "physical": false,
+        "substrate": "libvirt",
+        "uri": "qemu:///system"
+      },
+      "tree": {
+        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
+        "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
+      },
+      "treeMedia": {
+        "name": "rhel-9.8-x86_64-dvd.iso",
+        "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "size": 13107200000
+      },
+      "user": "bootwright",
+      "version": "os-install-anaconda-v10"
+    },
+    {
+      "address": "198.51.100.141",
+      "bootMedia": {
+        "name": "rhel-9.8-x86_64-boot.iso",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "size": 1105199104
+      },
+      "budgets": {
+        "identity": {
+          "attempts": 120,
+          "delaySeconds": 30
+        },
+        "installer": {
+          "attempts": 180,
+          "delaySeconds": 20
+        },
+        "networkApply": {
+          "attempts": 24,
+          "delaySeconds": 5
+        },
+        "networkReconnect": {
+          "attempts": 12,
+          "delaySeconds": 5
+        },
+        "reachability": {
+          "attempts": 30,
+          "delaySeconds": 10
+        },
+        "reboot": {
+          "attempts": 60,
+          "delaySeconds": 10
+        }
+      },
+      "fleetKeyRef": "bootwright-machine-key",
+      "hostKeyPath": "/etc/bootwright/host-key.pub",
+      "hostname": "nv-vlan-bond.lab.example.test",
+      "identity": {
+        "block": "os-install-nv-vlan-bond",
+        "context": "lab",
+        "object": "nv-vlan-bond",
+        "profile": "rhel-9-8"
+      },
+      "image": {
+        "certificateRef": "artifact-server-tls",
+        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/nv-vlan-bond/install.iso",
+        "url": "https://192.0.2.1:8443/os/nv-vlan-bond/install.iso"
+      },
+      "installerArguments": [
+        "ifname=nic0:52:54:00:88:5b:99",
+        "ifname=nic1:52:54:00:2c:47:47"
+      ],
+      "kickstart": "# Generated by Bootwright. Do not edit.\ntext\neula --agreed\npoweroff\n\nurl --url=http://192.0.2.1:8080/os/rhel-9-8/tree\nnetwork --bootproto=static --device=bond0 --bondslaves=nic0,nic1 --bondopts=mode=active-backup,miimon=100 --vlanid=130 --interfacename=bond0.130 --ip=198.51.100.141 --netmask=255.255.255.192 --hostname=nv-vlan-bond.lab.example.test --onboot=on --activate --gateway=198.51.100.129 --nameserver=192.0.2.1\n\nlang en_US.UTF-8\nkeyboard --vckeymap=us\ntimezone Etc/UTC --utc --ntpservers=192.0.2.1\n\nrootpw --lock\nuser --name=bootwright --groups=wheel --lock\nsshkey --username=bootwright \"@@BOOTWRIGHT_AUTHORIZED_KEY@@\"\n\nignoredisk --only-use=vda\nclearpart --all --initlabel --drives=vda\nautopart --type=lvm\n\nselinux --enforcing\n\nservices --enabled=chronyd,qemu-guest-agent,sshd\n\n%packages --excludedocs --exclude-weakdeps\n@^minimal-environment\nchrony\nnmstate\nqemu-guest-agent\n%end\n\n%post --erroronfail\nset -eu\ninstall -d -m 0755 /etc/bootwright\ncat \u003e /etc/bootwright/install-marker.json \u003c\u003c'BOOTWRIGHT_MARKER_EOF'\n@@BOOTWRIGHT_MARKER@@\nBOOTWRIGHT_MARKER_EOF\nchmod 0444 /etc/bootwright/install-marker.json\n/usr/bin/ssh-keygen -A\ninstall -m 0444 /etc/ssh/ssh_host_ed25519_key.pub /etc/bootwright/host-key.pub\ntest -s /etc/bootwright/host-key.pub\nif grep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=' /etc/sysconfig/qemu-ga; then\nsed -i '/^FILTER_RPC_ARGS=/s/--allow-rpcs=/--allow-rpcs=guest-file-open,guest-file-close,guest-file-read,/' /etc/sysconfig/qemu-ga\ngrep -q '^FILTER_RPC_ARGS=.*--allow-rpcs=guest-file-open,guest-file-close,guest-file-read,' /etc/sysconfig/qemu-ga\nelif grep -q '^FILTER_RPC_ARGS=.*--block-rpcs=' /etc/sysconfig/qemu-ga; then\nsed -i '/^FILTER_RPC_ARGS=/s/guest-file-open,//;/^FILTER_RPC_ARGS=/s/guest-file-close,//;/^FILTER_RPC_ARGS=/s/guest-file-read,//' /etc/sysconfig/qemu-ga\n! grep -q '^FILTER_RPC_ARGS=.*guest-file-open' /etc/sysconfig/qemu-ga\nfi\ninstall -d -m 0750 /etc/sudoers.d\nprintf '%s\\n' 'bootwright ALL=(ALL) NOPASSWD: ALL' \u003e /etc/sudoers.d/60-bootwright\nchmod 0440 /etc/sudoers.d/60-bootwright\ninstall -d -m 0755 /etc/ssh/sshd_config.d\nprintf '%s\\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' \u003e /etc/ssh/sshd_config.d/60-bootwright.conf\nchmod 0600 /etc/ssh/sshd_config.d/60-bootwright.conf\nrm -f /root/anaconda-ks.cfg /root/original-ks.cfg /run/install/ks.cfg\n%end\n",
+      "markerPath": "/etc/bootwright/install-marker.json",
+      "network": {
+        "checkpointSeconds": 300,
+        "document": {
+          "dns-resolver": {
+            "config": {
+              "search": [
+                "lab.example.test"
+              ],
+              "server": [
+                "192.0.2.1"
+              ]
+            }
+          },
+          "interfaces": [
+            {
+              "controller": "bond0",
+              "ipv4": {
+                "enabled": false
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "name": "nic0",
+              "state": "up",
+              "type": "ethernet"
+            },
+            {
+              "controller": "bond0",
+              "ipv4": {
+                "enabled": false
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "name": "nic1",
+              "state": "up",
+              "type": "ethernet"
+            },
+            {
+              "ipv4": {
+                "enabled": false
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "link-aggregation": {
+                "mode": "active-backup",
+                "options": {
+                  "miimon": 100
+                },
+                "port": [
+                  "nic0",
+                  "nic1"
+                ]
+              },
+              "name": "bond0",
+              "state": "up",
+              "type": "bond"
+            },
+            {
+              "ipv4": {
+                "address": [
+                  {
+                    "ip": "198.51.100.141",
+                    "prefix-length": 26
+                  }
+                ],
+                "dhcp": false,
+                "enabled": true
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "name": "bond0.130",
+              "state": "up",
+              "type": "vlan",
+              "vlan": {
+                "base-iface": "bond0",
+                "id": 130
+              }
+            },
+            {
+              "ipv4": {
+                "address": [
+                  {
+                    "ip": "203.0.113.13",
+                    "prefix-length": 24
+                  }
+                ],
+                "dhcp": false,
+                "enabled": true
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "mtu": 1400,
+              "name": "bond0.140",
+              "state": "up",
+              "type": "vlan",
+              "vlan": {
+                "base-iface": "bond0",
+                "id": 140
+              }
+            }
+          ],
+          "routes": {
+            "config": [
+              {
+                "next-hop-interface": "nic0",
+                "state": "absent"
+              },
+              {
+                "next-hop-interface": "nic1",
+                "state": "absent"
+              },
+              {
+                "next-hop-interface": "bond0",
+                "state": "absent"
+              },
+              {
+                "next-hop-interface": "bond0.130",
+                "state": "absent"
+              },
+              {
+                "next-hop-interface": "bond0.140",
+                "state": "absent"
+              },
+              {
+                "destination": "0.0.0.0/0",
+                "metric": 100,
+                "next-hop-address": "198.51.100.129",
+                "next-hop-interface": "bond0.130",
+                "table-id": 254
+              },
+              {
+                "destination": "192.0.2.0/24",
+                "metric": 200,
+                "next-hop-address": "198.51.100.129",
+                "next-hop-interface": "bond0.130",
+                "table-id": 254
+              }
+            ]
+          }
+        },
+        "documentPath": "/etc/bootwright/network.yml",
+        "markerPath": "/etc/bootwright/network-marker.json"
+      },
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "target": {
+        "channel": "guest-agent",
+        "controller": {
+          "credentialsRef": "lab-bmc-credentials",
+          "endpoint": "https://127.0.0.1:8002/redfish/v1/Systems/f84ec133-de31-8b74-9989-e15275b6bca9",
+          "tlsVerify": true,
+          "trustBundleRef": "lab-bmc-tls",
+          "virtualMedia": {
+            "removeCertificate": false,
+            "restoreVerification": false,
+            "trust": "established"
+          }
+        },
+        "domain": "bootwright-lab-nv-vlan-bond",
+        "physical": false,
+        "substrate": "libvirt",
+        "uri": "qemu:///system"
+      },
+      "tree": {
+        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
+        "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
+      },
+      "treeMedia": {
+        "name": "rhel-9.8-x86_64-dvd.iso",
+        "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "size": 13107200000
+      },
+      "user": "bootwright",
+      "version": "os-install-anaconda-v10"
+    }
+  ]
+}

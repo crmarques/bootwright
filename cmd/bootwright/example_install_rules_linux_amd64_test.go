@@ -11,7 +11,7 @@ import (
 const subscriptionRowReason = "the install profile selects spec.subscription, which carries secret bytes or effects this executable does not prove"
 
 func TestTheReferenceExamplesInstallUnderTheNewRules(t *testing.T) {
-	for _, name := range []string{"lab-rhel", "lab-rhel-3-nodes", "libvirt-3-nodes-ceph", "lab-baremetal"} {
+	for _, name := range []string{"lab-rhel", "lab-rhel-3-nodes", "libvirt-3-nodes-ceph", "libvirt-network-variants", "lab-baremetal"} {
 		t.Run(name, func(t *testing.T) {
 			catalog := compiledEffective(t, name)
 			if len(installation.InstalledMachines(catalog)) == 0 {

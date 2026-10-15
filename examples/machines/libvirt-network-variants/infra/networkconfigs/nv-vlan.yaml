@@ -1,0 +1,73 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: nv-vlan
+
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.64/26
+
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: nic0
+        type: ethernet
+        state: up
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic0.120
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: nic0
+          id: 120
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic0.140
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: nic0
+          id: 140
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: 198.51.100.65
+          next-hop-interface: nic0.120
+          table-id: 254
+          metric: 100
+
+        - destination: 192.0.2.0/24
+          next-hop-address: 198.51.100.65
+          next-hop-interface: nic0.120
+          table-id: 254
+          metric: 200

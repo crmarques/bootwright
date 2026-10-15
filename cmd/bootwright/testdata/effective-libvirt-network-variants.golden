@@ -1,0 +1,601 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: libvirt-network-variants
+spec:
+  domains:
+    base: lab.example.test
+    machines: lab.example.test
+    clusters: lab.example.test
+    containerClusters: lab.example.test
+    storageClusters: lab.example.test
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+  controller:
+    machineRef: controller
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+spec:
+  capabilities:
+    - container-runtime
+    - libvirt
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: controller.lab.example.test
+      - name: ip
+        address: 192.0.2.1
+  access:
+    local: true
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: nv-bond
+spec:
+  capabilities: []
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: rhel
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: nv-bond
+    attachmentRef: nv-lab
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: nv-bond.lab.example.test
+      - name: ip
+        address: 198.51.100.11/26
+        interface: bond0
+      - name: guest
+        address: 203.0.113.11/24
+        interface: bond0.140
+    overrides:
+      interfaces:
+        - mtu: 1400
+          name: bond0.140
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: nv-vlan
+spec:
+  capabilities: []
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: rhel
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: nv-vlan
+    attachmentRef: nv-trunk
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: nv-vlan.lab.example.test
+      - name: ip
+        address: 198.51.100.71/26
+        interface: nic0.120
+      - name: guest
+        address: 203.0.113.12/24
+        interface: nic0.140
+    overrides:
+      interfaces:
+        - mtu: 1400
+          name: nic0.140
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: nv-vlan-bond
+spec:
+  capabilities: []
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: rhel
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: nv-vlan-bond
+    attachmentRef: nv-trunk
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: nv-vlan-bond.lab.example.test
+      - name: ip
+        address: 198.51.100.141/26
+        interface: bond0.130
+      - name: guest
+        address: 203.0.113.13/24
+        interface: bond0.140
+    overrides:
+      interfaces:
+        - mtu: 1400
+          name: bond0.140
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-8-boot
+spec:
+  bootMedia: local-media:rhel-9.8-x86_64-boot.iso
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-8
+spec:
+  os:
+    family: rhel
+    version: "9.8"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-9-8-boot
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http
+  customizations:
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+    ssh:
+      passwordAuthentication: false
+    packages:
+      install:
+        - chrony
+        - qemu-guest-agent
+      excludeDocs: true
+      installWeakDeps: false
+    services:
+      enabled:
+        - chronyd
+        - qemu-guest-agent
+        - sshd
+    security:
+      selinux:
+        mode: enforcing
+  proxy:
+    direct: {}
+  ntp:
+    - serverRef: lab-ntp
+      endpointRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: nv-bond
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.0/26
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - controller: bond0
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        name: nic0
+        state: up
+        type: ethernet
+      - controller: bond0
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        name: nic1
+        state: up
+        type: ethernet
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        link-aggregation:
+          mode: active-backup
+          options:
+            miimon: 100
+          port:
+            - nic0
+            - nic1
+        name: bond0
+        state: up
+        type: bond
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        name: bond0.140
+        state: up
+        type: vlan
+        vlan:
+          base-iface: bond0
+          id: 140
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 198.51.100.1
+          next-hop-interface: bond0
+          table-id: 254
+        - destination: 192.0.2.0/24
+          metric: 200
+          next-hop-address: 198.51.100.1
+          next-hop-interface: bond0
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: nv-vlan
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.64/26
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        name: nic0
+        state: up
+        type: ethernet
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        name: nic0.120
+        state: up
+        type: vlan
+        vlan:
+          base-iface: nic0
+          id: 120
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        name: nic0.140
+        state: up
+        type: vlan
+        vlan:
+          base-iface: nic0
+          id: 140
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 198.51.100.65
+          next-hop-interface: nic0.120
+          table-id: 254
+        - destination: 192.0.2.0/24
+          metric: 200
+          next-hop-address: 198.51.100.65
+          next-hop-interface: nic0.120
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: nv-vlan-bond
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.128/26
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - controller: bond0
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        name: nic0
+        state: up
+        type: ethernet
+      - controller: bond0
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        name: nic1
+        state: up
+        type: ethernet
+      - ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        link-aggregation:
+          mode: active-backup
+          options:
+            miimon: 100
+          port:
+            - nic0
+            - nic1
+        name: bond0
+        state: up
+        type: bond
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        name: bond0.130
+        state: up
+        type: vlan
+        vlan:
+          base-iface: bond0
+          id: 130
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        name: bond0.140
+        state: up
+        type: vlan
+        vlan:
+          base-iface: bond0
+          id: 140
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 198.51.100.129
+          next-hop-interface: bond0.130
+          table-id: 254
+        - destination: 192.0.2.0/24
+          metric: 200
+          next-hop-address: 198.51.100.129
+          next-hop-interface: bond0.130
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+spec:
+  libvirt:
+    machineRef: controller
+    uri: qemu:///system
+    bmcEmulationDefaults:
+      enabled: true
+      protocol: redfish
+      emulator: sushy-tools
+      bindAddress: 127.0.0.1
+      certificateRef: lab-bmc-tls
+      port: 8000
+      auth:
+        credentialsRef: lab-bmc-credentials
+    machineProfiles:
+      - name: rhel
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 60
+        tpm: {}
+  networkAttachments:
+    - name: nv-lab
+      libvirt:
+        bridge: virbr-nv
+        management: managed
+        address: 198.51.100.1/26
+        forward: nat
+    - name: nv-trunk
+      libvirt:
+        bridge: br-nv
+        management: external
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: lab-proxy
+spec:
+  management: managed
+  machineRef: controller
+  implementation: squid
+  bindAddress: 192.0.2.1
+  port: 3128
+  endpoints:
+    - name: ip
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+spec:
+  management: managed
+  machineRef: controller
+  implementation: dnsmasq
+  bindAddress: 192.0.2.1
+  port: 53
+  endpoints:
+    - name: ip
+      addressRef: ip
+  forwarders:
+    - 192.0.2.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: lab-ntp
+spec:
+  management: managed
+  machineRef: controller
+  implementation: chrony
+  bindAddress: 192.0.2.1
+  port: 123
+  endpoints:
+    - name: ip
+      addressRef: ip
+  upstreamSources:
+    - 192.0.2.123
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: lab-artifacts
+spec:
+  management: managed
+  machineRef: controller
+  bindAddress: 192.0.2.1
+  retention: persistent
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+  listeners:
+    - name: https
+      protocol: https
+      port: 8443
+    - name: http
+      protocol: http
+      port: 8080
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: controller.lab.example.test
+      dnsNames:
+        - controller.lab.example.test
+      ipAddresses:
+        - 192.0.2.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bootwright-machine-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: bootwright-machine-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: localhost
+      dnsNames:
+        - localhost
+      ipAddresses:
+        - 127.0.0.1
+      validityDays: 3650

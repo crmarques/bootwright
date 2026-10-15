@@ -1,0 +1,43 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: nv-vlan-bond
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: rhel
+
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+
+  network:
+    configRef: nv-vlan-bond
+    attachmentRef: nv-trunk
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: nv-vlan-bond.lab.example.test
+
+      - name: ip
+        address: 198.51.100.141/26
+        interface: bond0.130
+
+      - name: guest
+        address: 203.0.113.13/24
+        interface: bond0.140
+
+    overrides:
+      interfaces:
+        - name: bond0.140
+          mtu: 1400

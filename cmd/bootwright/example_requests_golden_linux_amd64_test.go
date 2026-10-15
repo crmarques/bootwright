@@ -28,9 +28,9 @@ func compiledEffective(t *testing.T, name string) api.Catalog {
 	return state.Effective()
 }
 
-// TestExampleRequestsKeepTheirBytes pins the requests lab-rhel, lab-sno and
-// lab-baremetal derive with controller Machine controller in context lab,
-// lab-baremetal's private installation included.
+// TestExampleRequestsKeepTheirBytes pins the requests lab-rhel, lab-sno,
+// libvirt-network-variants and lab-baremetal derive with controller Machine
+// controller in context lab, lab-baremetal's private installation included.
 func TestExampleRequestsKeepTheirBytes(t *testing.T) {
 	const controllerMachine, contextName = "controller", "lab"
 	derive := func(t *testing.T, name string, err error) {
@@ -49,6 +49,17 @@ func TestExampleRequestsKeepTheirBytes(t *testing.T) {
 			found.LibvirtMachines, err = libvirt.MachineRequests(catalog, controllerMachine, contextName)
 			derive(t, "the libvirt machine requests", err)
 			found.Installations = plannedInstallations(t, "lab-rhel", controllerMachine, contextName)
+			return found
+		},
+		"libvirt-network-variants": func(t *testing.T) exampleRequests {
+			catalog := compiledEffective(t, "libvirt-network-variants")
+			var found exampleRequests
+			var err error
+			found.LibvirtHosts, err = libvirt.HostRequests(catalog, controllerMachine, contextName)
+			derive(t, "the libvirt host requests", err)
+			found.LibvirtMachines, err = libvirt.MachineRequests(catalog, controllerMachine, contextName)
+			derive(t, "the libvirt machine requests", err)
+			found.Installations = plannedInstallations(t, "libvirt-network-variants", controllerMachine, contextName)
 			return found
 		},
 		"lab-sno": func(t *testing.T) exampleRequests {

@@ -1,0 +1,91 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: nv-bond
+
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.0/26
+
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: nic0
+        type: ethernet
+        state: up
+        controller: bond0
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic1
+        type: ethernet
+        state: up
+        controller: bond0
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: bond0
+        type: bond
+        state: up
+
+        link-aggregation:
+          mode: active-backup
+
+          options:
+            miimon: 100
+
+          port:
+            - nic0
+            - nic1
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+      - name: bond0.140
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: bond0
+          id: 140
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: 198.51.100.1
+          next-hop-interface: bond0
+          table-id: 254
+          metric: 100
+
+        - destination: 192.0.2.0/24
+          next-hop-address: 198.51.100.1
+          next-hop-interface: bond0
+          table-id: 254
+          metric: 200
