@@ -149,3 +149,34 @@ func TestRegistryResolvesOmittedNativePorts(t *testing.T) {
 	more := nfsService(m("port", 12050, "monitoring_port", 9601)).With("service_id", api.StringValue("more"))
 	requireOnly(t, graphIssues(t, []api.Value{first, more}), second+".placement", "api.invariant", qosListener, "place the two services on disjoint hosts")
 }
+
+func TestHAProxyProtocolNFSBindsAllAddresses(t *testing.T) {
+	services := graphServices()
+	services[0] = rgwService(rgwPort(12049))
+	services[2] = nfsService(m("port", 12049, "virtual_ip", "192.0.2.60", "enable_haproxy_protocol", true))
+	requireBound(t, graphIssues(t, services), nfsAt+".spec.port", "node-1", rgwAt+".spec.rgw_frontend_port")
+}
+
+func TestListenerRegistryStaysOnItsCluster(t *testing.T) {
+	services := graphServices()
+	services[0] = rgwService(rgwPort(6800))
+	services[3] = services[3].With("spec", services[3].Get("spec").Without("first_virtual_router_id"))
+	cluster, catalog := withGraph(t, bindingCatalog(), services)
+	issues := Validate(cluster, catalog)
+	if len(issuesAt(issues, rgwAt+".spec.rgw_frontend_port")) != 1 || len(issuesAt(issues, nfsIngressAt+".spec.first_virtual_router_id")) != 1 {
+		t.Fatalf("cluster admitted its conflicts: %#v", issues)
+	}
+	children := 0
+	for _, object := range catalog.Objects() {
+		if object.Identity() == cluster.Identity() {
+			continue
+		}
+		children++
+		if found := issuesUnder(Validate(object, catalog), "$.spec.ceph.services"); len(found) != 0 {
+			t.Fatalf("%s carries its cluster's listener issues: %#v", object.Identity(), found)
+		}
+	}
+	if children == 0 {
+		t.Fatal("catalog has no other objects")
+	}
+}
