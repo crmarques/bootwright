@@ -180,3 +180,30 @@ func TestListenerRegistryStaysOnItsCluster(t *testing.T) {
 		t.Fatal("catalog has no other objects")
 	}
 }
+
+func TestListenerRegistryCoversIngressPortsOnce(t *testing.T) {
+	const messenger = "this listener port is reserved by the Ceph messenger range 6800-7568 of OSD, MGR and MDS daemons on host node-1"
+	monitor := rgwIngressAt + ".spec.monitor_port"
+	services := graphServices()
+	services[1] = withIngressSpec(services[1], "monitor_port", 6800)
+	requireOnly(t, graphIssues(t, services), monitor, "api.invariant", messenger, "set "+monitor+" to a port that no Ceph daemon reserves on the selected hosts")
+	peer := rgwIngressAt + ".spec.haproxy_peer_communication_port"
+	services = graphServices()
+	services[1] = withIngressSpec(services[1], "haproxy_peer_communication_port", 6800)
+	found := issuesAt(graphIssues(t, services), peer)
+	if len(found) != 2 || found[0].Message == found[1].Message || (found[0].Message != messenger && found[1].Message != messenger) {
+		t.Fatalf("issues at %s: %#v", peer, found)
+	}
+	more := plainRGW(rgwPort(2049)).With("service_id", api.StringValue("more"))
+	requireBound(t, graphIssues(t, []api.Value{plainRGW(rgwPort(2049)), more, nfsService(api.MapValue())}), "$.spec.ceph.services[5].spec.port", "node-1", rgwAt+".spec.rgw_frontend_port")
+	services = graphServices()
+	services[1] = withIngressSpec(services[1], "frontend_port", 1967)
+	issues := graphIssues(t, services)
+	requireOnly(t, issues, rgwIngressAt+".spec.frontend_port", "api.invariant", "ingress frontend, monitor and peer ports must differ", "")
+	requireNoIssueAt(t, issues, monitor)
+	services = graphServices()
+	services[3] = withIngressSpec(services[3], "frontend_port", 1024)
+	issues = graphIssues(t, services)
+	requireOnly(t, issues, nfsIngressAt+".spec.frontend_port", "api.invariant", "ingress frontend, monitor and peer ports must differ", "")
+	requireNoIssueAt(t, issues, nfsIngressAt+".spec.haproxy_peer_communication_port")
+}
