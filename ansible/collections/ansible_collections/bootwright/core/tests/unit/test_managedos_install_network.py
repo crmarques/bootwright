@@ -39,6 +39,7 @@ GUEST = "managedos_install_anaconda_guest_command"
 DIGEST = "0123456789abcdef" * 4
 BOOT_ID = "6f1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
 CHECKPOINT = "/org/freedesktop/NetworkManager/Checkpoint/7"
+EARLIER_CHECKPOINT = "/org/freedesktop/NetworkManager/Checkpoint/6"
 SENTINEL = "sentinel-0f6e2a-network-document"
 REPLAN = "plan the installation again with this release"
 MACHINE = "rhel-01"
@@ -258,6 +259,20 @@ def test_document_reaches_the_guest_on_stdin_only():
     assert marker == '{"bootId":"%s","request":"%s"}' % (BOOT_ID, DIGEST)
 
 
+def test_the_declared_network_applies_under_a_checkpoint_it_does_not_commit():
+    scope = dict(defaults(), **failing_scope())
+    argv = [str(word) for word in Templar(loader=LOADER, variables=scope).template(
+        trust_as_template("{{ managedos_install_anaconda_network_start }}"))]
+    shell = argv.index("/usr/bin/sh")
+    assert argv[:shell] == ["/usr/bin/sudo", "-n", "/usr/bin/systemd-run", "--no-block", "--quiet", "--collect",
+                            "--unit=bootwright-network-apply.service", "-p", "Type=exec"]
+    assert argv[shell + 1] == "-c"
+    script = argv[shell + 2]
+    assert script.startswith('/usr/bin/nmstatectl apply --no-commit --timeout="$1" "$2" ')
+    assert "--memory-only" not in script and "/etc/nmstate" not in script
+    assert argv[shell + 3:] == ["bootwright-network", "300", "/etc/bootwright/network.yml", "/run/bootwright"]
+
+
 def install(**fields):
     arguments = {"phase": "completed", "outcome": "changed", "digest": DIGEST,
                  "observation": {"image": True, "tree": True}, "marker": '{"context":"lab"}',
@@ -412,6 +427,7 @@ class Guest:
         self.answers = {name: list(queue) for name, queue in answers.items()}
         self.matched = matched
         self.ran = []
+        self.argv = {}
         self.fired = []
         self.scope = dict(defaults(), **{
             "bootwright_os_install_digest": DIGEST,
@@ -451,6 +467,7 @@ class Guest:
         if task.get(INCLUDE) == "guest.yml":
             command = task["vars"][GUEST].rsplit("managedos_install_anaconda_network_", 1)[-1].strip(" }")
             self.ran.append(command)
+            self.argv.setdefault(command, []).append([str(word) for word in templar.template(task["vars"][GUEST])])
             self.scope["managedos_install_anaconda_guest"] = self.answers[command].pop(0)
         elif FAIL in task:
             self.fired.append(task["name"])
@@ -484,7 +501,7 @@ APPLIED = guest_read(rc="0", checkpoint=CHECKPOINT, listed=[CHECKPOINT])
 @pytest.mark.parametrize("first, after, expected", [
     (guest_read(), ("prepare", "start", "wait", "commit", "mark", "poweroff"),
      ["wait", "read", "prepare", "start", "wait", "read", "commit", "mark", "poweroff", "boot_id", "show"]),
-    (guest_read(rc="", checkpoint=CHECKPOINT, listed=[CHECKPOINT]),
+    (guest_read(rc="", checkpoint=EARLIER_CHECKPOINT, listed=[EARLIER_CHECKPOINT]),
      ("rollback", "prepare", "start", "wait", "commit", "mark", "poweroff"),
      ["wait", "read", "rollback", "prepare", "start", "wait", "read", "commit", "mark", "poweroff", "boot_id", "show"]),
     (guest_read(marker=marker_of(BOOT_ID)), ("poweroff",), ["wait", "read", "poweroff", "boot_id", "show"]),
@@ -500,6 +517,11 @@ def test_a_converging_network_fires_no_refusal(first, after, expected):
     assert guest.fired == [] and guest.ran == expected
     assert guest.scope["managedos_install_anaconda_network_result"] == {
         "network": True, "networkReboot": True, "networkDifferences": [], "changed": expected != ["wait", "read", "show"]}
+    if "rollback" in after:
+        rollback = guest.argv["rollback"][0]
+        assert rollback[rollback.index("bootwright-network") + 1] == EARLIER_CHECKPOINT
+    if "commit" in after:
+        assert guest.argv["commit"] == [["/usr/bin/sudo", "-n", "/usr/bin/nmstatectl", "commit", CHECKPOINT]]
 
 
 @pytest.mark.parametrize("first, matched, network, reboot", [
