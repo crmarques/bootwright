@@ -110,6 +110,7 @@ def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
                "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
                "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_host_route_probe": '"""Fixed fixture."""\n',
                "ceph_host_runtime": '"""Fixed fixture."""\n', "native_specializations": '"""Fixed fixture."""\n',
+               "ceph_native_resources": '"""Fixed fixture."""\n',
                "ceph_native": inspect.getsource(ceph_native) +
                '\ndef dispatch(value):\n    code, output = bounded_command(' + repr(invocation) +
                ', timeout=1)\n    return {"code": code, "session": COMMAND_SESSION}\n'}

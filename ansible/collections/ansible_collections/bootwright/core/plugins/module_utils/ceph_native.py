@@ -3473,7 +3473,7 @@ def dispatch(envelope):
     resource = isinstance(request, dict) and request.get("action") in ceph_native_resources.ACTIONS
     worker = (ceph_native_resources.ResourceWorker if resource else Worker)(request, envelope["host"])
     worker.horizon = worker.clock() + MANAGER_HORIZON
-    require(phase in CORE_PHASES or phase in ceph_native_resources.PHASES)
+    require(phase in CORE_PHASES or (resource and phase in ceph_native_resources.PHASES))
     if phase not in CORE_READ_ONLY_PHASES and phase not in ceph_native_resources.READ_ONLY_PHASES:
         require(supported_transport(worker.request), "unsupported-release")
     if phase in ("bootstrap", "authorize", "tunnel_configure"):

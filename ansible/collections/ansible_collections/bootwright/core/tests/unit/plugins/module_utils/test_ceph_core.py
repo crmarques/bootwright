@@ -1923,3 +1923,37 @@ def test_resource_phases_ship_in_their_own_module():
     assert ceph_native_resources.READ_ONLY_PHASES <= ceph_native_resources.PHASES
     assert not any(hasattr(ceph_native.Worker, name) for name in ("pool", "client", "client_read"))
     assert all(hasattr(ceph_native_resources.ResourceWorker, name) for name in ("pool", "client", "client_read"))
+
+
+def test_dispatch_routes_resource_actions_to_the_resource_worker(monkeypatch, core_request):
+    reached = []
+
+    def recording(kind):
+        class Recording:
+            def __init__(self, request, host):
+                self.request, self.blocking = request, []
+
+            def clock(self):
+                return 0
+
+            def __getattr__(self, name):
+                return lambda *arguments: reached.append((kind, name)) or {}
+        return Recording
+
+    monkeypatch.setattr(ceph_native, "Worker", recording("core"))
+    monkeypatch.setattr(ceph_native_resources, "ResourceWorker", recording("resource"))
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
+
+    def send(action, phase):
+        request = dict(core_request, action=action)
+        return ceph_native.dispatch({"request": request, "host": "node-1", "phase": phase, "private": {}})
+
+    for action, phase in (("pool", "pool"), ("pool", "observe"), ("client", "client"), ("client", "client_read"), ("client", "observe")):
+        send(action, phase)
+    send("cluster", "observe")
+    assert reached == [("resource", "pool"), ("resource", "observe"), ("resource", "client"), ("resource", "client_read"),
+                       ("resource", "observe"), ("core", "observe")]
+    for phase in ("pool", "client", "client_read"):
+        with pytest.raises(ceph_native.Refusal, match="^request$"):
+            send("cluster", phase)
+    assert len(reached) == 6

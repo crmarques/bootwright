@@ -266,6 +266,10 @@ def test_supported_transport_is_the_pinned_release_over_verified_tunnel_only(clu
 @pytest.mark.parametrize("phase", ["claim", "authorize", "bootstrap", "enroll", "services", "pool", "client", "destroy"])
 def test_remote_dispatch_refuses_an_unsupported_release_before_any_effect(cluster_request, phase):
     cluster_request["clusterSSHTransport"] = "native"
+    resources = {"pool": {"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"},
+                 "client": {"name": "reader", "pool": "volumes", "access": "read-only"}}
+    if phase in resources:
+        cluster_request.update({"action": phase, phase: resources[phase]})
     with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
         ceph_native.dispatch({"request": pinned(cluster_request), "host": "node-1", "phase": phase, "private": {}})
 
