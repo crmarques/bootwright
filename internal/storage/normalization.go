@@ -31,9 +31,6 @@ func Normalize(object api.Object, catalog api.Catalog) (api.Object, []api.Issue)
 				spec = spec.With("dataPoolRefs", api.ListValue(value.With("default", api.BoolValue(true))))
 			}
 		}
-		if spec.Has("mds", "serviceSpec", "networks") {
-			spec = spec.WithPath(normalizeCIDRs(spec.Get("mds", "serviceSpec", "networks")), "mds", "serviceSpec", "networks")
-		}
 	case api.StorageObjectGateway:
 		if !spec.Has("frontendPort") || (spec.Get("frontendPort").Type() == api.Integer && numeric(spec.Get("frontendPort")).Sign() == 0) {
 			spec = spec.With("frontendPort", api.IntegerValue("8080"))

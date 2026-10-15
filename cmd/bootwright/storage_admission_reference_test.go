@@ -51,6 +51,40 @@ func TestNativeServiceRefusalsPointAtTheAuthoredService(t *testing.T) {
 	}
 }
 
+func TestMultidcExampleMigratesWithoutLegacyFields(t *testing.T) {
+	sources := exampleSources(t)
+	var out, errOut bytes.Buffer
+	run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
+	var result struct{ Diagnostics []diagnostics.Diagnostic }
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatal(err, out.String())
+	}
+	for _, d := range result.Diagnostics {
+		if d.Object != nil && d.Object.Kind == "StorageFilesystem" || d.Source != nil && filepath.Base(d.Source.Path) == "odf-cephfs.yaml" {
+			t.Fatalf("the reference filesystem is refused: %+v", d)
+		}
+	}
+	filesystems, services := 0, 0
+	for _, file := range sources.Files {
+		text := string(file.Bytes())
+		switch {
+		case filepath.Base(file.Path()) == "odf-cephfs.yaml":
+			filesystems++
+			if _, mds, _ := strings.Cut(text, "\n  mds:\n"); strings.Contains(mds, "placement:") || !strings.Contains(text, "\n  mdsServiceRef: mds.odf-cephfs\n") {
+				t.Fatalf("the reference filesystem keeps a legacy MDS field:\n%s", text)
+			}
+		case filepath.Base(filepath.Dir(file.Path())) == "ceph" && filepath.Base(file.Path()) == "cluster.yaml":
+			services = strings.Count(text, "- service_type: mds\n")
+			if strings.Count(text, "- service_type: mds\n        service_id: odf-cephfs\n") != 1 {
+				t.Fatal("the reference cluster does not declare mds.odf-cephfs")
+			}
+		}
+	}
+	if filesystems != 1 || services != 1 {
+		t.Fatalf("reference filesystems %d, MDS services %d", filesystems, services)
+	}
+}
+
 func TestReferenceStretchSitesMustBeEnvironmentSites(t *testing.T) {
 	const authored = "          - site-b\n\n        tiebreaker:\n          node: node-07\n          site: site-c\n"
 	for _, test := range []struct {

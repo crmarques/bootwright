@@ -244,6 +244,10 @@ cluster whose name is its `service_id`, because cephadm sets `mds_join_fs` to
 the service ID
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/cephadmservice.py#L950-L960));
 an MDS service that no filesystem of its cluster binds refuses at admission.
+`StorageFilesystem.spec.mdsServiceRef` is exactly `mds.<filesystem>`; a
+missing or other target refuses at that field, and admission checks that the
+service places enough daemons for the filesystem's active ranks and standbys
+([CephFS filesystems](api/storage.md#cephfs-filesystems)).
 
 The cluster block applies MON, MGR, OSD and MDS services in its one services
 batch. Core observation admits a daemon only through its type's row in one
@@ -588,7 +592,7 @@ compatibility contract; this design promises no migration of runtime records.
 | Node `devices`/`osd`, `osdDrivegroups` | Native OSD ServiceSpec/DriveGroupSpec, retaining proved data/DB/WAL allocations and encryption intent. |
 | `monitoring` helpers | Explicit native monitoring services; selected retention, networks and ports stay in native fields, passwords use bindings. Both old `enabled: true` and old omission that selected the native stack expand into visible qualified service entries; old `enabled: false` creates none. |
 | `mgmtGateway` and nested OAuth/ingress | Native management/OAuth/ingress services plus required endpoint/resource and Secret bindings. Ingress is optional where the provider permits direct service access. |
-| Filesystem MDS placement/service helpers | Filesystem rank/standby policy stays resource-owned; one native MDS service carries daemon placement and options. |
+| Filesystem MDS placement/service helpers | Retired: `spec.mds.placement` and `spec.mds.serviceSpec` refuse naming the StorageCluster's `mds` service entry; rank and standby policy stay on the filesystem, bound by `spec.mdsServiceRef`. |
 | RGW service/ingress helpers | Logical object gateway/resource ownership remains; native RGW/ingress services own daemon config and placement. |
 | NFS service plus `exports[]` | Native NFS/ingress services and individually named StorageNFSExport resources with native JSON projection. |
 | Global bare service-ID uniqueness | Uniqueness by qualified native service name and checked reference type. |

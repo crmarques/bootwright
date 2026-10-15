@@ -296,32 +296,6 @@ func (a *admission) poolRole(name, field, role string, cluster api.Object) {
 		a.invalid(field, "referenced pool does not have the consumer's required role")
 	}
 }
-func (a *admission) filesystem(cluster api.Object) {
-	spec := a.object.Spec()
-	a.poolRole(textOf(spec, "metadataPoolRef"), "$.spec.metadataPoolRef", "cephfs-metadata", cluster)
-	names, defaults := []string{}, 0
-	for i, value := range spec.Get("dataPoolRefs").Items() {
-		name := poolRefName(value)
-		names = append(names, name)
-		a.poolRole(name, indexed("$.spec.dataPoolRefs", i), "cephfs-data", cluster)
-		if value.Get("default").Bool() {
-			defaults++
-		}
-	}
-	a.uniqueValues(names, "$.spec.dataPoolRefs", "data pool references must be unique")
-	if len(names) > 1 && defaults != 1 {
-		a.invalid("$.spec.dataPoolRefs", "multiple data pools require exactly one explicit default")
-	}
-	a.placement(cluster, spec.Get("mds", "placement"), "$.spec.mds.placement", "mds", false)
-	for i, group := range spec.Get("subvolumeGroups").Items() {
-		if name := textOf(group, "poolLayoutRef"); name != "" {
-			a.poolRole(name, indexed("$.spec.subvolumeGroups", i)+".poolLayoutRef", "cephfs-data", cluster)
-			if !slices.Contains(names, name) {
-				a.invalid(indexed("$.spec.subvolumeGroups", i)+".poolLayoutRef", "group layout must use an attached filesystem data pool")
-			}
-		}
-	}
-}
 func (a *admission) export(cluster api.Object, managed bool) {
 	spec := a.object.Spec()
 	if managed {

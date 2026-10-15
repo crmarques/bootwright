@@ -108,7 +108,7 @@ func expandedExampleSources(t *testing.T) desiredstate.Sources {
 // admission refuses until their later slices (storage family refusals): the
 // admissible projection cannot carry one, and no other kind may be missing
 // from it.
-var refusedKinds = []api.Kind{api.StorageExport, api.StorageFilesystem, api.StorageObjectGateway, api.StorageNFSExport}
+var refusedKinds = []api.Kind{api.StorageExport, api.StorageObjectGateway, api.StorageNFSExport}
 
 const (
 	fusionAddOn           = "fusion-data-foundation"
@@ -277,7 +277,6 @@ func referenceRefusals() []diagnosticTuple {
 		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-02"),
 		family("StorageExport", "ceph-multidc-01-odf-ocp-multidc-01"),
 		family("StorageExport", "ceph-multidc-01-odf-ocp-multidc-02"),
-		family("StorageFilesystem", "odf-cephfs"),
 		family("StorageObjectGateway", "odf-rgw-all")}
 }
 
@@ -368,7 +367,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 92, ObjectsDecoded: 114}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 92, ObjectsDecoded: 117}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	if len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.deferred" || report.Diagnostics[0].Object == nil || report.Diagnostics[0].Object.Name != "acceptance-playbook" {

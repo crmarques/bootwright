@@ -184,12 +184,12 @@ func TestEffectiveCapacityAndFilesystemLayoutsCannotBypassOwnership(t *testing.T
 	requireIssue(t, Validate(pool, catalog), "$.spec.replicated.size")
 	filesystem := find(t, catalog, api.StorageFilesystem, "files")
 	filesystem = filesystem.WithSpec(filesystem.Spec().With("subvolumeGroups", api.ListValue(m("name", "application", "poolLayoutRef", "block"))))
-	requireIssue(t, validateFutureFamily(filesystem, catalog), "$.spec.subvolumeGroups[0].poolLayoutRef")
+	requireIssue(t, Validate(filesystem, catalog), "$.spec.subvolumeGroups[0].poolLayoutRef")
 	other := object(api.StoragePool, "unattached", m("clusterRef", "storage", "role", "cephfs-data"))
 	filesystem = filesystem.WithSpec(filesystem.Spec().With("subvolumeGroups", api.ListValue(m("name", "application", "poolLayoutRef", "unattached"))))
-	requireIssue(t, validateFutureFamily(filesystem, replace(catalog, other)), "$.spec.subvolumeGroups[0].poolLayoutRef")
-	cluster := find(t, catalog, api.StorageCluster, "storage")
-	a := admission{object: filesystem.WithSpec(filesystem.Spec().Without("mds")), catalog: catalog}
-	a.filesystem(cluster)
-	requireIssue(t, a.issues, "$.spec.mds.placement")
+	requireIssue(t, Validate(filesystem, replace(catalog, other)), "$.spec.subvolumeGroups[0].poolLayoutRef")
+	unbound := filesystem.WithSpec(filesystem.Spec().Without("mdsServiceRef"))
+	if found := issuesAt(Validate(unbound, replace(catalog, unbound)), "$.spec.mdsServiceRef"); len(found) != 1 || found[0].Code != "api.required" {
+		t.Fatalf("missing mdsServiceRef: %#v", found)
+	}
 }

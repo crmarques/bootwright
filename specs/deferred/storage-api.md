@@ -184,32 +184,36 @@ distributions keep `k+m` within OSD-host capacity.
 
 ## StorageFilesystem
 
-This kind owns one CephFS filesystem, its composition of pool references, and
-its MDS service policy. The referenced `StoragePool` objects own the pools.
+This kind is current: [CephFS filesystems](../api/storage.md#cephfs-filesystems)
+owns its admission. It owns one CephFS filesystem, its composition of pool
+references, its rank and standby policy and the binding to its native MDS
+service. The referenced `StoragePool` objects own the pools.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `spec.clusterRef` | string | yes | — | Managed `StorageCluster`. |
+| `spec.mdsServiceRef` | string | yes | — | Exactly `mds.<filesystem>`, a native service of the cluster. |
 | `spec.metadataPoolRef` | string | yes | — | Same-cluster `cephfs-metadata` pool. |
 | `spec.dataPoolRefs` | array | yes | — | Non-empty ordered unique same-cluster `cephfs-data` pools. |
-| `spec.mds` | object | no | — | MDS service policy. |
+| `spec.mds` | object | no | — | Rank and standby policy. |
 | `spec.subvolumeGroups` | array | no | `[]` | Set keyed by group name. |
 
 Each data-pool entry accepts either the scalar pool name or
 `{name: <pool>, default: <boolean>}`. A single entry normalizes to
 `default: true`; multiple entries require exactly one explicit default.
 
-`mds` contains `activeCount`, `standbyReplay`, `standbyCountWanted`,
-`placement`, and optional `serviceSpec`. Counts are non-negative. In an
-authored block, consumers use effective `activeCount: 1` and
-`standbyReplay: false` when those fields are absent, but normalization does not
-write either value. An omitted `mds` block remains absent.
-`serviceSpec` contains only `unmanaged`, `extraContainerArgs`,
-`extraEntrypointArgs`, and `networks`.
+`mds` contains only `activeCount` (1 to 256), `standbyReplay` and
+`standbyCountWanted` (0 to 2147483647). In an authored block, consumers use
+effective `activeCount: 1`, `standbyCountWanted: 0` and `standbyReplay: false`
+when those fields are absent, but normalization does not write them. An
+omitted `mds` block remains absent. `placement` and `serviceSpec` are retired:
+the StorageCluster's `mds` service entry owns placement and native service
+fields.
 
 Each subvolume group contains `name`, optional `poolLayoutRef`, octal string `mode`,
-presence-sensitive non-negative `uid` and `gid`, and non-negative
-`sizeBytes`. Names are unique, and a layout pool belongs to the same cluster.
+presence-sensitive `uid` and `gid` from 0 to 2147483647, and positive
+`sizeBytes`; an omitted `sizeBytes` sets no quota (D160, OD25). Names are
+unique, and a layout pool belongs to the same cluster.
 
 ## StorageObjectGateway
 

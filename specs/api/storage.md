@@ -9,9 +9,8 @@ native service documents retain native snake case.
 
 Current admission requires nonempty `spec.ceph.services`. Core MON, MGR and
 OSD documents are admitted, and so are MDS documents that a StorageFilesystem
-of the same cluster binds by name. StorageFilesystem itself stays refused until
-[B492](../milestones/m2.md#b492)'s filesystem lane, so no MDS service is
-planned before then. RGW, ingress and NFS documents are admitted under their
+of the same cluster binds by name. StorageFilesystem is admitted under
+[CephFS filesystems](#cephfs-filesystems). RGW, ingress and NFS documents are admitted under their
 [native records](../storage-native-api.md#rgw-ingress-and-nfs-records), and
 planning refuses them `lifecycle.unsupported` until B477 and B478's execution
 lanes. `spec.ceph.mgrModules` admits `cephadm` and `rbd_support`; `nfs`
@@ -30,8 +29,8 @@ implicit administrator capability is granted. `StoragePlacementPolicy` and
 [pool protection and erasure coding](#pool-protection-and-erasure-coding), and
 `StorageRBDImage` under [RBD images](#rbd-images).
 Other P2 resource additions remain target contracts, not admitted kinds.
-Future filesystem, object, NFS and export feature families are refused by
-current pure admission.
+Future object, NFS and export feature families are refused by current pure
+admission.
 Their historical field tables in [field detail](../deferred/storage-api.md)
 are retained only for the later owning slices.
 
@@ -140,7 +139,7 @@ provider sizing and measured resource acceptance remain separate.
 | `StorageClient` | One pool-scoped RBD CephX principal with required same-cluster `poolRef` and explicit access. |
 | `StoragePool` | One pool. `spec.type` is `replicated` (default) or `erasure` and selects protection; the referenced cluster selects the storage engine. |
 | `StorageRBDImage` | One RBD image: same-cluster replicated rbd `poolRef`, exact `sizeBytes`, optional rbd `dataPoolRef` and a closed feature set; image format 2. |
-| `StorageFilesystem` | One CephFS filesystem: a same-cluster `cephfs-metadata` pool, one or more ordered `cephfs-data` pools, and its MDS policy. |
+| `StorageFilesystem` | One CephFS filesystem: a same-cluster `cephfs-metadata` pool, one or more ordered `cephfs-data` pools (the default replicated), its rank and standby policy, subvolume groups, and the native MDS service it binds through `mdsServiceRef`. |
 | `StorageObjectGateway` | One RGW service and its optional public endpoint; ingresses belong to that endpoint and select no other backend. |
 | `StorageNFSExport` | One NFS-Ganesha service and zero or more exports; there is no separate `StorageNFSService` kind. |
 | `StorageExport` | One downstream storage surface: the `dataFoundation` arm for a managed cluster, `externalDetails` for an external one. |
@@ -157,6 +156,7 @@ on the already selected Machine.
 | `placementPolicyRef` | `StoragePlacementPolicy` |
 | pool refs | `StoragePool` |
 | `filesystemRef` | `StorageFilesystem` |
+| `mdsServiceRef` | native service registry, exactly `mds.<filesystem>` |
 | `objectGatewayRef` | `StorageObjectGateway` |
 | `machineRef` | `Machine` |
 | `tls.secretRef` | `Secret` |
@@ -286,6 +286,48 @@ again and propagates every plan refusal of the image pool and data pool. A
 StorageClient on a pool whose StorageRBDImage declares any `dataPoolRef`
 refuses at plan, naming the lexically first such image, until
 [B489](../milestones/m2.md#b489) derives the data-pool caps.
+
+## CephFS filesystems
+
+`StorageFilesystem` is admitted for a managed cluster. Its schema requires
+`clusterRef`, `mdsServiceRef`, `metadataPoolRef` and `dataPoolRefs`;
+`mds.activeCount` is an integer from 1 to 256 (default 1),
+`mds.standbyCountWanted` from 0 to 2147483647 (default 0) and
+`mds.standbyReplay` a boolean (default false). A subvolume group's `uid` and
+`gid` are integers from 0 to 2147483647 and its `sizeBytes` from 1 to
+9223372036854775807; an omitted `sizeBytes` sets no quota. `mds.placement`
+and `mds.serviceSpec` are retired: each refuses `api.field` naming the
+StorageCluster's `spec.ceph.services` entry with `service_type: mds` and
+`service_id` equal to the filesystem name as its replacement, also under
+`spec.defaults.StorageFilesystem`. Admission refuses with `api.invariant`,
+before any effect:
+
+- `metadata.name` longer than 47 characters, which would not fit its block
+  identity `ceph-filesystem-<name>` of at most 63 characters;
+- `metadata.name` starting with a digit, since its MDS `service_id` cannot;
+- `mdsServiceRef` other than `mds.<filesystem>`, or a cluster that declares
+  no native service `mds.<filesystem>`;
+- a `metadataPoolRef` of another cluster or without role `cephfs-metadata`,
+  or a data pool of another cluster or without role `cephfs-data`; repeated
+  data pools; several data pools without exactly one `default: true` (a sole
+  data pool is the default);
+- an erasure-coded default data pool, which `ceph fs new` refuses unless
+  forced; erasure-coded `cephfs-data` pools attach as additional data pools;
+- an MDS service that places fewer daemons than `activeCount +
+  max(standbyCountWanted, standbyReplay ? activeCount : 0)`, where the
+  placed daemons are its resolved hosts times `count_per_host`, capped by
+  `count`;
+- a metadata or data pool that another StorageFilesystem of the same cluster
+  already uses; a cluster admits several filesystems, each with its own pools
+  and its own MDS service;
+- a subvolume group named `_nogroup`, `_index`, `_deleting` or `_legacy`, or
+  outside `^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`, also in a defaults fragment;
+- a group `poolLayoutRef` that is not an attached data pool.
+
+A cephfs-metadata pool must be replicated under
+[pool protection](#pool-protection-and-erasure-coding). No capability of this
+build realizes StorageFilesystem yet, so apply refuses an operation that
+declares one before registration.
 
 ## Complete-graph invariants
 

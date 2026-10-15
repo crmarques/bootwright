@@ -288,6 +288,18 @@ spec:
             - node-04.ceph-multidc-01.clusters.example.com
             - node-05.ceph-multidc-01.clusters.example.com
 
+      - service_type: mds
+        service_id: odf-cephfs
+
+        placement:
+          hosts:
+            - node-01.ceph-multidc-01.clusters.example.com
+            - node-02.ceph-multidc-01.clusters.example.com
+            - node-03.ceph-multidc-01.clusters.example.com
+            - node-04.ceph-multidc-01.clusters.example.com
+            - node-05.ceph-multidc-01.clusters.example.com
+            - node-06.ceph-multidc-01.clusters.example.com
+
     serviceBindings:
       - serviceRef: grafana
 

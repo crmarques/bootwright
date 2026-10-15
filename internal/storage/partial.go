@@ -69,6 +69,8 @@ func (a *admission) intrinsic() {
 
 	case api.StorageRBDImage:
 		a.rbdImageIntrinsic()
+	case api.StorageFilesystem:
+		a.subvolumeGroups()
 	case api.StorageObjectGateway:
 		if textOf(spec, "endpoint", "scheme") == "http" {
 			a.forbid(spec.Get("endpoint"), "$.spec.endpoint", "tls")

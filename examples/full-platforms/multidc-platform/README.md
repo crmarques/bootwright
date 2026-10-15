@@ -65,9 +65,11 @@ installation also remains refused by the
 Storage children select `clusterRef` explicitly and reference their placement
 policies and pools. The cluster's native MON/MGR/OSD services use registered
 hostnames; the witness belongs to MON placement without OSD devices. The stretch
-policy expresses four replicas with a minimum of two. Native observability,
-Grafana Secret binding, CephFS, RGW and consumer exports remain future intent;
-see [storage API](../../../specs/api/storage.md) and
+policy expresses four replicas with a minimum of two. The
+[filesystem](clusters/ceph/filesystems/odf-cephfs.yaml) declares its rank and
+standby policy and pools, bound by `mdsServiceRef` to its native MDS service.
+Native observability, Grafana Secret binding, RGW and consumer exports remain
+future intent; see [storage API](../../../specs/api/storage.md) and
 [native service qualification](../../../specs/storage-native-api.md).
 
 Add-on definitions declare typed inputs, readiness and effects; profiles compose
@@ -101,7 +103,7 @@ The expected result is failure with explicit diagnostics for:
   qualified pool-default pair.
 - Prometheus, Grafana and Alertmanager native services and the Grafana Secret
   binding path.
-- Four `StorageExport` objects, `StorageFilesystem` and `StorageObjectGateway`.
+- Four `StorageExport` objects and `StorageObjectGateway`.
 
 The exact diagnostic set is pinned by `TestActualCLIRefusesFutureReferenceFeatures`
 in [admission acceptance tests](../../../cmd/bootwright/admission_acceptance_test.go).

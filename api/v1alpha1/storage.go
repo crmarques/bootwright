@@ -98,7 +98,9 @@ func storagePoolSchema() *Shape {
 
 func storageFilesystemSchema() *Shape {
 	dataPool := &Shape{Alternatives: []*Shape{ref(StoragePool), record(required("name", ref(StoragePool)), field("default", boolean()))}}
-	return record(required("clusterRef", ref(StorageCluster)), required("metadataPoolRef", ref(StoragePool)), required("dataPoolRefs", nonemptyArray(array(dataPool))), field("mds", record(field("activeCount", integer("0", "")), field("standbyReplay", boolean()), field("standbyCountWanted", integer("0", "")), field("placement", storagePlacement()), field("serviceSpec", storageServiceSpec(false)))), field("subvolumeGroups", named(record(required("name", nonempty()), field("poolLayoutRef", ref(StoragePool)), field("mode", nonempty()), field("uid", integer("0", "")), field("gid", integer("0", "")), field("sizeBytes", integer("0", ""))))))
+	mds := record(field("activeCount", integer("1", "256")), field("standbyReplay", boolean()), field("standbyCountWanted", integer("0", "2147483647")))
+	group := record(required("name", nonempty()), field("poolLayoutRef", ref(StoragePool)), field("mode", nonempty()), field("uid", integer("0", "2147483647")), field("gid", integer("0", "2147483647")), field("sizeBytes", integer("1", "9223372036854775807")))
+	return record(required("clusterRef", ref(StorageCluster)), required("mdsServiceRef", nonempty()), required("metadataPoolRef", ref(StoragePool)), required("dataPoolRefs", nonemptyArray(array(dataPool))), field("mds", mds), field("subvolumeGroups", named(group)))
 }
 
 func storageObjectGatewaySchema() *Shape {

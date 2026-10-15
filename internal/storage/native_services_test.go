@@ -11,7 +11,13 @@ import (
 func withMDSService(t *testing.T, catalog api.Catalog, service api.Value) (api.Object, api.Catalog) {
 	t.Helper()
 	cluster := find(t, catalog, api.StorageCluster, "storage")
-	services := append(cluster.Spec().Get("ceph", "services").Items(), service)
+	services := []api.Value{}
+	for _, existing := range cluster.Spec().Get("ceph", "services").Items() {
+		if textOf(existing, "service_type") != "mds" {
+			services = append(services, existing)
+		}
+	}
+	services = append(services, service)
 	changed := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "ceph", "services"))
 	return changed, replace(catalog, changed)
 }

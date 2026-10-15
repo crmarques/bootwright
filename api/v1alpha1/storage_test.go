@@ -156,3 +156,36 @@ func checkStorageShape(t *testing.T, shape *Shape) {
 		checkStorageShape(t, alternative)
 	}
 }
+
+func TestFilesystemSchemaBindsItsMDSServiceAndRetiresDaemonHelpers(t *testing.T) {
+	schema := Schema(StorageFilesystem)
+	names := []string{}
+	for _, field := range schema.Fields {
+		names = append(names, field.Name)
+	}
+	if !slices.Equal(names, []string{"clusterRef", "mdsServiceRef", "metadataPoolRef", "dataPoolRefs", "mds", "subvolumeGroups"}) {
+		t.Fatalf("StorageFilesystem fields = %v", names)
+	}
+	if ref, _ := schema.Field("mdsServiceRef"); !ref.Required || ref.Shape.Type != String {
+		t.Fatal("mdsServiceRef must be a required string")
+	}
+	mds, _ := schema.Field("mds")
+	bounds := map[string][2]string{}
+	for _, field := range mds.Shape.Fields {
+		bounds[field.Name] = [2]string{field.Shape.Minimum, field.Shape.Maximum}
+	}
+	if len(bounds) != 3 || bounds["activeCount"] != [2]string{"1", "256"} || bounds["standbyCountWanted"] != [2]string{"0", "2147483647"} {
+		t.Fatalf("mds fields = %v", bounds)
+	}
+	for _, retired := range []string{"placement", "serviceSpec"} {
+		if _, ok := mds.Shape.Field(retired); ok {
+			t.Fatalf("mds.%s must be retired", retired)
+		}
+	}
+	groups, _ := schema.Field("subvolumeGroups")
+	size, _ := groups.Shape.Element.Field("sizeBytes")
+	uid, _ := groups.Shape.Element.Field("uid")
+	if size.Shape.Minimum != "1" || size.Shape.Maximum != "9223372036854775807" || uid.Shape.Minimum != "0" || uid.Shape.Maximum != "2147483647" {
+		t.Fatal("group sizeBytes must be positive and uid an int32")
+	}
+}

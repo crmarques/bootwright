@@ -5,6 +5,7 @@ metadata:
 
 spec:
   clusterRef: ceph-multidc-01
+  mdsServiceRef: mds.odf-cephfs
   metadataPoolRef: odf-cephfs-metadata
 
   dataPoolRefs:
@@ -14,14 +15,5 @@ spec:
   mds:
     activeCount: 2
     standbyReplay: false
-
-    placement:
-      hosts:
-        - node-01
-        - node-02
-        - node-03
-        - node-04
-        - node-05
-        - node-06
 
   subvolumeGroups: []

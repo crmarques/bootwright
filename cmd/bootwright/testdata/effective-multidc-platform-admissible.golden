@@ -2795,6 +2795,11 @@ spec:
           data_devices:
             paths:
               - /dev/sdb
+      - service_type: mds
+        service_id: odf-cephfs
+        placement:
+          label: ceph-core
+          count: 2
     topology:
       nodes:
         - name: node-01
@@ -2831,6 +2836,28 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: StoragePool
 metadata:
+  name: odf-cephfs-data
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: host-spread
+  type: replicated
+  role: cephfs-data
+  application: cephfs
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: odf-cephfs-metadata
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: host-spread
+  type: replicated
+  role: cephfs-metadata
+  application: cephfs
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
   name: odf-hub-multidc-01-rbd
 spec:
   clusterRef: ceph-multidc-01
@@ -2859,6 +2886,24 @@ spec:
   clusterRef: ceph-multidc-01
   poolRef: odf-hub-multidc-01-rbd
   access: read-only
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: odf-cephfs
+spec:
+  clusterRef: ceph-multidc-01
+  mdsServiceRef: mds.odf-cephfs
+  metadataPoolRef: odf-cephfs-metadata
+  dataPoolRefs:
+    - name: odf-cephfs-data
+      default: true
+  mds:
+    activeCount: 1
+    standbyCountWanted: 1
+  subvolumeGroups:
+    - name: csi
+      mode: "755"
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon

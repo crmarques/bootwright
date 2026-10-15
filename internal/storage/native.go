@@ -544,9 +544,24 @@ func validSecretPointer(pointer string) bool {
 	return true
 }
 
+var retiredResourceFields = map[api.Kind]map[string]string{
+	api.StorageFilesystem: {
+		"$.spec.mds.placement":   "an entry of its StorageCluster's spec.ceph.services with service_type mds and service_id equal to this StorageFilesystem's name, and set spec.mdsServiceRef to mds.<name>",
+		"$.spec.mds.serviceSpec": "the native fields (networks, extra_container_args, extra_entrypoint_args) of its StorageCluster's spec.ceph.services entry with service_type mds and service_id equal to this StorageFilesystem's name",
+	},
+}
+
+func retiredIssue(field, replacement string) api.Issue {
+	return api.Issue{Code: "api.field", Field: field, Message: "storage daemon helper was retired by the native-service migration", Remediation: "replace " + field + " with " + replacement}
+}
+
 func RetiredField(kind api.Kind, field string) (api.Issue, bool) {
 	if kind != api.StorageCluster {
-		return api.Issue{}, false
+		replacement, ok := retiredResourceFields[kind][field]
+		if !ok {
+			return api.Issue{}, false
+		}
+		return retiredIssue(field, replacement), true
 	}
 	replacement := ""
 	switch field {
@@ -584,7 +599,7 @@ func RetiredField(kind api.Kind, field string) (api.Issue, bool) {
 	if replacement == "" {
 		return api.Issue{}, false
 	}
-	return api.Issue{Code: "api.field", Field: field, Message: "storage daemon helper was retired by the native-service migration", Remediation: "replace " + field + " with " + replacement}, true
+	return retiredIssue(field, replacement), true
 }
 
 func (a *admission) retired(field string) {
