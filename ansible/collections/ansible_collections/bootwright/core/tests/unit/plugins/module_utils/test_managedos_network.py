@@ -177,13 +177,15 @@ def test_compare_names_each_difference_bounded():
     running["routes"]["config"].pop(1)
     running["routes"]["config"].append({"destination": "10.0.0.0/8", "next-hop-interface": "nic2"})
     running["dns-resolver"]["config"]["server"] = ["198.51.100.54", "198.51.100.53"]
-    found = compare(desired_document(), running)
+    desired = desired_document()
+    desired["dns-resolver"]["config"]["server"] = ["198.51.100.53", "198.51.100.54"]
+    found = compare(desired, running)
     assert found == [
         "interface bond0: mtu is 1500, declared 1400",
         "interface bond0: link-aggregation ports are [nic0, nic2], declared [nic0, nic1]",
         "route 192.0.2.0/24 via 203.0.113.1 on nic2: not configured",
         "route 10.0.0.0/8 via - on nic2: configured but not declared",
-        "dns server is [198.51.100.54, 198.51.100.53], declared [198.51.100.53]",
+        "dns server is [198.51.100.54, 198.51.100.53], declared [198.51.100.53, 198.51.100.54]",
     ]
     desired = {"interfaces": [{"name": "gone%02d" % index + "\x1b" * 200, "state": "absent"} for index in range(20)]}
     present = {"interfaces": [{"name": item["name"]} for item in desired["interfaces"]]}
@@ -285,6 +287,36 @@ def down_interface(desired, running):
     desired["interfaces"].append({"name": "nic9", "type": "ethernet", "state": "down"})
 
 
+def running_named(running, name):
+    return next(item for item in running["interfaces"] if item["name"] == name)
+
+
+def vlan_as_ethernet(desired, running):
+    running_named(running, "bond0.130")["type"] = "ethernet"
+
+
+def other_vlan_protocol(desired, running):
+    desired["interfaces"][3]["vlan"]["protocol"] = "802.1ad"
+
+
+def route_on_another_interface(desired, running):
+    running_route(running, "192.0.2.0/24")["next-hop-interface"] = "bond0.130"
+
+
+def same_name_of_another_type_first(desired, running):
+    running["interfaces"].insert(0, {"name": "bond0", "type": "ovs-interface", "state": "down"})
+
+
+def reversed_search(desired, running):
+    desired["dns-resolver"]["config"]["search"] = ["example.test", "lab.example.test"]
+    running["dns-resolver"]["config"]["search"] = ["lab.example.test", "example.test"]
+
+
+def uncanonical_server(desired, running):
+    desired["dns-resolver"]["config"]["server"] = ["2001:db8::0:53"]
+    running["dns-resolver"]["config"]["server"] = ["2001:db8::53"]
+
+
 ONE_FIELD = {
     "a running route via another gateway": (wrong_gateway, [
         "route 0.0.0.0/0 via 198.51.100.1 on bond0.130: not configured",
@@ -305,6 +337,21 @@ ONE_FIELD = {
         "interface bond0.130: ipv6 autoconf is false, declared true",
     ]),
     "an interface declared down and missing": (down_interface, []),
+    "a vlan running as another type": (vlan_as_ethernet, [
+        "interface bond0.130: type is ethernet, declared vlan",
+    ]),
+    "a vlan running another protocol": (other_vlan_protocol, [
+        "interface bond0.130: vlan protocol is 802.1q, declared 802.1ad",
+    ]),
+    "a running route on another interface": (route_on_another_interface, [
+        "route 192.0.2.0/24 via 203.0.113.1 on nic2: not configured",
+        "route 192.0.2.0/24 via 203.0.113.1 on bond0.130: configured but not declared",
+    ]),
+    "a running name shared by another type first": (same_name_of_another_type_first, []),
+    "a running search list in another order": (reversed_search, [
+        "dns search is [lab.example.test, example.test], declared [example.test, lab.example.test]",
+    ]),
+    "a declared server in another spelling": (uncanonical_server, []),
 }
 
 
