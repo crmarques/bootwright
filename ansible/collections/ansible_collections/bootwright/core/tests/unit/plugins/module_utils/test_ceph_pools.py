@@ -401,13 +401,45 @@ def test_pool_quota_setter_lost_success_is_read_back_without_a_second_write():
     assert ready(native)[0] is False
 
 
-@pytest.mark.parametrize("metadata,expected", [
-    ({"cephfs": {"data": "fs1"}}, True), ({"cephfs": {}}, True), ({"cephfs": {"data": "fs1", "metadata": "fs1"}}, False),
-    ({"cephfs": {"metadata": "fs1"}}, False), ({"cephfs": {"data": "fs1"}, "rbd": {}}, False), ({"cephfs": {"data": ["fs1"]}}, False), ({}, False),
+@pytest.mark.parametrize("option,value,expected", [
+    ("target_size_ratio", 0.2, True), ("pg_num_min", 16, False), ("pg_num_min", 64.0, False), ("pg_num_min", True, False),
+    ("target_size_ratio", 0.5, False), ("target_size_ratio", "0.2", False), ("compression_min_blob_size", 4096, False),
+    ("compression_min_blob_size", "8192", False),
 ])
-def test_pool_observe_accepts_cephfs_application_key_from_fs_new(metadata, expected):
+def test_pool_readiness_compares_each_set_option_value(option, value, expected):
     world = World()
-    native, unused = resource(world, "pool", pool_value(role="cephfs-data"))
+    autoscale = {"bulk": False, "maxPGs": 0, "minPGs": 64, "mode": "on", "targetBytes": 0, "targetRatio": "0.2"}
+    compression = {"algorithm": "", "maxBlob": 0, "minBlob": 8192, "mode": "passive", "requiredRatio": ""}
+    native, unused = resource(world, "pool", pool_value(autoscale=autoscale, compression=compression, pgNum=64))
+    native.pool()
+    assert ("osd", "pool", "set", "volumes", "compression_min_blob_size", "8192") in world.log
+    assert ready(native)[0] is True
+    world.entry("volumes")["options"][option] = value
+    assert ready(native)[0] is expected
+
+
+def test_pool_max_pgs_below_the_default_caps_pg_num():
+    world = World()
+    autoscale = {"bulk": False, "maxPGs": 16, "minPGs": 0, "mode": "on", "targetBytes": 0, "targetRatio": ""}
+    native, unused = resource(world, "pool", pool_value(autoscale=autoscale, pgNum=16))
+    native.pool()
+    creates = [entry for entry in world.log if entry[:3] == ("osd", "pool", "create")]
+    assert creates == [("osd", "pool", "create", "volumes", "16", "16", "replicated", "replicated_rule", "--autoscale_mode", "on", "--pg_num_max", "16")]
+    assert ready(native)[0] is True
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        resource(World(), "pool", pool_value(autoscale=autoscale, pgNum=32))
+
+
+@pytest.mark.parametrize("role,metadata,expected", [
+    ("cephfs-data", {"cephfs": {"data": "fs1"}}, True), ("cephfs-data", {"cephfs": {}}, True),
+    ("cephfs-data", {"cephfs": {"data": "fs1", "metadata": "fs1"}}, False), ("cephfs-data", {"cephfs": {"metadata": "fs1"}}, False),
+    ("cephfs-data", {"cephfs": {"data": "fs1"}, "rbd": {}}, False), ("cephfs-data", {"cephfs": {"data": ["fs1"]}}, False), ("cephfs-data", {}, False),
+    ("cephfs-metadata", {"cephfs": {"metadata": "fs1"}}, True), ("cephfs-metadata", {"cephfs": {}}, True),
+    ("cephfs-metadata", {"cephfs": {"data": "fs1"}}, False),
+])
+def test_pool_observe_accepts_cephfs_application_key_from_fs_new(role, metadata, expected):
+    world = World()
+    native, unused = resource(world, "pool", pool_value(role=role))
     native.pool()
     assert ("osd", "pool", "application", "enable", "volumes", "cephfs") in world.log
     world.entry("volumes")["application_metadata"] = metadata
@@ -509,7 +541,7 @@ def foreign_create(world):
     world.effect = effect
 
 
-@pytest.mark.parametrize("case", ["steps-drift", "take-drift", "id-drift", "foreign-create", "id-without-rule"])
+@pytest.mark.parametrize("case", ["steps-drift", "take-drift", "id-drift", "stale-mark", "foreign-create", "id-without-rule"])
 def test_policy_identity_guards_after_and_around_creation(case):
     world = World([["ssd"], ["ssd"], ["ssd"]])
     native, marks = resource(world, "policy", policy_value(), count=3)
@@ -531,6 +563,11 @@ def test_policy_identity_guards_after_and_around_creation(case):
         steps[1]["op"] = "chooseleaf_indep"
     elif case == "take-drift":
         steps[0]["item_name"] = "default"
+    elif case == "stale-mark":
+        marks.records["policy-fast.json"] = policy_value(size=3)
+        with pytest.raises(ceph_native.Refusal, match="^foreign-rule$"):
+            ready(native)
+        return
     else:
         marks.records["policy-id-fast.json"] = {"id": world.rules["ssd-hosts"]["rule_id"] + 1}
         with pytest.raises(ceph_native.Refusal, match="^foreign-rule$"):
