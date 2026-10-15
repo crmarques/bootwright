@@ -64,7 +64,36 @@ A `known_hosts` entry records an RSA host key as `ssh-rsa`, but the server may
 sign with `rsa-sha2-256`/`rsa-sha2-512`, and many now refuse the SHA-1 form
 entirely. `HostKeyAlgorithms=ssh-rsa` would therefore refuse a key the record
 already trusts, so `trust.HostKey.Algorithms` expands that one type to
-`rsa-sha2-512,rsa-sha2-256,ssh-rsa`. Every other type is its own name.
+`rsa-sha2-512,rsa-sha2-256,ssh-rsa`, which the policy intersection below then
+narrows. Every other type is its own name.
+
+## `-o` beats the policy file: intersect, never override
+
+ssh_config(5) reads command-line options first, and "for each parameter, the
+first obtained value will be used" ([ssh_config(5)](https://man.openbsd.org/ssh_config.5)).
+A session's `-o HostKeyAlgorithms=` therefore replaced the policy's list in its
+`-F` configuration, and on a FIPS-policy controller re-enabled `ssh-ed25519`
+or SHA-1 `ssh-rsa`. The launcher now runs the pinned client as
+`ssh -G -F /dev/stdin -o CanonicalizeHostname=no localhost` over the same
+reduced policy bytes the session's configuration carries (no endpoint is
+contacted; `+`, `-` and `^` list modifiers resolve natively), reads the
+`hostkeyalgorithms` line, and pins only the pinned key's algorithms in that
+list, in pinned order. An empty intersection, or a list it cannot evaluate,
+refuses `access.unavailable` before any session opens; there is no fallback.
+`access.Service` asks for this admission when it proves the key, so a
+several-member `machine exec` refuses before any member runs.
+
+A present policy without its own `HostKeyAlgorithms` is still evaluated, and
+OpenSSH 10.x's compiled default list excludes `ssh-rsa`, so an RSA pin narrows
+to `rsa-sha2-512,rsa-sha2-256`. Only a host with no policy backend (or one with
+no crypto directive) keeps the pinned list unevaluated. `-F /dev/null` drops
+the policy entirely; the Ceph controller transport still does that (the Ceph
+transport part of [B346](../../specs/milestones/m1.md#b346)).
+
+Pinned by `TestSessionRefusesAPinnedHostKeyThePolicyExcludes`,
+`TestSessionPinsOnlyTheIntersection`, `TestSessionPolicyEvaluationFailureRefuses`,
+`TestTheRealClientResolvesPolicyListModifiers` and
+`TestASessionRefusesAPolicyExcludedKeyBeforeItOpens`.
 
 ## Observe with the client, never `ssh-keyscan`
 

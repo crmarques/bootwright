@@ -473,6 +473,15 @@ Bootwright's own: it carries only allowlisted cryptographic directives from the
 host crypto-policy backend where that exists, so site and FIPS policy is
 retained, and it admits no identity, certificate, agent, command, forwarding
 or host rule from system or personal configuration.
+The pinned host key's algorithms are intersected with that policy as the
+pinned client itself evaluates it (`ssh -G` over the reduced configuration,
+contacting no endpoint), and the session pins only the intersection, so
+command-line pinning cannot re-enable an algorithm the policy excludes. An
+empty intersection refuses `access.unavailable`, naming the Machine and the key
+type, before any session opens; a policy the client cannot evaluate refuses
+the same way, with no fallback. A host with no policy backend keeps the pinned
+algorithms under OpenSSH's defaults. This is access compatibility, not FIPS
+certification.
 The client receives only terminal-identifying environment values, so a
 caller-selected askpass helper, agent, loader or crypto-provider override
 cannot cross the process boundary. The session is a waited child whose streams

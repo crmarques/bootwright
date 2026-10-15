@@ -28,7 +28,7 @@ const fixedSuffix = "-o GSSAPIAuthentication=no -o HostbasedAuthentication=no -o
 	"-o UpdateHostKeys=no -o HashKnownHosts=no"
 
 func TestTheKeyArmOffersExactlyTheResolvedCredential(t *testing.T) {
-	got := strings.Join(arguments(session(machine.IdentityKey), paths{config: 3, privateKey: 4, knownHosts: 5}), " ")
+	got := strings.Join(arguments(session(machine.IdentityKey), paths{config: 3, privateKey: 4, knownHosts: 5}, hostKey().Algorithms()), " ")
 	want := "-F /proc/" + strconv.Itoa(os.Getpid()) + "/fd/3 -i /proc/" + strconv.Itoa(os.Getpid()) + "/fd/4 -o IdentitiesOnly=yes -o IdentityAgent=none " +
 		"-o PreferredAuthentications=publickey -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no " +
 		fixedSuffix + " -o UserKnownHostsFile=/proc/" + strconv.Itoa(os.Getpid()) + "/fd/5 -o StrictHostKeyChecking=yes " +
@@ -44,7 +44,7 @@ func TestTheKeyArmOffersExactlyTheResolvedCredential(t *testing.T) {
 func TestAnOfferedKeyPrecedesTheDeclaredCredential(t *testing.T) {
 	with := session(machine.IdentityKey)
 	with.IdentityFile = "/home/operator/.ssh/id_ed25519"
-	got := strings.Join(arguments(with, paths{config: 3, identityFile: 4, privateKey: 5, knownHosts: 6}), " ")
+	got := strings.Join(arguments(with, paths{config: 3, identityFile: 4, privateKey: 5, knownHosts: 6}, with.HostKey.Algorithms()), " ")
 	if !strings.Contains(got, "-i /proc/"+strconv.Itoa(os.Getpid())+"/fd/4 -i /proc/"+strconv.Itoa(os.Getpid())+"/fd/5 -o IdentitiesOnly=yes") {
 		t.Fatalf("arguments = %s", got)
 	}
@@ -54,7 +54,7 @@ func TestAnOfferedKeyPrecedesTheDeclaredCredential(t *testing.T) {
 }
 
 func TestTheOperatorArmOffersNoMaterialFromThisContext(t *testing.T) {
-	got := strings.Join(arguments(session(machine.IdentityOperator), paths{config: 3, knownHosts: 4}), " ")
+	got := strings.Join(arguments(session(machine.IdentityOperator), paths{config: 3, knownHosts: 4}, hostKey().Algorithms()), " ")
 	if strings.Contains(got, "/proc/"+strconv.Itoa(os.Getpid())+"/fd/4 -o IdentitiesOnly") || strings.Contains(got, "-i ") {
 		t.Fatalf("the operator arm offered a credential: %s", got)
 	}
@@ -73,7 +73,7 @@ func TestTheOperatorArmOffersNoMaterialFromThisContext(t *testing.T) {
 func TestTheOperatorArmWithNoUserLogsInAsTheClientAccount(t *testing.T) {
 	unnamed := session(machine.IdentityOperator)
 	unnamed.User = ""
-	args := arguments(unnamed, paths{config: 3, knownHosts: 4})
+	args := arguments(unnamed, paths{config: 3, knownHosts: 4}, unnamed.HostKey.Algorithms())
 	got := strings.Join(args, " ")
 	for _, absent := range []string{"-l", "-i"} {
 		if slices.Contains(args, absent) {
@@ -94,7 +94,7 @@ func TestTheOperatorArmWithNoUserLogsInAsTheClientAccount(t *testing.T) {
 }
 
 func TestThePasswordArmLetsTheClientAskAndOffersNoKey(t *testing.T) {
-	got := strings.Join(arguments(session(machine.IdentityPassword), paths{config: 3, knownHosts: 4}), " ")
+	got := strings.Join(arguments(session(machine.IdentityPassword), paths{config: 3, knownHosts: 4}, hostKey().Algorithms()), " ")
 	if !strings.Contains(got, "-o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive") {
 		t.Fatalf("arguments = %s", got)
 	}
@@ -104,13 +104,13 @@ func TestThePasswordArmLetsTheClientAskAndOffersNoKey(t *testing.T) {
 // may never prompt; a single session keeps the client's own behavior.
 func TestOnlyABatchSessionForbidsTheClientToPrompt(t *testing.T) {
 	for _, kind := range []machine.IdentityKind{machine.IdentityKey, machine.IdentityOperator, machine.IdentityPassword} {
-		single := arguments(session(kind), paths{config: 3, privateKey: 4, knownHosts: 5})
+		single := arguments(session(kind), paths{config: 3, privateKey: 4, knownHosts: 5}, hostKey().Algorithms())
 		if strings.Contains(strings.Join(single, " "), "BatchMode") {
 			t.Fatalf("a single %s session forbade prompting: %v", kind, single)
 		}
 		batch := session(kind)
 		batch.Batch = true
-		got := arguments(batch, paths{config: 3, privateKey: 4, knownHosts: 5})
+		got := arguments(batch, paths{config: 3, privateKey: 4, knownHosts: 5}, batch.HostKey.Algorithms())
 		if !strings.Contains(strings.Join(got, " "), "-o BatchMode=yes") {
 			t.Fatalf("a batch %s session may prompt: %v", kind, got)
 		}
@@ -123,19 +123,34 @@ func TestOnlyABatchSessionForbidsTheClientToPrompt(t *testing.T) {
 func TestAPinnedRSAKeyAdmitsTheSignaturesItsServerMayOffer(t *testing.T) {
 	with := session(machine.IdentityKey)
 	with.HostKey = trust.HostKey{Type: "ssh-rsa", PublicKey: "AAAA"}
-	got := strings.Join(arguments(with, paths{config: 3, privateKey: 4, knownHosts: 5}), " ")
+	got := strings.Join(arguments(with, paths{config: 3, privateKey: 4, knownHosts: 5}, with.HostKey.Algorithms()), " ")
 	if !strings.Contains(got, "-o HostKeyAlgorithms=rsa-sha2-512,rsa-sha2-256,ssh-rsa") {
 		t.Fatalf("arguments = %s", got)
+	}
+}
+
+func TestTheSessionPinsTheAlgorithmsItIsGiven(t *testing.T) {
+	with := session(machine.IdentityKey)
+	with.HostKey = trust.HostKey{Type: "ssh-rsa", PublicKey: "AAAA"}
+	got := arguments(with, paths{config: 3, privateKey: 4, knownHosts: 5}, "rsa-sha2-256")
+	var pinned []string
+	for _, word := range got {
+		if strings.HasPrefix(word, "HostKeyAlgorithms=") {
+			pinned = append(pinned, word)
+		}
+	}
+	if !slices.Equal(pinned, []string{"HostKeyAlgorithms=rsa-sha2-256"}) {
+		t.Fatalf("pinned = %v in %v", pinned, got)
 	}
 }
 
 func TestANonDefaultPortIsNamedAndTheDefaultIsNot(t *testing.T) {
 	with := session(machine.IdentityOperator)
 	with.Port = 2222
-	if got := strings.Join(arguments(with, paths{config: 3, knownHosts: 4}), " "); !strings.Contains(got, "-p 2222") {
+	if got := strings.Join(arguments(with, paths{config: 3, knownHosts: 4}, with.HostKey.Algorithms()), " "); !strings.Contains(got, "-p 2222") {
 		t.Fatalf("arguments = %s", got)
 	}
-	if got := strings.Join(arguments(session(machine.IdentityOperator), paths{config: 3, knownHosts: 4}), " "); strings.Contains(got, "-p ") {
+	if got := strings.Join(arguments(session(machine.IdentityOperator), paths{config: 3, knownHosts: 4}, hostKey().Algorithms()), " "); strings.Contains(got, "-p ") {
 		t.Fatalf("the default port was named: %s", got)
 	}
 }
@@ -145,7 +160,7 @@ func TestANonDefaultPortIsNamedAndTheDefaultIsNot(t *testing.T) {
 func TestACommandReachesTheRemoteShellAsTheExactWordsGiven(t *testing.T) {
 	with := session(machine.IdentityOperator)
 	with.Command = []string{"systemctl", "status", "sshd.service", "a b", "", "$(payload)", "it's"}
-	got := arguments(with, paths{config: 3, knownHosts: 4})
+	got := arguments(with, paths{config: 3, knownHosts: 4}, with.HostKey.Algorithms())
 	tail := got[len(got)-7:]
 	want := []string{"systemctl", "status", "sshd.service", "'a b'", "''", "'$(payload)'", `'it'\''s'`}
 	for i := range want {

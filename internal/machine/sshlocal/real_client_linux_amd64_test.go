@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const realClientPolicy = "Ciphers aes128-ctr\nKexAlgorithms curve25519-sha256\n"
@@ -75,7 +77,7 @@ func TestTheRealClientReadsSessionMaterialThroughLauncherDescriptors(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := arguments(s, held)
+	args := arguments(s, held, s.HostKey.Algorithms())
 	resolved, stderr, err := resolvedConfiguration(t, client, args)
 	if err != nil {
 		t.Fatalf("ssh -G = %v\n%s", err, stderr)
@@ -89,6 +91,31 @@ func TestTheRealClientReadsSessionMaterialThroughLauncherDescriptors(t *testing.
 		"stricthostkeychecking true",
 	)
 	requireUnreadableConfig(t, client, args)
+}
+
+// The real client resolves list modifiers itself, so a policy that removes
+// one algorithm from the compiled defaults is honoured as the session will.
+func TestTheRealClientResolvesPolicyListModifiers(t *testing.T) {
+	l := launcher(t, realClient(t))
+	l.PolicyPath = t.TempDir() + "/openssh.config"
+	if err := os.WriteFile(l.PolicyPath, []byte("HostKeyAlgorithms -ssh-ed25519\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := l.HostKeyAlgorithms(context.Background(), keySession())
+	if reported := diagnostics.Of(err); len(reported) != 1 ||
+		!strings.Contains(reported[0].Message, "ssh-ed25519 host key Machine/rhel-01 presents is excluded") {
+		t.Fatalf("an excluded ssh-ed25519 key was admitted: %v", err)
+	}
+	for keyType, want := range map[string]string{
+		"ecdsa-sha2-nistp256": "ecdsa-sha2-nistp256",
+		"ssh-rsa":             "rsa-sha2-512,rsa-sha2-256",
+	} {
+		s := keySession()
+		s.HostKey.Type = keyType
+		if got, err := l.HostKeyAlgorithms(context.Background(), s); err != nil || got != want {
+			t.Fatalf("%s admitted %q (%v), want %q", keyType, got, err, want)
+		}
+	}
 }
 
 func TestTheRealClientReadsObservationPolicyThroughALauncherDescriptor(t *testing.T) {

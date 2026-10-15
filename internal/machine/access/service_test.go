@@ -196,6 +196,21 @@ type client struct {
 	// run, when set, answers each session in place of code and err. It is
 	// called concurrently and outside the lock.
 	run func(machine.Session, io.Writer, io.Writer) (int, error)
+	// admit, when set, answers each host-key admission in place of the pinned
+	// key's own algorithms; admitted names each Machine asked about.
+	admit    func(machine.Session) (string, error)
+	admitted []string
+}
+
+func (c *client) HostKeyAlgorithms(_ context.Context, session machine.Session) (string, error) {
+	c.mu.Lock()
+	c.admitted = append(c.admitted, session.Machine)
+	admit := c.admit
+	c.mu.Unlock()
+	if admit != nil {
+		return admit(session)
+	}
+	return session.HostKey.Algorithms(), nil
 }
 
 func (c *client) Run(_ context.Context, session machine.Session, in io.Reader, out, errOut io.Writer) (int, error) {
@@ -306,6 +321,27 @@ func TestAnInstalledMachineOpensAsTheIdentityItsStateAuthorizes(t *testing.T) {
 	}
 	if strings.Join(h.lender.requested, ",") != "fleet" {
 		t.Fatalf("opened %v, want the credential alone", h.lender.requested)
+	}
+}
+
+// A proved key this host's SSH crypto policy excludes refuses before the
+// session opens, with the launcher's own diagnostic.
+func TestASessionRefusesAPolicyExcludedKeyBeforeItOpens(t *testing.T) {
+	h := newHarness(t, nil)
+	excluded := failure("access.unavailable",
+		"the ssh-ed25519 host key Machine/guest presents is excluded by this host's SSH crypto policy", "connect elsewhere")
+	h.client.admit = func(session machine.Session) (string, error) {
+		if session.Machine != "guest" || session.Address != "192.0.2.10" || session.HostKey.PublicKey != publicKey {
+			t.Errorf("admitted %+v", session)
+		}
+		return "", excluded
+	}
+	_, err := exec(t, h, "guest", machine.SSHOptions{}, "true")
+	if err != excluded {
+		t.Fatalf("refusal = %v", err)
+	}
+	if len(h.client.sessions) != 0 || len(h.client.admitted) != 1 || h.errStream.Len() != 0 {
+		t.Fatalf("opened %d after %v, wrote %q", len(h.client.sessions), h.client.admitted, h.errStream.String())
 	}
 }
 

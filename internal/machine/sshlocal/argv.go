@@ -39,9 +39,9 @@ var fixedOptions = []string{
 	"HashKnownHosts=no",
 }
 
-// arguments builds the exact client argument vector for one session. It is
-// pure so the vector a session runs is the vector a test can read.
-func arguments(session machine.Session, held paths) []string {
+// arguments builds the exact client argument vector for one session, pinning
+// the algorithms the host policy admits; it is pure so a test reads what runs.
+func arguments(session machine.Session, held paths, pinned string) []string {
 	args := []string{"-F", descriptorPath(held.config)}
 	if held.identityFile != 0 {
 		args = append(args, "-i", descriptorPath(held.identityFile))
@@ -62,7 +62,7 @@ func arguments(session machine.Session, held paths) []string {
 	args = append(args,
 		"-o", "UserKnownHostsFile="+descriptorPath(held.knownHosts),
 		"-o", "StrictHostKeyChecking=yes",
-		"-o", "HostKeyAlgorithms="+session.HostKey.Algorithms(),
+		"-o", "HostKeyAlgorithms="+pinned,
 	)
 	if session.User != "" {
 		args = append(args, "-l", session.User)

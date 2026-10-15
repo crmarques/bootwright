@@ -67,6 +67,7 @@ type Confirmer interface {
 type Launcher interface {
 	Run(ctx context.Context, session machine.Session, in io.Reader, out, errOut io.Writer) (int, error)
 	IdentityFile(ctx context.Context, path string) (string, error)
+	HostKeyAlgorithms(ctx context.Context, session machine.Session) (string, error)
 }
 
 // Streams are the operator's own terminal streams. A session hands them to the

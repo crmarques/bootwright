@@ -144,6 +144,7 @@ func TestARefusalForAnyMemberOpensNoSession(t *testing.T) {
 		adjust  func(*harness)
 		code    string
 		want    string
+		lent    bool
 	}{
 		{name: "reached locally", names: []string{"secured", "host", "controller"},
 			code: "access.unavailable", want: "Machine/controller"},
@@ -158,6 +159,16 @@ func TestARefusalForAnyMemberOpensNoSession(t *testing.T) {
 		{name: "unowned installation", names: []string{"peer", "guest"},
 			adjust: func(h *harness) { h.service.options.Ownership = owner{realized: false} },
 			code:   "access.target", want: "Machine/guest"},
+		{name: "policy-excluded host key", names: []string{"declared", "guest"},
+			adjust: func(h *harness) {
+				h.client.admit = func(session machine.Session) (string, error) {
+					if session.Machine == "guest" {
+						return "", failure("access.unavailable", "the ssh-ed25519 host key Machine/guest presents is excluded", "")
+					}
+					return session.HostKey.Algorithms(), nil
+				}
+			},
+			code: "access.unavailable", want: "Machine/guest", lent: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			h := newHarness(t, nil)
@@ -173,7 +184,7 @@ func TestARefusalForAnyMemberOpensNoSession(t *testing.T) {
 			if len(h.client.sessions) != 0 || len(h.prompt.asked) != 0 || len(h.trust.written) != 0 {
 				t.Fatalf("opened %d, asked %d, wrote %d", len(h.client.sessions), len(h.prompt.asked), len(h.trust.written))
 			}
-			if test.code == "access.unavailable" && h.lender.lends != 0 {
+			if test.code == "access.unavailable" && !test.lent && h.lender.lends != 0 {
 				t.Fatal("a resolution refusal opened material")
 			}
 		})

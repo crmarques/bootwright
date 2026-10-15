@@ -4,15 +4,30 @@ import (
 	"context"
 	"errors"
 
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/trust"
 )
 
-// hostKey proves the server identity before any credential is offered, from
-// exactly one source. The order is what makes the proof meaningful: a key this
-// context declared or installed outranks one it merely recorded, and an
-// unproved key is confirmed by the operator or refused — never assumed.
+// hostKey proves and admits the server identity before any session opens.
 func (s Service) hostKey(ctx context.Context, contextName string, selected target,
+	material map[string]secrets.Material, machines declaredTrust) (trust.HostKey, error) {
+	key, err := s.provedHostKey(ctx, contextName, selected, material, machines)
+	if err != nil {
+		return trust.HostKey{}, err
+	}
+	if _, err := s.options.Launcher.HostKeyAlgorithms(ctx, machine.Session{
+		Machine: selected.name, Address: selected.address, Port: selected.port, HostKey: key,
+	}); err != nil {
+		return trust.HostKey{}, err
+	}
+	return key, nil
+}
+
+// provedHostKey proves the server identity from exactly one source, before any
+// credential is offered: a key this context declared or installed outranks one
+// it merely recorded, and an unproved key is confirmed or refused, never assumed.
+func (s Service) provedHostKey(ctx context.Context, contextName string, selected target,
 	material map[string]secrets.Material, machines declaredTrust) (trust.HostKey, error) {
 	if reference := selected.ssh.KnownHostsRef; reference != "" {
 		return declaredHostKey(reference, selected, material)

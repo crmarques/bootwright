@@ -3,6 +3,7 @@
 package sshlocal
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -23,10 +24,11 @@ const (
 	// PATH, so the program a session runs is the program it named.
 	Client = "/usr/bin/ssh"
 
-	observationTimeout = 10 * time.Second
-	terminationGrace   = 5 * time.Second
-	maxObservedBytes   = 64 << 10
-	maxOfferedKeyBytes = 64 << 10
+	observationTimeout      = 10 * time.Second
+	policyEvaluationTimeout = 10 * time.Second
+	terminationGrace        = 5 * time.Second
+	maxObservedBytes        = 64 << 10
+	maxOfferedKeyBytes      = 64 << 10
 )
 
 // terminalEnvironment is everything a session's client inherits. A caller
@@ -74,10 +76,9 @@ func New(home func() (string, error), owner func() (int, error), files Files) La
 	return Launcher{Client: Client, Home: home, Owner: owner, Files: files, PolicyPath: PolicyPath, Scratch: "/run", Environ: os.Environ}
 }
 
-// Run opens one session and returns the client's own exit status. The streams
-// belong to the client for its whole duration; this process adds nothing to
-// them and waits rather than replacing itself, so the material it holds is
-// released only once the session has ended.
+// Run opens one session and returns the client's own exit status. The client
+// owns the streams for its whole duration; this process adds nothing and waits
+// rather than replacing itself, so its material is released only at the end.
 func (l Launcher) Run(ctx context.Context, session machine.Session, in io.Reader, out, errOut io.Writer) (int, error) {
 	client, err := l.executable()
 	if err != nil {
@@ -90,12 +91,16 @@ func (l Launcher) Run(ctx context.Context, session machine.Session, in io.Reader
 	if err != nil {
 		return 0, err
 	}
+	pinned, err := l.pinned(ctx, client, policy, session)
+	if err != nil {
+		return 0, err
+	}
 	held, files, err := l.materialize(ctx, policy, session)
 	defer closeAll(files)
 	if err != nil {
 		return 0, err
 	}
-	command := exec.CommandContext(ctx, client, arguments(session, held)...)
+	command := exec.CommandContext(ctx, client, arguments(session, held, pinned)...)
 	command.Stdin, command.Stdout, command.Stderr = in, out, errOut
 	command.Env = l.environment()
 	command.Dir = "/"
@@ -105,6 +110,79 @@ func (l Launcher) Run(ctx context.Context, session machine.Session, in io.Reader
 		return exitStatus(err)
 	}
 	return 0, nil
+}
+
+// HostKeyAlgorithms admits a proved key against this host's SSH crypto policy.
+func (l Launcher) HostKeyAlgorithms(ctx context.Context, session machine.Session) (string, error) {
+	client, err := l.executable()
+	if err != nil {
+		return "", err
+	}
+	if !session.HostKey.Present() {
+		return "", failure("a session requires the host key it pins", "")
+	}
+	policy, err := l.policy()
+	if err != nil {
+		return "", err
+	}
+	return l.pinned(ctx, client, policy, session)
+}
+
+func (l Launcher) pinned(ctx context.Context, client string, policy []byte, session machine.Session) (string, error) {
+	if policy == nil {
+		return session.HostKey.Algorithms(), nil
+	}
+	admitted, err := l.evaluate(ctx, client, policy, session)
+	if err != nil {
+		return "", err
+	}
+	return admittedAlgorithms(session, admitted, l.PolicyPath)
+}
+
+func (l Launcher) evaluate(ctx context.Context, client string, policy []byte, session machine.Session) ([]string, error) {
+	evaluation, cancel := context.WithTimeout(ctx, policyEvaluationTimeout)
+	defer cancel()
+	output := &boundedOutput{limit: maxEvaluatedPolicyBytes}
+	command := exec.CommandContext(evaluation, client, "-G", "-F", "/dev/stdin", "-o", "CanonicalizeHostname=no", "localhost")
+	command.Stdin, command.Stdout, command.Stderr = bytes.NewReader(policy), output, io.Discard
+	command.Env = []string{"LC_ALL=C"}
+	command.Dir = "/"
+	command.WaitDelay = terminationGrace
+	ran := command.Run()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	name := client + " -G"
+	switch {
+	case ran != nil && errors.Is(evaluation.Err(), context.DeadlineExceeded):
+		return nil, unevaluatedPolicy(session, l.PolicyPath, name+" did not finish within 10s")
+	case output.exceeded:
+		return nil, unevaluatedPolicy(session, l.PolicyPath, name+" output exceeds 256 KiB")
+	case ran != nil:
+		return nil, unevaluatedPolicy(session, l.PolicyPath, name+" failed")
+	}
+	admitted, err := evaluatedHostKeyAlgorithms(output.data)
+	if err != nil {
+		return nil, unevaluatedPolicy(session, l.PolicyPath, name+" "+err.Error())
+	}
+	return admitted, nil
+}
+
+type boundedOutput struct {
+	data     []byte
+	limit    int
+	exceeded bool
+}
+
+func (b *boundedOutput) Write(p []byte) (int, error) {
+	room := b.limit - len(b.data)
+	if len(p) > room {
+		b.exceeded = true
+		b.data = append(b.data, p[:max(room, 0)]...)
+		return len(p), nil
+	}
+	b.data = append(b.data, p...)
+	return len(p), nil
 }
 
 // Observe reads the key a server presents without offering any credential.

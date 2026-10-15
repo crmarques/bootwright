@@ -976,7 +976,10 @@ endpoint to two keys fails `trust.identity` naming the repair of
 observation by itself trusts nothing. The session pins exactly the proved key
 and its algorithm, so a Machine presenting another key fails to connect; a
 changed key is never recorded by a session, and is superseded only by
-`machine trust --replace`.
+`machine trust --replace`. The proved key is then admitted against this host's
+SSH crypto policy: the session pins only the key's algorithms that policy
+admits, and a key whose type it excludes fails `access.unavailable` naming the
+Machine, the type and the remedy, before any credential is offered.
 
 The session is the operator's. Standard input, output and error belong to the
 client for its whole duration, its exit status is the result, and Bootwright
@@ -1022,8 +1025,9 @@ the diagnostic names the `machine exec` of that Machine alone as the way, and
 an offered `--ssh-id-file` does not lift the refusal, because a password
 identity tells the client never to try a key; a borrowed `--ssh-user` account
 resolves to the operator identity and is not refused. One credential lend
-covers every session. Host keys are proved one Machine at a time in canonical order before any
-session opens, so an interactive first-use confirmation asks about one Machine
+covers every session. Host keys are proved, and admitted against this host's
+SSH crypto policy, one Machine at a time in canonical order before any session
+opens, so an interactive first-use confirmation asks about one Machine
 at a time, and each recorded write re-reads the trust store before it writes.
 Any refusal exits `255`, opens no session and runs nothing. `--ssh-user` and
 `--ssh-id-file` apply to every Machine alike.

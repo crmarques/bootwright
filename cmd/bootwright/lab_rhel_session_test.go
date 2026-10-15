@@ -79,6 +79,10 @@ func (c *labSessionClient) Run(_ context.Context, session machine.Session, _ io.
 
 func (c *labSessionClient) IdentityFile(context.Context, string) (string, error) { return "", nil }
 
+func (c *labSessionClient) HostKeyAlgorithms(_ context.Context, session machine.Session) (string, error) {
+	return session.HostKey.Algorithms(), nil
+}
+
 // The guest lab-rhel installs declares no ssh address, and its installation
 // proves the host key at the address the installation request carries. A
 // session therefore dials that address, so machine exec opens right after the

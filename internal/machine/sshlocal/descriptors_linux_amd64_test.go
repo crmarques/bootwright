@@ -80,7 +80,8 @@ func descriptorClient(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return stubClient(t, "exec "+quoteWord(executable)+" -test.run=^TestSSHDescriptorClient$ -- --ssh-descriptor-client \"$@\"")
+	return stubClient(t, `[ "$1" = -G ] && { echo "hostkeyalgorithms ssh-ed25519"; exit 0; }
+exec `+quoteWord(executable)+" -test.run=^TestSSHDescriptorClient$ -- --ssh-descriptor-client \"$@\"")
 }
 
 func TestSSHMaterialSurvivesClientDescriptorClosure(t *testing.T) {

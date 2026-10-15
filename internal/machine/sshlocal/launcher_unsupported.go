@@ -41,6 +41,10 @@ func (Launcher) Observe(context.Context, string, int) (trust.HostKey, error) {
 	return trust.HostKey{}, availability.ErrNotImplemented
 }
 
+func (Launcher) HostKeyAlgorithms(context.Context, machine.Session) (string, error) {
+	return "", availability.ErrNotImplemented
+}
+
 func (Launcher) IdentityFile(context.Context, string) (string, error) {
 	return "", availability.ErrNotImplemented
 }
