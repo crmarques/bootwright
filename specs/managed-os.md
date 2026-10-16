@@ -669,20 +669,29 @@ document is frozen with the installation and the install marker names the
 request's digest, so neither a continuation nor a new plan can change the
 declared network of an installed Machine: a network declaration error is
 recovered only by `bootwright destroy`, which is context-wide, and a fresh
-apply. A refusal that may be transient (NetworkManager refused the document or
+apply. A `libvirt` Machine's destroy erases its disks. A `baremetal` Machine's
+destroy keeps the system installed on it until physical erasure lands
+([B70](milestones/m1.md#b70)), and a powered-on guest that answers with another
+marker refuses, so its recovery also powers it off from its management
+controller: only a powered-off Machine with no readable marker installs. In
+the texts below, `<recovery>` is `run bootwright destroy, which erases the
+Machines this context installed` on `libvirt`, and `run bootwright destroy,
+which releases Machine <m> but keeps the system installed on it, then power <m>
+off from its management controller so the next apply installs it again` on
+`baremetal`. A Machine without nmstatectl ends with `<recovery>, then apply
+with an install source that carries the nmstate package`. A refusal that may
+be transient (NetworkManager refused the document or
 the rollback, the change stayed uncommitted after the connection returned,
 nmstatectl reported no checkpoint, or the unit was still running after both
 budgets) ends with: `repeat bootwright apply; if it fails the same way, the
-declared network cannot be applied: run bootwright destroy, which erases the
-Machines this context installed, correct the network of <m>, then run
-bootwright apply`. A declared network that cut the controller off, which
+declared network cannot be applied: <recovery>, correct the network of <m>,
+then run bootwright apply`. A declared network that cut the controller off, which
 NetworkManager rolled back (the connection dropped while the change ran, or the
 checkpoint was no longer listed when the connection returned, as when the
 controller's packets were dropped for longer than `checkpointSeconds`), ends
 with: `the declared network of <m> cannot
-change under this apply: run bootwright destroy, which erases the Machines this
-context installed, correct the network of <m> so <address> stays reachable from
-the controller, then run bootwright apply`; a running network that differs from
+change under this apply: <recovery>, correct the network of <m> so <address>
+stays reachable from the controller, then run bootwright apply`; a running network that differs from
 its declaration after the restart ends with the same text without the
 reachability clause. A connection that does not come back says `its state is
 unknown: repeat bootwright apply, and if <m> stays unreachable, restore its

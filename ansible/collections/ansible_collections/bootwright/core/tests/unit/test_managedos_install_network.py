@@ -192,20 +192,38 @@ DESTROYING = (
 
 def test_network_failures_are_partial_and_name_destroy():
     tasks = flattened("network.yml")
-    templar = Templar(loader=LOADER, variables=failing_scope())
+    templar = Templar(loader=LOADER, variables=dict(defaults(), **failing_scope()))
     for name in DESTROYING:
         task = tasks[index_of(tasks, named(name), name)]
         conditions = task.get("when", [])
         for condition in conditions if isinstance(conditions, list) else [conditions]:
             assert templar.evaluate_conditional(condition), name
         message = templar.template(trust_as_template(task[FAIL]["msg"]))
-        assert MACHINE in message and "bootwright destroy" in message, (name, message)
+        assert MACHINE in message and "run bootwright destroy, which erases the Machines" in message, (name, message)
         assert message.isprintable(), (name, message)
     for task in tasks:
         if FAIL in task:
             text = task[FAIL]["msg"]
             assert "no effect" not in text and "nothing was installed" not in text, task["name"]
-            assert "repeat bootwright apply" in text or "bootwright destroy" in text or REPLAN in text, task["name"]
+            assert ("repeat bootwright apply" in text or "managedos_install_anaconda_network_recovery" in text
+                    or REPLAN in text), task["name"]
+            assert "bootwright destroy" not in text, task["name"]
+
+
+def test_a_physical_machine_is_told_to_power_off_after_destroy():
+    """A physical Machine's destroy keeps its installed system (B70), so the
+    remedy never claims it erases one and names the power-off that lets the
+    next apply install it again."""
+    tasks = flattened("network.yml")
+    scope = failing_scope()
+    scope["bootwright_os_install_request"]["target"] = {"substrate": "baremetal"}
+    templar = Templar(loader=LOADER, variables=dict(defaults(), **scope))
+    for name in DESTROYING:
+        message = templar.template(trust_as_template(tasks[index_of(tasks, named(name), name)][FAIL]["msg"]))
+        assert "erases" not in message, (name, message)
+        assert ("run bootwright destroy, which releases Machine %s but keeps the system installed on it, then power %s "
+                "off from its management controller so the next apply installs it again" % (MACHINE, MACHINE)
+                ) in message, (name, message)
 
 
 def option_values(argv):

@@ -59,9 +59,9 @@
   ansible.builtin.fail:
     msg: >-
       Machine {{ bootwright_os_install_request.identity.object }} has no nmstatectl,
-      so its declared network cannot be applied; run bootwright destroy, which erases
-      the Machines this context installed, then apply with an install source that
-      carries the nmstate package
+      so its declared network cannot be applied;
+      {{ managedos_install_anaconda_network_recovery }},
+      then apply with an install source that carries the nmstate package
   when: not (managedos_install_anaconda_network_state.nmstatectl | bool)
 
 - name: Stop at a network change that is still running
@@ -90,7 +90,7 @@
           {{ managedos_install_anaconda_network_state.checkpoint }}:
           {{ (managedos_install_anaconda_guest.stderr | default('') | string | bootwright.core.printable)[-512:] }};
           repeat bootwright apply; if it fails the same way, the declared network cannot be
-          applied: run bootwright destroy, which erases the Machines this context installed,
+          applied: {{ managedos_install_anaconda_network_recovery }},
           correct the network of {{ bootwright_os_install_request.identity.object }},
           then run bootwright apply
       when: managedos_install_anaconda_guest.rc | default(1) != 0
@@ -169,8 +169,8 @@
           + ((bootwright_os_install_request.budgets.networkReconnect.attempts | int)
           * (bootwright_os_install_request.budgets.networkReconnect.delaySeconds | int)) }}
           seconds; repeat bootwright apply; if it fails the same way, the declared network
-          cannot be applied: run bootwright destroy, which erases the Machines this context
-          installed, correct the network of {{ bootwright_os_install_request.identity.object }},
+          cannot be applied: {{ managedos_install_anaconda_network_recovery }},
+          correct the network of {{ bootwright_os_install_request.identity.object }},
           then run bootwright apply
       when: managedos_install_anaconda_network_waited | int == 3
 
@@ -228,7 +228,7 @@
           {{ bootwright_os_install_request.identity.object }}:
           {{ managedos_install_anaconda_network_applied.error }};
           repeat bootwright apply; if it fails the same way, the declared network cannot be
-          applied: run bootwright destroy, which erases the Machines this context installed,
+          applied: {{ managedos_install_anaconda_network_recovery }},
           correct the network of {{ bootwright_os_install_request.identity.object }},
           then run bootwright apply
       when:
@@ -241,7 +241,7 @@
           the network change on Machine {{ bootwright_os_install_request.identity.object }}
           was still uncommitted after its connection returned;
           repeat bootwright apply; if it fails the same way, the declared network cannot be
-          applied: run bootwright destroy, which erases the Machines this context installed,
+          applied: {{ managedos_install_anaconda_network_recovery }},
           correct the network of {{ bootwright_os_install_request.identity.object }},
           then run bootwright apply
       when:
@@ -255,8 +255,8 @@
           from Machine {{ bootwright_os_install_request.placement.machine }}, and
           NetworkManager rolled it back on Machine {{ bootwright_os_install_request.identity.object }};
           the declared network of {{ bootwright_os_install_request.identity.object }} cannot
-          change under this apply: run bootwright destroy, which erases the Machines this
-          context installed, correct the network of {{ bootwright_os_install_request.identity.object }}
+          change under this apply: {{ managedos_install_anaconda_network_recovery }},
+          correct the network of {{ bootwright_os_install_request.identity.object }}
           so {{ bootwright_os_install_request.address }} stays reachable from the controller,
           then run bootwright apply
       # A checkpoint NetworkManager no longer lists was rolled back by its own
@@ -274,7 +274,7 @@
           nmstatectl on Machine {{ bootwright_os_install_request.identity.object }} reported
           no checkpoint for the declared network;
           repeat bootwright apply; if it fails the same way, the declared network cannot be
-          applied: run bootwright destroy, which erases the Machines this context installed,
+          applied: {{ managedos_install_anaconda_network_recovery }},
           correct the network of {{ bootwright_os_install_request.identity.object }},
           then run bootwright apply
       when: >-
@@ -470,8 +470,8 @@
       differs from its declaration:
       {{ managedos_install_anaconda_network_compared.differences | default([]) | join('; ') }};
       the declared network of {{ bootwright_os_install_request.identity.object }} cannot
-      change under this apply: run bootwright destroy, which erases the Machines this
-      context installed, correct the network of {{ bootwright_os_install_request.identity.object }},
+      change under this apply: {{ managedos_install_anaconda_network_recovery }},
+      correct the network of {{ bootwright_os_install_request.identity.object }},
       then run bootwright apply
   when: not (managedos_install_anaconda_network_compared.matched | default(false) | bool)
 

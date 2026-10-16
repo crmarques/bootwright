@@ -233,3 +233,14 @@ managedos_install_anaconda_network_show:
   - /usr/bin/nmstatectl
   - show
   - --json
+# The way back from a declared network that cannot converge. A libvirt
+# Machine's destroy erases its disks, so the next apply installs it again; a
+# physical Machine's destroy releases its claim and keeps the system installed
+# on it until physical erasure lands (B70), so it must also be powered off:
+# only a powered-off Machine with no readable marker installs.
+managedos_install_anaconda_network_recovery: >-
+  {{ ('run bootwright destroy, which releases Machine ' ~ bootwright_os_install_request.identity.object
+  ~ ' but keeps the system installed on it, then power ' ~ bootwright_os_install_request.identity.object
+  ~ ' off from its management controller so the next apply installs it again')
+  if bootwright_os_install_request.target.substrate == 'baremetal'
+  else 'run bootwright destroy, which erases the Machines this context installed' }}
