@@ -711,7 +711,10 @@ without a state must be present with an equal `type`, state `up` and an equal
 `autoconf` for IPv6, when declared; and, when neither DHCP nor autoconf is on,
 the declared static addresses equal to the running ones, IPv6 link-local
 addresses aside. A bond has an equal `link-aggregation` mode, port set and each
-declared option as text; a VLAN an equal `base-iface` and `id`, and `protocol`
+declared option as text, where a mode, an enumerated option or a boolean option
+that nmstate reads by a position or an alias (`lacp` or `4`, `lacp_rate: 1`,
+`xmit_hash_policy: 2`, `use_carrier: yes`) compares as the name nmstate shows
+for it (`802.3ad`, `fast`, `layer2+3`, `true`); a VLAN an equal `base-iface` and `id`, and `protocol`
 when declared. An interface declared `absent` is not present. The declared
 routes that are not `absent` equal, one to one, the running routes on declared
 interfaces, matched on destination, `next-hop-interface` when declared,

@@ -254,6 +254,31 @@ def test_compare_names_vlan_bond_and_family_fields():
     ]
 
 
+def bonded(aggregation):
+    return {"interfaces": [{"name": "bond1", "type": "bond", "state": "up", "link-aggregation": aggregation}]}
+
+
+def test_compare_reads_bond_aliases_as_nmstate_shows_them():
+    shown = {"mode": "802.3ad", "port": ["a", "b"],
+             "options": {"lacp_rate": "fast", "xmit_hash_policy": "layer2+3", "fail_over_mac": "active",
+                         "arp_validate": "filter_backup", "use_carrier": True, "balance_slb": False, "miimon": 100}}
+    for mode, lacp, policy, mac, validate, carrier in (("lacp", 1, 2, 1, 6, "yes"), ("4", "1", "2", "1", "6", 1),
+                                                       (4, "fast", "layer2+3", "active", "filter_backup", True)):
+        declared = {"mode": mode, "port": ["b", "a"],
+                    "options": {"lacp_rate": lacp, "xmit_hash_policy": policy, "fail_over_mac": mac,
+                                "arp_validate": validate, "use_carrier": carrier, "balance-slb": "off",
+                                "miimon": "100"}}
+        assert compare(bonded(declared), bonded(shown)) == [], declared
+    declared = {"mode": "lacp", "port": ["a", "b"], "options": {"lacp_rate": 0, "xmit_hash_policy": 7}}
+    assert compare(bonded(declared), bonded(shown)) == [
+        "interface bond1: link-aggregation option lacp_rate is fast, declared 0",
+        "interface bond1: link-aggregation option xmit_hash_policy is layer2+3, declared 7",
+    ]
+    assert compare(bonded({"mode": 1}), bonded(shown)) == [
+        "interface bond1: link-aggregation mode is 802.3ad, declared 1",
+    ]
+
+
 def test_a_running_network_without_interfaces_is_one_difference():
     assert compare(desired_document(), {"routes": {}}) == ["the running network lists no interfaces"]
     assert compare(desired_document(), []) == ["the running network lists no interfaces"]

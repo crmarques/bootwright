@@ -31,6 +31,25 @@ MAX_ERROR = 512
 MAX_RC_DIGITS = 12
 MAIN_TABLE = 254
 LINK_LOCAL = ipaddress.ip_network("fe80::/10")
+# nmstate reads a bond mode, and each enumerated bond option, by its name, an
+# alias or its position, and shows only the name (nmstate
+# rust/src/lib/ifaces/bond.rs), so both sides compare by that name.
+BOND_MODES = ("balance-rr", "active-backup", "balance-xor", "broadcast", "802.3ad", "balance-tlb", "balance-alb")
+BOND_MODE_ALIASES = {"lacp": "802.3ad"}
+BOND_OPTION_NAMES = {
+    "ad_select": ("stable", "bandwidth", "count"),
+    "all_slaves_active": ("dropped", "delivered"),
+    "arp_all_targets": ("any", "all"),
+    "arp_validate": ("none", "active", "backup", "all", "filter", "filter_active", "filter_backup"),
+    "fail_over_mac": ("none", "active", "follow"),
+    "lacp_rate": ("slow", "fast"),
+    "primary_reselect": ("always", "better", "failure"),
+    "xmit_hash_policy": ("layer2", "layer3+4", "layer2+3", "encap2+3", "encap3+4", "vlan+srcmac"),
+}
+BOND_BOOLEAN_OPTIONS = ("balance_slb", "lacp_active", "tlb_dynamic_lb", "use_carrier")
+BOND_OPTION_KEYS = {"balance-slb": "balance_slb"}
+TRUE_WORDS = ("1", "true", "yes", "on", "y")
+FALSE_WORDS = ("0", "false", "no", "off", "n")
 
 
 def checkpoint_from_log(text):
@@ -257,20 +276,53 @@ def port_set(aggregation):
     return sorted(set(text(port) for port in ports)) if isinstance(ports, list) else None
 
 
+def enumerated(value, names, aliases=None):
+    """An enumerated value by the name nmstate shows: a position or alias
+    becomes its name, and anything else keeps its own text."""
+    word = text(value)
+    if word in (aliases or {}):
+        return aliases[word]
+    if re.fullmatch(r"[0-9]+", word) and int(word) < len(names):
+        return names[int(word)]
+    return word
+
+
+def bond_mode(value):
+    return enumerated(value, BOND_MODES, BOND_MODE_ALIASES)
+
+
+def bond_option(key, value):
+    """A bond option's value by the text nmstate shows it as."""
+    if key in BOND_OPTION_NAMES:
+        return enumerated(value, BOND_OPTION_NAMES[key])
+    if key in BOND_BOOLEAN_OPTIONS and not isinstance(value, bool):
+        word = text(value).lower()
+        if word in TRUE_WORDS:
+            return "true"
+        if word in FALSE_WORDS:
+            return "false"
+    return text(value)
+
+
+def bond_options(value):
+    """Bond options by the key nmstate shows each under."""
+    return {BOND_OPTION_KEYS.get(key, key): option for key, option in mapping(value).items()}
+
+
 def bond_differences(name, desired, running):
     """The differences of one bond's declared link aggregation."""
     found = []
     want, have = mapping(desired.get("link-aggregation")), mapping(running.get("link-aggregation"))
-    if "mode" in want and text(want["mode"]) != text(have.get("mode")):
+    if "mode" in want and bond_mode(want["mode"]) != bond_mode(have.get("mode")):
         found.append("interface %s: link-aggregation mode is %s, declared %s" % (
             name, text(have.get("mode")), text(want["mode"])))
     wanted_ports = port_set(want)
     if wanted_ports is not None and wanted_ports != port_set(have):
         found.append("interface %s: link-aggregation ports are %s, declared %s" % (
             name, text(port_set(have)), text(wanted_ports)))
-    have_options = mapping(have.get("options"))
-    for key, value in mapping(want.get("options")).items():
-        if text(value) != text(have_options.get(key)):
+    have_options = bond_options(have.get("options"))
+    for key, value in bond_options(want.get("options")).items():
+        if bond_option(key, value) != bond_option(key, have_options.get(key)):
             found.append("interface %s: link-aggregation option %s is %s, declared %s" % (
                 name, key, text(have_options.get(key)), text(value)))
     return found
