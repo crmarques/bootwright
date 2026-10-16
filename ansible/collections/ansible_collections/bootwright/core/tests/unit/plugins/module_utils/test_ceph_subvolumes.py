@@ -356,6 +356,18 @@ def test_subvolume_observe_never_lists_a_missing_filesystem(group):
     assert [command for command in world.log if command[:2] in (("fs", "subvolume"), ("fs", "subvolumegroup"))] == []
 
 
+def test_subvolume_unfinished_reports_owned_mark_partial():
+    world = World()
+    native, marks = worker(world)
+    native.daemons = lambda: []
+    evidence = native.observe()
+    assert not evidence["owned"] and not evidence["exists"] and not evidence["partial"]
+    marks.records["subvolume-docs.json"] = sub_value()
+    evidence = native.observe()
+    assert evidence["owned"] and evidence["exists"] and evidence["partial"] and not evidence["ready"]
+    assert volume_commands(world) == []
+
+
 @pytest.mark.parametrize("change", ["extra", "missing", "dot", "long", "nogroup", "mode", "uid", "filesystem"])
 def test_validation_refuses_a_subvolume_go_never_freezes(change):
     subvolume = sub_value()
