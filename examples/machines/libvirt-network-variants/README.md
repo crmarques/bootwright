@@ -142,13 +142,15 @@ Record each row's outcome as you go.
    destroy is context-wide.
 
 7. Drift. Lower the MTU of one guest-only VLAN. `diff --observe` reads
-   `Machine/nv-bond` partial with a difference naming the MTU of `bond0.140`.
-   Restore 1400 and it reads realized. Observation repairs nothing
+   `Machine/nv-bond` partial; it names the block, not the field that drifted,
+   so read the running MTU of `bond0.140` from the guest. Restore 1400 and it
+   reads realized. Observation repairs nothing
    ([observation and drift](../../../specs/managed-os.md#network-convergence)).
 
    ```sh
    ./bin/bootwright machine exec --name nv-bond -- sudo -n ip link set dev bond0.140 mtu 1300
    ./bin/bootwright diff --observe
+   ./bin/bootwright machine exec --name nv-bond -- sudo -n nmstatectl show bond0.140
    ./bin/bootwright machine exec --name nv-bond -- sudo -n ip link set dev bond0.140 mtu 1400
    ./bin/bootwright diff --observe
    ```
