@@ -137,7 +137,6 @@ Alias cell.
 | [B463](#b463) | new, 2026-10-08 (X46) | enabling | Controller (privilege), Desired state and Infrastructure services | Host observations of what X46 proved only in-tree | Found in X46; parked under D48 (D116); each needs root on a host, which D59's closing run provides |
 | [B464](#b464) | new, 2026-10-08 (X46) | enabling | Each spec's and test's owner | Wording, tests and dead code X46 left | Found in X46; parked under D48 (D116) |
 | [B495](#b495) | new, 2026-10-12 (X48 review) | enabling | State reconciliation, with Managed OS, Substrate and Infrastructure services | The three-node lifecycle composition runs end to end with the real runner and controlled adapters | Found in X48's review; parked under D48 (D116): D125's operator gate already proves overlap on a host, and X48's tests qualify each part |
-| [B500](#b500) | new, 2026-10-12 (the 2026-10-11 M2 review) | enabling | Storage | One reviewed IBM Ceph release profile per language, checked across Go, Python and the docs | Found in the M2 review; no milestone depends on it: the pin repeats at about twelve sites that agree today, and the next release bump is the time to consolidate them |
 | [B503](#b503) | new, 2026-10-12 (the 2026-10-11 M2 review) | defect | Substrate and Secrets | Applying a generated BMC serving certificate proves its expiry and that its key matches | Found in the M2 review; no milestone depends on it: admission now proves the names and a fresh apply binds the stored certificate |
 | [B508](#b508) | new, 2026-10-12 (the owner's M2b fixture run) | defect | Secrets, with CLI | After a refused standard-input `secret set`, `secret check` names a remedy that works | Found in the M2b run; no milestone depends on it: since b3e48bcb6 the standard-input route is refused only under a policy that logs input |
 | [B510](#b510) | new, 2026-10-12 (the owner's M2b fixture run) | defect | Workspace | Every on-demand directory creation is durable for each writer that proceeds | Found reviewing B506's fix; no milestone depends on it: each window is microseconds wide and the winner's failed sync fails its own operation |
@@ -1029,16 +1028,6 @@ and one cancellation each leaving no sibling's scratch or effect removed, and
 its destroy in inverse order, with a mutation check that unwires the
 production bound or the invocation scope; `make quick`, `make docs-check`,
 `make race` and `make check`; or withdrawn by the owner.
-
-### B500
-
-The reviewed release, 9.9.1.2 with the discovery tag `v9.9.1-25074`, is written
-at about twelve sites across Go, Python, the examples and the specs. Each
-language keeps one reviewed release profile, and a check compares the profiles
-across languages and the docs so a bump cannot leave a stale copy (found by the
-2026-10-11 M2 review). Do it with the next release bump. **Exit evidence:** one
-profile per language, a cross-language check that fails when one differs, and a
-bump that moves each place together.
 
 ### B503
 
@@ -1988,6 +1977,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B528 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the execution bundles, retained resolutions and `setup --purge-old-bundles` it concerned. |
 | B542 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the Fedora native plan and its libdnf5 solver; the host's dnf installs controller packages. |
 | B574 | 2026-10-16 | [D155](#decisions) retains records-only settlement; comparing the current build's plan is declined for now. No implementation remains. |
+| B500 | 2026-10-16 | Superseded by [D157](#decisions) and [B615](m2.md#b615): remove reviewed release pins instead of consolidating them into per-language release profiles. |
 
 ## Decisions
 
@@ -2318,3 +2308,16 @@ Requires cell as `owner decision: <question>`.
   and B80 promotion gates remain open. B476's acceptance under D155 stands.
   This decision neither completes M2 nor authorizes unrelated implementation.
   Runtime facts, exact commands, digests and raw evidence are retained locally.
+- **D157** (2026-10-16, the owner): require [B615](m2.md#b615) before M2b
+  completes. Operators may supply any IBM Ceph release, package/tool version,
+  container tag/digest and related version parameter, even nonexistent or
+  incompatible selections. Bootwright attempts those selections through native
+  package, container and Ceph tools and reports their native errors. It does
+  not validate version compatibility, register IBM's release table, maintain
+  approved-version catalogs or require per-release profiles or approval.
+  This supersedes D143's single-release admission and pinned-tag selection
+  policy, the corresponding B472 restriction and B500's proposed release
+  profiles. Independent authenticity, transport trust, authorization and frozen
+  artifact/continuation requirements remain. The owning contract is
+  [storage admission](../api/storage.md); X99 is planned and not started.
+  This request authorizes backlog/specification work, not implementation.

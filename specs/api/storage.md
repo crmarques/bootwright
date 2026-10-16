@@ -23,13 +23,32 @@ object, NFS and export feature families are refused by current pure admission.
 Their historical field tables in [field detail](../deferred/storage-api.md)
 are retained only for the later owning slices.
 
-Ordinary apply realizes the core cluster, replicated RBD pool and client for
-the one pinned release over `verified-tunnel`: IBM Storage Ceph 9.9.1.2,
+Operators select IBM Ceph release identifiers, package and tool versions,
+container tags or digests and related service-version coordinates in input.
+Bootwright preserves those selections through native package, container and
+Ceph commands, including malformed or nonexistent versions and incompatible combinations,
+and reports native failures with their cause and selected coordinate, subject
+to secret redaction. It neither checks version existence, vendor support or
+mutual compatibility nor maintains IBM's release table, an approved-version
+catalog or per-release profiles. A tested example imposes no version allowlist.
+Structural input validation and independent trust, authorization and immutable
+artifact requirements still apply; version syntax is interpreted by native
+tools rather than a Bootwright semantic-version grammar.
+
+Not yet met: operator-selected versions through native execution and native
+error reporting; tracked as [B615](../milestones/m2.md#b615), required in M2b.
+
+Current implementation: ordinary apply realizes the core cluster, replicated
+RBD pool and client for the one pinned release over `verified-tunnel`: IBM
+Storage Ceph 9.9.1.2,
 image `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9` at tag `v9.9.1-25074`, packages
 `20.2.1-405.el9cp` and cephadm-ansible `5.0.3-1`. Anything else, `native`
 included, refuses `lifecycle.unsupported` before registration, credential
-reads or native effects, and the remedy names the pinned values; a newer
-release needs a reviewed pin bump. An Entitlement whose `registry.url` is not
+reads or native effects, and the remedy names the pinned values. B615 removes
+the release/artifact pin restriction; `native` transport remains refused.
+The cephadm-ansible version is currently only
+an admission coordinate; its package is not installed or executed.
+An Entitlement whose `registry.url` is not
 `cp.icr.io` refuses the same way, with the remedy to set it to `cp.icr.io`. `image.version` accepts the pinned tag or
 the digest of its linux/amd64 child manifest, not the index digest that
 `skopeo` or `podman` print for the tag. The [release qualification](../storage-coverage.md#release-qualification) owns
@@ -164,5 +183,6 @@ checks:
 Stretch admission remains unavailable until its provider-qualified slice.
 
 These checks qualify desired intent only. Live capacity, device safety,
-release support, external-cluster identity, and native-schema compatibility
-remain gates of explicitly supported renderer or lifecycle slices.
+external-cluster identity and native-output interpretation remain gates of
+the owning lifecycle slices. They do not authorize version-combination
+screening: native tools determine version availability and compatibility.

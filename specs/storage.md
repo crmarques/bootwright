@@ -32,9 +32,10 @@ M7's standalone renderer or operator scripts. Native inputs are frozen data;
 native orchestration deploys daemons within the authorized request, while
 Bootwright owns the plan, target proof and interpretation of its result.
 
-B472 fixes exact release/tool/schema coordinates, the complete provider feature
+B472 records tested artifact/schema coordinates, the complete provider feature
 matrix and new typed API fields before their consuming implementation is
-promoted. Each feature maps to
+promoted. Tested coordinates do not restrict the operator's
+[version selection](api/storage.md). Each feature maps to
 intent, projection, effects, readiness, access, continuation and removal gates.
 Missing intent receives a deliberate API extension. Admission of other
 distributions or external clusters does not select an M2 implementation.
@@ -71,9 +72,10 @@ with the required coordinate and recovery action.
 Registry and repository entitlement, transport trust, cluster SSH trust and
 required publisher authenticity are explicit inputs. Registry login cannot
 weaken TLS verification, and a supplied digest does not substitute for required
-publisher trust. FIPS, CephX, encryption and call-home choices must match the
-qualified release and host prerequisites; unsupported combinations refuse
-before mutation.
+publisher trust. FIPS, CephX, encryption and call-home choices retain their
+independent API, trust and authorization requirements. Native tools determine
+whether the selected versions can realize those choices; Bootwright does not
+screen their version compatibility.
 
 Bootwright acquires provider artifacts using the selected Entitlement's bound
 Secret and the cluster's release/source intent. Operators import credentials;
@@ -81,13 +83,18 @@ they need not perform a separate registry login or image pre-pull. Resolution
 freezes the authenticated immutable image reference before native execution,
 and guest delivery uses that exact reference and original credential binding.
 Ambient auth files, a cached tag and operator reports cannot replace those
-proofs. Each build supports one reviewed, code-pinned release whose digest is
-frozen before any native effect, and guest delivery pulls exactly that
-reference with the original binding. Ordinary Storage apply has no other image
-or release override. The [storage API](api/storage.md) owns the
-pinned coordinates and the admission refusal, and the
+proofs. The authored version and image coordinates select the artifacts;
+native tools determine whether that selection can be installed and run.
+Acquisition freezes the selected artifacts before their native effects, and
+guest delivery uses the original binding. Bootwright does not substitute a
+reviewed release or compare the selected versions for compatibility.
+The [storage API](api/storage.md) owns version selection and the
 [release qualification](storage-coverage.md#release-qualification) owns the
 digest resolution and the authored-digest rule.
+
+Not yet met: removal of the build's release and artifact allowlist; tracked as
+[B615](milestones/m2.md#b615).
+
 IBM's public signed RPM repository does not require registry credentials.
 Red Hat media/CDN access remains a separate entitlement and source boundary.
 
@@ -174,11 +181,12 @@ owned markers scoped by owner, FSID and host:
 1. Package installation from the frozen package decision, keeping the
    inherited crypto-policy proof.
 2. A pull of the frozen image digest with a protected authfile, a signature
-   policy limited to the pinned repository and bounded attempts. A pull counts
+   policy limited to the selected repository and bounded attempts. A pull counts
    only after local inspection proves the digest and the linux/amd64 platform.
 3. A runtime profile from a contained probe of the image: the ceph account,
-   crypto policy, SELinux label and cephadm bytes, which must equal the
-   authenticated RPM payload.
+   crypto policy, SELinux label and cephadm bytes, bound to the authenticated
+   frozen image. Host RPM payloads retain their independent authenticity and
+   integrity proof without a package/image compatibility comparison.
 4. A route probe of the provider's native SSH class inside the image.
 
 The [coverage page](storage-coverage.md#release-qualification) owns the probe

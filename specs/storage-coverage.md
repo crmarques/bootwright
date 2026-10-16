@@ -13,32 +13,22 @@ minimal run is recorded in
 
 ## Release qualification
 
-The target family remains IBM Storage Ceph 9.9.x. IBM's
+IBM's
 [release/package mapping](https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions)
-identifies this family with upstream Ceph Tentacle and lists 9.9.1.2, dated
-6 September 2026. The planning references are IBM 9.9.1 documentation and
-the matching Tentacle native formats. These sources establish the release
-lineage, not a runnable package/image lock or a claim that any fix is the
-latest supported one. IBM support and its exact packaged schemas take
-precedence over upstream feature availability.
+is a reference for operators, not a Bootwright catalog. The
+[storage API](api/storage.md) owns operator-selected version coordinates and
+delegation of compatibility and installation failures to native tools (D157).
+Bootwright does not register this table or maintain per-release profiles.
 
-Before any Ceph implementation is promoted, B472 records one tested patch
-release and its support lifecycle, host OS/architecture, kernel and container
-runtime, cephadm and cephadm-ansible package coordinates and repository trust,
-Ceph image digest, every service image digest, client-tool versions, native
-service schemas, defaults and release-specific defects/workarounds. An
-entitled registry lookup supplies actual immutable digests; this plan invents
-none. A tag, documentation URL or successful schema validation alone does not
-qualify a combination. IBM, OSS and Red Hat coordinates are not interchangeable.
+B472 records the artifacts, host/runtime, native schemas, defaults and observed
+constraints of tested adapter and feature journeys. These records establish
+the scope of that evidence; they do not approve version combinations or gate
+an authored selection. B476's accepted minimal journey is recorded in its
+owner-accepted ledger row; it certifies no other version or feature.
 
-Each build supports one reviewed, code-pinned release, which amends D134's
-"latest provider release available at setup" (D143): 9.9.1.2 with discovery tag
-`v9.9.1-25074`, resolved at apply to its immutable digest and frozen for the
-run. No run resolves a newer release itself. A moving latest tag is not an
-execution lock. The [storage API](api/storage.md) owns the admission refusal
-of any other release. There is no runtime qualification registry:
-acceptance is the owner-accepted ledger row of
-[B476](milestones/delivered.md#x94--post-destroy-cluster-inspection); no other evidence promotes an artifact.
+Not yet met: removal of the current single-release, artifact and derived
+version pins; tracked as [B615](milestones/m2.md#b615), required before M2b exits.
+
 Native manager-to-host SSH must enforce pinned host keys, including a negative
 wrong-key test through actual manager connection, reconnect and failover paths.
 The [upstream Tentacle connection](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161)
@@ -46,22 +36,21 @@ disables that verification; controller-to-host verification
 alone cannot qualify this independent native channel. No authored exception
 can disable verification. `native` stays refused.
 The approved [verified-tunnel target](storage-native-api.md#verified-native-orchestration-transport)
-retains that requirement through its outer authenticated channel. Qualification
-is specific to image and transport, and includes guest forwarding restrictions,
-staged bootstrap, read-only MGR mounts, reconnection, restart/failover and owned
-recovery/removal. Candidate image inventory and parser probes alone never
-promote an artifact.
+retains that requirement through its outer authenticated channel. Transport
+proof applies to the selected artifacts and includes guest forwarding
+restrictions, staged bootstrap, read-only MGR mounts, reconnection,
+restart/failover and owned recovery/removal; prior per-version approval is not
+an admission requirement.
 
-Apply resolves the pinned tag in a controller-local image block, using the one
-declared licensed Entitlement and its protected registry Secret, before any
-native effect. The block reads only manifests from the fixed registry origin:
-the tag must resolve to an image index with exactly one linux/amd64 child
-manifest matching its indexed digest and size, and a single-manifest tag is
-refused. It fetches no blob, so no registry blob redirect takes part. Its
-evidence is the release, base, tag, child digest and platform, and the cluster,
+Apply resolves the authored tag or digest in a controller-local image block,
+using the declared licensed Entitlement and its protected registry Secret, before any
+native effect. Resolution authenticates the selected manifest and platform
+from the declared registry origin. A direct digest selects that artifact
+without resolving or comparing it to a build-pinned tag. Resolution evidence
+identifies the authored reference, selected digest and platform, and the cluster,
 pool and client blocks depend on it. The result is frozen: continuation never
-refreshes the tag, and an authored digest is admitted only when it equals the
-child digest, never the index digest that registry tools print for the tag.
+refreshes a tag or substitutes another release. Native acquisition failures
+retain their cause and the requested coordinate through Bootwright's diagnostics.
 The guest re-proves the pulled image's platform and repository digest. The
 operator supplies neither a Podman login nor a locally cached image.
 Credential delivery and the original acquisition binding remain Secrets-owned.
@@ -73,9 +62,10 @@ Bearer realms and redirects; tracked as [B79](milestones/m2.md#b79).
 Each host-preparation block derives account, code and crypto-policy facts from
 the exact immutable image pulled with the original registry binding. Its
 contained probes have no network, credential mounts, inherited image
-environment, hooks, automatic health checks or image volumes. Public cephadm
-bytes must match the independently authenticated provider RPM payload before
-cache publication. Installed RPM metadata agreement alone is not publisher
+environment, hooks, automatic health checks or image volumes. Image code and
+host RPM payloads are independently authenticated and bound to their frozen
+artifacts; equality between different selected artifacts is not a version
+compatibility gate. Installed RPM metadata agreement alone is not publisher
 authentication, and an operator report cannot create a runtime authority.
 The same contained image's SDK normalizes only the frozen core ServiceSpec
 documents, including the code-owned protected MGR mount. These native defaults
