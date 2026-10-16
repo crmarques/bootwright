@@ -4507,7 +4507,7 @@ the retirement tests `TestHostBoundEffectRetiresWithItsHostsWhichStopFirst`,
 **Constraints left behind:** each build supports one reviewed, code-pinned
 release, and the digest is frozen by the image block, not code-pinned, until
 B472's lock adds it. The runtime profile and host preparation run only on the
-apply path, and no host has run them yet: [B476](m2.md#b476)'s owner run is the
+apply path, and no host has run them yet: [B476](delivered.md#x94--post-destroy-cluster-inspection)'s owner run is the
 acceptance. The package decision journal and the operation index format moved,
 so a context from an earlier build is destroyed with its applying build or
 abandoned with `--purge --allow-orphans`. Removal while hosts survive stays
@@ -4575,7 +4575,7 @@ record or request version moved.
 the failed blocks waiting on a shared resource be retried in the same
 invocation, as before; only first attempts stop. The `lifecycle.stage`
 refusal still names only the first failed block's stage. The live
-confirmation is the next continuation of [B476](m2.md#b476)'s run.
+confirmation is the next continuation of [B476](delivered.md#x94--post-destroy-cluster-inspection)'s run.
 
 ### X72 — Ceph refusals reach the operator
 
@@ -4645,7 +4645,7 @@ package worker now ships `ceph_native_worker` in its closure to name a site. The
 detail of a controller-local refusal is checked only against the protocol's
 character filter, not attested against the shipped sources; that is safe
 because every reason it names is a code literal. The automation digest moved. The live confirmation is the next continuation of
-[B476](m2.md#b476)'s run.
+[B476](delivered.md#x94--post-destroy-cluster-inspection)'s run.
 
 ### X73 — Contained probes proved as Podman reports them
 
@@ -4684,7 +4684,7 @@ fixture now reports a container as Podman 5.8 does before and after its start:
 `default_sysctls` is not visible to the proof, because Podman reports none.
 The route probe's exercise inside the image needs a root host to run as the
 ceph account and was not reproduced off a guest; its first run is the next
-continuation of [B476](m2.md#b476)'s run. The automation digest moved.
+continuation of [B476](delivered.md#x94--post-destroy-cluster-inspection)'s run. The automation digest moved.
 
 ### X74 — continuation under a rebuilt binary
 
@@ -4828,7 +4828,7 @@ shaped like the RHEL 9 back-end; the existing drift cases keep refusing.
 **Constraints left behind:** the walk proves what sshd reads by following the
 same links sshd follows, but the whole chain is still never exercised against
 a live host before the next apply; the first run of the phases after
-`authorize` is the next continuation of [B476](m2.md#b476)'s run. An
+`authorize` is the next continuation of [B476](delivered.md#x94--post-destroy-cluster-inspection)'s run. An
 Ansible-only change moves the automation digest and no frozen block, so that
 continuation needs a rebuild and `setup`, not a destroy.
 
@@ -4917,7 +4917,7 @@ unit is starting or stopping while its container exists is pending in that
 snapshot, and its mounts are proved by the next one. The independent review's
 seven minor findings, each transient and recovered by a later apply, are
 parked as [B533](backlog.md#b533). The first live run of every phase after
-`authorize` is the next continuation of [B476](m2.md#b476)'s run.
+`authorize` is the next continuation of [B476](delivered.md#x94--post-destroy-cluster-inspection)'s run.
 
 ### X77 — Device reads on a host claimed before its authorization
 
@@ -4944,7 +4944,7 @@ failed on the previous module, and
 `test_a_published_registry_is_reproved_before_any_device_read`.
 
 **Constraints left behind:** none beyond X76's; the next continuation of
-[B476](m2.md#b476)'s run is its live confirmation.
+[B476](delivered.md#x94--post-destroy-cluster-inspection)'s run is its live confirmation.
 
 ### X78 — Host trust compared in the form the transport bundle holds
 
@@ -4972,7 +4972,7 @@ which failed on the previous module, and
 
 **Constraints left behind:** the controller still writes a blank line after
 each known_hosts entry; every reader renders it, so it is left as is. The next
-continuation of [B476](m2.md#b476)'s run is its live confirmation.
+continuation of [B476](delivered.md#x94--post-destroy-cluster-inspection)'s run is its live confirmation.
 
 ### X79 — cephadm bootstrap reads its podman version
 
@@ -5008,7 +5008,7 @@ the bootstrap argv tests assert the flag is absent.
 **Constraints left behind:** a bootstrap that fails after its attempt record
 leaves a partial seed the next apply never restarts; recovering one whose mon
 store was never made is parked as [B537](backlog.md#b537). The live run of
-[B476](m2.md#b476) is its confirmation.
+[B476](delivered.md#x94--post-destroy-cluster-inspection) is its confirmation.
 
 ### X80 — Observation snapshots settle while cephadm converges
 
@@ -5063,7 +5063,7 @@ the previous module, and
 readiness wait still refuses `not-ready` for a host that never settles rather
 than returning partial evidence. A transient name cephadm stages in the FSID
 directory (such as its `cephadm.<sha256>.new` upload) is still a foreign name.
-The next continuation of [B476](m2.md#b476)'s run is its live confirmation.
+The next continuation of [B476](delivered.md#x94--post-destroy-cluster-inspection)'s run is its live confirmation.
 
 ### X81 — The pool block reads the pool ID Ceph's listing names
 
@@ -5105,7 +5105,7 @@ in the listing's real shape; 90 of these tests failed on the previous module.
 **Constraints left behind:** the resume still identifies its pool by name,
 type, rule and attempt record only, which a pool deleted and recreated under
 the same name between the create and the resume also satisfies; B540 tracks
-a stronger fingerprint. The next continuation of [B476](m2.md#b476)'s run is
+a stronger fingerprint. The next continuation of [B476](delivered.md#x94--post-destroy-cluster-inspection)'s run is
 its live confirmation.
 
 ### X82 — Resolution and retry in one invocation
@@ -5165,7 +5165,7 @@ resolution whose retry fails or never starts.
 cannot be formed or whose log cannot open leaves the resolution's row running
 and, with no cause of its own, replaces the resolution's remedy by the log
 fault the boundary reports; the operation is then `unknown`, which that
-remedy no longer described. The next continuation of [B476](m2.md#b476)'s run
+remedy no longer described. The next continuation of [B476](delivered.md#x94--post-destroy-cluster-inspection)'s run
 is its live confirmation.
 
 ### X67 — Go toolchain vulnerability gate
@@ -6016,8 +6016,8 @@ applied side with a note saying so. A libvirt disk resized by hand beside a
 running controller reads unknown with the size refusal as its reason rather
 than projecting the observed size ([B606](backlog.md#b606)). A newer build may not compile an old frozen
 revision, and its applied objects then read unknown. A settled apply attests
-only its own records ([B574](backlog.md#b574) holds the owner's decision on
-whether it also compares the plan).
+only its own records ([D155](backlog.md#decisions) retains that policy and
+retires B574).
 
 ### X90 — Controller setup v2 retention and offline sources
 
@@ -6321,3 +6321,39 @@ that state completed. The row is an observation.
 [B560](backlog.md#b560); a dnf5 one did not arise, since nothing was missing on
 Fedora. The ledger rows hold the commands, outcomes and log digests; the
 evidence stays local to the owner.
+
+### X94 — Post-destroy cluster inspection
+
+**Owner:** CLI and Managed OS. A bounded defect slice of [M1](m1.md), the
+first unfinished hardening milestone, authorized on 2026-10-16. **Items:**
+B613, created and completed here; B476, acceptance of original X54 work.
+**Decision:** [D155](backlog.md#decisions).
+
+**Outcome:** `cluster info` after destroy reaches its existing unavailable and
+custody handling. Host-key inspection checks that managed-OS evidence belongs
+to a completed apply before decoding installation proof; removal evidence
+supplies no host keys. Malformed or inconsistent proof from a completed apply
+still refuses. The change neither mutates lifecycle state nor reveals
+credentials, and changes no durable format or contract version.
+
+**Guard tests:** `TestClusterInfoAfterDestroyReadsRemovalEvidenceAsUnavailable`
+exercises the post-destroy inspection path;
+`TestMachineHostKeysRequiresCompletedApplyEvidence` covers host-key selection
+and malformed completed-apply evidence. **Gates:** `make quick`,
+`make docs-check`, `make check` and `make race`; exact command results are
+recorded in the delivering commit.
+
+**Operator acceptance, B476 (original X54 work):** the owner accepted the
+2026-10-16 clean-build `fcff2f58` ledger row under D155, explicitly confirming
+the dashboard fingerprint comparison, successful login and expected host/OSD
+inventory checks. The console evidence covers the required journey through
+teardown and purge. Image/log digests and run details are retained locally.
+B476's acceptance baseline is the commit whose `Refs:` line closes X70; this
+row descends from it. B613's post-destroy inspection correction is qualified
+in-tree; no live rerun of the correction is claimed.
+
+**Constraints left behind:** M1 still requires B608 and B466's host-restart
+rerun. B476 is complete, but M2b promotion still requires M1 and the remaining
+core/prerequisite gates on [M2](m2.md#m2b). B80's open definition and promotion
+gates remain. D155's future reconciliation and shared-host safety directions
+remain unimplemented; this correction authorizes none of them.

@@ -6,10 +6,10 @@ intent, and [M2](milestones/m2.md) owns delivery and sequencing. Each row below
 is required when supported by the frozen IBM release; an unqualified feature
 is refused before effects, never silently omitted.
 
-Not yet met: release qualification (the owner-accepted run of the pinned
-release and the provider coverage record) and native projection; tracked as
-[B472](milestones/m2.md#b472), [B474](milestones/m2.md#b474) and
-[B476](milestones/m2.md#b476).
+Not yet met: complete release qualification and native projection; tracked as
+[B472](milestones/m2.md#b472) and [B474](milestones/m2.md#b474). B476's accepted
+minimal run is recorded in
+[X94](milestones/delivered.md#x94--post-destroy-cluster-inspection).
 
 ## Release qualification
 
@@ -38,7 +38,7 @@ run. No run resolves a newer release itself. A moving latest tag is not an
 execution lock. The [storage API](api/storage.md) owns the admission refusal
 of any other release. There is no runtime qualification registry:
 acceptance is the owner-accepted ledger row of
-[B476](milestones/m2.md#b476); no other evidence promotes an artifact.
+[B476](milestones/delivered.md#x94--post-destroy-cluster-inspection); no other evidence promotes an artifact.
 Native manager-to-host SSH must enforce pinned host keys, including a negative
 wrong-key test through actual manager connection, reconnect and failover paths.
 The [upstream Tentacle connection](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161)

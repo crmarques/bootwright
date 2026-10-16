@@ -17,21 +17,22 @@ every other command `bootwright --help` lists returns the
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
 | [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | B608, then the owner's three-node host-restart re-run for B466 (D125) |
-| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | the owner's B476 run (X54) on the latest build |
+| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | M1 prerequisite and B80/core promotion gates |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
 | [M5](milestones/m5.md) | OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44, X48 to X51, X67, X70, X83, X84, X87 to X93 are delivered.
+X44, X48 to X51, X67, X70, X83, X84, X87 to X94 are delivered.
 
 - **Next for agents:** M1's [B608](milestones/m1.md#b608), the libvirt
-  network's reboot race, when the owner authorizes it; in M2b, nothing until
-  the owner's B476 run.
+  network's reboot race, when the owner authorizes it; M2b keeps its M1
+  prerequisite and remaining core/promotion gates after B476's acceptance.
 - **Next for operator:** after B608, repeat the three-node journey's fresh
   apply, host restart and destroy for [B466](milestones/m1.md#b466), which
-  leaves M1 holding no item; then B476's run (M2b). The
+  leaves M1 holding no item. B476 (M2b) is accepted under D155; its
+  remaining core/promotion gates stay open. The
   [closing run](milestones/delivered.md#x93--the-owner-run-of-2026-10-14)
   of 2026-10-14 and 2026-10-15 completed D59's other gates and B549 and B555
   (D154). After M1: follow [M2b to M2e](milestones/m2.md#submilestones), then

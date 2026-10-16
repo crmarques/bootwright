@@ -8,11 +8,11 @@ owns delivery and qualification. An accepted storage declaration does not
 claim lifecycle support.
 
 Candidate core plans and runtime ports are implemented. Not yet met:
-owner-accepted cluster realization, complete resource lifecycles, removal
-while hosts survive and release qualification; tracked as
+complete resource lifecycles, removal while hosts survive and release
+qualification; tracked as
 [B79](milestones/m2.md#b79), [B80](milestones/m2.md#b80),
-[B81](milestones/m2.md#b81), [B472](milestones/m2.md#b472),
-[B476](milestones/m2.md#b476) and [B491](milestones/m2.md#b491).
+[B81](milestones/m2.md#b81), [B472](milestones/m2.md#b472) and
+[B491](milestones/m2.md#b491).
 
 ## Ownership and supported inputs
 
@@ -370,7 +370,7 @@ test never deletes it by name or repeats a write whose completion is
 ambiguous. Bootwright creates no test data, and read-only readiness,
 preflight, status, health and unknown-effect resolution never do. Passing
 native readiness does not claim the client-data acceptance gate passed; that
-gate is the owner-accepted run of [B476](milestones/m2.md#b476).
+gate is the owner-accepted run of [B476](milestones/delivered.md#x94--post-destroy-cluster-inspection).
 
 ## Secret custody
 

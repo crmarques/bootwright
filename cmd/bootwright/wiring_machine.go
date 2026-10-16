@@ -15,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/machine/sshlocal"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -178,7 +179,7 @@ func realizationOf(published []lifecycle.BlockEvidence) (machine.OwnershipState,
 // machineHostKeys reads the host key one context's own installation proved.
 // Reconciliation never interprets a capability's evidence, so the capability
 // that wrote it decodes it here, and a session asks only for the answer.
-type machineHostKeys struct{ reconciler lifecycle.Service }
+type machineHostKeys struct{ reconciler evidenceReader }
 
 func (h machineHostKeys) HostKey(ctx context.Context, contextName, name string) (machine.HostKeyEvidence, bool, error) {
 	published, err := h.reconciler.Evidence(ctx, contextName, "Machine", name)
@@ -186,7 +187,7 @@ func (h machineHostKeys) HostKey(ctx context.Context, contextName, name string) 
 		return machine.HostKeyEvidence{}, false, err
 	}
 	for _, block := range published {
-		if block.Implementation != installation.Implementation || len(block.Evidence) == 0 {
+		if block.Implementation != installation.Implementation || block.Verb != reconciliation.Apply || block.State != reconciliation.BlockDone || len(block.Evidence) == 0 {
 			continue
 		}
 		address, key, err := installation.HostKeyEvidence(block.Evidence)

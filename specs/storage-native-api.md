@@ -142,8 +142,10 @@ configuration. That probe does not prove the complete MGR lifecycle or the
 guest sshd policy. Correct/wrong-key behavior through actual manager
 connections, actual MGR UID/permissions/SELinux, reconnection,
 restart/failover, interrupted-state recovery and removal remain
-[B472/B79/B80](milestones/m2.md#m2b) promotion evidence, and the owner-accepted
-run of [B476](milestones/m2.md#b476) closes it.
+[B472/B79/B80](milestones/m2.md#m2b) promotion evidence. B476's accepted
+minimal run is recorded in
+[X94](milestones/delivered.md#x94--post-destroy-cluster-inspection); remaining
+core/promotion gates stay on M2.
 
 The candidate supplies registry access through an exclusively owned protected
 guest Podman authfile. Native bootstrap and registry-login arguments never

@@ -189,10 +189,10 @@ creating write before any effect; extends B243 and B267.
 No effect. Decision: one decision path, re-proof included, for `plan`,
 `apply` and `diff`.
 
-**[B574](../../specs/milestones/backlog.md#b574): a settle is a claim about
+**[B574](../../specs/milestones/backlog.md#retired): a settle is a claim about
 records.** A build planning other blocks for the same input still reports
-`done`; specified and fail-safe. Decision: whether a settle compares
-`PlanDigest` awaits the owner.
+`done`; specified and fail-safe. [D155](../../specs/milestones/backlog.md#decisions) accepts
+records-only settle: it does not replan or read the host.
 
 **B248: the artifact server's resolution records `done` over a superseded
 configuration.** Its `Evidence`
