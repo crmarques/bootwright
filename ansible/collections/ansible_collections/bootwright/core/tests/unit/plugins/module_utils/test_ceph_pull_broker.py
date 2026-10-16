@@ -165,9 +165,9 @@ def test_native_tls_client_uses_exact_reference_without_receiving_credentials(tm
         connection = socket.create_connection(("127.0.0.1", port), timeout=5)
         connection.sendall(("CONNECT " + REGISTRY + ":443 HTTP/1.1\r\nHost: " + REGISTRY + ":443\r\n\r\n").encode())
         assert connection.recv(4096) == b"HTTP/1.1 200 Connection Established\r\n\r\n"
-        context = ssl.create_default_context(cafile=str(tmp_path / "ca.crt"))
+        context = ssl.create_default_context(cafile=service.cert_directory + "/ca.crt")
         if client_identity:
-            context.load_cert_chain(str(tmp_path / "client.cert"), str(tmp_path / "client.key"))
+            context.load_cert_chain(service.cert_directory + "/client.cert", service.cert_directory + "/client.key")
 
         def fetch():
             with context.wrap_socket(connection, server_hostname=REGISTRY) as secured:

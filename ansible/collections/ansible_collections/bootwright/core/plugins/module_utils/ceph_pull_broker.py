@@ -50,7 +50,7 @@ def authority(value):
     return parsed.hostname, parsed.port or 443
 
 
-def certificate(directory, registry, command):
+def certificate(directory, cert_directory, registry, command):
     """Use the signed native OpenSSL executable; no Python crypto dependency."""
     host, unused_port = authority(registry)
     try:
@@ -76,13 +76,15 @@ def certificate(directory, registry, command):
     context.load_cert_chain(cert, key)
     context.load_verify_locations(cafile=cert)
     context.verify_mode = ssl.CERT_REQUIRED
-    # containers/image reads only paired .cert/.key names for client TLS.
+    # containers/image rejects every .key without a matching .cert. Keep
+    # broker setup material outside the directory scanned by the native client.
     # This ephemeral identity permits the native process to use this broker;
     # it has no authority at the real registry.
-    for source, name in ((cert, "client.cert"), (key, "client.key")):
-        with open(source, "rb") as incoming, open(os.path.join(directory, name), "xb") as outgoing:
+    os.mkdir(cert_directory, 0o700)
+    for source, name in ((cert, "ca.crt"), (cert, "client.cert"), (key, "client.key")):
+        with open(source, "rb") as incoming, open(os.path.join(cert_directory, name), "xb") as outgoing:
             outgoing.write(incoming.read(65536))
-        os.chmod(os.path.join(directory, name), 0o600)
+        os.chmod(os.path.join(cert_directory, name), 0o600)
     return context
 
 
@@ -261,7 +263,8 @@ class Broker:
         require(separator and HEX.fullmatch(self.digest) is not None and self.repository.startswith(self.authority + "/"))
         self.namespace = self.repository.split("/", 1)[1]
         self.upstream = upstream or Upstream(self.authority, self.repository, json.loads(private), deadline)
-        self.tls = tls or certificate(directory, self.authority, command)
+        self.cert_directory = os.path.join(directory, "native-certs")
+        self.tls = tls or certificate(directory, self.cert_directory, self.authority, command)
         self.home = os.path.join(directory, "home")
         os.mkdir(self.home, 0o700)
         self.registries = os.path.join(directory, "registries.conf")
@@ -402,7 +405,12 @@ class Broker:
         for worker in self.workers:
             worker.join(timeout=max(0, deadline - time.monotonic()))
         require(not self.thread.is_alive() and all(not worker.is_alive() for worker in self.workers))
-        for name in ("openssl.cnf", "broker.key", "ca.crt", "client.cert", "client.key", "registries.conf"):
+        for name in ("ca.crt", "client.cert", "client.key"):
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(os.path.join(self.cert_directory, name))
+        with contextlib.suppress(FileNotFoundError):
+            os.rmdir(self.cert_directory)
+        for name in ("openssl.cnf", "broker.key", "ca.crt", "registries.conf"):
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(os.path.join(self.directory, name))
         os.rmdir(self.home)

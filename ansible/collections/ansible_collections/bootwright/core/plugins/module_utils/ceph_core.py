@@ -197,8 +197,8 @@ def dashboard_output(path, value):
 
 def bootstrap_launcher(supervisor_source, host_source):
     """The long host launcher's fixed code, admitting only the bootstrap phase under the bootstrap ceiling."""
-    return ("s={'__name__':'fixed_ceph_supervisor'};exec(compile(" + repr(supervisor_source) + ",'<fixed-ceph-supervisor>','exec'),s);"
-            "f={'__name__':'fixed_ceph_host'};exec(compile(" + repr(host_source) + ",'<fixed-ceph-host>','exec'),f);"
+    return (ceph_native_worker.launcher(supervisor_source)
+            + "f={'__name__':'fixed_ceph_host'};exec(compile(" + repr(host_source) + ",'<fixed-ceph-host>','exec'),f);"
             "f.update(REMOTE_LIMIT=" + str(BOOTSTRAP_CEILING) + ",PHASE='bootstrap');f['main'](s)")
 
 
@@ -309,7 +309,8 @@ class Transport:
             source = bootstrap_launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
             return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": BOOTSTRAP_BUDGET}, BOOTSTRAP_CALL,
                               worker_budget=BOOTSTRAP_BUDGET, worker_ceiling=BOOTSTRAP_CEILING)
-        return self._call(host, inspect.getsource(ceph_native_worker), {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout,
+        source = ceph_native_worker.launcher(inspect.getsource(ceph_native_worker)) + "s['main']()"
+        return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout,
                           worker_budget=budget)
 
     def host_profile(self, host):

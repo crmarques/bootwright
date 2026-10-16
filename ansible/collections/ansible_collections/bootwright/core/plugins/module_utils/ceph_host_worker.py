@@ -47,6 +47,8 @@ def main(supervisor):
 
 
 def launcher(supervisor_source, source):
-    """Only two code-owned helpers enter argv; the shipped modules use protected stdin."""
-    return ("s={'__name__':'fixed_ceph_supervisor'};exec(compile(" + repr(supervisor_source) + ",'<fixed-ceph-supervisor>','exec'),s);"
-            "f={'__name__':'fixed_ceph_host'};exec(compile(" + repr(source) + ",'<fixed-ceph-host>','exec'),f);f['main'](s)")
+    """Only fixed launcher code enters argv; the native module bundle uses protected stdin."""
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker
+
+    return (ceph_native_worker.launcher(supervisor_source)
+            + "f={'__name__':'fixed_ceph_host'};exec(compile(" + repr(source) + ",'<fixed-ceph-host>','exec'),f);f['main'](s)")

@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker, native_diagnostics
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_host_worker, ceph_native_worker, native_diagnostics
 
 
 def source_bundle():
@@ -346,3 +346,70 @@ def test_failure_cause_is_a_closed_reason_or_a_code_site_never_a_value():
     for value in (dict(results["error"], cause="secret value"), dict(results["error"], cause="OSError@ceph_native.dispatch"), dict(results["error"], cause="")):
         with pytest.raises(ValueError, match="^fixed native worker$"):
             ceph_native_worker.result_bytes(value)
+
+
+@pytest.mark.parametrize("phase", ["host_observe", "profile", "bootstrap"])
+def test_clean_supervisor_preserves_redacted_native_failure_through_each_launcher(phase):
+    sources = ceph_core.Transport.native_sources()
+    sources["ceph_native"] += (
+        "\ndef dispatch(value):\n"
+        "    raise NativeFailure('image-pull', 'registry.example.test/ceph:authored', "
+        "'pull refused password=synthetic-secret known-private', secrets=('known-private',))\n"
+    )
+    supervisor = inspect.getsource(ceph_native_worker)
+    host = inspect.getsource(ceph_host_worker)
+    if phase == "profile":
+        source = ceph_host_worker.launcher(supervisor, host)
+    elif phase == "bootstrap":
+        source = ceph_core.bootstrap_launcher(supervisor, host)
+    else:
+        source = ceph_native_worker.launcher(supervisor) + "s['main']()"
+    payload = {"sources": sources, "payload": {"phase": phase}, "budget": 3}
+    result = subprocess.run([sys.executable, "-I", "-c", source, "3"], input=json.dumps(payload).encode(),
+                            capture_output=True, timeout=10, check=False)
+    assert result.returncode == 0 and result.stderr == b""
+    value = json.loads(result.stdout)
+    assert value["ok"] is False and value["reason"] == "native-refusal"
+    assert value["cause"].startswith("image-pull@ceph_native.dispatch:")
+    assert value["nativeError"] == {"coordinate": "registry.example.test/ceph:authored",
+                                    "cause": "pull refused password=[redacted] [redacted]"}
+    assert b"synthetic-secret" not in result.stdout and b"known-private" not in result.stdout
+
+
+@pytest.mark.parametrize("malformed", [
+    {"coordinate": "selected", "cause": "native failure"}, {}, {"coordinate": "selected", "cause": ""},
+    {"coordinate": "selected", "cause": "line\nbreak"},
+    {"coordinate": "selected", "cause": "x" * (native_diagnostics.MAX_CAUSE + 1)},
+    {"coordinate": "selected", "cause": "error", "extra": "private"},
+])
+def test_clean_parent_rejects_malformed_diagnostics_even_when_child_sends_them(malformed):
+    source = ceph_native_worker.launcher(inspect.getsource(ceph_native_worker))
+    source += """
+import json
+
+received = []
+validate = s['result_bytes']
+child_work = s['child_work']
+
+def parent_validate(value):
+    received.append(value)
+    return validate(value)
+
+def raw_child(*args):
+    # This runs after fork, before child_work resolves its serialization callable.
+    s['result_bytes'] = lambda value: json.dumps(value).encode()
+    child_work(*args)
+
+s['result_bytes'] = parent_validate
+s['child_work'] = raw_child
+value = {'ok': False, 'reason': 'native-refusal', 'nativeError': """ + repr(malformed) + """}
+result = s['supervise'](lambda: value, budget=3, grace=0)
+print(json.dumps({'result': result, 'received': received}))
+"""
+    result = subprocess.run([sys.executable, "-I", "-c", source], capture_output=True, timeout=10, check=False)
+    assert result.returncode == 0 and result.stderr == b""
+    observed = json.loads(result.stdout)
+    transmitted = {"ok": False, "reason": "native-refusal", "nativeError": malformed}
+    assert observed["received"] == [transmitted]
+    expected = transmitted if native_diagnostics.valid(malformed) else {"ok": False, "reason": "native-unknown"}
+    assert observed["result"] == expected

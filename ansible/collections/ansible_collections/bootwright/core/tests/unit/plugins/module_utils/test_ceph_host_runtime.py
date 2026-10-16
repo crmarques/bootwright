@@ -13,6 +13,9 @@ import hashlib
 import json
 import os
 import re
+import ssl
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -26,12 +29,15 @@ PAYLOAD = b"#!/usr/bin/python3\n# synthetic cephadm payload\n"
 
 @pytest.fixture(autouse=True)
 def injected_broker(monkeypatch):
+    original = runtime.ceph_pull_broker.Broker
+
     class Broker:
         environment = {}
 
         def __init__(self, directory, request, private, deadline, command):
             assert json.loads(private)["password"] == PASSWORD
             assert request["image"] == IMAGE
+            self.cert_directory = os.path.join(directory, "native-certs")
 
         def __enter__(self):
             return self
@@ -40,6 +46,7 @@ def injected_broker(monkeypatch):
             return False
 
     monkeypatch.setattr(runtime.ceph_pull_broker, "Broker", Broker)
+    return original
 
 
 @pytest.fixture
@@ -157,6 +164,64 @@ def test_a_pull_counts_only_once_inspection_proves_the_digest_and_platform(reque
     with worker.journal() as durable:
         assert worker.pull(durable, registry(request_value), 4285) is False
     assert pull_argv_count(podman) == 1
+
+
+@pytest.mark.parametrize("outcome", ["ok", "fail"])
+def test_pull_cert_directory_loads_native_client_identity(request_value, tmp_path, monkeypatch, injected_broker, outcome):
+    """Real certificates, native directory discovery, and no registry/container effects."""
+    monkeypatch.setattr(runtime.ceph_pull_broker, "Broker", injected_broker)
+
+    class Upstream:
+        def __init__(self, *unused):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(runtime.ceph_pull_broker, "Upstream", Upstream)
+    podman = Podman(request_value, [outcome] * runtime.PULL_ATTEMPTS)
+    directories = []
+
+    def command(argv, timeout, limit, **options):
+        if argv[:2] == ["/usr/bin/openssl", "req"]:
+            result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    timeout=timeout, check=True, env={"PATH": "/usr/bin:/bin", "LANG": "C"})
+            assert len(result.stdout) + len(result.stderr) <= limit
+            return 0, result.stdout
+        if argv[:2] == ["/usr/bin/podman", "pull"]:
+            directory = Path(argv[argv.index("--cert-dir") + 1])
+            directories.append(directory)
+            # containers/image SetupCertificates scans all .key and .cert files,
+            # rejecting an orphan in either direction before any registry request.
+            names = {path.name for path in directory.iterdir()}
+            context = ssl.create_default_context()
+            for path in directory.iterdir():
+                if path.suffix == ".key":
+                    assert path.with_suffix(".cert").name in names
+                elif path.suffix == ".cert":
+                    assert path.with_suffix(".key").name in names
+                    context.load_cert_chain(str(path), str(path.with_suffix(".key")))
+                elif path.suffix == ".crt":
+                    context.load_verify_locations(cafile=str(path))
+            assert names == {"ca.crt", "client.cert", "client.key"}
+            assert directory.stat().st_mode & 0o777 == 0o700
+            assert all(path.stat().st_mode & 0o777 == 0o600 for path in directory.iterdir())
+            assert PASSWORD not in str(options.get("environment"))
+            assert all(PASSWORD.encode() not in path.read_bytes() for path in directory.iterdir())
+        return podman(argv, timeout, limit)
+
+    worker, markers, unused = host_runtime(request_value, tmp_path, command)
+    with contextlib.ExitStack() as stack:
+        if outcome == "fail":
+            stack.enter_context(pytest.raises(ceph_native.Refusal, match="^image-pull$"))
+        with worker.journal(create=True) as durable:
+            assert worker.pull(durable, registry(request_value), 4285) is True
+    assert len(directories) == (1 if outcome == "ok" else runtime.PULL_ATTEMPTS)
+    assert all(not directory.exists() for directory in directories)
+    for directory in directories:
+        if directory.parent.exists():
+            assert {path.name for path in directory.parent.iterdir()} == {"policy.json"}
+    assert ("pulled.json" in markers.records) is (outcome == "ok")
 
 
 def test_pull_retries_stay_bounded_and_refuse_after_three_attempts(request_value, tmp_path):

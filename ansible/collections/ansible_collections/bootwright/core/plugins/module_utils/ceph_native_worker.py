@@ -23,6 +23,9 @@ import sys
 import time
 import types
 
+if globals().get("__package__"):
+    from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
+
 PREFIX = "ansible_collections.bootwright.core.plugins.module_utils"
 MODULES = ("native_diagnostics", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native",
            "ceph_host_route_probe", "ceph_pull_broker", "ceph_host_runtime")
@@ -42,6 +45,17 @@ LAUNCHED = {"<fixed-ceph-supervisor>": "ceph_native_worker"}
 
 class RemoteDeadline(Exception):
     """The controller's smaller execution allowance elapsed without disclosure."""
+
+
+def launcher(supervisor_source):
+    """Bind the shared validator before forking in a collection-free interpreter."""
+    import inspect
+
+    diagnostics_source = inspect.getsource(native_diagnostics)
+    return ("import types;d=types.ModuleType('fixed_native_diagnostics');exec(compile(" + repr(diagnostics_source)
+            + ",'<fixed-native-diagnostics>','exec'),d.__dict__);"
+            "s={'__name__':'fixed_ceph_supervisor','native_diagnostics':d};exec(compile("
+            + repr(supervisor_source) + ",'<fixed-ceph-supervisor>','exec'),s);")
 
 
 def require(condition):
@@ -171,7 +185,6 @@ def result_bytes(value):
                 and value["reason"] in ("native-unknown", "native-refusal", "native-timeout"))
         require("cause" not in value or valid_cause(value["cause"]))
         if "nativeError" in value:
-            from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
             require(native_diagnostics.valid(value["nativeError"]))
     data = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
     require(0 < len(data) <= MAX_RESULT)

@@ -472,7 +472,8 @@ class HostRuntime:
                 ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command) as broker:
             policy = os.path.join(scratch, "policy.json")
             ceph_native.private_write(policy, signature_policy(image))
-            argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth, "--cert-dir", scratch, image]
+            argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth,
+                    "--cert-dir", broker.cert_directory, image]
             while True:
                 seconds = min(PULL_SECONDS, deadline - self.clock() - PULL_RESERVE)
                 require(seconds >= PULL_MINIMUM, "image-pull")
