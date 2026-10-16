@@ -106,6 +106,7 @@ func TestAuthoredKickstartValuesAreRefusedBeforePlan(t *testing.T) {
 // mirror in the rows that need one.
 const labHostedTree = `        hostedTree:
           fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
+
           artifactServerEndpoint:
             serverRef: lab-artifacts
             endpointRef: ip-http

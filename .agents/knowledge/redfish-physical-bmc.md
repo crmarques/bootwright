@@ -293,7 +293,7 @@ server is unproved.
   require. A plain `openssl req -x509` with a distribution's default
   configuration marks the certificate `CA:TRUE` (observed with OpenSSL 3.5 on
   Fedora), so set the extensions explicitly. The
-  [lab-baremetal README's](../../examples/lab-baremetal/README.md) invocation
+  [lab-baremetal README's](../../examples/machines/lab-baremetal/README.md) invocation
   sets `basicConstraints`, `keyUsage` and `extendedKeyUsage` with `-addext`;
   its output passed the material check with OpenSSL 3.5.8 on Fedora, and it
   has not been run on a RHEL 9 host.

@@ -372,9 +372,9 @@ same sockets and the same guest bridge.
 
 | Journey | What it runs | Gate |
 | --- | --- | --- |
-| [lab-rhel](../examples/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, a session through exec and rsh, a restart, a settled replay, a removal refused while the guest runs, a fresh apply and a host restart | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; next, M1's closing run ([D59](../specs/milestones/backlog.md#decisions)) |
-| [lab-sno](../examples/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
-| [lab-baremetal](../examples/lab-baremetal/README.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish controller, its installer image and host key published privately; the HTTPS emulated rehearsal still needs a CA trust chain accepted by the physical BMC contract, [B446](../specs/milestones/m2.md#b446) | [B73](../specs/milestones/m2.md#b73) operator gate, not run |
+| [lab-rhel](../examples/machines/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, exec/rsh sessions, drift observation, replay, restart and safe removal; extended acceptance checks are below | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; M1's extended checks follow [D59](../specs/milestones/backlog.md#decisions) |
+| [lab-sno](../examples/container-clusters/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
+| [lab-baremetal](../examples/machines/lab-baremetal/README.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish controller, its installer image and host key published privately; the HTTPS emulated rehearsal still needs a CA trust chain accepted by the physical BMC contract, [B446](../specs/milestones/m2.md#b446) | [B73](../specs/milestones/m2.md#b73) operator gate, not run |
 
 Run each block from the repository root, one line at a time, and keep the
 sequence exactly as run: the ledger records it. After each operation, `status`
@@ -545,7 +545,7 @@ if any gate fails. A known reachable vulnerability on the pinned Go toolchain
 is not a pass. This command installs no controller packages and runs no lab
 effects.
 
-M1 also needs D59's extended [lab-rhel journey](../examples/lab-rhel/README.md#run-it)
+M1 also needs D59's extended [lab-rhel journey](../examples/machines/lab-rhel/README.md#run-it)
 on a clean committed build. A build at or after the setup v2 cut-over (X88)
 first needs the [fresh install](#a-host-an-earlier-bootwright-build-manages) on
 a host an earlier build prepared; the
@@ -558,7 +558,7 @@ does not qualify that part of the gate. Record setup's timings, its plan and
 the receipt table in the [setup row](acceptance.md#setup-v2-fresh-install-row).
 Keep a local run record outside Git.
 
-X48 adds the [three-node RHEL journey](../examples/lab-rhel-3-nodes/README.md)
+X48 adds the [three-node RHEL journey](../examples/machines/lab-rhel-3-nodes/README.md)
 to that gate. Prove actual overlapping service work, machine realization and
 three same-profile installation waits, with exactly one package-tree
 publication. Keep timestamped progress and operation logs locally; graph
@@ -566,8 +566,14 @@ waves and total runtime alone do not qualify the overlap. Repeat apply and
 safe destroy, proving all guests stopped and no sibling scratch, shared tree
 or managed units remain.
 
-Besides the runbook's time, running-disk, machine-access, replay, restart,
-removal-refusal and final-unit checks, run these JSON status cases after the
+Extended acceptance adds a running-disk size read, a destroy refused while
+the guest runs, then stop and destroy, a fresh apply, a host restart and
+guest start/stop/removal checks. The three-node host-restart rerun remains
+gated by [B608](../specs/milestones/m1.md#b608). These checks qualify the
+milestone beyond the ordinary example journey.
+
+Besides the runbook's time, machine-access, replay, restart and final-unit
+checks, run these JSON status cases after the
 first complete apply as an unprivileged account under password-required sudo,
 with no matching `NOPASSWD` grant. A root or passwordless invocation does not
 qualify the missing-password refusal. Each case emits exactly one JSON

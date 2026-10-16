@@ -157,4 +157,4 @@ and removes when the network is undefined; nothing touches firewalld directly.
 The Redfish surface above was read from the source, not driven through a
 complete installation; `mkksiso` and `xorriso` against RHEL 9.8 media were
 checked by hand only for their argument surface. The first real run of
-`examples/lab-rhel` is where both are proved.
+`examples/machines/lab-rhel` is where both are proved.

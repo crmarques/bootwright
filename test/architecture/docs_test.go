@@ -486,10 +486,15 @@ func TestDocsExamplesAreIndexed(t *testing.T) {
 	}
 	examples := map[string]bool{}
 	for _, name := range tracked {
-		if rest, ok := strings.CutPrefix(name, "examples/"); ok {
-			if example, _, nested := strings.Cut(rest, "/"); nested {
-				examples[example] = true
+		if rest, ok := strings.CutPrefix(name, "examples/"); ok && strings.HasSuffix(rest, "/environment.yaml") {
+			example := strings.TrimSuffix(rest, "/environment.yaml")
+			if len(strings.Split(example, "/")) != 2 {
+				t.Errorf("examples/%s must be under a category and scenario directory", rest)
 			}
+			if !slices.Contains(tracked, "examples/"+example+"/README.md") {
+				t.Errorf("examples/%s has no runbook", example)
+			}
+			examples[example] = true
 		}
 	}
 	for _, example := range sortedKeys(examples) {

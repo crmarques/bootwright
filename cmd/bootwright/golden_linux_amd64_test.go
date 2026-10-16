@@ -107,25 +107,16 @@ const (
 // An example is the declaration an operator starts from, so the effective
 // state render effective prints for it is contract: normalization, defaults
 // and canonical encoding all reach these bytes (specs/cli/output.md, streams).
-// Each directory under examples/ compiles through the production compiler and
-// its canonical YAML is compared with testdata/effective-<example>.golden. A
-// new example needs its golden, and a golden whose example is gone fails.
+// Each categorized scenario compiles through the production compiler and its
+// canonical YAML is compared with testdata/effective-<example>.golden. A new
+// example needs its golden, and a golden whose example is gone fails.
 func TestEveryExampleEffectiveStateMatchesItsGolden(t *testing.T) {
-	entries, err := os.ReadDir(filepath.Join("..", "..", "examples"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	directories := exampleDirectories(t)
 	var examples []string
-	for _, entry := range entries {
-		// examples/wip holds ignored local translations of real environments
-		// and is never part of the tree (examples/README.md).
-		if entry.IsDir() && entry.Name() != "wip" {
-			examples = append(examples, entry.Name())
-		}
+	for name := range directories {
+		examples = append(examples, name)
 	}
-	if len(examples) == 0 {
-		t.Fatal("no example directory was found under examples/")
-	}
+	slices.Sort(examples)
 	for _, name := range examples {
 		t.Run(name, func(t *testing.T) {
 			if name == refusedExample {
@@ -158,7 +149,7 @@ func TestEveryExampleEffectiveStateMatchesItsGolden(t *testing.T) {
 		name := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(path), "effective-"), ".golden")
 		known := slices.Contains(examples, name) || name == refusedExample+admissibleGoldenSuffix && slices.Contains(examples, refusedExample)
 		if !known {
-			t.Errorf("%s pins examples/%s, which no longer exists; delete the golden with its example", path, name)
+			t.Errorf("%s pins missing example %s; delete the golden with its example", path, name)
 		}
 	}
 }

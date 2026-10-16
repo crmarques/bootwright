@@ -1,0 +1,57 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: multidc
+
+spec:
+  domains:
+    base: example.com
+    machines: example.com
+    clusters: clusters.example.com
+    containerClusters: clusters.example.com
+    storageClusters: clusters.example.com
+
+  sites:
+    - name: site-a
+    - name: site-b
+    - name: site-c
+
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+
+  defaults:
+    ContainerCluster:
+      install:
+        pullSecretRef: openshift-pull-secret
+
+        proxy:
+          proxyRef: default
+
+          noProxy:
+            - .example.com
+            - 192.0.2.0/24
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+
+        ntp:
+          - serverRef: default-01
+          - serverRef: default-02
+          - serverRef: default-03
+
+    MachineInstallProfile:
+      proxy:
+        proxyRef: default
+
+        noProxy:
+          - .example.com
+          - 192.0.2.0/24
+          - 198.51.100.0/24
+          - 203.0.113.0/24
+
+      ntp:
+        - serverRef: default-01
+        - serverRef: default-02
+        - serverRef: default-03
+
+  controller:
+    machineRef: controller

@@ -1,84 +1,70 @@
 # Examples
 
-This directory is the versioned home for synthetic Bootwright desired-state
-examples. Every tracked example must:
+Choose the outcome you want, then follow that scenario's README from the
+repository root. Each directory is a self-contained desired-state input;
+validate or import that directory, rather than its category or all of
+`examples/`, which contain multiple Environments.
 
-- use `apiVersion: bootwright.io/v1alpha1` on each Bootwright object;
-- conform to [the desired-state API](../specs/api.md);
-- contain no secret bytes, real-machine identity, private endpoint, private
-  topology, credential-bearing URL, or other environment-specific value; and
-- put co-located YAML payloads below the exact reserved `playbooks`, `roles`,
-  `collections`, `manifests`, or `secrets` roots so desired-state discovery
-  never reads them.
+| Type | Example | Outcome |
+| --- | --- | --- |
+| `machines/` | [lab-rhel](machines/lab-rhel/README.md) | Install RHEL on one libvirt guest through an emulated Redfish BMC. |
+| `machines/` | [lab-rhel-3-nodes](machines/lab-rhel-3-nodes/README.md) | Install three RHEL guests concurrently using a shared package tree. |
+| `machines/` | [lab-baremetal](machines/lab-baremetal/README.md) | Install RHEL on one physical server through its Redfish BMC. |
+| `infra-components/` | [lab-services](infra-components/lab-services/README.md) | Run managed proxy, DNS, NTP and artifact services on the controller. |
+| `storage-clusters/` | [libvirt-3-nodes-ceph](storage-clusters/libvirt-3-nodes-ceph/README.md) | Install three RHEL guests and a core IBM Ceph cluster with an RBD pool and client. |
+| `container-clusters/` | [lab-sno](container-clusters/lab-sno/README.md) | Install single-node OpenShift on a libvirt guest. |
+| `full-platforms/` | [multidc-platform](full-platforms/multidc-platform/README.md) | Authoring reference for a multi-datacenter platform; current admission refuses its unsupported features. |
 
-[`multidc-platform/`](multidc-platform/) is a synthetic, non-operational
-multi-datacenter graph. It demonstrates a large resource and reference surface
-using fictional identities, documentation address ranges, and deliberately
-fake operational coordinates. Its private Secret payload root is ignored.
-It is a future authoring reference: current admission explicitly refuses its
-stretch, observability, and CephFS/RGW/export features pending their qualified
-slices. The test suite asserts those refusals.
+Machine and cluster examples include the infrastructure they need. There is no
+dependency on running another example first. Their shared service addresses and
+ports mean these lab scenarios should run one at a time on a host unless you
+assign distinct resources. Read each runbook's prerequisites and qualification
+limits before applying it. The [operator guide](../docs/operator-guide.md)
+owns controller setup and host access; [milestones](../specs/milestones.md)
+owns delivery and operator acceptance status.
 
-Inspect the whole reference graph; this command currently reports the expected
-unsupported-feature diagnostics:
+## Prepare an operator copy
 
-```text
-bootwright validate -f examples/multidc-platform
-```
+Tracked inputs use documentation addresses and synthetic identities. Copy a
+scenario outside the repository, customize it, and supply licensed media and
+secrets as its runbook directs. Placeholder checksums and registry digests are
+not real content identities: replace them with values verified for your media
+and release. `validate` proves admission, not connectivity or readiness.
 
-[`lab-rhel/`](lab-rhel/) is the single-machine lab: the development machine is
-the controller, hosts the managed proxy, DNS, NTP and artifact-server
-containers of the `infra-components` stage, and provides the libvirt guest
-whose RHEL Bootwright installs through an emulated Redfish BMC. It uses
-documentation addresses and a synthetic domain, and its README walks the
-journey that prepares the controller from it.
+Context import freezes a copy of the input; edits to the source directory do
+not update the context. To replace applied intent, complete destroy while
+keeping the context, then use
+`context update --name <context> --input-dir <directory>` and review `plan`
+before a fresh apply. For input already imported, `diff` compares it with the
+context's recorded realization.
+An unfinished apply continues with the same stage selection after the cause is
+resolved. Follow the refusal's remedy if frozen intent or execution inputs
+changed; do not delete context evidence to force a retry. Each scenario gives
+its removal sequence.
 
-[`lab-rhel-3-nodes/`](lab-rhel-3-nodes/) extends it to three RHEL guests using
-one install profile and package tree. Its README checks concurrent services,
-machine realization and installation, followed by replay and safe removal.
+## Contributing examples
 
-[`libvirt-3-nodes-ceph/`](libvirt-3-nodes-ceph/) adds dedicated OSD disks,
-native core services, an RBD pool and a pool-scoped client. Its README is the
-staged-apply procedure from the first context to the removal of the cluster and
-its guests.
+Every tracked example must use `apiVersion: bootwright.io/v1alpha1`, conform to
+the [API](../specs/api.md), and contain no secret bytes, real-machine identity,
+private endpoint, topology, or credential-bearing URL. Each scenario has an
+`environment.yaml` and concise README covering customization, execution,
+inspection, recovery and removal. Follow the repository's
+[YAML style](../.agents/skills/code-implementation/references/formatting.md#yaml),
+including one empty line between logical blocks. Co-located non-object YAML
+belongs under the
+exact reserved `playbooks`, `roles`, `collections`, `manifests`, or `secrets`
+roots so desired-state discovery skips it.
 
-[`lab-sno/`](lab-sno/) is that same single-machine lab with one
-single-node OpenShift cluster instead of an installed RHEL guest: the same
-managed proxy, DNS, NTP and artifact-server set, one libvirt Machine the
-substrate realizes and the agent installer supplies the operating system of,
-and the cluster that installs onto it. Its README walks the journey.
+`examples/wip/` is an ignored local work area for operator translations. Verify
+the boundary before putting real inputs there:
 
-[`lab-baremetal/`](lab-baremetal/) is the physical counterpart of `lab-rhel`:
-one operator-owned server that RHEL is installed on through its own Redfish
-management controller. Its installation publishes the installer image and the
-delivered host key privately and needs a verified controller leg
-([B73](../specs/milestones/m2.md#b73)); its README states the
-[host prerequisites](lab-baremetal/README.md#host-prerequisites) and
-[the run](lab-baremetal/README.md#run-it), proved in-tree only, and the
-rehearsal against an emulated controller that is not provided yet.
-
-The [operator guide](../docs/operator-guide.md) prepares a host for these lab
-journeys and records their runs in the acceptance ledger.
-
-## Local work in progress
-
-`examples/wip/` is intentionally ignored. It is the place for complete
-environment-specific translations used for operator review before a safe
-synthetic example is extracted. Such local cases are not part of Git history
-and must remain ignored because their values describe real environments.
-
-A translation may expose required immutable input that the source never
-carried, such as an image checksum or digest. Its local README must identify
-that gap for operator input; it must not invent a plausible value or claim the
-graph is validation-ready.
-
-Verify the boundary before working with local examples:
-
-```text
+```sh
 git check-ignore -v examples/wip/
 git status --short --ignored examples/
 ```
 
-A WIP graph must satisfy the field tables and cross-object rules in
-`specs/api/`; the absence of a successful contract-conforming validation never
-counts as success.
+Local translations must identify missing checksums, digests or other required
+operator inputs. Never invent plausible values or claim validation succeeded
+without running it. The test suite compiles every tracked scenario and pins
+its effective state; the full-platform reference instead has explicit
+unsupported-feature assertions.

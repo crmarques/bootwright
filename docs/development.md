@@ -51,6 +51,20 @@ is separate from the product's [runtime lock](#lock-refresh-and-tested-hosts)
 and builds its own pinned interpreter on first use, so the collection gate does
 not depend on the host's Python.
 
+Human-authored YAML follows the
+[source formatting standard](../.agents/skills/code-implementation/references/formatting.md#yaml):
+community indentation and scalar conventions, plus one empty line between
+logical blocks. The examples [.yamllint](../examples/.yamllint) checks the mechanical rules;
+review the block grouping and preserve parsed values when formatting. Once
+the [Ansible check environment](../scripts/tools/ansible-check.md) is prepared,
+check tracked examples with its pinned yamllint (ignored local inputs are
+excluded):
+
+```sh
+yaml_python="$(./scripts/cache-dir)/ansible-check/venv/bin/python"
+git ls-files -z 'examples/**/*.yaml' | xargs -0 "$yaml_python" -I -m yamllint --strict -c examples/.yamllint
+```
+
 The embedded collection is no part of any setup identity: each command that
 runs Ansible unpacks the build's own automation, so a build that changes only
 `ansible/` needs a build and an `apply`, never a `setup`;
@@ -219,5 +233,5 @@ of that surface is still unproved against this image: the
 `EthernetInterfaces` collection the
 [physical target proof](../specs/substrates.md#physical-machine-realization)
 reads, which only the
-[lab-baremetal rehearsal](../examples/lab-baremetal/README.md#rehearsing-it-without-hardware)
+[lab-baremetal rehearsal](../examples/machines/lab-baremetal/README.md#rehearsing-it-without-hardware)
 exercises.

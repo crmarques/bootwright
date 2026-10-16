@@ -1,0 +1,33 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: storage-witness-01
+
+spec:
+  capabilities:
+    - ceph-node
+    - ceph-arbiter
+
+  placement:
+    site: site-c
+
+  os:
+    provided: true
+
+  network:
+    addresses:
+      - name: fqdn
+        address: storage-witness-01.example.com
+
+      - name: ssh
+        address: 198.51.100.133
+
+  access:
+    ssh:
+      addressRef: ssh
+      port: 22
+
+      auth:
+        operatorIdentity: {}
+
+    rootLogin: keep

@@ -1,0 +1,23 @@
+extends: default
+
+rules:
+  document-start: disable
+  line-length: disable
+
+  indentation:
+    spaces: 2
+    indent-sequences: true
+
+  empty-lines:
+    max: 1
+    max-start: 0
+    max-end: 0
+
+  truthy:
+    allowed-values:
+      - 'true'
+      - 'false'
+    check-keys: false
+
+  new-lines:
+    type: unix

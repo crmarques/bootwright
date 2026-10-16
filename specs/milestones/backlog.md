@@ -1016,7 +1016,7 @@ fails when its guard is removed, or withdrawn by the owner.
 X48 qualified production concurrency in parts: the composed invocation scope
 admits sibling runs of its real runner
 (`TestTheComposedInvocationScopeAdmitsSiblingRunsOfItsRunner`), the production
-DAG over the [three-node fixture](../../examples/lab-rhel-3-nodes/README.md)
+DAG over the [three-node fixture](../../examples/machines/lab-rhel-3-nodes/README.md)
 holds the right blocks ready together (`TestThreeNodeRHELExampleSharesOnePublicationAndAdmitsIndependentWork`),
 and real adapter processes held at barriers overlap wave by wave
 (`TestThreeMachineWavesRunInOneInvocationWithPrivateScratch`). No test runs the

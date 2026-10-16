@@ -198,8 +198,8 @@ func base() []api.Object {
 	}
 }
 
-// singleNodeCatalog is the shape examples/lab-sno declares: one cluster whose
-// three endpoint slots resolve to its one node.
+// singleNodeCatalog is the shape examples/container-clusters/lab-sno declares:
+// one cluster whose three endpoint slots resolve to its one node.
 func singleNodeCatalog() api.Catalog {
 	objects := append(base(), guest("sno-01", "198.51.100.21/24"))
 	objects = append(objects, cluster("sno",

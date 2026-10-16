@@ -196,7 +196,7 @@ adapter, and SSH placement against a real host are covered by no in-tree gate.
 The operator-run acceptance it named, the journey of the since removed
 managed-infra-components example (staged apply, replay, interrupt, continue and
 destroy against a real container runtime), the single-service lab-artifacts
-journey and SSH placement against a second OS-ready host, is unrecorded. Its consumer is now [`examples/lab-rhel`](../../examples/lab-rhel).
+journey and SSH placement against a second OS-ready host, is unrecorded. Its consumer is now [`examples/machines/lab-rhel`](../../examples/machines/lab-rhel).
 
 ### M1g — controller prerequisites by selecting scope
 
@@ -249,7 +249,7 @@ other block and receives the publication boundary, an observation cannot
 authorize a host effect, and a plan without a controller block gains no
 dependency); the CLI catalog, dispatch, confirmation and output tests;
 `cmd/bootwright` admission and example acceptance, including the one controller
-block [`examples/lab-rhel`](../../examples/lab-rhel) plans; and `make check`.
+block [`examples/machines/lab-rhel`](../../examples/machines/lab-rhel) plans; and `make check`.
 
 **Constraints left behind:** an executed native client transaction, an executed
 target-client publication and the RHEL libvirt refusal against a real entitled
@@ -1705,7 +1705,7 @@ CPython 3.14.
 ### X38 — the real-host run of 2026-10-05
 
 **Owner:** State reconciliation; run by the operator, who ran
-[lab-rhel](../../examples/lab-rhel/README.md#run-it) end to end on a host and
+[lab-rhel](../../examples/machines/lab-rhel/README.md#run-it) end to end on a host and
 accepted its [ledger row](../../docs/acceptance.md#ledger) the same day.
 **Items:** B49, B72. **Decisions:** D58.
 
@@ -3163,7 +3163,7 @@ refuses before any effect, and observation and destroy never refuse on it. A
 new filter pins `HostKeyAlgorithms` to the delivered key's type on every
 connection of the reachability wait and the identity read, with SHA-1 RSA left
 out, so a controller under the FIPS policy can prove an RSA or ECDSA key. The
-[lab-baremetal](../../examples/lab-baremetal/README.md) example names a
+[lab-baremetal](../../examples/machines/lab-baremetal/README.md) example names a
 `caBundle` Secret in `trustBundleRef` instead of opting out of verification,
 and its README states what the run needs: the disk the media and hosted trees
 take, the egress destinations, the listener hand check, the firewall ports by
@@ -4184,7 +4184,7 @@ exclusive tree claim while it builds images, boots or waits; removal follows the
 inverse order, consumers first and the tree before its artifact server. The
 [Managed OS](../managed-os.md#shared-package-tree-publication) spec owns the
 partial-effect, replay and old-plan contracts, and the
-[three-node fixture](../../examples/lab-rhel-3-nodes/README.md) (synthetic
+[three-node fixture](../../examples/machines/lab-rhel-3-nodes/README.md) (synthetic
 documentation addresses, one shared install profile) exercises it.
 [B466's section](m1.md#b466) states each step and the test that proves it. The
 review closed three gaps: no test ran the production options against the real
@@ -4445,7 +4445,7 @@ prints them, `unproved` with a reason when unreachable, and `--secrets --name`
 reveals the password, warning on an unproved copy.
 
 **Outcome, B516:** the
-[three-node example](../../examples/libvirt-3-nodes-ceph/README.md) pins
+[three-node example](../../examples/storage-clusters/libvirt-3-nodes-ceph/README.md) pins
 `image.version: v9.9.1-25074`, and its README is the staged-apply procedure
 (context, registry Secret, the four stages, validation through `cluster info`'s
 ceph prefix, the RBD client-data test, the dashboard login, the changed-intent
@@ -6285,7 +6285,7 @@ was ready on both after the controller stage, and a Redfish power read
 answered under the `FUTURE` and `DEFAULT` crypto-policies on Fedora.
 
 **Outcome, B19, B20, B270, B276 and B277:** the
-[lab-rhel journey](../../examples/lab-rhel/README.md#run-it) ran as written
+[lab-rhel journey](../../examples/machines/lab-rhel/README.md#run-it) ran as written
 with the lab conventions only: the four services answered (the chrony check
 printed an offset within its ten seconds), RHEL 9.8 installed in 8m24s, the
 running guest's disk read `virtual-size` 64424509440 under `--force-share`,
@@ -6306,7 +6306,7 @@ the second-press path never arose; D154 accepted the observation as B339's
 gate.
 
 **Observed, B466:** the
-[three-node journey](../../examples/lab-rhel-3-nodes/README.md), with 4 GiB
+[three-node journey](../../examples/machines/lab-rhel-3-nodes/README.md), with 4 GiB
 guests, overlapped the four services, the three machine realizations beside
 the tree publication, and the three installations end to end (01:03:27 to
 01:12:12 UTC, then 01:18:19 to 01:27:24 in a fresh apply), with one tree
@@ -6357,3 +6357,33 @@ rerun. B476 is complete, but M2b promotion still requires M1 and the remaining
 core/prerequisite gates on [M2](m2.md#m2b). B80's open definition and promotion
 gates remain. D155's future reconciliation and shared-host safety directions
 remain unimplemented; this correction authorizes none of them.
+
+### X95 — Categorized examples and current runbooks
+
+**Owner:** Documentation and CLI. An enabling slice of [M1](m1.md), explicitly
+requested on 2026-10-16. **Item:** B614, created and completed here.
+
+**Outcome:** the [examples index](../../examples/README.md) groups scenarios
+under machines, infrastructure components, storage clusters, container clusters
+and full platforms. A self-contained services-only graph fills the
+infrastructure category. Every runbook covers its current prerequisites,
+customization, supported commands, inspection, recovery and removal. The
+multi-datacenter graph remains an expected-refusal authoring reference. Links,
+diagnostic remediation and example discovery follow the categorized paths;
+existing desired-state semantics are unchanged. The source-formatting reference
+defines community YAML conventions and the repository's blank-line grouping;
+all example YAML follows them, with a scoped yamllint configuration and pinned
+lint instructions in the development guide.
+
+**Guard tests:** `TestEveryExampleEffectiveStateMatchesItsGolden` compiles all
+seven categorized scenarios, retaining the future-reference refusal assertions
+and adding the services-only effective-state golden. `TestDocsExamplesAreIndexed`
+requires each scenario's runbook and index entry. The command-catalog, README
+certificate and artifact-journal checks continue to cover operator commands.
+**Gates:** `make docs-check`, `make quick`, `make check` and `make race`; exact
+results, pinned example YAML lint and parsed-equivalence checks are recorded
+in the delivering commit.
+
+**Constraints left behind:** no host lifecycle journey was run for this docs
+change, and no operator acceptance or product capability is promoted. Existing
+milestone gates and unsupported-feature refusals remain in force.

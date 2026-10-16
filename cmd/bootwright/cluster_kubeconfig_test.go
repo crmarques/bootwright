@@ -96,7 +96,7 @@ func snoContext(t *testing.T) (cli.Services, *contextfs.Store, string) {
 	t.Helper()
 	services, repository, _, root := contextFixture(t)
 	input := filepath.Join(t.TempDir(), "lab-sno")
-	base, err := filepath.Abs(filepath.Join("..", "..", "examples", "lab-sno"))
+	base, err := filepath.Abs(examplePath(t, "lab-sno"))
 	if err != nil {
 		t.Fatal(err)
 	}

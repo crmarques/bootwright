@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -30,7 +31,7 @@ func exampleDirectory(t *testing.T, name string) desiredstate.Sources {
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("filesystem admission is qualified for linux/amd64")
 	}
-	root, err := filepath.Abs(filepath.Join("..", "..", "examples", name))
+	root, err := filepath.Abs(examplePath(t, name))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,6 +40,52 @@ func exampleDirectory(t *testing.T, name string) desiredstate.Sources {
 		t.Fatal(diagnostics.Of(err))
 	}
 	return sources
+}
+
+func examplePath(t *testing.T, name string) string {
+	t.Helper()
+	path, ok := exampleDirectories(t)[name]
+	if !ok {
+		t.Fatalf("no categorized example named %q", name)
+	}
+	return path
+}
+
+// Discover tracked scenarios without entering ignored or untracked local input.
+func exampleDirectories(t *testing.T) map[string]string {
+	t.Helper()
+	root := filepath.Join("..", "..")
+	command := exec.Command("git", "ls-files", "-z", "--", "examples")
+	command.Dir = root
+	command.Env = slices.DeleteFunc(os.Environ(), func(value string) bool { return strings.HasPrefix(value, "GIT_") })
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("list tracked examples: %v", err)
+	}
+	examples := map[string]string{}
+	tracked := map[string]bool{}
+	for name := range strings.SplitSeq(string(output), "\x00") {
+		tracked[name] = true
+		parts := strings.Split(name, "/")
+		if len(parts) < 4 || parts[1] == "wip" {
+			continue
+		}
+		directory := filepath.Join(root, filepath.FromSlash(strings.Join(parts[:3], "/")))
+		if previous, exists := examples[parts[2]]; exists && previous != directory {
+			t.Fatalf("duplicate example name %q in %s and %s", parts[2], previous, directory)
+		}
+		examples[parts[2]] = directory
+	}
+	for _, directory := range examples {
+		relative, err := filepath.Rel(root, directory)
+		if err != nil || !tracked[filepath.ToSlash(filepath.Join(relative, "environment.yaml"))] {
+			t.Fatalf("example %s needs a tracked environment.yaml file", directory)
+		}
+	}
+	if len(examples) == 0 {
+		t.Fatal("no categorized example was found under examples/")
+	}
+	return examples
 }
 
 func readAcceptanceFixture(t *testing.T, name string) []byte {

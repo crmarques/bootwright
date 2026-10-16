@@ -389,7 +389,7 @@ func (s Service) unsupportedRefusals(state *compilation.State) []Refusal {
 	return SortRefusals(append(refused, Unrealizable(state.Effective(), s.capabilityKinds())...))
 }
 
-const supportedExample = "examples/lab-rhel"
+const supportedExample = "examples/machines/lab-rhel"
 
 // capabilityKinds is the distinct API-kind set this build binds at least one
 // implementation for, in binding order.

@@ -1,8 +1,0 @@
-apiVersion: bootwright.io/v1alpha1
-kind: Secret
-metadata:
-  name: ibm-registry
-spec:
-  type: usernamePassword
-  source:
-    contextStore: {}

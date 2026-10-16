@@ -35,23 +35,60 @@ contiguous. Use `goimports` only through a reviewed, pinned repository entrypoin
 
 ## YAML
 
-Use two-space indentation, block mappings/sequences unless an empty or atomic
-flow value is clearer, lowercase `true`/`false`/`null`, and quoting when plain style
-would change a scalar's intended type.
+Follow [YAML community best practices](https://www.yaml.info/learn/bestpractices.html):
+two spaces per indentation level, no tabs, and quotes where a plain value would
+have the wrong type. This repository chooses indented sequence markers, block
+mappings/sequences unless an empty or atomic flow value is clearer, and
+lowercase `true`/`false`/`null`. Preserve deliberate string quotes and key order.
+The examples [yamllint configuration](../../../../examples/.yamllint), using the
+[community rules](https://yamllint.readthedocs.io/en/stable/rules.html), checks
+indentation, duplicate keys, boolean spellings and whitespace. Long immutable
+references are not wrapped to an arbitrary column limit.
+
+Blank-line grouping is the repository's readability convention:
 
 - Keep the Kubernetes-style identity envelope contiguous: `apiVersion`, `kind`,
   and `metadata` have no intervening blank lines. Separate `spec` and subsequent
   top-level mapping or sequence sections from that envelope.
-- Among direct `spec` children, each scalar/empty-collection run is one block;
-  each non-empty mapping or sequence is its own block. Separate these blocks.
-- Keep nested compact records contiguous. Separate schema-defined sections,
-  adjacent multiline sequence records, and multiline named mapping records;
-  keep scalar sequences and compact scalar maps together.
+- At every mapping level, consecutive scalar or empty-collection fields form
+  one compact block. Each non-empty block mapping or sequence forms its own
+  block. Separate adjacent blocks with exactly one empty line; keep the first
+  child attached to its parent and add no blank line after the last child.
+- Separate adjacent multiline sequence records with one empty line. Keep
+  scalar sequences, single-line records and each compact scalar map contiguous.
+  Apply the same rules to native manifests and nested Kubernetes objects,
+  retaining each object's contiguous identity envelope.
 - In multi-document streams, separate each later `---` from the previous document
   with one empty line, attached to the following document. Generic single
   documents do not require a leading marker; preserve owning format policy.
 - Choose literal or folded multiline scalars for their required value, not
-  appearance. Scalar preservation overrides separator rules.
+  appearance. Preserve multiline scalar and flow-collection content, plus
+  inline and trailing comment ownership. Scalar preservation overrides
+  separator rules; never add cosmetic blank lines inside string content.
+
+For example, scalar identity and endpoint fields stay compact while structured
+sections and multiline endpoint records are separated:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: example-proxy
+
+spec:
+  management: managed
+  machineRef: controller
+  implementation: squid
+  bindAddress: 192.0.2.1
+  port: 3128
+
+  endpoints:
+    - name: ip
+      addressRef: ip
+
+    - name: fqdn
+      addressRef: fqdn
+```
 
 ## Ansible
 
