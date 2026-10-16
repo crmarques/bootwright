@@ -598,7 +598,8 @@ inspected and left alone. The request, the document and the budgets are
 frozen with the installation; this section states what the adapter does with
 them.
 
-**Protocol.** The phase runs under `verify-installation`, after the fleet
+**Protocol.** The phase runs under its own group `converge-network`, which
+starts once `verify-installation` completes, after the fleet
 account accepted the reported key and after the work area and any private
 material are withdrawn, so neither outlives the power cycle. Every guest
 command is a fixed argument vector run as the fleet account over a new SSH

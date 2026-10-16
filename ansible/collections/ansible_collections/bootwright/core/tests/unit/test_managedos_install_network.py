@@ -116,9 +116,13 @@ def test_network_task_order():
     withdraw = index_of(applied, named("Withdraw the private material now that the machine has it"), "withdraw")
     network = index_of(applied, lambda task: task.get(INCLUDE) == "network.yml", "network")
     inspect = index_of(applied, named("Prove everything this installation publishes is in place"), "inspect")
-    reported = index_of(applied, lambda task: (task.get(PROTOCOL) or {}).get("group") == "verify-installation"
-                        and task[PROTOCOL].get("status") == "ok", "verification completion")
-    assert verify < withdraw < network < reported < inspect
+
+    def reported(group, status):
+        return index_of(applied, lambda task: (task.get(PROTOCOL) or {}).get("group") == group
+                        and task[PROTOCOL].get("status") == status, "%s %s" % (group, status))
+    verified = reported("verify-installation", "ok")
+    converging, converged = reported("converge-network", "running"), reported("converge-network", "ok")
+    assert verify < withdraw < verified < converging < network < converged < inspect
     # One code path: the include has no predicate on the network's content.
     assert "when" not in applied[network]
 

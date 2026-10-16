@@ -576,15 +576,29 @@
       when: managedos_install_anaconda_delivers_key | bool
       changed_when: managedos_install_anaconda_delivers_key | bool
 
+    - name: Report installation verification completion
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: verify-installation
+        status: ok
+      no_log: true
+
+    - name: Report network convergence
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: converge-network
+        status: running
+      no_log: true
+
     # Converged on every installed Machine, after the work area and the private
     # material are withdrawn, so neither outlives the power cycle it needs.
     - name: Converge the installed machine to its declared network
       ansible.builtin.include_tasks: network.yml
 
-    - name: Report installation verification completion
+    - name: Report network convergence completion
       bootwright.core.managedos_install_protocol:
         phase: group
-        group: verify-installation
+        group: converge-network
         status: ok
       no_log: true
 
