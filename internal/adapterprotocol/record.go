@@ -10,7 +10,10 @@ import (
 	"errors"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Record is one decoded record, carrying exactly its phase's members.
@@ -22,9 +25,12 @@ type Record struct {
 	Reason      string
 	Source      string
 	Detail      string
+	NativeError *NativeError
 	Evidence    json.RawMessage
 	Preparation json.RawMessage
 }
+
+type NativeError struct{ Coordinate, Cause string }
 
 // Admission names the runner a record stream is read for: which phases it
 // admits and how many records it reads.
@@ -44,6 +50,8 @@ const (
 	// maxDepth is the deepest nesting of objects and arrays a record holds.
 	maxDepth             = 16
 	maxDetail            = 160
+	MaxNativeCoordinate  = 512
+	MaxNativeCause       = 1024
 	maxLifecycleRecords  = 64
 	maxControllerRecords = 132
 )
@@ -62,10 +70,11 @@ func (a Admission) Records() int {
 // phase is one phase's exact member set and the runners that admit it. A
 // source or detail is an optional refusal member only for its runners.
 type phase struct {
-	members  []string
-	admitted Admission
-	source   Admission
-	detail   Admission
+	members     []string
+	admitted    Admission
+	source      Admission
+	detail      Admission
+	nativeError Admission
 }
 
 // phases is the one table of which runner admits which phase.
@@ -76,7 +85,7 @@ var phases = map[string]phase{
 	"native":    {members: []string{"phase"}, admitted: Controller},
 	"continue":  {members: []string{"phase"}, admitted: Controller},
 	"completed": {members: []string{"evidence", "outcome", "phase"}, admitted: Lifecycle | Controller},
-	"refused":   {members: []string{"phase", "reason"}, admitted: Lifecycle | Controller, source: Controller, detail: Lifecycle},
+	"refused":   {members: []string{"phase", "reason"}, admitted: Lifecycle | Controller, source: Controller, detail: Lifecycle, nativeError: Lifecycle},
 }
 
 var (
@@ -89,7 +98,7 @@ var (
 // Read decodes the result channel for one admission and sends each record
 // on. shape is the consumer's own check of a decoded record; its error ends
 // the read exactly as a malformed record does. Every record is bounded and
-// strictly shaped; adapter prose is never a product result.
+// strictly shaped; each consumer authorizes any native diagnostic data.
 func Read(reader io.Reader, admission Admission, shape func(Record) error, out chan<- Record) error {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 4096), MaxLine)
@@ -254,6 +263,9 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 	if _, named := members["detail"]; named && rule.detail&admission != 0 {
 		expected = append(slices.Clone(expected), "detail")
 	}
+	if _, named := members["nativeError"]; named && rule.nativeError&admission != 0 {
+		expected = append(slices.Clone(expected), "nativeError")
+	}
 	if len(members) != len(expected) {
 		return Record{}, errRecord
 	}
@@ -280,6 +292,11 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 		if raw, named := members["detail"]; named {
 			valid = valid && text(raw, &record.Detail) && detailed(record.Detail)
 		}
+		if raw, named := members["nativeError"]; named {
+			var ok bool
+			record.NativeError, ok = nativeError(raw)
+			valid = valid && ok
+		}
 	case "prepared":
 		record.Preparation = members["preparation"]
 		valid = len(record.Preparation) > 0 && record.Preparation[0] == '{'
@@ -305,4 +322,68 @@ func detailed(value string) bool {
 // text decodes a member that must be a JSON string.
 func text(raw json.RawMessage, target *string) bool {
 	return len(raw) > 0 && raw[0] == '"' && json.Unmarshal(raw, target) == nil
+}
+
+func nativeError(raw json.RawMessage) (*NativeError, bool) {
+	var members map[string]json.RawMessage
+	if len(raw) == 0 || raw[0] != '{' || json.Unmarshal(raw, &members) != nil || len(members) != 2 {
+		return nil, false
+	}
+	result := &NativeError{}
+	valid := nativeString(members["coordinate"], &result.Coordinate) && nativeString(members["cause"], &result.Cause) && nativeText(result.Coordinate, MaxNativeCoordinate) && nativeText(result.Cause, MaxNativeCause)
+	if !valid {
+		return nil, false
+	}
+	return result, true
+}
+func nativeText(value string, limit int) bool {
+	if strings.TrimSpace(value) == "" || len(value) > limit || !utf8.ValidString(value) {
+		return false
+	}
+	for _, r := range value {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func nativeString(raw json.RawMessage, target *string) bool {
+	if !text(raw, target) {
+		return false
+	}
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '\\' {
+			continue
+		}
+		if i+1 >= len(raw) {
+			return false
+		}
+		if raw[i+1] != 'u' {
+			i++
+			continue
+		}
+		if i+6 > len(raw) {
+			return false
+		}
+		code, err := strconv.ParseUint(string(raw[i+2:i+6]), 16, 16)
+		if err != nil {
+			return false
+		}
+		if code >= 0xdc00 && code <= 0xdfff {
+			return false
+		}
+		if code >= 0xd800 && code <= 0xdbff {
+			if i+12 > len(raw) || raw[i+6] != '\\' || raw[i+7] != 'u' {
+				return false
+			}
+			low, err := strconv.ParseUint(string(raw[i+8:i+12]), 16, 16)
+			if err != nil || low < 0xdc00 || low > 0xdfff {
+				return false
+			}
+			i += 6
+		}
+		i += 5
+	}
+	return true
 }

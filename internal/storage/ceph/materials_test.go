@@ -82,6 +82,9 @@ func TestObservationUsesOnlyFleetIdentityAndKnownHostsAndFrozenDigest(t *testing
 	}
 	lifecycle.ClearProduced(observation.Produced)
 	call := runner.request
+	if !call.NativeErrors {
+		t.Fatal("Ceph invocation did not opt in to typed native errors")
+	}
 	if !reflect.DeepEqual(call.Outputs, []lifecycle.OutputFile{{Name: "dashboard", Variable: "dashboard"}}) {
 		t.Fatalf("the cluster observation does not recapture its dashboard password: %+v", call.Outputs)
 	}

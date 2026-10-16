@@ -24,7 +24,7 @@ def completion(arguments):
 REFUSALS = tuple(dict.fromkeys(ceph_core.HOST_REASONS + ceph_core.CLUSTER_REASONS))
 CAPABILITY = adapter_protocol.Capability(
     "Ceph core", "the Ceph capability result could not be published", completion,
-    phases=adapter_protocol.REFUSING_PHASES, refusals=REFUSALS, detail=True,
+    phases=adapter_protocol.REFUSING_PHASES, refusals=REFUSALS, detail=True, native_error=True,
 )
 
 

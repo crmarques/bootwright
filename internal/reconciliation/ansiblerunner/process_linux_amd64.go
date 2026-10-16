@@ -330,9 +330,9 @@ func (j *lifecycleJudge) Judge(ctx context.Context, record adapterprotocol.Recor
 		// The adapter names a refusal its caller remedies by name, then fails.
 		// The caller's own failure for it replaces the adapter's.
 		named := j.request.Refusals[record.Reason]
-		valid = valid && j.loaded && named != nil
+		valid = valid && j.loaded && named != nil && (record.NativeError == nil || j.request.NativeErrors)
 		if valid {
-			verdict.Failure = refusalDetail(named, record.Detail)
+			verdict.Failure = refusalNative(refusalDetail(named, record.Detail), record.NativeError)
 		}
 	default:
 		valid = false
@@ -347,6 +347,15 @@ func refusalDetail(named error, detail string) error {
 		return named
 	}
 	found[0].Message += " (adapter detail: " + detail + ")"
+	return &diagnostics.Failure{Diagnostics: found, Usage: diagnostics.IsUsage(named)}
+}
+
+func refusalNative(named error, native *adapterprotocol.NativeError) error {
+	found := diagnostics.Of(named)
+	if native == nil || len(found) == 0 {
+		return named
+	}
+	found[0].Message += " (selected " + native.Coordinate + ": " + native.Cause + ")"
 	return &diagnostics.Failure{Diagnostics: found, Usage: diagnostics.IsUsage(named)}
 }
 

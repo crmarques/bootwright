@@ -133,11 +133,14 @@ func inspectImage(cluster string, proofs []lifecycle.BlockEvidence) (ImageInspec
 		return ImageInspection{}, "the cluster's resolved Ceph image has ambiguous evidence"
 	}
 	evidence, err := reconciliation.DecodeEvidence[ImageEvidence](proof.Evidence, maxImageEvidence, "Ceph image")
-	if err != nil || evidence.Absent || !evidence.Postcondition || evidence.Release != PinnedRelease || evidence.Base != PinnedRepository ||
-		evidence.Tag == "" || evidence.Platform != PinnedPlatform || !ValidImageDigest(evidence.Digest) {
-		return ImageInspection{}, "the cluster's resolved Ceph image evidence is not the pinned linux/amd64 manifest"
+	if err != nil || evidence.Absent || !evidence.Postcondition || evidence.Release == "" || evidence.Base == "" || evidence.Platform != PinnedPlatform || !ValidImageDigest(evidence.Digest) {
+		return ImageInspection{}, "the cluster's resolved Ceph image evidence is not a resolved linux/amd64 manifest"
 	}
-	return ImageInspection{Reference: evidence.Base + ":" + evidence.Tag, Digest: evidence.Digest, Platform: evidence.Platform}, ""
+	reference := evidence.Base + ":" + evidence.Tag
+	if evidence.Tag == "" {
+		reference = evidence.Base + "@" + evidence.Digest
+	}
+	return ImageInspection{Reference: reference, Digest: evidence.Digest, Platform: evidence.Platform}, ""
 }
 
 func inspectCluster(cluster string, proofs []lifecycle.BlockEvidence) (Evidence, string) {

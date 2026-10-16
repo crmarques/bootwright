@@ -98,7 +98,7 @@ def served_tree_fixture(tmp_path, monkeypatch):
     source = {"host": "node-1", "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "c" * 64, "mediaSize": 1000000,
               "publicationPath": "/var/lib/bootwright-services/example/artifact-server/artifacts/public/os/rhel/tree",
               "url": base + "/os/rhel/tree", "certificateRef": "serving-tls"}
-    acquisition = sources.Acquisition(source, chain.read_text())
+    acquisition = sources.Acquisition(source, chain.read_text(), repository=base + "/ibm/ceph/9/rhel9/x86_64")
     # The served IBM stand-in shares the loopback anchor; production trusts the system store.
     acquisition.public = acquisition.local
     yield acquisition, base
@@ -115,7 +115,7 @@ def test_a_real_shaped_dvd_tree_and_ibm_repository_are_acquired_with_their_comps
     assert [(r["id"], r["baseURL"], r["signer"]) for r in repositories] == [
         ("rhel-baseos", base + "/os/rhel/tree/BaseOS", native_signatures.RHEL_SIGNER),
         ("rhel-appstream", base + "/os/rhel/tree/AppStream", native_signatures.RHEL_SIGNER),
-        ("ibm-storage-ceph-9", base + "/ibm/ceph/9/rhel9/x86_64", native_signatures.IBM_CEPH_SIGNER)]
+        ("ibm-storage-ceph", base + "/ibm/ceph/9/rhel9/x86_64", native_signatures.IBM_CEPH_SIGNER)]
     for repository, comps in zip(repositories, (2, 2, 0)):
         stored = sorted(path.name for path in (scratch / "repositories" / repository["id"] / "repodata").iterdir())
         assert len([name for name in stored if "-comps-" in name]) == comps and "repomd.xml" in stored

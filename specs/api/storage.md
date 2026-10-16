@@ -35,25 +35,27 @@ Structural input validation and independent trust, authorization and immutable
 artifact requirements still apply; version syntax is interpreted by native
 tools rather than a Bootwright semantic-version grammar.
 
-Not yet met: operator-selected versions through native execution and native
-error reporting; tracked as [B615](../milestones/m2.md#b615), required in M2b.
+Ordinary apply realizes the core cluster, replicated RBD pool and client over
+`verified-tunnel`. `ceph.release` is the operator's release label;
+`ceph.packageVersion` selects the Ceph/cephadm RPM roots and
+`ceph.cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.
+Optional `ceph.nfsGanesha.packageVersion` selects the NFS-Ganesha RPM without
+admitting NFS orchestration. These strings are nonempty, bounded to 1024 UTF-8
+bytes and control-free; native tools interpret their contents.
+`ceph.packageRepository` optionally selects an HTTPS RPM repository without
+userinfo or fragment. Omission uses
+`https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64` as a
+source default, not a release catalog. Independent publisher signatures remain
+required for its selected RPMs.
 
-Current implementation: ordinary apply realizes the core cluster, replicated
-RBD pool and client for the one pinned release over `verified-tunnel`: IBM
-Storage Ceph 9.9.1.2,
-image `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9` at tag `v9.9.1-25074`, packages
-`20.2.1-405.el9cp` and cephadm-ansible `5.0.3-1`. Anything else, `native`
-included, refuses `lifecycle.unsupported` before registration, credential
-reads or native effects, and the remedy names the pinned values. B615 removes
-the release/artifact pin restriction; `native` transport remains refused.
-The cephadm-ansible version is currently only
-an admission coordinate; its package is not installed or executed.
-An Entitlement whose `registry.url` is not
-`cp.icr.io` refuses the same way, with the remedy to set it to `cp.icr.io`. `image.version` accepts the pinned tag or
-the digest of its linux/amd64 child manifest, not the index digest that
-`skopeo` or `podman` print for the tag. The [release qualification](../storage-coverage.md#release-qualification) owns
-the resolution and freezing. Successful validation proves no live
-qualification. [M2b](../milestones/m2.md#m2b) owns delivery state.
+`ceph.image.base` names the repository and `ceph.image.version` supplies the
+authored tag or SHA-256 digest. The Entitlement registry namespace must contain
+the selected repository; credentials are scoped to its authority. A direct
+digest is resolved independently of any tag. Native acquisition and platform
+inspection freeze the selected immutable artifact for continuation.
+The [release qualification](../storage-coverage.md#release-qualification) owns
+those proofs. Validation proves no live qualification; [M2b](../milestones/m2.md#m2b)
+owns delivery and operator acceptance.
 
 `ceph.cephadm.clusterSSH.transport` accepts `native` or `verified-tunnel`
 (D135). Omission selects `native`; an empty, null or unknown value refuses.
@@ -63,11 +65,12 @@ this field grants no exception to host-key verification. The three-node
 example selects `verified-tunnel` explicitly; its protected mounts and staged
 bootstrap remain subject to
 [release qualification](../storage-coverage.md#release-qualification).
-Core request v4 refuses continuation of v3 operations; finish or remove old
+Core request v5, image request v2 and package decision v2 refuse continuation
+of older operations; finish or remove old
 contexts with their original applying build.
 
 The existing native-section config map admits explicit fixed-memory and
-pool-default pairs for the IBM 9.9.1.2 candidate:
+pool-default pairs for the minimal core configuration:
 
 ```yaml
 ceph:

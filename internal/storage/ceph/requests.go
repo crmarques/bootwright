@@ -17,7 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v4"
+const Version = "ceph-core-v5"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -43,7 +43,6 @@ type Host struct {
 type Tool struct {
 	PackageVersion string `json:"packageVersion"`
 	Path           string `json:"path"`
-	Version        string `json:"version"`
 }
 
 type Pool struct {
@@ -78,32 +77,37 @@ type nativeService struct {
 	Spec        *nativeOSD      `json:"spec,omitempty"`
 }
 
+const DefaultPackageRepository = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64"
+
 type Request struct {
-	Action              string                       `json:"action"`
-	Bootstrap           string                       `json:"bootstrap"`
-	CallHome            string                       `json:"callHome"`
-	CephVersion         string                       `json:"cephVersion"`
-	Cephadm             Tool                         `json:"cephadm"`
-	Client              *Client                      `json:"client,omitempty"`
-	Cluster             string                       `json:"cluster"`
-	ClusterKeyRef       string                       `json:"clusterKeyRef"`
-	ClusterNetworks     []string                     `json:"clusterNetworks"`
-	ClusterSSHTransport string                       `json:"clusterSSHTransport"`
-	ClusterSSHUser      string                       `json:"clusterSSHUser"`
-	Config              map[string]map[string]string `json:"config,omitempty"`
-	Controller          string                       `json:"controller"`
-	FSID                string                       `json:"fsid,omitempty"`
-	Hosts               []Host                       `json:"hosts"`
-	Image               string                       `json:"image"`
-	MonIP               string                       `json:"monIP"`
-	Owner               string                       `json:"owner,omitempty"`
-	Packages            *PackageRequest              `json:"packages,omitempty"`
-	Pool                *Pool                        `json:"pool,omitempty"`
-	PublicNetworks      []string                     `json:"publicNetworks"`
-	Registry            string                       `json:"registry"`
-	RegistryRef         string                       `json:"registryRef"`
-	Services            []json.RawMessage            `json:"services"`
-	Version             string                       `json:"version"`
+	Action                   string                       `json:"action"`
+	AnsiblePackageVersion    string                       `json:"ansiblePackageVersion"`
+	Bootstrap                string                       `json:"bootstrap"`
+	CallHome                 string                       `json:"callHome"`
+	Cephadm                  Tool                         `json:"cephadm"`
+	Client                   *Client                      `json:"client,omitempty"`
+	Cluster                  string                       `json:"cluster"`
+	ClusterKeyRef            string                       `json:"clusterKeyRef"`
+	ClusterNetworks          []string                     `json:"clusterNetworks"`
+	ClusterSSHTransport      string                       `json:"clusterSSHTransport"`
+	ClusterSSHUser           string                       `json:"clusterSSHUser"`
+	Config                   map[string]map[string]string `json:"config,omitempty"`
+	Controller               string                       `json:"controller"`
+	FSID                     string                       `json:"fsid,omitempty"`
+	Hosts                    []Host                       `json:"hosts"`
+	Image                    string                       `json:"image"`
+	MonIP                    string                       `json:"monIP"`
+	NFSGaneshaPackageVersion string                       `json:"nfsGaneshaPackageVersion,omitempty"`
+	Owner                    string                       `json:"owner,omitempty"`
+	PackageRepository        string                       `json:"packageRepository"`
+	Packages                 *PackageRequest              `json:"packages,omitempty"`
+	Pool                     *Pool                        `json:"pool,omitempty"`
+	PublicNetworks           []string                     `json:"publicNetworks"`
+	Registry                 string                       `json:"registry"`
+	RegistryRef              string                       `json:"registryRef"`
+	Release                  string                       `json:"release"`
+	Services                 []json.RawMessage            `json:"services"`
+	Version                  string                       `json:"version"`
 }
 
 func (r Request) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph") }
@@ -124,31 +128,28 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if spec.Get("distribution").Text() != "ibm" {
 		return Request{}, failure("lifecycle.unsupported", "core Ceph realizes only the IBM Storage Ceph distribution", "set ceph.distribution to ibm")
 	}
-	if spec.Get("release").Text() != PinnedRelease || spec.Get("packageVersion").Text() != PinnedPackageVersion || spec.Get("cephadm", "ansible", "packageVersion").Text() != PinnedAnsibleVersion {
-		return Request{}, unsupportedFailure()
-	}
 	base, imageVersion := spec.Get("image", "base").Text(), spec.Get("image", "version").Text()
 	reference := base + ":" + imageVersion
 	if ValidImageDigest(imageVersion) {
 		reference = base + "@" + imageVersion
-	} else if imageVersion != PinnedTag {
-		return Request{}, unsupportedFailure()
-	}
-	if base != PinnedRepository {
-		return Request{}, unsupportedFailure()
 	}
 	ent, _ := c.Find(api.Entitlement, spec.Get("entitlementRef").Text())
 	if !ent.Spec().Get("license", "accept").Bool() {
 		return Request{}, failure("lifecycle.unsupported", "the selected IBM license has not been accepted", "review the provider license and set license.accept on the declared Entitlement")
 	}
-	if ent.Spec().Get("registry", "url").Text() != PinnedRegistry {
-		return Request{}, failure("lifecycle.unsupported", "the Entitlement's registry is not the registry the pinned Ceph image is served from", "set the Entitlement's registry.url to "+PinnedRegistry)
+	if registry := ent.Spec().Get("registry", "url").Text(); base != registry && !strings.HasPrefix(base, registry+"/") {
+		return Request{}, failure("lifecycle.unsupported", "the Entitlement registry does not match the selected Ceph image registry", "set the Entitlement registry.url to the selected image registry")
 	}
+	registry, _, _ := strings.Cut(ent.Spec().Get("registry", "url").Text(), "/")
 	r := Request{Version: Version, Action: "cluster", Cluster: cluster.Name(), Image: reference,
-		Cephadm: Tool{Path: "/usr/sbin/cephadm", Version: PinnedCephVersion, PackageVersion: PinnedPackageVersion}, CephVersion: PinnedCephVersion,
+		Cephadm: Tool{Path: "/usr/sbin/cephadm", PackageVersion: spec.Get("packageVersion").Text()}, Release: spec.Get("release").Text(), AnsiblePackageVersion: spec.Get("cephadm", "ansible", "packageVersion").Text(), NFSGaneshaPackageVersion: spec.Get("nfsGanesha", "packageVersion").Text(),
 		ClusterSSHUser: spec.Get("cephadm", "clusterSSH", "user").Text(), ClusterKeyRef: spec.Get("cephadm", "clusterSSH", "keyRef").Text(),
-		RegistryRef: ent.Spec().Get("registry", "credentialsRef").Text(), Registry: ent.Spec().Get("registry", "url").Text(), CallHome: spec.Get("ibm", "callHome").Text(),
+		RegistryRef: ent.Spec().Get("registry", "credentialsRef").Text(), Registry: registry, CallHome: spec.Get("ibm", "callHome").Text(),
 		PublicNetworks: spec.Get("networks", "publicCIDRs").Strings(), ClusterNetworks: spec.Get("networks", "clusterCIDRs").Strings(), Hosts: []Host{}, Services: []json.RawMessage{}}
+	r.PackageRepository = spec.Get("packageRepository").Text()
+	if r.PackageRepository == "" {
+		r.PackageRepository = DefaultPackageRepository
+	}
 	r.ClusterSSHTransport = spec.Get("cephadm", "clusterSSH", "transport").Text()
 	if r.ClusterSSHTransport == "" {
 		r.ClusterSSHTransport = "native"

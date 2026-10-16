@@ -1,11 +1,9 @@
-"""Session-free manifest-only resolution of the pinned IBM Ceph tag.
+"""Session-free resolution of the authored IBM Ceph image.
 
-The approved Python runtime talks only to the pinned HTTPS registry origin. No
-redirect, proxy, daemon, native tool, image cache, blob or container takes part.
-The tag's raw image index bytes select the one Linux amd64 child, whose raw
-manifest bytes prove its immutable digest and size; an authored digest must be
-that child digest, never the index digest. Observation and removal read nothing
-remote: a resolution retains nothing, so both report its absence.
+The approved Python runtime talks only to the selected HTTPS registry authority.
+No redirect or ambient proxy is followed. Tags and direct digests select their
+own manifest; a manifest's config proves the platform where no index does.
+Observation and removal read nothing remote, and continuation uses frozen evidence.
 """
 
 from __future__ import annotations
@@ -23,18 +21,10 @@ import stat
 import time
 import urllib.parse
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker, native_diagnostics
 
-REPOSITORY = "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"
-NAMESPACE = "cp/ibm-ceph/ceph-9-rhel9"
-TAG_NAME = "v9.9.1-25074"
-TAG = REPOSITORY + ":" + TAG_NAME
-RELEASE = "9.9.1.2"
-REGISTRY = "cp.icr.io"
 PLATFORM = "linux/amd64"
-SERVICE = "registry"
-SCOPE = "repository:" + NAMESPACE + ":pull"
-VERSION = "ceph-image-v1"
+VERSION = "ceph-image-v2"
 OPERATIONS = ("apply", "observe", "destroy")
 REQUEST = ("base", "cluster", "controller", "image", "registry", "registryRef", "release", "tag", "version")
 REASONS = ("request", "artifact", "material", "discovery", "timeout", "unknown", "adapter-exception", "image-digest-mismatch")
@@ -106,18 +96,21 @@ def name(value):
 
 def validate_request(value):
     require(isinstance(value, dict) and set(value) == set(REQUEST))
-    require(value["version"] == VERSION and value["release"] == RELEASE and value["base"] == REPOSITORY)
-    require(value["tag"] == TAG_NAME and value["registry"] == REGISTRY)
+    require(value["version"] == VERSION and isinstance(value["release"], str) and bool(value["release"]))
+    require(all(isinstance(value[key], str) and "\x00" not in value[key] for key in ("base", "tag", "image", "registry")))
+    require(re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.:-]*", value["registry"]) is not None)
+    require(value["base"].startswith(value["registry"] + "/") and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+", value["base"]) is not None)
+    require(all(part not in ("", ".", "..") for part in value["base"].split("/")))
     require(name(value["cluster"]) and name(value["controller"]) and name(value["registryRef"]))
-    image = value["image"]
-    authored = isinstance(image, str) and image.startswith(REPOSITORY + "@sha256:") and digest(image[len(REPOSITORY) + 8 :])
-    require(image == TAG or authored)
+    authored = authored_digest(value)
+    require(value["image"] == value["base"] + ":" + value["tag"] and bool(value["tag"])
+            or authored is not None and value["tag"] == "" and authored.startswith("sha256:") and ID.fullmatch(authored[7:]) is not None)
     return value
 
 
 def authored_digest(request):
     """The digest an operator authored in place of the tag, or None."""
-    prefix = REPOSITORY + "@"
+    prefix = request["base"] + "@"
     return request["image"][len(prefix) :] if request["image"].startswith(prefix) else None
 
 
@@ -129,7 +122,7 @@ def evidence(value, request_digest):
         require(value["absent"] is True, "discovery")
         return value
     require(set(value) == {"request", "postcondition", "release", "base", "tag", "digest", "platform"}, "discovery")
-    require(value["release"] == RELEASE and value["base"] == REPOSITORY and value["tag"] == TAG_NAME and value["platform"] == PLATFORM, "discovery")
+    require(all(isinstance(value[key], str) for key in ("release", "base", "tag")) and value["platform"] == PLATFORM, "discovery")
     require(isinstance(value["digest"], str) and value["digest"].startswith("sha256:") and digest(value["digest"][7:]), "discovery")
     return value
 
@@ -190,13 +183,15 @@ def protected_file(path, maximum, *, private=False, root=False):
             os.close(descriptor)
 
 
-def basic_material(raw):
-    """The Basic credential of the pinned registry's entitlement key."""
+def basic_material(raw, registry):
+    """The Basic credential of the selected registry entitlement."""
     value = decode(raw, "material")
-    require(isinstance(value, dict) and set(value) == {"url", "username", "password"} and value["url"] == REGISTRY and value["username"] == "cp", "material")
+    require(isinstance(value, dict) and set(value) == {"url", "username", "password"}
+            and value["url"] == registry and isinstance(value["username"], str) and bool(value["username"]), "material")
+    require(len(value["username"].encode()) <= 256 and not any(character in value["username"] for character in ":\x00\r\n"), "material")
     password = value["password"]
     require(isinstance(password, str) and 0 < len(password.encode()) <= 32768 and not any(character in password for character in "\x00\r\n"), "material")
-    return "Basic " + base64.b64encode(("cp:" + password).encode()).decode("ascii")
+    return "Basic " + base64.b64encode((value["username"] + ":" + password).encode()).decode("ascii")
 
 
 def certificates(data):
@@ -279,7 +274,8 @@ def bounded_lifetime(seconds=TOTAL_SECONDS):
             signal.signal(number, handler)
 
 
-def challenge(value):
+def challenge(value, registry, namespace):
+    scope = "repository:" + namespace + ":pull"
     require(isinstance(value, str) and len(value) <= 4096 and value.startswith("Bearer "), "discovery")
     remaining, parameters = value[7:], {}
     pattern = re.compile(r'([A-Za-z_]+)="([^"\\\x00-\x1f\x7f]*)"(?:,\s*|$)')
@@ -290,12 +286,14 @@ def challenge(value):
         remaining = remaining[match.end() :]
     require(
         {"realm", "service"} <= set(parameters) <= {"realm", "service", "scope"}
-        and parameters["service"] == SERVICE
-        and parameters.get("scope", SCOPE) == SCOPE,
+        and bool(parameters["service"])
+        and parameters.get("scope", scope) == scope,
         "discovery",
     )
-    require(parameters["realm"] == "https://" + REGISTRY + "/oauth/token", "discovery")
-    return "/oauth/token?" + urllib.parse.urlencode({"service": SERVICE, "scope": SCOPE, "account": "cp"})
+    realm = urllib.parse.urlsplit(parameters["realm"])
+    require(realm.scheme == "https" and realm.netloc == registry and realm.username is None and realm.password is None
+            and realm.path.startswith("/") and not realm.query and not realm.fragment, "discovery")
+    return realm.path + "?" + urllib.parse.urlencode({"service": parameters["service"], "scope": scope})
 
 
 def token(raw):
@@ -313,7 +311,11 @@ def token(raw):
 class Registry:
     """No generic URL, redirects, proxy or arbitrary request method constructor."""
 
-    def __init__(self, context, now=time.monotonic):
+    def __init__(self, context, request, now=time.monotonic):
+        self.request = validate_request(request)
+        self.registry = request["registry"]
+        self.namespace = request["base"].split("/", 1)[1]
+        self.token_path = None
         self.context, self.now = context, now
         self.deadline = now() + TOTAL_SECONDS
 
@@ -321,10 +323,12 @@ class Registry:
         # Exact byte budgets exclude bool and float.
         # pylint: disable=unidiomatic-typecheck
         require(isinstance(path, str), "discovery")
-        manifest = "/v2/" + NAMESPACE + "/manifests/"
-        allowed = path == manifest + TAG_NAME or path.startswith(manifest + "sha256:") and digest(path[len(manifest + "sha256:") :])
-        token_path = challenge('Bearer realm="https://' + REGISTRY + '/oauth/token",service="' + SERVICE + '"')
-        require(allowed or path == token_path, "discovery")
+        manifest = "/v2/" + self.namespace + "/manifests/"
+        allowed = (path == manifest + urllib.parse.quote(self.request["tag"], safe=":")
+                   or path.startswith(manifest + "sha256:") and ID.fullmatch(path[len(manifest + "sha256:") :]) is not None)
+        token_path = self.token_path
+        blob = "/v2/" + self.namespace + "/blobs/sha256:"
+        require(allowed or path.startswith(blob) and digest(path[len(blob):]) or path == token_path, "discovery")
         require(
             authorization is None
             or isinstance(authorization, str)
@@ -336,7 +340,7 @@ class Registry:
         require(type(maximum) is int and 0 < maximum <= MAX_BODY, "discovery")
         remaining = self.deadline - self.now()
         require(remaining > 0, "timeout")
-        connection = http.client.HTTPSConnection(REGISTRY, port=443, timeout=min(remaining, 30), context=self.context)
+        connection = http.client.HTTPSConnection(self.registry, timeout=min(remaining, 30), context=self.context)
         try:
             headers = {
                 "Accept": ACCEPT if path.startswith(manifest) else "application/json",
@@ -456,36 +460,59 @@ def select(index):
     return selected[0]
 
 
+def http_success(status, raw, coordinate, secrets=()):
+    if status != 200:
+        private = list(secrets)
+        for authorization in secrets:
+            if isinstance(authorization, str) and authorization.startswith("Basic "):
+                try:
+                    private.extend(base64.b64decode(authorization[6:], validate=True).decode("utf-8").split(":", 1))
+                except (ValueError, UnicodeError):
+                    pass
+            elif isinstance(authorization, str) and authorization.startswith("Bearer "):
+                private.append(authorization[7:])
+        error = DiscoveryRefusal("discovery")
+        error.native_error = native_diagnostics.error_detail(coordinate, "HTTP " + str(status) + ": " + raw.decode("utf-8", errors="replace"), secrets=private)
+        raise error
+
+
 def successful(client, path, authorization, expected=None, size=None):
     status, headers, raw = client.get(path, authorization)
-    require(status == 200, "discovery")
+    http_success(status, raw, path, (authorization,) if authorization else ())
     actual = "sha256:" + hashlib.sha256(raw).hexdigest()
     require("docker-content-digest" not in headers or headers["docker-content-digest"] == actual, "discovery")
     return verified(raw, actual if expected is None else expected, size), headers
 
 
-def resolve(basic, client):
-    """The linux/amd64 child digest the pinned tag's image index names."""
+def resolve(basic, client, request):
+    """Resolve the authored tag or digest without consulting another coordinate."""
     # Schema version is an exact JSON integer, never bool or float.
     # pylint: disable=unidiomatic-typecheck
-    path = "/v2/" + NAMESPACE + "/manifests/" + TAG_NAME
+    namespace = request["base"].split("/", 1)[1]
+    selected_reference = authored_digest(request) or request["tag"]
+    path = "/v2/" + namespace + "/manifests/" + urllib.parse.quote(selected_reference, safe=":")
     status, headers, raw = client.get(path)
     authorization = None
     if status == 401:
-        token_path = challenge(headers.get("www-authenticate"))
+        token_path = challenge(headers.get("www-authenticate"), request["registry"], namespace)
+        client.token_path = token_path
         status, unused_headers, raw = client.get(token_path, basic, MAX_TOKEN * 2)
-        require(status == 200, "discovery")
+        http_success(status, raw, request["image"], (basic,))
         authorization = token(raw)
         status, headers, raw = client.get(path, authorization)
-    require(status == 200, "discovery")
+    http_success(status, raw, request["image"], (basic, authorization) if authorization else (basic,))
     tag_digest = "sha256:" + hashlib.sha256(raw).hexdigest()
     require("docker-content-digest" not in headers or headers["docker-content-digest"] == tag_digest, "discovery")
-    document = verified(raw, tag_digest)
+    document = verified(raw, authored_digest(request) or tag_digest)
     media = headers.get("content-type", "").split(";", 1)[0]
-    require(media in INDEX_TYPES and isinstance(document, dict) and document.get("mediaType", media) == media, "discovery")
-    selected = select(document)
-    manifest, headers = successful(client, "/v2/" + NAMESPACE + "/manifests/" + selected["digest"], authorization, selected["digest"], selected["size"])
-    require(headers.get("content-type", "").split(";", 1)[0] == selected["mediaType"], "discovery")
+    require(media in INDEX_TYPES + MANIFEST_TYPES and isinstance(document, dict) and document.get("mediaType", media) == media, "discovery")
+    if media in INDEX_TYPES:
+        selected = select(document)
+        manifest, headers = successful(client, "/v2/" + namespace + "/manifests/" + selected["digest"], authorization, selected["digest"], selected["size"])
+        require(headers.get("content-type", "").split(";", 1)[0] == selected["mediaType"], "discovery")
+    else:
+        selected = {"digest": tag_digest, "mediaType": media}
+        manifest = document
     require(
         isinstance(manifest, dict)
         and type(manifest.get("schemaVersion")) is int
@@ -494,7 +521,10 @@ def resolve(basic, client):
         "discovery",
     )
     image_layers(manifest.get("layers"))
-    descriptor(manifest.get("config"), CONFIG_TYPES)
+    config = descriptor(manifest.get("config"), CONFIG_TYPES)
+    if media in MANIFEST_TYPES:
+        configuration, unused_headers = successful(client, "/v2/" + namespace + "/blobs/" + config["digest"], authorization, config["digest"], config["size"])
+        require(isinstance(configuration, dict) and configuration.get("os") == "linux" and configuration.get("architecture") == "amd64", "discovery")
     return selected["digest"]
 
 
@@ -503,7 +533,8 @@ def resolution(request, request_digest, child):
     authored = authored_digest(request)
     require(authored is None or authored == child, "image-digest-mismatch")
     return evidence(
-        {"request": request_digest, "postcondition": True, "release": RELEASE, "base": REPOSITORY, "tag": TAG_NAME, "digest": child, "platform": PLATFORM},
+        {"request": request_digest, "postcondition": True, "release": request["release"], "base": request["base"],
+         "tag": request["tag"], "digest": child, "platform": PLATFORM},
         request_digest,
     )
 
@@ -517,10 +548,10 @@ def execute(operation, request, digest_value, material):
         return {"changed": False, "evidence": evidence({"request": digest_value, "postcondition": True, "absent": True}, digest_value)}
     with bounded_lifetime(), tls_proof() as (context, prove_tls):
         with protected_file(material["registryJSON"], MAX_REGISTRY, private=True) as (loan, prove):
-            basic = basic_material(loan.read(MAX_REGISTRY + 1))
+            basic = basic_material(loan.read(MAX_REGISTRY + 1), request["registry"])
             prove()
             prove_tls()
-            child = resolve(basic, Registry(context))
+            child = resolve(basic, Registry(context, request), request)
             prove()
             prove_tls()
     return {"changed": False, "evidence": resolution(original, digest_value, child)}

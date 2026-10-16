@@ -255,3 +255,8 @@ func TestCanonicalImageLowercasesOnlyTheDigest(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeVersionStringsAreBoundedWithoutProviderGrammar(t *testing.T) {
+	lexicalRows(t, "native-version", []string{"latest", "invalid version?", "--option-like", "1:other+build", "sha256:not-a-digest"}, []string{"", "bad\nversion", "bad\x00version", strings.Repeat("a", 1025)})
+	lexicalRows(t, "package-repository", []string{"https://packages.example.test/ceph/other"}, []string{"http://packages.example.test/ceph", "https://user:secret@packages.example.test/ceph", "https://packages.example.test/ceph#fragment"})
+}

@@ -51,10 +51,12 @@ def client(tmp_path, monkeypatch):
               "user": "operator", "port": 22, "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}],
               "labels": [], "location": {}, "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    request = {"controller": "controller", "version": "ceph-core-v4", "action": "client", "cluster": "example", "owner": "apply-example",
+    request = {"controller": "controller", "version": "ceph-core-v5", "action": "client", "cluster": "example", "owner": "apply-example",
                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
-               "cephadm": {"path": "/usr/sbin/cephadm", "version": "20.2.1", "packageVersion": "20.2.1-405.el9cp"},
-               "cephVersion": "20.2.1", "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator",
+               "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
+               "release": "9.1", "ansiblePackageVersion": "3.2.0",
+               "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+               "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator",
                "clusterSSHTransport": "verified-tunnel", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
                "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
                "services": [{"service_type": "mon", "placement": {"hosts": names}},

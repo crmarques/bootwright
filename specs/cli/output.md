@@ -295,6 +295,16 @@ Successful result objects have stable top-level fields:
 | `cluster list` | `context`, `clusters` |
 | `cluster info` | `context`, `clusters`, `storage` |
 
+Storage preflight reports every check as `id`, `target`, `status`, `reason` and
+`next`. Status is `passed`, `failed`, `unknown` or `pending`; only `passed`
+proves readiness. Optional `capacity` carries `resource`, `unit`, `required`,
+`available`, `reserve`, `deficit` and `observed`. The summary counts each status.
+JSON retains the complete report when checks fail. Uninstalled guests remain
+pending without remote probes; dry-run performs no live capacity or guest
+probe. Installed guest probes use established verified Machine access and a
+bounded read-only command set. Anonymous key observation under
+`--trust-on-first-use` neither enrolls nor accepts a key.
+
 A `setup --dry-run --output json` that the host or the state root refuses
 writes the same fields with `ok` `false` and the refusal in `diagnostics`,
 including the `state-root` check, and nothing else on standard output: the
@@ -790,6 +800,7 @@ it to a variable.
 | `secret.store.limit` | A secret material, input, metadata or recovery bound was exceeded. |
 | `media.store` | Media identity, integrity, import, publication, or deletion failed. |
 | `preflight.failed` | One or more required readiness checks definitely failed. |
+| `preflight.unknown` | Readiness includes unknown or pending checks and no definite failure. |
 | `controller.unsupported` | The setup host, dependency combination or acquisition route is not qualified. |
 | `controller.identity` | Required controller binding or verified host evidence is missing or contradictory. |
 | `controller.state` | Retained setup evidence is incomplete, contradictory or no longer valid. |

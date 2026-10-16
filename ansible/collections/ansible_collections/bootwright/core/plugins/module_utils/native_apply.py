@@ -128,7 +128,7 @@ def apply(request, scratch):
         before = native.inspect(request, scratch)
         if before["inventorySHA256"] != plan["beforeSHA256"]:
             raise ValueError("native inventory changed before transaction")
-        if request.get("policy") == "ceph-packages-v1":
+        if request.get("policy") == "ceph-packages-v2":
             native_signatures.import_ceph_keys(request)
         # DNF owns its transaction lock, RPM checks, vendor hooks and history.
         # Concurrent direct RPM/operator writes are diagnosed by exact inventory

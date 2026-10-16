@@ -15,7 +15,7 @@ def completion(arguments):
 
 CAPABILITY = adapter_protocol.Capability(
     "Ceph image", "the Ceph image resolution could not be published", completion,
-    phases=("loaded", "refused", "completed"), refusals=discovery.REASONS, detail=True,
+    phases=("loaded", "refused", "completed"), refusals=discovery.REASONS, detail=True, native_error=True,
 )
 
 

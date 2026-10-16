@@ -62,7 +62,7 @@ class Capability:
     its own message, which names a cause the generic one would hide.
     """
 
-    def __init__(self, name, unpublished, completion, phases=PHASES, refusals=(), passthrough=(), detail=False):
+    def __init__(self, name, unpublished, completion, phases=PHASES, refusals=(), passthrough=(), detail=False, native_error=False):
         self.name = name
         self.unpublished = unpublished
         self.completion = completion
@@ -70,6 +70,7 @@ class Capability:
         self.refusals = refusals
         self.passthrough = passthrough
         self.detail = detail
+        self.native_error = native_error
 
 
 def refusal(arguments, refusals):
@@ -98,6 +99,12 @@ def handed(arguments, capability, emit):
         detail = arguments.get("detail")
         if capability.detail and isinstance(detail, str) and 0 < len(detail) <= MAX_DETAIL and not set(detail) - DETAIL:
             record["detail"] = detail
+        if "native_error" in arguments:
+            from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
+            value = arguments["native_error"]
+            if not capability.native_error or not native_diagnostics.valid(value):
+                raise ValueError("native diagnostic")
+            record["nativeError"] = value
         emit(record)
         return {"changed": False}
     outcome = arguments.get("outcome")

@@ -1,5 +1,5 @@
 {
-  "digest": "baa131f50596c75ad037a48003d0d5e04e95b4566ecb3f164aeb1018dd314ae5",
+  "digest": "675aeb4c599fde7a29ff85ac0a2f04b9fa24d602d68f883631b3fe8655e9b19e",
   "request": {
     "base": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
     "cluster": "example",
@@ -9,6 +9,6 @@
     "registryRef": "registry",
     "release": "9.9.1.2",
     "tag": "v9.9.1-25074",
-    "version": "ceph-image-v1"
+    "version": "ceph-image-v2"
   }
 }

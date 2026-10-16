@@ -195,3 +195,31 @@ class NativeResolution(unittest.TestCase):
             self.assertTrue(
                 native.verified_files(platform, "/snapshot", [], "/scratch")
             )
+
+
+class AuthoredNativeSelections(unittest.TestCase):
+    def test_native_dnf_receives_authored_coordinate_without_bootwright_parsing(self):
+        import sys
+        import types
+
+        for coordinate in ("x" * 1024, "latest", "83.7-42.vendor", "not a version", "--invalid", "2:1.0~candidate-7", "absent@version"):
+            seen = []
+            chosen = package("nfs-ganesha")
+            query = SimpleNamespace(available=lambda: [chosen])
+            subject = types.ModuleType("dnf.subject")
+            subject.Subject = lambda value: seen.append(("subject", value)) or SimpleNamespace(get_best_query=lambda *args, **kwargs: query)
+            dnf = types.ModuleType("dnf")
+            dnf.subject = subject
+            base = SimpleNamespace(sack=object(), install=lambda value, **kwargs: seen.append(("install", value)))
+            with patch.dict(sys.modules, {"dnf": dnf, "dnf.subject": subject}):
+                self.assertEqual(native.authored_candidates(base, "nfs-ganesha", coordinate), [chosen])
+            self.assertEqual(seen, [("install", "nfs-ganesha-" + coordinate), ("subject", "nfs-ganesha-" + coordinate)])
+
+    def test_each_selected_package_has_an_actual_native_root(self):
+        request = {"policy": "ceph-packages-v2", "requirements": {"cephPackages": True},
+                   "versions": {"ceph": "synthetic-ceph", "ansible": "synthetic-ansible", "nfsGanesha": "synthetic-nfs",
+                                "license": "latest", "inheritedPolicy": "latest"}}
+        roots = native.selected_roots(request)
+        self.assertIn(("ceph", "cephadm", "synthetic-ceph"), roots)
+        self.assertIn(("ansible", "cephadm-ansible", "synthetic-ansible"), roots)
+        self.assertIn(("nfsGanesha", "nfs-ganesha", "synthetic-nfs"), roots)

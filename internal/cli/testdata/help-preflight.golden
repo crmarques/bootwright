@@ -10,7 +10,7 @@ Available Commands:
   container-cluster Check ContainerCluster readiness (unavailable)
   controller        Check controller prerequisites
   infra             Check infrastructure readiness (unavailable)
-  storage-cluster   Check StorageCluster readiness (unavailable)
+  storage-cluster   Check StorageCluster readiness
 
 Global Flags:
       --context string             Select a context (default: current context)

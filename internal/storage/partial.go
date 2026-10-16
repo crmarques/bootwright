@@ -10,13 +10,6 @@ func ValidatePartial(object api.Object, catalog api.Catalog) []api.Issue {
 		return nil
 	}
 	a := admission{object: object, catalog: catalog}
-	spec := object.Spec()
-	if object.Kind() == api.StorageCluster && !spec.Has("ceph", "distribution") {
-		// A later object can select either release grammar.
-		release := spec.Get("ceph", "release")
-		a.lexical(release, "$.spec.ceph.release", exactOSS.MatchString(release.Text()) || ossName.MatchString(release.Text()) || vendorRelease.MatchString(release.Text()))
-		a.object = object.WithSpec(spec.With("ceph", spec.Get("ceph").Without("release")))
-	}
 	a.lexicalValues()
 	a.object = object
 	a.partial = true

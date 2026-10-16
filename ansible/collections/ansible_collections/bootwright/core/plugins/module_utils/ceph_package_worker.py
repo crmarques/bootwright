@@ -15,14 +15,14 @@ import time
 import types
 
 PREFIX = "ansible_collections.bootwright.core.plugins.module_utils"
-MODULES = ("ceph_native_worker", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native", "native_resolution",
-           "native_signatures", "native_apply", "ceph_package_sources", "ceph_crypto_policy", "ceph_packages")
+MODULES = ("native_diagnostics", "ceph_native_worker", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native",
+           "native_resolution", "native_signatures", "native_apply", "ceph_package_sources", "ceph_crypto_policy", "ceph_packages")
 # The closed reasons a package failure names; any other refusal is packages.
 REASONS = ("packages", "package-artifact", "package-drift", "package-host", "package-journal", "package-license", "package-limit", "package-platform",
            "package-timeout", "package-resolution", "package-signature", "package-transaction")
 LIMIT = 2 << 20
 REMOTE_LIMIT = 1920
-RESULT_LIMIT = 4096
+RESULT_LIMIT = 8192
 INTERRUPTS = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
 
 
@@ -80,7 +80,8 @@ def work():
 
 def failure(error):
     """The closed reason and, once the shipped helpers are loaded, the code site; never a value."""
-    token = error.args[0] if type(error).__name__.endswith("Refusal") and len(error.args) == 1 else None
+    refused = isinstance(error, ValueError) and (type(error).__name__.endswith("Refusal") or type(error).__name__ == "NativeFailure")
+    token = error.args[0] if refused and len(error.args) == 1 else None
     output = {"ok": False, "reason": token if token in REASONS else "packages"}
     helper = sys.modules.get(PREFIX + ".ceph_native_worker")
     try:
@@ -89,6 +90,10 @@ def failure(error):
         cause = None
     if cause is not None:
         output["cause"] = cause
+    diagnostics = sys.modules.get(PREFIX + ".native_diagnostics")
+    native_error = getattr(error, "native_error", None)
+    if diagnostics is not None and diagnostics.valid(native_error):
+        output["nativeError"] = native_error
     return output
 
 

@@ -8,6 +8,12 @@ spec:
     machineRef: controller
     uri: qemu:///system
 
+    # Example host headroom; choose reserves for your own allocation budget.
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 2048
+      diskGiB: 10
+
     bmcEmulationDefaults:
       enabled: true
       protocol: redfish

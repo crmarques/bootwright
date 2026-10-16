@@ -160,7 +160,7 @@ func fleetRequest(t *testing.T, change func(*ceph.Request)) json.RawMessage {
 	t.Helper()
 	r := ceph.Request{
 		Version: ceph.Version, Action: "cluster", Cluster: "example", Controller: "controller", ClusterSSHTransport: "native", Bootstrap: fleetHosts[0],
-		Image: ceph.PinnedRepository + ":" + ceph.PinnedTag, ClusterKeyRef: "cluster-key", RegistryRef: "registry", Registry: ceph.PinnedRegistry,
+		Image: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9" + ":" + "v9.9.1-25074", ClusterKeyRef: "cluster-key", RegistryRef: "registry", Registry: "cp.icr.io",
 		Packages: &ceph.PackageRequest{LicenseAccepted: true, Sources: []ceph.PackageSource{}, Version: ceph.PackageVersion},
 		Services: []json.RawMessage{
 			json.RawMessage(`{"placement":{"hosts":["rhel-01","rhel-02","rhel-03"]},"service_id":"data","service_type":"osd","spec":{"data_devices":{"paths":["/dev/vdb"]}}}`),
@@ -207,8 +207,8 @@ func fleetJourney(t *testing.T, keeps bool) (*lifecycle.CapabilityJourney, *flee
 // Ceph image and Ceph capabilities over runner, and the Secrets they bind.
 func fleetEngine(t *testing.T, machines *fleetMachines, runner ceph.Runner) *lifecycle.CapabilityJourney {
 	t.Helper()
-	image, err := ceph.ImageRequest{Version: ceph.ImageVersion, Cluster: "example", Controller: "controller", Release: ceph.PinnedRelease, Base: ceph.PinnedRepository, Tag: ceph.PinnedTag,
-		Image: ceph.PinnedRepository + ":" + ceph.PinnedTag, Registry: ceph.PinnedRegistry, RegistryRef: "registry"}.Canonical()
+	image, err := ceph.ImageRequest{Version: ceph.ImageVersion, Cluster: "example", Controller: "controller", Release: "9.9.1.2", Base: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9", Tag: "v9.9.1-25074",
+		Image: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9" + ":" + "v9.9.1-25074", Registry: "cp.icr.io", RegistryRef: "registry"}.Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}

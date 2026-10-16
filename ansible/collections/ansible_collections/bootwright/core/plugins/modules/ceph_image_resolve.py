@@ -1,14 +1,14 @@
 #!/usr/bin/python
-"""Resolve the pinned IBM Ceph tag to its linux/amd64 manifest digest."""
+"""Resolve the authored IBM Ceph tag or digest to its linux/amd64 manifest digest."""
 
 from __future__ import annotations
 
 DOCUMENTATION = r"""
 module: ceph_image_resolve
-short_description: Resolve the pinned IBM Ceph image manifest-only
+short_description: Resolve the authored IBM Ceph image manifest-only
 version_added: "0.1.0"
 description:
-  - Resolves only the pinned release tag with a bounded origin-confined OCI client.
+  - Resolves the authored tag or digest with a bounded origin-confined OCI client.
   - Downloads no image layers, starts no container and retains nothing.
   - Observation and removal read nothing remote and report the resolution absent.
 options:
@@ -34,7 +34,7 @@ author:
 """
 
 EXAMPLES = r"""
-- name: Resolve the pinned provider image
+- name: Resolve the authored provider image
   bootwright.core.ceph_image_resolve:
     operation: apply
     request: '{{ bootwright_ceph_image_request }}'
@@ -48,6 +48,10 @@ evidence:
   description: The resolved immutable reference, or the resolution's absence.
   type: dict
   returned: success
+nativeError:
+  description: Bounded redacted native cause and selected public coordinate.
+  type: dict
+  returned: failure
 reason:
   description: Fixed refusal without native output or credentials.
   type: str
@@ -59,6 +63,7 @@ detail:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_registry_discovery as discovery
 
 
@@ -75,6 +80,9 @@ def main():
     except Exception as error:
         reason, detail = discovery.refusal(error)
         failure = {"reason": reason}
+        native_error = getattr(error, "native_error", None)
+        if native_diagnostics.valid(native_error):
+            failure["nativeError"] = native_error
         if detail:
             failure["detail"] = detail
         module.fail_json(msg="Ceph image resolution refused", **failure)

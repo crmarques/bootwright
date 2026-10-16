@@ -23,6 +23,9 @@ options:
   detail:
     description: Non-secret refusal cause, a refusal name or an exception type and code site.
     type: str
+  native_error:
+    description: Bounded redacted native cause and selected public coordinate.
+    type: dict
   digest:
     description: Digest of the frozen lifecycle request.
     type: str

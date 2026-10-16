@@ -4,8 +4,8 @@ The ordinary native worker ships this module. Each phase is journaled under
 root-owned markers scoped by the original apply's owner, the cluster FSID and
 the host, so an interrupted call resumes from what it proved. Facts come from
 the pulled image's own contained processes, never from an operator report.
-The registry credential reaches the host only as a protected authfile that
-exists for one pull; it never enters argv, logs, journals or evidence.
+The registry credential stays in the invocation-local broker. Podman receives
+an empty authfile; secrets never enter argv, logs, journals or evidence.
 """
 
 from __future__ import annotations
@@ -28,21 +28,20 @@ import time
 import uuid
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_host_route_probe as probe, ceph_native, ceph_native_observe as observe, ceph_tunnel, ceph_tunnel_custody as custody,
+    ceph_host_route_probe as probe, ceph_native, ceph_native_observe as observe, ceph_tunnel, ceph_tunnel_custody as custody, ceph_pull_broker,
 )
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
 VERSION = "ceph-host-v1"
-PROFILE_VERSION = "ceph-runtime-profile-v2"
-ROUTE_VERSION = "ceph-host-route-v1"
+PROFILE_VERSION = "ceph-runtime-profile-v3"
+ROUTE_VERSION = "ceph-host-route-v2"
 DEVICES_VERSION = "ceph-device-identities-v1"
 EVIDENCE_VERSION = "ceph-host-evidence-v1"
 PROFILE = "runtime-profile.json"
 PAYLOAD = "cephadm-payload"
 ROUTE = "route.json"
 DEVICES = "device-identities.json"
-CEPHADM_SHA256 = "027222324b11d1af53b72b4ebb17134f58e477f63c39e9d07be40ba1fc2aabc1"
 SHARED_LABEL = "system_u:object_r:container_file_t:s0"
 SENTINEL = b"bootwright-contained-public-label-probe-v1\n"
 # Podman adds HOSTNAME to a started container's environment unless one is set, so the probe pins both.
@@ -50,7 +49,7 @@ PROBE_HOSTNAME = "bootwright-probe"
 PROBE_ENV = frozenset(("HOME=/tmp", "PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C", "HOSTNAME=" + PROBE_HOSTNAME))
 # The read-only relabelled bind the probe requests, plus the defaults podman records beside it.
 BIND_OPTIONS = frozenset(("ro", "z", "rprivate", "nosuid", "nodev", "rbind"))
-IMAGE = re.compile(r"cp\.icr\.io/cp/ibm-ceph/ceph-9-rhel9@sha256:[0-9a-f]{64}\Z")
+IMAGE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}\Z")
 IDENTIFIER = re.compile(r"[0-9a-f]{64}\Z")
 DEVICE_ID = re.compile(r"[A-Za-z0-9_.:+/-]{1,512}\Z")
 MAX_PAYLOAD = 2 << 20
@@ -64,11 +63,8 @@ PROFILE_CALL_SECONDS = 4285
 PHASES = frozenset(("profile", "route", "device_identity", "host_devices", "host_observe"))
 ARTIFACTS = ("/usr/sbin/cephadm", "/usr/share/ceph/mgr/cephadm/ssh.py", "/usr/share/ceph/mgr/cephadm/module.py",
              "/usr/share/ceph/mgr/cephadm/serve.py", "/usr/bin/ceph", "/usr/bin/ceph-authtool")
-SOURCES = {
-    "/usr/share/ceph/mgr/cephadm/ssh.py": probe.PROVIDER_SHA256,
-    "/usr/share/ceph/mgr/cephadm/module.py": "fe45b0e9d91cb57cdf3a109322ba11a355119d812dabe941ef112dbfbdadceec",
-    "/usr/share/ceph/mgr/cephadm/serve.py": "ae991c31e84f5f0b5607fa16c5ec66deb730915180fcf7e21767ae1fef45bc86",
-}
+SOURCE_PATHS = ARTIFACTS[1:4]
+
 EXPECTED_CASES = {
     "correctKey": (1, 1, 1, 1, 1, 0), "wrongKey": (1, 0, 0, 0, 0, 0),
     "unknownTarget": (0, 0, 0, 0, 0, 0), "unavailableProxy": (0, 0, 0, 0, 0, 0),
@@ -269,9 +265,9 @@ def discard_residue(parent, prefix):
 
 
 @contextlib.contextmanager
-def authfile(directory, request, private):
-    """Hold the original secret descriptor; never store bytes or their digest."""
-    data = ceph_native.registry_material(request, private)
+def authfile(directory):
+    """Override native ambient authentication with a proved empty authfile."""
+    data = b'{"auths":{}}'
     path = os.path.join(directory, "auth.json")
     fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
     try:
@@ -294,9 +290,9 @@ def authfile(directory, request, private):
             os.close(fd)
 
 
-def signature_policy():
-    """Accept only the pinned repository; every other reference is rejected."""
-    return canonical({"default": [{"type": "reject"}], "transports": {"docker": {ceph_native.PINNED_REPOSITORY: [{"type": "insecureAcceptAnything"}]}}})
+def signature_policy(image):
+    """Accept only the frozen repository; every other reference is rejected."""
+    return canonical({"default": [{"type": "reject"}], "transports": {"docker": {image.split("@", 1)[0]: [{"type": "insecureAcceptAnything"}]}}})
 
 
 @contextlib.contextmanager
@@ -339,7 +335,6 @@ def decode_payload(encoded):
     except (ValueError, TypeError):
         raise Refusal("image-profile") from None
     require(0 < len(data) <= MAX_PAYLOAD and base64.b64encode(data).decode() == encoded)
-    require(hashlib.sha256(data).hexdigest() == CEPHADM_SHA256)
     return data
 
 
@@ -356,7 +351,7 @@ def validate_probe(value, user):
         require(artifact["mode"] in (0o644, 0o755) and ceph_native.digest(artifact["sha256"]))
     payload = decode_payload(value["cephadm"])
     artifact = value["artifacts"]["/usr/sbin/cephadm"]
-    require(artifact["sha256"] == CEPHADM_SHA256 and artifact["bytes"] == len(payload) and artifact["mode"] == 0o755)
+    require(artifact["sha256"] == hashlib.sha256(payload).hexdigest() and artifact["bytes"] == len(payload) and artifact["mode"] == 0o755)
     crypto_policy(value["cryptoPolicy"])
     return value
 
@@ -433,9 +428,11 @@ class HostRuntime:
         self.markers = markers
         self.packages = packages or ceph_native.Markers(request, root=PACKAGE_ROOT)
 
-    def command(self, argv, timeout, limit, reason="native-command"):
-        code, output = self.run(argv, timeout=timeout, limit=limit)
-        require(code == 0, reason)
+    def command(self, argv, timeout, limit, reason="native-command", *, environment=None, secrets=()):
+        options = {"environment": environment} if environment else {}
+        code, output = self.run(argv, timeout=timeout, limit=limit, **options)
+        if code != 0:
+            raise ceph_native.NativeFailure(reason, self.request["image"], getattr(output, "stderr", b"") or output, secrets=secrets)
         return output
 
     def journal(self, create=False):
@@ -468,20 +465,25 @@ class HostRuntime:
                 durable.write("pulled.json", {"scope": self.scope(), "imageID": current["id"]})
                 return True
         require(attempts < PULL_ATTEMPTS, "image-pull")
-        with owned_scratch(durable.path, "pull-") as scratch, authfile(scratch, self.request, private) as auth:
+        ceph_native.registry_material(self.request, private)
+        material = json.loads(private, object_pairs_hook=ceph_native.unique_object)
+        secrets = (material["username"], material["password"])
+        with owned_scratch(durable.path, "pull-") as scratch, authfile(scratch) as auth, \
+                ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command) as broker:
             policy = os.path.join(scratch, "policy.json")
-            ceph_native.private_write(policy, signature_policy())
-            argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth, image]
+            ceph_native.private_write(policy, signature_policy(image))
+            argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth, "--cert-dir", scratch, image]
             while True:
                 seconds = min(PULL_SECONDS, deadline - self.clock() - PULL_RESERVE)
                 require(seconds >= PULL_MINIMUM, "image-pull")
                 attempts += 1
                 durable.write("pull-attempt-%d.json" % attempts, {"scope": self.scope(), "attempt": attempts})
                 try:
-                    self.command(argv, seconds, 256 << 10, "image-pull")
+                    self.command(argv, seconds, 256 << 10, "image-pull", environment=broker.environment, secrets=secrets)
                     break
                 except Refusal:
-                    require(attempts < PULL_ATTEMPTS, "image-pull")
+                    if attempts >= PULL_ATTEMPTS:
+                        raise
                     self.pause(PULL_PAUSE)
         current = inspect_image(image, self.command)
         durable.write("pulled.json", {"scope": self.scope(), "imageID": current["id"]})
@@ -626,18 +628,17 @@ class HostRuntime:
                 self.current(durable)
                 cephadm_payload(durable)
                 return {"changed": changed}
-            installed = installed_cephadm(self.request)
             probe_result = self.facts(original["id"])
             require(inspect_image(self.request["image"], self.command) == original, "image-platform")
             user = (probe_result["cephUID"], probe_result["cephGID"])
             label = self.label(original["id"], user, durable.path)
             require(inspect_image(self.request["image"], self.command) == original, "image-platform")
             payload = decode_payload(probe_result["cephadm"])
-            require(hashlib.sha256(payload).hexdigest() == installed == CEPHADM_SHA256)
+            payload_digest = hashlib.sha256(payload).hexdigest()
             write_payload(durable, payload)
             durable.write(PROFILE, {"version": PROFILE_VERSION, "scope": self.scope(), "image": self.request["image"], "host": self.host["name"],
                                     "imageID": original["id"], "uid": user[0], "gid": user[1], "policy": crypto_policy(probe_result["cryptoPolicy"]),
-                                    "label": label, "cephadmSHA256": CEPHADM_SHA256,
+                                    "label": label, "cephadmSHA256": payload_digest,
                                     "artifacts": {path: probe_result["artifacts"][path]["sha256"] for path in ARTIFACTS}})
             self.current(durable)
             return {"changed": True}
@@ -647,7 +648,8 @@ class HostRuntime:
         return current_profile(self.request, self.host["name"], durable, self.command)
 
     def route_record(self, profile):
-        return {"version": ROUTE_VERSION, "scope": self.scope(), "imageID": profile["imageID"], "sources": dict(SOURCES),
+        return {"version": ROUTE_VERSION, "scope": self.scope(), "imageID": profile["imageID"],
+                "sources": {path: profile["artifacts"][path] for path in SOURCE_PATHS},
                 "cases": {name: dict(zip(probe.COUNTERS, values)) for name, values in EXPECTED_CASES.items()}}
 
     def route(self):
@@ -658,7 +660,6 @@ class HostRuntime:
             if existing is not None:
                 require(canonical(existing) == canonical(expected), "route-probe")
                 return {"changed": False}
-            require(all(profile["artifacts"].get(path) == digest for path, digest in SOURCES.items()), "route-probe")
             user = (profile["uid"], profile["gid"])
             prepared_keys = self.contained(profile["imageID"], user, module_source(probe), ("prepare",), limit=probe.MAX_OUTPUT)
             require(isinstance(prepared_keys, dict) and set(prepared_keys) == {"schema", "ok", "synthetic"}, "route-probe")
@@ -803,7 +804,7 @@ def current_profile(request, host, durable, command):
     require(record["image"] == request["image"] and record["host"] == host, "runtime-profile")
     require(isinstance(record["imageID"], str) and IDENTIFIER.fullmatch(record["imageID"]) is not None, "runtime-profile")
     require(type(record["uid"]) is int and type(record["gid"]) is int and 0 < record["uid"] == record["gid"] < 65536, "runtime-profile")
-    require(record["label"] == SHARED_LABEL and record["cephadmSHA256"] == CEPHADM_SHA256, "runtime-profile")
+    require(record["label"] == SHARED_LABEL and ceph_native.digest(record["cephadmSHA256"]), "runtime-profile")
     require(isinstance(record["policy"], str) and bool(record["policy"]), "runtime-profile")
     try:
         require(ceph_tunnel.crypto_policy(record["policy"]) == record["policy"], "runtime-profile")
@@ -813,7 +814,7 @@ def current_profile(request, host, durable, command):
         raise Refusal("runtime-profile") from None
     require(isinstance(record["artifacts"], dict) and set(record["artifacts"]) == set(ARTIFACTS)
             and all(ceph_native.digest(value) for value in record["artifacts"].values()), "runtime-profile")
-    require(record["artifacts"]["/usr/sbin/cephadm"] == CEPHADM_SHA256, "runtime-profile")
+    require(record["artifacts"]["/usr/sbin/cephadm"] == record["cephadmSHA256"], "runtime-profile")
     require(inspect_image(request["image"], command, "runtime-profile")["id"] == record["imageID"], "runtime-profile")
     return record
 
@@ -821,7 +822,9 @@ def current_profile(request, host, durable, command):
 def cephadm_payload(durable):
     """The retained public bytes, refused unless they are the authenticated payload."""
     data = ceph_native.read_regular(os.path.join(durable.path, PAYLOAD), maximum=MAX_PAYLOAD, private=True)
-    require(hashlib.sha256(data).hexdigest() == CEPHADM_SHA256, "runtime-profile")
+    profile = durable.read(PROFILE)
+    require(isinstance(profile, dict) and profile.get("version") == PROFILE_VERSION
+            and hashlib.sha256(data).hexdigest() == profile.get("cephadmSHA256"), "runtime-profile")
     return data
 
 
@@ -842,7 +845,7 @@ def route_cases(value):
 @contextlib.contextmanager
 def staged(directory, synthetic, uid, gid):
     """Retain the synthetic bytes outside the read-only mounted children."""
-    request = {"version": "ceph-core-v4", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
+    request = {"version": "ceph-core-v5", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
                "clusterSSHTransport": "verified-tunnel", "clusterSSHUser": probe.USER,
                "hosts": [{"name": probe.HOST, "address": probe.ADDRESS, "port": probe.OUTER_PORT}]}
     known = ("[" + probe.ADDRESS + "]:" + str(probe.OUTER_PORT) + " " + synthetic["keys"]["outer"]["public"] + "\n").encode()

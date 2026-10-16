@@ -91,9 +91,9 @@ func automationFormats() map[string]automationFormat {
 	return map[string]automationFormat{
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.
-		"ceph-runtime-profile-v2":   persistedBy(ceph.HostImplementation, ceph.Implementation),
+		"ceph-runtime-profile-v3":   persistedBy(ceph.HostImplementation, ceph.Implementation),
 		"ceph-device-identities-v1": persistedBy(ceph.HostImplementation, ceph.Implementation),
-		"ceph-host-route-v1":        host,
+		"ceph-host-route-v2":        host,
 		"ceph-package-decision-v1":  host,
 		"ceph-package-artifacts-v1": host,
 		"ceph-package-complete-v1":  host,
@@ -115,6 +115,8 @@ func automationFormats() map[string]automationFormat {
 		"ceph-dashboard-redeploy-v1":        core,
 		"ceph-dashboard-user-v1":            core,
 		"ceph-cluster-device-identities-v1": core,
+		"ceph-osd-device-intent-v1":         core,
+		"ceph-service-inputs-v1":            core,
 		// The core block's cache phase publishes cephadm on each host under it.
 		"ceph-host-cache-v1": core,
 		// The client and dashboard credential custody records, by kind.
@@ -129,15 +131,16 @@ func automationFormats() map[string]automationFormat {
 		"bootwright-ceph-route-synthetic-v1": {class: formatTransient},
 		// The registry client's User-Agent.
 		"bootwright-ceph-metadata-v1": {class: formatTransient},
+		"bootwright-pull-broker-v1":   {class: formatTransient},
 		// The bytes the label probe writes in its own scratch and reads back.
 		"bootwright-contained-public-label-probe-v1": {class: formatTransient},
 
 		"ceph-host-v1":                {class: formatMirrored},
 		"ceph-host-evidence-v1":       {class: formatMirrored},
-		"ceph-core-v4":                {class: formatMirrored},
+		"ceph-core-v5":                {class: formatMirrored},
 		"ceph-core-evidence-v2":       {class: formatMirrored},
-		"ceph-packages-v1":            {class: formatMirrored},
-		"ceph-image-v1":               {class: formatMirrored},
+		"ceph-packages-v2":            {class: formatMirrored},
+		"ceph-image-v2":               {class: formatMirrored},
 		"os-package-tree-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
 		"substrate-host-libvirt-v5": {class: formatMirrored},

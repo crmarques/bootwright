@@ -22,7 +22,6 @@ func stubCapabilities() map[string]bool {
 		"internal/containercluster/preflight":    true,
 		"internal/environment/preflight":         true,
 		"internal/nativeartifacts/rendering":     true,
-		"internal/storage/preflight":             true,
 		"internal/storage/rendering":             true,
 	}
 }

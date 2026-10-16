@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "preflight storage-cluster",
+  "ok": false,
+  "exitCode": 1,
+  "result": {
+    "context": "synthetic",
+    "target": "storage-cluster",
+    "checks": [
+      {
+        "id": "host.prerequisites",
+        "target": "guest",
+        "status": "pending",
+        "reason": "the Machine has not been installed",
+        "next": "run bootwright apply --context synthetic --stage machines"
+      },
+      {
+        "id": "capacity.memory",
+        "target": "controller",
+        "status": "unknown",
+        "reason": "the capacity read did not complete",
+        "capacity": {
+          "resource": "memory",
+          "unit": "bytes",
+          "required": 1024,
+          "available": 0,
+          "reserve": 1024,
+          "deficit": 0,
+          "observed": false
+        }
+      }
+    ],
+    "summary": {
+      "passed": 0,
+      "failed": 0,
+      "unknown": 1,
+      "pending": 1
+    }
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "preflight.unknown",
+      "message": "storage readiness is not proved",
+      "remediation": "resolve the reported prerequisites"
+    }
+  ],
+  "logs": []
+}

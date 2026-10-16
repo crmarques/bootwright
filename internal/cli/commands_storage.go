@@ -9,7 +9,7 @@ import (
 )
 
 func storagePreflightCommand() commandSpec {
-	return commandSpec{path: "preflight storage-cluster", short: "Check StorageCluster readiness", flags: preflightFlags()}
+	return available(commandSpec{path: "preflight storage-cluster", short: "Check StorageCluster readiness", flags: preflightFlags()})
 }
 
 func storageRenderCommand() commandSpec {
@@ -17,28 +17,29 @@ func storageRenderCommand() commandSpec {
 }
 
 type StoragePreflightService interface {
-	Check(context.Context, storagepreflight.PreflightRequest) error
+	Check(context.Context, storagepreflight.PreflightRequest) (*storagepreflight.Report, error)
 }
 
 type StorageArtifactService interface {
 	Render(context.Context, storagerendering.RenderArtifactsRequest) error
 }
 
-func (s Services) invokeStoragePreflight(ctx context.Context, path string, values *requestValues, args []string) error {
+func (s Services) invokeStoragePreflight(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
 	if s.StoragePreflight == nil {
-		return errMissingService
+		return commandResult{}, errMissingService
 	}
 	switch path {
 	case "preflight storage-cluster":
-		return invokeRequest(ctx, values, storagepreflight.PreflightRequest{
+		report, err := invokeResult(ctx, values, storagepreflight.PreflightRequest{
 			ContextName:     values.text("context"),
 			Clusters:        values.names("clusters"),
 			DryRun:          values.boolean("dry-run"),
 			TrustOnFirstUse: values.boolean("trust-on-first-use"),
 			SSH:             values.ssh(),
 		}, s.StoragePreflight.Check)
+		return commandResult{storagePreflight: report}, err
 	default:
-		return errors.New("command has no application dispatch")
+		return commandResult{}, errors.New("command has no application dispatch")
 	}
 }
 

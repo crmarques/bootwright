@@ -14,7 +14,7 @@ func TestUnavailableService(t *testing.T) {
 		name   string
 		invoke func(context.Context) error
 	}{
-		{"preflight storage-cluster", func(ctx context.Context) error { return (Service{}).Check(ctx, PreflightRequest{}) }},
+		{"preflight storage-cluster", func(ctx context.Context) error { _, err := (Service{}).Check(ctx, PreflightRequest{}); return err }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -92,9 +92,6 @@ The [storage API](api/storage.md) owns version selection and the
 [release qualification](storage-coverage.md#release-qualification) owns the
 digest resolution and the authored-digest rule.
 
-Not yet met: removal of the build's release and artifact allowlist; tracked as
-[B615](milestones/m2.md#b615).
-
 IBM's public signed RPM repository does not require registry credentials.
 Red Hat media/CDN access remains a separate entitlement and source boundary.
 
@@ -141,6 +138,20 @@ them:
 - Pools precede their filesystems; filesystem/MDS or object storage prerequisites
   precede their NFS exports; gateways precede their ingress endpoints. An export
   for a downstream consumer waits for all resources and material it describes.
+
+Before an apply that selects managed Ceph claims an operation or binds secrets,
+it observes aggregate declared libvirt CPU, memory and backing-filesystem disk
+capacity, including guests outside the selected cluster. Pure planning performs
+no capacity probes. Apply re-proves the capacity gate under its exclusive
+transaction before registration or native effects. [Storage preflight](cli/commands.md) reports the same
+capacity checks; unknown facts cannot authorize effects. The provider authors
+its reserve explicitly through `libvirt.capacityReserve`; there is no inferred
+vendor sizing profile or default reserve. Existing owned allocations receive
+credit only after exact protected domain, process and backing-file proofs.
+Foreign configured domains, including inactive domains, reserve their vCPUs.
+Memory uses observed available memory plus proved owned resident memory; disk
+uses actual backing-filesystem availability plus unique proved allocations.
+Remote provider facts remain unknown until that observer is qualified.
 
 B472 fixes provider-specific ordering and forbids cycles. Storage never installs
 another domain's prerequisites itself. Preflight names unmet prerequisites and
@@ -196,8 +207,15 @@ The cluster block depends on every host block, re-proves the recorded profile
 against the inspected image, and refuses a missing or contradicting one. Between
 the tunnel mount and enrollment it publishes and proves the exact cephadm bytes
 in the cache. A host block removes nothing; packages and the image are retained
-shared host state. The registry credential reaches a guest only as the
-protected authfile.
+shared host state. Guest pull credentials enter only the invocation-local
+registry broker over protected stdin. Podman receives an empty authfile and
+an ephemeral mutual-TLS identity; upstream entitlement and bearer credentials
+remain broker-owned. The broker connects only to the frozen registry authority
+with ordinary host TLS verification, rejects foreign realms and redirects,
+and forwards only bounded repository manifest/blob reads. Local clients without
+the invocation certificate cannot use it. A proxy bypass carries no entitlement
+or bearer credential. Listener, upstream sockets and workers finish before the
+private invocation directory is removed.
 
 Each bootstrap, enrollment, service and resource attempt observes first and
 defines partial-completion evidence and safe retry. Complete owned state is
@@ -212,8 +230,18 @@ capture proves both bootstrap outputs root's own single-link files closed to
 writes by others and makes them private before recording their identities;
 observation never changes them. A phase that restarts the manager waits,
 bounded and inside its worker budget, for the MON to report an available
-manager whose orchestrator answers. Orchestrator reads and declarative applies
-repeat only while that manager restarts; a journaled setter never repeats.
+manager whose orchestrator answers. Orchestrator reads repeat only while that manager restarts. Per-host enrollment
+and label attempts and per-service apply attempts retain exact intent before
+effects and exact completion after native readback. A lost reply settles from
+the same host/service identity; drift refuses. Native ServiceSpec defaults come
+from the selected image's SDK and are frozen before effects.
+OSD services use deterministic per-host children with the proved virtio or
+QEMU SCSI serial aliases. Immediately before submission each host proves empty devices or exact
+owned partial OSD/LV UUID and membership; raw path reuse cannot widen the write
+target. Read-only device observation publishes no custody records. Pool setters
+retain setting intent/completion and settle from the same numeric pool ID.
+An incomplete RBD init may repeat only the bounded native idempotent init of
+that exact owned pool; an application flag alone proves no completed init.
 
 Cancellation, lost response, unavailable evidence and contradictory native
 state follow [unknown-effect recovery](state-reconciliation.md#converging-an-effect).
@@ -232,7 +260,10 @@ value. A token the block gives no remedy is published as `unknown`, or
 `remote-refusal` from a native worker, with the token in the detail, so no
 refusal reaches the operator without its reason. A refusal inside the package
 worker whose token is outside that worker's closed set is published as
-`packages`, with the original token in the detail.
+`packages`, with the original token in the detail. Selected native acquisition
+and execution failures additionally carry the bounded redacted `nativeError`
+projection defined by the adapter protocol, so the diagnostic retains the
+requested coordinate and useful native cause without reflecting raw output.
 
 A named refusal ends the attempt with its entry's code. An entry coded
 `lifecycle.unknown` leaves the block's attempt outcome unknown rather than

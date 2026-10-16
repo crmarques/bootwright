@@ -28,6 +28,7 @@
   bootwright.core.ceph_cluster_protocol:
     phase: refused
     reason: '{{ storage_ceph_host_result.reason | default("adapter-exception") }}'
+    native_error: '{{ storage_ceph_host_result.nativeError | default(omit) }}'
     detail: >-
       {{ storage_ceph_host_result.detail
         | default(omit if storage_ceph_host_result.reason is defined else "module-failure") }}

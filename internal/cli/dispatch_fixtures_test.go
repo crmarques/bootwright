@@ -219,8 +219,8 @@ func (s containerPreflightSpy) Check(ctx context.Context, request containerprefl
 
 type storagePreflightSpy struct{ record *dispatchRecord }
 
-func (s storagePreflightSpy) Check(ctx context.Context, request storagepreflight.PreflightRequest) error {
-	return s.record.called(ctx, "preflight storage-cluster", request)
+func (s storagePreflightSpy) Check(ctx context.Context, request storagepreflight.PreflightRequest) (*storagepreflight.Report, error) {
+	return s.record.result.storagePreflight, s.record.called(ctx, "preflight storage-cluster", request)
 }
 
 type addOnPreflightSpy struct{ record *dispatchRecord }

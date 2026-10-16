@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -18,6 +19,10 @@ type Executable struct {
 	Modified        bool
 }
 
+// ApplyAdmission observes prerequisites outside pure planning, before claims.
+// It must not reopen lifecycle services while holding its snapshot.
+type ApplyAdmission func(context.Context, string, api.Catalog, map[string]ObjectOwnership) error
+
 type Options struct {
 	BeginInvocation BeginInvocation
 	Confirmer       Confirmer
@@ -26,6 +31,7 @@ type Options struct {
 	Clock           Clock
 	Entropy         reconciliation.Entropy
 	Selection       CurrentSelection
+	ApplyAdmission  ApplyAdmission
 	// Concurrency bounds how many of an operation's blocks run at once. It is
 	// how much this host is asked to do at the same time, never what the plan
 	// permits, so it is not frozen with the plan. Zero takes the default.

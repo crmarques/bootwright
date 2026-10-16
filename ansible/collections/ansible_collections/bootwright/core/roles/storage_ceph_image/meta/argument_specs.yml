@@ -1,6 +1,6 @@
 argument_specs:
   resolve:
-    short_description: Resolve the pinned IBM Ceph tag manifest-only.
+    short_description: Resolve the selected IBM Ceph tag or direct digest.
     options: &request
       bootwright_ceph_image_request:
         type: dict
@@ -33,7 +33,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-image-v1]
+            choices: [ceph-image-v2]
       bootwright_ceph_image_digest:
         type: str
         required: true

@@ -17,7 +17,7 @@ every other command `bootwright --help` lists returns the
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
 | [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | done | none; completed under D156 |
-| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | M2b's remaining core/prerequisite and B80 promotion gates; B615 version selection |
+| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | B615's fresh operator journey before M2b acceptance |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
 | [M5](milestones/m5.md) | OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
@@ -27,12 +27,12 @@ every other command `bootwright --help` lists returns the
 X44, X48 to X51, X67, X70, X83, X84, X87 to X97 are delivered in-tree;
 [X98](milestones/delivered.md#x98--m1-owner-acceptance) records M1's completion.
 
-- **Next for agents:** M2b's remaining core/prerequisite and
-  [B80 promotion gates](milestones/m2.md#b80) and required
-  [B615 version selection](milestones/m2.md#b615), within the authorized scope.
-  M1's prerequisite is satisfied; M2b remains in progress.
+- **Next for agents:** review the fresh [B615 operator evidence](milestones/m2.md#b615)
+  and address any demonstrated M2b defects. The authorized M2b implementation
+  and its in-tree gates pass; broader M2 work retains its own scope rules.
 - **Next for operator:** no M1 rerun remains. B476 was accepted under D155;
-  M2b's other gates remain before [M2c to M2e](milestones/m2.md#submilestones),
+  B615's fresh authored-artifact journey remains before M2b acceptance and
+  [M2c to M2e](milestones/m2.md#submilestones),
   then M3's [B61](milestones/m3.md#b61) and cluster gates. D156 accepts the
   completed B466/B608 journey and declares M1 done on 2026-10-16 at tested
   clean build `591af9616446596a77a599cd6303970a85131694`.

@@ -54,6 +54,10 @@ evidence:
   description: Bounded Ceph identity and readiness observations without credentials.
   type: dict
   returned: success
+nativeError:
+  description: Bounded redacted native cause and selected public coordinate.
+  type: dict
+  returned: failure
 reason:
   description: Fixed refusal the block's caller names, without native output or credentials.
   type: str
@@ -65,6 +69,7 @@ detail:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core
 
 
@@ -86,6 +91,9 @@ def main():
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.CLUSTER_REASONS)
         failure = {"reason": reason}
+        native_error = getattr(error, "native_error", None)
+        if native_diagnostics.valid(native_error):
+            failure["nativeError"] = native_error
         if detail:
             failure["detail"] = detail
         module.fail_json(msg="Ceph operation refused", **failure)

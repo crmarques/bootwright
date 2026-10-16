@@ -48,10 +48,8 @@ REGISTRY_DIRECTORY = "/etc/ceph"
 REGISTRY_NAME = "podman-auth.json"
 REGISTRY_FILE = REGISTRY_DIRECTORY + "/" + REGISTRY_NAME
 MAX_REGISTRY = 65536
-# The one release this build realizes, over verified-tunnel only: native SSH
-# never verifies manager-to-host keys (upstream v20.2.1 passes known_hosts=None).
-PINNED_REPOSITORY = "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9"
-PINNED_CEPH_VERSION = "20.2.1"
+# Artifact selection is authored; the adapter independently proves its SSH
+# route rather than treating a version identifier as transport trust.
 DEVICE_IDENTITIES = "device-identities.json"
 DEVICE_IDENTITIES_VERSION = "ceph-cluster-device-identities-v1"
 HOST_PHASES = frozenset(("profile", "route", "device_identity", "host_devices", "host_observe"))
@@ -67,8 +65,7 @@ DASHBOARD_BUDGET = 540
 DASHBOARD_INTERVAL = 5
 # cephadm bootstrap under the bootstrap call's own longer worker budget (ceph_core.BOOTSTRAP_BUDGET), leaving its proofs time.
 BOOTSTRAP_TIMEOUT = 1620
-# cephadm 20.2.1's own minimum podman and the time units its host preparation walks, in its order.
-PODMAN_MINIMUM = (2, 0, 2)
+# Time-service presence is an effect boundary, not a native version compatibility table.
 CEPHADM_TIME_UNITS = ("chrony.service", "chronyd.service", "systemd-timesyncd.service", "ntpd.service", "ntp.service", "ntpsec.service",
                       "openntpd.service", "timemaster.service")
 # A manager restart leaves the orchestrator unanswered for a while: each wait is bounded, and every wait in one ordinary phase
@@ -85,9 +82,10 @@ PENDING_DAEMON = re.compile(r"(mon|mgr)\.[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 
 def supported_transport(request):
     image = request.get("image")
-    prefix = PINNED_REPOSITORY + "@sha256:"
-    return (request.get("clusterSSHTransport") == "verified-tunnel" and isinstance(image, str) and image.startswith(prefix) and
-            HEX.fullmatch(image[len(prefix):]) is not None and request.get("cephVersion") == PINNED_CEPH_VERSION)
+    if request.get("clusterSSHTransport") != "verified-tunnel" or not isinstance(image, str):
+        return False
+    repository, separator, identifier = image.rpartition("@sha256:")
+    return bool(repository and separator and HEX.fullmatch(identifier))
 
 
 def tunnel_helpers():
@@ -105,6 +103,24 @@ class RemoteRefusal(Refusal):
     def __init__(self, detail=None):
         super().__init__("remote-refusal")
         self.detail = detail
+
+
+class NativeFailure(Refusal):
+    """A native failure whose public diagnostic has an explicit redaction boundary."""
+
+    def __init__(self, reason, coordinate, output, secrets=()):
+        super().__init__(reason)
+        from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
+        self.native_error = native_diagnostics.error_detail(coordinate, output, secrets=secrets)
+
+
+class NativeOutput(bytes):
+    """Private stdout and stderr, retaining the existing two-value runner port."""
+
+    def __new__(cls, output, stderr=b""):
+        value = super().__new__(cls, output)
+        value.stderr = stderr
+        return value
 
 
 class ManagerRefusal(Refusal):
@@ -258,22 +274,44 @@ def digest(value):
     return isinstance(value, str) and HEX.fullmatch(value) is not None
 
 
-def bounded_command(argv, data=b"", timeout=60, limit=MAX_OUTPUT):
+def command_environment(environment):
+    """Build the fixed native environment with explicitly bounded broker overrides."""
+    native_environment = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C"}
+    if environment is not None:
+        allowed = {"HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy",
+                   "CONTAINERS_REGISTRIES_CONF", "DOCKER_CONFIG", "HOME"}
+        require(isinstance(environment, dict) and set(environment) <= allowed, "executable")
+        require(all(isinstance(value, str) and len(value) <= 4096 and all(ord(char) >= 32 and ord(char) != 127 for char in value)
+                    for value in environment.values()), "executable")
+        for key, value in environment.items():
+            if key.lower() in ("http_proxy", "https_proxy"):
+                require(re.fullmatch(r"http://127\.0\.0\.1:[1-9][0-9]{0,4}", value) is not None, "executable")
+            elif key.lower() == "no_proxy":
+                require(value == "", "executable")
+            else:
+                require(os.path.isabs(value), "executable")
+        native_environment.update(environment)
+    return native_environment
+
+
+def bounded_command(argv, data=b"", timeout=60, limit=MAX_OUTPUT, environment=None):
     """Drain both pipes within a hard byte/time budget; never invoke a shell."""
     require(argv and os.path.isabs(argv[0]), "executable")
     require(all(isinstance(v, str) and "\x00" not in v for v in argv), "executable")
+    native_environment = command_environment(environment)
     owned_session = COMMAND_SESSION
     try:
         # Bounded fixed-argv helper that kills its own process group; run_command offers neither.
         # pylint: disable-next=ansible-bad-function
         process = subprocess.Popen(
             argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C", "LC_ALL": "C"},
+            env=native_environment,
             start_new_session=owned_session,
         )
     except OSError:
         raise Refusal("native-command") from None
     output = bytearray()
+    stderr = bytearray()
     total = 0
     pending = memoryview(data)
     deadline = time.monotonic() + timeout
@@ -310,6 +348,8 @@ def bounded_command(argv, data=b"", timeout=60, limit=MAX_OUTPUT):
                         require(total <= limit, "native-output")
                         if key.fileobj is process.stdout:
                             output.extend(block)
+                        else:
+                            stderr.extend(block)
         # Observe exit without reaping: an exited leader still reserves the
         # group identifier until cleanup stops every inherited descendant.
         while True:
@@ -320,7 +360,7 @@ def bounded_command(argv, data=b"", timeout=60, limit=MAX_OUTPUT):
                 require(status.si_pid == process.pid, "native-command")
                 code = status.si_status if status.si_code == os.CLD_EXITED else -status.si_status
                 require(time.monotonic() < deadline, "native-timeout")
-                return code, bytes(output)
+                return code, NativeOutput(bytes(output), bytes(stderr))
             time.sleep(min(remaining, 0.02))
     except (subprocess.TimeoutExpired, OSError):
         raise Refusal("native-command") from None
@@ -350,9 +390,10 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = {"controller", "version", "action", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",
-                "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "cephVersion", "clusterKeyRef", "registryRef", "registry"}
-    require(required <= set(request) and not set(request) - required - {"pool", "client", "config", "packages"})
-    require(request["version"] == "ceph-core-v4")
+                "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
+                "packageRepository", "clusterKeyRef", "registryRef", "registry"}
+    require(required <= set(request) and not set(request) - required - {"pool", "client", "config", "packages", "nfsGaneshaPackageVersion"})
+    require(request["version"] == "ceph-core-v5")
     require(request["action"] in ("cluster", "pool", "client"))
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
@@ -362,10 +403,18 @@ def validate(request):
         raise Refusal("request") from None
     require(isinstance(request["image"], str) and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}", request["image"]) is not None)
     tool = request["cephadm"]
-    require(isinstance(tool, dict) and set(tool) == {"path", "version", "packageVersion"})
+    require(isinstance(tool, dict) and set(tool) == {"path", "packageVersion"})
     require(tool["path"] in ("/usr/sbin/cephadm", "/usr/bin/cephadm"))
-    require(tool["version"] == request["cephVersion"] == "20.2.1", "artifact")
-    require(isinstance(tool["packageVersion"], str) and re.fullmatch(r"[0-9A-Za-z.+:~_-]{1,128}", tool["packageVersion"]) is not None)
+    for coordinate in (tool["packageVersion"], request["release"], request["ansiblePackageVersion"]):
+        require(isinstance(coordinate, str) and 0 < len(coordinate.encode()) <= 1024 and not any(ord(char) < 32 or ord(char) == 127 for char in coordinate))
+    if "nfsGaneshaPackageVersion" in request:
+        coordinate = request["nfsGaneshaPackageVersion"]
+        require(isinstance(coordinate, str) and 0 < len(coordinate.encode()) <= 1024 and not any(ord(char) < 32 or ord(char) == 127 for char in coordinate))
+    from urllib.parse import urlsplit
+    require(isinstance(request["packageRepository"], str) and 0 < len(request["packageRepository"].encode()) <= 4096)
+    repository = urlsplit(request["packageRepository"])
+    require(repository.scheme == "https" and repository.hostname and repository.username is None and repository.password is None
+            and not repository.fragment, "artifact")
     require(named(request["clusterSSHUser"]))
     require(request["clusterSSHTransport"] in ("native", "verified-tunnel"))
     require(named(request["clusterKeyRef"]) and named(request["registryRef"]))
@@ -385,7 +434,7 @@ def validate(request):
     package = request.get("packages")
     if package is not None:
         require(isinstance(package, dict) and set(package) == {"version", "licenseAccepted", "sources"})
-        require(package["version"] == "ceph-packages-v1" and package["licenseAccepted"] is True)
+        require(package["version"] == "ceph-packages-v2" and package["licenseAccepted"] is True)
         require(isinstance(package["sources"], list) and len(package["sources"]) == len(hosts))
         names = []
         required_source = {"host", "profile", "media", "publicationPath", "url", "certificateRef"}
@@ -424,7 +473,6 @@ def validate_config(request):
         return
     config = request["config"]
     require(isinstance(config, dict) and bool(config) and set(config) <= {"osd", "global"}, "config-unqualified")
-    require(request["cephadm"]["packageVersion"] == "20.2.1-405.el9cp", "config-unqualified")
     if "global" in config:
         global_options = config["global"]
         require(isinstance(global_options, dict) and global_options == {"osd_pool_default_size": "2", "osd_pool_default_min_size": "2"}, "config-unqualified")
@@ -927,7 +975,9 @@ class Worker:
 
     def command(self, argv, data=b"", timeout=60, json_result=True):
         code, output = self.run(argv, data=data, timeout=timeout)
-        require(code == 0, "native-command")
+        if code != 0:
+            coordinate = self.request["image"] + "; host package " + self.request["cephadm"]["packageVersion"]
+            raise NativeFailure("native-command", coordinate, getattr(output, "stderr", b"") or output, secrets=(data,))
         if not json_result:
             return output
         try:
@@ -992,8 +1042,10 @@ class Worker:
         try:
             yield
         except Refusal as error:
-            if type(error) is Refusal and str(error) in MANAGER_FAILURES:
-                raise ManagerRefusal(str(error)) from None
+            if type(error) in (Refusal, NativeFailure) and str(error) in MANAGER_FAILURES:
+                transient = ManagerRefusal(str(error))
+                transient.native_cause = error
+                raise transient from None
             raise
 
     def wait_deadline(self):
@@ -1009,7 +1061,8 @@ class Worker:
                 with self.manager_served():
                     return action(*args, **options)
             except ManagerRefusal as error:
-                require(self.clock() + MANAGER_INTERVAL < deadline, str(error))
+                if self.clock() + MANAGER_INTERVAL >= deadline:
+                    raise getattr(error, "native_cause", error) from None
                 self.pause(MANAGER_INTERVAL)
 
     def manager_wait(self, previous=None, name=None):
@@ -1480,8 +1533,61 @@ class Worker:
         self.markers.write("registry-removed.json", record)
         return True
 
+    def osd_device_scope(self):
+        return {"version": "ceph-osd-device-intent-v1", "owner": self.request["owner"], "fsid": self.request["fsid"],
+                "host": self.host["name"], "devices": self.host["devices"], "image": self.request["image"]}
+
+    def owned_osd_device(self, actual, item, signatures):
+        require(self.markers.owned() and self.markers.read("osd-device-intent.json") == self.osd_device_scope(), "device-not-empty")
+        require(item.get("fstype") in (None, "", "LVM2_member") and not any(item.get("mountpoints") or []), "device-not-empty")
+        require(all(isinstance(value, dict) and value.get("type") == "LVM2_member" for value in signatures), "device-not-empty")
+        output = self.command(["/usr/sbin/lvs", "--reportformat", "json", "--options", "lv_path,lv_uuid,lv_tags,devices"])
+        require(isinstance(output, dict) and isinstance(output.get("report"), list) and len(output["report"]) == 1, "native-output")
+        rows = output["report"][0].get("lv")
+        require(isinstance(rows, list) and len(rows) <= 1024, "native-output")
+        candidates = []
+        for row in rows:
+            require(isinstance(row, dict) and isinstance(row.get("devices"), str), "native-output")
+            paths = [part.strip().split("(", 1)[0] for part in row["devices"].split(",")]
+            if actual not in paths:
+                continue
+            require(paths == [actual] and isinstance(row.get("lv_tags"), str), "foreign-osd")
+            tags = {}
+            for tag in row["lv_tags"].split(","):
+                key, separator, value = tag.strip().partition("=")
+                require(separator and key not in tags, "foreign-osd")
+                tags[key] = value
+            require(tags.get("ceph.cluster_fsid") == self.request["fsid"] and tags.get("ceph.type") == "block", "foreign-osd")
+            require(re.fullmatch(r"[0-9]+", tags.get("ceph.osd_id", "")) is not None
+                    and re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", tags.get("ceph.osd_fsid", "")), "foreign-osd")
+            require(isinstance(row.get("lv_uuid"), str) and row["lv_uuid"] and isinstance(row.get("lv_path"), str), "foreign-osd")
+            children = item.get("children") or []
+            require(len(children) == 1 and os.path.realpath(children[0].get("path", "")) == os.path.realpath(row["lv_path"])
+                    and children[0].get("type") == "lvm" and not children[0].get("children")
+                    and not any(children[0].get("mountpoints") or []) and children[0].get("fstype") in (None, "", "ceph_bluestore"), "foreign-osd")
+            candidates.append({"path": actual, "id": int(tags["ceph.osd_id"]), "uuid": tags["ceph.osd_fsid"], "lvUUID": row["lv_uuid"]})
+        require(len(candidates) == 1, "foreign-osd")
+        retained = self.markers.read(self.osd_identity_marker(actual))
+        require(retained is None or retained == candidates[0], "foreign-osd")
+        return candidates[0]
+
+    @staticmethod
+    def osd_identity_marker(path):
+        return "osd-device-" + hashlib.sha256(path.encode()).hexdigest() + ".json"
+
+    def stable_device_path(self, host, device, *, submission=False):
+        """Only the already qualified QEMU Virtio and SCSI disk identities."""
+        if re.fullmatch(r"/dev/vd[a-z]+", device["path"]):
+            return "/dev/disk/by-id/virtio-" + device["serial"]
+        require(re.fullmatch(r"/dev/sd[a-z]+", device["path"]) is not None, "device-identity")
+        identifier = "QEMU_QEMU_HARDDISK_" + device["serial"]
+        if submission:
+            identities = self.device_identities()
+            require(identities is not None and identities.get((host["name"], device["path"])) == identifier, "device-identity")
+        return "/dev/disk/by-id/scsi-0" + identifier
+
     def devices(self):
-        # A host claimed before its authorization holds no registry yet; authorize prepares and proves it.
+        self.observed_device_ids = []
         if self.markers.owned() and self.markers.read("registry-file.json") is not None:
             self.prove_registry()
         observed = self.command(["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "PATH,TYPE,SERIAL,SIZE,FSTYPE,MOUNTPOINTS"])
@@ -1489,6 +1595,7 @@ class Worker:
         flattened = []
 
         def visit(items):
+            require(isinstance(items, list) and len(flattened) + len(items) <= 4096, "device-unproved")
             for item in items:
                 require(isinstance(item, dict), "device-unproved")
                 flattened.append(item)
@@ -1497,21 +1604,54 @@ class Worker:
         visit(observed["blockdevices"])
         for device in self.host["devices"]:
             actual = os.path.realpath(device["path"])
-            for service in self.request["services"]:
-                if service["service_type"] != "osd" or self.host["name"] not in service["placement"]["hosts"]:
-                    continue
-                for path in service["spec"]["data_devices"]["paths"]:
-                    if selected_device(self.host, path) == device:
-                        require(os.path.realpath(device_path(path)) == actual, "device-identity")
-            matches = [d for d in flattened if d.get("path") == actual]
+            alias = self.stable_device_path(self.host, device)
+            require(os.path.realpath(alias) == actual, "device-identity")
+            matches = [value for value in flattened if value.get("path") == actual]
             require(len(matches) == 1, "device-unproved")
             item = matches[0]
-            require(item.get("type") == "disk" and str(item.get("serial", "")).strip() == device["serial"] and item.get("size") == device["sizeBytes"],
-                    "device-identity")
-            require(not item.get("children") and not item.get("fstype") and not any(item.get("mountpoints") or []), "device-not-empty")
+            require(item.get("type") == "disk" and str(item.get("serial", "")).strip() == device["serial"]
+                    and item.get("size") == device["sizeBytes"], "device-identity")
+            if alias.startswith("/dev/disk/by-id/scsi-"):
+                from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime as runtime
+                raw = self.command(["/usr/bin/udevadm", "info", "--query=property", "--name=" + actual], json_result=False)
+                require(isinstance(raw, bytes) and 0 < len(raw) <= 128 << 10, "device-identity")
+                values = {}
+                for line in raw.splitlines():
+                    require(b"=" in line and len(line) <= 4096, "device-identity")
+                    name, value = line.split(b"=", 1)
+                    if name in (b"ID_SERIAL", b"ID_SCSI_SERIAL", b"ID_VENDOR", b"ID_MODEL"):
+                        require(name not in values and all(32 <= byte <= 126 for byte in value), "device-identity")
+                        values[name] = value
+                environment = {name.decode("ascii"): value.decode("ascii") for name, value in values.items()}
+                require(environment.get("ID_SCSI_SERIAL") == device["serial"]
+                        and environment.get("ID_SERIAL") == "0QEMU_QEMU_HARDDISK_" + device["serial"]
+                        and runtime.native_form(environment) == "QEMU_QEMU_HARDDISK_" + device["serial"]
+                        and os.path.realpath(alias) == actual, "device-identity")
             signatures = self.command(["/usr/sbin/wipefs", "--no-act", "--json", actual])
-            require(isinstance(signatures, dict) and signatures.get("signatures") == [], "device-not-empty")
+            require(isinstance(signatures, dict) and isinstance(signatures.get("signatures"), list), "device-not-empty")
+            if item.get("children") or item.get("fstype") or any(item.get("mountpoints") or []) or signatures["signatures"]:
+                self.observed_device_ids.append(self.owned_osd_device(actual, item, signatures["signatures"]))
+            else:
+                require(self.markers.read(self.osd_identity_marker(actual)) is None, "foreign-osd")
         return {"devices": len(self.host["devices"])}
+
+    def osd_prepare(self):
+        require(self.markers.owned(), "ownership")
+        scope = self.osd_device_scope()
+        retained = self.markers.read("osd-device-intent.json")
+        require(retained is None or retained == scope, "ownership")
+        self.devices()
+        if retained is None:
+            self.markers.write("osd-device-intent.json", scope)
+        changed = retained is None
+        for row in self.observed_device_ids:
+            marker = self.osd_identity_marker(row["path"])
+            previous = self.markers.read(marker)
+            require(previous is None or previous == row, "foreign-osd")
+            if previous is None:
+                self.markers.write(marker, row)
+                changed = True
+        return {"changed": changed}
 
     def authorize(self, private):
         """Add only the separately owned cluster key to an existing account."""
@@ -1791,12 +1931,8 @@ class Worker:
         return {"changed": True}
 
     def prove_inert_host_preparation(self):
-        """cephadm bootstrap reads the podman version only inside its host preparation, so the preparation runs; prove it
-        changes nothing: it would install podman, lvm2 or chrony when missing, and enables the first installed time unit
-        of its list that is not enabled and running before reaching one that is."""
-        version = self.command(["/usr/bin/podman", "version", "--format", "{{.Client.Version}}"], json_result=False).decode("ascii", "replace").strip()
-        require(re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+~][A-Za-z0-9.]+)?", version) is not None, "host-prerequisite")
-        require(tuple(int(part) for part in re.split(r"[.\-+~]", version)[:3]) >= PODMAN_MINIMUM, "host-prerequisite")
+        """Check native prerequisites; bootstrap separately forbids automatic host preparation."""
+        self.command([self.tool, "check-host", "--expect-hostname", self.host["name"]], timeout=60, json_result=False)
         require(os.path.isfile("/usr/sbin/lvcreate") and os.access("/usr/sbin/lvcreate", os.X_OK), "host-prerequisite")
         for unit in CEPHADM_TIME_UNITS:
             enabled = self.run(["/usr/bin/systemctl", "is-enabled", unit], timeout=30)[1].decode("ascii", "replace").strip()
@@ -1867,8 +2003,7 @@ class Worker:
         if self.markers.read("bootstrap-enrollment.json") is not None:
             require(canonical(self.markers.read("bootstrap-enrollment.json")) == canonical(self.recovery_scope()), "ownership")
             evidence = self.observe()
-            require(evidence["ready"], "partial-cluster")
-            stage = "complete"
+            stage = "complete" if evidence["ready"] else "enrolling"
         elif not daemons:
             require(self.markers.read("bootstrap-attempt.json") is None, "partial-cluster")
             if owned:
@@ -2302,6 +2437,21 @@ class Worker:
         self.markers.write(name, record)
         return True
 
+    def enrollment_hosts(self):
+        hosts = self.manager_retry(self.ceph, "orch", "host", "ls")
+        require(isinstance(hosts, list) and len(hosts) <= len(self.request["hosts"]), "foreign-host")
+        wanted = {host["name"]: host for host in self.request["hosts"]}
+        result = {}
+        for host in hosts:
+            require(isinstance(host, dict) and host.get("hostname") in wanted, "foreign-host")
+            name = host["hostname"]
+            require(name not in result and host.get("addr") == wanted[name]["address"], "foreign-host")
+            labels = host.get("labels", [])
+            require(isinstance(labels, list) and all(isinstance(label, str) for label in labels)
+                    and len(labels) == len(set(labels)) and set(labels) <= set(wanted[name]["labels"] or []), "host-label-drift")
+            result[name] = host
+        return result
+
     def enroll(self):
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
@@ -2313,32 +2463,49 @@ class Worker:
             self.verify_transport_bundle()
             self.manager_retry(self.verify_tunnel_configuration)
             self.verify_manager_mounts(self.daemons())
-            if self.recovery_enabled():
-                require(self.markers.read("bootstrap-enrollment.json") is None, "partial-cluster")
-                require(self.manager_retry(self.ceph, "orch", "host", "ls") == [], "partial-cluster")
-                self.markers.write("bootstrap-enrollment.json", self.recovery_scope())
-        # Every orchestrator call here is a read or an idempotent host declaration, repeated only while the manager restarts.
-        hosts = self.manager_retry(self.ceph, "orch", "host", "ls")
-        require(isinstance(hosts, list), "native-output")
-        wanted = {h["name"]: h for h in self.request["hosts"]}
+        scope = self.recovery_scope()
+        enrolled = self.markers.read("bootstrap-enrollment.json")
+        require(enrolled is None or enrolled == scope, "ownership")
+        if enrolled is None:
+            require(not self.enrollment_hosts(), "foreign-host")
+            self.markers.write("bootstrap-enrollment.json", scope)
+        for name in self.enrollment_hosts():
+            host = next(value for value in self.request["hosts"] if value["name"] == name)
+            spec = {"service_type": "host", "hostname": name, "addr": host["address"], "labels": host["labels"] or []}
+            require(self.markers.read("enrollment-" + name + "-attempt.json") == {"scope": scope, "host": spec}, "foreign-host")
         changed = False
-        for host in hosts:
-            require(host.get("hostname") in wanted and host.get("addr") == wanted[host["hostname"]]["address"], "foreign-host")
-        observed = {h["hostname"] for h in hosts}
-        for name, host in wanted.items():
-            if name not in observed:
-                spec = {"service_type": "host", "hostname": name, "addr": host["address"], "labels": host["labels"] or []}
-                self.manager_retry(self.tunnel_effect, "orch", "apply", "-i", "-", data=canonical(spec), json_result=False)
+        for host in self.request["hosts"]:
+            name = host["name"]
+            spec = {"service_type": "host", "hostname": name, "addr": host["address"], "labels": host["labels"] or []}
+            intent = {"scope": scope, "host": spec}
+            prefix = "enrollment-" + name
+            attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
+            require(attempt is None or attempt == intent, "ownership")
+            require(complete is None or complete == intent and attempt == intent, "ownership")
+            current = self.enrollment_hosts().get(name)
+            require(current is None or attempt == intent, "foreign-host")
+            require(complete is None or current is not None and set(current.get("labels", [])) == set(spec["labels"]), "host-label-drift")
+            if current is None:
+                require(complete is None, "foreign-host")
+                if attempt is None:
+                    self.markers.write(prefix + "-attempt.json", intent)
+                self.tunnel_effect("orch", "apply", "-i", "-", data=canonical(spec), json_result=False)
                 changed = True
-            else:
-                present = next(h for h in hosts if h["hostname"] == name)
-                labels = present.get("labels") or []
-                require(isinstance(labels, list), "native-output")
-                require(set(labels) <= set(host["labels"] or []), "host-label-drift")
-                for label in host["labels"] or []:
-                    if label not in labels:
-                        self.manager_retry(self.tunnel_effect, "orch", "host", "label", "add", name, label, json_result=False)
-                        changed = True
+                current = self.enrollment_hosts().get(name)
+                require(current is not None, "not-ready")
+            for label in spec["labels"]:
+                if label not in current.get("labels", []):
+                    label_intent = {"host": intent, "label": label}
+                    marker = prefix + "-label-" + hashlib.sha256(label.encode()).hexdigest() + ".json"
+                    prior = self.markers.read(marker)
+                    require(prior is None or prior == label_intent, "ownership")
+                    self.markers.write(marker, label_intent)
+                    self.tunnel_effect("orch", "host", "label", "add", name, label, json_result=False)
+                    changed = True
+            current = self.enrollment_hosts().get(name)
+            require(current is not None and set(current.get("labels", [])) == set(spec["labels"]), "not-ready")
+            if complete is None:
+                self.markers.write(prefix + "-complete.json", intent)
         return {"changed": changed}
 
     def device_identities(self, publish=None):
@@ -2368,29 +2535,121 @@ class Worker:
             result[(host, device["path"])] = value["deviceID"]
         return result
 
-    def services(self, devices=None):
+    def service_specs(self):
+        values = self.ceph("orch", "ls", "--export")
+        require(isinstance(values, list) and len(values) <= len(self.request["services"]) * len(self.request["hosts"]), "foreign-service")
+        result = {}
+        for value in values:
+            require(isinstance(value, dict) and isinstance(value.get("service_type"), str), "native-output")
+            key = value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")
+            require(key not in result, "foreign-service")
+            normalized = dict(value)
+            require(normalized.pop("service_name", key) == key, "foreign-service")
+            if normalized.get("unmanaged") is False:
+                normalized.pop("unmanaged")
+            result[key] = normalized
+        return result
+
+    def service_spec(self, service):
+        value = json.loads(canonical(service))
+        if self.request["clusterSSHTransport"] == "verified-tunnel" and value["service_type"] == "mgr":
+            helper, unused = tunnel_helpers()
+            value["extra_container_args"] = ["--volume=" + os.path.join(self.markers.path, "transport") + ":" + helper.CONTAINER_ROOT + ":ro,z"]
+        if value["service_type"] != "osd":
+            return [value]
+        result = []
+        for host in self.request["hosts"]:
+            if host["name"] not in value["placement"]["hosts"]:
+                continue
+            projected = json.loads(canonical(value))
+            projected["placement"] = {"hosts": [host["name"]]}
+            projected["service_id"] = value["service_id"][:46] + "-" + hashlib.sha256(canonical([value["service_id"], host["name"]])).hexdigest()[:16]
+            projected["spec"]["data_devices"]["paths"] = [
+                self.stable_device_path(host, selected_device(host, path), submission=True)
+                for path in value["spec"]["data_devices"]["paths"]
+            ]
+            result.append(projected)
+        return result
+
+    def normalized_services(self, groups):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime as runtime
+        scope = {"owner": self.request["owner"], "fsid": self.request["fsid"], "image": self.request["image"], "inputs": groups}
+        retained = self.markers.read("service-inputs.json")
+        if retained is not None:
+            require(isinstance(retained, dict) and set(retained) == {"version", "scope", "services"}
+                    and retained["version"] == "ceph-service-inputs-v1" and retained["scope"] == scope, "ownership")
+            result = json.loads(canonical(retained["services"]))
+        else:
+            profile = self.runtime_profile()
+            worker = runtime.HostRuntime(self.request, self.host["name"], command=self.run)
+            source = ("import json,sys\nfrom ceph.deployment.service_spec import ServiceSpec\n"
+                      "values=json.loads(sys.argv[1])\n"
+                      "print(json.dumps([[ServiceSpec.from_json(value).to_json() for value in group] for group in values]))\n")
+            result = worker.contained(profile["imageID"], (profile["uid"], profile["gid"]), source, (canonical(groups).decode(),))
+        require(isinstance(result, list) and len(result) == len(groups), "native-output")
+        for originals, normalized in zip(groups, result):
+            require(isinstance(normalized, list) and len(normalized) == len(originals), "native-output")
+            for original, value in zip(originals, normalized):
+                require(isinstance(value, dict), "native-output")
+                key = original["service_type"] + ("." + original["service_id"] if original.get("service_id") else "")
+                require(value.pop("service_name", key) == key, "foreign-service")
+                if value.get("unmanaged") is False:
+                    value.pop("unmanaged")
+                require(all(value.get(field) == original.get(field) for field in
+                            ("service_type", "service_id", "placement", "extra_container_args")), "foreign-service")
+                if original["service_type"] == "osd":
+                    spec = value.get("spec")
+                    require(isinstance(spec, dict) and spec.get("data_devices") == original["spec"]["data_devices"]
+                            and not any(spec.get(field) for field in ("db_devices", "wal_devices", "journal_devices", "data_directories", "encrypted", "tpm2"))
+                            and spec.get("osds_per_device", 1) == 1, "osd-unqualified")
+        if retained is None:
+            self.markers.write("service-inputs.json", {"version": "ceph-service-inputs-v1", "scope": scope, "services": result})
+        return result
+
+    def services(self, devices=None, service=None):
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         self.prove_registry()
         self.provider_registry_absent()
         if self.request["clusterSSHTransport"] == "verified-tunnel":
             require(self.device_identities(devices) is not None, "device-identity")
-        self.config_database()
-        # Native orch apply accepts one mapping per YAML document, rather than
-        # a JSON array in a single document. JSON mappings preserve native data
-        # and are valid YAML documents without a remote YAML dependency.
-        services = self.request["services"]
-        if self.request["clusterSSHTransport"] == "verified-tunnel":
-            helper, unused = tunnel_helpers()
             self.manager_retry(self.verify_tunnel_configuration)
-            services = [dict(service) for service in services]
-            for service in services:
-                if service["service_type"] == "mgr":
-                    service["extra_container_args"] = ["--volume=" + os.path.join(self.markers.path, "transport") + ":" + helper.CONTAINER_ROOT + ":ro,z"]
-        documents = b"\n---\n".join(canonical(service) for service in services) + b"\n"
-        # The specifications are declarative; repeating them while the manager restarts applies the same state.
-        self.manager_retry(self.tunnel_effect, "orch", "apply", "-i", "-", data=documents, json_result=False)
-        return {"changed": True}
+        self.config_database()
+        groups = self.normalized_services([self.service_spec(value) for value in self.request["services"]])
+        wanted = [value for group in groups for value in group]
+        keys = [value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "") for value in wanted]
+        require(len(set(keys)) == len(keys), "foreign-service")
+        require(service is None or type(service) is int and 0 <= service < len(groups), "request")
+        selected = wanted if service is None else groups[service]
+        scope = self.recovery_scope()
+        changed = False
+        for value in selected:
+            key = value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")
+            prefix = "service-" + key
+            intent = {"scope": scope, "service": value}
+            attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
+            require(attempt is None or attempt == intent, "ownership")
+            require(complete is None or complete == intent and attempt == intent, "ownership")
+            observed = self.service_specs()
+            require(set(observed) <= set(keys), "foreign-service")
+            expected = dict(zip(keys, wanted))
+            for observed_key, observed_value in observed.items():
+                require(observed_value == expected[observed_key]
+                        and self.markers.read("service-" + observed_key + "-attempt.json") == {"scope": scope, "service": expected[observed_key]},
+                        "foreign-service")
+            present = observed.get(key)
+            require(present is None or attempt == intent and present == value, "foreign-service")
+            require(complete is None or present == value, "foreign-service")
+            if present is None:
+                require(complete is None, "foreign-service")
+                if attempt is None:
+                    self.markers.write(prefix + "-attempt.json", intent)
+                self.tunnel_effect("orch", "apply", "-i", "-", data=canonical(value) + b"\n", json_result=False)
+                changed = True
+                require(self.service_specs().get(key) == value, "not-ready")
+            if complete is None:
+                self.markers.write(prefix + "-complete.json", intent)
+        return {"changed": changed}
 
     def caps(self):
         client = self.request["client"]
@@ -2437,13 +2696,47 @@ class Worker:
             entries = [p for p in self.pools() if p.get("pool_name") == name]
             require(len(entries) == 1, "pool-identity")
             self.markers.write("pool-id-" + name + ".json", {"id": self.pool_id(entries[0])})
-        self.ceph("osd", "pool", "set", name, "size", str(pool["size"]), json_result=False)
-        self.ceph("osd", "pool", "set", name, "min_size", str(pool["minSize"]), json_result=False)
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
-        with proof:
-            self.command(["/usr/bin/rbd", "--conf", os.path.join(self.markers.path, "ceph.conf"), "--keyring",
-                          os.path.join(self.markers.path, "ceph.client.admin.keyring"), "pool", "init", name], json_result=False)
-        return {"changed": True}
+        for field, wanted in (("size", pool["size"]), ("min_size", pool["minSize"])):
+            self.pool_setting(pool, field, wanted)
+        init = {"owner": self.request["owner"], "fsid": self.request["fsid"], "pool": pool,
+                "id": self.markers.read("pool-id-" + name + ".json")["id"]}
+        attempt_name, complete_name = "pool-rbd-attempt-" + name + ".json", "pool-rbd-complete-" + name + ".json"
+        attempted, completed = self.markers.read(attempt_name), self.markers.read(complete_name)
+        require(attempted is None or attempted == init, "pool-identity")
+        require(completed is None or completed == init and attempted == init, "pool-identity")
+        current = self.owned_pool(pool)
+        require(completed is None or "rbd" in current.get("application_metadata", {}), "pool-identity")
+        if completed is None:
+            self.markers.write(attempt_name, init)
+            proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
+            with proof:
+                self.command(["/usr/bin/rbd", "--conf", os.path.join(self.markers.path, "ceph.conf"), "--keyring",
+                              os.path.join(self.markers.path, "ceph.client.admin.keyring"), "pool", "init", name], json_result=False)
+            require("rbd" in self.owned_pool(pool).get("application_metadata", {}), "not-ready")
+            self.markers.write(complete_name, init)
+        return {"changed": completed is None}
+
+    def owned_pool(self, pool):
+        entries = [entry for entry in self.pools() if entry.get("pool_name") == pool["name"]]
+        require(len(entries) == 1 and self.markers.read("pool-id-" + pool["name"] + ".json") == {"id": self.pool_id(entries[0])}, "pool-identity")
+        return entries[0]
+
+    def pool_setting(self, pool, field, wanted):
+        current = self.owned_pool(pool)
+        require(type(current.get(field)) is int and current[field] > 0, "native-output")
+        prefix = "pool-setting-" + pool["name"] + "-" + field
+        intent = {"owner": self.request["owner"], "fsid": self.request["fsid"], "id": self.pool_id(current), "field": field, "value": wanted}
+        attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
+        require(attempt is None or attempt == intent, "pool-identity")
+        require(complete is None or complete == intent and attempt == intent, "pool-identity")
+        require(complete is None or current[field] == wanted, "pool-identity")
+        if attempt is None:
+            self.markers.write(prefix + "-attempt.json", intent)
+        if current[field] != wanted:
+            self.ceph("osd", "pool", "set", pool["name"], field, str(wanted), json_result=False)
+            require(self.owned_pool(pool).get(field) == wanted, "not-ready")
+        if complete is None:
+            self.markers.write(prefix + "-complete.json", intent)
 
     def created_pool(self, entry, pool):
         """The frozen creation parameters: a replicated pool on the frozen rule with the frozen PG count, which the PG autoscaler
@@ -3027,6 +3320,11 @@ def dispatch(envelope):
         envelope = {key: value for key, value in envelope.items() if key != "devices"}
     else:
         devices = None
+    if phase == "services" and "service" in envelope:
+        service = envelope["service"]
+        envelope = {key: value for key, value in envelope.items() if key != "service"}
+    else:
+        service = None
     require(isinstance(envelope, dict) and set(envelope) == {"request", "host", "phase", "private"})
     require(isinstance(envelope["private"], dict))
     if phase in HOST_PHASES:
@@ -3034,14 +3332,15 @@ def dispatch(envelope):
         return ceph_host_runtime.dispatch(envelope)
     worker = Worker(envelope["request"], envelope["host"])
     worker.horizon = worker.clock() + MANAGER_HORIZON
-    require(phase in ("prerequisites", "claim", "devices", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount", "cache", "enroll", "services", "pool",
+    require(phase in ("prerequisites", "claim", "devices", "osd_prepare", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
+                      "cache", "enroll", "services", "pool",
                       "client", "client_read", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
     if phase not in ("prerequisites", "devices", "observe", "bootstrap_state", "host_state", "client_read", "dashboard_read"):
         require(supported_transport(worker.request), "unsupported-release")
     if phase in ("bootstrap", "authorize", "tunnel_configure"):
         return getattr(worker, phase)(envelope["private"])
     if phase == "services":
-        return worker.services(devices)
+        return worker.services(devices, service)
     if phase == "observe":
         # The health checks that kept readiness unproved travel beside the closed evidence, for the refusal's detail only.
         return dict(worker.observe(), blocking=list(worker.blocking))

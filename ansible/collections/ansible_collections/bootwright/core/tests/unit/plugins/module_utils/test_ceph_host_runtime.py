@@ -24,15 +24,34 @@ PASSWORD = "REGISTRY-PASSWORD-SENTINEL"
 PAYLOAD = b"#!/usr/bin/python3\n# synthetic cephadm payload\n"
 
 
+@pytest.fixture(autouse=True)
+def injected_broker(monkeypatch):
+    class Broker:
+        environment = {}
+
+        def __init__(self, directory, request, private, deadline, command):
+            assert json.loads(private)["password"] == PASSWORD
+            assert request["image"] == IMAGE
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *unused):
+            return False
+
+    monkeypatch.setattr(runtime.ceph_pull_broker, "Broker", Broker)
+
+
 @pytest.fixture
 def request_value():
     hosts = [{"name": "node-" + str(i), "machine": "machine-" + str(i), "address": "192.0.2." + str(i), "user": "operator", "port": 22,
               "devices": [{"path": "/dev/sda", "serial": "drive-scsi" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v4", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v5", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": IMAGE,
-            "cephadm": {"path": "/usr/sbin/cephadm", "version": "20.2.1", "packageVersion": "20.2.1-405.el9cp"}, "cephVersion": "20.2.1",
+            "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
+            "release": "synthetic-release", "ansiblePackageVersion": "5.0.3-1", "packageRepository": "https://publisher.example.test/ceph",
             "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "verified-tunnel",
             "clusterKeyRef": "cluster-key", "registryRef": "registry-key", "registry": "cp.icr.io", "callHome": "enabled",
             "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
@@ -101,7 +120,7 @@ class Podman:
             policy = argv[argv.index("--signature-policy") + 1]
             with open(policy, "rb") as handle:
                 assert json.loads(handle.read()) == {"default": [{"type": "reject"}],
-                                                     "transports": {"docker": {ceph_native.PINNED_REPOSITORY: [{"type": "insecureAcceptAnything"}]}}}
+                                                     "transports": {"docker": {IMAGE.split("@", 1)[0]: [{"type": "insecureAcceptAnything"}]}}}
             outcome = self.outcomes.pop(0)
             if outcome == "ok":
                 self.present = True
@@ -209,7 +228,7 @@ def test_a_pulled_digest_or_platform_mismatch_refuses(request_value, tmp_path, c
     assert pull_argv_count(podman) == 1 and "pulled.json" not in markers.records
 
 
-def test_the_registry_credential_reaches_only_the_protected_authfile(request_value, tmp_path):
+def test_native_pull_receives_only_an_empty_authfile(request_value, tmp_path):
     podman = Podman(request_value, ["fail", "ok"])
     worker, markers, unused = host_runtime(request_value, tmp_path, podman)
     with worker.journal(create=True) as durable:
@@ -217,8 +236,7 @@ def test_the_registry_credential_reaches_only_the_protected_authfile(request_val
     assert len(podman.authfiles) == 2
     for mode, links, data in podman.authfiles:
         assert mode == 0o600 and links == 1
-        auth = json.loads(data)["auths"]["cp.icr.io"]["auth"]
-        assert base64.b64decode(auth).decode() == "registry-user:" + PASSWORD
+        assert json.loads(data) == {"auths": {}}
     assert all(PASSWORD not in " ".join(argv) and "registry-user" not in " ".join(argv) for argv in podman.calls)
     assert PASSWORD not in json.dumps(markers.records)
     leftovers = [os.path.join(root, name) for root, unused_dirs, files in os.walk(markers.path) for name in files]
@@ -491,7 +509,6 @@ def probe_output(payload=PAYLOAD, **changes):
 @pytest.fixture
 def authenticated(monkeypatch):
     digest = hashlib.sha256(PAYLOAD).hexdigest()
-    monkeypatch.setattr(runtime, "CEPHADM_SHA256", digest)
     monkeypatch.setattr(runtime, "installed_cephadm", lambda request: digest)
     return digest
 
@@ -550,13 +567,12 @@ def test_profile_records_the_image_runtime_and_the_authenticated_payload(request
     assert pull_argv_count(podman) == 1
 
 
-def test_profile_refuses_image_bytes_unequal_to_the_installed_package(request_value, tmp_path, monkeypatch, authenticated):
+def test_profile_authenticates_image_bytes_independently_of_installed_package(request_value, tmp_path, monkeypatch, authenticated):
     del authenticated
     monkeypatch.setattr(runtime, "installed_cephadm", lambda request: "f" * 64)
     worker, markers, unused, unused_engine = profiled_runtime(request_value, tmp_path, monkeypatch, [probe_output(), probe_output()])
-    with pytest.raises(ceph_native.Refusal, match="^image-profile$"):
-        worker.profile({"registryJSON": registry(request_value)})
-    assert runtime.PROFILE not in markers.records
+    assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": True}
+    assert markers.records[runtime.PROFILE]["cephadmSHA256"] == hashlib.sha256(PAYLOAD).hexdigest()
 
 
 @pytest.mark.parametrize("private", [{}, {"registryJSON": "x", "extra": "y"}])
@@ -599,8 +615,8 @@ def seed_profile(markers, request_value, **changes):
     markers.records["scope.json"] = runtime.scope(request_value, "node-1")
     record = {"version": runtime.PROFILE_VERSION, "scope": runtime.scope(request_value, "node-1"), "image": IMAGE, "host": "node-1", "imageID": IMAGE_ID,
               "uid": 167, "gid": 167, "policy": "Ciphers aes256-gcm@openssh.com\n", "label": runtime.SHARED_LABEL,
-              "cephadmSHA256": runtime.CEPHADM_SHA256, "artifacts": {path: runtime.CEPHADM_SHA256 if path == "/usr/sbin/cephadm" else
-                                                                     runtime.SOURCES.get(path, "e" * 64) for path in runtime.ARTIFACTS}}
+              "cephadmSHA256": hashlib.sha256(PAYLOAD).hexdigest(),
+              "artifacts": {path: hashlib.sha256(PAYLOAD).hexdigest() if path == "/usr/sbin/cephadm" else "e" * 64 for path in runtime.ARTIFACTS}}
     record.update(changes)
     markers.records[runtime.PROFILE] = record
 
@@ -803,7 +819,7 @@ def test_host_observation_reports_a_prepared_host(request_value, tmp_path):
     worker, markers, unused = host_runtime(request_value, tmp_path, podman, packages=packages)
     seed_profile(markers, request_value)
     markers.records[runtime.ROUTE] = {"version": runtime.ROUTE_VERSION, "scope": runtime.scope(request_value, "node-1"), "imageID": IMAGE_ID,
-                                      "sources": dict(runtime.SOURCES), "cases": route_result()["cases"]}
+                                      "sources": {path: "e" * 64 for path in runtime.SOURCE_PATHS}, "cases": route_result()["cases"]}
     markers.records[runtime.DEVICES] = {"version": runtime.DEVICES_VERSION, "scope": runtime.scope(request_value, "node-1"), "imageID": IMAGE_ID,
                                         "devices": [{"host": "node-1", "path": "/dev/sda", "serial": "drive-scsi1",
                                                      "deviceID": "QEMU_QEMU_HARDDISK_drive-scsi1"}]}
@@ -933,3 +949,27 @@ def test_the_shipped_sources_carry_no_fixture_session_or_qualification_authority
     for module in (runtime, probe):
         text = runtime.module_source(module)
         assert not re.search(r"FixtureSession|fixture_runtime|qualif", text, re.IGNORECASE)
+
+
+def test_image_payload_identity_is_independent_of_host_package_payload(request_value, tmp_path, monkeypatch):
+    image_payload = b"#!/usr/bin/python3\n# unrelated authenticated image build\n"
+    output = json.loads(probe_output(image_payload)(["--user=0:0"]))
+    # A selected image authenticates its own bytes, regardless of the host RPM.
+    monkeypatch.setattr(runtime, "installed_cephadm", lambda unused: "b" * 64)
+    assert runtime.validate_probe(output, (0, 0))["artifacts"]["/usr/sbin/cephadm"]["sha256"] == hashlib.sha256(image_payload).hexdigest()
+
+
+def test_final_pull_failure_retains_the_native_stderr(request_value, tmp_path):
+    podman = Podman(request_value, ["fail", "fail", "fail"])
+
+    def command(argv, timeout, limit):
+        code, output = podman(argv, timeout, limit)
+        if argv[:2] == ["/usr/bin/podman", "pull"]:
+            return code, ceph_native.NativeOutput(output, b"manifest unknown: authored image missing; password=synthetic-secret")
+        return code, output
+
+    worker, unused, unused_clock = host_runtime(request_value, tmp_path, command)
+    with pytest.raises(ceph_native.NativeFailure) as caught:
+        worker.profile({"registryJSON": registry(request_value)})
+    assert "manifest unknown" in caught.value.native_error["cause"]
+    assert "synthetic-secret" not in str(caught.value.native_error)

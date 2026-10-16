@@ -1,7 +1,10 @@
-Check StorageCluster readiness. This command is recognized but not implemented.
+Check StorageCluster readiness
 
 Usage:
   bootwright preflight storage-cluster [flags]
+
+Examples:
+  bootwright preflight storage-cluster --context lab --output json
 
 Flags:
       --clusters string      Select comma-separated cluster names (default: all)

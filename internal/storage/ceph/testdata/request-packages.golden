@@ -1,12 +1,11 @@
 {
   "action": "cluster",
+  "ansiblePackageVersion": "5.0.3-1",
   "bootstrap": "node-1",
   "callHome": "enabled",
-  "cephVersion": "20.2.1",
   "cephadm": {
     "packageVersion": "20.2.1-405.el9cp",
-    "path": "/usr/sbin/cephadm",
-    "version": "20.2.1"
+    "path": "/usr/sbin/cephadm"
   },
   "cluster": "example",
   "clusterKeyRef": "cluster-key",
@@ -78,6 +77,7 @@
   ],
   "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
   "monIP": "192.0.2.1",
+  "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
   "packages": {
     "licenseAccepted": true,
     "sources": [
@@ -112,13 +112,14 @@
         "url": "https://192.0.2.10:8443/os/rhel/tree"
       }
     ],
-    "version": "ceph-packages-v1"
+    "version": "ceph-packages-v2"
   },
   "publicNetworks": [
     "192.0.2.0/24"
   ],
   "registry": "cp.icr.io",
   "registryRef": "registry",
+  "release": "9.9.1.2",
   "services": [
     {
       "placement": {
@@ -161,5 +162,5 @@
       }
     }
   ],
-  "version": "ceph-core-v4"
+  "version": "ceph-core-v5"
 }

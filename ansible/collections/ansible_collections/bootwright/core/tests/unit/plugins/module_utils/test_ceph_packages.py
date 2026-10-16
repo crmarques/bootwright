@@ -27,7 +27,13 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 )
 
 
+ACTUAL_PLATFORM = packages.actual_platform
 SUPPORTED = ceph_native.supported_transport
+
+
+@pytest.fixture(autouse=True)
+def synthetic_platform(monkeypatch):
+    monkeypatch.setattr(packages, "actual_platform", lambda: {"os": "rhel", "release": "9.8", "architecture": "amd64"})
 
 
 @pytest.fixture
@@ -36,31 +42,33 @@ def package_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1 << 30}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v4", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v5", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
-            "cephadm": {"path": "/usr/sbin/cephadm", "version": "20.2.1", "packageVersion": "20.2.1-405.el9cp"}, "cephVersion": "20.2.1", "bootstrap": "node-1",
+            "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
+            "release": "synthetic-release", "ansiblePackageVersion": "5.0.3-1", "packageRepository": "https://publisher.example.test/ceph",
+            "bootstrap": "node-1",
             "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "native", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
             "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names}}, {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
                          {"service_type": "osd", "service_id": "data", "placement": {"hosts": names}, "spec": {"data_devices": {"paths": ["/dev/vdb"]}}}],
-            "packages": {"version": "ceph-packages-v1", "licenseAccepted": True,
+            "packages": {"version": "ceph-packages-v2", "licenseAccepted": True,
                          "sources": [{"host": name, "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "c" * 64, "mediaSize": 1000000,
                                       "publicationPath": "/var/lib/bootwright-services/example/artifact-server/artifacts/public/os/rhel/tree",
                                       "url": "https://192.0.2.10:8443/os/rhel/tree", "certificateRef": "serving-tls"} for name in names]}}
 
 
 def plan_fixture(actions=True, grant=None):
-    grant = grant or packages.transaction_request()
+    grant = grant or packages.transaction_request({"cephadm": {"packageVersion": "20.2.1-405.el9cp"}, "ansiblePackageVersion": "5.0.3-1"})
     values = []
     roots = []
     for key, name, requested in native_resolution.selected_roots(grant):
-        epoch, rest = ("0:1-1" if requested == "latest" else requested).split(":")
+        epoch, rest = ("0:1-1" if requested == "latest" else requested if ":" in requested else "0:" + requested).split(":")
         version, release = rest.split("-", 1)
         identity = {"name": name, "epoch": int(epoch), "version": version, "release": release, "architecture": "noarch" if name != "ceph-common" else "x86_64"}
         inherited = key == "inherited-policy"
         base = "https://192.0.2.10:8443/os/rhel/tree/BaseOS" if inherited else sources.IBM_BASE
         source = {"id": "native-" + hashlib.sha256(name.encode()).hexdigest()[:32], "url": base + "/" + name + ".rpm",
-                  "sha256": sources.ROOT_HASHES.get(name, "f" * 64), "bytes": 64}
+                  "sha256": "f" * 64, "bytes": 64}
         values.append(dict(identity, signer=native_signatures.RHEL_SIGNER if inherited else native_signatures.IBM_CEPH_SIGNER, source=source))
         roots.append({"key": key, "requested": requested, "package": identity})
     plan = {"format": native_resolution.FORMAT, "platform": grant["platform"], "requirements": grant["requirements"], "requests": grant["versions"],
@@ -255,9 +263,10 @@ def test_license_acceptance_is_yes_scoped_and_never_inferred_from_environment(mo
 
 
 def test_shared_resolver_ceph_policy_has_only_exact_provider_roots():
-    grant = packages.transaction_request()
-    assert native_resolution.selected_roots(grant) == [("ceph", "cephadm", "2:20.2.1-405.el9cp"), ("ceph", "ceph-common", "2:20.2.1-405.el9cp"),
-                                                       ("license", "ibm-storage-ceph-license", "0:9.1-1.el9cp"),
+    grant = packages.transaction_request({"cephadm": {"packageVersion": "20.2.1-405.el9cp"}, "ansiblePackageVersion": "5.0.3-1"})
+    assert native_resolution.selected_roots(grant) == [("ceph", "cephadm", "20.2.1-405.el9cp"), ("ceph", "ceph-common", "20.2.1-405.el9cp"),
+                                                       ("ansible", "cephadm-ansible", "5.0.3-1"), ("license", "ibm-storage-ceph-license", "latest"),
+                                                       ("broker", "openssl", "latest"),
                                                        ("inherited-policy", "crypto-policies", "latest"),
                                                        ("inherited-policy", "crypto-policies-scripts", "latest")]
     for change in (dict(policy="unknown"), dict(versions={"ceph": "latest", "license": "latest"}),
@@ -267,7 +276,7 @@ def test_shared_resolver_ceph_policy_has_only_exact_provider_roots():
 
 
 def test_publisher_keys_are_scoped_to_ibm_and_rhel(monkeypatch):
-    grant = packages.transaction_request()
+    grant = packages.transaction_request({"cephadm": {"packageVersion": "20.2.1-405.el9cp"}, "ansiblePackageVersion": "5.0.3-1"})
     grant["publisherKeys"] = {native_signatures.IBM_CEPH_SIGNER: "/private/ibm-key"}
     seen = []
     monkeypatch.setattr(native_signatures, "read_key", lambda path: seen.append(path) or b"public-key")
@@ -305,6 +314,7 @@ def test_acquisition_never_uses_proxy_redirect_or_unverified_tls(package_request
 def test_stream_download_enforces_hash_size_budget_and_origin(package_request):
     source = package_request["packages"]["sources"][0]
     acquisition = object.__new__(sources.Acquisition)
+    acquisition.repository_base = sources.IBM_BASE
     acquisition.source, acquisition.total, acquisition.deadline = source, 0, sources.time.monotonic() + 10
 
     class Response(io.BytesIO):
@@ -326,13 +336,15 @@ def test_stream_download_enforces_hash_size_budget_and_origin(package_request):
         acquisition.stream("https://foreign.example.test/repo/test.rpm", io.BytesIO(), 7)
 
 
-def test_root_payload_changed_under_same_release_refuses_before_download(tmp_path):
+def test_root_payload_uses_acquired_hash_without_release_allowlist(tmp_path):
     acquisition = object.__new__(sources.Acquisition)
+    acquisition.repository_base = sources.IBM_BASE
     plan = plan_fixture()
     plan["packages"][0]["source"]["sha256"] = "f" * 64
-    acquisition.file = lambda *args: pytest.fail("downloaded a changed qualified root")
-    with pytest.raises(ceph_native.Refusal):
-        acquisition.payloads(str(tmp_path), plan)
+    seen = []
+    acquisition.file = lambda *args: seen.append(args)
+    acquisition.payloads(str(tmp_path), plan)
+    assert seen[0][3] == "f" * 64
 
 
 def test_fixed_bundle_uses_stdin_and_sanitizes_vendor_output_and_errors():
@@ -367,6 +379,7 @@ repository = AppStream
 
 def test_repository_selection_proves_actual_publication_pin_and_tree_layout(package_request):
     acquisition = object.__new__(sources.Acquisition)
+    acquisition.repository_base = sources.IBM_BASE
     acquisition.source = package_request["packages"]["sources"][0]
     base = acquisition.source["url"]
     documents = {base + "/.bootwright-tree-identity": ("c" * 64 + "\n").encode(), base + "/.treeinfo": TREEINFO}
@@ -378,7 +391,7 @@ def test_repository_selection_proves_actual_publication_pin_and_tree_layout(pack
     assert seen[:2] == [("rhel-baseos", base + "/BaseOS", native_signatures.RHEL_SIGNER),
                         ("rhel-appstream", base + "/AppStream", native_signatures.RHEL_SIGNER)]
     assert sources.source_for(package_request, "node-1")["publicationPath"].startswith("/var/lib/bootwright-services/")
-    for metadata in (TREEINFO.replace(b"9.8", b"9.7"), TREEINFO.replace(b"x86_64", b"aarch64"),
+    for metadata in (TREEINFO.replace(b"x86_64", b"aarch64"),
                      TREEINFO.replace(b"repository = BaseOS", b"repository = ../foreign")):
         documents[base + "/.treeinfo"] = metadata
         seen.clear()
@@ -403,6 +416,7 @@ def test_metadata_decompression_proves_open_checksum_and_bounds_expansion(tmp_pa
     import gzip
 
     acquisition = object.__new__(sources.Acquisition)
+    acquisition.repository_base = sources.IBM_BASE
     acquisition.expanded, acquisition.deadline = 0, sources.time.monotonic() + 10
     payload = b"<metadata>bounded native input</metadata>"
     compressed = gzip.compress(payload)
@@ -424,6 +438,7 @@ def test_metadata_decompression_proves_open_checksum_and_bounds_expansion(tmp_pa
 
 def test_xz_metadata_is_rejected_before_loading_an_unbounded_dictionary(tmp_path):
     acquisition = object.__new__(sources.Acquisition)
+    acquisition.repository_base = sources.IBM_BASE
     acquisition.expanded, acquisition.deadline = 0, sources.time.monotonic() + 10
     path = tmp_path / "primary.xml.xz"
     # No decoder receives an untrusted XZ stream, including its dictionary header.
@@ -488,7 +503,8 @@ print(json.dumps(namespace["supervise"](delayed_effect, budget=0.1, grace=0.01))
 
 def test_fixed_publisher_import_follows_verification_and_before_inventory_check(monkeypatch, tmp_path):
     plan = plan_fixture()
-    grant = dict(packages.transaction_request(), plan=plan, operation="apply", payloads={})
+    grant = dict(packages.transaction_request({"cephadm": {"packageVersion": "20.2.1-405.el9cp"}, "ansiblePackageVersion": "5.0.3-1"}),
+                 plan=plan, operation="apply", payloads={})
     events = []
     base = SimpleNamespace(close=lambda: events.append("close"))
     observations = iter([{"inventorySHA256": plan["beforeSHA256"]}, {"inventorySHA256": plan["afterSHA256"], "rootsReady": True}])
@@ -548,7 +564,7 @@ def live_key_doubles(monkeypatch, events, results=None):
 
 
 def live_key_grant(inherited_policy=True):
-    request = packages.transaction_request()
+    request = packages.transaction_request({"cephadm": {"packageVersion": "20.2.1-405.el9cp"}, "ansiblePackageVersion": "5.0.3-1"})
     if not inherited_policy:
         del request["versions"]["inheritedPolicy"]
     grant = dict(request, plan=plan_fixture(grant=copy.deepcopy(request)), operation="apply", payloads={})
@@ -615,18 +631,18 @@ def test_live_signature_check_follows_every_signer_import_and_still_refuses_a_fa
 
 
 @pytest.mark.parametrize("release,machine,valid",
-                         [(b'ID=rhel\nVERSION_ID="9.8"\n', "x86_64", True), (b'ID=rhel\nVERSION_ID="9.7"\n', "x86_64", False),
-                          (b'ID=fedora\nVERSION_ID=43\n', "x86_64", False), (b'ID=rhel\nVERSION_ID="9.8"\n', "aarch64", False),
+                         [(b'ID=rhel\nVERSION_ID="9.8"\n', "x86_64", True), (b'ID=rhel\nVERSION_ID="9.7"\n', "x86_64", True),
+                          (b'ID=fedora\nVERSION_ID=43\n', "x86_64", True), (b'ID=rhel\nVERSION_ID="9.8"\n', "aarch64", False),
                           (b'ID=rhel\nID=rhel\nVERSION_ID="9.8"\n', "x86_64", False)])
 def test_actual_guest_platform_is_proved_read_only(release, machine, valid, monkeypatch):
     monkeypatch.setattr(os.path, "islink", lambda path: False)
     monkeypatch.setattr(ceph_native, "read_regular", lambda *args, **kwargs: release)
     monkeypatch.setattr(os, "uname", lambda: SimpleNamespace(machine=machine))
     if valid:
-        packages.actual_platform()
+        ACTUAL_PLATFORM()
     else:
         with pytest.raises(ceph_native.Refusal, match="package-platform"):
-            packages.actual_platform()
+            ACTUAL_PLATFORM()
 
 
 @pytest.mark.parametrize("reason", ["package-platform", "package-host", "foreign-cluster"])
@@ -680,7 +696,8 @@ def test_ordinary_transaction_adds_authenticated_inherited_policy_roots_before_t
     result = prepare(package_request, b)
     assert result["ready"] and b.events == ["payload-integrity", "publisher-verification", "transaction", "policy-installed"]
     assert b.journal.writes == ["decision.json", "verified.json", "complete.json"]
-    assert packages.transaction_request()["versions"] == {"ceph": "2:20.2.1-405.el9cp", "license": "0:9.1-1.el9cp", "inheritedPolicy": "latest"}
+    assert packages.transaction_request({"cephadm": {"packageVersion": "20.2.1-405.el9cp"}, "ansiblePackageVersion": "5.0.3-1"})["versions"] == {
+        "ceph": "20.2.1-405.el9cp", "ansible": "5.0.3-1", "license": "latest", "inheritedPolicy": "latest"}
     assert [p["name"] for p in b.plan["packages"] if p["signer"] == native_signatures.RHEL_SIGNER] == ["crypto-policies", "crypto-policies-scripts"]
     again = prepare(package_request, b)
     assert again == dict(result, changed=False) and b.events.count("transaction") == 1
@@ -724,3 +741,38 @@ def test_completed_replay_reproves_the_original_inherited_policy_record(package_
     with pytest.raises(ceph_native.Refusal):
         prepare(package_request, b)
     assert b.journal.writes == writes and b.events == events
+
+
+def test_native_package_failure_keeps_selection_and_native_cause():
+    with pytest.raises(ceph_native.NativeFailure) as caught:
+        with packages.phase("package-resolution", "cephadm-ansible-not a version"):
+            raise ValueError("No match for argument: cephadm-ansible-not a version; password=synthetic-secret")
+    assert caught.value.native_error["coordinate"] == "cephadm-ansible-not a version"
+    assert "No match for argument" in caught.value.native_error["cause"]
+    assert "synthetic-secret" not in str(caught.value.native_error)
+
+
+@pytest.mark.parametrize("name", ["cephadm", "ceph-common", "cephadm-ansible", "nfs-ganesha"])
+def test_selected_older_root_reaches_native_transaction_and_frozen_retry(package_request, boundary, name):
+    if name == "nfs-ganesha":
+        package_request["nfsGaneshaPackageVersion"] = "7.3-9"
+        boundary.plan.clear()
+        boundary.plan.update(plan_fixture(grant=packages.transaction_request(package_request)))
+    action = next(row for row in boundary.plan["actions"] if row["after"]["name"] == name)
+    action["kind"] = "downgrade"
+    action["before"] = dict(action["after"], version="999")
+    boundary.plan["digest"] = native_resolution.digest({key: value for key, value in boundary.plan.items() if key != "digest"})
+    assert prepare(package_request, boundary)["changed"] is True
+    assert prepare(package_request, boundary)["changed"] is False
+    assert boundary.events.count("transaction") == 1
+    assert boundary.acquisition.calls == ["metadata", "key", "payloads"]
+
+
+def test_unrequested_host_policy_downgrade_refuses_before_effects(package_request, boundary):
+    action = next(row for row in boundary.plan["actions"] if row["after"]["name"] == "crypto-policies")
+    action["kind"] = "downgrade"
+    action["before"] = dict(action["after"], version="999")
+    boundary.plan["digest"] = native_resolution.digest({key: value for key, value in boundary.plan.items() if key != "digest"})
+    with pytest.raises(ceph_native.Refusal, match="package-journal"):
+        prepare(package_request, boundary)
+    assert boundary.events == [] and boundary.journal.writes == []

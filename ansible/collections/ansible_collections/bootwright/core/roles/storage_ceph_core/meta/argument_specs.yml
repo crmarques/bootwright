@@ -15,7 +15,15 @@ argument_specs:
           callHome:
             type: str
             required: true
-          cephVersion:
+          release:
+            type: str
+            required: true
+          ansiblePackageVersion:
+            type: str
+            required: true
+          nfsGaneshaPackageVersion:
+            type: str
+          packageRepository:
             type: str
             required: true
           cephadm:
@@ -79,7 +87,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-core-v4]
+            choices: [ceph-core-v5]
       bootwright_ceph_digest:
         type: str
         required: true

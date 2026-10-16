@@ -72,13 +72,8 @@ func TestUnsupportedReleaseOrTransportRefusesBeforeRegistration(t *testing.T) {
 		"omitted transport": func(spec api.Value) api.Value {
 			return spec.WithPath(requestMap("user", "operator", "keyRef", "cluster-key"), "ceph", "cephadm", "clusterSSH")
 		},
-		"another release":         set("9.9.1.3", "ceph", "release"),
-		"another package version": set("20.2.1-406.el9cp", "ceph", "packageVersion"),
-		"another cephadm-ansible": set("5.0.4-1", "ceph", "cephadm", "ansible", "packageVersion"),
-		"another base":            set("cp.icr.io/cp/ibm-ceph/ceph-8-rhel9", "ceph", "image", "base"),
-		"unpinned tag":            set("v9.9.1-25075", "ceph", "image", "version"),
-		"latest":                  set("latest", "ceph", "image", "version"),
-		"placeholder digest":      set("sha256:"+strings.Repeat("0", 64), "ceph", "image", "version"),
+		"empty release":     set("", "ceph", "release"),
+		"control character": set("bad\nversion", "ceph", "packageVersion"),
 	}
 	for name, change := range refused {
 		t.Run(name, func(t *testing.T) {
@@ -93,7 +88,7 @@ func TestUnsupportedReleaseOrTransportRefusesBeforeRegistration(t *testing.T) {
 			}
 		})
 	}
-	for _, want := range []string{PinnedRelease, PinnedPackageVersion, PinnedAnsibleVersion, PinnedRepository, PinnedTag, "linux/amd64", PinnedTransport, "native transport is refused", "host-key verification cannot be disabled"} {
+	for _, want := range []string{PinnedTransport, "native transport is refused", "host-key verification cannot be disabled"} {
 		if !strings.Contains(unsupportedRemedy, want) {
 			t.Fatalf("pinned remedy omits %q: %s", want, unsupportedRemedy)
 		}

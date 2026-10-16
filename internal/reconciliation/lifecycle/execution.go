@@ -206,6 +206,9 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err := s.proveShared(ctx, name, decided); err != nil {
 		return nil, err
 	}
+	if err := s.admitApply(ctx, name, decided); err != nil {
+		return nil, err
+	}
 	// The plan is presented before authorization refuses, so a refusal names
 	// steps the operator has just read; both precede the prompt and
 	// registration.
@@ -224,6 +227,32 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		}
 	}
 	return s.execute(ctx, name, decided)
+}
+
+func (s Service) admitApply(ctx context.Context, name string, decided transition) error {
+	if decided.verb != reconciliation.Apply || s.options.ApplyAdmission == nil {
+		return nil
+	}
+	return s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+		return s.admitApplyView(ctx, view, decided)
+	})
+}
+
+func (s Service) admitApplyView(ctx context.Context, view View, decided transition) error {
+	if decided.verb != reconciliation.Apply || s.options.ApplyAdmission == nil {
+		return nil
+	}
+	state, err := s.compile(ctx, view)
+	if err != nil {
+		return err
+	}
+	owned := map[string]ObjectOwnership{}
+	for _, block := range decided.plan.Blocks {
+		if current := decided.states[block.ID]; current != "" && current != reconciliation.BlockPending {
+			recordOwnership(owned, block, reconciliation.Apply, current)
+		}
+	}
+	return s.options.ApplyAdmission(ctx, view.Identity().Name, state.Effective(), owned)
 }
 
 // decideShared takes one decision from durable state read under the shared
@@ -1065,6 +1094,9 @@ func clearMaterial(material map[string]secrets.Material) {
 
 // run joins every adapter before releasing its execution scope and transaction.
 func (s Service) run(ctx context.Context, tx Transaction, decided transition, binding string, material map[string]secrets.Material, record *registering) (*OperationResult, error) {
+	if err := s.admitApplyView(ctx, tx, decided); err != nil {
+		return nil, err
+	}
 	if s.options.BeginInvocation != nil {
 		var release func()
 		ctx, release = s.options.BeginInvocation(ctx)

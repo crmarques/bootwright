@@ -92,7 +92,8 @@ type RunRequest struct {
 	// adapter that names one of these reasons before it fails fails the run
 	// with the caller's diagnostic for it, which says what the refusal is about
 	// and what to change; a reason not listed here breaks the protocol.
-	Refusals map[string]error
+	Refusals     map[string]error
+	NativeErrors bool
 	// Deadline bounds the run: the capability derives it from the waits its
 	// frozen request budgets, and the runner holds it to MaxDeadline. Zero
 	// keeps the runner's default.
@@ -134,7 +135,8 @@ type Invocation struct {
 	Outputs        []OutputFile
 	// Refusals are the adapter refusals the capability remedies by name, each
 	// with the diagnostic it reports in place of the adapter's failure.
-	Refusals map[string]error
+	Refusals     map[string]error
+	NativeErrors bool
 	// Deadline is the run's own deadline, derived from the budgets the frozen
 	// request carries; zero keeps the runner's default.
 	Deadline time.Duration
@@ -166,6 +168,7 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		Output:            execution.Output,
 		OutputRemediation: attemptOutputRemediation(execution),
 		Refusals:          maps.Clone(invocation.Refusals),
+		NativeErrors:      invocation.NativeErrors,
 		Deadline:          invocation.Deadline,
 		ReadOnly:          execution.ReadOnly || execution.Attempt == 0 || execution.Resolution != 0,
 		Unrecorded:        execution.Attempt == 0 && execution.Resolution == 0,

@@ -100,6 +100,16 @@ provider also takes refuses at admission, because that Machine's disk directory
 would hold the provider's virtual-media pool
 ([substrates](../substrates.md#refusal-table)).
 
+### Libvirt capacity reserve
+
+Optional `spec.libvirt.capacityReserve` contains exactly the required integer
+fields `cpu`, `memoryMiB` and `diskGiB`, each nonnegative. Explicit zero is
+allowed; omission supplies no reserve policy and storage preflight reports
+unknown capacity with a remedy naming these fields. Providers sharing one
+host and backing filesystem must agree on reserve quantities. These are
+operator-selected host headroom, not a Ceph version compatibility table or
+vendor minimum. Overflow beyond the native quantity representation refuses.
+
 ### Refused arms
 
 The `vsphere` and `kubevirt` provider arms, their network-attachment arms and

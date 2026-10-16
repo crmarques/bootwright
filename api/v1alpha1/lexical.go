@@ -97,6 +97,11 @@ func ValidLexical(rule, value string) bool {
 		return validRegistry(value)
 	case "image":
 		return validImage(value)
+	case "package-repository":
+		u, err := neturl.Parse(value)
+		return len(value) <= 4096 && validHTTPURL(value, true) && err == nil && u.Fragment == "" && u.RawQuery == ""
+	case "native-version":
+		return len(value) > 0 && len(value) <= 1024 && strings.IndexFunc(value, func(r rune) bool { return r < 32 || r == 127 }) < 0
 	case "image-version":
 		return value != "latest" && (imageTagPattern.MatchString(value) || strings.HasPrefix(strings.ToLower(value), "sha256:") && digestPattern.MatchString(value))
 	case "cli-version":

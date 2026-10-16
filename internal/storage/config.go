@@ -42,9 +42,6 @@ func CoreCephConfig(ceph api.Value) (map[string]map[string]string, []api.Issue) 
 	if len(result) == 0 {
 		return nil, nil
 	}
-	if ceph.Get("distribution").Text() != "ibm" || ceph.Get("release").Text() != "9.9.1.2" || ceph.Get("packageVersion").Text() != "20.2.1-405.el9cp" {
-		return refuse("$.spec.ceph.config", "the declared release has no qualified core configuration record", "use the IBM 9.9.1.2 candidate package coordinates or qualify the selected release before using config")
-	}
 	return result, nil
 }
 

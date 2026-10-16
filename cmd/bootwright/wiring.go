@@ -151,6 +151,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust
 	services.ClusterAccess = wireClusterAccess(services.DesiredState, secrets.binder, deps.Selection)
 	services.EnvironmentInspection = wireInspection(services.DesiredState, reconciler, secrets.binder, deps.Selection)
+	services.StoragePreflight = wireStoragePreflight(services.DesiredState, reconciler, deps)
 	return services
 }
 

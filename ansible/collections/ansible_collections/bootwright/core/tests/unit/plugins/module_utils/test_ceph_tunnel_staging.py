@@ -13,9 +13,9 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_tunnel
 
 @pytest.fixture
 def stage_request():
-    return {"version": "ceph-core-v4", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
+    return {"version": "ceph-core-v5", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
-            "cephadm": {"path": "/usr/sbin/cephadm", "version": "20.2.1", "packageVersion": "20.2.1-405.el9cp"},
+            "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "bootstrap": "node-1.example.test", "monIP": "192.0.2.1", "clusterNetworks": [], "callHome": "enabled",
             "hosts": [{"name": "node-1.example.test", "machine": "machine-1", "address": "192.0.2.1", "port": 22},
                       {"name": "node-2.example.test", "machine": "machine-2", "address": "192.0.2.2", "port": 22}]}
@@ -189,7 +189,7 @@ def test_no_initial_redeploy_after_any_host_enrollment(stage_request, inventory)
                                       metadata("mon"), metadata("mgr"))
 
 
-@pytest.mark.parametrize("field,value", [("path", "/tmp/cephadm"), ("version", "20.2.0"), ("packageVersion", "20.2.1-404.el9cp")])
+@pytest.mark.parametrize("field,value", [("path", "/tmp/cephadm"), ("version", "20.2.0")])
 def test_staging_does_not_extend_to_uninspected_provider_tools(stage_request, field, value):
     stage_request["cephadm"][field] = value
     with pytest.raises(staging.StageRefusal):
@@ -264,3 +264,8 @@ def test_observed_seed_contradiction_still_refuses(stage_request, field, value):
         staging.prove_seed_daemons(stage_request, daemons, observing=True)
     with pytest.raises(staging.StageRefusal):
         staging.initial_redeploy_plan(stage_request, staging.stage_intent(stage_request), daemons, [], metadata("mon"), metadata("mgr"), observing=True)
+
+
+def test_staging_accepts_authored_package_coordinate_without_catalog(stage_request):
+    stage_request["cephadm"]["packageVersion"] = "synthetic+native-coordinate"
+    assert "--skip-prepare-host" in staging.bootstrap_argv(stage_request, scratch(stage_request))

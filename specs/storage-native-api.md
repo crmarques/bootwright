@@ -133,8 +133,8 @@ verification scripts. These source and boundary proofs do not establish the
 complete native touch closure or qualify actual guest/runtime observations;
 that evidence remains [B79](milestones/m2.md#b79).
 
-These are approved target requirements. Admission is the pinned
-verified-tunnel path of the [storage API](api/storage.md): the image digest is
+These are approved target requirements. Admission uses the
+verified-tunnel path and authored artifact selection of the [storage API](api/storage.md): the image digest is
 frozen before any native effect, and each host proves the native SSH class
 route at host preparation, with correct-key forwarding and zero direct contact
 for changed keys, unknown destinations, unavailable proxies and missing native
@@ -147,10 +147,12 @@ minimal run is recorded in
 [X94](milestones/delivered.md#x94--post-destroy-cluster-inspection); remaining
 core/promotion gates stay on M2.
 
-The candidate supplies registry access through an exclusively owned protected
-guest Podman authfile. Native bootstrap and registry-login arguments never
-receive the credentials: the inspected provider login implementation exposes
-its password in a child argument. Publication binds a reserved inode to a
+Host preparation supplies registry access through the invocation-local
+credential broker defined by [storage](storage.md). Podman receives an empty
+authfile and ephemeral mutual-TLS identity. Native bootstrap and provider
+registry-login arguments never receive entitlement credentials. Core
+authorization retains its separately owned protected guest registry record;
+publication binds a reserved inode to a
 durable frozen-scope intent before the native file becomes visible. Recovery
 and removal require that binding and the exact descriptor identity; matching
 bytes or an empty native inventory do not supply ownership. Ownership records

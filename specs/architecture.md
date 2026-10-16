@@ -773,6 +773,15 @@ They accept these phases:
 | `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp`, an acquisition class with `source`, or `internal` | none | last, once, in place of `completed`: `release-stamp` while an `openshift-clients` tool is being installed; an acquisition class (`dns`, `certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`, `integrity`, `trust`, `storage`) naming the tool being installed; `internal`, with no `source`, after `loaded` | The run fails with the [release-stamp refusal](controller.md#the-controller-stage), or the diagnostic Go gives the [class](controller.md#the-controller-stage), naming the source's host, instead of the generic adapter failure, even when the adapter's failed exit is read first; `internal` keeps the generic failure. |
 | `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply; optionally `detail`: at most 160 letters, digits and `_.:@-` naming a closed cause, optionally with the code site that refused, or an exception type and code site, never a value | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason, its message followed by any `detail`, instead of the generic adapter failure, even when the adapter's failed exit is read first; the runner closes the acknowledgement channel and kills nothing, so the adapter is left to end on its own. |
 
+Ceph core, host and image calls explicitly opt into an additional `nativeError`
+on `refused` only. It has exactly `coordinate` (at most 512 UTF-8 bytes) and
+`cause` (at most 1024), both nonempty printable strings. The producer projects
+native output through bounded credential redaction and the controller redacts
+again against its private material before publication. The runner validates
+shape and bounds and appends these values only for an opted-in call. Other
+capabilities refuse this member. This leaves the closed `detail` grammar
+unchanged; raw vendor output and exception text never become evidence.
+
 `outcome` is `changed` or `unchanged`. `status` is `running`, `ok`, `failed`
 or `skipped`, and every status but `running` settles its group. Go alone derives
 `failed`, `unknown` and `canceled`; they never cross the channel. `reason`

@@ -136,22 +136,22 @@ func TestInspectReportsAReasonUnlessBothProofsAreCompleteAndReady(t *testing.T) 
 			p := provedPair(t)
 			p[0].Evidence = json.RawMessage(`{"digest":`)
 			return p
-		}, "pinned linux/amd64 manifest"},
+		}, "resolved linux/amd64 manifest"},
 		{"image digest invalid", func() []lifecycle.BlockEvidence {
 			p := provedPair(t)
 			p[0].Evidence = inspectedImageEvidence(t, func(e *ImageEvidence) { e.Digest = "sha256:short" })
 			return p
-		}, "pinned linux/amd64 manifest"},
+		}, "resolved linux/amd64 manifest"},
 		{"image platform foreign", func() []lifecycle.BlockEvidence {
 			p := provedPair(t)
 			p[0].Evidence = inspectedImageEvidence(t, func(e *ImageEvidence) { e.Platform = "linux/arm64" })
 			return p
-		}, "pinned linux/amd64 manifest"},
+		}, "resolved linux/amd64 manifest"},
 		{"image absent", func() []lifecycle.BlockEvidence {
 			p := provedPair(t)
 			p[0].Evidence = inspectedImageEvidence(t, func(e *ImageEvidence) { e.Absent = true })
 			return p
-		}, "pinned linux/amd64 manifest"},
+		}, "resolved linux/amd64 manifest"},
 		{"cluster not ready", func() []lifecycle.BlockEvidence {
 			p := provedPair(t)
 			p[1].Evidence = inspectedClusterEvidence(t, func(e *Evidence) { e.Ready, e.Partial = false, true })

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "preflight storage-cluster",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "synthetic",
+    "target": "storage-cluster",
+    "checks": [
+      {
+        "id": "capacity.memory",
+        "target": "controller",
+        "status": "passed",
+        "reason": "available capacity covers declared guests and reserve",
+        "capacity": {
+          "resource": "memory",
+          "unit": "bytes",
+          "required": 1024,
+          "available": 4096,
+          "reserve": 1024,
+          "deficit": 0,
+          "observed": true
+        }
+      }
+    ],
+    "summary": {
+      "passed": 1,
+      "failed": 0,
+      "unknown": 0,
+      "pending": 0
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

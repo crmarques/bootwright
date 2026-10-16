@@ -24,7 +24,14 @@ from ansible_collections.bootwright.core.plugins.modules import ceph_image_resol
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[4]
 GOLDEN = json.loads((COLLECTION / "tests" / "fixtures" / "ceph-image-call.golden").read_text())
-AUTH = 'Bearer realm="https://cp.icr.io/oauth/token",service="registry",scope="' + discovery.SCOPE + '"'
+GOLDEN["request"]["version"] = "ceph-image-v2"
+REPOSITORY = GOLDEN["request"]["base"]
+NAMESPACE = REPOSITORY.split("/", 1)[1]
+TAG_NAME = GOLDEN["request"]["tag"]
+REGISTRY = GOLDEN["request"]["registry"]
+RELEASE = GOLDEN["request"]["release"]
+SCOPE = "repository:" + NAMESPACE + ":pull"
+AUTH = 'Bearer realm="https://cp.icr.io/oauth/token",service="registry",scope="' + SCOPE + '"'
 
 
 def raw(value):
@@ -83,9 +90,9 @@ class Client:
 @pytest.mark.parametrize("digest_headers", [True, False])
 def test_pinned_index_freezes_raw_linux_amd64_digest_without_blob_requests(authenticated, digest_headers):
     client = Client(True, authenticated, digest_headers)
-    assert discovery.resolve("Basic synthetic-secret", client) == sha(raw(client.manifest))
+    assert discovery.resolve("Basic synthetic-secret", client, GOLDEN["request"]) == sha(raw(client.manifest))
     assert client.rows == []
-    assert all(path.startswith("/v2/" + discovery.NAMESPACE + "/") or path.startswith("/oauth/token?") for path, unused_auth, unused_limit in client.calls)
+    assert all(path.startswith("/v2/" + NAMESPACE + "/") or path.startswith("/oauth/token?") for path, unused_auth, unused_limit in client.calls)
     assert [path for path, unused_auth, unused_limit in client.calls if "/blobs/" in path] == []
     if authenticated:
         assert client.calls[0][1] is None and client.calls[1][1] == "Basic synthetic-secret"
@@ -96,14 +103,14 @@ def test_pinned_index_freezes_raw_linux_amd64_digest_without_blob_requests(authe
 
 @pytest.mark.parametrize("media", discovery.MANIFEST_TYPES)
 @pytest.mark.parametrize("authenticated", [True, False])
-def test_single_manifest_tag_refuses_without_platform_proof_or_followup(media, authenticated):
+def test_single_manifest_tag_authenticates_config_platform(media, authenticated):
     client = Client(indexed=False, authenticated=authenticated)
     client.manifest["mediaType"] = media
     client.rows[-1] = response(client.manifest, media)
-    with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$"):
-        discovery.resolve("Basic synthetic-secret", client)
-    assert client.rows == [] and len(client.calls) == (3 if authenticated else 1)
-    assert client.calls[-1][0] == "/v2/" + discovery.NAMESPACE + "/manifests/" + discovery.TAG_NAME
+    client.rows.append(response(client.config, discovery.CONFIG_TYPES[0]))
+    assert discovery.resolve("Basic synthetic-secret", client, GOLDEN["request"]) == sha(raw(client.manifest))
+    assert client.rows == [] and len(client.calls) == (4 if authenticated else 2)
+    assert client.calls[-1][0].startswith("/v2/" + NAMESPACE + "/blobs/")
 
 
 def test_optional_body_media_type_uses_supported_http_type_and_raw_digest():
@@ -112,7 +119,7 @@ def test_optional_body_media_type_uses_supported_http_type_and_raw_digest():
     client.selected.update(digest=sha(raw(client.manifest)), size=len(raw(client.manifest)))
     client.index.pop("mediaType")
     client.rows = [response(client.index, discovery.INDEX_TYPES[0]), response(client.manifest, discovery.MANIFEST_TYPES[0])]
-    assert discovery.resolve("Basic synthetic", client) == sha(raw(client.manifest))
+    assert discovery.resolve("Basic synthetic", client, GOLDEN["request"]) == sha(raw(client.manifest))
 
 
 def test_present_body_media_type_must_match_the_supported_http_type():
@@ -121,10 +128,10 @@ def test_present_body_media_type_must_match_the_supported_http_type():
     client.selected.update(digest=sha(raw(client.manifest)), size=len(raw(client.manifest)))
     client.rows = [response(client.index, discovery.INDEX_TYPES[0]), response(client.manifest, discovery.MANIFEST_TYPES[0])]
     with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$"):
-        discovery.resolve("Basic synthetic", client)
+        discovery.resolve("Basic synthetic", client, GOLDEN["request"])
 
 
-@pytest.mark.parametrize("change", ["http", "foreign", "userinfo", "port", "path", "query", "service", "scope", "duplicate", "escaping", "extra"])
+@pytest.mark.parametrize("change", ["http", "foreign", "userinfo", "port", "query", "scope", "duplicate", "escaping", "extra"])
 def test_unapproved_auth_challenge_refuses_before_secret_delivery(change):
     value = AUTH
     replacements = {
@@ -145,7 +152,7 @@ def test_unapproved_auth_challenge_refuses_before_secret_delivery(change):
     client = Client()
     client.rows[0] = (401, {"www-authenticate": value}, b"")
     with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$"):
-        discovery.resolve("Basic synthetic-secret", client)
+        discovery.resolve("Basic synthetic-secret", client, GOLDEN["request"])
     assert len(client.calls) == 1 and client.calls[0][1] is None
 
 
@@ -154,7 +161,7 @@ def test_redirects_never_receive_followup_or_forwarded_credentials(slot):
     client = Client()
     client.rows[slot] = (302, {"location": "https://foreign.invalid/steal"}, b"")
     with pytest.raises(discovery.DiscoveryRefusal):
-        discovery.resolve("Basic synthetic-secret", client)
+        discovery.resolve("Basic synthetic-secret", client, GOLDEN["request"])
     assert len(client.calls) == slot + 1
 
 
@@ -206,7 +213,7 @@ def test_content_and_platform_ambiguity_cannot_publish_identity(change):
         client.selected.update(digest=sha(raw(client.manifest)), size=len(raw(client.manifest)))
         client.rows[2:] = [response(client.index, discovery.INDEX_TYPES[0]), response(client.manifest, discovery.MANIFEST_TYPES[0])]
     with pytest.raises(discovery.DiscoveryRefusal):
-        discovery.resolve("Basic synthetic-secret", client)
+        discovery.resolve("Basic synthetic-secret", client, GOLDEN["request"])
 
 
 @pytest.mark.parametrize(
@@ -231,7 +238,7 @@ def test_optional_oci_hints_are_never_followed_or_used_as_authority():
     client.manifest["config"].update(urls=["https://foreign.invalid/config"], data="ignored")
     client.selected.update(digest=sha(raw(client.manifest)), size=len(raw(client.manifest)))
     client.rows[2:] = [response(client.index, discovery.INDEX_TYPES[0]), response(client.manifest, discovery.MANIFEST_TYPES[0])]
-    assert discovery.resolve("Basic synthetic", client) == sha(raw(client.manifest))
+    assert discovery.resolve("Basic synthetic", client, GOLDEN["request"]) == sha(raw(client.manifest))
     assert all("foreign.invalid" not in path for path, unused_auth, unused_limit in client.calls)
 
 
@@ -271,8 +278,8 @@ def test_fixed_connection_ignores_proxies_and_never_follows_redirect(monkeypatch
 
     monkeypatch.setattr(discovery.http.client, "HTTPSConnection", Connection)
     context = object()
-    status, unused_headers, unused_body = discovery.Registry(context).get("/v2/" + discovery.NAMESPACE + "/manifests/" + discovery.TAG_NAME)
-    assert status == 302 and calls[0][0] == discovery.REGISTRY and calls[0][1]["context"] is context and calls[0][1]["port"] == 443
+    status, unused_headers, unused_body = discovery.Registry(context, GOLDEN["request"]).get("/v2/" + NAMESPACE + "/manifests/" + TAG_NAME)
+    assert status == 302 and calls[0][0] == REGISTRY and calls[0][1]["context"] is context
     assert calls[1][0] == "GET" and calls[-1] == "closed" and len(calls) == 3
 
 
@@ -304,7 +311,7 @@ def test_response_bounds_and_ambiguity_close_connection_without_evidence(monkeyp
 
     monkeypatch.setattr(discovery.http.client, "HTTPSConnection", Connection)
     with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$"):
-        discovery.Registry(object()).get("/v2/" + discovery.NAMESPACE + "/manifests/" + discovery.TAG_NAME)
+        discovery.Registry(object(), GOLDEN["request"]).get("/v2/" + NAMESPACE + "/manifests/" + TAG_NAME)
     assert closed == [True]
 
 
@@ -314,14 +321,13 @@ def test_response_bounds_and_ambiguity_close_connection_without_evidence(monkeyp
         "https://foreign.invalid",
         "/v2/other/manifests/tag",
         "/oauth/token?service=foreign",
-        "/v2/" + discovery.NAMESPACE + "/blobs/sha256:" + "0" * 64,
-        "/v2/" + discovery.NAMESPACE + "/blobs/sha256:" + "a" * 64,
+        "/v2/" + NAMESPACE + "/blobs/sha256:not-a-digest",
     ],
 )
 def test_no_arbitrary_endpoint_can_reach_the_socket_factory(monkeypatch, path):
     monkeypatch.setattr(discovery.http.client, "HTTPSConnection", lambda *args, **kwargs: pytest.fail("unapproved network"))
     with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$"):
-        discovery.Registry(object()).get(path, "Bearer synthetic")
+        discovery.Registry(object(), GOLDEN["request"]).get(path, "Bearer synthetic")
 
 
 def test_tls_roots_are_held_explicit_and_ignore_ambient_ssl_paths(monkeypatch):
@@ -438,13 +444,12 @@ def test_native_ssl_context_loads_synthetic_ca_with_utf8_comment(monkeypatch):
 @pytest.mark.parametrize(
     "name,value",
     [
-        ("image", discovery.REPOSITORY + ":latest"),
+        ("image", REPOSITORY + ":latest"),
         ("image", "registry.example.test/ceph@sha256:" + "a" * 64),
-        ("image", discovery.REPOSITORY + "@sha256:" + "0" * 64),
+        ("image", REPOSITORY + "@sha256:" + "0" * 64),
         ("tag", "latest"),
         ("base", "cp.icr.io/cp/ibm-ceph/ceph-8-rhel9"),
         ("registry", "foreign.invalid"),
-        ("release", "unknown"),
         ("version", "ceph-image-v0"),
         ("cluster", "../escape"),
         ("registryRef", True),
@@ -533,7 +538,7 @@ def test_original_loan_custody_refuses_unsafe_or_replaced_files(tmp_path, change
 def test_private_loan_is_retained_and_no_file_or_cache_is_created(tmp_path, monkeypatch):
     tmp_path.chmod(0o700)
     path = tmp_path / "registry"
-    path.write_bytes(raw({"url": discovery.REGISTRY, "username": "cp", "password": "synthetic-secret"}))
+    path.write_bytes(raw({"url": REGISTRY, "username": "cp", "password": "synthetic-secret"}))
     path.chmod(0o600)
     checks = []
     fake_tls(monkeypatch, checks)
@@ -541,8 +546,8 @@ def test_private_loan_is_retained_and_no_file_or_cache_is_created(tmp_path, monk
     monkeypatch.setattr(discovery, "Registry", lambda *args: client)
     result = discovery.execute("apply", GOLDEN["request"], GOLDEN["digest"], {"registryJSON": str(path)})
     assert result == {"changed": False, "evidence": {
-        "request": GOLDEN["digest"], "postcondition": True, "release": discovery.RELEASE, "base": discovery.REPOSITORY,
-        "tag": discovery.TAG_NAME, "digest": sha(raw(client.manifest)), "platform": "linux/amd64",
+        "request": GOLDEN["digest"], "postcondition": True, "release": RELEASE, "base": REPOSITORY,
+        "tag": TAG_NAME, "digest": sha(raw(client.manifest)), "platform": "linux/amd64",
     }}
     assert checks == ["tls", "tls", "tls"] and list(tmp_path.iterdir()) == [path]
     assert "synthetic-secret" not in str(result)
@@ -579,7 +584,7 @@ def test_slow_http_headers_and_body_are_stopped_by_whole_call_budget(monkeypatch
     opened = []
 
     def connect(host, **options):
-        assert host == "cp.icr.io" and options["port"] == 443
+        assert host == "cp.icr.io" and options.get("port", 443) == 443
         client = http.client.HTTPConnection(address[0], address[1], timeout=1)
         opened.append(client)
         return client
@@ -589,7 +594,7 @@ def test_slow_http_headers_and_body_are_stopped_by_whole_call_budget(monkeypatch
     try:
         with pytest.raises(discovery.DiscoveryRefusal, match="^timeout$"):
             with discovery.bounded_lifetime(0.05):
-                discovery.Registry(object()).get("/v2/" + discovery.NAMESPACE + "/manifests/" + discovery.TAG_NAME)
+                discovery.Registry(object(), GOLDEN["request"]).get("/v2/" + NAMESPACE + "/manifests/" + TAG_NAME)
         assert time.monotonic() - started < 1 and opened[0].sock is None
     finally:
         stopped.set()
@@ -614,9 +619,9 @@ def test_an_authored_digest_must_be_the_resolved_child_and_never_the_index():
     child = "sha256:" + "c" * 64
     tagged = discovery.resolution(GOLDEN["request"], GOLDEN["digest"], child)
     assert tagged["digest"] == child and tagged["platform"] == "linux/amd64"
-    authored = dict(GOLDEN["request"], image=discovery.REPOSITORY + "@" + child)
+    authored = dict(GOLDEN["request"], image=REPOSITORY + "@" + child)
     assert discovery.resolution(authored, GOLDEN["digest"], child) == tagged
-    index = dict(GOLDEN["request"], image=discovery.REPOSITORY + "@sha256:" + "e" * 64)
+    index = dict(GOLDEN["request"], image=REPOSITORY + "@sha256:" + "e" * 64)
     with pytest.raises(discovery.DiscoveryRefusal, match="^image-digest-mismatch$"):
         discovery.resolution(index, GOLDEN["digest"], child)
 
@@ -624,19 +629,19 @@ def test_an_authored_digest_must_be_the_resolved_child_and_never_the_index():
 def test_authored_index_digest_refuses_after_resolution_without_evidence(tmp_path, monkeypatch):
     tmp_path.chmod(0o700)
     path = tmp_path / "registry"
-    path.write_bytes(raw({"url": discovery.REGISTRY, "username": "cp", "password": "synthetic-secret"}))
+    path.write_bytes(raw({"url": REGISTRY, "username": "cp", "password": "synthetic-secret"}))
     path.chmod(0o600)
     fake_tls(monkeypatch)
     client = Client()
     monkeypatch.setattr(discovery, "Registry", lambda *args: client)
-    index = dict(GOLDEN["request"], image=discovery.REPOSITORY + "@" + sha(raw(client.index)))
+    index = dict(GOLDEN["request"], tag="", image=REPOSITORY + "@" + sha(raw(client.index)))
     with pytest.raises(discovery.DiscoveryRefusal, match="^image-digest-mismatch$"):
         discovery.execute("apply", index, GOLDEN["digest"], {"registryJSON": str(path)})
     assert client.rows == [] and discovery.refusal(discovery.DiscoveryRefusal("image-digest-mismatch")) == ("image-digest-mismatch", None)
 
 
 @pytest.mark.parametrize("change", [
-    {"request": "f" * 64}, {"postcondition": False}, {"platform": "linux/arm64"}, {"tag": "latest"}, {"digest": "sha256:" + "0" * 64},
+    {"request": "f" * 64}, {"postcondition": False}, {"platform": "linux/arm64"}, {"digest": "sha256:" + "0" * 64},
     {"index": "sha256:" + "e" * 64}, {"absent": True},
 ])
 def test_published_evidence_is_exactly_one_pinned_resolution_or_its_absence(change):
@@ -675,3 +680,35 @@ def test_every_discovery_exit_names_a_reason_and_no_value():
     assert discovery.refusal(discovery.DiscoveryRefusal("timeout")) == ("timeout", None)
     assert discovery.refusal(discovery.DiscoveryRefusal("synthetic-unlisted")) == ("unknown", "synthetic-unlisted")
     assert discovery.refusal(OSError("synthetic secret")) == ("adapter-exception", "OSError@unknown.frame:0")
+
+
+def test_authored_direct_digest_is_resolved_without_any_tag_request():
+    client = Client(indexed=False, authenticated=False)
+    client.rows.append(response(client.config, discovery.CONFIG_TYPES[0]))
+    selected = sha(raw(client.manifest))
+    request = dict(GOLDEN["request"], tag="", image=REPOSITORY + "@" + selected)
+    assert discovery.validate_request(request) == request
+    assert discovery.resolve("Basic synthetic", client, request) == selected
+    assert client.calls[0][0] == "/v2/" + NAMESPACE + "/manifests/" + selected
+    assert all(TAG_NAME not in path for path, unused_auth, unused_maximum in client.calls)
+
+
+@pytest.mark.parametrize("tag", ["synthetic-future-release", "not a tag", "--bad-tag", "sha256:not-a-digest"])
+def test_authored_tag_reaches_registry_without_version_grammar(tag):
+    client = Client(authenticated=False)
+    request = dict(GOLDEN["request"], base="registry.example.test/vendor/other", registry="registry.example.test", release="unrelated",
+                   tag=tag, image="registry.example.test/vendor/other:" + tag)
+    assert discovery.validate_request(request) == request
+    discovery.resolve("Basic synthetic", client, request)
+    assert client.calls[0][0] == "/v2/vendor/other/manifests/" + discovery.urllib.parse.quote(tag, safe=":")
+
+
+def test_native_registry_failure_keeps_selection_and_redacts_credentials():
+    client = Client(authenticated=False)
+    client.rows = [(404, {}, b'{"errors":[{"code":"MANIFEST_UNKNOWN","message":"no manifest; password=synthetic-secret"}]}')]
+    request = dict(GOLDEN["request"], tag="unavailable", image=REPOSITORY + ":unavailable")
+    with pytest.raises(discovery.DiscoveryRefusal) as caught:
+        discovery.resolve("Basic synthetic-secret", client, request)
+    assert caught.value.native_error["coordinate"] == request["image"]
+    assert "MANIFEST_UNKNOWN" in caught.value.native_error["cause"]
+    assert "synthetic-secret" not in str(caught.value.native_error)

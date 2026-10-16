@@ -1,5 +1,5 @@
 implementation: storage-ceph-image-v1
-content-digest: 9730cadd6ce46c97c727b3955f3bba23ec7b4d935cf483d74e2b9b1cbe7f8ef5
+content-digest: 9e2fbb421ee6b115530037b89963e922db036b53c33440a065de8b464e4ea6dc
 automation-formats: none
 request-schema:
   base string

@@ -279,7 +279,7 @@ def test_coordinator_runs_only_missing_proved_transitions(core_request, monkeypa
     clock = core_fixtures.ReadinessClock()
 
     class Transport(core_fixtures.ReadinessTransport):
-        def call(self, host, phase, private=None, *, timeout=None, devices=None):
+        def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
             if phase == "prerequisites":
                 self.calls.append((host["name"], phase, timeout))
                 local = stage if stage in ("unclaimed", "claimed", "prepared") else "complete" if host["name"] == core_request["bootstrap"] else "prepared"
@@ -306,20 +306,20 @@ def test_coordinator_runs_only_missing_proved_transitions(core_request, monkeypa
     assert phases.count("bootstrap") == (1 if stage in ("unclaimed", "claimed", "prepared") else 0)
     assert phases.count("tunnel_configure") == (0 if stage in ("configured", "mounted") else 1)
     assert phases.count("tunnel_mount") == (0 if stage == "mounted" else 1)
-    assert phases.count("enroll") == phases.count("services") == 1
+    assert phases.count("enroll") == 1
+    assert phases.count("services") == len(core_request["services"])
     assert phases.count("cache") == phases.count("host_devices") == 3 and "packages" not in phases
     assert max(index for index, phase in enumerate(phases) if phase == "cache") < phases.index("enroll")
     preconvergence = phases[:phases.index("services") + 1]
     assert len(preconvergence) <= 27
 
 
-def test_partial_enrollment_fence_is_not_replayed_or_erased(native):
+def test_partial_enrollment_fence_resumes_without_erasing_ownership(native):
     scope = protocol(native)
     native.markers.records["bootstrap-enrollment.json"] = scope
     native.daemons = lambda: fixtures.initial_daemons(native)
     native.observe = lambda: dict(native.empty_evidence(), exists=True, partial=True)
-    with pytest.raises(ceph_native.Refusal, match="partial-cluster"):
-        native.bootstrap_state()
+    assert native.bootstrap_state()["stage"] == "enrolling"
     assert native.markers.writes == []
 
 
@@ -356,16 +356,13 @@ def test_observed_mount_without_completion_receipts_requests_only_safe_finalizat
     assert native.bootstrap_state()["stage"] == "mounted"
 
 
-@pytest.mark.parametrize("existing", [False, True])
-def test_enrollment_fence_precedes_first_host_effect_and_prior_attempt_never_retries(native, private, existing):
+def test_enrollment_fence_precedes_first_host_effect(native, private):
     fixtures.configuration_fixture(native, private)
     native.markers.records["tunnel-mounted.json"] = {"fixture": "complete"}
     native.markers.records["cache-ready.json"] = {"fixture": "complete"}
     native.verify_transport_bundle = lambda: None
     native.verify_tunnel_configuration = lambda: None
     native.verify_manager_mounts = lambda daemons, observing=False: []
-    if existing:
-        native.markers.records["bootstrap-enrollment.json"] = staging.recovery_scope(native.request)
     write = native.markers.write
 
     def stop(name, value):
@@ -374,7 +371,7 @@ def test_enrollment_fence_precedes_first_host_effect_and_prior_attempt_never_ret
         write(name, value)
 
     native.markers.write = stop
-    with pytest.raises(ceph_native.Refusal, match="partial-cluster" if existing else "ownership"):
+    with pytest.raises(ceph_native.Refusal, match="ownership"):
         native.enroll()
     assert "bootstrap-enrollment.json" not in native.markers.writes
 
@@ -467,7 +464,7 @@ def test_lost_mount_reply_is_finalized_by_coordinator_before_enrollment_without_
         def bootstrap_material(self):
             return private
 
-        def call(self, host, phase, private=None, devices=None):
+        def call(self, host, phase, private=None, devices=None, service=None):
             del private, devices
             if phase == "tunnel_mount":
                 return native.tunnel_mount()
@@ -481,7 +478,7 @@ def test_lost_mount_reply_is_finalized_by_coordinator_before_enrollment_without_
             if phase == "enroll":
                 assert native.markers.read("tunnel-mounted.json") is not None
                 return native.enroll()
-            assert phase in ("devices", "services")
+            assert phase in ("devices", "services", "osd_prepare")
             return {"changed": False}
 
     ceph_core.apply_tunnel_cluster(native.request, native.host, Transport(), state, preparations)
@@ -655,7 +652,9 @@ def test_enrollment_waits_out_the_restarted_orchestrator_before_its_fence(native
     clock = manual_clock(native)
     inventory, events = enrollment_fixture(native, {"config": 1, "inventory": 2})
     assert native.enroll() == {"changed": True}
-    assert events == ["config", "config", "inventory", "inventory", "inventory", "inventory", "node-1", "node-2", "node-3"]
+    assert events[:6] == ["config", "config", "inventory", "inventory", "inventory", "inventory"]
+    assert [value for value in events if value.startswith("node-")] == ["node-1", "node-2", "node-3"]
+    assert events[-1] == "inventory"
     assert [host["hostname"] for host in inventory] == ["node-1", "node-2", "node-3"]
     assert clock["value"] == 3 * ceph_native.MANAGER_INTERVAL
 

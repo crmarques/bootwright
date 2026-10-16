@@ -19,7 +19,6 @@ import (
 const HostImplementation = "storage-ceph-host-v1"
 const HostVersion = "ceph-host-v1"
 const HostEvidenceVersion = "ceph-host-evidence-v1"
-const PinnedCephadmSHA256 = "027222324b11d1af53b72b4ebb17134f58e477f63c39e9d07be40ba1fc2aabc1"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
 
@@ -70,7 +69,7 @@ func (r HostRequest) source() (int, bool) {
 }
 
 func HostContentDigest() string {
-	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + PinnedCephadmSHA256 + "\x00packages-pull-profile-route-devices-v1"))
+	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-pull-profile-route-devices-v2"))
 	return hex.EncodeToString(d[:])
 }
 
@@ -142,7 +141,7 @@ func (e HostEvidence) empty() bool {
 func (e HostEvidence) prepared(r HostRequest) bool {
 	host, ok := r.target()
 	if !ok || !e.Ready || e.Removed || !e.Route || !hex64(e.ImageID) || e.UID <= 0 || e.UID != e.GID || e.UID >= 65536 || e.Label != SharedLabel ||
-		!hex64(e.PolicySHA256) || e.CephadmSHA256 != PinnedCephadmSHA256 || !hex64(e.PlanDigest) || len(e.Devices) != len(host.Devices) {
+		!hex64(e.PolicySHA256) || !hex64(e.CephadmSHA256) || !hex64(e.PlanDigest) || len(e.Devices) != len(host.Devices) {
 		return false
 	}
 	for i, device := range host.Devices {
@@ -303,16 +302,16 @@ func hostRefusals() map[string]error {
 
 func packageRefusals() map[string]error {
 	return map[string]error{
-		"packages":            failure("lifecycle.unknown", "the Ceph host package preparation refused its request, source or result", "the adapter detail names the refusing step; check that the declared hosted RHEL DVD tree and the IBM Ceph repository serve the pinned release to the host, then apply again"),
+		"packages":            failure("lifecycle.unknown", "the Ceph host package preparation refused its request, source or result", "the adapter detail names the refusing step; check that the declared hosted RHEL DVD tree and the IBM Ceph repository serve the authored package selection to the host, then apply again"),
 		"package-artifact":    failure("lifecycle.unknown", "an installed Ceph package header does not match its authenticated payload", "inspect the host's RPM database for the frozen packages; a replaced package is never adopted"),
 		"package-drift":       failure("lifecycle.unknown", "the Ceph host's installed packages no longer match its completed package decision", "inspect the host's installed packages against the retained package decision; Bootwright never installs over a foreign inventory"),
 		"package-host":        failure("lifecycle.unknown", "the Ceph host's /var/lib/ceph tree is not owned and protected as its packages create it", "inspect the owner and mode of /var/lib/ceph and its directories on the host; a foreign or writable tree is never adopted"),
 		"package-journal":     failure("lifecycle.unknown", "the Ceph host's package journal is foreign, locked or contradicts the frozen decision", "inspect the host's package journal under /var/lib/ceph's owned markers; a foreign journal is never adopted"),
 		"package-license":     failure("lifecycle.unsupported", "the IBM Ceph package transaction requires the provider license acceptance", "review the provider license and declare Entitlement.spec.license.accept"),
 		"package-limit":       failure("lifecycle.unknown", "a Ceph package source served more than its bounded acquisition admits", "check that the declared package source serves the pinned repository metadata and payloads, not a larger tree"),
-		"package-platform":    failure("lifecycle.unsupported", "the Ceph host is not the pinned RHEL 9.8 x86_64 platform", "install the Machine with the owned RHEL 9.8 x86_64 DVD profile"),
+		"package-platform":    failure("lifecycle.unsupported", "the Ceph host does not provide the required RHEL x86_64 native package tooling", "install the Machine with the owned RHEL x86_64 DVD profile"),
 		"package-timeout":     failure("lifecycle.unknown", "the Ceph package acquisition did not finish within its bounded time", "check the host's reach to the declared package source and the IBM Ceph repository, then apply again; the package journal resumes"),
-		"package-resolution":  failure("lifecycle.unknown", "the frozen Ceph package set could not be resolved from the declared package sources", "check that the declared hosted RHEL DVD tree and the IBM Ceph repository serve the pinned release to the host; the adapter detail names the refusing step"),
+		"package-resolution":  failure("lifecycle.unknown", "the frozen Ceph package set could not be resolved from the declared package sources", "check that the declared hosted RHEL DVD tree and the IBM Ceph repository serve the authored package selection to the host; the adapter detail names the refusing step"),
 		"package-signature":   failure("lifecycle.unknown", "a Ceph package or publisher key is not the pinned signed artifact", "check that the package sources serve the pinned Red Hat and IBM publisher keys and payloads signed by them; an unsigned or foreign-signed package is never installed"),
 		"package-transaction": failure("lifecycle.unknown", "the native Ceph package transaction did not complete", "inspect the host's dnf log for the frozen transaction, then apply again; the package journal resumes only from the exact authenticated state"),
 	}
@@ -334,7 +333,7 @@ func hostMaterial(e lifecycle.Execution, r HostRequest, operation string, reader
 	if operation == "apply" {
 		index, _ := r.source()
 		files = append(files, lifecycle.MaterialFile{Name: "package-ca-" + host.Name, Secret: r.Cluster.Packages.Sources[index].CertificateRef, Part: secrets.CertificatePart, Variable: packageCertificateVariable(index)})
-		registry, err := imageRegistryMaterial(e, r.Cluster.RegistryRef)
+		registry, err := imageRegistryMaterial(e, r.Cluster.RegistryRef, r.Cluster.Registry)
 		if err != nil {
 			cleanup()
 			return e, nil, func() {}, err
@@ -366,7 +365,7 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 	}
 	defer cleanup()
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: HostImplementation, Operation: operation, Variable: "bootwright_ceph_host", Canonical: canonical,
-		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Refusals: hostRefusals(), Deadline: hostDeadline(operation)}))
+		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Refusals: hostRefusals(), NativeErrors: true, Deadline: hostDeadline(operation)}))
 }
 
 func (c HostCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {

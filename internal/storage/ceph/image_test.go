@@ -23,6 +23,9 @@ var resolvedDigest = "sha256:" + strings.Repeat("c", 64)
 func imageBlock(t *testing.T, cluster, authored string) reconciliation.Block {
 	t.Helper()
 	request := ImageRequest{Version: ImageVersion, Cluster: cluster, Controller: "controller", Release: PinnedRelease, Base: PinnedRepository, Tag: PinnedTag, Image: authored, Registry: PinnedRegistry, RegistryRef: "registry"}
+	if strings.Contains(authored, "@") {
+		request.Tag = ""
+	}
 	canonical, err := request.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -47,8 +50,12 @@ func resolvedEvidence(t *testing.T, request, digest string) json.RawMessage {
 func imageProof(t *testing.T, cluster, authored, digest string) lifecycle.BlockEvidence {
 	t.Helper()
 	block := imageBlock(t, cluster, authored)
+	evidence := resolvedEvidence(t, block.RequestDigest, digest)
+	if strings.Contains(authored, "@") {
+		evidence = bytes.Replace(evidence, []byte(`,"tag":"`+PinnedTag+`"`), nil, 1)
+	}
 	return lifecycle.BlockEvidence{Kind: block.Kind, Object: block.Object, Implementation: block.Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone,
-		Evidence: resolvedEvidence(t, block.RequestDigest, digest), Block: block}
+		Evidence: evidence, Block: block}
 }
 
 func TestPlanEmitsTheImageBlockEveryCephBlockDependsOn(t *testing.T) {
@@ -155,7 +162,7 @@ func TestPrepareRefusesMissingAmbiguousOrForeignResolution(t *testing.T) {
 			e.ApplyProved[0].Evidence = bytes.Replace(e.ApplyProved[0].Evidence, []byte(PinnedPlatform), []byte("linux/arm64"), 1)
 		},
 		"index-shaped digest": func(e *lifecycle.Execution) {
-			e.ApplyProved[0].Evidence = resolvedEvidence(t, e.ApplyProved[0].Block.RequestDigest, "sha256:"+strings.Repeat("0", 64))
+			e.ApplyProved[0].Evidence = resolvedEvidence(t, e.ApplyProved[0].Block.RequestDigest, "sha256:"+strings.Repeat("g", 64))
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -184,7 +191,8 @@ func TestAuthoredDigestMustEqualTheResolvedChildManifest(t *testing.T) {
 		t.Fatalf("index digest accepted: %v", diagnostics.Of(err))
 	}
 	block := imageBlock(t, "example", PinnedRepository+"@"+index)
-	runner := &recordingRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: resolvedEvidence(t, block.RequestDigest, resolvedDigest)}}
+	evidence := bytes.Replace(resolvedEvidence(t, block.RequestDigest, resolvedDigest), []byte(`,"tag":"`+PinnedTag+`"`), nil, 1)
+	runner := &recordingRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: evidence}}
 	result, err := NewImage(runner).Apply(context.Background(), imageExecution(block))
 	if d := diagnostics.Of(err); result.Outcome != reconciliation.OutcomeFailed || len(d) != 1 || !strings.Contains(d[0].Message, "image-digest-mismatch") || runner.calls != 1 {
 		t.Fatalf("resolution of another digest accepted: %+v %v", result, err)
@@ -208,6 +216,9 @@ func TestImageResolutionRunsOnTheControllerWithOnlyTheRegistryLoan(t *testing.T)
 		t.Fatalf("resolution refused: %+v %v", result, err)
 	}
 	sent := runner.request
+	if !sent.NativeErrors {
+		t.Fatal("Ceph invocation did not opt in to typed native errors")
+	}
 	if sent.Implementation != ImageImplementation || sent.Operation != "apply" || sent.Placement != (machine.Placement{Connection: machine.ConnectionLocal, Machine: "controller"}) ||
 		!bytes.Equal(sent.Canonical, block.Request) || sent.Deadline <= 0 || sent.Deadline > lifecycle.MaxDeadline {
 		t.Fatalf("resolution request %+v", sent)
@@ -301,4 +312,24 @@ type failingRunner struct {
 func (r *failingRunner) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	r.request = request
 	return lifecycle.RunResult{}, r.err
+}
+
+func TestRegistryLoanUsesTheSelectedRegistryWithoutSubstitution(t *testing.T) {
+	execution := imageExecution(imageBlock(t, "example", PinnedRepository+":"+PinnedTag))
+	material, err := imageRegistryMaterial(execution, "registry", "registry.example.test/selected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer material.Clear()
+	data, ok := material.Part(secrets.ValuePart)
+	if !ok {
+		t.Fatal("missing registry material")
+	}
+	var value map[string]string
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatal(err)
+	}
+	if value["url"] != "registry.example.test/selected" || value["username"] != "cp" || value["password"] != "entitlement-key" {
+		t.Fatal("selected registry material changed")
+	}
 }

@@ -30,8 +30,11 @@ CORE = {
     "action": "cluster",
     "bootstrap": "node-1",
     "callHome": "enabled",
-    "cephVersion": "20.2.1",
-    "cephadm": {"packageVersion": "20.2.1-405.el9cp", "path": "/usr/sbin/cephadm", "version": "20.2.1"},
+    "release": "synthetic-release",
+    "ansiblePackageVersion": "synthetic-tool",
+    "nfsGaneshaPackageVersion": "synthetic-nfs",
+    "packageRepository": "https://packages.example.test/selected",
+    "cephadm": {"packageVersion": "20.2.1-405.el9cp", "path": "/usr/sbin/cephadm"},
     "client": {"access": "rw", "name": "app", "pool": "data"},
     "cluster": "example",
     "clusterKeyRef": "cluster-key",
@@ -69,14 +72,14 @@ CORE = {
             "publicationPath": "/packages",
             "url": "https://192.0.2.9/packages",
         }],
-        "version": "ceph-packages-v1",
+        "version": "ceph-packages-v2",
     },
     "pool": {"crushRule": "replicated_rule", "minSize": 2, "name": "data", "pgNum": 32, "size": 2},
     "publicNetworks": ["192.0.2.0/24"],
     "registry": "cp.icr.io",
     "registryRef": "ibm-registry",
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
-    "version": "ceph-core-v4",
+    "version": "ceph-core-v5",
 }
 
 IMAGE = {
@@ -88,7 +91,7 @@ IMAGE = {
     "registryRef": "ibm-registry",
     "release": "9.9.1.2",
     "tag": "v9.9.1-25074",
-    "version": "ceph-image-v1",
+    "version": "ceph-image-v2",
 }
 
 HOST = {"cluster": CORE, "host": "node-1", "version": "ceph-host-v1"}

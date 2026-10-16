@@ -24,7 +24,8 @@ import time
 import types
 
 PREFIX = "ansible_collections.bootwright.core.plugins.module_utils"
-MODULES = ("ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native", "ceph_host_route_probe", "ceph_host_runtime")
+MODULES = ("native_diagnostics", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native",
+           "ceph_host_route_probe", "ceph_pull_broker", "ceph_host_runtime")
 MAX_INPUT = 2 << 20
 MAX_SOURCE = 1 << 20
 MAX_RESULT = 1 << 20
@@ -94,7 +95,7 @@ def cause(error):
             site = "%s.%s:%d" % (module[:40], function, min(trace.tb_lineno, 999999))
             caller = site if function != "require" else caller
         trace = trace.tb_next
-    if isinstance(error, ValueError) and type(error).__name__.endswith("Refusal") and len(error.args) == 1:
+    if isinstance(error, ValueError) and (type(error).__name__.endswith("Refusal") or type(error).__name__ == "NativeFailure") and len(error.args) == 1:
         reason = error.args[0]
         if isinstance(reason, str) and REFUSAL_CAUSE.match(reason):
             sited = "%s@%s" % (reason, caller)
@@ -109,6 +110,10 @@ def failure(reason, error):
     named = cause(error)
     if named is not None:
         value["cause"] = named
+    diagnostics = sys.modules.get(PREFIX + ".native_diagnostics")
+    native_error = getattr(error, "native_error", None)
+    if diagnostics is not None and diagnostics.valid(native_error):
+        value["nativeError"] = native_error
     return value
 
 
@@ -162,15 +167,19 @@ def result_bytes(value):
     if value["ok"]:
         require(set(value) == {"ok", "result"} and isinstance(value["result"], dict))
     else:
-        require(set(value) in ({"ok", "reason"}, {"ok", "reason", "cause"}) and value["reason"] in ("native-unknown", "native-refusal", "native-timeout"))
+        require({"ok", "reason"} <= set(value) <= {"ok", "reason", "cause", "nativeError"}
+                and value["reason"] in ("native-unknown", "native-refusal", "native-timeout"))
         require("cause" not in value or valid_cause(value["cause"]))
+        if "nativeError" in value:
+            from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
+            require(native_diagnostics.valid(value["nativeError"]))
     data = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
     require(0 < len(data) <= MAX_RESULT)
     return data
 
 
 def work(started=None, ceiling=REMOTE_LIMIT, loader=load):
-    """No vendor output, exception text, request or credentials are returned."""
+    """Only typed evidence, attested causes and bounded redacted native errors return."""
     started = time.monotonic() if started is None else started
     quiet = os.open(os.devnull, os.O_WRONLY | os.O_CLOEXEC)
     previous_alarm = None

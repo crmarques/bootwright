@@ -19,7 +19,7 @@ import time
 from ansible_collections.bootwright.core.plugins.module_utils import (
     adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_observe, ceph_native_worker,
     ceph_package_sources, ceph_package_worker, ceph_packages, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody,
-    native_apply, native_resolution, native_signatures,
+    native_apply, native_diagnostics, native_resolution, native_signatures, ceph_pull_broker,
 )
 
 READINESS_TIMEOUT = 900
@@ -100,7 +100,7 @@ def refusal(error, reasons):
         token = named[-1].partition("@")[0] if named[0] == "native-refusal" else named[0]
         return (token if token in reasons else "remote-refusal"), error.detail or None
     detail = ceph_native_worker.cause(error)
-    if isinstance(error, ValueError) and type(error).__name__.endswith("Refusal"):
+    if isinstance(error, ceph_native.Refusal):
         return (str(error) if str(error) in reasons else "unknown"), detail
     return "adapter-exception", detail
 
@@ -258,6 +258,9 @@ class Transport:
             ceph_native.private_write(known, ceph_native.read_regular(self.material["knownHosts"], private=True))
             argv = ssh_argv(host, key, known, source, worker_budget, worker_ceiling=worker_ceiling)
             sources = dict(payload.get("sources", {})) if isinstance(payload, dict) else {}
+            private = payload.get("payload", {}).get("private", {}) if isinstance(payload, dict) else {}
+            private = native_diagnostics.private_values(private)
+            private.extend(ceph_native.read_regular(path, private=True) for path in self.material.values())
             payload = ceph_native.canonical(payload)
             ceph_native.require(len(payload) <= ceph_native.MAX_INPUT, "material")
             code, output = self.run(argv, data=payload, timeout=timeout)
@@ -270,28 +273,37 @@ class Transport:
         if not result["ok"]:
             # Native reasons are not arbitrary strings to be reflected: only a
             # closed reason and a cause the shipped sources attest travel.
-            ceph_native.require(set(result) in ({"ok", "reason"}, {"ok", "reason", "cause"})
+            ceph_native.require({"ok", "reason"} <= set(result) <= {"ok", "reason", "cause", "nativeError"}
                                 and result["reason"] in failures, "transport")
             shipped = dict(sources, ceph_native_worker=inspect.getsource(ceph_native_worker))
             ceph_native.require("cause" not in result or ceph_native_worker.attested(result["cause"], shipped), "transport")
-            raise ceph_native.RemoteRefusal(result["reason"] + (":" + result["cause"] if "cause" in result else ""))
+            error = ceph_native.RemoteRefusal(result["reason"] + (":" + result["cause"] if "cause" in result else ""))
+            if "nativeError" in result:
+                ceph_native.require(native_diagnostics.valid(result["nativeError"]), "transport")
+                value = result["nativeError"]
+                error.native_error = native_diagnostics.error_detail(value["coordinate"], value["cause"], secrets=private)
+            raise error
         ceph_native.require(set(result) == {"ok", "result"} and isinstance(result["result"], dict), "transport")
         return result["result"]
 
     @staticmethod
     def native_sources():
-        modules = (ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native, ceph_host_route_probe, ceph_host_runtime)
+        modules = (native_diagnostics, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native, ceph_host_route_probe,
+                   ceph_pull_broker, ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
 
-    def call(self, host, phase, private=None, *, timeout=660, devices=None):
+    def call(self, host, phase, private=None, *, timeout=660, devices=None, service=None):
         ceph_native.require(type(timeout) in (int, float) and 0 < timeout <= 660, "transport")
         ceph_native.require(phase != "profile" and (devices is None or phase == "services"), "transport")
+        ceph_native.require(service is None or phase == "services" and type(service) is int and 0 <= service < len(self.request["services"]), "transport")
         budget = min(640, timeout - 2) if timeout > 2 else timeout / 2
         payload = {"request": self.request, "host": host["name"], "phase": phase, "private": private or {}}
         if devices is not None:
             payload["devices"] = devices
+        if service is not None:
+            payload["service"] = service
         if phase == "bootstrap":
             # The cluster's one long call: cephadm restarts its manager several times before bootstrap returns.
             source = bootstrap_launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
@@ -319,8 +331,8 @@ class Transport:
         material = "packageCA" + str(index)
         ceph_native.require(material in self.material, "material")
         certificate = ceph_native.read_regular(self.material[material], private=True).decode("utf-8")
-        modules = (ceph_native_worker, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native, native_resolution,
-                   native_signatures, native_apply, ceph_package_sources, ceph_crypto_policy, ceph_packages)
+        modules = (native_diagnostics, ceph_native_worker, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
+                   native_resolution, native_signatures, native_apply, ceph_package_sources, ceph_crypto_policy, ceph_packages)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         result = self._call(host, inspect.getsource(ceph_package_worker),
                             {"sources": sources, "payload": {"request": self.request, "host": host["name"], "private": {"certificate": certificate}}}, 1980,
@@ -449,7 +461,7 @@ def recovery_preparations(request, values):
 
 
 def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
-    """Advance only missing proved initial transitions, never partial enrollment."""
+    """Resume only exact owned native transitions with their retained intents."""
     stage = ceph_tunnel_staging.prove_recovery_record(request, bootstrap["name"], state, evidence=True)
     ceph_native.require(stage != "complete", "partial-cluster")
     stages = recovery_preparations(request, preparations)
@@ -475,14 +487,22 @@ def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
         changed = transport.call(bootstrap, "bootstrap", ssh)["changed"] or changed
     if fresh or stage == "seed":
         changed = transport.call(bootstrap, "tunnel_configure", ssh)["changed"] or changed
-    if stage != "mounted":
+    if stage not in ("mounted", "enrolling"):
         changed = transport.call(bootstrap, "tunnel_mount")["changed"] or changed
     for host in [bootstrap] + [host for host in request["hosts"] if host != bootstrap]:
         changed = transport.call(host, "cache")["changed"] or changed
     changed = transport.call(bootstrap, "enroll")["changed"] or changed
     for host in request["hosts"]:
         transport.call(host, "devices")
-    return transport.call(bootstrap, "services", devices=device_identities(request, transport))["changed"] or changed
+    devices = device_identities(request, transport)
+    for index, service in enumerate(request["services"]):
+        if service["service_type"] == "osd":
+            names = set(service["placement"]["hosts"])
+            for host in request["hosts"]:
+                if host["name"] in names:
+                    changed = transport.call(host, "osd_prepare")["changed"] or changed
+        changed = transport.call(bootstrap, "services", devices=devices, service=index)["changed"] or changed
+    return changed
 
 
 def device_identities(request, transport):

@@ -57,7 +57,6 @@ func TestPackageSourcesUseOwnedDVDAndDeclaredVerifiedListener(t *testing.T) {
 	entitlement, _ := catalog.Find(api.Entitlement, "ibm")
 	for _, replacement := range []api.Object{
 		entitlement.WithSpec(entitlement.Spec().WithPath(api.BoolValue(false), "license", "accept")),
-		profile.WithSpec(profile.Spec().WithPath(api.StringValue("10.2"), "os", "version")),
 		profile.WithSpec(profile.Spec().WithPath(api.StringValue("https://other.example.test/dvd.iso"), "installer", "anaconda", "packageSource", "hostedTree", "fromMedia")),
 		server.WithSpec(server.Spec().WithPath(api.ListValue(requestMap("name", "http", "listenerRef", "http", "addressRef", "ip")), "endpoints")),
 		server.WithSpec(server.Spec().WithPath(api.StringValue(""), "tls", "secretRef")),

@@ -73,16 +73,17 @@ func TestCoreCephConfigPreservesExplicitNativeOptionsAndRefusesUnqualifiedEffect
 	}
 }
 
-func TestCoreCephConfigRequiresItsReleaseRecordAndJoinsAdmission(t *testing.T) {
+func TestCoreCephConfigIsIndependentOfReleaseAndJoinsAdmission(t *testing.T) {
 	for _, path := range []string{"distribution", "release", "packageVersion"} {
 		input := memoryCeph(memoryOptions("2147483648")).With(path, api.StringValue("unqualified"))
 		_, issues := CoreCephConfig(input)
-		requireIssue(t, issues, "$.spec.ceph.config")
+		if len(issues) != 0 {
+			t.Fatal(issues)
+		}
 	}
 	catalog := fixtureCatalog()
 	cluster := find(t, catalog, api.StorageCluster, "storage")
 	changed := cluster.WithSpec(cluster.Spec().WithPath(memoryOptions("2147483648"), "ceph", "config"))
-	requireIssue(t, Validate(changed, replace(catalog, changed)), "$.spec.ceph.config")
 	qualified := changed.Spec().Get("ceph").With("distribution", api.StringValue("ibm")).With("release", api.StringValue("9.9.1.2")).With("packageVersion", api.StringValue("20.2.1-405.el9cp"))
 	a := admission{}
 	a.clusterServices(qualified)

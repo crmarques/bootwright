@@ -190,7 +190,7 @@ func TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem(t *testing.
 		t.Fatalf("proof without evidence = %+v (%v) after reads %v", proof, err, reader.reads)
 	}
 	digest := "sha256:" + strings.Repeat("e", 64)
-	image, err := json.Marshal(ceph.ImageEvidence{Postcondition: true, Release: ceph.PinnedRelease, Base: ceph.PinnedRepository, Tag: ceph.PinnedTag, Digest: digest, Platform: ceph.PinnedPlatform, Request: "digest"})
+	image, err := json.Marshal(ceph.ImageEvidence{Postcondition: true, Release: "9.9.1.2", Base: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9", Tag: "v9.9.1-25074", Digest: digest, Platform: ceph.PinnedPlatform, Request: "digest"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -35,6 +35,10 @@ func encodingFailure(ctx context.Context, err error) error {
 func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path string, result commandResult) (bool, error) {
 	out, errOut := r.config.Out, r.config.ErrOut
 	switch path {
+	case "preflight storage-cluster":
+		if result.storagePreflight != nil {
+			return true, writeStoragePreflight(out, errOut, path, result.storagePreflight, nil, 0, selectedJSON(command))
+		}
 	case "setup", "preflight controller":
 		if path == "setup" && validSetupDownload(result.controller) {
 			return true, writeSetupDownload(out, result.controller)

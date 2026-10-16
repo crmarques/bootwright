@@ -14,7 +14,7 @@ import sys
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_worker, ceph_package_worker, ceph_packages,
+    ceph_core, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_worker, ceph_package_worker, ceph_packages, native_diagnostics,
 )
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_host_runtime as host_fixtures
 
@@ -25,7 +25,7 @@ PASSWORD = "REGISTRY-PASSWORD-SENTINEL"
 @pytest.fixture
 def host_request(request_value):
     cluster = copy.deepcopy(request_value)
-    cluster["packages"] = {"version": "ceph-packages-v1", "licenseAccepted": True, "sources": [
+    cluster["packages"] = {"version": "ceph-packages-v2", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"}
@@ -40,7 +40,7 @@ def prepared_evidence(request, **changes):
     cluster = request["cluster"]
     value = {"version": ceph_host_runtime.EVIDENCE_VERSION, "host": request["host"], "owner": cluster["owner"], "fsid": cluster["fsid"],
              "image": cluster["image"], "ready": True, "removed": False, "imageID": "c" * 64, "uid": 167, "gid": 167,
-             "label": ceph_host_runtime.SHARED_LABEL, "policySHA256": "f" * 64, "cephadmSHA256": ceph_host_runtime.CEPHADM_SHA256,
+             "label": ceph_host_runtime.SHARED_LABEL, "policySHA256": "f" * 64, "cephadmSHA256": "e" * 64,
              "planDigest": "a" * 64, "route": True,
              "devices": [{"path": "/dev/sda", "serial": "drive-scsi2", "deviceID": "QEMU_QEMU_HARDDISK_drive-scsi2"}]}
     value.update(changes)
@@ -201,6 +201,7 @@ def test_the_long_launcher_admits_only_the_profile_phase(phase):
 
 def test_the_long_launcher_raises_only_its_own_ceiling():
     sources = {name: '"""Fixed fixture."""\n' for name in ceph_native_worker.MODULES}
+    sources["native_diagnostics"] = inspect.getsource(native_diagnostics)
     sources["ceph_native"] = "class Refusal(ValueError): pass\ndef dispatch(value):\n    return {'phase': value['phase']}\n"
     source = ceph_host_worker.launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
     for phase, expected in (("profile", {"ok": True, "result": {"phase": "profile"}}), ("route", {"ok": False, "reason": "native-refusal"})):
@@ -258,6 +259,7 @@ def test_a_package_failure_outside_the_workers_closed_set_is_transport(host_requ
 
 def test_the_package_worker_names_only_its_closed_tokens_and_their_site():
     bundle = {name: '"""Fixed test helper."""\n' for name in ceph_package_worker.MODULES}
+    bundle["native_diagnostics"] = inspect.getsource(native_diagnostics)
     bundle["ceph_native_worker"] = inspect.getsource(ceph_native_worker)
     bundle["ceph_packages"] += "class Refusal(ValueError):\n pass\n\ndef entrypoint(payload):\n raise Refusal(payload)\n"
     source = inspect.getsource(ceph_package_worker)

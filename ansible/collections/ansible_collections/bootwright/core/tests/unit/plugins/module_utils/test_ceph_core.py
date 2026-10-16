@@ -28,9 +28,11 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v4", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v5", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
-            "cephadm": {"path": "/usr/sbin/cephadm", "version": "20.2.1", "packageVersion": "20.2.1-405.el9cp"}, "cephVersion": "20.2.1", "bootstrap": "node-1",
+            "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
+            "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
+            "packageRepository": "https://packages.example.test/native", "bootstrap": "node-1",
             "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "native", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
             "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names}}, {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
@@ -174,7 +176,7 @@ def test_unqualified_or_unbounded_input_never_executes(core_request, change):
 
 @pytest.mark.parametrize("operation", ["apply", "destroy"])
 @pytest.mark.parametrize("change", [
-    {}, {"clusterSSHTransport": "verified-tunnel", "image": ceph_native.PINNED_REPOSITORY.replace("ceph-9", "ceph-8") + "@sha256:" + "a" * 64},
+    {}, {"clusterSSHTransport": "native"},
 ])
 def test_an_unsupported_release_refuses_before_any_transport(core_request, operation, change):
     class NoTransport:
@@ -184,13 +186,13 @@ def test_an_unsupported_release_refuses_before_any_transport(core_request, opera
         def packages(self, *args):
             pytest.fail("an unsupported release staged packages")
 
-    core_request.update({"image": ceph_native.PINNED_REPOSITORY + "@sha256:" + "a" * 64, "registry": "cp.icr.io"}, **change)
+    core_request.update({"image": "registry.example.test/ceph" + "@sha256:" + "a" * 64, "registry": "registry.example.test"}, **change)
     with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
         ceph_core.execute(core_request, operation, "d" * 64, NoTransport())
 
 
 def test_remote_dispatch_cannot_bypass_the_pinned_release(core_request):
-    core_request.update(image=ceph_native.PINNED_REPOSITORY + "@sha256:" + "a" * 64, registry="cp.icr.io")
+    core_request.update(image="registry.example.test/ceph" + "@sha256:" + "a" * 64, registry="registry.example.test")
     with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
         ceph_native.dispatch({"request": core_request, "host": "node-1", "phase": "claim", "private": {}})
 
@@ -277,7 +279,7 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
         assert set(envelope) == {"sources", "payload", "budget"}
         assert envelope["payload"]["private"] == {"registryJSON": "REGISTRY-SECRET-SENTINEL"}
         assert set(envelope["sources"]) == {"ceph_native", "ceph_native_observe", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody",
-                                            "ceph_host_route_probe", "ceph_host_runtime"}
+                                            "ceph_host_route_probe", "ceph_host_runtime", "native_diagnostics", "ceph_pull_broker"}
         assert 0 < envelope["budget"] <= min(640, timeout - 1)
         return 0, b'{"ok":true,"result":{"changed":false}}'
 
@@ -359,13 +361,21 @@ def pool_world(core_request, pools, effects):
             return 0, json.dumps({"rule_id": 0, "rule_name": "replicated_rule"}).encode()
         effects.append(command)
         if command[:3] == ("osd", "pool", "create"):
-            pools.append({"pool_name": command[3], "pool_id": 8, "type": 1, "crush_rule": 0, "pg_num": int(command[4])})
+            pools.append({"pool_name": command[3], "pool_id": 8, "type": 1, "crush_rule": 0, "pg_num": int(command[4]),
+                          "size": 3, "min_size": 2, "application_metadata": {}})
+        if command[:3] == ("osd", "pool", "set"):
+            pools[0][command[4]] = int(command[5])
+        if command[0] == "/usr/bin/rbd":
+            pools[0]["application_metadata"] = {"rbd": {}}
         return 0, b""
     return run
 
 
 def pool_worker(core_request, marks, pools, effects):
     core_request.update(action="pool", pool={"name": "volumes", "size": 2, "minSize": 2, "pgNum": 32, "crushRule": "replicated_rule"})
+    for value in pools:
+        value.setdefault("size", 3)
+        value.setdefault("min_size", 2)
     native = ceph_native.Worker(core_request, core_request["bootstrap"], run=pool_world(core_request, pools, effects), markers=marks)
     return native
 
@@ -800,36 +810,50 @@ def test_config_database_is_reproved_immediately_before_services(core_request):
     core_request["config"] = memory_config()
     native, calls = worker(core_request, {("fsid",): {"fsid": core_request["fsid"]}, ("config", "dump"): memory_database(),
                                           ("orch", "apply", "-i", "-"): (0, b"")})
+    records = {}
+    native.recovery_scope = lambda: {"cluster": copy.deepcopy(core_request)}
+    native.normalized_services = lambda groups: groups
+    native.service_specs = lambda: copy.deepcopy(records)
+
+    def effect(*args, **kwargs):
+        native.ceph(*args, **kwargs)
+        value = json.loads(kwargs["data"])
+        records[value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")] = value
+
+    native.tunnel_effect = effect
     assert native.services() == {"changed": True}
-    assert [argv[argv.index("--format") + 2:] for argv in calls] == [["fsid"], ["config", "dump"], ["orch", "apply", "-i", "-"]]
-    assert native.markers.writes == []
+    assert [argv[argv.index("--format") + 2:] for argv in calls[:2]] == [["fsid"], ["config", "dump"]]
+    assert len(records) == 5
 
 
 def test_services_preserve_native_mappings_as_separate_yaml_documents(core_request):
     original = copy.deepcopy(core_request)
     received = []
+    observed = {}
 
     def run(argv, data=b"", timeout=60):
         del timeout
         command = argv[argv.index("--format") + 2:]
         if command == ["fsid"]:
-            assert not data
             return 0, json.dumps({"fsid": core_request["fsid"]}).encode()
+        if command == ["orch", "ls", "--export"]:
+            return 0, json.dumps(list(observed.values())).encode()
         assert command == ["orch", "apply", "-i", "-"]
-        # IBM's native CLI uses safe_load_all and requires every document to
-        # be a mapping accepted by ServiceSpec.from_json.
         documents = list(yaml.safe_load_all(data))
-        assert documents and all(isinstance(document, dict) for document in documents)
-        assert documents == core_request["services"]
+        assert len(documents) == 1 and isinstance(documents[0], dict)
+        value = documents[0]
+        observed[value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")] = value
         received.append(data)
         return 0, b"Scheduled service update\n"
 
     native = ceph_native.Worker(core_request, core_request["bootstrap"], run=run, markers=Markers())
     native.prove_registry = lambda: None
     native.provider_registry_absent = lambda: None
+    native.recovery_scope = lambda: {"cluster": copy.deepcopy(core_request)}
+    native.normalized_services = lambda groups: groups
     assert native.services() == {"changed": True}
-    assert len(received) == 1 and received[0].endswith(b"\n")
-    assert core_request == original and native.markers.writes == []
+    assert len(received) == 5 and all(value.endswith(b"\n") for value in received)
+    assert core_request == original
 
 
 def test_owned_bootstrap_recovers_interrupted_call_home_acknowledgement(core_request, monkeypatch):
@@ -1284,7 +1308,7 @@ class ReadinessTransport:
         return {"clusterPublicKey": "owned-cluster-public-key", "clusterPrivateKey": "owned-private-key", "knownHosts": "owned-host-keys",
                 "registryJSON": "protected-registry-material"}
 
-    def call(self, host, phase, private=None, *, timeout=None, devices=None):
+    def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
         del private
         self.calls.append((host["name"], phase, timeout))
         if phase == "services":
@@ -1319,12 +1343,12 @@ class ReadinessTransport:
             return {"name": host["name"], "owned": True, "exists": True}
         if phase == "dashboard":
             return {"changed": True, "private": PASSWORD}
-        assert phase in ("prerequisites", "devices", "claim", "authorize", "bootstrap", "cache", "enroll", "services")
+        assert phase in ("prerequisites", "devices", "claim", "authorize", "bootstrap", "cache", "enroll", "services", "osd_prepare")
         return {"changed": phase not in ("prerequisites", "devices")}
 
 
 def package_intent(core_request):
-    core_request["packages"] = {"version": "ceph-packages-v1", "licenseAccepted": True, "sources": [
+    core_request["packages"] = {"version": "ceph-packages-v2", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "publicationPath": "/private/example/os-tree",
          "url": "https://192.0.2.10:8443/os/rhel/tree", "certificateRef": "serving-tls"}
         for host in core_request["hosts"]]}
@@ -1358,7 +1382,7 @@ def test_registry_material_only_reaches_each_hosts_authorization(core_request, m
     private_calls = []
 
     class ProjectionTransport(ReadinessTransport):
-        def call(self, host, phase, private=None, *, timeout=None, devices=None):
+        def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
             if mode == "verified-tunnel" and phase == "prerequisites":
                 self.calls.append((host["name"], phase, timeout))
                 return {"name": host["name"], "owned": False, "exists": False,
@@ -1373,7 +1397,7 @@ def test_registry_material_only_reaches_each_hosts_authorization(core_request, m
             if phase in ("tunnel_configure", "tunnel_mount"):
                 self.calls.append((host["name"], phase, timeout))
                 return {"changed": True}
-            return super().call(host, phase, private, timeout=timeout, devices=devices)
+            return super().call(host, phase, private, timeout=timeout, devices=devices, service=service)
 
     transport = ProjectionTransport(core_request, clock)
     monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
@@ -1451,7 +1475,7 @@ def test_partial_existing_cluster_is_never_adopted_or_rebootstrapped(core_reques
     clock = ReadinessClock()
 
     class PartialTransport(ReadinessTransport):
-        def call(self, host, phase, private=None, *, timeout=None, devices=None):
+        def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
             if phase == "observe":
                 self.calls.append((host["name"], phase, timeout))
                 value = observation(self.request, ready=True)
@@ -1532,13 +1556,13 @@ class UnsettledTransport(ReadinessTransport):
         super().__init__(request, clock, ready_after=1)
         self.phase, self.host, self.unsettled, self.detail = phase, host, polls, detail
 
-    def call(self, host, phase, private=None, *, timeout=None, devices=None):
+    def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
         if phase == self.phase and host["name"] == self.host and self.unsettled:
             self.calls.append((host["name"], phase, timeout))
             self.unsettled -= 1
             self.clock.value += 10
             raise ceph_native.RemoteRefusal(self.detail)
-        return super().call(host, phase, private, timeout=timeout, devices=devices)
+        return super().call(host, phase, private, timeout=timeout, devices=devices, service=service)
 
 
 @pytest.mark.parametrize("phase,host", [("observe", "node-1"), ("host_state", "node-2")])
@@ -1640,6 +1664,9 @@ def test_the_bootstrap_call_runs_alone_under_its_own_longer_budget(core_request,
 
 def test_the_bootstrap_launcher_admits_only_bootstrap_within_its_ceiling():
     sources = {name: '"""Fixed fixture."""\n' for name in ceph_native_worker.MODULES}
+    from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
+    sources["native_diagnostics"] = inspect.getsource(native_diagnostics)
+    sources["native_diagnostics"] = "def valid(value): return False\n"
     sources["ceph_native"] = "class Refusal(ValueError): pass\ndef dispatch(value):\n    return {'phase': value['phase']}\n"
     source = ceph_core.bootstrap_launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
     for phase, budget, expected in (("bootstrap", 3, {"ok": True, "result": {"phase": "bootstrap"}}), ("profile", 3, {"ok": False, "reason": "native-refusal"}),

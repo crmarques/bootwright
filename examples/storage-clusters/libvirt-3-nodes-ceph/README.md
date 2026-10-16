@@ -100,6 +100,14 @@ Each guest downloads the whole image on its own, so allow bandwidth and disk cap
 
 `status` and `diff` without `--observe` read local records; `diff --observe` reads live targets without changing them. Repeating a completed apply with identical input settles from records and performs no repair.
 
+Run `./bin/bootwright preflight storage-cluster` after guest installation to
+inspect capacity and guest prerequisites. The provider's reserve values are
+example host headroom; set them deliberately for your host. Missing or unknown
+capacity cannot authorize managed Ceph apply. Preflight does not install or
+repair prerequisites. Version coordinates in this example are authored choices,
+not the only accepted versions. Optional `ceph.nfsGanesha.packageVersion`
+selects its signed package without enabling NFS orchestration.
+
 ## Validate the cluster
 
 `cluster info` prints the cluster's release, FSID, frozen image digest, monitors, admin node and its Ceph command (`cephCommand`), the line that runs `ceph` on the admin node with the administrator configuration and keyring that apply keeps there. It reads local evidence and contacts no host.

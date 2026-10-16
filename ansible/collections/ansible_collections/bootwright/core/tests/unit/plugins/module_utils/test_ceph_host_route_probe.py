@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -102,10 +101,11 @@ def test_mutable_synthetic_mount_refuses_before_reading_material(tmp_path, monke
         PROBE.read_synthetic(os.geteuid(), os.getegid())
 
 
-def test_provider_source_must_match_authenticated_bytes_before_execution(tmp_path, monkeypatch):
+def test_mutable_provider_source_refuses_before_execution(tmp_path, monkeypatch):
     effect = tmp_path / "effect"
     source = tmp_path / "ssh.py"
     source.write_text("open(" + repr(str(effect)) + ", 'w').write('unexpected source')\n")
+    source.chmod(0o666)
     monkeypatch.setattr(PROBE, "PROVIDER_SOURCE", str(source))
     with pytest.raises(PROBE.Refusal):
         PROBE.provider_module()
@@ -120,7 +120,6 @@ def test_provider_import_stubs_are_only_error_bookkeeping_and_are_restored(tmp_p
     sentinel = types.ModuleType("orchestrator")
     monkeypatch.setitem(sys.modules, "orchestrator", sentinel)
     monkeypatch.setattr(PROBE, "PROVIDER_SOURCE", str(source))
-    monkeypatch.setattr(PROBE, "PROVIDER_SHA256", hashlib.sha256(raw).hexdigest())
     module = PROBE.provider_module()
     assert module.normalized == "route-target" and module.error is PROBE.Refusal
     assert sys.modules["orchestrator"] is sentinel

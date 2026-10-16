@@ -261,7 +261,7 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	}
 	usage := diagnostics.IsUsage(err)
 	if diagnostics := diagnostics.Of(err); len(diagnostics) != 0 {
-		if handled, presentErr := r.writeNegativeSecretCheck(command, path, result, diagnostics); handled {
+		if handled, presentErr := r.writeNegativeReadinessResults(command, path, result, diagnostics); handled {
 			if presentErr != nil {
 				return 1
 			}

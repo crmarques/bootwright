@@ -26,7 +26,7 @@ IMAGE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}\Z")
 SCRATCH = re.compile(r"\.(?:bootstrap|tunnel-stage)-[a-zA-Z0-9_-]{1,64}\Z")
 MAX_METADATA = 4096
 MAX_SSHD_CONFIG = 256 * 1024
-RECOVERY_STAGES = frozenset(("unclaimed", "claimed", "prepared", "seed", "configured", "mounted", "complete"))
+RECOVERY_STAGES = frozenset(("unclaimed", "claimed", "prepared", "seed", "configured", "mounted", "enrolling", "complete"))
 
 
 class StageRefusal(ValueError):
@@ -49,7 +49,7 @@ def named(value):
 def bindings(request):
     """Validate the staging subset without inferring ownership from native names."""
     require(isinstance(request, dict))
-    require(request.get("version") == "ceph-core-v4" and request.get("clusterSSHTransport") == "verified-tunnel")
+    require(request.get("version") == "ceph-core-v5" and request.get("clusterSSHTransport") == "verified-tunnel")
     require(named(request.get("owner")) and named(request.get("bootstrap")))
     fsid = request.get("fsid")
     try:
@@ -58,9 +58,9 @@ def bindings(request):
         raise StageRefusal("native-tunnel-stage-unproved") from None
     require(isinstance(request.get("image"), str) and IMAGE.fullmatch(request["image"]) is not None)
     tool = request.get("cephadm")
-    require(isinstance(tool, dict) and set(tool) == {"path", "version", "packageVersion"})
+    require(isinstance(tool, dict) and set(tool) == {"path", "packageVersion"})
     require(tool["path"] in ("/usr/sbin/cephadm", "/usr/bin/cephadm"))
-    require(tool["version"] == "20.2.1" and tool["packageVersion"] == "20.2.1-405.el9cp")
+    require(isinstance(tool["packageVersion"], str) and 0 < len(tool["packageVersion"].encode()) <= 512 and "\x00" not in tool["packageVersion"])
     hosts = request.get("hosts")
     require(isinstance(hosts, list) and 1 <= len(hosts) <= 256)
     result, names, machines, addresses, stems = [], set(), set(), set(), set()
@@ -164,7 +164,7 @@ def bootstrap_argv(request, scratch):
     argv = [request["cephadm"]["path"], "--image", request["image"], "bootstrap",
             "--fsid", request["fsid"], "--mon-id", intent["monID"], "--mgr-id", intent["mgrID"],
             "--mon-ip", request["monIP"], "--output-dir", marker_path(request),
-            "--skip-ssh", "--skip-monitoring-stack", "--skip-dashboard",
+            "--skip-ssh", "--skip-prepare-host", "--skip-monitoring-stack", "--skip-dashboard",
             "--skip-admin-label", "--allow-fqdn-hostname", "--no-cleanup-on-failure",
             "--config", os.path.join(scratch, "ceph.conf"), "--automatically-accept-license"]
     networks = request.get("clusterNetworks")

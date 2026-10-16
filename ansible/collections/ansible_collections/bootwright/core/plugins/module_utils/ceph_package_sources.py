@@ -22,11 +22,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
 
 IBM_BASE = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64"
 IBM_KEY = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH"
-ROOT_HASHES = {
-    "cephadm": "7acf50c99cf3263c64a103476dcf67a3fd93a7b918472db7df660541ea987287",
-    "ceph-common": "dc4d5846497d5ec849e1d08f73f9ba6b4d4b202107a884df2fc26a518dd200dc",
-    "ibm-storage-ceph-license": "bf6e3a92ac2c38de9cb0a747bfb4afac49b8b227222394396d71a9128c21f65f",
-}
+PROVIDER_ROOTS = {"cephadm", "ceph-common", "cephadm-ansible", "nfs-ganesha", "ibm-storage-ceph-license"}
+
 NAMESPACE = "{http://linux.duke.edu/metadata/repo}"
 METADATA_TYPES = {"primary", "filelists", "modules", "group", "group_gz", "updateinfo", "other"}
 # Every createrepo comps member names its external DTD; only that exact prolog is admitted.
@@ -41,7 +38,7 @@ def source_for(request, host):
     ceph_native.validate(request)
     package = request.get("packages")
     ceph_native.require(isinstance(package, dict) and set(package) == {"version", "licenseAccepted", "sources"}, "packages")
-    ceph_native.require(package["version"] == "ceph-packages-v1" and package["licenseAccepted"] is True, "packages")
+    ceph_native.require(package["version"] == "ceph-packages-v2" and package["licenseAccepted"] is True, "packages")
     sources = package["sources"]
     ceph_native.require(isinstance(sources, list) and len(sources) == len(request["hosts"]), "packages")
     names = []
@@ -63,7 +60,6 @@ def source_for(request, host):
         if source["host"] == host:
             selected = source
     ceph_native.require(names == sorted(h["name"] for h in request["hosts"]) and selected is not None, "packages")
-    ceph_native.require(request["cephadm"]["packageVersion"] == "20.2.1-405.el9cp", "packages")
     return selected
 
 
@@ -92,8 +88,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 class Acquisition:
     """Never use ambient proxies, redirect credentials or unverified HTTPS."""
 
-    def __init__(self, source, certificate, budget=1800):
+    def __init__(self, source, certificate, budget=1800, *, repository=IBM_BASE):
         ceph_native.require(isinstance(certificate, str) and 0 < len(certificate.encode()) <= 1 << 20, "material")
+        self.repository_base = safe_url(repository).rstrip("/")
         self.source = source
         self.deadline = time.monotonic() + budget
         self.total = 0
@@ -108,7 +105,7 @@ class Acquisition:
     def stream(self, url, output, limit, expected=None, size=None):
         safe_url(url)
         prefix = self.source["url"].rstrip("/") + "/"
-        ceph_native.require(url.startswith(prefix) or url.startswith(IBM_BASE + "/") or url == IBM_KEY, "packages")
+        ceph_native.require(url.startswith(prefix) or url.startswith(self.repository_base + "/") or url == IBM_KEY, "packages")
         remaining = self.deadline - time.monotonic()
         ceph_native.require(remaining > 0, "package-timeout")
         opener = self.local if url.startswith(prefix) else self.public
@@ -218,7 +215,7 @@ class Acquisition:
         metadata = self.bytes(child_url(self.source["url"], ".treeinfo"), 1 << 20)
         tree = configparser.ConfigParser(interpolation=None, strict=True)
         tree.read_string(metadata.decode("utf-8"))
-        ceph_native.require(tree.get("general", "family") == "Red Hat Enterprise Linux" and tree.get("general", "version") in ("9.8", "9.8.0")
+        ceph_native.require(tree.get("general", "family") == "Red Hat Enterprise Linux" and bool(tree.get("general", "version"))
                             and tree.get("general", "arch") == "x86_64", "packages")
         ceph_native.require(tree.get("tree", "arch") == "x86_64"
                             and {"BaseOS", "AppStream"} <= {variant.strip() for variant in tree.get("tree", "variants").split(",")}, "packages")
@@ -231,15 +228,15 @@ class Acquisition:
         return [
             self.repository(scratch, "rhel-baseos", repositories["BaseOS"], native_signatures.RHEL_SIGNER),
             self.repository(scratch, "rhel-appstream", repositories["AppStream"], native_signatures.RHEL_SIGNER),
-            self.repository(scratch, "ibm-storage-ceph-9", IBM_BASE, native_signatures.IBM_CEPH_SIGNER),
+            self.repository(scratch, "ibm-storage-ceph", self.repository_base, native_signatures.IBM_CEPH_SIGNER),
         ]
 
     def payloads(self, scratch, plan):
         result = {}
         for package in plan["packages"]:
             source = package["source"]
-            if package["name"] in ROOT_HASHES:
-                ceph_native.require(package["signer"] == native_signatures.IBM_CEPH_SIGNER and source["sha256"] == ROOT_HASHES[package["name"]], "packages")
+            if package["name"] in PROVIDER_ROOTS:
+                ceph_native.require(package["signer"] == native_signatures.IBM_CEPH_SIGNER, "packages")
             ceph_native.require(re.fullmatch(r"native-[0-9a-f]{32}", source["id"]) is not None, "packages")
             path = str(Path(scratch, source["id"] + ".rpm"))
             self.file(source["url"], path, 256 << 20, source["sha256"], source["bytes"])

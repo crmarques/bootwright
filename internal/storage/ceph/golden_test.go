@@ -57,8 +57,11 @@ func matchesGoldenFile(t *testing.T, path string, data []byte, terminated bool) 
 
 func TestFrozenRequestGolden(t *testing.T) {
 	r := runtimeRequest()
-	r.Cephadm = Tool{Path: "/usr/sbin/cephadm", Version: "20.2.1", PackageVersion: "20.2.1-405.el9cp"}
-	r.CephVersion = "20.2.1"
+	r.Cephadm = Tool{Path: "/usr/sbin/cephadm", PackageVersion: "20.2.1-405.el9cp"}
+	r.Release = "9.9.1.2"
+	r.AnsiblePackageVersion = "5.0.3-1"
+	r.NFSGaneshaPackageVersion = "synthetic-native-ganesha"
+	r.PackageRepository = DefaultPackageRepository
 	r.MonIP = "192.0.2.1"
 	r.ClusterSSHUser = "operator"
 	r.CallHome = "enabled"

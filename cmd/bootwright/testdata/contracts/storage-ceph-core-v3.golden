@@ -1,15 +1,14 @@
 implementation: storage-ceph-core-v3
-content-digest: 91fe7d16860bc770cacdccaf9754c406fa42e6f2974090257f47283c2f6daa73
-automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-pool-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v2, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v2
+content-digest: a0fdaf7a2d3774540a069994a74d9fa57be47193f56c9c1826378fa765e207d1
+automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-pool-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v2
 request-schema:
   action string
+  ansiblePackageVersion string
   bootstrap string
   callHome string
-  cephVersion string
   cephadm struct ceph.Tool
   cephadm.packageVersion string
   cephadm.path string
-  cephadm.version string
   client *struct ceph.Client omitempty
   client.access string
   client.name string
@@ -39,7 +38,9 @@ request-schema:
   hosts[].user string
   image string
   monIP string
+  nfsGaneshaPackageVersion string omitempty
   owner string omitempty
+  packageRepository string
   packages *struct ceph.PackageRequest omitempty
   packages.licenseAccepted bool
   packages.sources []struct ceph.PackageSource
@@ -61,6 +62,7 @@ request-schema:
   publicNetworks []string
   registry string
   registryRef string
+  release string
   services []opaque
   version string
 evidence-schema:

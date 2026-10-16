@@ -282,3 +282,33 @@ func TestDecodeAdmitsALifecycleRefusalDetailOfTheClosedGrammarOnly(t *testing.T)
 	)
 	refuses(t, Controller, `{"detail":"cause","phase":"refused","reason":"timeout"}`)
 }
+
+func TestNativeErrorIsExactLifecycleRefusalData(t *testing.T) {
+	line := `{"nativeError":{"cause":"package not found","coordinate":"ceph-operator-selection"},"phase":"refused","reason":"native"}`
+	records := accepts(t, Lifecycle, line)
+	if len(records) != 1 || records[0].NativeError == nil || records[0].NativeError.Coordinate != "ceph-operator-selection" || records[0].NativeError.Cause != "package not found" {
+		t.Fatalf("%+v", records)
+	}
+	refuses(t, Controller, line)
+	refuses(t, Lifecycle,
+		`{"nativeError":{"cause":"failure","coordinate":"selected"},"phase":"loaded"}`,
+		`{"evidence":{"ready":true},"nativeError":{"cause":"failure","coordinate":"selected"},"outcome":"changed","phase":"completed"}`,
+		`{"nativeError":null,"phase":"refused","reason":"native"}`,
+		`{"nativeError":{"cause":"failure"},"phase":"refused","reason":"native"}`,
+		`{"nativeError":{"cause":"failure","coordinate":"selected","extra":"x"},"phase":"refused","reason":"native"}`,
+		`{"nativeError":{"Cause":"failure","coordinate":"selected"},"phase":"refused","reason":"native"}`,
+		`{"nativeError":{"coordinate":"selected","cause":"failure"},"phase":"refused","reason":"native"}`,
+		`{"nativeError":{"cause":"failure","coordinate":"selected","coordinate":"other"},"phase":"refused","reason":"native"}`,
+	)
+}
+func TestNativeErrorBoundsDecodedUTF8AndRefusesControls(t *testing.T) {
+	record := func(cause, coordinate string) string {
+		return `{"nativeError":{"cause":` + cause + `,"coordinate":` + coordinate + `},"phase":"refused","reason":"native"}`
+	}
+	accepts(t, Lifecycle, record(`"`+strings.Repeat("x", MaxNativeCause)+`"`, `"`+strings.Repeat("y", MaxNativeCoordinate)+`"`), record(`"`+strings.Repeat(`\u00e9`, MaxNativeCause/2)+`"`, `"selected"`), record(`"\ud83d\ude00"`, `"selected"`), record(`"\ufffd"`, `"selected"`))
+	refuses(t, Lifecycle, record(`"`+strings.Repeat("x", MaxNativeCause+1)+`"`, `"selected"`), record(`"cause"`, `"`+strings.Repeat("x", MaxNativeCoordinate+1)+`"`), record(`"`+strings.Repeat(`\u00e9`, MaxNativeCause/2+1)+`"`, `"selected"`))
+	for _, value := range []string{`""`, `"   "`, `null`, `12`, `"line\nnext"`, `"tab\tvalue"`, `"\u0000"`, `"\u001b[31m"`, `"\u007f"`, `"\u0085"`, `"\u202e"`, `"\ud800"`, `"\udc00"`, `"\ud800x"`} {
+		refuses(t, Lifecycle, record(value, `"selected"`), record(`"cause"`, value))
+	}
+	accepts(t, Lifecycle, record(`"literal \\ud800"`, `"selected"`))
+}

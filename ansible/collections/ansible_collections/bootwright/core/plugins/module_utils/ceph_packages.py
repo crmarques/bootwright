@@ -38,7 +38,8 @@ def actual_platform():
         words = shlex.split(value, comments=True, posix=True)
         ceph_native.require(len(words) == 1, "package-platform")
         values[key] = words[0]
-    ceph_native.require(values == {"ID": "rhel", "VERSION_ID": "9.8"} and os.uname().machine == "x86_64", "package-platform")
+    ceph_native.require(set(values) == {"ID", "VERSION_ID"} and all(values.values()) and os.uname().machine == "x86_64", "package-platform")
+    return {"os": values["ID"], "release": values["VERSION_ID"], "architecture": "amd64"}
 
 
 def ceph_root():
@@ -103,13 +104,13 @@ def host_admission(request):
         os.close(directory)
 
 
-def transaction_request():
-    return {
-        "policy": "ceph-packages-v1",
-        "platform": {"os": "rhel", "release": "9.8", "architecture": "amd64"},
-        "requirements": {"cephPackages": True},
-        "versions": {"ceph": "2:20.2.1-405.el9cp", "license": "0:9.1-1.el9cp", "inheritedPolicy": "latest"},
-    }
+def transaction_request(request):
+    versions = {"ceph": request["cephadm"]["packageVersion"], "ansible": request["ansiblePackageVersion"],
+                "license": "latest", "inheritedPolicy": "latest"}
+    if "nfsGaneshaPackageVersion" in request:
+        versions["nfsGanesha"] = request["nfsGaneshaPackageVersion"]
+    return {"policy": "ceph-packages-v2", "platform": actual_platform(),
+            "requirements": {"cephPackages": True}, "versions": versions}
 
 
 class Journal:
@@ -152,14 +153,14 @@ class Journal:
 
 
 @contextlib.contextmanager
-def phase(reason):
+def phase(reason, coordinate="Ceph package transaction"):
     """A native helper's failure is named by the package phase it failed in, at the site it failed."""
     try:
         yield
     except ceph_native.Refusal:
         raise
     except Exception as error:
-        raise ceph_native.Refusal(reason).with_traceback(error.__traceback__) from None
+        raise ceph_native.NativeFailure(reason, coordinate, str(error)).with_traceback(error.__traceback__) from None
 
 
 @contextlib.contextmanager
@@ -176,16 +177,17 @@ def accepted_license(accepted):
             os.environ["ACCEPT_EULA"] = previous
 
 
-def validate_decision(record, binding):
+def validate_decision(record, binding, grant):
     ceph_native.require(isinstance(record, dict) and set(record) == {"version", "binding", "plan"}, "package-journal")
     ceph_native.require(record["version"] == "ceph-package-decision-v1" and record["binding"] == binding, "package-journal")
     plan = native_resolution.validate_plan(record["plan"])
-    grant = transaction_request()
     ceph_native.require(plan["platform"] == grant["platform"] and plan["requirements"] == grant["requirements"] and plan["requests"] == grant["versions"]
                         and plan["solver"] == "dnf4", "package-journal")
     roots = sorted((r["key"], r["package"]["name"], r["requested"]) for r in plan["roots"])
     ceph_native.require(roots == sorted(native_resolution.selected_roots(grant)), "package-journal")
-    ceph_native.require(all(a["kind"] in ("install", "upgrade") for a in plan["actions"]), "package-journal")
+    selected = {native_resolution.canonical(root["package"]) for root in plan["roots"] if root["key"] in ("ceph", "ansible", "nfsGanesha")}
+    ceph_native.require(all(action["kind"] in ("install", "upgrade") or action["kind"] == "downgrade"
+                            and native_resolution.canonical(action["after"]) in selected for action in plan["actions"]), "package-journal")
     return plan
 
 
@@ -237,18 +239,18 @@ def prepare(request, host, certificate, *, acquisition=None, journal=None):
     host_admission(request)
     binding = native_resolution.digest({"request": request, "host": host, "source": source,
                                         "certificateSHA256": hashlib.sha256(certificate.encode()).hexdigest()})
-    acquire = acquisition or ceph_package_sources.Acquisition(source, certificate)
+    acquire = acquisition or ceph_package_sources.Acquisition(source, certificate, repository=request["packageRepository"])
     with (journal or Journal(request)) as durable, tempfile.TemporaryDirectory(prefix="bootwright-ceph-packages-") as scratch:
-        grant = transaction_request()
+        grant = transaction_request(request)
         record = durable.read("decision.json")
         if record is None:
-            with phase("package-resolution"):
+            with phase("package-resolution", str(grant["versions"])):
                 grant["repositories"] = acquire.repositories(scratch)
                 plan = native_resolution.solve4(grant, scratch)
             record = {"version": "ceph-package-decision-v1", "binding": binding, "plan": plan}
-            validate_decision(record, binding)
+            validate_decision(record, binding, grant)
             durable.write("decision.json", record)
-        plan = validate_decision(record, binding)
+        plan = validate_decision(record, binding, grant)
         grant["plan"] = plan
         complete = durable.read("complete.json")
         completion = {"version": "ceph-package-complete-v1", "binding": binding, "planDigest": plan["digest"]}

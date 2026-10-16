@@ -942,3 +942,29 @@ func TestAnUnnamedRefusalTokenReachesTheOperatorInTheUnknownDetail(t *testing.T)
 		t.Fatalf("a reason the caller did not name was judged %+v", verdict)
 	}
 }
+
+func TestNativeErrorOnlyReachesAnOptedInCallersDiagnostic(t *testing.T) {
+	named := diagnostics.NewFailureWithRemediation("lifecycle.unknown", "native acquisition failed", "", "correct the selected coordinate")
+	line := []byte(`{"detail":"native-refusal","nativeError":{"cause":"No matching package was found [redacted]","coordinate":"ceph-operator-selection"},"phase":"refused","reason":"native"}`)
+	record, err := adapterprotocol.Decode(line, adapterprotocol.Lifecycle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, enabled := range []bool{false, true} {
+		judge := &lifecycleJudge{request: lifecycle.RunRequest{NativeErrors: enabled, Refusals: map[string]error{"native": named}}, loaded: true}
+		verdict := judge.Judge(context.Background(), record, adapterprotocol.Moment{Open: true})
+		if !enabled {
+			if verdict.Valid || verdict.Failure != nil {
+				t.Fatal("non-Ceph run accepted native diagnostic data")
+			}
+			continue
+		}
+		found := diagnostics.Of(verdict.Failure)
+		if !verdict.Valid || len(found) != 1 || found[0].Code != "lifecycle.unknown" || found[0].Remediation != "correct the selected coordinate" || found[0].Message != "native acquisition failed (adapter detail: native-refusal) (selected ceph-operator-selection: No matching package was found [redacted])" {
+			t.Fatalf("%+v %+v", verdict, found)
+		}
+	}
+	if diagnostics.Of(named)[0].Message != "native acquisition failed" {
+		t.Fatal("mutated the caller's reusable diagnostic")
+	}
+}

@@ -1,0 +1,4 @@
+Storage preflight  synthetic
+  passed  controller  capacity.memory: available capacity covers declared guests and reserve
+    Required 1024 bytes; available 4096; reserve 1024; deficit 0
+  Summary  1 passed, 0 failed, 0 unknown, 0 pending

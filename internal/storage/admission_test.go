@@ -276,8 +276,8 @@ func TestStorageDistributionAndVendorNamespace(t *testing.T) {
 	}
 	wrong := ibm.WithSpec(ibm.Spec().WithPath(api.StringValue("registry.example.test/vendor-extra/ceph"), "ceph", "image", "base"))
 	requireIssue(t, Validate(wrong, replace(catalog, wrong)), "$.spec.ceph.image.base")
-	if issues := ValidateAuthored(ibm.WithSpec(ibm.Spec().WithPath(api.StringValue("v9"), "ceph", "release")), catalog); len(issues) == 0 {
-		t.Fatal("vendor alias was accepted")
+	if issues := ValidateAuthored(ibm.WithSpec(ibm.Spec().WithPath(api.StringValue("v9"), "ceph", "release")), catalog); len(issues) != 0 {
+		t.Fatal("native release string was refused", issues)
 	}
 }
 

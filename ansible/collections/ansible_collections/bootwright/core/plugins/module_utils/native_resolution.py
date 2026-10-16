@@ -123,23 +123,22 @@ def snapshot_database(platform, scratch):
 
 
 def selected_roots(request):
-    if request.get("policy") != "ceph-packages-v1":
+    if request.get("policy") != "ceph-packages-v2" or request["requirements"] != {"cephPackages": True}:
         raise ValueError("native root policy")
-    versions = {"ceph": "2:20.2.1-405.el9cp", "license": "0:9.1-1.el9cp"}
-    inherited = request["versions"] == dict(versions, inheritedPolicy="latest")
-    if (
-        request["platform"] != {"os": "rhel", "release": "9.8", "architecture": "amd64"}
-        or request["requirements"] != {"cephPackages": True}
-        or request["versions"] != versions and not inherited
-    ):
-        raise ValueError("Ceph package policy")
-    roots = [
-        ("ceph", "cephadm", request["versions"]["ceph"]),
-        ("ceph", "ceph-common", request["versions"]["ceph"]),
-        ("license", "ibm-storage-ceph-license", request["versions"]["license"]),
-    ]
-    if inherited:
-        roots.extend(("inherited-policy", name, "latest") for name in ("crypto-policies", "crypto-policies-scripts"))
+    versions = request["versions"]
+    if (not isinstance(versions, dict) or not {"ceph", "ansible", "license"} <= set(versions)
+            or set(versions) - {"ceph", "ansible", "license", "inheritedPolicy", "nfsGanesha"}):
+        raise ValueError("native root selections")
+    if any(not isinstance(value, str) or not 0 < len(value.encode("utf-8")) <= 1024
+           or any(ord(char) < 32 or ord(char) == 127 for char in value) for value in versions.values()):
+        raise ValueError("native root selection")
+    roots = [("ceph", "cephadm", versions["ceph"]), ("ceph", "ceph-common", versions["ceph"]),
+             ("ansible", "cephadm-ansible", versions["ansible"]), ("license", "ibm-storage-ceph-license", versions["license"])]
+    roots.append(("broker", "openssl", "latest"))
+    if "nfsGanesha" in versions:
+        roots.append(("nfsGanesha", "nfs-ganesha", versions["nfsGanesha"]))
+    if "inheritedPolicy" in versions:
+        roots.extend(("inherited-policy", name, versions["inheritedPolicy"]) for name in ("crypto-policies", "crypto-policies-scripts"))
     return roots
 
 
@@ -188,11 +187,11 @@ def setup_dnf4(request, scratch, repositories=True, installroot=None):
     conf.assumeyes = False
     conf.substitutions["releasever"] = request["platform"]["release"]
     conf.substitutions["basearch"] = "x86_64"
-    if request.get("policy") == "ceph-packages-v1":
+    if request.get("policy") == "ceph-packages-v2":
         selected_roots(request)
         # The disposable snapshot contains RPMDB only, while DVD AppStream
         # modular metadata requires the selected RHEL platform explicitly.
-        conf.module_platform_id = "platform:el9"
+        conf.module_platform_id = "platform:el" + request["platform"]["release"].split(".", 1)[0]
     base = dnf.Base(conf)
     if repositories:
         for record in local_repositories(request):
@@ -301,6 +300,7 @@ def package_record(package, request):
 def assemble(request, before, roots, inbound, outbound, compare, solver_version):
     packages, root_values = {}, []
     root_names = {}
+    explicit_ceph_roots = set()
     for key, requested, package in roots:
         record = package_record(package, request)
         packages[record["source"]["id"]] = record
@@ -308,6 +308,8 @@ def assemble(request, before, roots, inbound, outbound, compare, solver_version)
             {"key": key, "requested": requested, "package": identity(package)}
         )
         root_names[record["name"]] = requested
+        if request.get("policy") == "ceph-packages-v2" and key in ("ceph", "ansible", "nfsGanesha"):
+            explicit_ceph_roots.add(record["name"])
     before_names = {}
     for value in before:
         before_names.setdefault(value["name"], []).append(value)
@@ -341,7 +343,7 @@ def assemble(request, before, roots, inbound, outbound, compare, solver_version)
                 raise ValueError("unrequested native reinstall")
             action["kind"] = "upgrade" if order > 0 else "downgrade"
             action["before"] = previous
-            if order < 0 and root_names.get(target["name"], "latest") == "latest":
+            if order < 0 and target["name"] not in explicit_ceph_roots and root_names.get(target["name"], "latest") == "latest":
                 raise ValueError("unrelated native downgrade")
             removed.pop(canonical(previous))
             after.pop(canonical(previous))
@@ -380,6 +382,16 @@ def assemble(request, before, roots, inbound, outbound, compare, solver_version)
     return plan
 
 
+def authored_candidates(base, name, requested, *, unversioned=False):
+    """The native resolver owns version parsing, availability and error text."""
+    import dnf.subject
+
+    subject = name if unversioned else name + "-" + requested
+    base.install(subject, strict=True)
+    return [package for package in dnf.subject.Subject(subject).get_best_query(base.sack, with_provides=False).available()
+            if package.name == name]
+
+
 def solve4(request, scratch, local_sources=None, return_transaction=False):
     import dnf
     import rpm
@@ -409,14 +421,13 @@ def solve4(request, scratch, local_sources=None, return_transaction=False):
         return rpm.labelCompare(("0", left, ""), ("0", right, ""))
 
     for key, name, requested in selected_roots(request):
-        candidates = (
-            [pkg for pkg in local if pkg.name == name]
-            if local is not None
-            else list(base.sack.query().available().filter(name=name))
-        )
-        package, peers = choose(
-            candidates, requested if local is None else "latest", compare
-        )
+        if local is None:
+            # Let DNF interpret the exact authored subject, including malformed
+            # versions. A fixed package name prevents option/command injection.
+            candidates = authored_candidates(base, name, requested, unversioned=key in ("license", "inherited-policy", "broker"))
+        else:
+            candidates = [pkg for pkg in local if pkg.name == name]
+        package, peers = choose(candidates, "latest", compare)
         records = [package_record(peer, request) for peer in peers]
         if any(
             record["source"]["sha256"] != records[0]["source"]["sha256"]

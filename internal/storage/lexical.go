@@ -9,16 +9,13 @@ import (
 )
 
 var (
-	exactOSS          = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
-	ossName           = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]*$`)
-	vendorRelease     = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)+$`)
-	packageCoordinate = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~^:-]*$`)
-	checksum          = regexp.MustCompile(`(?i)^(?:sha256:)?[0-9a-f]{64}$`)
-	retentionTime     = regexp.MustCompile(`^([0-9]+)(y|w|d|h|m|s)$`)
-	retentionSize     = regexp.MustCompile(`^([0-9]+)(B|KB|MB|GB|TB|PB|EB)$`)
-	storageSize       = regexp.MustCompile(`^([0-9]+)(B|K|M|G|T|P|E|KB|MB|GB|TB|PB|EB)?$`)
-	deviceSize        = regexp.MustCompile(`^([0-9]+)(M|G|T|MB|GB|TB)$`)
-	fileMode          = regexp.MustCompile(`^0?[0-7]{3}$`)
+	exactOSS      = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+	checksum      = regexp.MustCompile(`(?i)^(?:sha256:)?[0-9a-f]{64}$`)
+	retentionTime = regexp.MustCompile(`^([0-9]+)(y|w|d|h|m|s)$`)
+	retentionSize = regexp.MustCompile(`^([0-9]+)(B|KB|MB|GB|TB|PB|EB)$`)
+	storageSize   = regexp.MustCompile(`^([0-9]+)(B|K|M|G|T|P|E|KB|MB|GB|TB|PB|EB)?$`)
+	deviceSize    = regexp.MustCompile(`^([0-9]+)(M|G|T|MB|GB|TB)$`)
+	fileMode      = regexp.MustCompile(`^0?[0-7]{3}$`)
 )
 
 func quantity(value string, grammar *regexp.Regexp) (*big.Int, bool) {
@@ -85,15 +82,10 @@ func (a *admission) lexicalValues() {
 	spec := a.object.Spec()
 	if a.object.Kind() == api.StorageCluster {
 		ceph := spec.Get("ceph")
-		distribution := fallback(ceph.Get("distribution"), "oss")
-		release := ceph.Get("release")
-		valid := vendorRelease.MatchString(release.Text())
-		if distribution == "oss" {
-			valid = exactOSS.MatchString(release.Text()) || ossName.MatchString(release.Text())
+		for _, path := range [][]string{{"release"}, {"packageVersion"}, {"cephadm", "ansible", "packageVersion"}, {"nfsGanesha", "packageVersion"}, {"image", "version"}} {
+			value := ceph.Get(path...)
+			a.lexical(value, "$.spec.ceph."+strings.Join(path, "."), NativeVersion(value.Text()))
 		}
-		a.lexical(release, "$.spec.ceph.release", valid)
-		a.lexical(ceph.Get("packageVersion"), "$.spec.ceph.packageVersion", packageCoordinate.MatchString(textOf(ceph, "packageVersion")))
-		a.lexical(ceph.Get("cephadm", "ansible", "packageVersion"), "$.spec.ceph.cephadm.ansible.packageVersion", packageCoordinate.MatchString(textOf(ceph, "cephadm", "ansible", "packageVersion")))
 		a.size(ceph.Get("monitoring", "prometheus", "retentionTime"), "$.spec.ceph.monitoring.prometheus.retentionTime", retentionTime)
 		a.size(ceph.Get("monitoring", "prometheus", "retentionSize"), "$.spec.ceph.monitoring.prometheus.retentionSize", retentionSize)
 		for i, node := range ceph.Get("topology", "nodes").Items() {
@@ -120,4 +112,9 @@ func (a *admission) osdLexical(osd api.Value, field string) {
 		value := osd.Get(key, "size")
 		a.lexical(value, field+"."+key+".size", validDeviceRange(value.Text()))
 	}
+}
+
+// NativeVersion bounds transport without interpreting a provider's version grammar.
+func NativeVersion(value string) bool {
+	return len(value) > 0 && len(value) <= 1024 && strings.IndexFunc(value, func(r rune) bool { return r < 32 || r == 127 }) < 0
 }

@@ -100,7 +100,7 @@ func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation st
 	if (operation == "apply" || operation == "observe") && r.Action == "cluster" {
 		outputs = append(outputs, lifecycle.OutputFile{Name: DashboardOutput, Variable: DashboardOutput})
 	}
-	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: Implementation, Operation: operation, Variable: "bootwright_ceph", Canonical: canonical, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Outputs: outputs, Refusals: adapterRefusals(), Deadline: deadline}))
+	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: Implementation, Operation: operation, Variable: "bootwright_ceph", Canonical: canonical, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Outputs: outputs, Refusals: adapterRefusals(), NativeErrors: true, Deadline: deadline}))
 }
 
 const (

@@ -54,6 +54,7 @@ func packageRoles() map[string]packageRole {
 		"internal/reconciliation/ansiblerunner":  adapterRole,
 		"internal/managedos/medialocal":          adapterRole,
 		"internal/machine/sshlocal":              adapterRole,
+		"internal/storage/preflightlocal":        adapterRole,
 		"internal/secrets/secretstore":           applicationRole,
 		"internal/secrets/localkeyring":          adapterRole,
 		"internal/secrets/material":              adapterRole,
@@ -439,7 +440,9 @@ const readOnlyInput = "internal/desiredstate/inputfs"
 const invokerFiles = "internal/workspace/invokerfs"
 
 // readOnlyAdapters are the packages the input-mutation clause holds.
-func readOnlyAdapters() []string { return []string{readOnlyInput, invokerFiles} }
+func readOnlyAdapters() []string {
+	return []string{readOnlyInput, invokerFiles, "internal/storage/preflightlocal"}
+}
 
 // effectGrants is every exception to the effect boundary, keyed by the package
 // that holds it. A capability is an import path, which grants the whole
@@ -463,6 +466,7 @@ func effectGrants() map[string][]string {
 		"internal/adapterprotocol":              {"io", "os", "os/exec", "syscall"},
 		"internal/controller/privilege":         {"io", "os", "os/exec", "os/signal", "syscall"},
 		"internal/controller/hostlinux":         {"golang.org/x/sys/unix", "io", "os"},
+		"internal/storage/preflightlocal":       {"golang.org/x/sys/unix", "io", "os"},
 		"internal/controller/bundlelocal":       {"io", "net.DNSError", "net.Dialer", "net/http", "os", "syscall"},
 		"internal/controller/ansiblelocal":      {"io", "os", "os/exec", "syscall"},
 		"internal/controller/hostdnf":           {"io", "os", "os/exec", "syscall"},

@@ -239,6 +239,7 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 		capabilities = deps.Capabilities
 	}
 	options := lifecycleOptions(deps, clock, runner)
+	options.ApplyAdmission = storageCapacityAdmission
 	if controller.Lock != nil {
 		options.Lock = lifecycle.RuntimeLock{Digest: controller.Lock.Digest, AnsibleCore: controller.Lock.AnsibleCore}
 		if controller.Setup != nil && controller.Python != nil {

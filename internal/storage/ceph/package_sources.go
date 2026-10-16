@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const PackageVersion = "ceph-packages-v1"
+const PackageVersion = "ceph-packages-v2"
 
 type PackageSource struct {
 	CertificateRef  string `json:"certificateRef"`
@@ -46,8 +46,8 @@ func packageSources(c api.Catalog, r Request, contextName string) (*PackageReque
 	for _, host := range r.Hosts {
 		m, _ := c.Find(api.Machine, host.Machine)
 		profile, ok := c.Find(api.MachineInstallProfile, m.Spec().Get("os", "installProfileRef").Text())
-		if !ok || profile.Spec().Get("os", "family").Text() != "rhel" || profile.Spec().Get("os", "version").Text() != "9.8" || profile.Spec().Get("os", "architecture").Text() != "x86_64" {
-			return nil, failure("lifecycle.unsupported", "Ceph package acquisition requires the owned RHEL 9.8 x86_64 DVD installation profile", "select the hosted DVD profile used to install each Ceph Machine")
+		if !ok || profile.Spec().Get("os", "family").Text() != "rhel" || profile.Spec().Get("os", "architecture").Text() != "x86_64" {
+			return nil, failure("lifecycle.unsupported", "Ceph package acquisition requires the owned RHEL x86_64 DVD installation profile", "select the hosted DVD profile used to install each Ceph Machine")
 		}
 		tree := profile.Spec().Get("installer", "anaconda", "packageSource", "hostedTree")
 		media, local := strings.CutPrefix(tree.Get("fromMedia").Text(), "local-media:")

@@ -32,10 +32,11 @@ def cluster_request():
               "user": "operator", "port": 22, "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}],
               "labels": [], "location": {}, "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v4", "action": "cluster", "cluster": "example", "owner": "apply-example",
+    return {"controller": "controller", "version": "ceph-core-v5", "action": "cluster", "cluster": "example", "owner": "apply-example",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
-            "cephadm": {"path": "/usr/sbin/cephadm", "version": "20.2.1", "packageVersion": "20.2.1-405.el9cp"},
-            "cephVersion": "20.2.1", "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator",
+            "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
+            "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
+            "packageRepository": "https://packages.example.test/native", "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator",
             "clusterSSHTransport": "verified-tunnel", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
             "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names}},
@@ -202,8 +203,8 @@ class HostMarkers:
 def host_profile(request, name, **changes):
     record = {"version": ceph_host_runtime.PROFILE_VERSION, "scope": ceph_host_runtime.scope(request, name), "image": request["image"], "host": name,
               "imageID": "c" * 64, "uid": 167, "gid": 167, "policy": "Ciphers aes256-gcm@openssh.com\n", "label": ceph_host_runtime.SHARED_LABEL,
-              "cephadmSHA256": ceph_host_runtime.CEPHADM_SHA256,
-              "artifacts": {path: ceph_host_runtime.CEPHADM_SHA256 if path == "/usr/sbin/cephadm" else "d" * 64 for path in ceph_host_runtime.ARTIFACTS}}
+              "cephadmSHA256": "e" * 64,
+              "artifacts": {path: "e" * 64 if path == "/usr/sbin/cephadm" else "d" * 64 for path in ceph_host_runtime.ARTIFACTS}}
     record.update(changes)
     return record
 
@@ -231,7 +232,7 @@ def profiled(cluster_request, tmp_path):
 
 
 def pinned(request, **changes):
-    request = dict(request, image=ceph_native.PINNED_REPOSITORY + "@sha256:" + "a" * 64, registry="cp.icr.io")
+    request = dict(request, image="registry.example.test/ceph" + "@sha256:" + "a" * 64, registry="registry.example.test")
     request.update(changes)
     return request
 
@@ -241,11 +242,9 @@ def test_supported_transport_is_the_pinned_release_over_verified_tunnel_only(clu
     for changed in (
         pinned(cluster_request, clusterSSHTransport="native"),
         pinned(cluster_request, clusterSSHTransport=""),
-        pinned(cluster_request, cephVersion="20.2.2"),
-        pinned(cluster_request, image="registry.example.test/ceph@sha256:" + "a" * 64),
-        pinned(cluster_request, image=ceph_native.PINNED_REPOSITORY + ":v9.9.1-25074"),
-        pinned(cluster_request, image=ceph_native.PINNED_REPOSITORY + "@sha256:" + "A" * 64),
-        pinned(cluster_request, image=ceph_native.PINNED_REPOSITORY + "@sha256:" + "a" * 63),
+        pinned(cluster_request, image="registry.example.test/ceph" + ":v9.9.1-25074"),
+        pinned(cluster_request, image="registry.example.test/ceph" + "@sha256:" + "A" * 64),
+        pinned(cluster_request, image="registry.example.test/ceph" + "@sha256:" + "a" * 63),
     ):
         assert not ceph_native.supported_transport(changed)
     without = pinned(cluster_request)
@@ -283,7 +282,7 @@ def test_manager_runtime_fails_closed_until_host_preparation_writes_its_profile(
 @pytest.mark.parametrize("changes", [
     {"image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:" + "b" * 64}, {"host": "node-2"}, {"uid": 0}, {"uid": True}, {"uid": "167"}, {"gid": 168},
     {"label": ""}, {"label": "system_u:object_r:other_t:s0"}, {"policy": None}, {"policy": "Include /etc/foreign\n"}, {"version": "ceph-runtime-profile-v1"},
-    {"unproved": True}, {"cephadmSHA256": "e" * 64}, {"imageID": "f" * 64}, {"scope": {"host": "node-1"}},
+    {"unproved": True}, {"cephadmSHA256": "f" * 64}, {"imageID": "f" * 64}, {"scope": {"host": "node-1"}},
 ])
 def test_a_contradicting_runtime_profile_refuses(profiled, changes):
     worker, inspected, unused = profiled
@@ -490,7 +489,7 @@ def test_bootstrap_persists_frozen_intent_before_skip_ssh_command(native, privat
     def command(argv, **kwargs):
         assert native.markers.read("tunnel-stage.json") == ceph_tunnel_staging.stage_intent(native.request)
         assert "--skip-ssh" in argv and "--no-cleanup-on-failure" in argv
-        assert "--skip-prepare-host" not in argv
+        assert "--skip-prepare-host" in argv
         assert all(flag not in argv for flag in ("--ssh-user", "--ssh-private-key", "--ssh-public-key", "--ssh-config", "--apply-spec"))
         assert all(not argument.startswith("--registry") and "registryJSON" not in argument for argument in argv)
         scratch = os.path.dirname(argv[argv.index("--config") + 1])
@@ -744,7 +743,8 @@ def test_unrelated_native_mount_does_not_break_protected_bundle_proof(native):
 
 def test_enrollment_has_no_host_effect_until_all_current_tunnel_proofs_pass(native):
     native.markers.records["tunnel-mounted.json"] = {"fixture": True}
-    events = []
+    native.markers.records["bootstrap-scope.json"] = ceph_tunnel_staging.recovery_scope(native.request)
+    events, inventory = [], []
     native.verify_transport_bundle = lambda: events.append("bundle")
     native.verify_tunnel_configuration = lambda: events.append("config")
     native.verify_manager_mounts = lambda observed: events.append("mount")
@@ -754,10 +754,12 @@ def test_enrollment_has_no_host_effect_until_all_current_tunnel_proofs_pass(nati
         if args == ("fsid",):
             return {"fsid": native.request["fsid"]}
         if args == ("orch", "host", "ls"):
-            assert events == ["bundle", "config", "mount"]
-            return []
+            assert events[:3] == ["bundle", "config", "mount"]
+            return copy.deepcopy(inventory)
         assert args == ("orch", "apply", "-i", "-")
-        events.append(json.loads(kwargs["data"])["hostname"])
+        value = json.loads(kwargs["data"])
+        events.append(value["hostname"])
+        inventory.append({"hostname": value["hostname"], "addr": value["addr"], "labels": value["labels"]})
 
     native.ceph = ceph
     native.markers.records["cache-ready.json"] = {"fixture": True}
@@ -791,18 +793,23 @@ def test_enrollment_refuses_mount_drift_before_any_host_add(native):
 def test_service_documents_add_owned_manager_mount_without_mutating_frozen_input(native):
     original = copy.deepcopy(native.request["services"])
     native.verify_tunnel_configuration = lambda: None
-    calls = []
+    native.normalized_services = lambda groups: groups
+    native.recovery_scope = lambda: {"fixture": True}
+    calls, inventory = [], []
 
     def ceph(*args, **kwargs):
         if args == ("fsid",):
             return {"fsid": native.request["fsid"]}
+        if args == ("orch", "ls", "--export"):
+            return copy.deepcopy(inventory)
         calls.append((args, kwargs))
+        inventory.append(json.loads(kwargs["data"]))
 
     native.ceph = ceph
     native.services(device_rows(native.request))
     assert native.markers.read(ceph_native.DEVICE_IDENTITIES)["devices"] == device_rows(native.request)
     assert calls[0][0] == ("orch", "apply", "-i", "-")
-    documents = [json.loads(document) for document in calls[0][1]["data"].split(b"\n---\n")]
+    documents = [json.loads(kwargs["data"]) for args, kwargs in calls]
     manager = next(service for service in documents if service["service_type"] == "mgr")
     assert manager["extra_container_args"] == ["--volume=" + native.markers.path + "/transport:/run/bootwright-ceph-ssh:ro,z"]
     assert native.request["services"] == original
@@ -856,10 +863,10 @@ def test_only_the_services_phase_receives_device_identities(cluster_request, pha
 
 def test_the_services_phase_hands_its_device_identities_to_the_worker(cluster_request, monkeypatch):
     received = []
-    monkeypatch.setattr(ceph_native.Worker, "services", lambda self, devices=None: received.append(devices) or {"changed": True})
+    monkeypatch.setattr(ceph_native.Worker, "services", lambda self, devices=None, service=None: received.append((devices, service)) or {"changed": True})
     envelope = {"request": pinned(cluster_request), "host": "node-1", "phase": "services", "private": {}, "devices": device_rows(cluster_request)}
     assert ceph_native.dispatch(envelope) == {"changed": True}
-    assert received == [device_rows(cluster_request)]
+    assert received == [(device_rows(cluster_request), None)]
 
 
 def test_published_device_identities_never_change(native):
@@ -1273,8 +1280,8 @@ def host_preparation(native, monkeypatch, units, podman=b"5.8.2\n", lvcreate=Tru
     def run(argv, data=b"", timeout=60):
         del data, timeout
         calls.append(list(argv))
-        if argv[:2] == ["/usr/bin/podman", "version"]:
-            return 0, podman
+        if argv[:2] == [native.tool, "check-host"]:
+            return 0, b"ok"
         if argv[0] == "/usr/bin/systemctl" and argv[1] in ("is-enabled", "is-active"):
             enabled, active = units.get(argv[2], (None, "inactive"))
             if argv[1] == "is-enabled":
@@ -1292,9 +1299,10 @@ def host_preparation(native, monkeypatch, units, podman=b"5.8.2\n", lvcreate=Tru
     return calls
 
 
-def test_a_rhel_guest_with_running_chronyd_lets_cephadm_prepare_the_host_without_a_change(native, monkeypatch):
+def test_selected_cephadm_checks_the_host_before_inert_time_service_proof(native, monkeypatch):
     calls = host_preparation(native, monkeypatch, {"chronyd.service": ("enabled", "active")})
     native.prove_inert_host_preparation()
+    assert calls[0] == [native.tool, "check-host", "--expect-hostname", native.host["name"]]
     assert [argv[2] for argv in calls if argv[0] == "/usr/bin/systemctl"] == ["chrony.service"] * 2 + ["chronyd.service"] * 2
 
 
@@ -1302,9 +1310,6 @@ def test_a_rhel_guest_with_running_chronyd_lets_cephadm_prepare_the_host_without
     ({"chronyd.service": ("disabled", "inactive"), "ntpd.service": ("enabled", "active")}, b"5.8.2\n", True, "host-time"),
     ({"chrony.service": ("enabled", "inactive"), "chronyd.service": ("enabled", "active")}, b"5.8.2\n", True, "host-time"),
     ({}, b"5.8.2\n", True, "host-time"),
-    ({"chronyd.service": ("enabled", "active")}, b"2.0.1\n", True, "host-prerequisite"),
-    ({"chronyd.service": ("enabled", "active")}, b"not a version\n", True, "host-prerequisite"),
-    ({"chronyd.service": ("enabled", "active")}, b"5.8.\xff\n", True, "host-prerequisite"),
     ({"chronyd.service": ("enabled", "active")}, b"5.8.2\n", False, "host-prerequisite"),
 ])
 def test_a_host_cephadm_would_change_while_preparing_it_refuses_before_any_bootstrap_record(native, monkeypatch, units, podman, lvcreate, reason):
@@ -1323,3 +1328,17 @@ def test_a_host_preparation_refusal_leaves_no_bootstrap_attempt_so_the_bootstrap
     with pytest.raises(ceph_native.Refusal, match="^host-time$"):
         native.tunnel_bootstrap(ssh_material(private))
     assert native.markers.read("bootstrap-attempt.json") is None
+
+
+def test_selected_native_host_check_failure_has_no_preparation_fallback(native):
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        return 1, b"selected native runtime unavailable"
+    native.run = run
+    native.command = lambda argv, **kwargs: ceph_native.Worker.command(native, argv, **kwargs)
+    with pytest.raises(ceph_native.NativeFailure, match="native-command"):
+        native.prove_inert_host_preparation()
+    assert calls == [[native.tool, "check-host", "--expect-hostname", native.host["name"]]]
+    assert native.markers.writes == []

@@ -26,8 +26,9 @@ the scope of that evidence; they do not approve version combinations or gate
 an authored selection. B476's accepted minimal journey is recorded in its
 owner-accepted ledger row; it certifies no other version or feature.
 
-Not yet met: removal of the current single-release, artifact and derived
-version pins; tracked as [B615](milestones/m2.md#b615), required before M2b exits.
+Authored versions now select native acquisition without release/artifact pins.
+[B615](milestones/m2.md#b615) still requires its fresh operator journey before
+M2b exits.
 
 Native manager-to-host SSH must enforce pinned host keys, including a negative
 wrong-key test through actual manager connection, reconnect and failover paths.
@@ -56,8 +57,10 @@ operator supplies neither a Podman login nor a locally cached image.
 Credential delivery and the original acquisition binding remain Secrets-owned.
 Signed package acquisition and the pull belong to host preparation. RHEL
 installation media are a separate prerequisite.
-Not yet met: guest engine credential-destination qualification, including
-Bearer realms and redirects; tracked as [B79](milestones/m2.md#b79).
+Guest pull credentials are confined by the invocation-local broker described
+in [storage](storage.md); the native client receives no real
+registry credential or token. Synthetic boundary tests include foreign realms,
+redirects, uncredentialed bypass and local mutual-TLS access.
 
 Each host-preparation block derives account, code and crypto-policy facts from
 the exact immutable image pulled with the original registry binding. Its
@@ -195,7 +198,7 @@ profile, not a production sizing promise. MON/MGR roles may share those hosts.
 Monitoring and gateways are enabled only in their later profiles. B490 reports
 the aggregate RAM/vCPU/storage budget, controller reserve and host deficits
 before provisioning; insufficient capacity requires an explicit smaller
-supported profile or more resources, never lower replica/quorum safety.
+declared allocation or more resources, never lower replica/quorum safety.
 
 Full feature coverage is the union of separately declared, reproducible
 profiles: core, pool variants, file/object services, gateway families,

@@ -30,6 +30,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
+	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -546,6 +547,13 @@ func cliGoldens() []cliGolden {
 			"nothing repairs it, because Bootwright never changes the owner or mode of an existing state root")
 	}
 	return append([]cliGolden{
+		{golden: "cli-storage-preflight", args: "preflight storage-cluster --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = successfulStoragePreflight() }},
+		{golden: "cli-storage-preflight-json", args: "preflight storage-cluster --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = successfulStoragePreflight() }},
+		{golden: "cli-storage-preflight-pending-json", args: "preflight storage-cluster --context synthetic --output json", code: 1, record: func(r *dispatchRecord) {
+			r.result.storagePreflight = pendingStoragePreflight()
+			r.err = diagnostics.NewFailureWithRemediation("preflight.unknown", "storage readiness is not proved", "", "resolve the reported prerequisites")
+		}},
+
 		// Controller reports: an unpresented dry-run plan in text and JSON, a
 		// presented setup that changed the host, and a context's readiness.
 		{golden: "cli-setup-plan", args: "setup --dry-run", record: func(r *dispatchRecord) { r.result.controller = setupDryRun(platform) }},
@@ -1177,4 +1185,12 @@ func setupDryRun(platform prerequisites.Platform) *prerequisites.Report {
 			{Filename: "pip-26.0.1-py3-none-any.whl", URL: "https://files.pythonhosted.org/packages/pip-26.0.1-py3-none-any.whl", SHA256: strings.Repeat("b", 64)},
 		},
 	}
+}
+
+func successfulStoragePreflight() *storagepreflight.Report {
+	return &storagepreflight.Report{Context: "synthetic", Target: "storage-cluster", Checks: []storagepreflight.Check{{ID: "capacity.memory", Target: "controller", Status: "passed", Reason: "available capacity covers declared guests and reserve", Capacity: &storagepreflight.Capacity{Resource: "memory", Unit: "bytes", Required: 1024, Available: 4096, Reserve: 1024, Observed: true}}}, Summary: storagepreflight.Summary{Passed: 1}}
+}
+
+func pendingStoragePreflight() *storagepreflight.Report {
+	return &storagepreflight.Report{Context: "synthetic", Target: "storage-cluster", Checks: []storagepreflight.Check{{ID: "host.prerequisites", Target: "guest", Status: "pending", Reason: "the Machine has not been installed", Next: "run bootwright apply --context synthetic --stage machines"}, {ID: "capacity.memory", Target: "controller", Status: "unknown", Reason: "the capacity read did not complete", Capacity: &storagepreflight.Capacity{Resource: "memory", Unit: "bytes", Required: 1024, Reserve: 1024}}}, Summary: storagepreflight.Summary{Unknown: 1, Pending: 1}}
 }

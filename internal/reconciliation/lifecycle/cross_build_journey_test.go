@@ -138,7 +138,7 @@ func TestACephClusterLeftUnknownContinuesUnderARebuiltBinary(t *testing.T) {
 					t.Fatalf("the records of %s name %+v, want one attempt under the rebuilt binary", block, named)
 				}
 			}
-			if image := ceph.PinnedRepository + "@" + runner.resolvedAt; len(runner.images) == 0 || slices.ContainsFunc(runner.images, func(handed string) bool { return handed != image }) {
+			if image := "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9" + "@" + runner.resolvedAt; len(runner.images) == 0 || slices.ContainsFunc(runner.images, func(handed string) bool { return handed != image }) {
 				t.Fatalf("the Ceph runs were handed images %v, want each the %s the registering build resolved", runner.images, image)
 			}
 			if kept := journey.Kept(); len(kept) != 2 || kept[1] != cluster+"/dashboard="+fleetDashboardPassword {
@@ -196,7 +196,7 @@ func TestACephClusterContinuesOverRecordsAnEarlierBuildWrote(t *testing.T) {
 	if hostRuns, imageRuns := runner.took(); !slices.Equal(hostRuns, []string{cluster + ":observe", pool + ":apply", client + ":apply"}) || len(imageRuns) != 0 {
 		t.Fatalf("the continuation ran host-contacting %v and controller-local image %v", hostRuns, imageRuns)
 	}
-	if image := ceph.PinnedRepository + "@" + runner.resolvedAt; len(runner.images) == 0 || slices.ContainsFunc(runner.images, func(handed string) bool { return handed != image }) {
+	if image := "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9" + "@" + runner.resolvedAt; len(runner.images) == 0 || slices.ContainsFunc(runner.images, func(handed string) bool { return handed != image }) {
 		t.Fatalf("the Ceph runs were handed images %v, want each the %s the buildless image record holds", runner.images, image)
 	}
 	for block, count := range earlier {

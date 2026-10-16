@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import hashlib
 import importlib.util
 import json
 import os
@@ -32,7 +31,6 @@ SYNTHETIC_SCHEMA = "bootwright-ceph-route-synthetic-v1"
 SYNTHETIC_ROOT = "/run/bootwright-ceph-route"
 TUNNEL_ROOT = "/run/bootwright-ceph-ssh"
 PROVIDER_SOURCE = "/usr/share/ceph/mgr/cephadm/ssh.py"
-PROVIDER_SHA256 = "a07ee53ec6ca44d91738e92869fff5c236e392285379a227bd8ab3ee7933feb2"
 CRYPTO_SOURCE = "/etc/crypto-policies/back-ends/openssh.config"
 USER = "bootwright-route"
 HOST = "route-target"
@@ -230,7 +228,7 @@ def provider_module():
         info = os.fstat(stream.fileno())
         require(stat.S_ISREG(info.st_mode) and info.st_mode & 0o022 == 0 and 0 < info.st_size <= 1024 * 1024)
         raw = stream.read(1024 * 1024 + 1)
-        require(len(raw) == info.st_size and hashlib.sha256(raw).hexdigest() == PROVIDER_SHA256)
+        require(len(raw) == info.st_size)
     stubs = {name: types.ModuleType(name) for name in ("ceph", "ceph.deployment", "ceph.deployment.hostspec", "orchestrator")}
     stubs["ceph"].__path__ = []
     stubs["ceph.deployment"].__path__ = []

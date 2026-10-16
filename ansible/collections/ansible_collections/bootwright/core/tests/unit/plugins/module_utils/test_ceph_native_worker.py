@@ -14,11 +14,12 @@ import time
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker, native_diagnostics
 
 
 def source_bundle():
-    return {"ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
+    return {"native_diagnostics": inspect.getsource(native_diagnostics), "ceph_pull_broker": '"""Fixed fixture."""\n',
+            "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
             "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_host_route_probe": '"""Fixed fixture."""\n', "ceph_host_runtime": '"""Fixed fixture."""\n',
             "ceph_native": ('class Refusal(ValueError): pass\nCOMMAND_SESSION = True\ndef dispatch(value):\n'
                             '    return {"session": COMMAND_SESSION, "source": bool(_BOOTWRIGHT_SOURCE)}\n')}

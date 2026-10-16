@@ -252,6 +252,9 @@ func TestHostApplyLendsOnlyItsHostsMaterialAndTheRegistryAsAProtectedFile(t *tes
 		t.Fatalf("host apply %+v %v", result, diagnostics.Of(err))
 	}
 	sent := runner.request
+	if !sent.NativeErrors {
+		t.Fatal("Ceph invocation did not opt in to typed native errors")
+	}
 	if sent.Implementation != HostImplementation || sent.Operation != "apply" || sent.Variable != "bootwright_ceph_host" || sent.Deadline != 8365*time.Second ||
 		sent.Placement != (machine.Placement{Connection: machine.ConnectionLocal, Machine: "controller"}) {
 		t.Fatalf("host run %+v", sent)
@@ -323,7 +326,7 @@ func TestHostEvidenceEffects(t *testing.T) {
 		"another owner":     {func(v *HostEvidence) { v.Owner = "apply-other" }, reconciliation.EffectUnknown},
 		"another image":     {func(v *HostEvidence) { v.Image = PinnedRepository + "@sha256:" + strings.Repeat("d", 64) }, reconciliation.EffectUnknown},
 		"another host":      {func(v *HostEvidence) { v.Host = "node-1" }, reconciliation.EffectUnknown},
-		"ready but unbound": {func(v *HostEvidence) { v.CephadmSHA256 = strings.Repeat("e", 64) }, reconciliation.EffectUnknown},
+		"ready but unbound": {func(v *HostEvidence) { v.CephadmSHA256 = "" }, reconciliation.EffectUnknown},
 		"foreign label":     {func(v *HostEvidence) { v.Label = "system_u:object_r:user_tmp_t:s0" }, reconciliation.EffectUnknown},
 		"guessed device":    {func(v *HostEvidence) { v.Devices[0].Serial = "guessed" }, reconciliation.EffectUnknown},
 		"removed":           {func(v *HostEvidence) { v.Removed = true }, reconciliation.EffectUnknown},

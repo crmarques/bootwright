@@ -177,3 +177,12 @@ func TestEveryExecutionDeclaresItsReadOnlyness(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeErrorAdmissionRequiresTheInvocationsExplicitOptIn(t *testing.T) {
+	if RunFor(Execution{}, Invocation{}).NativeErrors {
+		t.Fatal("native prose enabled by default")
+	}
+	if !RunFor(Execution{}, Invocation{NativeErrors: true}).NativeErrors {
+		t.Fatal("explicit native diagnostic contract was lost")
+	}
+}

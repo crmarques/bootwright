@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_worker
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_worker, native_diagnostics
 
 
 DESCENDANT = '''
@@ -106,7 +106,8 @@ def test_remote_command_never_signals_the_supervisors_shared_group(monkeypatch):
 def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
     effect = tmp_path / "effect"
     invocation = [sys.executable, "-I", "-c", DESCENDANT, str(effect)]
-    sources = {"ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
+    sources = {"native_diagnostics": inspect.getsource(native_diagnostics), "ceph_pull_broker": '"""Fixed fixture."""\n',
+               "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
                "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_host_route_probe": '"""Fixed fixture."""\n',
                "ceph_host_runtime": '"""Fixed fixture."""\n',
                "ceph_native": inspect.getsource(ceph_native) +

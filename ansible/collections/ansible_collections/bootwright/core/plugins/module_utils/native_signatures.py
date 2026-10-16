@@ -65,10 +65,8 @@ def select_key(keys, fingerprint):
 
 
 def key_for(request, signer):
-    if request.get("policy") != "ceph-packages-v1":
+    if request.get("policy") != "ceph-packages-v2":
         return read_key(publisher_key(request["platform"]))
-    if request["platform"] != {"os": "rhel", "release": "9.8", "architecture": "amd64"}:
-        raise ValueError("Ceph publisher platform")
     if signer == RHEL_SIGNER:
         return read_key(publisher_key(request["platform"]))
     if signer == IBM_CEPH_SIGNER and set(request.get("publisherKeys", {})) == {IBM_CEPH_SIGNER}:
@@ -90,7 +88,7 @@ def import_ceph_keys(request):
     from ansible_collections.bootwright.core.plugins.module_utils import native_resolution
 
     native_resolution.selected_roots(request)
-    if request.get("policy") != "ceph-packages-v1" or os.geteuid() != 0:
+    if request.get("policy") != "ceph-packages-v2" or os.geteuid() != 0:
         raise ValueError("Ceph publisher import authority")
     signers = sorted({package["signer"] for package in request["plan"]["packages"]})
     if not 0 < len(signers) <= 8:
