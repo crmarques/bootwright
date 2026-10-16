@@ -346,6 +346,16 @@ def test_subvolume_observe_never_lists_a_missing_group():
     assert ready is False and not evidence["exists"] and volume_commands(world) == []
 
 
+@pytest.mark.parametrize("group", ["", "csi"])
+def test_subvolume_observe_never_lists_a_missing_filesystem(group):
+    world = World()
+    world.filesystems.remove(world.entry("files"))
+    native = worker(world, sub_value(group=group))[0]
+    ready, evidence = observe(native)
+    assert ready is False and not evidence["exists"] and evidence["resource"] == {"id": "", "path": ""}
+    assert [command for command in world.log if command[:2] in (("fs", "subvolume"), ("fs", "subvolumegroup"))] == []
+
+
 @pytest.mark.parametrize("change", ["extra", "missing", "dot", "long", "nogroup", "mode", "uid", "filesystem"])
 def test_validation_refuses_a_subvolume_go_never_freezes(change):
     subvolume = sub_value()
