@@ -129,6 +129,13 @@ def test_downstream_secret_or_body_is_refused(header):
         broker.read_request(io.BytesIO(b"GET /v2/ HTTP/1.1\r\n" + header + b"\r\n"))
 
 
+def test_repeated_accept_headers_still_obey_total_byte_limit():
+    header = b"Accept: application/vnd.oci.image.manifest.v1+json\r\n"
+    request = b"GET /v2/ HTTP/1.1\r\n" + header * (broker.MAX_HEADERS // len(header) + 1) + b"\r\n"
+    with pytest.raises(broker.BrokerError):
+        broker.read_request(io.BytesIO(request))
+
+
 def test_byte_budget_and_deadline_refuse_without_unbounded_forwarding():
     up, unused = upstream([])
     value = boundary(up)
@@ -142,8 +149,18 @@ def test_byte_budget_and_deadline_refuse_without_unbounded_forwarding():
         up.fetch("GET", "/v2/", lambda unused: None)
 
 
-@pytest.mark.parametrize("client_identity", [True, False])
-def test_native_tls_client_uses_exact_reference_without_receiving_credentials(tmp_path, client_identity):
+@pytest.mark.parametrize("client_identity,extra_headers,permitted", [
+    (True, "", True),
+    (False, "", False),
+    (True, "hOsT: " + REGISTRY + "\r\n", False),
+    (True, "Content-Length: 0\r\ncOnTeNt-LeNgTh: 0\r\n", False),
+    (True, "Transfer-Encoding: chunked\r\ntransfer-encoding: chunked\r\n", False),
+    (True, "Authorization: secret\r\nauthorization: secret\r\n", False),
+    (True, "Proxy-Authorization: secret\r\nproxy-authorization: secret\r\n", False),
+    (True, "Cookie: secret\r\ncookie: secret\r\n", False),
+    (True, "X-Other: value\r\nx-other: value\r\n", False),
+])
+def test_native_tls_client_uses_exact_reference_without_receiving_credentials(tmp_path, client_identity, extra_headers, permitted):
     """Real loopback TLS and synthetic upstream; no registry or container effects."""
     up, connections = upstream([Response(body=b"native-payload")])
     request = {"registry": REGISTRY, "image": REPOSITORY + "@sha256:" + DIGEST}
@@ -171,14 +188,24 @@ def test_native_tls_client_uses_exact_reference_without_receiving_credentials(tm
 
         def fetch():
             with context.wrap_socket(connection, server_hostname=REGISTRY) as secured:
-                secured.sendall(("GET /v2/vendor/ceph/manifests/sha256:" + DIGEST + " HTTP/1.1\r\nHost: " + REGISTRY + "\r\n\r\n").encode())
+                # containers/image emits separate Accept lines for manifest types.
+                headers = ("Accept: application/vnd.oci.image.manifest.v1+json\r\n"
+                           "aCcEpT: application/vnd.docker.distribution.manifest.v2+json\r\n"
+                           "Accept: application/vnd.docker.distribution.manifest.list.v2+json\r\n")
+                secured.sendall(("GET /v2/vendor/ceph/manifests/sha256:" + DIGEST + " HTTP/1.1\r\nHost: " + REGISTRY
+                                + "\r\n" + headers + extra_headers + "\r\n").encode())
                 with secured.makefile("rb") as stream:
                     return stream.read()
 
-        if client_identity:
+        if permitted:
             output = fetch()
             assert output.endswith(b"native-payload") and PASSWORD.encode() not in output
             assert connections.calls[0][2] == "/v2/vendor/ceph/manifests/sha256:" + DIGEST
+            assert connections.calls[0][3]["Accept"] == (
+                "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json")
+        elif client_identity:
+            assert fetch() == b""
+            assert connections.calls == []
         else:
             with pytest.raises((ssl.SSLError, ConnectionResetError)):
                 fetch()

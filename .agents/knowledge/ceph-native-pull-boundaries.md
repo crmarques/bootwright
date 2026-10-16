@@ -18,6 +18,25 @@ Upstream entitlement and bearer material remain broker-owned. Regression tests
 must inspect the actual directory selected in the native pull arguments, use
 real certificates, and cover cleanup on success and refusal.
 
+## Manifest requests and repeated Accept headers
+
+The native client's
+[manifest request](https://raw.githubusercontent.com/containers/image/v5.34.3/docker/docker_client.go)
+adds one `Accept` header for each supported manifest media type. Rejecting every
+repeated header closes an otherwise valid manifest connection: CONNECT and
+mutual TLS succeed, but the native client receives EOF before any upstream
+manifest request. A test with one `Accept` line does not exercise that request.
+
+The broker permits repeated `Accept` only within the existing total header-byte
+limit. It discards those values locally and builds its own upstream headers;
+they neither select an upstream authority nor carry authentication. Other
+duplicate headers still refuse after case normalization, including Host,
+framing and credential headers. Real loopback tests cover repeated native
+manifest media types, no client-header forwarding, and refusal before upstream
+access for ambiguous or credential-bearing requests. EOF can also represent
+another broker refusal; the synthetic reproduction identifies this parser
+failure without proving a real registry pull succeeded.
+
 ## Validation in the isolated supervisor parent
 
 A bare `native-unknown` may hide result collection or validation failure; it

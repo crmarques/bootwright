@@ -104,7 +104,9 @@ def read_request(stream):
         name, separator, value = line[:-2].partition(b":")
         require(separator and re.fullmatch(rb"[A-Za-z0-9-]+", name) is not None)
         key = name.decode("ascii").lower()
-        require(key not in headers)
+        # Native manifest requests repeat Accept. Its values stay local; the
+        # upstream owner supplies its own Accept header. Other duplicates refuse.
+        require(key == "accept" or key not in headers)
         headers[key] = value.strip().decode("ascii")
     require("transfer-encoding" not in headers and headers.get("content-length", "0") == "0")
     require("authorization" not in headers and "proxy-authorization" not in headers and "cookie" not in headers)
