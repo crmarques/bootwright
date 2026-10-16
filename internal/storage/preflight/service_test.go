@@ -32,14 +32,74 @@ func testService() Service {
 	}, Capacity: fixtureBudget()}
 }
 func TestUninstalledGuestIsPendingWithoutProbe(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		ownership ownedStub
+	}{
+		{"unrecorded", ownedStub{}},
+		{"apply pending", ownedStub{"Machine/guest": {Verb: machine.VerbApply, State: machine.BlockPending}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			s := testService()
+			s.Ownership = test.ownership
+			s.Guests = guestFunc(func(context.Context, string, api.Object, PreflightRequest) ([]Check, error) {
+				t.Fatal("probed a future host")
+				return nil, nil
+			})
+			report, err := s.Check(context.Background(), PreflightRequest{ContextName: "synthetic"})
+			if err == nil || report == nil || report.Summary != (Summary{Pending: 1, Passed: 3}) {
+				t.Fatalf("report=%+v err=%v", report, err)
+			}
+		})
+	}
+}
+func TestUnprovedGuestRemainsUnknownWithoutProbe(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		ownership Ownership
+	}{
+		{"ownership unavailable", nil},
+		{"empty record", ownedStub{"Machine/guest": {}}},
+		{"apply running", ownedStub{"Machine/guest": {Verb: machine.VerbApply, State: machine.BlockRunning}}},
+		{"apply failed", ownedStub{"Machine/guest": {Verb: machine.VerbApply, State: machine.BlockFailed}}},
+		{"apply unknown", ownedStub{"Machine/guest": {Verb: machine.VerbApply, State: machine.BlockUnknown}}},
+		{"apply partial", ownedStub{"Machine/guest": {Verb: machine.VerbApply, State: "partial"}}},
+		{"apply unrecognized", ownedStub{"Machine/guest": {Verb: machine.VerbApply, State: "unrecognized"}}},
+		{"unrecognized verb", ownedStub{"Machine/guest": {Verb: "unrecognized", State: machine.BlockPending}}},
+		{"destroy pending", ownedStub{"Machine/guest": {Verb: machine.VerbDestroy, State: machine.BlockPending}}},
+		{"destroy running", ownedStub{"Machine/guest": {Verb: machine.VerbDestroy, State: machine.BlockRunning}}},
+		{"destroy failed", ownedStub{"Machine/guest": {Verb: machine.VerbDestroy, State: machine.BlockFailed}}},
+		{"destroy unknown", ownedStub{"Machine/guest": {Verb: machine.VerbDestroy, State: machine.BlockUnknown}}},
+		{"destroy done", ownedStub{"Machine/guest": {Verb: machine.VerbDestroy, State: machine.BlockDone}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			s := testService()
+			s.Ownership = test.ownership
+			s.Guests = guestFunc(func(context.Context, string, api.Object, PreflightRequest) ([]Check, error) {
+				t.Fatal("probed a Machine without proved installation")
+				return nil, nil
+			})
+			report, err := s.Check(context.Background(), PreflightRequest{ContextName: "synthetic"})
+			if err == nil || report == nil || report.Summary != (Summary{Unknown: 1, Passed: 3}) {
+				t.Fatalf("report=%+v err=%v", report, err)
+			}
+		})
+	}
+}
+func TestProvidedGuestWithPendingOwnershipUsesActualChecks(t *testing.T) {
 	s := testService()
+	s.Ownership = ownedStub{"Machine/guest": {Verb: machine.VerbApply, State: machine.BlockPending}}
+	cluster, _ := s.Graph.(graphStub).catalog.Find(api.StorageCluster, "storage")
+	host := api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue(api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(true)})}))
+	s.Graph = graphStub{api.NewCatalog([]api.Object{cluster, host})}
+	called := false
 	s.Guests = guestFunc(func(context.Context, string, api.Object, PreflightRequest) ([]Check, error) {
-		t.Fatal("probed a future host")
-		return nil, nil
+		called = true
+		return []Check{{ID: "host.prerequisites", Target: "guest", Status: Failed, Reason: "a native prerequisite is missing"}}, nil
 	})
 	report, err := s.Check(context.Background(), PreflightRequest{ContextName: "synthetic"})
-	if err == nil || report.Summary.Pending != 1 || report.Summary.Passed != 3 {
-		t.Fatalf("report=%+v err=%v", report, err)
+	if !called || err == nil || report == nil || report.Summary != (Summary{Failed: 1, Passed: 3}) {
+		t.Fatalf("called=%t report=%+v err=%v", called, report, err)
 	}
 }
 func TestDryRunNeverObservesProviderOrInstalledGuest(t *testing.T) {

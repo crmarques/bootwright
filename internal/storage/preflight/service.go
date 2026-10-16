@@ -144,7 +144,7 @@ func (s Service) guestChecks(ctx context.Context, selected string, catalog api.C
 	switch {
 	case !found:
 		check.Reason = "the declared Machine is missing"
-	case !provided && !recorded && s.Ownership != nil:
+	case !provided && s.Ownership != nil && (!recorded || state.Verb == machine.VerbApply && state.State == machine.BlockPending):
 		check.Status = Pending
 		check.Reason = "the Machine has not been installed"
 		check.Next = "run bootwright apply --context " + selected + " --stage machines"

@@ -153,6 +153,10 @@ Memory uses observed available memory plus proved owned resident memory; disk
 uses actual backing-filesystem availability plus unique proved allocations.
 Remote provider facts remain unknown until that observer is qualified.
 
+Storage preflight reports future Machines whose managed OS installation has
+not started as pending without remote guest probes. Installed or provided OS
+guests require actual prerequisite observations before readiness is proved.
+
 B472 fixes provider-specific ordering and forbids cycles. Storage never installs
 another domain's prerequisites itself. Preflight names unmet prerequisites and
 their owners; [B490](milestones/m2.md#b490) qualifies host and capacity proofs.
