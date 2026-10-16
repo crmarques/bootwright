@@ -6,6 +6,10 @@ argument_specs:
         type: dict
         required: true
         options:
+          firewallReadyUnit:
+            type: str
+            required: true
+
           identity:
             type: dict
             required: true
@@ -39,7 +43,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [substrate-host-libvirt-v4]
+            choices: [substrate-host-libvirt-v5]
       bootwright_substrate_host_material:
         type: dict
         required: true

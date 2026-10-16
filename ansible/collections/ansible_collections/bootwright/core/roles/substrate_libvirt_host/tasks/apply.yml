@@ -2,7 +2,7 @@
 - name: Validate the frozen provider host request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v4'
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v5'
       - bootwright_substrate_host_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_host_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_host_request.poolPath == '/var/lib/libvirt/images/bootwright/'
@@ -209,6 +209,11 @@
   loop_control:
     label: '{{ item.name }}'
 
+- name: Prepare the owned firewall readiness barrier for host restart
+  bootwright.core.libvirt_firewall_ready:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_firewall_ready
+
 - name: Use this invocation's private definitions
   block:
     - name: Create the private definition directory
@@ -262,6 +267,22 @@
       loop_control:
         label: '{{ item.name }}'
       changed_when: true
+
+    # RemainAfterExit records boot completion, so a running barrier is not proof
+    # that the firewall still answers after an independent firewall restart.
+    - name: Wait for the host firewall to answer before starting managed networks
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - "15"
+          - /usr/bin/firewall-cmd
+          - --state
+      register: substrate_libvirt_host_firewall_state
+      retries: 30
+      delay: 2
+      until: (substrate_libvirt_host_firewall_state.rc | default(1)) == 0
+      changed_when: false
+      when: bootwright_substrate_host_request.firewallReadyUnit | length > 0
 
     - name: Start each managed network
       ansible.builtin.command:
@@ -388,6 +409,7 @@
       {{ 'changed'
          if (substrate_libvirt_host_packages is changed
              or substrate_libvirt_host_daemon is changed
+             or substrate_libvirt_host_firewall_ready is changed
              or substrate_libvirt_host_pool_directory is changed
              or substrate_libvirt_host_running.observation.pool != 'active'
              or substrate_libvirt_host_incomplete_networks | length > 0

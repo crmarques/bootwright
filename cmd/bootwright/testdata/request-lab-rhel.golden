@@ -1,6 +1,7 @@
 {
   "libvirtHosts": [
     {
+      "firewallReadyUnit": "bootwright-lab-lab-libvirt-firewalld-ready.service",
       "identity": {
         "block": "substrate-host-lab-libvirt",
         "context": "lab",
@@ -39,7 +40,7 @@
         "virtstoraged.service"
       ],
       "uri": "qemu:///system",
-      "version": "substrate-host-libvirt-v4"
+      "version": "substrate-host-libvirt-v5"
     }
   ],
   "libvirtMachines": [

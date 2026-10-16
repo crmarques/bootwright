@@ -31,7 +31,7 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 		}
 		if substrate.ManagedAttachments(provider) > substrate.MaxManagedAttachments {
 			found = append(found, lifecycle.RefusalOf(provider,
-				fmt.Sprintf("a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool, within the 64 keys one reservation holds, so it declares at most %d managed attachments", substrate.MaxManagedAttachments),
+				fmt.Sprintf("a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so it declares at most %d managed attachments", substrate.MaxManagedAttachments),
 				fmt.Sprintf("declare at most %d attachments with management: managed in spec.networkAttachments of %s, or make the others external", substrate.MaxManagedAttachments, provider.Identity())))
 		}
 	}
@@ -72,13 +72,21 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 	if uri == "" {
 		return HostRequest{}, refusal("api.required", "the libvirt provider declares no connection URI", "set spec.libvirt.uri on "+provider.Identity())
 	}
+	readyUnit := ""
+	for _, network := range networks {
+		if network.Managed {
+			readyUnit = "bootwright-" + contextName + "-" + name + "-firewalld-ready.service"
+			break
+		}
+	}
 	return HostRequest{
-		Identity:  Identity{Block: HostBlockID(name), Context: contextName, Object: name},
-		Networks:  networks,
-		Packages:  HypervisorPackages(),
-		Placement: placement,
-		PoolName:  substrate.PoolName(contextName, name),
-		PoolPath:  substrate.PoolPath(contextName, name),
+		FirewallReadyUnit: readyUnit,
+		Identity:          Identity{Block: HostBlockID(name), Context: contextName, Object: name},
+		Networks:          networks,
+		Packages:          HypervisorPackages(),
+		Placement:         placement,
+		PoolName:          substrate.PoolName(contextName, name),
+		PoolPath:          substrate.PoolPath(contextName, name),
 		// The controller stage installs the closure on the controller, so this
 		// block proves it there and installs it only on a host reached over SSH.
 		Provisioned: !placement.Local(),

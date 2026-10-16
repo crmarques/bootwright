@@ -1,6 +1,15 @@
 {
   "absent": false,
   "directory": true,
+  "firewallReady": {
+    "answered": true,
+    "enabled": true,
+    "name": "bootwright-lab-lab-libvirt-firewalld-ready.service",
+    "owned": true,
+    "present": true,
+    "ready": true,
+    "state": "active"
+  },
   "hypervisor": true,
   "networks": [
     {

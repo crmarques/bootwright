@@ -177,7 +177,7 @@ func contractRows() []contractRow {
 		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true,
 			noEffect: map[string]any{"power": "Off"}, drift: map[string]any{"reachable": false}},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
-			absence:   map[string]any{"uri": true, "poolAnswered": true, "directory": false},
+			absence:   map[string]any{"uri": true, "poolAnswered": true, "directory": false, "firewallReady": map[string]any{"answered": true}},
 			readiness: "services", removalPartial: contractStoppedPool, drift: map[string]any{"poolAutostart": false}},
 		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence,
 			drift: map[string]any{"installer": "0.0.0"}},
@@ -1137,9 +1137,14 @@ func contractHostPresence(t *testing.T, execution lifecycle.Execution) map[strin
 			"definition": network.Managed, "autostart": network.Managed,
 		})
 	}
+	ready := map[string]any{"name": request.FirewallReadyUnit, "answered": true}
+	if request.FirewallReadyUnit != "" {
+		ready["present"], ready["owned"], ready["enabled"], ready["ready"], ready["state"] = true, true, true, true, "active"
+	}
 	return map[string]any{
 		"postcondition": true, "hypervisor": true, "services": services, "uri": true, "pool": "active", "poolAnswered": true, "networks": networks,
-		"directory": true, "poolAutostart": true, "poolOwned": true,
+		"firewallReady": ready,
+		"directory":     true, "poolAutostart": true, "poolOwned": true,
 	}
 }
 

@@ -62,9 +62,12 @@ LISTENERS = [{"address": "192.0.2.1", "fingerprint": "", "name": "http", "port":
 NETWORK = {"answered": True, "autostart": True, "bridge": True, "definition": True, "managed": True, "name": "n",
            "owned": True, "state": "active", "uuid": "u"}
 SERVICE = {"enabled": True, "name": "virtnetworkd.service", "state": "active"}
-HOST = {"directory": True, "hypervisor": True, "networks": [NETWORK], "pool": "active", "poolAnswered": True,
+READY = {"name": "bootwright-lab-host-firewalld-ready.service", "answered": True, "present": True, "owned": True,
+         "enabled": True, "ready": True, "state": "active"}
+HOST = {"firewallReady": READY, "directory": True, "hypervisor": True, "networks": [NETWORK], "pool": "active", "poolAnswered": True,
         "poolAutostart": True, "poolOwned": True, "services": [SERVICE], "uri": True}
-HOST_GONE = dict(HOST, pool="", networks=[dict(NETWORK, state="", owned=False)], directory=False)
+HOST_GONE = dict(HOST, firewallReady=dict(READY, present=False, owned=False, enabled=False, ready=False, state=""),
+                 pool="", networks=[dict(NETWORK, state="", owned=False)], directory=False)
 DISK = {"name": "root", "present": True, "sizeGiB": 60}
 MACHINE = {"answered": True, "controller": "quay.io/x@sha256:" + "0" * 64, "disks": [DISK],
            "domain": "bootwright-lab-01", "listener": True, "owned": True, "state": "shut off", "unit": "active"}

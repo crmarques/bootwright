@@ -210,7 +210,7 @@ def test_a_destroy_removes_each_empty_parent_never_recursively():
     ]
     validate = index_of(tasks, lambda task: task.get("name") == "Validate the frozen provider host request", "validates the request")
     base = {"bootwright_substrate_host_digest": "0" * 64}
-    request = dict(REQUEST, version="substrate-host-libvirt-v4")
+    request = dict(REQUEST, version="substrate-host-libvirt-v5")
     assert holds(tasks[validate], dict(base, bootwright_substrate_host_request=request))
     shallow = dict(request, poolPath="/var/lib/libvirt/images/bootwright/lab/vmedia")
     assert not holds(tasks[validate], dict(base, bootwright_substrate_host_request=shallow))

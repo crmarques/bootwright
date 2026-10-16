@@ -140,7 +140,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-image-v1":               {class: formatMirrored},
 		"os-package-tree-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
-		"substrate-host-libvirt-v4": {class: formatMirrored},
+		"substrate-host-libvirt-v5": {class: formatMirrored},
 		"machine-libvirt-v6":        {class: formatMirrored},
 		"machine-baremetal-v2":      {class: formatMirrored},
 		"os-package-tree-v1":        {class: formatMirrored},

@@ -98,6 +98,7 @@ EXECUTABLES = frozenset({
 # What GNU timeout may start, held exact the same way.
 TIMEOUT = "/usr/bin/timeout"
 WRAPPED = frozenset({
+    "/usr/bin/firewall-cmd",
     "{{ containercluster_install_agent_installer }}",
     "{{ containercluster_media_agent_installer }}",
 })

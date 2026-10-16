@@ -32,10 +32,10 @@ func TestTheManagedAttachmentBoundKeepsTheHostReservationWithinItsKeys(t *testin
 		t.Fatalf("requests = %+v (%v)", requests, err)
 	}
 	keys := requests[0].ReservationKeys()
-	if len(keys) != 2+3*substrate.MaxManagedAttachments || len(keys) > prerequisites.MaxReservationKeys {
+	if len(keys) != 3+3*substrate.MaxManagedAttachments || len(keys) > prerequisites.MaxReservationKeys {
 		t.Fatalf("%d managed attachments claim %d keys, of the %d one reservation holds", substrate.MaxManagedAttachments, len(keys), prerequisites.MaxReservationKeys)
 	}
-	if 2+3*(substrate.MaxManagedAttachments+1) <= prerequisites.MaxReservationKeys {
+	if 3+3*(substrate.MaxManagedAttachments+1) <= prerequisites.MaxReservationKeys {
 		t.Fatalf("%d managed attachments still fit the %d keys one reservation holds, so the bound is not the largest", substrate.MaxManagedAttachments+1, prerequisites.MaxReservationKeys)
 	}
 }

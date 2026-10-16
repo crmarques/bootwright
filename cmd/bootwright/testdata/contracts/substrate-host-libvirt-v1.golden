@@ -1,7 +1,8 @@
 implementation: substrate-host-libvirt-v1
-content-digest: 56309b3fbe61fb504db90c7fb3e3cf43729ec39f66eb35da19aed93c3915140b
+content-digest: 0ac0fc232da50bcdccea54e861e38e7df4cf7d4a3c6ef43853ba5fc739426e16
 automation-formats: https://bootwright.io/substrate/v1
 request-schema:
+  firewallReadyUnit string
   identity struct libvirt.Identity
   identity.block string
   identity.context string
@@ -30,6 +31,14 @@ request-schema:
 evidence-schema:
   absent bool
   directory *bool
+  firewallReady struct libvirt.FirewallReadyEvidence
+  firewallReady.answered bool
+  firewallReady.enabled bool
+  firewallReady.name string
+  firewallReady.owned bool
+  firewallReady.present bool
+  firewallReady.ready bool
+  firewallReady.state string
   hypervisor bool
   networks []struct libvirt.NetworkEvidence
   networks[].answered bool

@@ -76,6 +76,7 @@ ARTIFACT_SERVER = {
 NETWORK = {"address": "192.0.2.1/24", "bridge": "virbr-lab", "forward": "nat", "managed": True,
            "name": "bootwright-lab-guests"}
 HOST = {
+    "firewallReadyUnit": "bootwright-%s-host-firewalld-ready.service" % CONTEXT,
     "identity": {"block": "provider-host", "context": CONTEXT, "object": "host"},
     "networks": [NETWORK],
     "packages": ["libvirt-daemon-kvm", "qemu-kvm"],
@@ -85,7 +86,7 @@ HOST = {
     "provisioned": True,
     "services": ["virtnetworkd.socket", "virtqemud.socket", "virtstoraged.socket"],
     "uri": "qemu:///system",
-    "version": "substrate-host-libvirt-v4",
+    "version": "substrate-host-libvirt-v5",
 }
 
 MACHINE = {

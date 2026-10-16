@@ -17,10 +17,11 @@ type HostEvidence struct {
 	// Directory is whether anything exists at the pool directory's path, read
 	// whether or not the URI answered. Evidence without it proves the
 	// directory neither present nor absent.
-	Directory  *bool             `json:"directory"`
-	Hypervisor bool              `json:"hypervisor"`
-	Networks   []NetworkEvidence `json:"networks"`
-	Pool       string            `json:"pool"`
+	Directory     *bool                 `json:"directory"`
+	FirewallReady FirewallReadyEvidence `json:"firewallReady"`
+	Hypervisor    bool                  `json:"hypervisor"`
+	Networks      []NetworkEvidence     `json:"networks"`
+	Pool          string                `json:"pool"`
 	// PoolAnswered is whether the storage driver answered for the pool: it
 	// returned the pool, or completed a listing that does not name it. The
 	// URI answering proves only that the hypervisor did, and a storage driver
@@ -39,6 +40,18 @@ type HostEvidence struct {
 	Request       string            `json:"request"`
 	Services      []ServiceEvidence `json:"services"`
 	URI           bool              `json:"uri"`
+}
+
+// FirewallReadyEvidence covers the provider's owned startup barrier, including
+// a residual enablement link. An unread path is never positive absence.
+type FirewallReadyEvidence struct {
+	Answered bool   `json:"answered"`
+	Enabled  bool   `json:"enabled"`
+	Name     string `json:"name"`
+	Owned    bool   `json:"owned"`
+	Present  bool   `json:"present"`
+	Ready    bool   `json:"ready"`
+	State    string `json:"state"`
 }
 
 // ServiceEvidence is one driver daemon's observed state. Enablement is proved
@@ -132,6 +145,12 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 	if err := matchServices(evidence.Services, request.Services); err != nil {
 		return err
 	}
+	if err := matchFirewallReady(evidence.FirewallReady, request.FirewallReadyUnit); err != nil {
+		return err
+	}
+	if request.FirewallReadyUnit != "" && !evidence.FirewallReady.Ready {
+		return refusal("lifecycle.state", "the provider host firewall is not proved enabled and ready", "")
+	}
 	if !evidence.URI {
 		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
 	}
@@ -145,6 +164,22 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 		return refusal("lifecycle.state", "the provider's virtual-media pool does not start with the host", "")
 	}
 	return matchNetworks(evidence.Networks, request.Networks)
+}
+
+func matchFirewallReady(observed FirewallReadyEvidence, name string) error {
+	if !observed.Answered || observed.Name != name {
+		return refusal("lifecycle.state", "the provider host evidence does not prove its frozen firewalld readiness unit", "")
+	}
+	if name == "" {
+		if observed.Present || observed.Owned || observed.Enabled || observed.Ready || observed.State != "" {
+			return refusal("lifecycle.state", "the provider host evidence reports an undeclared firewalld readiness unit", "")
+		}
+		return nil
+	}
+	if !observed.Present || !observed.Owned || !observed.Enabled || observed.State != "active" {
+		return refusal("lifecycle.state", "the provider's firewalld readiness unit is not owned, active and enabled", "")
+	}
+	return nil
 }
 
 // matchServices requires every frozen driver daemon to be running and enabled.
@@ -236,6 +271,10 @@ func ValidateHostAbsence(data []byte, digest string) error {
 	if !evidence.URI {
 		return refusal("lifecycle.state", "the provider host's hypervisor did not answer, so its removal is not proved", "")
 	}
+	ready := evidence.FirewallReady
+	if !ready.Answered || ready.Present || ready.Owned || ready.Enabled || ready.Ready || ready.State != "" {
+		return refusal("lifecycle.state", "the provider host removal evidence does not prove its firewalld readiness unit gone", "")
+	}
 	if evidence.Directory == nil || *evidence.Directory {
 		return refusal("lifecycle.state", "the provider host removal evidence does not prove its pool directory gone", "")
 	}
@@ -315,6 +354,9 @@ func decodeHostRemains(data []byte, digest string) (HostEvidence, error) {
 }
 
 func unremoved(evidence HostEvidence, request HostRequest) error {
+	if err := matchFirewallReady(evidence.FirewallReady, request.FirewallReadyUnit); err != nil {
+		return err
+	}
 	if !evidence.URI {
 		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
 	}
@@ -360,7 +402,11 @@ func holdsOwned(evidence HostEvidence) error {
 	if evidence.Pool != "" && !evidence.PoolOwned {
 		return refusal("lifecycle.state", "a virtual-media pool of the same name targets another directory than this provider's", "")
 	}
-	present := evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory)
+	ready := evidence.FirewallReady
+	if ready.Present && (!ready.Answered || !ready.Owned) {
+		return refusal("lifecycle.state", "a firewalld readiness unit exists without this provider's ownership", "")
+	}
+	present := evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory) || (ready.Answered && ready.Present && ready.Owned)
 	for _, network := range evidence.Networks {
 		if !network.Managed || (network.State == "" && !network.Owned) {
 			continue

@@ -86,10 +86,35 @@ def pool_realized(evidence):
     return evidence["poolAnswered"] and evidence["pool"] == "active" and evidence["poolAutostart"] and evidence["poolOwned"]
 
 
+def firewall_ready(observation):
+    entry = observation.get("firewallReady")
+    if not isinstance(entry, dict) or set(entry) != {"name", "answered", "present", "owned", "enabled", "ready", "state"}:
+        raise ValueError("firewall readiness evidence")
+    if not all(isinstance(entry[key], bool) for key in ("answered", "present", "owned", "enabled", "ready")):
+        raise ValueError("firewall readiness flags")
+    if not isinstance(entry["name"], str) or not isinstance(entry["state"], str):
+        raise ValueError("firewall readiness identity")
+    return dict(entry)
+
+
+def firewall_realized(evidence):
+    entry = evidence["firewallReady"]
+    if not any(network["managed"] for network in evidence["networks"]):
+        return entry["answered"] and not entry["name"] and not entry["present"] and not entry["enabled"]
+    return (entry["answered"] and bool(entry["name"]) and entry["present"] and entry["owned"]
+            and entry["enabled"] and entry["ready"] and entry["state"] == "active")
+
+
+def firewall_gone(evidence):
+    entry = evidence["firewallReady"]
+    return entry["answered"] and not entry["present"] and not entry["enabled"] and not entry["owned"] and not entry["ready"] and entry["state"] == ""
+
+
 def presence(observation, request_digest):
     evidence = {
         "absent": False,
         "directory": directory(observation),
+        "firewallReady": firewall_ready(observation),
         "hypervisor": bool(observation.get("hypervisor")),
         "networks": networks_of(observation),
         "pool": str(observation.get("pool", "")),
@@ -101,7 +126,7 @@ def presence(observation, request_digest):
         "services": services_of(observation),
         "uri": bool(observation.get("uri")),
     }
-    complete = evidence["hypervisor"] and evidence["uri"] and pool_realized(evidence)
+    complete = evidence["hypervisor"] and evidence["uri"] and pool_realized(evidence) and firewall_realized(evidence)
     for entry in evidence["services"]:
         complete = complete and entry["state"] == "active" and entry["enabled"]
     for entry in evidence["networks"]:
@@ -128,6 +153,8 @@ def remaining(observation):
         names.append("networks")
     if observation.get("directory"):
         names.append("directory")
+    if not firewall_gone({"firewallReady": firewall_ready(observation)}):
+        names.append("firewall readiness")
     return names
 
 
@@ -142,6 +169,8 @@ def unproved(evidence):
         if entry["state"] != "active" or not entry["enabled"]:
             names.append("services")
             break
+    if not firewall_realized(evidence):
+        names.append("firewall readiness")
     if not pool_realized(evidence):
         names.append("pool")
     for entry in evidence["networks"]:
@@ -179,6 +208,7 @@ def gone(evidence):
         and evidence["pool"] == ""
         and not any(still_defined(entry) for entry in evidence["networks"])
         and evidence["directory"] is False
+        and firewall_gone(evidence)
     )
 
 
@@ -187,6 +217,7 @@ def absence(observation, request_digest):
     evidence = {
         "absent": True,
         "directory": directory(observation),
+        "firewallReady": firewall_ready(observation),
         "hypervisor": bool(observation.get("hypervisor")),
         "networks": networks_of(observation),
         "pool": str(observation.get("pool", "")),

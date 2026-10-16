@@ -2,7 +2,7 @@
 - name: Validate the frozen provider host request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v4'
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v5'
       - bootwright_substrate_host_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_host_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_host_request.poolPath == '/var/lib/libvirt/images/bootwright/'
@@ -96,6 +96,14 @@
       a libvirt storage pool named {{ bootwright_substrate_host_request.poolName }}
       exists and does not target {{ bootwright_substrate_host_request.poolPath }},
       so it is not this provider's; remove or rename it, then repeat the removal
+    quiet: true
+
+- name: Refuse to remove a foreign or unknown firewall readiness barrier
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_before.observation.firewallReady.answered
+      - not substrate_libvirt_host_before.observation.firewallReady.present or substrate_libvirt_host_before.observation.firewallReady.owned
+    fail_msg: The provider firewall readiness barrier is unknown or belongs to another owner; restore it before removal
     quiet: true
 
 - name: Destroy each owned network
@@ -208,6 +216,12 @@
     status: ok
   no_log: true
 
+- name: Remove only this provider's firewall readiness barrier
+  bootwright.core.libvirt_firewall_ready:
+    request: '{{ bootwright_substrate_host_request }}'
+    state: absent
+  register: substrate_libvirt_host_firewall_ready
+
 - name: Report absence verification
   bootwright.core.substrate_host_protocol:
     phase: group
@@ -235,7 +249,8 @@
          if (substrate_libvirt_host_pool_directory is changed
              or substrate_libvirt_host_before.observation.pool | length > 0
              or substrate_libvirt_host_owned_networks | length > 0
-             or substrate_libvirt_host_parents is changed)
+             or substrate_libvirt_host_parents is changed
+             or substrate_libvirt_host_firewall_ready is changed)
          else 'unchanged' }}
     digest: '{{ bootwright_substrate_host_digest }}'
     observation: '{{ substrate_libvirt_host_after.observation }}'

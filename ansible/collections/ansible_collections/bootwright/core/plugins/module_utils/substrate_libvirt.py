@@ -14,6 +14,8 @@ import re
 import sys
 from xml.etree import ElementTree
 
+from ansible_collections.bootwright.core.plugins.module_utils.libvirt_firewall_ready import observe as observe_firewall_ready
+
 VIRSH = "/usr/bin/virsh"
 QEMU_IMG = "/usr/bin/qemu-img"
 SYSTEMCTL = "/usr/bin/systemctl"
@@ -646,6 +648,7 @@ def observe_host(runner, request):
         })
     return {
         "directory": os.path.lexists(request["poolPath"]),
+        "firewallReady": observe_firewall_ready(runner, request),
         "drifted": drifted,
         "hypervisor": packages_present(runner, request.get("packages") or []),
         "networks": networks,

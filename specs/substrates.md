@@ -73,7 +73,7 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` or `kubevirt` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal or libvirt provider` |
 | A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
 | An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulationDefaults.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulationDefaults.bindAddress on <provider> to one unicast host address` |
-| A provider with more managed attachments than its reservation holds | a libvirt provider with more than 20 `networkAttachments[]` entries of `management: managed` | `a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool, within the 64 keys one reservation holds, so it declares at most 20 managed attachments` | `declare at most 20 attachments with management: managed in spec.networkAttachments of <provider>, or make the others external` |
+| A provider with more managed attachments than its reservation holds | a libvirt provider with more than 20 `networkAttachments[]` entries of `management: managed` | `a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so it declares at most 20 managed attachments` | `declare at most 20 attachments with management: managed in spec.networkAttachments of <provider>, or make the others external` |
 
 ## Provider host realization
 
@@ -113,8 +113,9 @@ declares `management: managed` becomes one persistent libvirt network named
 definition writes as an XML-escaped attribute value, carrying the
 declared host address and prefix, forwarding as `forward` selects, with the
 built-in resolver and DHCP disabled so a managed `DNSServer` may bind the
-bridge address, placed in the host firewall's trusted zone so its guests reach
-the controller's managed services, and carrying ownership metadata naming the
+bridge address, placed in the host firewall's trusted zone through explicit
+`zone="trusted"` on the XML bridge so its guests reach the controller's managed
+services, and carrying ownership metadata naming the
 context and attachment. An `external` attachment is proved present as a bridge
 device, a `/sys/class/net/<name>/bridge` directory rather than any interface of
 that name, and is never defined, changed or removed. On one host, no two providers declare a managed
@@ -135,6 +136,40 @@ network whose definition differs from the frozen request is redefined, and
 restarted while it runs another one. Each managed network is started before it
 is set to autostart, so a start that fails leaves no definition that starts
 with the host.
+
+**Firewall readiness.** A provider with a managed network requires firewalld
+already enabled and running; it never enables or reconfigures the host firewall.
+It owns one readiness unit named
+`bootwright-<context>-<provider>-firewalld-ready.service` and exactly its
+enablement link under `virtnetworkd.service.wants`. The oneshot unit runs after
+`firewalld.service` and before `virtnetworkd.service`, checks actual
+`firewall-cmd --state` readiness with a 75-second start bound, and keeps its
+successful state with `RemainAfterExit=yes`. The driver pulls it in through
+`Wants`, delaying network autostart until the probe succeeds or its bound
+expires; a failed probe does not prove provider completion. Every host adapter
+apply attempt also probes current firewall readiness rather than trusting a successful oneshot
+from earlier in the boot. Missing readiness
+refuses with a remedy; it is never inferred from systemd's active state alone.
+An external-only provider creates no readiness unit.
+
+The unit and enablement link must match this provider's exact frozen ownership;
+unknown files, different enablement targets, drop-ins and foreign overrides
+refuse before replacement or removal. Host completion proves its
+`firewallReady` evidence (`name`, `answered`, `present`, `owned`, `enabled`,
+`ready`, `state`) covers the frozen unit and that it is owned, active and
+enabled. Its `ready` flag proves current firewalld enablement and readiness,
+independently of an earlier oneshot success.
+Destroy removes only that unit and link, and absence requires both gone.
+
+The explicit XML zone is required: libvirt 12's
+[`networkAddFirewallRules`](https://github.com/libvirt/libvirt/blob/v12.0.0/src/network/bridge_driver_linux.c)
+selects its own default zone when the XML omits one, overriding an earlier
+bridge binding. Its
+[`firewalld_dbus_signal_callback`](https://github.com/libvirt/libvirt/blob/v12.0.0/src/network/bridge_driver.c)
+reapplies network firewall rules after firewalld reloads. A permanent bridge
+binding alone therefore cannot preserve trusted-zone access. The readiness
+barrier retains libvirt's zone ownership without changing global daemon units
+or their drop-ins.
 
 The apply reads, for each managed network, both the definition it runs and the
 one libvirt keeps for its next start, and compares each value this contract
@@ -173,16 +208,20 @@ observed on the host.
 bridge name is host-global; `prefix:<masked prefix>` for every managed
 attachment, because the host routes its prefix to that bridge;
 `libvirt-network:<name>` for every managed network; `libvirt-pool:<name>` for
-the pool and `path:` for its directory
+the pool and `path:` for its directory; and `unit:<name>` without the `.service`
+suffix for the provider's
+firewall readiness unit when it has managed networks
 (`TestHostReservationsClaimEveryManagedNetworkAndThePool`). A provider therefore
-declares at most 20 managed attachments, within the 64 keys one reservation
+declares at most 20 managed attachments: 20 × 3 attachment keys plus two pool
+keys and one readiness-unit key use 63 of the 64 keys one reservation
 holds ([controller record](contexts/controller-record.md#bounds)), and
 admission refuses more, naming the bound and `spec.networkAttachments`
 (`TestTheManagedAttachmentBoundKeepsTheHostReservationWithinItsKeys`).
 
 **Evidence.** Completion requires the hypervisor present by package name, every
 driver daemon active and enabled to start with the host, the `uri` answering,
-every managed network active with its ownership metadata, running and keeping
+the provider's owned readiness resources proved as above, every managed
+network active with its ownership metadata, running and keeping
 the frozen definition and set to autostart, every external bridge present, and
 the pool active, set to autostart and targeting the frozen directory. Replay
 reports `completed` with no change when live state matches. The differences it
@@ -190,31 +229,36 @@ converges, each reported as a change, are an owned network whose definition
 differs, which is redefined under the identity it already holds and restarted
 while it runs another definition and nothing runs on it, a missing network or
 pool, which is defined again, and a network or the pool whose autostart was
-switched off, which is set to autostart again.
+switched off, which is set to autostart again, and missing owned readiness
+resources, which are restored under their frozen identity.
 The inverse refuses before its first effect when the `uri` does not answer,
 or when the network driver did not answer for a managed network or the storage
-driver for the pool, or when a same-named network or pool is foreign, then
+driver for the pool, or when a same-named network, pool or readiness resource
+is foreign or unknown, then
 destroys and undefines the networks and pool this context owns, removes the
 pool directory, then removes the provider's, `providers` and context directories
 beneath `/var/lib/libvirt/images/bootwright` each only once it is empty, never
 recursively, retaining `/var/lib/libvirt/images/bootwright` itself, and proves
 each absent: the networks
 and pool through a `uri` that answers and the driver that owns each, and the
-directory by its path. It leaves packages, foreign networks and external
+directory by its path. It also removes the owned readiness unit and enablement
+link and proves their absence. It leaves packages, foreign networks and external
 bridges untouched. Observation is read-only against the frozen request and
 reports whether the `uri` answered and, for each managed network and the pool,
 whether the driver that owns it answered for it: returned it, or completed a
 listing that does not name it. The `uri` answering proves only that the
 hypervisor driver did, and virsh reports a lookup a silent driver failed
 exactly as one that found nothing. The pool, its directory
-or an owned managed network present without the whole is a positive partial
-realization the next attempt converges. A managed network the hypervisor
+or an owned managed network or readiness resource present without the whole
+is a positive partial realization the next attempt converges. A managed network the hypervisor
 defines without this context's ownership is foreign and stays unknown. A
 connection that does not answer reports no network and no pool either, so its
 silence proves neither absent: it is never positive no effect or positive
 absence. A network or pool whose driver did not answer for it is proved
 neither present nor absent in the same way. Evidence without the directory
-proves it neither present nor absent.
+proves it neither present nor absent. Missing, unanswered or mismatched
+readiness evidence similarly proves neither presence nor absence; an owned
+orphan unit or link remains a partial effect to recover.
 The hypervisor closure is shared host software this block never removes, so its
 presence alone is not a partial realization. A removal's resolution reads the
 same observation for what the removal takes back, not for what the apply

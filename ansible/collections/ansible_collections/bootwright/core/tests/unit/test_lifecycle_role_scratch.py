@@ -66,7 +66,7 @@ def test_observation_never_creates_or_removes_durable_install_work():
 
 
 @pytest.mark.parametrize("role,variable,field,suffix,version", [
-    ("substrate_libvirt_host", "bootwright_substrate_host", "poolPath", "providers/node/vmedia", "substrate-host-libvirt-v4"),
+    ("substrate_libvirt_host", "bootwright_substrate_host", "poolPath", "providers/node/vmedia", "substrate-host-libvirt-v5"),
     ("substrate_libvirt_machine", "bootwright_substrate_machine", "directory", "machines/node", "machine-libvirt-v6"),
 ])
 def test_destroy_accepts_only_the_exact_namespaced_identity(role, variable, field, suffix, version):

@@ -55,7 +55,7 @@ func ServiceUnits() []string { return append([]string(nil), serviceUnits...) }
 const domainOff = "shut off"
 
 const (
-	hostRequestVersion    = "substrate-host-libvirt-v4"
+	hostRequestVersion    = "substrate-host-libvirt-v5"
 	machineRequestVersion = "machine-libvirt-v6"
 )
 

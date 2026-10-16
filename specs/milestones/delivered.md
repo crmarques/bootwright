@@ -6387,3 +6387,48 @@ in the delivering commit.
 **Constraints left behind:** no host lifecycle journey was run for this docs
 change, and no operator acceptance or product capability is promoted. Existing
 milestone gates and unsupported-feature refusals remain in force.
+
+### X96 — Managed libvirt network startup
+
+**Owner:** Substrate. A bounded defect slice of [M1](m1.md), authorized on
+2026-10-16. **Item:** B608, delivered in-tree; B608 and B466 await the
+operator restart gate and owner acceptance.
+
+**Outcome:** managed networks retain explicit `zone="trusted"` in libvirt
+XML. Each provider with a managed network owns one bounded firewalld-readiness
+oneshot and its exact `virtnetworkd.service.wants` link. It orders the actual
+firewall readiness probe before network autostart, instead of treating
+systemd's active state as readiness. A fresh probe also precedes current-apply
+network realization. Firewalld must already be enabled and running; the role
+does not enable it or change global daemon units. External-only providers
+create no barrier. [Substrates](../substrates.md#provider-host-realization)
+owns readiness, foreign-resource refusals and evidence requirements.
+
+The original permanent-only bridge-binding proposal is corrected: libvirt
+assigns its own default zone when XML omits one and reapplies that choice on
+firewall reload. Retaining the explicit zone and waiting for readiness keeps
+libvirt responsible for zone membership.
+
+**Guard tests:** collection unit tests cover explicit trusted XML, bounded
+readiness, fresh probing, already-enabled firewall prerequisites, external-only
+providers, foreign unit/link/override refusals and interrupted cleanup. Go
+request goldens freeze the provider's readiness-unit identity; host evidence
+tests require owned active enabled completion and exact removal proof.
+**Gates:** collection units and lint, `make quick`, `make docs-check`,
+`make check` and `make race`; exact results are recorded in the delivering
+commit.
+
+**Upgrade boundary:** the libvirt host request advances from
+`substrate-host-libvirt-v4` to `substrate-host-libvirt-v5`, with a new
+automation digest and affected plan digests. Every live context must first be
+retired with its applying build; it cannot continue across this change. This
+change requires no setup v2 store reset.
+
+**Constraints left behind:** no successful host restart is claimed in-tree.
+B608 and B466 remain on M1 awaiting the owner's fresh three-node apply,
+controller host restart, automatic network and managed-service return,
+explicit guest starts and safe destroy. Earlier accepted overlap, replay and
+cleanup evidence needs no repeat. The owner may accept the actual results in
+conversation; the agent updates the existing acceptance ledger. No separate
+hand-back record is needed, and consent without the actual run does not meet
+the gate. M1 and M2b's M1 prerequisite remain open until that acceptance.

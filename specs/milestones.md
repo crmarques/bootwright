@@ -16,7 +16,7 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | B608, then the owner's three-node host-restart re-run for B466 (D125) |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | Owner restart gate for B608 and B466 (D125) |
 | [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | M1 prerequisite and B80/core promotion gates |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
@@ -24,18 +24,19 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44, X48 to X51, X67, X70, X83, X84, X87 to X94 are delivered.
+X44, X48 to X51, X67, X70, X83, X84, X87 to X96 are delivered in-tree.
 
-- **Next for agents:** M1's [B608](milestones/m1.md#b608), the libvirt
-  network's reboot race, when the owner authorizes it; M2b keeps its M1
-  prerequisite and remaining core/promotion gates after B476's acceptance.
-- **Next for operator:** after B608, repeat the three-node journey's fresh
-  apply, host restart and destroy for [B466](milestones/m1.md#b466), which
-  leaves M1 holding no item. B476 (M2b) is accepted under D155; its
+- **Next for agents:** record actual operator results; B608's
+  [X96](milestones/delivered.md#x96--managed-libvirt-network-startup) is delivered
+  in-tree. M2b retains its M1 prerequisite and core/promotion gates.
+- **Next for operator:** on clean X96, repeat only the three-node fresh apply,
+  controller host restart, explicit guest starts and safe destroy for
+  [B608 and B466](milestones/m1.md#b608). Both await acceptance of that actual
+  run; M1 remains open. B476 (M2b) is accepted under D155; its
   remaining core/promotion gates stay open. The
   [closing run](milestones/delivered.md#x93--the-owner-run-of-2026-10-14)
-  of 2026-10-14 and 2026-10-15 completed D59's other gates and B549 and B555
-  (D154). After M1: follow [M2b to M2e](milestones/m2.md#submilestones), then
+  completed D59's other gates, B549 and B555 under D154. After M1:
+  [M2b to M2e](milestones/m2.md#submilestones), then
   M3's [B61](milestones/m3.md#b61) and cluster gates.
 
 ## Scope rules

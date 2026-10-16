@@ -1,0 +1,42 @@
+{
+  "firewallReadyUnit": "bootwright-lab-lab-libvirt-firewalld-ready.service",
+  "identity": {
+    "block": "substrate-host-lab-libvirt",
+    "context": "lab",
+    "object": "lab-libvirt"
+  },
+  "networks": [
+    {
+      "address": "198.51.100.1/24",
+      "bridge": "virbr-lab",
+      "forward": "nat",
+      "managed": true,
+      "name": "bootwright-lab-lab-guests"
+    }
+  ],
+  "packages": [
+    "libvirt-client",
+    "libvirt-daemon",
+    "libvirt-daemon-driver-network",
+    "libvirt-daemon-driver-qemu",
+    "libvirt-daemon-driver-storage-core",
+    "qemu-img",
+    "qemu-kvm",
+    "swtpm",
+    "swtpm-tools"
+  ],
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "poolName": "bootwright-lab-lab-libvirt-vmedia",
+  "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
+  "provisioned": false,
+  "services": [
+    "virtqemud.service",
+    "virtnetworkd.service",
+    "virtstoraged.service"
+  ],
+  "uri": "qemu:///system",
+  "version": "substrate-host-libvirt-v5"
+}

@@ -34,6 +34,13 @@ def host_observation(**overrides):
         "uri": True,
     }
     observation.update(overrides)
+    if "firewallReady" not in observation:
+        removed = not observation["directory"] and not observation["pool"]
+        observation["firewallReady"] = {
+            "name": "bootwright-lab-host-firewalld-ready.service", "answered": True,
+            "present": not removed, "owned": not removed, "enabled": not removed, "ready": not removed,
+            "state": "" if removed else "active",
+        }
     return observation
 
 
@@ -78,7 +85,7 @@ def test_a_provider_host_removal_names_what_is_still_defined():
     defined = host_observation(pool="", directory=False)
     assert not substrate_host_protocol.absence(defined, DIGEST)["postcondition"]
     assert substrate_host_protocol.remaining(defined) == ["networks"]
-    assert substrate_host_protocol.remaining(host_observation()) == ["pool", "networks", "directory"]
+    assert substrate_host_protocol.remaining(host_observation()) == ["pool", "networks", "directory", "firewall readiness"]
 
 
 def test_an_unmanaged_network_never_blocks_a_removal():
@@ -531,7 +538,10 @@ def test_a_provider_host_a_driver_did_not_answer_for_proves_no_removal(monkeypat
         evidence = observed(host_action, substrate_host_protocol, monkeypatch, observation)
         assert (evidence["absent"], evidence["postcondition"]) == (False, False), unanswered
     # Both drivers answering that nothing is defined is the removal's proof.
-    both = dict(network_silent, poolAnswered=True, networks=[dict(network_silent["networks"][0], answered=True)])
+    both = dict(network_silent,
+                firewallReady={"name": "bootwright-lab-host-firewalld-ready.service", "answered": True, "present": False,
+                               "owned": False, "enabled": False, "ready": False, "state": ""},
+                poolAnswered=True, networks=[dict(network_silent["networks"][0], answered=True)])
     result, published = removal(both)
     assert result == {"changed": False}
     assert published[0]["evidence"]["postcondition"] is True

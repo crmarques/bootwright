@@ -270,6 +270,14 @@ type.
 
 ### A host an earlier Bootwright build manages
 
+For a setup v2 host crossing X96's libvirt change, stop managed guests and
+destroy every live context using the build that applied it before switching
+to this build. The libvirt host request is now `substrate-host-libvirt-v5`
+with a new automation digest; an earlier frozen plan cannot continue across
+that boundary. Keep the original binary until its cleanup completes. This
+change alone needs no store deletion or fresh controller install. The
+following store-reset procedure applies to the earlier setup v2 cut-over.
+
 A host whose `/var/lib/bootwright` holds a store an earlier Bootwright build
 created is not a supported controller for this build until that build's
 environments are retired and its store removed. Store commands refuse there

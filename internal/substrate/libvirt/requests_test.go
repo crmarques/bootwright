@@ -10,7 +10,7 @@ import (
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenHostRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"substrate-host-libvirt-v1", "substrate-host-libvirt-v2", "substrate-host-libvirt-v3", "substrate-host-libvirt-v5", ""} {
+	for _, version := range []string{"substrate-host-libvirt-v1", "substrate-host-libvirt-v2", "substrate-host-libvirt-v3", "substrate-host-libvirt-v4", "substrate-host-libvirt-v6", ""} {
 		_, err := DecodeHostRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)

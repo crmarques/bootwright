@@ -3,6 +3,7 @@ package libvirt
 import (
 	"net/netip"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
@@ -33,12 +34,13 @@ type Network struct {
 // closure it runs, the networks its attachments declare and the pool its
 // emulated controllers stage media in. It carries no secret value.
 type HostRequest struct {
-	Identity  Identity             `json:"identity"`
-	Networks  []Network            `json:"networks"`
-	Packages  []string             `json:"packages"`
-	Placement machineref.Placement `json:"placement"`
-	PoolName  string               `json:"poolName"`
-	PoolPath  string               `json:"poolPath"`
+	FirewallReadyUnit string               `json:"firewallReadyUnit"`
+	Identity          Identity             `json:"identity"`
+	Networks          []Network            `json:"networks"`
+	Packages          []string             `json:"packages"`
+	Placement         machineref.Placement `json:"placement"`
+	PoolName          string               `json:"poolName"`
+	PoolPath          string               `json:"poolPath"`
 	// Provisioned is true when this block installs the closure itself through
 	// the host's own package manager, which it does only on a host reached over
 	// SSH. On the controller the controller stage installs the closure, so this
@@ -168,6 +170,9 @@ func validateDiskMedia(disks []Disk) error {
 // its first effect, so a second context refuses rather than taking them.
 func (r HostRequest) ReservationKeys() []string {
 	keys := []string{"path:" + r.PoolPath, "libvirt-pool:" + r.PoolName}
+	if r.FirewallReadyUnit != "" {
+		keys = append(keys, "unit:"+strings.TrimSuffix(r.FirewallReadyUnit, ".service"))
+	}
 	for _, network := range r.Networks {
 		if !network.Managed {
 			continue
