@@ -715,7 +715,10 @@ declared option as text, where a mode, an enumerated option or a boolean option
 that nmstate reads by a position or an alias (`lacp` or `4`, `lacp_rate: 1`,
 `xmit_hash_policy: 2`, `use_carrier: yes`) compares as the name nmstate shows
 for it (`802.3ad`, `fast`, `layer2+3`, `true`); a VLAN an equal `base-iface` and `id`, and `protocol`
-when declared. An interface declared `absent` is not present. The declared
+when declared. An interface declared `absent` is not present, except as an `ethernet`
+interface listed `down` or `ignore`: absent removes an interface's
+configuration, and a physical NIC stays listed without one, as nmstate's own
+verification accepts. The declared
 routes that are not `absent` equal, one to one, the running routes on declared
 interfaces, matched on destination, `next-hop-interface` when declared,
 next-hop address, `metric` when declared and `table-id` (the main table when

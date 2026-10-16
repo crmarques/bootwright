@@ -234,6 +234,20 @@ def test_compare_refuses_an_absent_interface_that_is_present():
     assert compare(desired, running_document()) == ["interface virbr0: declared absent but present"]
 
 
+def test_compare_accepts_an_absent_hardware_nic_that_stays_listed_down():
+    desired = desired_document()
+    desired["interfaces"].append({"name": "eno2", "type": "ethernet", "state": "absent"})
+    running = running_document()
+    for state in ("down", "ignore"):
+        running["interfaces"].append({"name": "eno2", "type": "ethernet", "state": state})
+        assert compare(desired, running) == [], state
+        running["interfaces"].pop()
+    running["interfaces"].append({"name": "eno2", "type": "ethernet", "state": "up"})
+    assert compare(desired, running) == ["interface eno2: declared absent but present"]
+    running["interfaces"][-1] = {"name": "eno2", "type": "dummy", "state": "down"}
+    assert compare(desired, running) == ["interface eno2: declared absent but present"]
+
+
 def test_compare_names_vlan_bond_and_family_fields():
     running = copy.deepcopy(running_document())
     interfaces = {item["name"]: item for item in running["interfaces"]}

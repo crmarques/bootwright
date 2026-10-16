@@ -370,6 +370,17 @@ def running_interface(candidates, kind):
     return candidates[0] if candidates else None
 
 
+def unconfigured_hardware(entry):
+    """Whether a running entry is a hardware NIC with no active configuration.
+
+    absent removes an interface's configuration; a physical NIC survives it
+    and NetworkManager still lists it, as down or, unmanaged, as ignore
+    (nmstate rust/src/lib/nm/show.rs), and nmstate's own verification
+    accepts it (verify_desire_absent_but_found_in_current in
+    rust/src/lib/query_apply/inter_ifaces.rs)."""
+    return entry.get("type") == "ethernet" and entry.get("state") in ("down", "ignore")
+
+
 def interfaces_differences(desired, running):
     """The differences of every declared interface, in declared order."""
     by_name = {}
@@ -380,7 +391,7 @@ def interfaces_differences(desired, running):
         name = text(interface.get("name"))
         state = interface.get("state", "up")
         if state == "absent":
-            if name in by_name:
+            if any(not unconfigured_hardware(entry) for entry in by_name.get(name, [])):
                 found.append("interface %s: declared absent but present" % name)
             continue
         if state != "up":
