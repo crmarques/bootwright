@@ -6432,3 +6432,32 @@ cleanup evidence needs no repeat. The owner may accept the actual results in
 conversation; the agent updates the existing acceptance ledger. No separate
 hand-back record is needed, and consent without the actual run does not meet
 the gate. M1 and M2b's M1 prerequisite remain open until that acceptance.
+
+### X97 — Inherited service defaults
+
+**Owner:** Substrate. A bounded B608 correction of [M1](m1.md), authorized by
+the existing fix request. **Status:** B608 and B466 still await the operator
+restart gate; no successful native restart is claimed.
+
+**Outcome:** readiness observation distinguishes the qualified operating
+system's inherited vendor service defaults from foreign overrides of the owned
+unit. The blanket `DropInPaths` refusal could reject completion after successful
+native network and pool creation, and prevent cleanup of those partial effects.
+The [firewall-readiness contract](../substrates.md#provider-host-realization)
+owns the narrow vendor-directory trust boundary, effective unit invariants and
+unchanged foreign-resource refusals. Shared defaults are read only and remain
+outside Bootwright ownership.
+
+**Guard tests:** collection units exercise completion, replay and removal with
+inherited defaults, unchanged shared files, unsafe files and directory ancestry,
+malformed paths, mixed vendor and unit-specific overrides, and incompatible
+effective service settings. **Gates:** collection units and lint, `make quick`,
+`make docs-check`, `make check` and `make race`; exact results are recorded in
+the delivering commit.
+
+**Recovery:** this automation-only correction changes no frozen request,
+evidence, unit content, block content digest or runtime lock. A failed X96
+operation can be recovered with its exact input and the corrected build; no
+setup or store reset is needed. A changed desired state still requires taking
+back the original operation's effects before importing the corrected input.
+B608, B466 and M1 remain open until the actual restart run passes and is accepted.

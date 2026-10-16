@@ -21,6 +21,9 @@ class Host:
         self.running = True
         self.fail = ""
         self.calls = []
+        self.dropins = ""
+        self.effective = {"Type": "oneshot", "RemainAfterExit": "yes", "TimeoutStartUSec": "1min 15s",
+                          "Before": "virtnetworkd.service shutdown.target", "After": "sysinit.target firewalld.service"}
 
     def run(self, argv, **kwargs):
         assert kwargs["check_rc"] is False
@@ -32,8 +35,9 @@ class Host:
             return 1, "", "injected failure"
         if action == "show":
             present = (self.root / NAME).exists()
-            return 0, ("LoadState=%s\nActiveState=%s\nFragmentPath=%s\nDropInPaths=\n" % (
-                "loaded" if present else "not-found", self.state, str(self.root / NAME) if present else "")), ""
+            return 0, ("LoadState=%s\nActiveState=%s\nFragmentPath=%s\nDropInPaths=%s\n" % (
+                "loaded" if present else "not-found", self.state, str(self.root / NAME) if present else "", self.dropins)
+                + "".join("%s=%s\n" % item for item in self.effective.items())), ""
         if action == "is-enabled":
             return (0, "enabled\n", "") if self.enabled else (1, "disabled\n", "")
         if action in ("start", "stop"):
@@ -161,3 +165,161 @@ def test_missing_fragment_does_not_hide_retained_or_unknown_unit_state(tmp_path,
     with pytest.raises(ValueError, match="unknown or foreign"):
         host.manage("absent")
     assert all(call[1] == "show" for call in host.calls)
+
+
+VENDOR = "/usr/lib/systemd/system/service.d/"
+
+
+@pytest.fixture
+def vendor_tree(tmp_path, monkeypatch):
+    directory = tmp_path / "vendor-root"
+    directory.mkdir()
+    defaults = directory / VENDOR.lstrip("/")
+    defaults.mkdir(parents=True)
+    check = ready.vendor_dropins
+    monkeypatch.setattr(ready, "vendor_dropins", lambda value: check(value, str(directory), os.geteuid()))
+    return directory, defaults
+
+
+@pytest.mark.parametrize("names", [("10-common.conf",), ("10-common.conf", "20-second.conf"), ("10-common defaults.conf",)])
+def test_vendor_defaults_allow_completion_replay_and_owned_removal_without_global_writes(tmp_path, vendor_tree, names):
+    _root, defaults = vendor_tree
+    before = {}
+    for name in names:
+        path = defaults / name
+        path.write_text("[Service]\nNice=1\n")
+        before[name] = (path.read_bytes(), path.stat())
+    host = Host(tmp_path)
+    # systemctl's string array is space-separated, quoting elements as needed.
+    host.dropins = " ".join(shlex.quote(VENDOR + name) for name in names)
+    assert host.manage("present")
+    observation = ready.observe(host.run, REQUEST, str(tmp_path), os.geteuid())
+    assert observation["answered"] and observation["owned"] and observation["ready"]
+    assert not host.manage("present")
+    assert host.manage("absent")
+    absent = ready.observe(host.run, REQUEST, str(tmp_path), os.geteuid())
+    assert absent["answered"] and not absent["present"] and not absent["owned"] and absent["state"] == ""
+    assert not host.manage("absent")
+    for name in names:
+        assert ((defaults / name).read_bytes(), (defaults / name).stat()) == before[name]
+
+
+@pytest.mark.parametrize("value", [
+    None, [], " ", "'unterminated", "[" + VENDOR + "10-common.conf]", VENDOR + "nested/10-common.conf",
+    VENDOR + "../10-common.conf", VENDOR + "10-common.conf/", VENDOR + "10-common.txt",
+    VENDOR + "10-common.conf\x00", VENDOR + "10-common.conf\nstray",
+    "/etc/systemd/system/service.d/10-common.conf", "/run/systemd/system/service.d/10-common.conf",
+    "/usr/lib/systemd/system/bootwright-.service.d/10-common.conf",
+    "/usr/lib/systemd/system/" + NAME + ".d/10-common.conf",
+    VENDOR + "10-common.conf /etc/systemd/system/service.d/20-local.conf",
+    VENDOR + "missing.conf", "x" * 16385,
+    " ".join([VENDOR + "10-common.conf"] * 65),
+])
+def test_malformed_specific_or_unproved_dropins_refuse(value, vendor_tree):
+    _root, defaults = vendor_tree
+    (defaults / "10-common.conf").write_text("[Service]\nNice=1\n")
+    assert not ready.vendor_dropins(value)
+
+
+@pytest.mark.parametrize("unsafe", ["file-writable", "parent-writable", "file-link", "parent-link", "directory", "fifo"])
+def test_vendor_provenance_rejects_unsafe_files_and_ancestors(vendor_tree, unsafe):
+    root, defaults = vendor_tree
+    path = defaults / "10-common.conf"
+    path.write_text("[Service]\nNice=1\n")
+    if unsafe == "file-writable":
+        path.chmod(0o666)
+    elif unsafe == "parent-writable":
+        (root / "usr/lib").chmod(0o777)
+    elif unsafe == "file-link":
+        target = defaults / "20-target.conf"
+        path.rename(target)
+        path.symlink_to(target)
+    elif unsafe == "parent-link":
+        target = root / "relocated"
+        (root / "usr/lib").rename(target)
+        (root / "usr/lib").symlink_to(target)
+    else:
+        path.unlink()
+        if unsafe == "directory":
+            path.mkdir()
+        else:
+            os.mkfifo(path)
+    assert not ready.vendor_dropins(VENDOR + "10-common.conf")
+
+
+@pytest.mark.parametrize("foreign", ["file", "ancestor"])
+def test_vendor_provenance_requires_trusted_ownership(monkeypatch, vendor_tree, foreign):
+    root, defaults = vendor_tree
+    path = defaults / "10-common.conf"
+    path.write_text("[Service]\nNice=1\n")
+    target = path if foreign == "file" else root / "usr/lib"
+    inode = target.stat().st_ino
+    original = os.fstat
+
+    def foreign_owner(descriptor):
+        info = original(descriptor)
+        if info.st_ino == inode:
+            fields = list(info)
+            fields[4] = os.geteuid() + 1
+            return os.stat_result(fields)
+        return info
+
+    monkeypatch.setattr(os, "fstat", foreign_owner)
+    assert not ready.vendor_dropins(VENDOR + "10-common.conf")
+
+
+@pytest.mark.parametrize("field,value", [
+    ("Type", "simple"), ("RemainAfterExit", "no"), ("TimeoutStartUSec", "infinity"),
+    ("TimeoutStartUSec", "76s"), ("TimeoutStartUSec", ""), ("Before", "shutdown.target"), ("After", "sysinit.target"),
+])
+@pytest.mark.parametrize("inherited", [False, True])
+def test_effective_barrier_cannot_be_weakened_even_by_trusted_defaults(tmp_path, vendor_tree, field, value, inherited):
+    _root, defaults = vendor_tree
+    (defaults / "10-common.conf").write_text("[Service]\nNice=1\n")
+    host = Host(tmp_path)
+    host.dropins = VENDOR + "10-common.conf" if inherited else ""
+    host.effective[field] = value
+    with pytest.raises(ValueError, match="loaded firewall readiness unit"):
+        host.manage("present")
+    assert not any(call[1] == "start" for call in host.calls)
+    assert (tmp_path / NAME).read_bytes() == ready.unit_content(NAME)
+    assert not ready.observe(host.run, REQUEST, str(tmp_path), os.geteuid())["owned"]
+
+
+def test_missing_dropin_property_does_not_prove_no_overrides(tmp_path):
+    host = Host(tmp_path)
+    host.manage("present")
+
+    def missing(argv, **kwargs):
+        code, output, error = host.run(argv, **kwargs)
+        return code, output.replace("DropInPaths=\n", ""), error
+
+    evidence = ready.observe(missing, REQUEST, str(tmp_path), os.geteuid())
+    assert evidence["answered"] and evidence["present"] and not evidence["owned"]
+
+
+@pytest.mark.parametrize("override", [
+    "/etc/systemd/system/service.d/20-local.conf", "/run/systemd/system/" + NAME + ".d/20-runtime.conf",
+    "/usr/lib/systemd/system/" + NAME + ".d/20-specific.conf", "/usr/lib/systemd/system/bootwright-.service.d/20-prefix.conf",
+])
+def test_mixed_vendor_and_specific_overrides_refuse_apply_and_cleanup(tmp_path, vendor_tree, override):
+    _root, defaults = vendor_tree
+    path = defaults / "10-common.conf"
+    path.write_text("[Service]\nNice=1\n")
+    host = Host(tmp_path)
+    host.manage("present")
+    host.dropins = VENDOR + "10-common.conf " + override
+    host.calls.clear()
+    for state in ("present", "absent"):
+        with pytest.raises(ValueError, match="unknown or foreign"):
+            host.manage(state)
+    assert all(call[1] == "show" for call in host.calls)
+    assert path.read_text() == "[Service]\nNice=1\n"
+    assert (tmp_path / NAME).read_bytes() == ready.unit_content(NAME)
+
+
+def test_equivalent_effective_timeout_is_accepted(tmp_path):
+    host = Host(tmp_path)
+    host.effective["TimeoutStartUSec"] = "75s"
+    assert host.manage("present")
+    assert ready.observe(host.run, REQUEST, str(tmp_path), os.geteuid())["owned"]

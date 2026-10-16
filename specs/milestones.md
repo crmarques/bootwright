@@ -24,12 +24,12 @@ every other command `bootwright --help` lists returns the
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44, X48 to X51, X67, X70, X83, X84, X87 to X96 are delivered in-tree.
+X44, X48 to X51, X67, X70, X83, X84, X87 to X97 are delivered in-tree.
 
-- **Next for agents:** record actual operator results; B608's
-  [X96](milestones/delivered.md#x96--managed-libvirt-network-startup) is delivered
-  in-tree. M2b retains its M1 prerequisite and core/promotion gates.
-- **Next for operator:** on clean X96, repeat only the three-node fresh apply,
+- **Next for agents:** record actual operator results after B608's
+  [X97 correction](milestones/delivered.md#x97--inherited-service-defaults).
+  M2b retains its M1 prerequisite and core/promotion gates.
+- **Next for operator:** on clean X97, repeat only the three-node fresh apply,
   controller host restart, explicit guest starts and safe destroy for
   [B608 and B466](milestones/m1.md#b608). Both await acceptance of that actual
   run; M1 remains open. B476 (M2b) is accepted under D155; its

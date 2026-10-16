@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import stat
 import tempfile
 
@@ -78,6 +79,66 @@ def command(runner, arguments):
     return runner(arguments, check_rc=False, environ_update=ENVIRONMENT)
 
 
+def vendor_dropins(value, root="/", owner=0):
+    """Accept only trusted vendor type-wide service defaults, never overrides.
+
+    systemctl renders its string array with shell_maybe_quote, separated by
+    spaces (systemd src/shared/bus-print-properties.c). Parse that data without
+    shell evaluation, then prove each direct vendor file through held directory
+    descriptors. The optional root/owner are the filesystem test boundary.
+    """
+    if not isinstance(value, str) or len(value) > 16384:
+        return False
+    try:
+        paths = shlex.split(value)
+    except ValueError:
+        return False
+    if not paths:
+        return value == ""
+    prefix = "/usr/lib/systemd/system/service.d/"
+    if len(paths) > 64 or any(
+        not path.startswith(prefix) or not path.endswith(".conf")
+        or "/" in path[len(prefix):] or not path[len(prefix):]
+        or any(ord(character) < 32 or ord(character) == 127 for character in path)
+        for path in paths
+    ):
+        return False
+    directory = None
+    try:
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+        directory = os.open(root, flags)
+        for component in (None, "usr", "lib", "systemd", "system", "service.d"):
+            if component is not None:
+                child = os.open(component, flags, dir_fd=directory)
+                os.close(directory)
+                directory = child
+            info = os.fstat(directory)
+            if info.st_uid != owner or stat.S_IMODE(info.st_mode) & 0o022:
+                return False
+        for path in paths:
+            descriptor = os.open(path[len(prefix):], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=directory)
+            try:
+                info = os.fstat(descriptor)
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != owner or stat.S_IMODE(info.st_mode) & 0o022:
+                    return False
+            finally:
+                os.close(descriptor)
+        return True
+    except OSError:
+        return False
+    finally:
+        if directory is not None:
+            os.close(directory)
+
+
+def effective_barrier(values):
+    """Qualified vendor defaults may not weaken the unit's boot barrier."""
+    return (values.get("Type") == "oneshot" and values.get("RemainAfterExit") == "yes"
+            and values.get("TimeoutStartUSec") in ("1min 15s", "75s")
+            and "virtnetworkd.service" in values.get("Before", "").split()
+            and "firewalld.service" in values.get("After", "").split())
+
+
 def observe(runner, request, root=SYSTEMD, owner=0):
     name = request.get("firewallReadyUnit", "")
     result = {"name": name, "answered": True, "present": False, "owned": False, "enabled": False, "ready": False, "state": ""}
@@ -92,14 +153,19 @@ def observe(runner, request, root=SYSTEMD, owner=0):
         present, owned, enabled = inspect_files(name, root, owner)
         result.update(present=present or enabled, owned=owned, enabled=enabled)
         code, output, _error = command(runner, [SYSTEMCTL, "show", "--property=LoadState", "--property=ActiveState",
-                                                "--property=FragmentPath", "--property=DropInPaths", name])
+                                                "--property=FragmentPath", "--property=DropInPaths", "--property=Type",
+                                                "--property=RemainAfterExit", "--property=TimeoutStartUSec",
+                                                "--property=Before", "--property=After", name])
         values = dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
         if code not in (0, 4) or values.get("LoadState") not in ("loaded", "not-found"):
             result["answered"] = False
         else:
             result["state"] = values.get("ActiveState", "")
             fragment = values.get("FragmentPath", "")
-            if values.get("DropInPaths") or fragment not in ("", os.path.join(root, name)):
+            if (
+                not vendor_dropins(values.get("DropInPaths")) or fragment not in ("", os.path.join(root, name))
+                or (values.get("LoadState") == "loaded" and not effective_barrier(values))
+            ):
                 result["owned"] = False
                 result["present"] = True
             if not present and values.get("LoadState") == "loaded":
@@ -165,6 +231,9 @@ def manage(runner, request, state, root=SYSTEMD, owner=0):
             os.symlink(path, link)
             changed = True
         require(runner, [SYSTEMCTL, "daemon-reload"])
+        loaded = observe(runner, request, root, owner)
+        if not loaded["answered"] or not loaded["present"] or not loaded["owned"]:
+            raise ValueError("the loaded firewall readiness unit does not preserve its owned boot barrier")
         if before["state"] != "active":
             require(runner, [SYSTEMCTL, "start", name])
             changed = True

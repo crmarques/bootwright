@@ -153,8 +153,16 @@ refuses with a remedy; it is never inferred from systemd's active state alone.
 An external-only provider creates no readiness unit.
 
 The unit and enablement link must match this provider's exact frozen ownership;
-unknown files, different enablement targets, drop-ins and foreign overrides
-refuse before replacement or removal. Host completion proves its
+unknown files, different enablement targets and unit-specific or administrative
+overrides refuse before replacement or removal. The qualified operating system's
+vendor-wide defaults are trusted only for regular `.conf` files directly under
+`/usr/lib/systemd/system/service.d`, with root ownership, no group/world write
+and no symbolic links in either file or directory ancestry. These
+[type-wide drop-ins](https://github.com/systemd/systemd/blob/main/man/systemd.unit.xml)
+remain outside Bootwright ownership and are never changed or removed. A loaded
+barrier must still prove effective `Type=oneshot`, `RemainAfterExit=yes`, its
+75-second start timeout and the required firewall-before-driver ordering;
+incompatible defaults refuse. Host completion proves its
 `firewallReady` evidence (`name`, `answered`, `present`, `owned`, `enabled`,
 `ready`, `state`) covers the frozen unit and that it is owned, active and
 enabled. Its `ready` flag proves current firewalld enablement and readiness,
