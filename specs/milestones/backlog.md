@@ -197,6 +197,7 @@ Alias cell.
 | [B610](#b610) | new, 2026-10-15 (X93) | product | Substrate | `diff --observe` shows a managed libvirt network that is not active | Found in the owner run; a projector for the provider host, promoted with B576 |
 | [B611](#b611) | new, 2026-10-15 (X93) | enabling | CLI | A check list written to a non-terminal names each row once | Found in the owner run; display only |
 | [B612](#b612) | new, 2026-10-15 (X93) | defect | Controller setup | The core-package note says install, not update, for a package the host lacks | Found in the owner run; wording only |
+| [B616](#b616) | new, 2026-10-16 | defect | Architecture and developer tooling | Source checks exclude unreadable ignored non-source directories | Found during integration verification; test tooling, no milestone gate |
 
 ### B82
 
@@ -1929,6 +1930,16 @@ the selected `python3.X` a core package, so the note is right to appear.
 **Outcome:** the note says the install adds or updates core packages as dnf's
 transaction does. **Exit evidence:** a hostdnf preview test with a fresh
 install.
+
+### B616
+
+Repository-wide Go package patterns and `TestEveryRequestFieldIsRead` can walk
+ignored non-source directories and fail on an unreadable entry before checking
+tracked source. The same committed source passes in a clean worktree. Make the
+source boundary explicit without changing permissions or deleting ignored data,
+and retain complete tracked-package coverage. **Exit evidence:** an ignored,
+unreadable directory regression plus the complete source checks. Parked as
+developer tooling; this adds no product or M2b acceptance gate.
 
 ## Retired
 
