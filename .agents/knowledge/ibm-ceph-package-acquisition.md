@@ -65,6 +65,23 @@ artifact and transaction behavior; [B79](../../specs/milestones/m2.md#b79)
 owns delivery. The evidence here does not qualify package installation,
 interruption recovery or the entitled container.
 
+## Authored cephadm-ansible RPM release
+
+[B615](../../specs/milestones/m2.md#b615) makes the authored
+`ceph.cephadm.ansible.packageVersion` select the actual cephadm-ansible RPM.
+Native DNF interprets the full package coordinate; it does not append a missing
+`.el9cp` release suffix to `5.0.3-1`.
+
+Read-only inspection of IBM's public HTTPS repository metadata on 2026-10-16
+matched primary metadata to its `repomd.xml` checksum and identified
+[1:cephadm-ansible-5.0.3-1.el9cp.noarch](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/cephadm-ansible-5.0.3-1.el9cp.noarch.rpm),
+with SHA-256 `52f44e83e146ae82b5ad106029d95a9213e604dbb2509558b2b009642573b7ca`.
+The [three-node example](../../examples/storage-clusters/libvirt-3-nodes-ceph/storage/cluster.yaml)
+therefore authors `5.0.3-1.el9cp`. This corrects an example coordinate; it adds no
+version allowlist, automatic substitution or support certification. The
+[storage API](../../specs/api/storage.md) owns the
+selection contract.
+
 ## Comps document type at the first live call
 
 Symptom: the first live packages call refuses within seconds with

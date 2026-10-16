@@ -1,4 +1,4 @@
-# Pinned IBM Storage Ceph 9.9.1.2; apply resolves this tag through the Entitlement and freezes its digest.
+# Example authored IBM Storage Ceph 9.9.1.2; apply resolves this tag through the Entitlement and freezes its digest.
 apiVersion: bootwright.io/v1alpha1
 kind: StorageCluster
 metadata:
@@ -29,7 +29,7 @@ spec:
       addressRef: ip
 
       ansible:
-        packageVersion: 5.0.3-1
+        packageVersion: 5.0.3-1.el9cp
 
       clusterSSH:
         user: bootwright
