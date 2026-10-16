@@ -14,6 +14,8 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
+var installInterfaceTypes = []string{"ethernet", "bond", "vlan"}
+
 var bondModes = []string{"balance-rr", "active-backup", "balance-xor", "broadcast", "802.3ad", "balance-tlb", "balance-alb"}
 
 var (
@@ -99,7 +101,11 @@ func installInterfaceRefusal(catalog api.Catalog, machine api.Object, template a
 			}
 		}
 	}
-	declared, _ := findNamed(template.Get("interfaces"), "name", iface)
+	declared, found := findNamed(template.Get("interfaces"), "name", iface)
+	if kind := declared.Get("type").Text(); found && !slices.Contains(installInterfaceTypes, kind) {
+		return "the installer configures only an ethernet, bond or VLAN install interface, and the install interface " + iface + " of " + identity + " is of type " + kind,
+			"assign the install address of " + identity + " to an ethernet, bond or VLAN interface"
+	}
 	if bond, ok := installBond(template, declared); ok {
 		if reason, remediation := bondRefusal(template, bond, identity, host); reason != "" {
 			return reason, remediation
