@@ -4118,9 +4118,9 @@ guard refuses a dot-import of the runner" (dfb627dbf); the fix round also holds
 the commits recorded with [X44](#x44--help-completion-contracts-and-ratchets),
 [X46](#x46--the-safety-and-defect-sweep-of-m1), [X50](#x50--direct-ssh-session-material)
 and [X51](#x51--native-rpm-snapshot-queries). **Items:** B303, B304, B467.
-**Decisions:** D125, D127, D139. **In-tree gates passed, operator gate awaiting
-acceptance:** [B466](m1.md#b466), whose row stays on M1 with Delivery
-`awaiting operator acceptance` for D125's three-node closing run.
+**Decisions:** D125, D127, D139. **Operator gate:** B466 initially awaited
+D125's three-node closing run; [X98](#x98--m1-owner-acceptance) records its
+acceptance and completion.
 
 **Outcome, B303:** every lifecycle role receives the runner's private scratch
 path as execution material, outside its frozen request and digest, proves its
@@ -4186,7 +4186,7 @@ inverse order, consumers first and the tree before its artifact server. The
 partial-effect, replay and old-plan contracts, and the
 [three-node fixture](../../examples/machines/lab-rhel-3-nodes/README.md) (synthetic
 documentation addresses, one shared install profile) exercises it.
-[B466's section](m1.md#b466) states each step and the test that proves it. The
+[B466's section](#b466) states each step and the test that proves it. The
 review closed three gaps: no test ran the production options against the real
 runner, so wiring the invocation scope to nil left every test of `cmd/bootwright`
 green while production would have refused each sibling after the first
@@ -4256,8 +4256,8 @@ destroy leaves no empty per-Machine or per-context work directory; a libvirt
 provider and a Machine may share a name; and the three-node example shows the
 shape.
 
-**Constraints left behind:** [B466](m1.md#b466) completes on D125's
-owner-accepted closing run over the three-node fixture; the full lifecycle
+**Constraints left behind:** B466's operator gate completed under
+[X98](#x98--m1-owner-acceptance). The full lifecycle
 composition over that fixture with the real runner is parked as
 [B495](backlog.md#b495). The installation role's tooling list still names `xorriso`
 beside a comment written before the tree moved to its own block, which no item
@@ -6255,72 +6255,52 @@ discard and the `python3.X` install on a real host.
 ### X93 — the owner run of 2026-10-14
 
 **Owner:** State reconciliation and Controller setup; run by the operator on
-the owner's Fedora 44 laptop and on a RHEL 9.8 guest it installed, from
-2026-10-14 to 2026-10-15, on the clean build `80f18c937`, which descends from
+the qualified controller platforms from 2026-10-14 to 2026-10-15, on the clean
+build `80f18c937`, which descends from
 X44, X48 to X51 and X87 to X92. The owner accepted its rows on 2026-10-15.
 **Items:** B19, B20, B270, B276, B277, B339, B549, B555. **Decisions:** D152,
-D154. The run also observed M1's three-node gate, which stays on M1, blocked
-by the defect it found.
+D154. The three-node gate initially remained blocked by B608; X98 records
+its subsequent acceptance. Environment details and exact evidence are retained
+locally with the original ledger.
 
-**The fresh install.** No context remained under the old store: the old
-build `5345d2f95` listed none, and no domain, pool, unit, container or
-listener of Bootwright's existed. An empty provider directory a destroy of
-2026-10-05 had left under `/var/lib/libvirt/images/bootwright/lab-rhel` was
-removed by hand, then both store roots. X87's S0 baseline could not be taken,
-as M1's [plan](m1.md#controller-setup-v2) records.
+**The fresh install:** earlier effects and stores were removed before setup
+v2. X87's S0 baseline could not be taken, as M1's
+[plan](m1.md#controller-setup-v2) records.
 
-**Outcome, B549:** `scripts/runtime-lock verify` on the owner's host verified
-all 17 locked files; CI's `runtime-lock` workflow passed on the same commit.
+**Outcome, B549:** runtime-lock verification and its CI workflow passed.
 
-**Outcome, B555:** setup v2 met every target on both hosts. On Fedora 44
-(dnf5, Python 3.14.8, both host packages already present), the fresh setup
-took 7.2 s, the ready path 0.79 s and a second clean build with the same lock
-1.01 s, each later one `Nothing to do.`; the runtime held 40.7 MB in 2,477
-files and the wheel cache 10.5 MB in 11. On a RHEL 9.8 guest of the run
-(dnf 4.14.0, glibc 2.34) whose repositories were the controller's hosted DVD
-tree, setup showed dnf's own `--assumeno` preview of podman, python3.14 and
-19 dependencies, then took 42.7 s of which dnf 36 s; the ready path 0.63 s,
-the same-lock build 0.67 s; 41.2 MB in 2,477 files. `preflight controller`
-was ready on both after the controller stage, and a Redfish power read
-answered under the `FUTURE` and `DEFAULT` crypto-policies on Fedora.
+**Outcome, B555:** D154 accepted the fresh, ready and same-lock setup paths,
+measured timing/cache budgets, controller readiness and applicable crypto-policy
+checks. Exact measurements, package-preview exceptions and applicability notes
+are retained locally.
 
-**Outcome, B19, B20, B270, B276 and B277:** the
-[lab-rhel journey](../../examples/machines/lab-rhel/README.md#run-it) ran as written
-with the lab conventions only: the four services answered (the chrony check
-printed an offset within its ten seconds), RHEL 9.8 installed in 8m24s, the
-running guest's disk read `virtual-size` 64424509440 under `--force-share`,
-`machine exec` and `rsh` reached it with no trust prompt, a restart came back,
-the replay settled, a destroy refused `lifecycle.live` until the guest
-stopped, the removal and a fresh apply completed, and after a host restart
-`machine start` brought the guest back. After the last destroy no
-`bootwright-*` unit existed, failed or otherwise. The four JSON `status` cases
-under password-required sudo gave one document each and nothing on standard
-error: exit 0, exit 0, then exit 1 with `runtime.privilege` for the missing
-password and for sudo's denial of `/proc/<pid>/exe`.
+**Outcome, B19, B20, B270, B276 and B277:** D154 accepted the
+[lab-rhel journey](../../examples/machines/lab-rhel/README.md#run-it), including
+service and machine access, clock and running-disk checks, restart, settled
+replay, live-resource destroy refusal, stopped-resource removal, fresh apply,
+host-restart recovery and absence checks. The JSON privilege cases returned
+the required single documents and diagnostics without standard-error output.
+Exact command history, results and log digests are retained locally.
 
-**Outcome, B339:** on Fedora 44 and on RHEL 9.8, both sudo 1.9.17p2 with
-`use_pty` at its default, one Ctrl-C during an interactive apply recorded the
-running block as `unknown`, exited 130 and left the terminal usable, and the
-next `apply` resolved the block and finished. Cleanup took under a second, so
-the second-press path never arose; D154 accepted the observation as B339's
-gate.
+**Outcome, B339:** interruption recorded the running block as `unknown`,
+returned exit 130 with a usable terminal, and the next apply resolved it and
+finished. The second-press path did not arise; D154 accepted the observation
+as the gate. Platform-specific details remain local.
 
 **Observed, B466:** the
-[three-node journey](../../examples/machines/lab-rhel-3-nodes/README.md), with 4 GiB
-guests, overlapped the four services, the three machine realizations beside
-the tree publication, and the three installations end to end (01:03:27 to
-01:12:12 UTC, then 01:18:19 to 01:27:24 in a fresh apply), with one tree
-publication block; the replay settled and both destroys left no unit or image
-directory. After the host restart the guests' network stayed down and
-`machine start` failed for all three ([B608](m1.md#b608)); the removal from
-that state completed. The row is an observation.
+[three-node journey](../../examples/machines/lab-rhel-3-nodes/README.md) proved
+concurrent service and machine work, shared publication, overlapping
+installations, settled replay and clean removal. Host-restart recovery failed
+because the managed network remained inactive ([B608](#b608)); removal from
+that state completed. That ledger row remains an observation. X98 combines
+its accepted passing clauses with the subsequent restart journey.
 
-**Constraints left behind:** B466 and M1 wait on B608. The run also found
+**Constraints left behind:** the remaining B608/B466 gate and M1 completed
+under [X98](#x98--m1-owner-acceptance). The run also found
 [B609](backlog.md#b609), [B610](backlog.md#b610), [B611](backlog.md#b611) and
-[B612](backlog.md#b612), parked under D48, and a dnf4 preview capture for
-[B560](backlog.md#b560); a dnf5 one did not arise, since nothing was missing on
-Fedora. The ledger rows hold the commands, outcomes and log digests; the
-evidence stays local to the owner.
+[B612](backlog.md#b612), parked under D48. Preview-capture evidence for
+[B560](backlog.md#b560) and the original command history, outcomes and digests
+are retained locally. The public ledger records the accepted qualifications.
 
 ### X94 — Post-destroy cluster inspection
 
@@ -6352,9 +6332,9 @@ B476's acceptance baseline is the commit whose `Refs:` line closes X70; this
 row descends from it. B613's post-destroy inspection correction is qualified
 in-tree; no live rerun of the correction is claimed.
 
-**Constraints left behind:** M1 still requires B608 and B466's host-restart
-rerun. B476 is complete, but M2b promotion still requires M1 and the remaining
-core/prerequisite gates on [M2](m2.md#m2b). B80's open definition and promotion
+**Constraints left behind:** X98 subsequently completed B608, B466 and M1.
+B476 is complete; M2b's remaining core/prerequisite gates on
+[M2](m2.md#m2b) stay open. B80's open definition and promotion
 gates remain. D155's future reconciliation and shared-host safety directions
 remain unimplemented; this correction authorizes none of them.
 
@@ -6391,8 +6371,8 @@ milestone gates and unsupported-feature refusals remain in force.
 ### X96 — Managed libvirt network startup
 
 **Owner:** Substrate. A bounded defect slice of [M1](m1.md), authorized on
-2026-10-16. **Item:** B608, delivered in-tree; B608 and B466 await the
-operator restart gate and owner acceptance.
+2026-10-16. **Item:** B608, delivered in-tree here; its operator gate and
+B466 completed under [X98](#x98--m1-owner-acceptance).
 
 **Outcome:** managed networks retain explicit `zone="trusted"` in libvirt
 XML. Each provider with a managed network owns one bounded firewalld-readiness
@@ -6424,20 +6404,17 @@ automation digest and affected plan digests. Every live context must first be
 retired with its applying build; it cannot continue across this change. This
 change requires no setup v2 store reset.
 
-**Constraints left behind:** no successful host restart is claimed in-tree.
-B608 and B466 remain on M1 awaiting the owner's fresh three-node apply,
-controller host restart, automatic network and managed-service return,
-explicit guest starts and safe destroy. Earlier accepted overlap, replay and
-cleanup evidence needs no repeat. The owner may accept the actual results in
-conversation; the agent updates the existing acceptance ledger. No separate
-hand-back record is needed, and consent without the actual run does not meet
-the gate. M1 and M2b's M1 prerequisite remain open until that acceptance.
+**Constraints left behind:** this slice qualified the correction in-tree.
+[X98](#x98--m1-owner-acceptance) subsequently records the completed restart
+journey and owner acceptance, closing B608, B466 and M1. The earlier accepted
+overlap, replay and cleanup evidence needed no repeat. M2b's M1 prerequisite
+is now satisfied; its remaining gates stay open.
 
 ### X97 — Inherited service defaults
 
 **Owner:** Substrate. A bounded B608 correction of [M1](m1.md), authorized by
-the existing fix request. **Status:** B608 and B466 still await the operator
-restart gate; no successful native restart is claimed.
+the existing fix request. **Status:** delivered in-tree here; the remaining
+B608/B466 operator gate completed under [X98](#x98--m1-owner-acceptance).
 
 **Outcome:** readiness observation distinguishes the qualified operating
 system's inherited vendor service defaults from foreign overrides of the owned
@@ -6460,4 +6437,118 @@ evidence, unit content, block content digest or runtime lock. A failed X96
 operation can be recovered with its exact input and the corrected build; no
 setup or store reset is needed. A changed desired state still requires taking
 back the original operation's effects before importing the corrected input.
-B608, B466 and M1 remain open until the actual restart run passes and is accepted.
+The actual restart run and owner acceptance subsequently completed B608,
+B466 and M1 under [X98](#x98--m1-owner-acceptance).
+
+### X98 — M1 owner acceptance
+
+**Owner:** State reconciliation and Substrate. An acceptance record for
+[M1](m1.md), authorized on 2026-10-16. **Items:** B466 and B608, completed.
+**Decision:** [D156](backlog.md#decisions). **Tested build:**
+`591af9616446596a77a599cd6303970a85131694`, source `clean`.
+
+**Outcome:** the owner-accepted three-node scenario completed fresh apply,
+controller host restart, automatic network and managed-service recovery,
+explicit guest startup, access and service checks, safe stop/destroy, absence
+checks, local evidence preservation and context purge. The earlier accepted
+concurrency, shared publication, replay and cleanup evidence remains valid.
+The owner accepted passing results in conversation and then requested the
+records after the completed run; no separate hand-back form or approval is
+required. The [acceptance ledger](../../docs/acceptance.md) records acceptance;
+command history, runtime facts, operation-log digests, archive digest and raw
+evidence are retained locally.
+
+**Milestone completion:** M1 is done on 2026-10-16 at the tested build above.
+It has no remaining item or planned slice. M2's M1 prerequisite is satisfied;
+M2b retains its remaining core/prerequisite and B80 promotion gates. B476's
+acceptance under D155 remains unchanged. This record completes no additional
+M2 item or later milestone.
+
+**Verification:** this slice changes delivery records only. Documentation and
+repository gate commands and results belong to the delivering commit. The
+functional implementation and guard tests remain in X48, X96 and X97.
+
+#### B466
+
+**Outcome:** independent services and same-profile installations run
+concurrently. [X48](#x48--bounded-concurrent-execution) delivered the
+implementation under D127. D125's operator gate is accepted under D156:
+the earlier concurrency and replay evidence combines with X98's completed
+restart journey. The following implementation and test map is retained from
+the item.
+
+The DAG already admitted independent infrastructure services and libvirt
+machines, and the scheduler already implemented bounded concurrent execution.
+Before X48, production nevertheless passed `Concurrency: 1` in
+`cmd/bootwright/wiring_reconciliation.go`, and
+`TestLifecycleConcurrencyBound` enforced it pending B303 and B304. A second,
+independent limit was in `internal/managedos/installation/requests.go`:
+`Request.ExclusiveKeys` froze the shared package-tree path on each entire
+installation block, holding it through installer boot and completion.
+Same-profile installations therefore serialized even with a higher production
+bound. Wave width measures graph shape; it neither overrides the bound nor
+accounts for exclusive resources.
+
+Authorized on M1 by D127 after rebasing over main. The shared publication
+realizes `MachineInstallProfile` under implementation/request
+`os-package-tree-v1`, with evidence `os-package-tree-evidence-v1`;
+installation requests advance to `os-install-anaconda-v8`.
+[Managed OS](../managed-os.md#shared-package-tree-publication) owns
+partial-effect, interrupted-removal, replay and old-plan contracts.
+
+**What X48 delivered, and where each step is proved:**
+
+1. B303 and B304 precede the bound: every role receives the runner's private
+   scratch, durable machine work and libvirt provider media occupy disjoint
+   `machines` and `providers` namespaces, and an invocation's own live jobs
+   pass the running-adapter refusal while a foreign, unattributed or orphaned
+   job still refuses. The runner's scope tests in
+   `internal/reconciliation/ansiblerunner`, the role scratch and remnants unit
+   tests, and the structural no-fixed-scratch rule with its self-tests prove it.
+2. Managed OS owns one durable package-tree publication block per context and
+   install profile with a hosted tree, in the `machines` stage; each
+   installation requires it and holds no exclusive tree claim.
+   `TestThreeInstallationsHaveOneSharedPublication` and the production-DAG test
+   in step 5 prove one publication block with one exclusive key, which each
+   installation requires and none holds.
+3. Tree extraction, atomic publication, observation and removal moved to that
+   owner, with its own evidence; inverse dependencies retain the tree until
+   every consumer is removed. `TestTreeRequestAndEvidenceGoldens`,
+   `TestTreeContinuationClassifiesPartialAndInterruptedRemoval`,
+   `TestTreeOldRequestAndEvidenceVersionsRefuse`,
+   `TestATreeApplyNamesItsRefusalsWithTheirRemedy` and the role harness in
+   `test_managedos_package_tree.py` prove replay, continuation after partial
+   publication, interrupted removal and the named refusals.
+4. Production uses the engine's bound of eight with no public flag or
+   desired-state field; `TestLifecycleConcurrencyBound` enforces it.
+5. Production composition is qualified at three levels.
+   `TestTheComposedInvocationScopeAdmitsSiblingRunsOfItsRunner` takes the
+   composed options' invocation scope with a real runner and a controlled
+   adapter, proves that two sibling runs are admitted while a run outside the
+   scope refuses, and fails when the scope is unwired.
+   `TestThreeNodeRHELExampleSharesOnePublicationAndAdmitsIndependentWork`
+   compiles the three-node example through the production capabilities and
+   checks which blocks are ready together, exclusive keys, selected stages and
+   the inverse order.
+   `TestThreeMachineWavesRunInOneInvocationWithPrivateScratch` runs each wave
+   of a three-Machine apply and destroy through real adapter processes held at
+   barriers. The cancellation case is
+   `TestInvocationScopeClosesOnlyAfterEveryCanceledAdapterSettles`. The full
+   lifecycle composition over the example with the real runner and controlled
+   adapters is parked as [B495](backlog.md#b495), because D125's operator gate
+   proves overlap on a host.
+
+#### B608
+
+**Outcome:** managed network startup waits for actual firewall readiness while
+retaining the explicit trusted XML zone. [X96](#x96--managed-libvirt-network-startup)
+delivered the bounded owned barrier, completion/absence evidence and frozen
+request change; [X97](#x97--inherited-service-defaults) qualified inherited
+vendor defaults and recovery without changing the frozen contract.
+[Substrates](../substrates.md#provider-host-realization) owns the required
+behavior. X98's completed restart journey and D156 close the operator gate.
+
+**Constraints left behind:** B495's full composed lifecycle rehearsal remains
+parked. M1 completion neither promotes parked safety work nor waives M2's
+remaining gates. Runtime-specific observations and recovery details are
+retained locally.

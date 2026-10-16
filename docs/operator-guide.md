@@ -576,8 +576,8 @@ or managed units remain.
 
 Extended acceptance adds a running-disk size read, a destroy refused while
 the guest runs, then stop and destroy, a fresh apply, a host restart and
-guest start/stop/removal checks. The three-node host-restart rerun remains
-gated by [B608](../specs/milestones/m1.md#b608). These checks qualify the
+guest start/stop/removal checks. The accepted three-node host-restart rerun
+is recorded under [B608](../specs/milestones/delivered.md#b608). These checks qualify the
 milestone beyond the ordinary example journey.
 
 Besides the runbook's time, machine-access, replay, restart and final-unit

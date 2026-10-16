@@ -16,28 +16,25 @@ every other command `bootwright --help` lists returns the
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | in progress | Owner restart gate for B608 and B466 (D125) |
-| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | M1 prerequisite and B80/core promotion gates |
+| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | done | none; completed under D156 |
+| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | M2b's remaining core/prerequisite and B80 promotion gates |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
 | [M5](milestones/m5.md) | OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44, X48 to X51, X67, X70, X83, X84, X87 to X97 are delivered in-tree.
+X44, X48 to X51, X67, X70, X83, X84, X87 to X97 are delivered in-tree;
+[X98](milestones/delivered.md#x98--m1-owner-acceptance) records M1's completion.
 
-- **Next for agents:** record actual operator results after B608's
-  [X97 correction](milestones/delivered.md#x97--inherited-service-defaults).
-  M2b retains its M1 prerequisite and core/promotion gates.
-- **Next for operator:** on clean X97, repeat only the three-node fresh apply,
-  controller host restart, explicit guest starts and safe destroy for
-  [B608 and B466](milestones/m1.md#b608). Both await acceptance of that actual
-  run; M1 remains open. B476 (M2b) is accepted under D155; its
-  remaining core/promotion gates stay open. The
-  [closing run](milestones/delivered.md#x93--the-owner-run-of-2026-10-14)
-  completed D59's other gates, B549 and B555 under D154. After M1:
-  [M2b to M2e](milestones/m2.md#submilestones), then
-  M3's [B61](milestones/m3.md#b61) and cluster gates.
+- **Next for agents:** M2b's remaining core/prerequisite and
+  [B80 promotion gates](milestones/m2.md#b80), within the authorized scope.
+  M1's prerequisite is satisfied; M2b remains in progress.
+- **Next for operator:** no M1 rerun remains. B476 was accepted under D155;
+  M2b's other gates remain before [M2c to M2e](milestones/m2.md#submilestones),
+  then M3's [B61](milestones/m3.md#b61) and cluster gates. D156 accepts the
+  completed B466/B608 journey and declares M1 done on 2026-10-16 at tested
+  clean build `591af9616446596a77a599cd6303970a85131694`.
 
 ## Scope rules
 

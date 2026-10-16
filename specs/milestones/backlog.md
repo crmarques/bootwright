@@ -1914,7 +1914,7 @@ the prompt.
 
 ### B610
 
-After a host restart left a context's managed network inactive ([B608](m1.md#b608)),
+After a host restart left a context's managed network inactive ([B608](delivered.md#b608)),
 `diff --observe` reported "No differences" and read the provider host as
 "part of this effect is realized as its frozen request states" with
 `spec.networkAttachments` not compared. **Outcome:** observation of a libvirt
@@ -2279,8 +2279,9 @@ Requires cell as `owner decision: <question>`.
   [X93](delivered.md#x93--the-owner-run-of-2026-10-14) for B19, B20, B270, B276, B277,
   B339, B549 and B555, which leave M1; accepts D152 as written, whose clause 9
   is (b): the closing validation ran on the X88 build; and records the
-  reboot defect as [B608](m1.md#b608) on M1, where it blocks B466. M1 stays
-  in progress, and B476's run (M2b) follows later.
+  reboot defect as [B608](delivered.md#b608) on M1, where it blocks B466. M1 stays
+  in progress, and B476's run (M2b) follows later. D156 subsequently closes
+  the remaining M1 gates.
 - **D155** (2026-10-16, the owner accepts the recommendations): D153 clauses
   1 to 4 stand as written. B574 is retired: settlement continues to attest only
   the completed frozen records over unchanged input, without re-planning or a
@@ -2301,4 +2302,19 @@ Requires cell as `owner decision: <question>`.
   [ledger row](../../docs/acceptance.md) and explicitly attests that dashboard
   fingerprint comparison, successful login and expected host/OSD inventory
   checks passed. This closes B476's operator gate on 2026-10-16; M2b promotion
-  still requires M1 and its remaining core/prerequisite gates.
+  still requires M1 and its remaining core/prerequisite gates. D156
+  subsequently satisfies M1; the other M2b gates remain open.
+- **D156** (2026-10-16, the owner): the standing acceptance of passing criteria
+  in conversation applies to the completed B466/B608 journey. The owner
+  requested the records after the actual fresh apply, controller host restart,
+  automatic network and managed-service recovery, guest startup/access checks,
+  safe removal, evidence preservation and context purge passed. Accept B466
+  and B608 on clean tested build
+  `591af9616446596a77a599cd6303970a85131694`, recorded by
+  [X98](delivered.md#x98--m1-owner-acceptance) and the existing acceptance
+  ledger. No separate hand-back form or further approval is required.
+  M1 is done on 2026-10-16 at that tested build, with no open item or planned
+  slice. M2's M1 prerequisite is satisfied; M2b's remaining core/prerequisite
+  and B80 promotion gates remain open. B476's acceptance under D155 stands.
+  This decision neither completes M2 nor authorizes unrelated implementation.
+  Runtime facts, exact commands, digests and raw evidence are retained locally.
