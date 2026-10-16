@@ -4506,9 +4506,14 @@ the retirement tests `TestHostBoundEffectRetiresWithItsHostsWhichStopFirst`,
 
 **Constraints left behind:** each build supports one reviewed, code-pinned
 release, and the digest is frozen by the image block, not code-pinned, until
-B472's lock adds it. The runtime profile and host preparation run only on the
-apply path, and no host has run them yet: [B476](delivered.md#x94--post-destroy-cluster-inspection)'s owner run is the
-acceptance. The package decision journal and the operation index format moved,
+B472's lock adds it. The runtime profile and host preparation run on the apply
+path. Their operator gate was unrun at delivery; B476's accepted run under
+[X94](#x94--post-destroy-cluster-inspection) subsequently exercised them through
+the ordinary staged apply, data and outage/recovery checks, dashboard checks,
+retirement with all owned virtual hosts and purge. M2b's remaining
+[core/prerequisite and B80 gates](m2.md#m2b) stay open; that accepted run is not
+blanket qualification of every native failure or credential boundary.
+The package decision journal and the operation index format moved,
 so a context from an earlier build is destroyed with its applying build or
 abandoned with `--purge --allow-orphans`. Removal while hosts survive stays
 [B491](m2.md#b491). The dashboard keeps Ceph's self-signed certificate and
