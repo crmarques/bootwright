@@ -2607,6 +2607,85 @@ class Worker:
             self.markers.write("service-inputs.json", {"version": "ceph-service-inputs-v1", "scope": scope, "services": result})
         return result
 
+    def prove_service_projections(self, projections, observed, scope):
+        """Admit only descriptions synthesized from this operation's remaining seed daemons."""
+        require(self.request["clusterSSHTransport"] == "verified-tunnel"
+                and self.host["name"] == self.request["bootstrap"], "foreign-service")
+        unused, staging = tunnel_helpers()
+        intent = staging.stage_intent(self.request)
+        for name in ("bootstrap-protocol.json", "bootstrap-attempt.json", "bootstrap-enrollment.json"):
+            require(canonical(self.markers.read(name)) == canonical(scope), "ownership")
+        require(self.markers.read("tunnel-stage.json") == intent, "ownership")
+        redeploy = self.markers.read("tunnel-redeploy.json")
+        require(isinstance(redeploy, dict) and set(redeploy) == {"scope", "custodyID"}
+                and isinstance(redeploy["scope"], dict), "ownership")
+        plan = redeploy["scope"].get("plan")
+        require(isinstance(plan, dict) and set(plan) == {"version", "intent", "monMetadata", "mgrMetadata"}
+                and plan["version"] == "ceph-tunnel-redeploy-v1" and plan["intent"] == intent
+                and redeploy["scope"] == self.manager_scope(plan), "ownership")
+        for kind in ("mon", "mgr"):
+            staging.parse_metadata(canonical(plan[kind + "Metadata"]), kind)
+        require(isinstance(redeploy["custodyID"], str) and re.fullmatch(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", redeploy["custodyID"]) is not None
+                and self.markers.read("tunnel-mounted.json") == {"intent": intent, "custodyID": redeploy["custodyID"]}, "ownership")
+        require(self.configuration_complete(), "native-tunnel-unproved")
+        self.verify_transport_bundle()
+        daemons = self.daemons()
+        self.verify_manager_mounts(daemons)
+        for kind in projections:
+            candidates = [daemon for daemon in daemons if daemon.get("name", "").startswith(kind + ".")]
+            require(len(candidates) == 1 and candidates[0]["name"] == kind + "." + intent[kind + "ID"], "foreign-service")
+            staging.seed_daemon(self.request, candidates[0], observing=False)
+        # describe_service includes deleted specs; --export omits them. Equal
+        # complete inventories prevent a deleted or hidden peer being adopted.
+        descriptions = {}
+        for row in self.services_inventory():
+            value = dict(row)
+            status = value.pop("status", None)
+            value.pop("events", None)
+            require(isinstance(status, dict) and "created" not in value and "deleted" not in value
+                    and "deleted" not in status, "foreign-service")
+            kind = value.get("service_type")
+            identifier = value.get("service_id")
+            require(isinstance(kind, str) and (identifier is None or isinstance(identifier, str)), "foreign-service")
+            key = kind + ("." + identifier if identifier else "")
+            require(key not in descriptions and value.pop("service_name", key) == key, "foreign-service")
+            if value.get("unmanaged") is False:
+                value.pop("unmanaged")
+            descriptions[key] = value
+            if key in projections:
+                require(value.get("unmanaged") is True and value == {"service_type": key, "unmanaged": True}
+                        and "created" not in status
+                        and set(status) <= {"size", "running", "last_refresh", "container_image_id", "container_image_name"}
+                        and type(status.get("size")) is int and status["size"] == 0
+                        and type(status.get("running")) is int and status["running"] == 1, "foreign-service")
+                require(all(isinstance(status[field], str) for field in set(status) - {"size", "running"}), "foreign-service")
+                require("container_image_name" not in status or status["container_image_name"] == self.request["image"], "foreign-service")
+        require(descriptions == observed, "foreign-service")
+
+    def owned_service_specs(self, expected, scope):
+        """Check all peers and intents before publishing any new service effect."""
+        observed = self.service_specs()
+        require(set(observed) <= set(expected), "foreign-service")
+        projections = set()
+        for key, value in expected.items():
+            intent = {"scope": scope, "service": value}
+            attempt = self.markers.read("service-" + key + "-attempt.json")
+            complete = self.markers.read("service-" + key + "-complete.json")
+            require(attempt is None or attempt == intent, "ownership")
+            require(complete is None or complete == intent and attempt == intent, "ownership")
+            present = observed.get(key)
+            require(complete is None or present == value, "foreign-service")
+            if present is None:
+                continue
+            if key in ("mon", "mgr") and present.get("unmanaged") is True and present == {"service_type": key, "unmanaged": True}:
+                require(complete is None, "foreign-service")
+                projections.add(key)
+            else:
+                require(present == value and attempt == intent, "foreign-service")
+        if projections:
+            self.prove_service_projections(projections, observed, scope)
+        return {key: value for key, value in observed.items() if key not in projections}
+
     def services(self, devices=None, service=None):
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
@@ -2631,13 +2710,7 @@ class Worker:
             attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
             require(attempt is None or attempt == intent, "ownership")
             require(complete is None or complete == intent and attempt == intent, "ownership")
-            observed = self.service_specs()
-            require(set(observed) <= set(keys), "foreign-service")
-            expected = dict(zip(keys, wanted))
-            for observed_key, observed_value in observed.items():
-                require(observed_value == expected[observed_key]
-                        and self.markers.read("service-" + observed_key + "-attempt.json") == {"scope": scope, "service": expected[observed_key]},
-                        "foreign-service")
+            observed = self.owned_service_specs(dict(zip(keys, wanted)), scope)
             present = observed.get(key)
             require(present is None or attempt == intent and present == value, "foreign-service")
             require(complete is None or present == value, "foreign-service")

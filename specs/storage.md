@@ -268,6 +268,16 @@ and label attempts and per-service apply attempts retain exact intent before
 effects and exact completion after native readback. A lost reply settles from
 the same host/service identity; drift refuses. Native ServiceSpec defaults come
 from the selected image's SDK and are frozen before effects.
+An orchestrator service description is not by itself a stored specification:
+native discovery can describe a bootstrap daemon through an inferred unmanaged
+service. Only the exact owned bootstrap MON/MGR projection may be treated as
+the absence of a stored specification, after full native descriptions prove
+that distinction and current bootstrap, daemon and transport proofs agree.
+A stored unmanaged specification receives the ordinary ownership checks.
+Every observed service is checked before a new service effect. The inferred
+projection never supplies desired placement or completion: normal frozen
+service intent precedes apply, and exact readback precedes completion. Unknown
+description shapes, foreign specifications and completed-service drift refuse.
 OSD services use deterministic per-host children with the proved virtio or
 QEMU SCSI serial aliases. Immediately before submission each host proves empty devices or exact
 owned partial OSD/LV UUID and membership; raw path reuse cannot widen the write
