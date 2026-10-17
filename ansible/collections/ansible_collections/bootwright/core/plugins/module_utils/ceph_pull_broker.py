@@ -279,6 +279,7 @@ class Broker:
         self.stopping = threading.Event()
         self.slots = threading.BoundedSemaphore(MAX_WORKERS)
         self.total = self.accepted = 0
+        self.failure = None
 
     def path(self, method, path):
         require(method in ("GET", "HEAD"))
@@ -291,8 +292,20 @@ class Broker:
         require(path.startswith(blob) and HEX.fullmatch(path[len(blob):]) is not None)
         return MAX_BLOB
 
-    def response(self, stream, response, method, maximum):
+    @property
+    def failure_cause(self):
+        """Latest refusal observed in this invocation, including its native retries."""
+        with self.lock:
+            failure = self.failure
+        if failure is None:
+            return ""
+        request_class, status = failure
+        return "broker observed " + request_class + " upstream HTTP " + str(status)
+
+    def response(self, stream, response, method, maximum, request_class):
         if response.status != 200:
+            with self.lock:
+                self.failure = (request_class, response.status)
             raw = response.read(MAX_METADATA + 1)
             message = native_diagnostics.redact(raw[:MAX_METADATA], secrets=self.upstream.private)
             body = json.dumps({"errors": [{"code": "REGISTRY_REFUSED", "message": "upstream HTTP " + str(response.status) + ": " + message}]}).encode()
@@ -339,7 +352,8 @@ class Broker:
                 method, path, headers = read_request(stream)
                 require(headers.get("host") in (self.authority, self.host + ":" + str(self.port)))
                 maximum = self.path(method, path)
-                self.upstream.fetch(method, path, lambda response: self.response(stream, response, method, maximum))
+                request_class = "registry" if path == "/v2/" else "blob" if maximum == MAX_BLOB else "manifest"
+                self.upstream.fetch(method, path, lambda response: self.response(stream, response, method, maximum, request_class))
         except (BrokerError, OSError, ValueError, http.client.HTTPException):
             # A closed connection is a native pull error. No exception text or
             # authentication challenge can cross the downstream boundary.

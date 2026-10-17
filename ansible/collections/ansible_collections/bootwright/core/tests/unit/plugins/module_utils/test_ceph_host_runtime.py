@@ -10,11 +10,14 @@ import base64
 import contextlib
 import copy
 import hashlib
+import io
 import json
 import os
 import re
 import ssl
 import subprocess
+import threading
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -33,6 +36,7 @@ def injected_broker(monkeypatch):
 
     class Broker:
         environment = {}
+        failure_cause = ""
 
         def __init__(self, directory, request, private, deadline, command):
             assert json.loads(private)["password"] == PASSWORD
@@ -1038,3 +1042,72 @@ def test_final_pull_failure_retains_the_native_stderr(request_value, tmp_path):
         worker.profile({"registryJSON": registry(request_value)})
     assert "manifest unknown" in caught.value.native_error["cause"]
     assert "synthetic-secret" not in str(caught.value.native_error)
+
+
+def test_pull_http_cause_survives_redaction_and_truncation_without_cross_invocation_state(
+        request_value, tmp_path, monkeypatch, injected_broker):
+    instances = []
+
+    class Broker(injected_broker):
+        environment = {}
+
+        def __init__(self, directory, *unused):
+            self.cert_directory = os.path.join(directory, "native-certs")
+            self.lock = threading.Lock()
+            self.failure = None
+            self.upstream = SimpleNamespace(private=[PASSWORD])
+            self.exited = False
+            instances.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *unused):
+            self.exited = True
+
+        @property
+        def failure_cause(self):
+            assert self.exited
+            return super().failure_cause
+
+    monkeypatch.setattr(runtime.ceph_pull_broker, "Broker", Broker)
+    for invocation in range(2):
+        podman = Podman(request_value, ["fail"] * runtime.PULL_ATTEMPTS)
+
+        def command(argv, timeout, limit):
+            code, output = podman(argv, timeout, limit)
+            if argv[:2] == ["/usr/bin/podman", "pull"]:
+                if invocation == 0:
+                    response = SimpleNamespace(status=503, read=lambda unused: b"private upstream body")
+                    instances[-1].response(io.BytesIO(), response, "GET", 1024, "manifest")
+                stderr = ("native refused password=" + PASSWORD + "; " + "long diagnostic " * 400).encode()
+                return code, ceph_native.NativeOutput(output, stderr)
+            return code, output
+
+        worker, markers, unused_clock = host_runtime(request_value, tmp_path / str(invocation), command)
+        with pytest.raises(ceph_native.NativeFailure) as caught:
+            with worker.journal(create=True) as durable:
+                worker.pull(durable, registry(request_value), 4285)
+        detail = caught.value.native_error
+        assert detail["coordinate"] == IMAGE
+        assert "native refused password=[redacted]" in detail["cause"]
+        assert PASSWORD not in str(detail) and "private upstream body" not in str(detail)
+        assert len(detail["cause"].encode()) <= 1024
+        assert detail["cause"].startswith("broker observed manifest upstream HTTP 503; ") is (invocation == 0)
+        assert pull_argv_count(podman) == runtime.PULL_ATTEMPTS
+        assert "pulled.json" not in markers.records
+    assert len(instances) == 2 and all(value.exited for value in instances)
+
+
+def test_successful_pull_retry_does_not_project_an_earlier_broker_refusal(request_value, tmp_path, monkeypatch):
+    class Broker(runtime.ceph_pull_broker.Broker):
+        @property
+        def failure_cause(self):
+            pytest.fail("successful pull must not project an observed refusal")
+
+    monkeypatch.setattr(runtime.ceph_pull_broker, "Broker", Broker)
+    podman = Podman(request_value, ["fail", "ok"])
+    worker, markers, unused = host_runtime(request_value, tmp_path, podman)
+    with worker.journal(create=True) as durable:
+        assert worker.pull(durable, registry(request_value), 4285) is True
+    assert pull_argv_count(podman) == 2 and "pulled.json" in markers.records

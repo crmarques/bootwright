@@ -72,6 +72,7 @@ def boundary(up):
     value = object.__new__(broker.Broker)
     value.namespace, value.digest, value.upstream = "vendor/ceph", DIGEST, up
     value.total = 0
+    value.failure = None
     import threading
     value.lock = threading.Lock()
     value.stopping = threading.Event()
@@ -85,7 +86,7 @@ def test_registry_authentication_is_owned_by_broker_and_never_forwarded():
         Response(body=b"manifest", headers={"Content-Type": "application/json", "Set-Cookie": PASSWORD, "WWW-Authenticate": TOKEN}),
     ])
     output = io.BytesIO()
-    up.fetch("GET", "/v2/vendor/ceph/manifests/sha256:" + DIGEST, lambda response: boundary(up).response(output, response, "GET", 1024))
+    up.fetch("GET", "/v2/vendor/ceph/manifests/sha256:" + DIGEST, lambda response: boundary(up).response(output, response, "GET", 1024, "manifest"))
     assert connections.calls[0][3].get("Authorization") is None
     assert connections.calls[1][3]["Authorization"] == "Basic " + base64.b64encode(b"operator:" + PASSWORD.encode()).decode()
     assert connections.calls[1][2].startswith("/token?")
@@ -94,6 +95,40 @@ def test_registry_authentication_is_owned_by_broker_and_never_forwarded():
     assert PASSWORD.encode() not in output.getvalue() and TOKEN.encode() not in output.getvalue()
     assert b"Set-Cookie" not in output.getvalue() and b"WWW-Authenticate" not in output.getvalue()
     assert connections.closed == 3
+
+
+@pytest.mark.parametrize("request_class", ["registry", "manifest", "blob"])
+@pytest.mark.parametrize("status", [301, 302, 307, 308, 401, 403, 404, 429, 500, 502, 503])
+def test_final_http_failure_retains_only_bounded_class_and_status(request_class, status):
+    rows = [Response(status, b"private upstream body", {"Location": "https://foreign.example.test/?token=" + TOKEN})]
+    if status == 401:
+        rows[:0] = [Response(401, headers={"WWW-Authenticate": CHALLENGE}), Response(body=json.dumps({"token": TOKEN}).encode())]
+    up, connections = upstream(rows)
+    value = boundary(up)
+    output = io.BytesIO()
+    paths = {"registry": "/v2/", "manifest": "/v2/vendor/ceph/manifests/sha256:" + DIGEST,
+             "blob": "/v2/vendor/ceph/blobs/sha256:" + DIGEST}
+    path = paths[request_class]
+    maximum = value.path("GET", path)
+    up.fetch("GET", path, lambda response: value.response(output, response, "GET", maximum, request_class))
+    assert value.failure == (request_class, status)
+    assert value.failure_cause == "broker observed " + request_class + " upstream HTTP " + str(status)
+    assert output.getvalue().startswith(b"HTTP/1.1 502 Bad Gateway")
+    assert b"Location" not in output.getvalue() and TOKEN.encode() not in output.getvalue()
+    assert len(connections.calls) == (3 if status == 401 else 1)
+    assert boundary(up).failure_cause == ""
+
+
+def test_successful_response_does_not_record_a_failure_and_retention_stays_bounded():
+    up, unused = upstream([])
+    value = boundary(up)
+    value.response(io.BytesIO(), Response(), "GET", broker.MAX_METADATA, "registry")
+    assert value.failure_cause == ""
+    for status in range(400, 512):
+        value.response(io.BytesIO(), Response(status), "GET", broker.MAX_METADATA, "manifest")
+    assert value.failure == ("manifest", 511)
+    value.response(io.BytesIO(), Response(), "GET", broker.MAX_METADATA, "registry")
+    assert value.failure_cause == "broker observed manifest upstream HTTP 511"
 
 
 @pytest.mark.parametrize("realm", ["https://foreign.example.test/token", "http://registry.example.test/token",
@@ -109,7 +144,7 @@ def test_wrong_token_realm_receives_neither_basic_nor_bearer(realm):
 def test_redirect_is_not_followed_and_private_error_is_redacted():
     up, connections = upstream([Response(307, ("redirect denied " + PASSWORD).encode(), {"Location": "https://foreign.example.test/"})])
     output = io.BytesIO()
-    up.fetch("GET", "/v2/", lambda response: boundary(up).response(output, response, "GET", 1024))
+    up.fetch("GET", "/v2/", lambda response: boundary(up).response(output, response, "GET", 1024, "manifest"))
     assert len(connections.calls) == 1 and b"Location" not in output.getvalue()
     assert b"HTTP/1.1 502" in output.getvalue() and b"redirect denied" in output.getvalue()
     assert PASSWORD.encode() not in output.getvalue()
@@ -140,10 +175,10 @@ def test_byte_budget_and_deadline_refuse_without_unbounded_forwarding():
     up, unused = upstream([])
     value = boundary(up)
     with pytest.raises(broker.BrokerError):
-        value.response(io.BytesIO(), Response(body=b"oversized"), "GET", 2)
+        value.response(io.BytesIO(), Response(body=b"oversized"), "GET", 2, "blob")
     value.deadline = time.monotonic() - 1
     with pytest.raises(broker.BrokerError):
-        value.response(io.BytesIO(), Response(), "GET", 1024)
+        value.response(io.BytesIO(), Response(), "GET", 1024, "manifest")
     up.deadline = time.monotonic() - 1
     with pytest.raises(broker.BrokerError):
         up.fetch("GET", "/v2/", lambda unused: None)

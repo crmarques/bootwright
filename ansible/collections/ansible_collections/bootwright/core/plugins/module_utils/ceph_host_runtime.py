@@ -29,6 +29,7 @@ import uuid
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_host_route_probe as probe, ceph_native, ceph_native_observe as observe, ceph_tunnel, ceph_tunnel_custody as custody, ceph_pull_broker,
+    native_diagnostics,
 )
 
 ROOT = "/var/lib/bootwright/ceph-host"
@@ -468,24 +469,30 @@ class HostRuntime:
         ceph_native.registry_material(self.request, private)
         material = json.loads(private, object_pairs_hook=ceph_native.unique_object)
         secrets = (material["username"], material["password"])
-        with owned_scratch(durable.path, "pull-") as scratch, authfile(scratch) as auth, \
-                ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command) as broker:
-            policy = os.path.join(scratch, "policy.json")
-            ceph_native.private_write(policy, signature_policy(image))
-            argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth,
-                    "--cert-dir", broker.cert_directory, image]
-            while True:
-                seconds = min(PULL_SECONDS, deadline - self.clock() - PULL_RESERVE)
-                require(seconds >= PULL_MINIMUM, "image-pull")
-                attempts += 1
-                durable.write("pull-attempt-%d.json" % attempts, {"scope": self.scope(), "attempt": attempts})
-                try:
-                    self.command(argv, seconds, 256 << 10, "image-pull", environment=broker.environment, secrets=secrets)
-                    break
-                except Refusal:
-                    if attempts >= PULL_ATTEMPTS:
-                        raise
-                    self.pause(PULL_PAUSE)
+        broker = None
+        try:
+            with owned_scratch(durable.path, "pull-") as scratch, authfile(scratch) as auth, \
+                    ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command) as broker:
+                policy = os.path.join(scratch, "policy.json")
+                ceph_native.private_write(policy, signature_policy(image))
+                argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth,
+                        "--cert-dir", broker.cert_directory, image]
+                while True:
+                    seconds = min(PULL_SECONDS, deadline - self.clock() - PULL_RESERVE)
+                    require(seconds >= PULL_MINIMUM, "image-pull")
+                    attempts += 1
+                    durable.write("pull-attempt-%d.json" % attempts, {"scope": self.scope(), "attempt": attempts})
+                    try:
+                        self.command(argv, seconds, 256 << 10, "image-pull", environment=broker.environment, secrets=secrets)
+                        break
+                    except Refusal:
+                        if attempts >= PULL_ATTEMPTS:
+                            raise
+                        self.pause(PULL_PAUSE)
+        except ceph_native.NativeFailure as error:
+            if broker is not None and broker.failure_cause:
+                error.native_error["cause"] = native_diagnostics.redact(broker.failure_cause + "; " + error.native_error["cause"])
+            raise
         current = inspect_image(image, self.command)
         durable.write("pulled.json", {"scope": self.scope(), "imageID": current["id"]})
         return True

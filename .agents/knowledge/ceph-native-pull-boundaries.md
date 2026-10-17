@@ -37,6 +37,26 @@ access for ambiguous or credential-bearing requests. EOF can also represent
 another broker refusal; the synthetic reproduction identifies this parser
 failure without proving a real registry pull succeeded.
 
+## Upstream HTTP status lost behind a broker 502
+
+The broker maps a final non-200 registry response to a local 502. Its JSON
+body includes the original status, but a native client may discard that body:
+[containers/image's error handler](https://raw.githubusercontent.com/containers/image/v5.34.3/docker/distribution_error.go)
+parses registry error bodies for 4xx responses and otherwise reports the HTTP
+status alone. A native blob error naming 502 therefore identifies neither a
+redirect nor a particular upstream refusal. Authentication, availability,
+rate limits and redirects must not be inferred from that status.
+
+Retain a bounded invocation-local observation independently of the downstream
+body: a fixed request class and integer upstream HTTP status only. After broker
+workers finish, prepend that observation to the existing bounded native cause,
+so a long native stderr cannot truncate it away. Label it as observed during
+the invocation rather than claiming it was the final native retry's response.
+No successful response creates a refusal, and a new broker starts without an
+observation. Never retain response headers, signed redirect locations, raw URLs
+or authentication challenges in that observation. Synthetic refusals exercise
+this path without changing redirect, authority or credential policy.
+
 ## Validation in the isolated supervisor parent
 
 A bare `native-unknown` may hide result collection or validation failure; it
