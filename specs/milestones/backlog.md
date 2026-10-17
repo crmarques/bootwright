@@ -198,6 +198,7 @@ Alias cell.
 | [B611](#b611) | new, 2026-10-15 (X93) | enabling | CLI | A check list written to a non-terminal names each row once | Found in the owner run; display only |
 | [B612](#b612) | new, 2026-10-15 (X93) | defect | Controller setup | The core-package note says install, not update, for a package the host lacks | Found in the owner run; wording only |
 | [B616](#b616) | new, 2026-10-16 | defect | Architecture and developer tooling | Source checks exclude unreadable ignored non-source directories | Found during integration verification; test tooling, no milestone gate |
+| [B617](#b617) | new, 2026-10-17 | defect | Storage | Registry socket publication serialized with close | Pre-existing connector race; separate cancellation follow-up, no new milestone gate |
 
 ### B82
 
@@ -1940,6 +1941,22 @@ source boundary explicit without changing permissions or deleting ignored data,
 and retain complete tracked-package coverage. **Exit evidence:** an ignored,
 unreadable directory regression plus the complete source checks. Parked as
 developer tooling; this adds no product or M2b acceptance gate.
+
+### B617
+
+`RegistryConnection.connect` in
+`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_pull_broker.py`
+checks cancellation before allocating and publishing its socket, without
+serializing that publication against `close`. A network-free synthetic schedule
+can let close see no socket, then let connect allocate one afterward. Concurrent
+close can also clear `self.sock` during connection setup. Existing socket and
+worker deadlines still bound the attempt; immediate cancellation is not proved.
+This predates blob delivery and is left unchanged by that correction.
+**Outcome:** socket publication and close share a tested ownership transition,
+without holding a mutex across blocking connect or TLS. **Exit evidence:**
+injected cancellation at allocation, connect and TLS boundaries proves no late
+publication, lost socket or unhandled setup exception. Parked for separate
+cancellation work; it adds no M2b acceptance gate.
 
 ## Retired
 

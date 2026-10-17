@@ -2,8 +2,10 @@
 
 Only this broker holds the entitlement and registry bearer token. The native
 client receives an empty authfile and an ephemeral CA, so a proxy bypass never
-carries credentials. Every upstream connection uses the host TLS trust and
-the one selected registry authority; redirects and foreign token realms refuse.
+carries credentials. Every upstream connection uses the host TLS trust.
+Authentication stays at the selected registry authority; only blob reads may
+use one public HTTPS delivery endpoint without registry credentials. Foreign
+token realms refuse.
 """
 
 from __future__ import annotations
@@ -18,11 +20,12 @@ import re
 import socket
 import ssl
 import stat
+import sys
 import threading
 import time
 import urllib.parse
 
-from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_diagnostics
 
 MAX_HEADERS = 16384
 MAX_METADATA = 1 << 20
@@ -31,6 +34,89 @@ MAX_TOTAL = 32 << 30
 MAX_CONNECTIONS = 512
 MAX_WORKERS = 8
 HEX = re.compile(r"[0-9a-f]{64}\Z")
+
+
+# A fresh exec owns potentially blocking libc/NSS resolution. No Python work
+# runs after a bare fork of the threaded broker, and no URL or credential is an
+# argument. The native command owner bounds pipes, time and kill/reap cleanup.
+DNS_SOURCE = """import json, socket, sys
+try:
+    host = sys.stdin.buffer.read(254).decode('ascii')
+    rows = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
+    if not 0 < len(rows) <= 16:
+        raise ValueError()
+    data = json.dumps([[family, kind, protocol, list(address)] for family, kind, protocol, _, address in rows]).encode()
+    if len(data) > 8192:
+        raise ValueError()
+    sys.stdout.buffer.write(data)
+except Exception:
+    sys.exit(1)
+"""
+
+
+def delivery_location(response):
+    locations = [value for name, value in response.getheaders() if name.lower() == "location"]
+    require(len(locations) == 1)
+    value = locations[0]
+    require(isinstance(value, str) and 0 < len(value) <= 4096 and all(32 < ord(char) < 127 for char in value)
+            and "\\" not in value)
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        require(parsed.scheme == "https" and parsed.hostname and parsed.port in (None, 443)
+                and parsed.username is None and parsed.password is None and not parsed.fragment and "#" not in value)
+        host = parsed.hostname
+        require(len(host) <= 253 and all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) is not None
+                                         for label in host.split(".")))
+        require(parsed.netloc.lower() in (host, host + ":443"))
+        path = parsed.path or "/"
+        require(path.startswith("/") and not path.startswith("//"))
+        return host, path + ("?" + parsed.query if parsed.query else "")
+    except ValueError:
+        raise BrokerError("blob delivery location") from None
+
+
+def delivery_addresses(raw):
+    # DNS framing integers must reject bool and float, not accept int subclasses.
+    # pylint: disable=unidiomatic-typecheck
+    require(isinstance(raw, bytes) and len(raw) <= 8192)
+    rows = json.loads(raw)
+    require(isinstance(rows, list) and 0 < len(rows) <= 16)
+    addresses, seen = [], set()
+    for row in rows:
+        require(isinstance(row, list) and len(row) == 4 and all(type(value) is int for value in row[:3]))
+        family, kind, protocol, address = row
+        require(family in (socket.AF_INET, socket.AF_INET6) and kind == socket.SOCK_STREAM and protocol == socket.IPPROTO_TCP)
+        require(isinstance(address, list) and len(address) == (2 if family == socket.AF_INET else 4)
+                and isinstance(address[0], str) and all(type(value) is int for value in address[1:]) and address[1] == 443)
+        require(family == socket.AF_INET or address[2:] == [0, 0])
+        ip = ipaddress.ip_address(address[0])
+        require(ip.version == (4 if family == socket.AF_INET else 6) and str(ip) == address[0]
+                and ip.is_global and not ip.is_reserved and not ip.is_multicast and not ip.is_unspecified
+                and not ip.is_loopback and not ip.is_link_local and not ip.is_private)
+        require(ip.version == 4 or not ip.is_site_local and ip.ipv4_mapped is None and ip.sixtofour is None and ip.teredo is None)
+        identity = (family, tuple(address))
+        require(identity not in seen)
+        seen.add(identity)
+        addresses.append((family, kind, protocol, "", tuple(address)))
+    return addresses
+
+
+class DeliveryResponse:
+    """Only blob bytes and a bounded framing length can cross this boundary."""
+
+    _bootwright_delivery = True
+
+    def __init__(self, response):
+        self.response, self.status = response, response.status
+        self.length = response.getheader("Content-Length") if self.status == 200 else None
+        require(self.length is None or re.fullmatch(r"0|[1-9][0-9]{0,11}", self.length) is not None
+                and int(self.length) <= MAX_BLOB)
+
+    def getheader(self, name, default=None):
+        return {"Content-Type": "application/octet-stream", "Content-Length": self.length}.get(name, default)
+
+    def read(self, maximum):
+        return self.response.read(maximum)
 
 
 class BrokerError(ValueError):
@@ -151,11 +237,13 @@ class RegistryConnection(http.client.HTTPSConnection):
 class Upstream:
     """Scoped HTTPS registry transport. Basic credentials never leave this owner."""
 
-    def __init__(self, registry, repository, credential, deadline, *, connection=None, clock=time.monotonic, context=None):
+    def __init__(self, registry, repository, credential, deadline, *, connection=None, clock=time.monotonic, context=None, resolver_runner=None):
         self.host, self.port = authority(registry)
         require(repository.startswith(registry + "/"))
         self.registry, self.namespace = registry, repository.split("/", 1)[1]
         self.deadline, self.clock = deadline, clock
+        self.resolver_runner = resolver_runner or ceph_native.bounded_command
+        self.stopping = threading.Event()
         if connection is None:
             # This synchronous setup remains under the owning remote worker's
             # hard deadline. No started broker thread performs name resolution.
@@ -180,20 +268,15 @@ class Upstream:
 
     def budget(self):
         remaining = self.deadline - self.clock()
-        require(remaining > 0)
+        require(remaining > 0 and not self.stopping.is_set())
         return min(30, remaining)
 
     @contextlib.contextmanager
-    def request(self, method, path, authorization=None):
-        connection = self.connection(self.host, port=self.port, context=self.context, timeout=self.budget())
-        with self.connections_lock:
-            self.connections.add(connection)
+    def exchange(self, connection, method, path, headers):
         try:
-            headers = {"Accept-Encoding": "identity",
-                       "Accept": "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
-                       "User-Agent": "bootwright-pull-broker-v1"}
-            if authorization:
-                headers["Authorization"] = authorization
+            with self.connections_lock:
+                require(not self.stopping.is_set())
+                self.connections.add(connection)
             connection.request(method, path, headers=headers)
             response = connection.getresponse()
             rows = response.getheaders()
@@ -205,8 +288,44 @@ class Upstream:
             with self.connections_lock:
                 self.connections.discard(connection)
 
+    @contextlib.contextmanager
+    def request(self, method, path, authorization=None):
+        connection = self.connection(self.host, port=self.port, context=self.context, timeout=self.budget())
+        headers = {"Accept-Encoding": "identity",
+                   "Accept": "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+                   "User-Agent": "bootwright-pull-broker-v1"}
+        if authorization:
+            headers["Authorization"] = authorization
+        with self.exchange(connection, method, path, headers) as response:
+            yield response
+
+    def deliver(self, method, response, consume):
+        host, path = delivery_location(response)
+        try:
+            require(not self.stopping.is_set())
+            code, raw = self.resolver_runner([sys.executable, "-I", "-B", "-c", DNS_SOURCE],
+                                             data=host.encode("ascii"), timeout=min(5, self.budget()), limit=8192)
+            require(code == 0 and not self.stopping.is_set())
+            addresses = delivery_addresses(raw)
+        except Exception:
+            # Neither resolver output nor a signed URL can enter diagnostics.
+            raise BrokerError("blob delivery resolution") from None
+        connection = RegistryConnection(host, addresses=addresses, deadline=self.deadline,
+                                        port=443, context=self.context, timeout=self.budget())
+        headers = {"Accept-Encoding": "identity", "User-Agent": "bootwright-pull-broker-v1"}
+        with self.exchange(connection, method, path, headers) as delivered:
+            return consume(DeliveryResponse(delivered))
+
+    def consume(self, method, path, response, consume):
+        prefix = "/v2/" + self.namespace + "/blobs/sha256:"
+        if (method in ("GET", "HEAD") and path.startswith(prefix) and HEX.fullmatch(path[len(prefix):]) is not None
+                and response.status in (307, 308)):
+            return self.deliver(method, response, consume)
+        return consume(response)
+
     def close(self):
         with self.connections_lock:
+            self.stopping.set()
             connections = list(self.connections)
         for connection in connections:
             if connection.sock is not None:
@@ -245,11 +364,11 @@ class Upstream:
     def fetch(self, method, path, consume):
         with self.request(method, path, self.bearer) as response:
             if response.status != 401:
-                return consume(response)
+                return self.consume(method, path, response, consume)
             challenge = response.getheader("WWW-Authenticate")
         self.authenticate(challenge)
         with self.request(method, path, self.bearer) as response:
-            return consume(response)
+            return self.consume(method, path, response, consume)
 
 
 class Broker:
@@ -306,8 +425,11 @@ class Broker:
         if response.status != 200:
             with self.lock:
                 self.failure = (request_class, response.status)
-            raw = response.read(MAX_METADATA + 1)
-            message = native_diagnostics.redact(raw[:MAX_METADATA], secrets=self.upstream.private)
+            if getattr(response, "_bootwright_delivery", False):
+                message = "blob delivery refused"
+            else:
+                raw = response.read(MAX_METADATA + 1)
+                message = native_diagnostics.redact(raw[:MAX_METADATA], secrets=self.upstream.private)
             body = json.dumps({"errors": [{"code": "REGISTRY_REFUSED", "message": "upstream HTTP " + str(response.status) + ": " + message}]}).encode()
             stream.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: "
                          + str(len(body)).encode() + b"\r\n\r\n" + body)

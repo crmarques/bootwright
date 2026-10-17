@@ -57,6 +57,32 @@ observation. Never retain response headers, signed redirect locations, raw URLs
 or authentication challenges in that observation. Synthetic refusals exercise
 this path without changing redirect, authority or credential policy.
 
+## Blob delivery delegation and bounded DNS
+
+The [registry API](https://distribution.github.io/distribution/spec/api/#fetch-blob)
+permits a blob GET to return 307 with a separate delivery location. Successful
+index resolution does not prove direct blob access: the
+[image resolver](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_registry_discovery.py)
+can select and verify a platform manifest without fetching its config blob.
+The manifest and blob paths therefore need separate boundary coverage.
+
+The [storage contract](../../specs/storage.md#bootstrap-identity-and-continuation)
+defines the broker's single delivery hop and credential separation. A signed
+Location is private capability data, even though registry credentials do not
+travel with it. Keep it inside the broker and normalize delivery metadata and
+errors before the native client sees them. Do not infer a header remedy from
+the different manifest and blob Accept values without comparative evidence.
+
+A socket connect timeout does not bound DNS resolution. Registry addresses are
+resolved before broker workers start; a delivery hostname is known only after
+a registry response. Running its resolver directly in a joinable thread can
+strand teardown. Reuse the existing native process owner for a short isolated
+host-Python resolver, then validate every numeric answer and pin the addresses
+for TLS connections. Never use a bare Python fork from a broker thread or start
+an independent process session outside the remote supervisor's group. Synthetic
+tests must cover a stalled resolver, prohibited or mixed answers, hostname
+verification, private output and shutdown during resolution.
+
 ## Validation in the isolated supervisor parent
 
 A bare `native-unknown` may hide result collection or validation failure; it

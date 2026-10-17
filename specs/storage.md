@@ -214,11 +214,36 @@ in the cache. A host block removes nothing; packages and the image are retained
 shared host state. Guest pull credentials enter only the invocation-local
 registry broker over protected stdin. Podman receives an empty authfile and
 an ephemeral mutual-TLS identity; upstream entitlement and bearer credentials
-remain broker-owned. The broker connects only to the frozen registry authority
-with ordinary host TLS verification, rejects foreign realms and redirects,
-and forwards only bounded repository manifest/blob reads. Local clients without
-the invocation certificate cannot use it. A proxy bypass carries no entitlement
-or bearer credential. Listener, upstream sockets and workers finish before the
+remain broker-owned. Authentication, token exchanges and manifest reads connect
+only to the frozen registry authority with ordinary host TLS verification;
+foreign token realms and manifest redirects refuse. The broker admits only
+bounded reads within the frozen repository. Local clients without the invocation
+certificate cannot use it, and a proxy bypass carries no entitlement or bearer
+credential.
+
+For an admitted blob GET or HEAD, the verified registry may delegate delivery
+through one 307 or 308 response. The broker follows that one hop internally;
+it never sends the Location to the native client. The destination must be
+HTTPS on port 443, without userinfo or a fragment. Every resolved address must
+be public unicast; a private, reserved, mixed, scoped, IPv4-mapped or IPv6
+tunneling answer refuses the complete result. Connections use only those validated
+numeric addresses and verify TLS against the original delivery hostname.
+Redirect URLs, including signed queries, remain invocation-local private data.
+Delivery requests contain no registry authorization, cookie, proxy credential
+or Referer. A delivery authentication challenge or further redirect refuses
+without another authentication exchange or hop. Delivery response metadata is
+normalized and error bodies are not published, so it cannot echo a private URL
+into the native client's output. The native client still verifies blobs against
+the frozen manifest's digests; a redirect never substitutes an artifact.
+
+Delivery shares the existing concurrency, byte and operation deadlines. DNS
+runs in a bounded, isolated subprocess of the existing host interpreter,
+receiving only the validated hostname through stdin and returning bounded
+numeric addresses. Each lookup has at most five seconds plus the existing
+one-second process cleanup allowance. Shutdown refuses admission after DNS and
+at connection registration; already admitted connection attempts remain bounded
+by the existing join deadline.
+Listener, upstream sockets, resolver children and workers finish before the
 private invocation directory is removed.
 
 Each bootstrap, enrollment, service and resource attempt observes first and

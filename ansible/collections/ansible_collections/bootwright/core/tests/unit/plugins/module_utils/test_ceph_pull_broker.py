@@ -8,6 +8,8 @@ import json
 import socket
 import ssl
 import subprocess
+import sys
+import threading
 import time
 
 import pytest
@@ -97,8 +99,11 @@ def test_registry_authentication_is_owned_by_broker_and_never_forwarded():
     assert connections.closed == 3
 
 
-@pytest.mark.parametrize("request_class", ["registry", "manifest", "blob"])
-@pytest.mark.parametrize("status", [301, 302, 307, 308, 401, 403, 404, 429, 500, 502, 503])
+@pytest.mark.parametrize("request_class,status", [
+    (kind, status) for kind in ("registry", "manifest", "blob")
+    for status in (301, 302, 307, 308, 401, 403, 404, 429, 500, 502, 503)
+    if kind != "blob" or status not in (307, 308)
+])
 def test_final_http_failure_retains_only_bounded_class_and_status(request_class, status):
     rows = [Response(status, b"private upstream body", {"Location": "https://foreign.example.test/?token=" + TOKEN})]
     if status == 401:
@@ -279,3 +284,299 @@ def test_foreign_connect_is_denied_before_upstream_access(tmp_path):
             connection.sendall(b"CONNECT foreign.example.test:443 HTTP/1.1\r\nHost: foreign.example.test\r\n\r\n")
             assert connection.recv(1024) == b""
     assert connections.calls == []
+
+
+DELIVERY = "delivery.example.test"
+SIGNED = "https://" + DELIVERY + "/object?signature=private-delivery-capability"
+BLOB_PATH = "/v2/vendor/ceph/blobs/sha256:" + DIGEST
+
+
+def dns_row(ip="8.8.8.8", family=socket.AF_INET):
+    return [family, socket.SOCK_STREAM, socket.IPPROTO_TCP, [ip, 443] + ([0, 0] if family == socket.AF_INET6 else [])]
+
+
+def delivery_setup(monkeypatch, status=200, method="GET", redirect=307):
+    up, registry = upstream([Response(401, headers={"WWW-Authenticate": CHALLENGE}),
+                             Response(body=json.dumps({"token": TOKEN}).encode()),
+                             Response(redirect, headers={"Location": SIGNED, "Set-Cookie": PASSWORD})])
+    calls, resolved = [], []
+    delivered = Response(status, b"payload" if status == 200 else SIGNED.encode(),
+                         {"Location": SIGNED, "Set-Cookie": PASSWORD, "WWW-Authenticate": CHALLENGE,
+                          "Content-Type": SIGNED, "Docker-Content-Digest": SIGNED, "Docker-Distribution-Api-Version": SIGNED})
+
+    def resolver(argv, *, data, timeout, limit):
+        assert argv == [sys.executable, "-I", "-B", "-c", broker.DNS_SOURCE]
+        assert data == DELIVERY.encode() and 0 < timeout <= 5 and limit == 8192
+        resolved.append(data)
+        return 0, json.dumps([dns_row()]).encode()
+
+    class DeliveryConnection:
+        sock = None
+
+        def __init__(self, host, **options):
+            assert host == DELIVERY and options["port"] == 443
+            assert options["addresses"] == [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("8.8.8.8", 443))]
+            assert options["context"] is up.context and options["context"].check_hostname
+            assert 0 < options["timeout"] <= 30 and options["deadline"] == up.deadline
+
+        def request(self, selected_method, path, headers):
+            assert selected_method == method
+            calls.append((path, headers))
+
+        def getresponse(self):
+            return delivered
+
+        def close(self):
+            pass
+
+    up.resolver_runner = resolver
+    monkeypatch.setattr(broker, "RegistryConnection", DeliveryConnection)
+    return up, registry, delivered, calls, resolved
+
+
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+@pytest.mark.parametrize("redirect", [307, 308])
+def test_blob_delivery_is_one_hop_without_registry_credentials(monkeypatch, method, redirect):
+    up, registry, delivered, calls, resolved = delivery_setup(monkeypatch, method=method, redirect=redirect)
+    output = io.BytesIO()
+    value = boundary(up)
+    up.fetch(method, BLOB_PATH, lambda response: value.response(output, response, method, broker.MAX_BLOB, "blob"))
+    assert len(registry.calls) == 3 and registry.calls[-1][3]["Authorization"] == "Bearer " + TOKEN
+    assert resolved == [DELIVERY.encode()] and len(calls) == 1
+    assert calls[0] == ("/object?signature=private-delivery-capability", {"Accept-Encoding": "identity", "User-Agent": "bootwright-pull-broker-v1"})
+    assert output.getvalue().startswith(b"HTTP/1.1 200")
+    assert output.getvalue().endswith(b"payload") if method == "GET" else delivered.tell() == 0
+    assert all(secret.encode() not in output.getvalue() for secret in (PASSWORD, TOKEN, SIGNED, "private-delivery-capability"))
+    assert b"Location" not in output.getvalue() and b"Set-Cookie" not in output.getvalue()
+    assert not up.connections
+
+
+@pytest.mark.parametrize("status", [301, 302, 307, 308, 401, 403, 500])
+def test_delivery_error_neither_authenticates_nor_follows_and_never_reflects_body(monkeypatch, status):
+    up, registry, delivered, calls, unused = delivery_setup(monkeypatch, status)
+    output = io.BytesIO()
+    value = boundary(up)
+    up.fetch("GET", BLOB_PATH, lambda response: value.response(output, response, "GET", broker.MAX_BLOB, "blob"))
+    assert len(registry.calls) == 3 and len(calls) == 1 and delivered.tell() == 0
+    assert value.failure_cause == "broker observed blob upstream HTTP " + str(status)
+    assert b"blob delivery refused" in output.getvalue()
+    assert all(secret.encode() not in output.getvalue() for secret in (PASSWORD, TOKEN, SIGNED, "private-delivery-capability"))
+
+
+@pytest.mark.parametrize("location", ["", "/relative", "http://delivery.example.test/x", "https://delivery.example.test:444/x",
+                                      "https://user:password@delivery.example.test/x", "https://delivery.example.test/x#fragment",
+                                      "https://delivery.example.test/x#", "https://delivery.example.test/\\x", "https://delivery.example.test/ x",
+                                      "https://delivery.example.test/é", "https://-bad.example/x", "https://bad..example/x",
+                                      "https://delivery.example.test//path", "https://delivery.example.test/" + "a" * 4096])
+def test_malformed_delivery_location_refuses_without_resolution(location):
+    up, calls = upstream([Response(307, headers={"Location": location})])
+    up.resolver_runner = lambda *args, **kwargs: pytest.fail("unexpected resolution")
+    with pytest.raises(broker.BrokerError):
+        up.fetch("GET", BLOB_PATH, lambda response: pytest.fail("unexpected delivery"))
+    assert len(calls.calls) == 1
+
+
+def test_duplicate_location_and_token_redirect_refuse():
+    response = Response(307)
+    response.getheaders = lambda: [("Location", SIGNED), ("location", SIGNED)]
+    with pytest.raises(broker.BrokerError):
+        broker.delivery_location(response)
+    up, calls = upstream([Response(401, headers={"WWW-Authenticate": CHALLENGE}), Response(307, headers={"Location": SIGNED})])
+    up.resolver_runner = lambda *args, **kwargs: pytest.fail("unexpected resolution")
+    with pytest.raises(broker.BrokerError):
+        up.fetch("GET", BLOB_PATH, lambda response: pytest.fail("unexpected delivery"))
+    assert len(calls.calls) == 2
+
+
+@pytest.mark.parametrize("ip", [
+    "0.0.0.0", "10.0.0.1", "127.0.0.1", "169.254.169.254", "100.64.0.1", "192.0.2.1",
+    "198.51.100.1", "203.0.113.1", "224.0.0.1", "240.0.0.1", "255.255.255.255",
+    "::", "::1", "fc00::1", "fec0::1", "feff::1", "fe80::1", "ff02::1", "2001:db8::1", "::ffff:8.8.8.8",
+    "2002:808:808::1", "2001:0:4136:e378:8000:63bf:3fff:fdd2"
+])
+def test_any_nonpublic_or_tunnel_answer_refuses_entire_delivery(ip):
+    family = socket.AF_INET6 if ":" in ip else socket.AF_INET
+    with pytest.raises((broker.BrokerError, ValueError)):
+        broker.delivery_addresses(json.dumps([dns_row(), dns_row(ip, family)]).encode())
+
+
+@pytest.mark.parametrize("rows", [
+    [], [dns_row()] * 17, [dns_row(), dns_row()], [[True, 1, 6, ["8.8.8.8", 443]]],
+    [[2, 1, 6, ["8.8.8.8", True]]], [[2, 1, 6, ["8.8.8.8", 80]]],
+    [[10, 1, 6, ["2606:4700:4700::1111", 443, 0, 1]]],
+    [[10, 1, 6, ["2606:4700:4700:0:0:0:0:1111", 443, 0, 0]]],
+    [[2, 2, 17, ["8.8.8.8", 443]]], {"unexpected": []}
+])
+def test_invalid_or_ambiguous_dns_payload_refuses(rows):
+    with pytest.raises((broker.BrokerError, ValueError)):
+        broker.delivery_addresses(json.dumps(rows).encode())
+
+
+def test_dns_output_limit_and_public_ipv6():
+    with pytest.raises(broker.BrokerError):
+        broker.delivery_addresses(b" " * 8193)
+    assert broker.delivery_addresses(json.dumps([dns_row("2606:4700:4700::1111", socket.AF_INET6)]).encode()) == [
+        (socket.AF_INET6, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("2606:4700:4700::1111", 443, 0, 0))]
+
+
+def test_resolution_stop_race_cannot_admit_connection(monkeypatch):
+    up, unused = upstream([Response(307, headers={"Location": SIGNED})])
+    entered, release = threading.Event(), threading.Event()
+    errors = []
+
+    def resolver(*args, **kwargs):
+        entered.set()
+        assert release.wait(2)
+        return 0, json.dumps([dns_row()]).encode()
+
+    def fetch():
+        try:
+            up.fetch("GET", BLOB_PATH, lambda response: pytest.fail("late response"))
+        except broker.BrokerError as error:
+            errors.append(str(error))
+
+    up.resolver_runner = resolver
+    monkeypatch.setattr(broker, "RegistryConnection", lambda *args, **kwargs: pytest.fail("late connection"))
+    worker = threading.Thread(target=fetch)
+    worker.start()
+    assert entered.wait(2)
+    up.close()
+    release.set()
+    worker.join(2)
+    assert not worker.is_alive() and errors == ["blob delivery resolution"] and not up.connections
+
+
+def test_fixed_dns_exec_uses_bounded_owner_without_live_dns():
+    fake = "import socket\nsocket.getaddrinfo = lambda *a, **k: [(2, 1, 6, '', ('8.8.8.8', 443))]\n"
+    code, raw = broker.ceph_native.bounded_command(
+        [sys.executable, "-I", "-B", "-c", fake + broker.DNS_SOURCE], data=DELIVERY.encode(), timeout=2, limit=8192)
+    assert code == 0 and broker.delivery_addresses(raw)[0][-1] == ("8.8.8.8", 443)
+
+
+def test_hung_dns_exec_is_killed_and_reaped(monkeypatch):
+    fake = "import socket, time\nsocket.getaddrinfo = lambda *a, **k: time.sleep(60)\n"
+    processes = []
+    popen = broker.ceph_native.subprocess.Popen
+
+    def tracked(*args, **kwargs):
+        process = popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(broker.ceph_native.subprocess, "Popen", tracked)
+    started = time.monotonic()
+    with pytest.raises(broker.ceph_native.Refusal):
+        broker.ceph_native.bounded_command([sys.executable, "-I", "-B", "-c", fake + broker.DNS_SOURCE],
+                                           data=DELIVERY.encode(), timeout=0.1, limit=8192)
+    assert time.monotonic() - started < 2
+    assert len(processes) == 1 and processes[0].returncode is not None
+    assert all(pipe.closed for pipe in (processes[0].stdin, processes[0].stdout, processes[0].stderr))
+
+
+def test_numeric_connection_pins_address_and_preserves_tls_name(monkeypatch):
+    calls = []
+
+    class Socket:
+        def settimeout(self, value):
+            assert value > 0
+
+        def connect(self, address):
+            calls.append(address)
+
+        def do_handshake(self):
+            calls.append("handshake")
+
+        def close(self):
+            pass
+
+    class TLS:
+        def wrap_socket(self, sock, *, server_hostname, do_handshake_on_connect):
+            assert server_hostname == DELIVERY and not do_handshake_on_connect
+            return sock
+
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: pytest.fail("DNS repeated"))
+    monkeypatch.setattr(socket, "socket", lambda *args: Socket())
+    connection = broker.RegistryConnection(DELIVERY, addresses=broker.delivery_addresses(json.dumps([dns_row()]).encode()),
+                                           deadline=time.monotonic() + 5, port=443, timeout=5)
+    connection._context = TLS()
+    connection.connect()
+    connection.close()
+    assert calls == [("8.8.8.8", 443), "handshake"]
+
+
+@pytest.mark.parametrize("result", [(1, b"private resolver failure"), (0, b"not JSON"), (0, b" " * 8193)])
+def test_resolver_failure_is_closed_and_private(monkeypatch, result):
+    up, unused = upstream([Response(307, headers={"Location": SIGNED})])
+    up.resolver_runner = lambda *args, **kwargs: result
+    monkeypatch.setattr(broker, "RegistryConnection", lambda *args, **kwargs: pytest.fail("unexpected delivery"))
+    with pytest.raises(broker.BrokerError, match="^blob delivery resolution$"):
+        up.fetch("GET", BLOB_PATH, lambda response: pytest.fail("unexpected response"))
+    assert not up.connections
+
+
+def test_stop_between_connection_creation_and_registration_cannot_request(monkeypatch):
+    up, unused = upstream([Response(307, headers={"Location": SIGNED})])
+    up.resolver_runner = lambda *args, **kwargs: (0, json.dumps([dns_row()]).encode())
+    closed = []
+
+    class Connection:
+        sock = None
+
+        def __init__(self, *args, **kwargs):
+            up.close()
+
+        def request(self, *args, **kwargs):
+            pytest.fail("request after shutdown")
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(broker, "RegistryConnection", Connection)
+    with pytest.raises(broker.BrokerError):
+        up.fetch("GET", BLOB_PATH, lambda response: pytest.fail("response after shutdown"))
+    assert closed == [True] and not up.connections
+
+
+def test_native_wire_blob_delegation_keeps_private_metadata_inside_broker(tmp_path, monkeypatch):
+    up, unused, delivered, calls, unused_resolved = delivery_setup(monkeypatch)
+    request = {"registry": REGISTRY, "image": REPOSITORY + "@sha256:" + DIGEST}
+
+    def command(argv, timeout, limit):
+        result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                timeout=timeout, check=True, env={"PATH": "/usr/bin:/bin", "LANG": "C"})
+        assert len(result.stdout) + len(result.stderr) <= limit
+        return result.stdout
+
+    with broker.Broker(str(tmp_path), request, json.dumps(MATERIAL), time.monotonic() + 60, command, upstream=up) as service:
+        port = int(service.environment["HTTPS_PROXY"].rsplit(":", 1)[1])
+        connection = socket.create_connection(("127.0.0.1", port), timeout=5)
+        connection.sendall(("CONNECT " + REGISTRY + ":443 HTTP/1.1\r\n\r\n").encode())
+        assert connection.recv(4096) == b"HTTP/1.1 200 Connection Established\r\n\r\n"
+        context = ssl.create_default_context(cafile=service.cert_directory + "/ca.crt")
+        context.load_cert_chain(service.cert_directory + "/client.cert", service.cert_directory + "/client.key")
+        with context.wrap_socket(connection, server_hostname=REGISTRY) as secured:
+            secured.sendall(("GET " + BLOB_PATH + " HTTP/1.1\r\nHost: " + REGISTRY + "\r\n\r\n").encode())
+            with secured.makefile("rb") as stream:
+                output = stream.read()
+        assert output.endswith(b"payload") and b"Content-Type: application/octet-stream" in output
+        assert all(secret.encode() not in output for secret in (PASSWORD, TOKEN, SIGNED, "private-delivery-capability"))
+        assert delivered.tell() == len(b"payload") and len(calls) == 1
+    assert not up.connections and all(not worker.is_alive() for worker in service.workers)
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("length", ["-1", "01", "1, 1", str(broker.MAX_BLOB + 1), SIGNED])
+def test_delivery_framing_refuses_without_reflecting_private_header(length):
+    with pytest.raises(broker.BrokerError):
+        broker.DeliveryResponse(Response(headers={"Content-Length": length}))
+    failed = broker.DeliveryResponse(Response(403, headers={"Content-Length": length}))
+    assert failed.status == 403 and failed.getheader("Content-Length") is None
+
+
+def test_delegated_stream_still_obeys_total_budget(monkeypatch):
+    up, unused, unused_response, unused_calls, unused_resolved = delivery_setup(monkeypatch)
+    monkeypatch.setattr(broker, "MAX_TOTAL", 3)
+    value = boundary(up)
+    with pytest.raises(broker.BrokerError):
+        up.fetch("GET", BLOB_PATH, lambda response: value.response(io.BytesIO(), response, "GET", broker.MAX_BLOB, "blob"))
+    assert not up.connections
