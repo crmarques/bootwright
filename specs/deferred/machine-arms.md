@@ -1,7 +1,7 @@
 # Refused machine arms
 
-[B87](../milestones/m5.md#b87) revives this detail for the KubeVirt
-provisioning variant, and the parked item [B99](../milestones/backlog.md#b99)
+[B87](../milestones/m1.md#b87) revives this detail for the KubeVirt
+provisioning variant, and [B99](../milestones/m1.md#b99)
 for the vSphere one. Until
 then these arms are admitted by the closed schema in `api/v1alpha1/machines.go`
 and `api/v1alpha1/machines_install.go`, whose admission enforces the rules

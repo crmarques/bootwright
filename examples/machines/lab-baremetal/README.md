@@ -219,7 +219,7 @@ A rehearsal needs a CA-issued emulator certificate and matching CA bundle,
 plus an installer-provisioned substrate guest with no OS install profile and
 accurately declared hardware. The shipped examples do not provide that chain.
 The limitation is tracked under
-[B496](../../../specs/milestones/m2.md#b496).
+[B496](../../../specs/milestones/m1.md#b496).
 
 ## What it does not cover
 

@@ -21,7 +21,6 @@ Alias cell.
 | [B96](#b96) | Y3 | enabling | Architecture | Collection metadata and naming polish | Pruned from M1 on 2026-09-28 |
 | [B97](#b97) | A8 (kind tables) | enabling | Desired state and Workspace | Kind field-table parity and a path checker | Pruned from M1 on 2026-09-28 |
 | [B98](#b98) | C30; B336 split from it on 2026-10-05 (D101) | enabling | Architecture | Production comments reduced to what the clarity contract keeps | D101: M1 amends the rule, and a ratchet holds the count |
-| [B99](#b99) | C1 (vSphere) | product | Substrate | One vSphere provisioning variant | No milestone names vSphere |
 | [B100](#b100) | C2 (LoadBalancer) | product | Infrastructure services | One managed `LoadBalancer` lifecycle | No consumer; M4's MetalLB is an in-cluster add-on |
 | [B101](#b101) | C6 (rest) | product | CLI | One more view of evidence or access, or a dashboard | No milestone names a view or dashboard |
 | [B102](#b102) | C8 | product | Custom automation | One typed, invertible executable playbook journey | M6's packages are add-ons, not playbooks |
@@ -204,7 +203,7 @@ Alias cell.
 ### B82
 
 One additional managed-OS image, profile or entitlement variant beyond the
-install arms [B74](m2.md#b74) to [B78](m2.md#b78) carry. No concrete consumer is named
+install arms [B74](m1.md#b74) to [B78](m1.md#b78) carry. No concrete consumer is named
 yet; [B80](m2.md#b80)'s definition may supply one. **Exit evidence:** the intent gap, a deliberate API revision, renderer
 and executor parity and qualification.
 
@@ -247,20 +246,10 @@ tooling or a maintained contract; every durable finding moved into
 `.agents/knowledge/` with its links and evidence; and B336's ratchet lowered
 to the result.
 
-### B99
-
-One vSphere machine-provisioning variant. An arm is a capability package plus
-one case of the [target derivation](../substrates.md#selection-and-refusal),
-and no consumer of a realized Machine changes; its KubeVirt counterpart is
-[B87](m5.md#b87). **Exit evidence:** the exact release, adapter contract, its
-two fixed identity and pre-boot task files, failure and replay tests and
-real-system qualification; [refused machine arms](../deferred/machine-arms.md)
-records the admitted arm.
-
 ### B100
 
 One managed `LoadBalancer` lifecycle over the shared managed-service capability
-M1f delivered; its `Registry` half is [B68](m3.md#b68). **Exit evidence:** a
+[legacy network services](delivered.md#m1f--managed-controller-network-services) delivered; its `Registry` half is [B68](m1.md#b68). **Exit evidence:** a
 typed port, the exact implementation, lifecycle evidence, and failure and
 acceptance tests.
 
@@ -285,7 +274,7 @@ invalid or out-of-range selectors. Prove inspection uses only permitted
 metadata, inapplicable access reads no credential bytes, failed access emits no
 descriptor or sensitive result, and successful handoff or export preserves its
 payload and output boundary. These tests depend on the promoted use case and do
-not expand M1a availability.
+not expand [legacy CLI availability](delivered.md#m1a--complete-cli-skeleton).
 
 Narrowed on 2026-10-12 (D143 clause 9, pending the owner's review): `cluster
 list` and `cluster info` (B519,
@@ -298,7 +287,7 @@ the remaining matrix.
 ### B102
 
 One typed, invertible executable custom-playbook journey. The reserved schema
-cannot prove effects, ownership or non-exfiltration; it needs M1e, the plan and
+cannot prove effects, ownership or non-exfiltration; it needs [the legacy lifecycle baseline](delivered.md#m1e--lifecycle-engine-and-managed-artifact-serving), the plan and
 execution extensions of [B62](m3.md#b62) to [B64](m3.md#b64) and a named
 journey. **Exit evidence:** a same-change API replacement of the
 [reserved shape](../deferred/custom-playbooks.md), immutable source and
@@ -533,7 +522,7 @@ A DNSServer's bind address defaults to the wildcard address, which collides with
 
 ### B334
 
-The emulated BMC runs as root, unconfined, with the libvirt socket, and requires a basic-auth credential; its TLS half, a generated serving certificate its client verifies, landed in-tree under [B446](m2.md#b446) (in progress, X47; D120), and the endpoint no longer serves plain HTTP. [B301](delivered.md#x44--help-completion-contracts-and-ratchets) binds the examples' BMCs to loopback. A refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). D120 split the TLS out as B446, now in M2 (D128). The loopback bind and the confinement remainder stay parked. **Exit evidence:** the refusal and the confined type, each with tests.
+The emulated BMC runs as root, unconfined, with the libvirt socket, and requires a basic-auth credential; its TLS half, a generated serving certificate its client verifies, landed in-tree under [B446](m1.md#b446) (in progress, X47; D120), and the endpoint no longer serves plain HTTP. [B301](delivered.md#x44--help-completion-contracts-and-ratchets) binds the examples' BMCs to loopback. A refusal of a non-loopback bind address once an installation's provider host must be the artifact server's placement ([B289](delivered.md#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs)), and a confined SELinux type would shrink that surface (found by the 2026-10-05 audit). D120 split the TLS out as B446, now in M2 (D128). The loopback bind and the confinement remainder stay parked. **Exit evidence:** the refusal and the confined type, each with tests.
 
 ### B341
 
@@ -545,7 +534,7 @@ In a human invocation sudo's sudoers denial, such as `Sorry, user ... is not all
 
 ### FIPS access moved to M2
 
-[B346](m2.md#b346) moved to M2 on 2026-10-11 (D129) for its security-profile
+[B346](m1.md#b346) moved to M2 on 2026-10-11 (D129) for its security-profile
 consumer.
 
 ### B348
@@ -900,7 +889,7 @@ collection and members on a powered-off server; the artifact unit's journal
 volume during a streamed ISO fetch against journald's rate limit, since one line
 is logged per completed range request; and the disk figures and the firewall
 zone opening the lab-baremetal README gives, written as the brief stated them.
-The device's `VerifyCertificate` is [B447](m2.md#b447)'s. **Exit evidence:**
+The device's `VerifyCertificate` is [B447](m1.md#b447)'s. **Exit evidence:**
 each observed on a host and recorded in the
 [acceptance ledger](../../docs/acceptance.md) or the knowledge page with the
 build commit, or withdrawn by the owner.
@@ -1997,7 +1986,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | C27 | before 2026-09 | Delivered by [X3](delivered.md#x3--machine-ssh-sessions-and-host-trust). |
 | R1 | 2026-09-28 | Merged into [B19](delivered.md#x93--the-owner-run-of-2026-10-14) with C28, whose outcome it was. |
 | M2a, M2b, M3, M4, M5, M6 | 2026-09-28 | These rows became items whose Alias cells name them; the numbers M3 to M6 now name milestones. |
-| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), [B73](m2.md#b73), [B61](m3.md#b61) and [B71](m3.md#b71); these M-letter IDs are no longer issued. |
+| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), [B73](m1.md#b73), [B61](m3.md#b61) and [B71](m3.md#b71); these M-letter IDs are no longer issued. |
 | N1 to N5, L2, L4, L5, L6 | 2026-09-28 | Became items whose Alias cells name them; L1 and L3 never existed. |
 | K01 to K73 | 2026-09-28 | The audit plan's cluster tokens, defined nowhere in the repository; the grouping stays in Git history. |
 | Phase 0 to Phase 4 | 2026-09-28 | The audit plan's ordering; slices carry order now. |
@@ -2365,3 +2354,37 @@ Requires cell as `owner decision: <question>`.
   this decision; its later authorized implementation and acceptance are recorded
   in [X99](delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion).
   This initial request authorized backlog/specification work, not implementation.
+- **D158** (2026-10-17, the owner): redefine M1 as Foundations: substrates,
+  infrastructure components and Machines. Group it as M1a API review, M1b
+  repository/code structuring, M1c libvirt+sushy, M1d infrastructure components,
+  M1e bare metal, and future M1f vSphere and M1g OpenShift Virtualization.
+  Move unfinished shared foundation work from M2/M3 into M1: X47, X55, X60,
+  X62 and X63 retain their IDs and item states; B78 moves out of X64 into
+  M1e's X100; B68 moves from M3 to M1d. Shared lifecycle safety B18/B23
+  moves to M1b, machine/network exclusion B265 to M1c, and the generic
+  controller/check-tool procedure B509 from M2 to M1c. Move parked B99 to M1f and B87 from
+  M5 to M1g, retaining IDs and requiring definition before implementation.
+  B100 and other parked work stay unpromoted. M1a/M1b map the previously
+  accepted hardening work; this declares no new audit or restructuring done.
+  Reopen M1 for its remaining foundation scope as an explicit exception to
+  the done-milestone rule. Preserve D156/X98's historical completion, every
+  accepted gate and M2b's completion under X99. B/X IDs and dated decisions
+  stay fixed; the historical M1a to M1g delivery labels retain their meanings
+  and distinct links. This changes planning history, not Git history.
+  M2 retains Ceph effects and service/security compatibility, including
+  CephX/FIPS and daemon compatibility in B472/B484/B485. M3 retains OpenShift
+  cluster delivery and M2 as a prerequisite. Moved B509 still gates full M2;
+  moved B18/B23/B265 still gate M3 completion, without reopening accepted
+  checkpoints or becoming prerequisites of every implementation slice.
+  M5 retains B88's OpenShift
+  cluster lifecycle and requires M3 plus B87. M1g consumes an existing
+  qualified host cluster and does not require Bootwright to provision it.
+  Consumers require the foundation capabilities they use, not all of M1;
+  vSphere and OpenShift Virtualization do not gate libvirt/bare-metal delivery.
+  Schedule shared foundation work with its first consuming product checkpoint;
+  M2c remains next with its required foundation gaps. M1f/M1g are future work
+  and do not take scheduling priority merely because they belong to M1.
+  All M1 items still gate M1's eventual completion. The WIP limit, promotion
+  gates, safety refusals and operator acceptance requirements remain. This
+  request authorizes roadmap and ownership changes only, with no new active
+  slice or substrate implementation.

@@ -343,7 +343,7 @@ selector or permission to bootstrap does not authorize them.
 
 Physical erase remains governed by
 [physical disk safety](state-reconciliation.md#physical-disk-safety) and
-[B70](milestones/m2.md#b70). Storage planning cannot remove that refusal.
+[B70](milestones/m1.md#b70). Storage planning cannot remove that refusal.
 B79 and B80 define which device preparation can be proved within apply; any
 path requiring physical erase waits for its safety contract and qualification.
 [B475](milestones/m2.md#b475) qualifies OSD identity, ownership and write/erase

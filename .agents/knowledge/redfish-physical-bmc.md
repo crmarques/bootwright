@@ -160,7 +160,7 @@ privilege answered **400** `<registry>.PropertyModificationNeedPrivilege`, not
 401 or 403 (the capture of 15:09Z, the HTTPS transfer verification PATCH). The
 client's restore reads a 400 as a read-only property, which is harmless there
 because the device property answers 501 and the restore never writes the
-manager; but [B319](../../specs/milestones/m2.md#b319), which takes the
+manager; but [B319](../../specs/milestones/m1.md#b319), which takes the
 manager's import, must read that 400 as a privilege refusal.
 
 ## Virtual-media certificate trust
@@ -197,7 +197,7 @@ settled after a proved eject:
 - `disable-verification` writes `VerifyCertificate` `false` only when it reads
   `true`; a refused write fails, because verification stays on. Where a manager
   publishes `HttpsTransferCertVerification` it refuses before any write,
-  naming that switch (D121, [B447](../../specs/milestones/m2.md#b447)).
+  naming that switch (D121, [B447](../../specs/milestones/m1.md#b447)).
 - There is **no fallback**. A member without `Certificates`, or a
   `VerifyCertificate` write answered 501, 400 or 405, fails the import naming
   the two exceptions an operator may declare instead, and a post refused while
@@ -231,7 +231,7 @@ BMC, with an account holding the privilege that governs security configuration.
 never captured, and its device flag is read-only. After enabling the switch,
 GET `/redfish/v1/Managers/1/VirtualMedia/CD` and record `VerifyCertificate`,
 and record whether media releases after an `EjectMedia` that answers 202
-([B305](../../specs/milestones/m2.md#b305)'s observation). Under D121 a false
+([B305](../../specs/milestones/m1.md#b305)'s observation). Under D121 a false
 device flag no longer refuses a private delivery, so the capture records the
 flag for the owner's acceptance; whether the BMC's fetch then verifies the
 server is the observation's question.
@@ -260,7 +260,7 @@ settle shapes, not an end-to-end run.
   `Oem.<vendor>`. It carries `HttpsTransferCertVerification`, `false` in every
   capture, and the actions `ImportRemoteHttpsServerRootCA` and
   `DeleteRemoteHttpsServerRootCA`; the import is
-  [B319](../../specs/milestones/m2.md#b319)'s.
+  [B319](../../specs/milestones/m1.md#b319)'s.
 
 **Reachability is the BMC's.** The BMC fetches the image itself, over its own
 network. The host-name image URL failed with `<registry>.ConnectionFailed` (the
@@ -407,7 +407,7 @@ the metadata decide**. A vendor name never appears in a condition.
 The reference used one fixed value, the certificate slot the captured BMC's
 import used (`RootCertId` 8). No fixed slot number is a portable default: the
 manager's import must discover and qualify its slot selection, which
-[B319](../../specs/milestones/m2.md#b319) settles.
+[B319](../../specs/milestones/m1.md#b319) settles.
 
 ## Prove by observation, not by response status
 

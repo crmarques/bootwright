@@ -584,7 +584,7 @@ retains the machine and lists no impact. It consumes no authorization, because
 it destroys nothing. The removal's resolution observes nothing and is always
 its completion, because the removal changes nothing on the machine. Physical
 erasure is deliberately not part of this contract
-and remains [B70](milestones/m2.md#b70).
+and remains [B70](milestones/m1.md#b70).
 
 **Quiescence.** The removal takes back only a claim, which nothing reads, so
 this block is always quiescent under the
@@ -718,7 +718,7 @@ material is never inserted under `disable-verification`. The B447 tests
 in the
 [Redfish client tests](../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_boot.py)
 prove it in-tree; a physical capture of the device flag stays
-[B305](milestones/m2.md#b305)'s observation. Before the trust is set, a device presenting other
+[B305](milestones/m1.md#b305)'s observation. Before the trust is set, a device presenting other
 media is released and proved empty. Each is set once, before the first attach
 and never inside its retry, and nothing falls back from one mode to another: a
 device that cannot import fails, naming the exceptions an operator may declare

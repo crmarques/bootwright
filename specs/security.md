@@ -221,7 +221,7 @@ once the invocation's ends of the channels close.
 Not yet met: a supervisor killed on its own, as by the out-of-memory killer,
 runs no handler, so its `ansible-playbook` child dies with it but an Ansible
 worker in a session of its own runs on; tracked as
-[B23](milestones/m3.md#b23).
+[B23](milestones/m1.md#b23).
 
 Each lifecycle adapter invocation owns a job directory `bootwright-run-<n>`
 beneath `/run` and a scratch directory `bootwright-run-scratch-<n>-<m>` beneath
@@ -440,10 +440,10 @@ Private URL capabilities travel over verified TLS, subject only to the
 [emulated-controller boot-media exception](container-clusters.md#boot-media).
 Public package trees carry no credentials.
 Not yet met: preflight and plan do not prove per-socket firewall reachability;
-tracked as [B318](milestones/m2.md#b318).
+tracked as [B318](milestones/m1.md#b318).
 Not yet met: the emulated BMC does not refuse a non-loopback bind and has no
 confined SELinux type; tracked as [B334](milestones/backlog.md#b334). Its TLS
-transport is tracked separately as [B446](milestones/m2.md#b446).
+transport is tracked separately as [B446](milestones/m1.md#b446).
 
 ### Direct SSH sessions
 

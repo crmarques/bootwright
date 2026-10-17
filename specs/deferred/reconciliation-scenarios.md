@@ -159,7 +159,7 @@ Each rule is an acceptance clause for any scenario slice.
    rule of
    [storage, locking and publication](../contexts.md#storage-locking-and-publication),
    so it refuses `lifecycle.lease` for the whole run. The lock narrows only
-   with [B18](../milestones/m3.md#b18).
+   with [B18](../milestones/m1.md#b18).
 8. **Seams need a present consumer.** Build a seam only where a consumer exists
    now: `diff` consumes `Compare`. Admission, `DeltaAdmitter` and the union
    plan stay on this page until a named slice and a decision promote one

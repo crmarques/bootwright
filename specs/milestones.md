@@ -1,43 +1,36 @@
 # Milestones
 
-This file owns delivery status and the rules every milestone page follows;
-specs claim no availability. The catalog in
-[`internal/cli`](../internal/cli/catalog.go) marks each available command;
-every other command `bootwright --help` lists returns the
-[unavailable result](cli.md#recognized-but-unavailable-commands).
+Milestones own delivery status; specs claim no availability.
+The [command catalog](../internal/cli/catalog.go) marks availability; other
+listed commands return the [unavailable result](cli.md#recognized-but-unavailable-commands).
 
 - [M1](milestones/m1.md) to [M7](milestones/m7.md): one page per milestone.
-- [Delivered](milestones/delivered.md): completed work, guard tests and
-  constraints.
-- [Backlog](milestones/backlog.md): parked items, retired IDs and owner
-  decisions.
+- [Delivered](milestones/delivered.md): completed work and its evidence.
+- [Backlog](milestones/backlog.md): parked work, retired IDs and decisions.
 
 ## Status
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Hardening: security, code and architecture improvement, bug fixes | none | done | none; completed under D156 |
-| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | M1 | in progress | M2b done; define and implement M2c's full virtual service coverage |
-| [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M1, M2 | in progress | B61's gate; define B473 |
+| [M1](milestones/m1.md) | Foundations: substrates, infrastructure components and Machines | none | in progress | foundation gaps for M2c; M1f/M1g future |
+| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e; B509 | in progress | M2b done; M2c full virtual coverage |
+| [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M2; applicable M1c/M1d/M1e; B18/B23/B265 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
-| [M5](milestones/m5.md) | OpenShift clusters over OpenShift Virtualization | M3 | not started | nothing until M3 |
+| [M5](milestones/m5.md) | OpenShift clusters over OpenShift Virtualization | M3, M1g | not started | nothing until M3 and M1g |
 | [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
 | [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
 
-X44, X48 to X51, X67, X70, X83, X84, X87 to X97 are delivered in-tree;
-[X98](milestones/delivered.md#x98--m1-owner-acceptance) records M1's completion;
+[D158](milestones/backlog.md#decisions) reopens M1 as Foundations with
+[M1a to M1g](milestones/m1.md#submilestones). The accepted hardening baseline
+under [X98](milestones/delivered.md#x98--m1-owner-acceptance) and M2b under
 [X99](milestones/delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion)
-records B615 and M2b completion.
+remain delivered.
 
-- **Next for agents:** M2b is done under
-  [X99](milestones/delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion).
-  Next: [M2c](milestones/m2.md#m2c), under the scope rules below.
-  Parked findings remain separate.
-- **Next for operator:** no M1 or M2b rerun remains. B476's earlier acceptance
-  and B615's completed authored-artifact journey satisfy M2b's operator gates.
-  [M2c to M2e](milestones/m2.md#submilestones) remain before full M2 completion,
-  then M3's [B61](milestones/m3.md#b61) and cluster gates. M1 remains done under
-  [X98](milestones/delivered.md#x98--m1-owner-acceptance).
+- **Next for agents:** [M2c](milestones/m2.md#m2c), including the shared
+  foundation gaps its profiles require. M1f/M1g are future work, not blanket
+  prerequisites; no new slice is activated.
+- **Next for operator:** no accepted hardening or M2b rerun is introduced.
+  Remaining provider and cluster gates keep their own acceptance.
 
 ## Scope rules
 
@@ -51,7 +44,9 @@ records B615 and M2b completion.
   Milestones are never active.
 - **In sequence** means the next planned slice of the first milestone in
   Status order that holds open items; when it has none, planning its next
-  slice is. Anything else is out of sequence.
+  slice is. D158 schedules shared M1 work with its first consuming product
+  checkpoint, currently M2c; future arms do not block unrelated consumers.
+  Anything else is out of sequence.
 - Requires governs promotion and implementation, not definition. An unmet
   Requires needs a waiver, which needs an explicit user request and is recorded
   in the item with its date.
@@ -95,6 +90,7 @@ records B615 and M2b completion.
   exit tier where that tier is operator-run. The owner declares it in one docs
   commit that sets its Status Delivery to `done` and writes
   `Done <date> at <commit>` on its page. A done milestone takes no new item.
+  D158 explicitly reopens M1 while preserving its accepted hardening baseline.
   Its Delivery is otherwise `in progress` once any of its items has started,
   and `not started` before. An item that completed has left its page, so the
   page's opening then links the record of a slice delivered toward it.
@@ -102,8 +98,8 @@ records B615 and M2b completion.
 ## Identifiers
 
 - **M\<n\>, milestone.** Sequence position; new milestones append. Exceptions:
-  D128's unfinished-scope renumbering and D131's
-  [M2a to M2e submilestones](milestones/m2.md#submilestones).
+  D128's unfinished-scope renumbering, D131's M2 submilestones and D158's
+  [Foundations redefinition](milestones/m1.md#submilestones).
   Other IDs and dated history stay fixed.
 - **B\<n\>, item.** One bounded outcome on exactly one milestone page, or
   parked in the backlog. The number encodes nothing and never changes: a new
