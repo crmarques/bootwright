@@ -27,8 +27,9 @@ an authored selection. B476's accepted minimal journey is recorded in its
 owner-accepted ledger row; it certifies no other version or feature.
 
 Authored versions now select native acquisition without release/artifact pins.
-[B615](milestones/m2.md#b615) still requires its fresh operator journey before
-M2b exits.
+[B615](milestones/delivered.md#b615)'s separate operator journey is accepted;
+[X99](milestones/delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion)
+closes M2b's exit.
 
 Native manager-to-host SSH must enforce pinned host keys, including a negative
 wrong-key test through actual manager connection, reconnect and failover paths.

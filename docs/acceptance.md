@@ -54,6 +54,14 @@ with `--set DEFAULT`, around the Redfish check.
 
 ## Ledger
 
+**B615 retrospective baseline:** X99 records B615's implementation baseline
+`fa4b87d0f0fa028bb910c1e071d6cd08bc1dd5a2` when closing the completed journey
+under the owner's acceptance in conversation. The baseline implementation
+preceded the run; its designation on the milestone page is retrospective.
+The B615 row is an explicit exception to advance baseline registration above;
+its clean builds still descend from that implementation. Future operator
+gates retain the advance-registration requirement.
+
 | Date | Build | Host OS | Example | Commands | Outcome | Log digest | Accepted by |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-09-17 | unrecorded; predates `c42ea10` and every later change | unrecorded | `examples/machines/lab-rhel` | `apply` of `rhel-01`, sequence unrecorded | The installation block completed in 1h10m7s: about ten minutes installing and the identity poll's full hour budget ([knowledge](../.agents/knowledge/installation-completion-proof.md)) | unrecorded | observation, not acceptance |
@@ -64,3 +72,4 @@ with `--set DEFAULT`, around the Redfish check.
 | 2026-10-15 | Commit 80f18c9374a471436ad3d12fc1e7fee1fe48dd3b; Source clean | Retained locally | Retained locally | Retained locally | Concurrent infrastructure and same-profile installations, shared publication, replay and teardown passed. After host restart the managed network was inactive and guest starts refused (B608); observed-state reporting omitted this (B610). Exact outcomes retained locally. | Retained locally | observation, not acceptance |
 | 2026-10-16 | Commit fcff2f58; Source clean | Retained locally | Retained locally | Retained locally | B476 console evidence through teardown and purge; dashboard fingerprint comparison, successful login and expected host/OSD inventory confirmed by owner attestation. Exact outcomes and image digest retained locally. Post-destroy inspection deviation tracked and corrected as B613/X94; no live rerun of that correction claimed. | Retained locally | Owner: B476, accepted on 2026-10-16 ([D155](../specs/milestones/backlog.md#decisions)) |
 | 2026-10-16 | Commit 591af9616446596a77a599cd6303970a85131694; Source clean | Retained locally | Retained locally | Retained locally | B466 and B608: fresh apply, controller host restart, automatic network and managed-service recovery, explicit guest startup and connectivity, stopped-resource teardown, absence checks, verified evidence archive and context purge passed. Earlier concurrency, shared-publication and replay evidence carried forward. Exact outcomes and all operation-log digests retained locally. | Retained locally | Owner: B466 and B608, accepted on 2026-10-16 ([D156](../specs/milestones/backlog.md#decisions)) |
+| 2026-10-17 | Commits aa7f4557efc582e134e47457d0aabb5e1369843a (negative selection), 082ae7cfa29c1d07e69bc338ace0dcd3a0b9219e (apply), 288165004c6ed4cb6ca95031a744ea17708e768d (continuation and retirement); Source clean | Retained locally | Retained locally | Retained locally | B615's separate native invalid-selection refusal and authored-artifact journey accepted through readiness, RBD data and client checks, dashboard certificate/login, explicit targeted recovery, stopped-host teardown, owned absence, verified private archives, purge and retained-media verification. B476's earlier acceptance remains separate. No fresh unattended core-v6 run or all-version qualification is claimed. Exact outcomes retained locally. | Retained locally | Owner: B615 and M2b, accepted on 2026-10-17 ([X99](../specs/milestones/delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion)) |

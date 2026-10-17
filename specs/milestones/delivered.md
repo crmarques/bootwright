@@ -6557,3 +6557,139 @@ behavior. X98's completed restart journey and D156 close the operator gate.
 parked. M1 completion neither promotes parked safety work nor waives M2's
 remaining gates. Runtime-specific observations and recovery details are
 retained locally.
+
+### X99 — Operator-selected Ceph artifacts and M2b completion
+
+**Owner:** Storage and Desired state, with CLI. **Item:**
+[B615](#b615), completed. **Decision:** [D157](backlog.md#decisions).
+**Submilestone:** [M2b](m2.md#m2b), done on 2026-10-17 at
+`7e3963d91851cc53bfaf54ed1962409a4051aca2`.
+
+**Outcome:** authored release, package/tool and image coordinates reach native
+consumers without a version allowlist or compatibility catalog. Native refusal
+causes remain bounded and redacted. Independent artifact authenticity,
+credential confinement, transport trust, ownership, authorization and frozen
+continuation remain required. The [storage API](../api/storage.md) and
+[storage lifecycle](../storage.md#bootstrap-identity-and-continuation) own the
+contracts; this record adds no new admission rule or effect.
+
+**Implementation and finding coverage:**
+
+- `fa4b87d0f0fa028bb910c1e071d6cd08bc1dd5a2` delivered authored artifacts,
+  aggregate local capacity/reserves, installed-host preflight, credential-confined
+  acquisition, host/service continuation and owned partial-OSD proof for M2b.
+- `6ba32fe7ecd149ac953560fabfa9f573a2acedef` keeps future guest prerequisites
+  pending before installation; `ce97678499310d9adef008b6781a3d95e3811723`
+  corrects the example's full native package release.
+- Native TLS discovery, isolated error validation, manifest header handling,
+  upstream refusal status and delegated blob delivery are corrected in
+  `9ea35e12fd43aa48c0e254a817c03ad70d4f2203`,
+  `6d9582453de7479f1c21001a143c220c743b4432`, `dd3bb18ae`, and
+  `044688f38bdeb3fb0c2701d48c35e50b7511080c`.
+  [Pull-boundary knowledge](../../.agents/knowledge/ceph-native-pull-boundaries.md)
+  retains the generic causes and proofs.
+- `082ae7cfa29c1d07e69bc338ace0dcd3a0b9219e` restores bootstrap-local
+  container-engine initialization after read-only host admission.
+  `288165004c6ed4cb6ca95031a744ea17708e768d` distinguishes owned inferred
+  bootstrap services from foreign stored specifications; see the
+  [service-projection proof](../../.agents/knowledge/ceph-bootstrap-service-projections.md).
+- `7e3963d91851cc53bfaf54ed1962409a4051aca2` waits for dashboard publication,
+  proves every manager's deployment port and retains a bounded exact-target
+  repair plan with at-most-once attempts. Core request/content v6 owns the new
+  persisted repair records; the original redeploy records remain unchanged.
+  [Dashboard knowledge](../../.agents/knowledge/ceph-dashboard-port-publication.md)
+  explains the ordering and completed-operation recovery boundary.
+
+**Operator acceptance:** the [ledger](../../docs/acceptance.md) records the
+separate negative-selection and successful authored-artifact journey. It also
+identifies the explicit retrospective baseline designation for B615; advance
+registration is not claimed, and future operator gates retain that rule. A
+nonexistent image selection reached its native refusal before dependent host
+or infrastructure effects. Successful native acquisition/execution, readiness,
+RBD round trip, scoped client access, dashboard certificate/login acceptance,
+safe stopped-host removal, owned absence, verified private archives, context
+purge and retained-media verification passed. B476's earlier accepted
+outage/recovery and continuation evidence remains valid. Exact environment,
+coordinates, commands, operation identities, hashes and helper history remain
+local and confidential.
+
+The accepted journey used clean `aa7f4557efc582e134e47457d0aabb5e1369843a`
+for the negative selection, clean
+`082ae7cfa29c1d07e69bc338ace0dcd3a0b9219e` for the final apply, and clean
+`288165004c6ed4cb6ca95031a744ea17708e768d` for continuation and retirement.
+It includes explicit targeted dashboard recovery. This does not claim that
+core-v6 automation was rerun as a fresh unattended deployment, or qualify every
+version combination. Older registered operations retain their original build
+for retirement when frozen contracts change.
+
+**Verification:** the implementing commits record their exact gates. The final
+product correction passed `make quick check race docs-check`, focused dashboard
+regressions and independent safety/contract reviews. The original implementation
+and earlier corrections also passed their recorded repository gates. Failed,
+unrun and conditional skipped checks remain identified in their local records;
+no synthetic check is presented as a live native run. This completion commit
+changes records only; its own documentation and integration results are in the
+commit body.
+
+**Remaining scope:** M2c to M2e remain open; full M2 is not done. B315 to B317,
+B494 and surviving-host removal retain their full-M2 gates. Parked
+[B537](backlog.md#b537), [B616](backlog.md#b616), [B617](backlog.md#b617) and
+[B618](backlog.md#b618) remain registered follow-ups and do not reopen M2b.
+No later implementation or publication is authorized by this completion.
+
+#### B615
+
+**Outcome:** satisfy the [operator-selected version contract](../api/storage.md)
+through native installation and execution. Added on 2026-10-16 at the owner's
+request (D157); mandatory for [M2b](m2.md#m2b), delivered as
+[X99](#x99--operator-selected-ceph-artifacts-and-m2b-completion).
+**Owners:** Storage and Desired state, with CLI for native diagnostics. **Requires:** M2a's accepted
+definition baseline and M1, satisfied under D156. **Implementation:** authorized by the owner on 2026-10-16. In-tree delivery
+includes authored RPM roots (Ceph, cephadm-ansible and optional NFS-Ganesha),
+repository selection, tag/direct-digest resolution, artifact-independent runtime
+proofs and bounded redacted native diagnostics. The separate operator journey
+below is accepted in the [ledger](../../docs/acceptance.md), closing B615 and
+M2b. Earlier B476 acceptance remains a separate gate. **Acceptance baseline:**
+`fa4b87d0f0fa028bb910c1e071d6cd08bc1dd5a2`, designated retrospectively under
+the ledger's explicit B615 exception. Accepted clean builds and recovery
+limits are recorded by X99.
+
+Cover `ceph.release`, `ceph.packageVersion`,
+`ceph.cephadm.ansible.packageVersion`, image repository/tag/digest selection,
+derived tool versions and related service-version inputs, including
+NFS-Ganesha. Version values are strings interpreted by native tools; remove
+Bootwright's semantic version grammar as well as its version allowlists.
+Each authored package version must select actual native package
+acquisition, not function only as admission metadata. Define the missing
+NFS-Ganesha selection surface here; NFS service/export orchestration remains
+B478's work and is not implied by this package-selection requirement.
+
+Remove the current release, tag, package, derived upstream version and source
+hash allowlists throughout Go requests, Python admission, package acquisition,
+image discovery, configuration and runtime preparation. A direct digest selects
+its artifact independently of the old discovery tag. Neither a fixed host-OS
+pin used as a release-compatibility rule nor equality between selected package
+and image code may replace native compatibility handling. Authenticate each
+selected artifact independently and freeze its acquired identity for continuation.
+Native package, container and Ceph tools attempt the authored selection and
+determine availability or compatibility; Bootwright surfaces their native
+cause and selected coordinate without substituting a known version. Keep
+structural validation, safe argument transport, secret redaction, publisher
+and transport trust, ownership, authorization and continuation semantics.
+
+The [storage API](../api/storage.md) defines the selection fields and native
+consumers. Core v6, image v2 and package decision v2 freeze them; core v6 also
+binds the dashboard's bounded port-repair records. Older
+operations require their original applying executable for safe retirement. No IBM table
+registry, version compatibility check, per-release profile or per-version
+qualification gate is part of this work.
+
+**Exit evidence:** boundary tests show unrelated, malformed, nonexistent and
+deliberately incompatible version strings reach native commands unchanged, including Ceph
+RPMs, cephadm-ansible, tags, direct digests and NFS-Ganesha package selection.
+Tests use synthetic values rather than copying IBM's rows, verify that native
+failures preserve their useful cause and redact secrets, and prove that retries
+reuse resolved artifacts without refreshing tags or substituting versions.
+An operator-run M2b journey demonstrates authored artifact acquisition and
+execution plus an invalid selection's native error; it does not certify every
+version or combination. Update the owning specs and examples with delivery.

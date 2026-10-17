@@ -67,7 +67,7 @@ interruption recovery or the entitled container.
 
 ## Authored cephadm-ansible RPM release
 
-[B615](../../specs/milestones/m2.md#b615) makes the authored
+[B615](../../specs/milestones/delivered.md#b615) makes the authored
 `ceph.cephadm.ansible.packageVersion` select the actual cephadm-ansible RPM.
 Native DNF interprets the full package coordinate; it does not append a missing
 `.el9cp` release suffix to `5.0.3-1`.

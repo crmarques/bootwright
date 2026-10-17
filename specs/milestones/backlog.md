@@ -2019,7 +2019,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B528 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the execution bundles, retained resolutions and `setup --purge-old-bundles` it concerned. |
 | B542 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the Fedora native plan and its libdnf5 solver; the host's dnf installs controller packages. |
 | B574 | 2026-10-16 | [D155](#decisions) retains records-only settlement; comparing the current build's plan is declined for now. No implementation remains. |
-| B500 | 2026-10-16 | Superseded by [D157](#decisions) and [B615](m2.md#b615): remove reviewed release pins instead of consolidating them into per-language release profiles. |
+| B500 | 2026-10-16 | Superseded by [D157](#decisions) and [B615](delivered.md#b615): remove reviewed release pins instead of consolidating them into per-language release profiles. |
 
 ## Decisions
 
@@ -2350,7 +2350,7 @@ Requires cell as `owner decision: <question>`.
   and B80 promotion gates remain open. B476's acceptance under D155 stands.
   This decision neither completes M2 nor authorizes unrelated implementation.
   Runtime facts, exact commands, digests and raw evidence are retained locally.
-- **D157** (2026-10-16, the owner): require [B615](m2.md#b615) before M2b
+- **D157** (2026-10-16, the owner): require [B615](delivered.md#b615) before M2b
   completes. Operators may supply any IBM Ceph release, package/tool version,
   container tag/digest and related version parameter, even nonexistent or
   incompatible selections. Bootwright attempts those selections through native
@@ -2361,5 +2361,7 @@ Requires cell as `owner decision: <question>`.
   policy, the corresponding B472 restriction and B500's proposed release
   profiles. Independent authenticity, transport trust, authorization and frozen
   artifact/continuation requirements remain. The owning contract is
-  [storage admission](../api/storage.md); X99 is planned and not started.
-  This request authorizes backlog/specification work, not implementation.
+  [storage admission](../api/storage.md). X99 was planned and not started at
+  this decision; its later authorized implementation and acceptance are recorded
+  in [X99](delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion).
+  This initial request authorized backlog/specification work, not implementation.
