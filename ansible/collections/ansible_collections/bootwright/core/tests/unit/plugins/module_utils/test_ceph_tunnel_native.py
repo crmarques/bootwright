@@ -480,16 +480,29 @@ def test_recursive_sshd_include_cannot_loop_or_exhaust_unbounded_work(native):
         native.tunnel_policy_preflight()
 
 
-def test_bootstrap_persists_frozen_intent_before_skip_ssh_command(native, private):
+def test_bootstrap_persists_frozen_intent_before_skip_ssh_command(native, private, monkeypatch):
     native.daemons = lambda: []
     prepared_bootstrap(native, private)
     native.markers.records["transport-ready.json"] = {"fixture": True}
+    checks = host_preparation(native, monkeypatch, {"chronyd.service": ("enabled", "active")})
+    checked_command = native.command
+    native.prove_inert_host_preparation = lambda: ceph_native.Worker.prove_inert_host_preparation(native)
     calls = []
 
     def command(argv, **kwargs):
+        time_checks = [["/usr/bin/systemctl", "is-enabled", "chrony.service"],
+                       ["/usr/bin/systemctl", "is-active", "chrony.service"],
+                       ["/usr/bin/systemctl", "is-enabled", "chronyd.service"],
+                       ["/usr/bin/systemctl", "is-active", "chronyd.service"]]
+        if argv[:2] == [native.tool, "check-host"]:
+            assert checks == time_checks
+            assert native.markers.read("bootstrap-attempt.json") is None
+            return checked_command(argv, **kwargs)
+        assert checks == time_checks + [[native.tool, "check-host", "--expect-hostname", native.host["name"]]]
+        assert native.markers.read("bootstrap-attempt.json") == ceph_tunnel_staging.recovery_scope(native.request)
         assert native.markers.read("tunnel-stage.json") == ceph_tunnel_staging.stage_intent(native.request)
         assert "--skip-ssh" in argv and "--no-cleanup-on-failure" in argv
-        assert "--skip-prepare-host" in argv
+        assert "--skip-prepare-host" not in argv
         assert all(flag not in argv for flag in ("--ssh-user", "--ssh-private-key", "--ssh-public-key", "--ssh-config", "--apply-spec"))
         assert all(not argument.startswith("--registry") and "registryJSON" not in argument for argument in argv)
         scratch = os.path.dirname(argv[argv.index("--config") + 1])
@@ -1272,7 +1285,7 @@ def test_transport_readiness_does_not_admit_bootstrap_without_original_custody(n
         native.tunnel_bootstrap(ssh_material(private))
 
 
-def host_preparation(native, monkeypatch, units, podman=b"5.8.2\n", lvcreate=True):
+def host_preparation(native, monkeypatch, units, podman=b"5.8.2\n", lvcreate=True, host_check=0):
     """Answer the read-only checks as a RHEL 9 guest does, stdout only: systemd 252 prints a unit it does not know on stderr.
     Any other command fails the test."""
     calls = []
@@ -1281,7 +1294,7 @@ def host_preparation(native, monkeypatch, units, podman=b"5.8.2\n", lvcreate=Tru
         del data, timeout
         calls.append(list(argv))
         if argv[:2] == [native.tool, "check-host"]:
-            return 0, b"ok"
+            return host_check, b"synthetic selected host check"
         if argv[0] == "/usr/bin/systemctl" and argv[1] in ("is-enabled", "is-active"):
             enabled, active = units.get(argv[2], (None, "inactive"))
             if argv[1] == "is-enabled":
@@ -1299,10 +1312,10 @@ def host_preparation(native, monkeypatch, units, podman=b"5.8.2\n", lvcreate=Tru
     return calls
 
 
-def test_selected_cephadm_checks_the_host_before_inert_time_service_proof(native, monkeypatch):
+def test_selected_cephadm_checks_the_host_after_inert_time_service_proof(native, monkeypatch):
     calls = host_preparation(native, monkeypatch, {"chronyd.service": ("enabled", "active")})
     native.prove_inert_host_preparation()
-    assert calls[0] == [native.tool, "check-host", "--expect-hostname", native.host["name"]]
+    assert calls[-1] == [native.tool, "check-host", "--expect-hostname", native.host["name"]]
     assert [argv[2] for argv in calls if argv[0] == "/usr/bin/systemctl"] == ["chrony.service"] * 2 + ["chronyd.service"] * 2
 
 
@@ -1313,9 +1326,10 @@ def test_selected_cephadm_checks_the_host_before_inert_time_service_proof(native
     ({"chronyd.service": ("enabled", "active")}, b"5.8.2\n", False, "host-prerequisite"),
 ])
 def test_a_host_cephadm_would_change_while_preparing_it_refuses_before_any_bootstrap_record(native, monkeypatch, units, podman, lvcreate, reason):
-    host_preparation(native, monkeypatch, units, podman, lvcreate)
+    calls = host_preparation(native, monkeypatch, units, podman, lvcreate)
     with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):
         native.prove_inert_host_preparation()
+    assert all(argv[:2] != [native.tool, "check-host"] for argv in calls)
     assert native.markers.writes == []
 
 
@@ -1330,15 +1344,17 @@ def test_a_host_preparation_refusal_leaves_no_bootstrap_attempt_so_the_bootstrap
     assert native.markers.read("bootstrap-attempt.json") is None
 
 
-def test_selected_native_host_check_failure_has_no_preparation_fallback(native):
-    calls = []
-
-    def run(argv, **kwargs):
-        calls.append(argv)
-        return 1, b"selected native runtime unavailable"
-    native.run = run
-    native.command = lambda argv, **kwargs: ceph_native.Worker.command(native, argv, **kwargs)
+def test_selected_native_host_check_failure_has_no_preparation_fallback(native, private, monkeypatch):
+    native.daemons = lambda: []
+    prepared_bootstrap(native, private)
+    native.markers.records["transport-ready.json"] = {"fixture": True}
+    calls = host_preparation(native, monkeypatch, {"chronyd.service": ("enabled", "active")}, host_check=1)
+    native.prove_inert_host_preparation = lambda: ceph_native.Worker.prove_inert_host_preparation(native)
     with pytest.raises(ceph_native.NativeFailure, match="native-command"):
-        native.prove_inert_host_preparation()
-    assert calls == [[native.tool, "check-host", "--expect-hostname", native.host["name"]]]
-    assert native.markers.writes == []
+        native.tunnel_bootstrap(ssh_material(private))
+    assert calls == [["/usr/bin/systemctl", "is-enabled", "chrony.service"],
+                     ["/usr/bin/systemctl", "is-active", "chrony.service"],
+                     ["/usr/bin/systemctl", "is-enabled", "chronyd.service"],
+                     ["/usr/bin/systemctl", "is-active", "chronyd.service"],
+                     [native.tool, "check-host", "--expect-hostname", native.host["name"]]]
+    assert native.markers.read("bootstrap-attempt.json") is None

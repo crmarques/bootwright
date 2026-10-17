@@ -105,8 +105,12 @@ package decision before installation. Continuation uses that decision and
 refuses an unrelated inventory or changed installed payload. An explicitly
 accepted IBM license authorizes only the provider's required `ACCEPT_EULA=yes`
 transaction environment; missing acceptance refuses before package effects.
-Native bootstrap skips provider host preparation so it cannot install packages
-through ambient repositories outside that frozen decision.
+Before provider host preparation, read-only checks prove it will neither
+install packages through ambient repositories outside that frozen decision nor
+enable or start a time service. Only then may the selected native host check
+run. A refusal leaves no bootstrap attempt. Bootstrap retains its own
+container-engine initialization; a separate prerequisite-check process cannot
+initialize that invocation's state.
 After the closure verifies in a scratch keyring, the host's RPM database gains
 the pinned key of each signer the decision names, Red Hat's from the OS's own
 key file and IBM's from the acquired one, before the transaction checks them.

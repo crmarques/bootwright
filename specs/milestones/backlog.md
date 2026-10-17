@@ -199,6 +199,7 @@ Alias cell.
 | [B612](#b612) | new, 2026-10-15 (X93) | defect | Controller setup | The core-package note says install, not update, for a package the host lacks | Found in the owner run; wording only |
 | [B616](#b616) | new, 2026-10-16 | defect | Architecture and developer tooling | Source checks exclude unreadable ignored non-source directories | Found during integration verification; test tooling, no milestone gate |
 | [B617](#b617) | new, 2026-10-17 | defect | Storage | Registry socket publication serialized with close | Pre-existing connector race; separate cancellation follow-up, no new milestone gate |
+| [B618](#b618) | new, 2026-10-17 | defect | Storage and CLI | Bounded native traceback projection retains the terminal cause | Pre-existing diagnostic truncation; separate output follow-up, no new milestone gate |
 
 ### B82
 
@@ -1957,6 +1958,19 @@ without holding a mutex across blocking connect or TLS. **Exit evidence:**
 injected cancellation at allocation, connect and TLS boundaries proves no late
 publication, lost socket or unhandled setup exception. Parked for separate
 cancellation work; it adds no M2b acceptance gate.
+
+### B618
+
+`native_diagnostics.redact` bounds a native cause by retaining its initial
+bytes. A synthetic long traceback with a warning and wrapper frames can use
+the entire allowance before the terminal exception, losing the most useful
+failure detail. This predates the bootstrap-initialization correction and is
+left unchanged by it. **Outcome:** retain a useful terminal native cause within
+the existing public byte ceiling, after complete bounded redaction, without
+publishing private material or changing execution and continuation behavior.
+**Exit evidence:** long and nested tracebacks, UTF-8 boundaries and secrets at
+projection cuts prove useful cause retention, the unchanged limit and no
+disclosure. Parked for separate diagnostic work; it adds no M2b acceptance gate.
 
 ## Retired
 

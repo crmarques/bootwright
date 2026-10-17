@@ -164,7 +164,7 @@ def bootstrap_argv(request, scratch):
     argv = [request["cephadm"]["path"], "--image", request["image"], "bootstrap",
             "--fsid", request["fsid"], "--mon-id", intent["monID"], "--mgr-id", intent["mgrID"],
             "--mon-ip", request["monIP"], "--output-dir", marker_path(request),
-            "--skip-ssh", "--skip-prepare-host", "--skip-monitoring-stack", "--skip-dashboard",
+            "--skip-ssh", "--skip-monitoring-stack", "--skip-dashboard",
             "--skip-admin-label", "--allow-fqdn-hostname", "--no-cleanup-on-failure",
             "--config", os.path.join(scratch, "ceph.conf"), "--automatically-accept-license"]
     networks = request.get("clusterNetworks")

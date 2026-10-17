@@ -53,6 +53,7 @@ def test_bootstrap_names_are_stable_and_match_provider_format(stage_request):
 def test_bootstrap_has_no_native_ssh_or_host_enrollment_path(stage_request):
     argv = staging.bootstrap_argv(stage_request, scratch(stage_request))
     assert "--skip-ssh" in argv and "--no-cleanup-on-failure" in argv
+    assert "--skip-prepare-host" not in argv
     assert "--mon-id" in argv and "--mgr-id" in argv
     assert not {"--ssh-user", "--ssh-config", "--ssh-private-key", "--ssh-public-key", "--apply-spec", "--single-host-defaults",
                 "--registry-json", "--registry-url", "--registry-username", "--registry-password"} & set(argv)
@@ -268,4 +269,4 @@ def test_observed_seed_contradiction_still_refuses(stage_request, field, value):
 
 def test_staging_accepts_authored_package_coordinate_without_catalog(stage_request):
     stage_request["cephadm"]["packageVersion"] = "synthetic+native-coordinate"
-    assert "--skip-prepare-host" in staging.bootstrap_argv(stage_request, scratch(stage_request))
+    assert "--skip-prepare-host" not in staging.bootstrap_argv(stage_request, scratch(stage_request))

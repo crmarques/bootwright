@@ -83,6 +83,23 @@ an independent process session outside the remote supervisor's group. Synthetic
 tests must cover a stalled resolver, prohibited or mixed answers, hostname
 verification, private output and shutdown during resolution.
 
+## Bootstrap container-engine initialization
+
+[X79](../../specs/milestones/delivered.md#x79--cephadm-bootstrap-reads-its-podman-version)
+records why bootstrap must initialize its own container engine. A successful
+`cephadm check-host` in a separate process does not initialize bootstrap's
+process-local Podman version. Keep `--skip-prepare-host` out of both bootstrap
+argument builders, including when accepting arbitrary authored package
+coordinates; version-policy changes must preserve this behavior.
+
+The [no-change host proof](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py)
+must precede even the selected native host check: the native time-service
+checker can enable and start an installed unit. Prove the executable dependency
+and ordered time-service conditions with read-only probes first, then let the
+selected native tool check its own prerequisites. Refuse before any bootstrap
+attempt record when those checks fail. Tests must cover this complete ordering,
+not substitute a successful native command for the proof.
+
 ## Validation in the isolated supervisor parent
 
 A bare `native-unknown` may hide result collection or validation failure; it

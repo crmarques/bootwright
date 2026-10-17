@@ -1931,17 +1931,18 @@ class Worker:
         return {"changed": True}
 
     def prove_inert_host_preparation(self):
-        """Check native prerequisites; bootstrap separately forbids automatic host preparation."""
-        self.command([self.tool, "check-host", "--expect-hostname", self.host["name"]], timeout=60, json_result=False)
+        """Prove host preparation inert before invoking the selected provider's host check."""
         require(os.path.isfile("/usr/sbin/lvcreate") and os.access("/usr/sbin/lvcreate", os.X_OK), "host-prerequisite")
         for unit in CEPHADM_TIME_UNITS:
             enabled = self.run(["/usr/bin/systemctl", "is-enabled", unit], timeout=30)[1].decode("ascii", "replace").strip()
             active = self.run(["/usr/bin/systemctl", "is-active", unit], timeout=30)[1].decode("ascii", "replace").strip()
             if enabled == "enabled" and active == "active":
-                return
+                break
             # systemd prints nothing on stdout for a unit it does not know, or "not-found"; cephadm treats both as absent.
             require(enabled in ("", "not-found"), "host-time")
-        raise Refusal("host-time")
+        else:
+            raise Refusal("host-time")
+        self.command([self.tool, "check-host", "--expect-hostname", self.host["name"]], timeout=60, json_result=False)
 
     def prove_bootstrap_absence(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_tunnel_custody as custody
