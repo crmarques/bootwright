@@ -433,9 +433,14 @@ Unavailable commands remain unavailable until their slice delivers them.
 After readiness, a dashboard phase on the bootstrap host enables the Ceph
 dashboard; bootstrap keeps skipping the dashboard and the monitoring stack, so
 the staged MGR port proof is unchanged. The phase enables the module with TLS,
-creates Ceph's self-signed certificate only when absent, performs one
-attempt-marked MGR redeploy so cephadm republishes the MGR ports, and creates
-user `admin` with a generated password. The password lives in produced
+creates Ceph's self-signed certificate only when absent, waits for publication
+of the dashboard endpoint before an attempt-marked MGR redeploy, and proves
+the dashboard port in every intended running MGR's refreshed deployment
+metadata. If publication changes during failover, one scoped repair plan may
+redeploy each affected owned MGR once; its per-daemon intent precedes the
+effect, and an ambiguous acknowledgment is observed without resubmission.
+Missing port proof never completes that phase. The phase then creates user
+`admin` with a generated password. The password lives in produced
 custody, reaches the native tool on standard input only and never appears in
 arguments, logs, evidence or plans. A lost response recaptures from retained
 custody and never regenerates. A user with no attempt marker, or a password

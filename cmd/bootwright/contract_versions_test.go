@@ -113,6 +113,8 @@ func automationFormats() map[string]automationFormat {
 		"ceph-pool-attempt-v1":              core,
 		"ceph-client-auth-v1":               core,
 		"ceph-dashboard-redeploy-v1":        core,
+		"ceph-dashboard-port-repair-v1":     core,
+		"ceph-dashboard-port-attempt-v1":    core,
 		"ceph-dashboard-user-v1":            core,
 		"ceph-cluster-device-identities-v1": core,
 		"ceph-osd-device-intent-v1":         core,
@@ -137,7 +139,7 @@ func automationFormats() map[string]automationFormat {
 
 		"ceph-host-v1":                {class: formatMirrored},
 		"ceph-host-evidence-v1":       {class: formatMirrored},
-		"ceph-core-v5":                {class: formatMirrored},
+		"ceph-core-v6":                {class: formatMirrored},
 		"ceph-core-evidence-v2":       {class: formatMirrored},
 		"ceph-packages-v2":            {class: formatMirrored},
 		"ceph-image-v2":               {class: formatMirrored},

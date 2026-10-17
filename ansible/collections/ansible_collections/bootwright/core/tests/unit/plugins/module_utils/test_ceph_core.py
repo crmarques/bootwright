@@ -28,7 +28,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v5", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v6", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -150,6 +150,13 @@ def test_pool_replication_requires_an_additional_osd_host(core_request, size, mi
     else:
         with pytest.raises(ceph_native.Refusal):
             ceph_native.validate(core_request)
+
+
+def test_previous_core_request_version_refuses_before_any_native_effect(core_request):
+    core_request["version"] = "ceph-core-v5"
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.Worker(core_request, core_request["bootstrap"],
+                           run=lambda *args, **kwargs: pytest.fail("previous request reached native effects"))
 
 
 @pytest.mark.parametrize("change", ["tag", "unknown", "root-disk", "empty-serial", "overlap", "selector", "missing-host"])

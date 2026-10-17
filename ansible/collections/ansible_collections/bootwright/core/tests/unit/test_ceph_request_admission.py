@@ -79,7 +79,7 @@ CORE = {
     "registry": "cp.icr.io",
     "registryRef": "ibm-registry",
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
-    "version": "ceph-core-v5",
+    "version": "ceph-core-v6",
 }
 
 IMAGE = {

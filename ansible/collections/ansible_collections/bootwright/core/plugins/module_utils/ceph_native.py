@@ -393,7 +393,7 @@ def validate(request):
                 "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
                 "packageRepository", "clusterKeyRef", "registryRef", "registry"}
     require(required <= set(request) and not set(request) - required - {"pool", "client", "config", "packages", "nfsGaneshaPackageVersion"})
-    require(request["version"] == "ceph-core-v5")
+    require(request["version"] == "ceph-core-v6")
     require(request["action"] in ("cluster", "pool", "client"))
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
@@ -3015,7 +3015,7 @@ class Worker:
                 self.pause(DASHBOARD_INTERVAL)
 
     def manager_containers(self):
-        """Each declared MGR's container and whether it runs, from a refreshed orchestrator view."""
+        """Refreshed declared MGR containers, running state and dashboard port publication."""
         with self.manager_served():
             rows = self.ceph("orch", "ps", "--daemon_type", "mgr", "--refresh")
         require(isinstance(rows, list) and len(rows) <= 128, "native-output")
@@ -3026,27 +3026,120 @@ class Worker:
             require(daemon_identity_host("mgr", row["daemon_id"], managers) == row.get("hostname") and row["daemon_id"] not in result, "foreign-service")
             container = row.get("container_id")
             require(container is None or isinstance(container, str) and re.fullmatch(r"[0-9a-f]{12,64}", container) is not None, "native-output")
-            result[row["daemon_id"]] = (container or "", type(row.get("status")) is int and row["status"] == 1)
+            ports = row.get("ports", [])
+            require(isinstance(ports, list) and len(ports) <= 128
+                    and all(type(port) is int and 1 <= port <= 65535 for port in ports), "native-output")
+            result[row["daemon_id"]] = (container or "", type(row.get("status")) is int and row["status"] == 1, DASHBOARD_PORT in ports)
+        require(len({row["hostname"] for row in rows}) == len(rows), "foreign-service")
+        containers = [container for container, unused_up, unused_port in result.values() if container]
+        require(len(set(containers)) == len(containers), "foreign-service")
         return result
 
+    def dashboard_published(self):
+        try:
+            with self.manager_served():
+                services = self.ceph("mgr", "services")
+        except ManagerRefusal:
+            return False
+        require(isinstance(services, dict), "native-output")
+        url = services.get("dashboard", "")
+        return isinstance(url, str) and DASHBOARD_URL.fullmatch(url) is not None
+
+    def dashboard_wait_publication(self, deadline):
+        while True:
+            require(self.clock() < deadline, "native-timeout")
+            if self.dashboard_published():
+                return
+            self.pause(DASHBOARD_INTERVAL)
+
+    def dashboard_schedule_redeploy(self, record, count, deadline):
+        while True:
+            self.dashboard_wait_publication(deadline)
+            running = self.manager_retry(self.manager_containers)
+            require(len(running) == count and all(container and up and container in record["containers"]
+                                                  for container, up, unused_port in running.values()), "dashboard-identity")
+            if self.dashboard_published():
+                require(self.clock() < deadline, "native-timeout")
+                self.tunnel_effect("orch", "redeploy", "mgr", json_result=False)
+                return
+            self.pause(DASHBOARD_INTERVAL)
+
+    def dashboard_repair_ports(self, scope, running, count, deadline):
+        """One frozen repair pass; ambiguous attempted targets are observed, never resubmitted."""
+        name = "dashboard-port-repair.json"
+        record = self.markers.read(name)
+        if record is None:
+            record = {"version": "ceph-dashboard-port-repair-v1", "scope": scope,
+                      "containers": {daemon: row[0] for daemon, row in running.items()},
+                      "missing": sorted(daemon for daemon, row in running.items() if not row[2])}
+            self.markers.write(name, record)
+        require(isinstance(record, dict) and set(record) == {"version", "scope", "containers", "missing"}
+                and record["version"] == "ceph-dashboard-port-repair-v1" and canonical(record["scope"]) == canonical(scope)
+                and isinstance(record["containers"], dict) and len(record["containers"]) == count
+                and all(isinstance(daemon, str) and isinstance(container, str) and re.fullmatch(r"[0-9a-f]{12,64}", container)
+                        for daemon, container in record["containers"].items())
+                and len(set(record["containers"].values())) == count
+                and isinstance(record["missing"], list) and record["missing"]
+                and all(isinstance(daemon, str) and daemon in record["containers"] for daemon in record["missing"])
+                and len(set(record["missing"])) == len(record["missing"]), "dashboard-identity")
+        changed = False
+        while True:
+            intents = {}
+            for daemon in record["missing"]:
+                target = {"version": "ceph-dashboard-port-attempt-v1", "scope": scope,
+                          "daemon": daemon, "container": record["containers"][daemon]}
+                filename = "dashboard-port-" + hashlib.sha256(daemon.encode()).hexdigest() + ".json"
+                attempted = self.markers.read(filename)
+                require(attempted is None or canonical(attempted) == canonical(target), "dashboard-identity")
+                intents[daemon] = (filename, target, attempted)
+            self.dashboard_wait_publication(deadline)
+            try:
+                running = self.manager_containers()
+            except ManagerRefusal:
+                running = {}
+            require(set(running) <= set(record["containers"]), "dashboard-identity")
+            if not self.dashboard_published():
+                self.pause(DASHBOARD_INTERVAL)
+                continue
+            if len(running) == count and all(container and up for container, up, unused_port in running.values()):
+                missing = {daemon for daemon, row in running.items() if not row[2]}
+                require(missing <= set(record["missing"]), "dashboard-identity")
+                require(all(running[daemon][0] == record["containers"][daemon] for daemon in missing), "dashboard-identity")
+                if not missing:
+                    return changed
+                target = next((daemon for daemon in sorted(missing) if intents[daemon][2] is None), None)
+                if target is not None:
+                    filename, intent, unused_attempt = intents[target]
+                    require(self.clock() < deadline, "native-timeout")
+                    self.markers.write(filename, intent)
+                    self.tunnel_effect("orch", "daemon", "redeploy", "mgr." + target, json_result=False)
+                    changed = True
+                    continue
+            require(self.clock() < deadline, "native-timeout")
+            self.pause(DASHBOARD_INTERVAL)
+
     def dashboard_redeploy(self, scope, deadline):
-        """One attempt-marked MGR redeploy, so cephadm republishes MGR ports including the dashboard's."""
+        """Gate redeployment on publication and prove every running MGR advertises its TLS port."""
         name, done = "dashboard-redeploy.json", "dashboard-redeployed.json"
+        placement = next(s["placement"] for s in self.request["services"] if s["service_type"] == "mgr")
+        count = placement.get("count", len(placement["hosts"]))
         record = self.markers.read(name)
         changed = False
         if record is None:
             running = self.manager_retry(self.manager_containers)
-            require(running and all(container and up for container, up in running.values()), "not-ready")
-            record = {"version": "ceph-dashboard-redeploy-v1", "scope": scope, "containers": sorted(container for container, unused in running.values())}
+            require(len(running) == count and all(container and up for container, up, unused_port in running.values()), "not-ready")
+            record = {"version": "ceph-dashboard-redeploy-v1", "scope": scope,
+                      "containers": sorted(container for container, unused_up, unused_port in running.values())}
             self.markers.write(name, record)
-            self.tunnel_effect("orch", "redeploy", "mgr", json_result=False)
+            self.dashboard_schedule_redeploy(record, count, deadline)
             changed = True
         require(isinstance(record, dict) and set(record) == {"version", "scope", "containers"} and record["version"] == "ceph-dashboard-redeploy-v1"
-                and canonical(record["scope"]) == canonical(scope) and isinstance(record["containers"], list), "dashboard-identity")
+                and canonical(record["scope"]) == canonical(scope) and isinstance(record["containers"], list)
+                and len(record["containers"]) == count
+                and all(isinstance(container, str) and re.fullmatch(r"[0-9a-f]{12,64}", container) for container in record["containers"])
+                and len(set(record["containers"])) == count, "dashboard-identity")
         completed = self.markers.read(done)
         require(completed is None or canonical(completed) == canonical(record), "dashboard-identity")
-        count = next(s["placement"] for s in self.request["services"] if s["service_type"] == "mgr")
-        count = count.get("count", len(count["hosts"]))
         reissued = changed
         while True:
             try:
@@ -3054,16 +3147,17 @@ class Worker:
             except ManagerRefusal:
                 # The redeploy restarts the manager that serves this view: nothing proved replaced yet.
                 running = {}
-            replaced = len(running) == count and all(container and up and container not in record["containers"] for container, up in running.values())
-            services = self.ceph("mgr", "services")
-            require(isinstance(services, dict), "native-output")
-            url = services.get("dashboard", "")
-            if replaced and isinstance(url, str) and DASHBOARD_URL.fullmatch(url):
+            replaced = len(running) == count and all(
+                container and up and container not in record["containers"] for container, up, unused_port in running.values())
+            if replaced and self.dashboard_published():
+                if self.markers.read("dashboard-port-repair.json") is not None or not all(row[2] for row in running.values()):
+                    changed = self.dashboard_repair_ports(scope, running, count, deadline) or changed
                 break
-            if completed is None and not reissued and running and all(container in record["containers"] for container, unused in running.values()):
+            unchanged = running and all(container in record["containers"] for container, unused_up, unused_port in running.values())
+            if completed is None and not reissued and unchanged:
                 # A lost response before the scheduling left every MGR unreplaced;
                 # a redeploy restarts them and is safe to schedule again.
-                self.tunnel_effect("orch", "redeploy", "mgr", json_result=False)
+                self.dashboard_schedule_redeploy(record, count, deadline)
                 reissued = changed = True
             require(self.clock() < deadline, "native-timeout")
             self.pause(DASHBOARD_INTERVAL)
